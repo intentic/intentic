@@ -27,7 +27,21 @@ export interface FileWindow {
     readonly size: number;
     readonly offset: number;
     readonly bytes: number;
+    // The window's bytes are not UTF-8, so `content` holds replacement characters where they failed to decode.
+    readonly lossy?: true;
 }
+
+// Whether bytes decode as UTF-8 with nothing replaced. A window is cut on character boundaries (below), so a UTF-8
+// file's window always passes and a failure is the file's own.
+export const isUtf8 = (bytes: Uint8Array): boolean => {
+    try {
+        new TextDecoder(`utf-8`, { fatal: true }).decode(bytes);
+        return true;
+    } catch {
+        // allow(silent-catch): the decoder's only complaint is the one this answers.
+        return false;
+    }
+};
 
 // A utf8 continuation byte (0b10xxxxxx): the middle of a character, never a cut point.
 const isContinuation = (byte: number): boolean => (byte & 0b1100_0000) === 0b1000_0000;
@@ -89,7 +103,8 @@ export const readWindow = async (abs: string, offset = 0, limit = MAX_TEXT_BYTES
         const slice = buffer.subarray(probe, bytesRead);
         const atStart = probe === 0 || buffer[0] === 0x0a;
         const { start, end } = trimToBoundaries(slice, atStart, from + slice.length >= size);
-        return { content: slice.toString(`utf8`, start, end), size, offset: from + start, bytes: end - start };
+        const read = { content: slice.toString(`utf8`, start, end), size, offset: from + start, bytes: end - start };
+        return isUtf8(slice.subarray(start, end)) ? read : { ...read, lossy: true };
     } catch {
         // allow(silent-catch): an unreadable file reads as absent, which is what the explorer can do something with.
         return undefined;
@@ -160,8 +175,8 @@ export const openFile = async (abs: string): Promise<OpenedFile | undefined> => 
 export const sha256Text = (text: string): string => createHash(`sha256`).update(text, `utf8`).digest(`hex`);
 
 // Why a save was not made: the file moved under it, another program holds it (Word keeps a document it has open locked
-// on Windows), this user may not write it, or it is past the cap.
-export type WriteRefusal = `changed` | `busy` | `denied` | `too-large`;
+// on Windows), this user may not write it, it is past the cap, or it is not UTF-8 text the editor could write back.
+export type WriteRefusal = `changed` | `busy` | `denied` | `too-large` | `not-text`;
 
 // The name a save is written under before it replaces the file, so the watcher can tell its own writes' debris apart.
 export const TEMPORARY_MARK = `.intentic-save-`;
@@ -223,23 +238,34 @@ const streamInto = async (abs: string, flags: number, source: WriteSource, limit
     }
 };
 
+// Why a text save names text the file does not hold: gone, not UTF-8 (the editor read it with replacement characters,
+// and writing those back would change every byte they stand for), or changed since it was read.
+const textRefusal = async (abs: string, baseHash: string): Promise<WriteRefusal | undefined> => {
+    // allow(silent-catch): a file that is gone no longer holds the text the save was based on, which is the refusal.
+    const current = await readFile(abs).catch(() => undefined);
+    if (current === undefined) {
+        return `changed`;
+    }
+    if (!isUtf8(current)) {
+        return `not-text`;
+    }
+    return sha256Text(current.toString(`utf8`)) === baseHash ? undefined : `changed`;
+};
+
 // A save of `source` over `abs`: the editor's text, or the first part of a drop. `baseHash`, when given, is the hash of
-// the text the editor last read; a file whose text no longer hashes to it is not overwritten. The replaced file's
-// permissions carry over, so saving a script keeps it runnable. The bytes stream into a new name beside the file and
-// replace it by rename, which replaces a link rather than following it, and a body past the cap leaves the file as it
-// was.
+// the text the editor last read; a file whose text no longer hashes to it, or that is not UTF-8, is not overwritten.
+// The replaced file's permissions carry over, so saving a script keeps it runnable. The bytes stream into a new name
+// beside the file and replace it by rename, which replaces a link rather than following it, and a body past the cap
+// leaves the file as it was.
 export const writeFileWhole = async (
     abs: string,
     source: WriteSource,
     baseHash: string | undefined,
     cap = MAX_WRITE_BYTES,
 ): Promise<WriteRefusal | undefined> => {
-    if (baseHash !== undefined) {
-        // allow(silent-catch): a file that is gone no longer holds the text the save was based on, which is the refusal.
-        const current = await readFile(abs, `utf8`).catch(() => undefined);
-        if (current === undefined || sha256Text(current) !== baseHash) {
-            return `changed`;
-        }
+    const refused = baseHash === undefined ? undefined : await textRefusal(abs, baseHash);
+    if (refused !== undefined) {
+        return refused;
     }
     // allow(silent-catch): a new file has no mode to keep.
     const previous = await lstat(abs).catch(() => undefined);

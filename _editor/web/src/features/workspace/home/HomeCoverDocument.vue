@@ -170,8 +170,12 @@ const undrawable = computed(
         (look.value === `picture` && drawn.value !== undefined && drawn.value.url === undefined),
 );
 
-// Relative links resolve against the file's own folder, and open in the reader's own scope, as the tab's do.
-const decorate = computed(() => fileLinkDecorator({ dir: folder === `` ? `` : `${folder}/`, agent: workspaceAgent.value }));
+// Relative links resolve against the file's own folder, and open in the reader's own scope, as the tab's do; a picture
+// beside the document is drawn from its own bytes in that scope (MarkdownViewer.vue).
+const decorate = computed(() => {
+    const agent = workspaceAgent.value;
+    return fileLinkDecorator({ dir: folder === `` ? `` : `${folder}/`, agent, picture: (file) => picture(agent, file, `original`)?.url });
+});
 
 const open = (): void => {
     if (entry !== undefined) {

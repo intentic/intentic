@@ -1,6 +1,7 @@
 import type { SandboxSummary, SetupReport } from "@intentic/api-contract";
 import type { NoticeModel } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
+import { t } from "@intentic/ui/i18n";
 import { ref, watch } from "vue";
 import { track } from "../../../app/analytics";
 import type { useSandbox } from "../../sandbox/client/useSandbox";
@@ -16,12 +17,15 @@ export interface SetupRowHost {
     readonly sandbox: Pick<SandboxStore, `sandboxes` | `create` | `select` | `remove`>;
     // Opens the workspace once the row is selected.
     readonly enter: () => Promise<void>;
+    // What the reported-in row still needs before its workspace opens (a hosted project's folder handed to the app,
+    // hostedProject.ts); false keeps this page, and the registry watch's next reading connects again.
+    readonly handOff?: ((id: string) => Promise<boolean>) | undefined;
     // What a row minted here is named after: the folder a project setup is for. A row found rather than made keeps its
     // own name.
     readonly name?: string | undefined;
 }
 
-export const useSetupRow = ({ sandbox, enter, name }: SetupRowHost) => {
+export const useSetupRow = ({ sandbox, enter, handOff, name }: SetupRowHost) => {
     // Null while the arrival's create is in flight, or after it failed.
     const created = ref<SandboxSummary | null>(null);
     // Arrived on an existing sandbox (named in the URL, or the one unfinished) rather than one created now.
@@ -64,18 +68,21 @@ export const useSetupRow = ({ sandbox, enter, name }: SetupRowHost) => {
             // Minted here, agreed to by nobody: from this instant it is a draft the discard rule owns.
             createdHere.value = true;
         } catch (err) {
-            error.value = noticeFrom(err, `Could not create your sandbox.`);
+            error.value = noticeFrom(err, t(`setup.setup.couldNotCreateSandbox`));
         } finally {
             creating.value = false;
         }
     };
 
     // Onboarding's make-or-break milestone, polled or attached. Selects the row explicitly: `reconcileActive` may have
-    // moved the selection away while this page waited.
+    // moved the selection away while this page waited, and the hand-off speaks to the selected sandbox.
     const connected = async (id: string, detail: { readonly attached?: true } = {}): Promise<void> => {
+        sandbox.select(id);
+        if (handOff !== undefined && !(await handOff(id))) {
+            return;
+        }
         track(`sandbox_connected`, { resuming: resuming.value, ...detail });
         finished.value = true;
-        sandbox.select(id);
         await enter();
     };
 

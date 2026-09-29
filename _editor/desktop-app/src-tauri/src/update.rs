@@ -99,6 +99,9 @@ pub struct UpdateState {
     /// Set once, never cleared: the process is on its way out from the moment this is true, and a second
     /// installer racing the first is the one way this can leave a machine with no working app at all.
     installing: AtomicBool,
+    /// The update is on disk and only the restart onto it is left, held because a local window had unsaved changes
+    /// when it was due (Linux, the one platform `install` returns on). The offer then means that restart.
+    restart_due: AtomicBool,
 }
 
 struct Staged {
@@ -385,14 +388,28 @@ fn record_failure(app: &AppHandle, settled: Stage, version: Option<String>, reas
     );
 }
 
+/// What the refusal for unsaved changes says, compared by [`act`] to know it is one the user can act on.
+const UNSAVED: &str = "Save or close the windows with unsaved changes first.";
+
+/// What an update that is installed but held from restarting says: the restart is the user's to give once their
+/// changes are saved, from the same offer.
+const RESTART_HELD: &str = "The update is installed. Save or close the windows with unsaved changes, then restart Intentic to use it.";
+
 /// Why an install was refused, in the words the screen shows. Refusals rather than queues: an update is
 /// offered again a moment later, and holding one to run behind somebody's back is exactly what this must not do.
+///
+/// Unsaved changes in a local window refuse it too, and here rather than at the exit: the Windows installer ends
+/// this process with `std::process::exit`, which no exit handler hears, and a restart cannot be held (windows.rs
+/// `hold_quit`). After "Quit anyway" nothing counts as unsaved, so an update staged for the way out still installs.
 pub fn refusal(app: &AppHandle) -> Option<&'static str> {
     if app.state::<UpdateState>().installing.load(Ordering::SeqCst) {
         return Some("Intentic is already installing an update.");
     }
-    if crate::scripts::busy() {
+    if crate::scripts::busy() || crate::project::busy() {
         return Some("Something is running on this device. Intentic will update once it finishes.");
+    }
+    if crate::windows::unsaved_windows() > 0 {
+        return Some(UNSAVED);
     }
     None
 }
@@ -407,26 +424,42 @@ pub fn install(app: &AppHandle, restart: bool) -> Result<(), String> {
         return Err("there is no downloaded update to install".to_string());
     };
     let version = staged.update.version.clone();
-    let applied = std::fs::read(&staged.file)
-        .map_err(|error| error.to_string())
-        .and_then(|bytes| {
-            app.state::<UpdateState>()
-                .installing
-                .store(true, Ordering::SeqCst);
-            let _ = std::fs::remove_file(&staged.file);
-            staged
-                .update
-                .install(bytes)
-                .map_err(|error| error.to_string())
-        });
-    if let Err(error) = applied {
-        return Err(abandon(app, version, &error));
+    let bytes = match std::fs::read(&staged.file) {
+        Ok(bytes) => bytes,
+        Err(error) => return Err(abandon(app, version, &error.to_string())),
+    };
+    // Asked again at the last moment the install can still be put back: reading a bundle of a hundred megabytes
+    // takes a while, and a window edited meanwhile would be lost to the Windows installer, which ends this process
+    // where nothing can ask (windows.rs `hold_quit`). The staged update goes back to be offered again.
+    if crate::windows::unsaved_windows() > 0 {
+        *app.state::<UpdateState>().ready.lock().unwrap() = Some(staged);
+        return Err(UNSAVED.to_string());
+    }
+    app.state::<UpdateState>()
+        .installing
+        .store(true, Ordering::SeqCst);
+    let _ = std::fs::remove_file(&staged.file);
+    if let Err(error) = staged.update.install(bytes) {
+        return Err(abandon(app, version, &error.to_string()));
     }
     // Windows never reaches this line. Linux does, having just replaced the file this process is running from.
     if restart {
-        app.restart();
+        restart_onto_update(app)?;
     }
     Ok(())
+}
+
+/// The restart onto an update already on disk, unless a local window has unsaved changes now: a restart cannot be
+/// held once asked for (windows.rs `hold_quit`), so it is not asked for. It waits, and the offer means it from then
+/// on (`take_offer`); a quit meanwhile lands on the new version at the next launch all the same.
+fn restart_onto_update(app: &AppHandle) -> Result<(), String> {
+    if crate::windows::unsaved_windows() > 0 {
+        app.state::<UpdateState>()
+            .restart_due
+            .store(true, Ordering::SeqCst);
+        return Err(RESTART_HELD.to_string());
+    }
+    app.restart();
 }
 
 /// An install that failed has spent its staged bytes, so the offer becomes the download page with the reason on
@@ -451,6 +484,14 @@ fn abandon(app: &AppHandle, version: String, error: &str) -> String {
 /* WHAT THE OFFER DOES WHEN IT IS TAKEN — one entry point for all three surfaces. BLOCKING: the install reads and
  * unpacks the whole download before it hands over, so every caller runs this off the main thread. */
 pub fn take_offer(app: &AppHandle) -> Result<(), String> {
+    // Installed already, with the restart held for unsaved changes: the offer is that restart.
+    if app
+        .state::<UpdateState>()
+        .restart_due
+        .load(Ordering::SeqCst)
+    {
+        return restart_onto_update(app);
+    }
     match stage(app) {
         Stage::Ready { .. } => install(app, true),
         Stage::Manual { url, .. } => {
@@ -467,12 +508,21 @@ pub fn take_offer(app: &AppHandle) -> Result<(), String> {
     }
 }
 
-/// The tray row and the `intentic://update` link, which have nowhere to show a refusal but the log.
+/// The tray row and the `intentic://update` link, which have nowhere to show a refusal but the log — except the ones
+/// the user has to act on before anything can happen, unsaved changes, which are said in a dialog.
 pub fn act(app: &AppHandle) {
     let app = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
         if let Err(error) = take_offer(&app) {
             eprintln!("intentic: {error}");
+            if error == UNSAVED || error == RESTART_HELD {
+                use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
+                app.dialog()
+                    .message(error)
+                    .title("Save your changes first")
+                    .kind(MessageDialogKind::Info)
+                    .show(|_| {});
+            }
         }
     });
 }

@@ -47,6 +47,8 @@ interface Rig {
     exportable: boolean;
     point: number;
     outcome: WriteOutcome;
+    // What the editor does once a save is marked, beyond recording it: recompute its flag, say.
+    onMarked: () => void;
 }
 
 const rig = (options: { saveable?: boolean; version?: string } = {}): Rig => {
@@ -62,6 +64,7 @@ const rig = (options: { saveable?: boolean; version?: string } = {}): Rig => {
         exportable: true,
         point: 1,
         outcome: { written: true, path: `brief.docx`, version: `v2` },
+        onMarked: () => undefined,
     };
     const save = new SaveController({
         fileType: `docx`,
@@ -76,7 +79,10 @@ const rig = (options: { saveable?: boolean; version?: string } = {}): Rig => {
                 return state.exportable;
             },
             changePoint: () => state.point,
-            markSaved: (point) => state.marked.push(point),
+            markSaved: (point) => {
+                state.marked.push(point);
+                state.onMarked();
+            },
             write: async (_bytes, kind) => {
                 state.writes.push(kind);
                 return state.outcome;
@@ -115,9 +121,11 @@ describe(`a save someone asks for`, () => {
         await settle();
         expect(r.writes).toEqual([{ kind: `save`, expected: `v1` }]);
         expect(r.marked).toEqual([7]);
+        // Then where things stand: the edits made while the save ran (point 8 and 9) are still unsaved.
         expect(r.posted).toEqual([
             { channel: CHANNEL, type: `dirty`, dirty: true },
             { channel: CHANNEL, type: `saved`, path: `brief.docx` },
+            { channel: CHANNEL, type: `dirty`, dirty: true },
         ]);
         // The next save names the version this one left.
         r.save.request();
@@ -226,12 +234,12 @@ describe(`saving on its own`, () => {
 
     it(`leaves at least MIN_GAP_MS between automatic saves, and after a failed one`, async () => {
         const r = edited();
-        r.outcome = { failed: `the sandbox answered 500` };
+        r.outcome = { failed: `writing the file failed (500): disk full` };
         r.clock.advance(IDLE_MS);
         expect(r.exports).toBe(1);
         r.save.fileStream(bytes, `brief.docx`, `docx`);
         await settle();
-        expect(r.posted.at(-1)).toEqual({ channel: CHANNEL, type: `save-failed`, detail: `the sandbox answered 500` });
+        expect(r.posted.at(-1)).toEqual({ channel: CHANNEL, type: `save-failed`, detail: `writing the file failed (500): disk full` });
         r.clock.advance(MIN_GAP_MS - AUTOSAVE_TICK_MS - 1);
         expect(r.exports).toBe(1);
         r.clock.advance(AUTOSAVE_TICK_MS + 1);
@@ -273,7 +281,7 @@ describe(`a file changed on disk meanwhile`, () => {
         r.save.fileStream(bytes, `brief.docx`, `docx`);
         await settle();
         expect(r.writes).toEqual([{ kind: `save`, expected: `v1` }, { kind: `overwrite` }]);
-        expect(r.posted.at(-1)).toEqual({ channel: CHANNEL, type: `saved`, path: `brief.docx` });
+        expect(r.posted.at(-2)).toEqual({ channel: CHANNEL, type: `saved`, path: `brief.docx` });
         expect(r.marked).toEqual([1]);
     });
 
@@ -303,6 +311,32 @@ describe(`a file changed on disk meanwhile`, () => {
 });
 
 describe(`the unsaved flag`, () => {
+    // `saved` is no clean document: the reader may type on while a save runs, and the editor's flag then stays set, so
+    // it never says so itself. The page says where it stands after every save of the document.
+    it(`is said again after a save, still set when the reader typed on while it ran`, async () => {
+        const r = edited();
+        r.save.request();
+        r.save.fileStream(bytes, `brief.docx`, `docx`);
+        await settle();
+        expect(r.posted.slice(-2)).toEqual([
+            { channel: CHANNEL, type: `saved`, path: `brief.docx` },
+            { channel: CHANNEL, type: `dirty`, dirty: true },
+        ]);
+    });
+
+    it(`is said clean after a save that left nothing unsaved, once the editor has said so`, async () => {
+        const r = edited();
+        r.onMarked = () => r.save.modified(false);
+        r.save.request();
+        r.save.fileStream(bytes, `brief.docx`, `docx`);
+        await settle();
+        expect(r.posted.slice(-3)).toEqual([
+            { channel: CHANNEL, type: `saved`, path: `brief.docx` },
+            { channel: CHANNEL, type: `dirty`, dirty: false },
+            { channel: CHANNEL, type: `dirty`, dirty: false },
+        ]);
+    });
+
     it(`tells the viewer only when it changes`, () => {
         const r = rig();
         r.save.modified(false);

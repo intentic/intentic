@@ -220,4 +220,65 @@ describe(`the entry menu`, () => {
         ]);
         expect(labels(entryMenuItems(input({ target: dir, serves: (route) => daemon.has(route) })))).toContain(`Open Terminal`);
     });
+    // A folder on this computer (the desktop app's local window) is handed no terminal, no unpacking and no download,
+    // and has one verb a sandbox's surface has not: asking an agent about a file.
+    const localVerbs = (): EntryVerbs => ({ ...verbs(), extract: undefined, openTerminal: undefined, download: undefined, ask: jest.fn() });
+    const zipFile: WorkspaceTreeEntry = { name: `site.zip`, path: `drops/site.zip`, type: `file` };
+
+    it(`leaves out every verb whose seam the surface was not handed, whatever the backend serves`, () => {
+        expect(labels(entryMenuItems(input({ target: zipFile, verbs: localVerbs() })))).toEqual([
+            `Ask an agent about this`,
+            `—`,
+            `New File`,
+            `New Folder`,
+            `—`,
+            `Rename`,
+            `Delete`,
+            `—`,
+            `Cut`,
+            `Copy`,
+        ]);
+        // Keep folder, Paste and the surface's own rows stay: they need nothing the window lacks.
+        expect(
+            labels(
+                entryMenuItems(input({ target: dir, barren: true, clipboardFull: true, verbs: localVerbs(), tail: [{ label: `Collapse Folders` }] })),
+            ),
+        ).toEqual([`New File`, `New Folder`, `—`, `Rename`, `Keep folder`, `Delete`, `—`, `Cut`, `Copy`, `Paste`, `—`, `Collapse Folders`]);
+        expect(labels(entryMenuItems(input({ multi: true, count: 3, verbs: localVerbs() })))).toEqual([
+            `New File`,
+            `New Folder`,
+            `—`,
+            `Delete 3 items`,
+            `—`,
+            `Cut 3 items`,
+            `Copy 3 items`,
+        ]);
+        expect(labels(entryMenuItems(input({ archived: true, verbs: localVerbs() })))).toEqual([
+            `Copy`,
+            `—`,
+            `Inside an archive: extract it to change anything`,
+        ]);
+    });
+
+    it(`asks an agent about the one file right-clicked, first, and a reader may too`, () => {
+        const spec = input({ verbs: localVerbs() });
+        const ask = entryMenuItems(spec).find((item) => item.label === `Ask an agent about this`);
+        ask?.command?.({ originalEvent: new Event(`click`), item: ask });
+        expect(spec.verbs.ask).toHaveBeenCalledTimes(1);
+        expect(labels(entryMenuItems(input({ canEdit: false, verbs: localVerbs() })))).toEqual([
+            `Ask an agent about this`,
+            `—`,
+            `Read-only: changing files needs writer access`,
+        ]);
+        // Never about a folder, a selection, the background, or an entry inside an archive, which is no file on disk.
+        const elsewhere: readonly Partial<EntryMenuInput>[] = [{ target: dir }, { multi: true, count: 2 }, { target: undefined }, { archived: true }];
+        expect(elsewhere.map((over) => labels(entryMenuItems(input({ ...over, verbs: localVerbs() }))).includes(`Ask an agent about this`))).toEqual([
+            false,
+            false,
+            false,
+            false,
+        ]);
+        // Nor on a surface with no way to an agent.
+        expect(labels(entryMenuItems(input()))).not.toContain(`Ask an agent about this`);
+    });
 });

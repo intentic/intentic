@@ -46,6 +46,59 @@ pub enum LocalVerb {
     /// "Work on this with an agent": the sandbox the window's folder has, or the question that makes one
     /// (project.rs). About the window's own folder, the only folder it could name.
     Sandbox,
+    /// "Ask about this": one file of the window's own (root-relative; a document window's is its document), handed
+    /// to the workspace read-only for a quarter of an hour (local.rs `ask`).
+    Ask(String),
+    /// What the window's project has changed in its sandbox copy, not yet brought back (project.rs).
+    Changes,
+    /// "Bring back changes": all of them, or only these root-relative paths. Keeps a restore point first.
+    BringBack(Option<Vec<String>>),
+    /// Put the folder back as it was at a restore point a bring-back kept.
+    Restore(String),
+    /// Which way the project's sync runs: `to-sandbox` (copy-first, the default) or `both`.
+    Direction(String),
+}
+
+/// A path a local window names inside its own folder: root-relative, forward slashes, no step out of it, and
+/// nothing a command line could read as a flag. No `:` anywhere either: on Windows `C:/x` and `C:x` name a drive
+/// rather than an entry of the folder, and `name:stream` an alternate data stream. Everything else is refused before
+/// it reaches a folder or an argument vector. The resolution against the folder itself (local.rs `inside`) is the
+/// second check, not this.
+pub fn is_relative_entry(path: &str) -> bool {
+    !path.is_empty()
+        && path.len() <= 4096
+        && !path.starts_with('/')
+        && !path.starts_with('-')
+        && !path.contains(['\\', '\0', ':'])
+        && !path.chars().any(char::is_control)
+        && path
+            .split('/')
+            .all(|segment| !matches!(segment, "" | "." | ".."))
+}
+
+/// A restore point's id as the machine agent names them: a plain token, never a flag or a path.
+fn is_point_id(point: &str) -> bool {
+    (1..=128).contains(&point.len())
+        && !point.starts_with('-')
+        && point
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b':' | b'-'))
+}
+
+/// A platform sandbox id, the value a hostname carries (`<label>-<sandboxId>.<zone>`): letters, digits, `-` and `_`.
+fn is_sandbox_id(id: &str) -> bool {
+    (1..=64).contains(&id.len())
+        && id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
+}
+
+/// `bring-back`'s `paths`: a JSON array of one or more [`is_relative_entry`] paths. Anything else, an empty array
+/// included, is no answer rather than "all of them": a page that meant everything sends no `paths` at all.
+fn entries_of(json: &str) -> Option<Vec<String>> {
+    let paths: Vec<String> = serde_json::from_str(json).ok()?;
+    (!paths.is_empty() && paths.len() <= 10_000 && paths.iter().all(|path| is_relative_entry(path)))
+        .then_some(paths)
 }
 
 /// `intentic://setup?code=…` — run the sandbox this setup code was minted for on this device.
@@ -111,6 +164,13 @@ pub struct SyncArgs {
     /// A ports-only enrollment: the daemon granted a mirror pairing, so there is no folder to pick and no
     /// SYNC_DIR to pass. The app runs the same script; the agent learns the mode from the token it redeems.
     pub mirror: bool,
+    /// A folder of this computer becoming a project of a HOSTED sandbox (project.rs `sync_project`): its name
+    /// inside `/work`, validated as `setup`'s is. The folder is the one this app parked, never one on the link.
+    #[serde(default)]
+    pub project: Option<String>,
+    /// The platform's row for that sandbox, remembered with the project so opening the folder again reaches it.
+    #[serde(default)]
+    pub sandbox_id: Option<String>,
 }
 
 /// `intentic://auth?handoff=…&state=…[&profile=…]` — the credential coming back from a sign-in that happened
@@ -138,8 +198,15 @@ pub enum WindowVerb {
     /// Maximise or restore, one verb: it is one button, and which of the two it does is a fact about the
     /// window rather than about the press.
     Maximize,
-    /// The × — which asks the same question the platform's × asked, through the same `request_close`.
-    Close,
+    /// The × — which asks the same question the platform's × asked, through the same `request_close`. In a local
+    /// window it is the platform's close, which the window's unsaved changes may hold (`confirmed` is the page
+    /// saying it already asked, `window?do=close&confirmed=1`; windows.rs).
+    Close {
+        confirmed: bool,
+    },
+    /// The page saying whether it holds unsaved changes (`window?do=dirty&value=0|1`): what a local window's close
+    /// and the app's Quit ask about first (windows.rs).
+    Dirty(bool),
     /// A press on an empty stretch of the bar: hand the window to the platform's own move loop.
     Drag,
     /// Bring the window in front of the reader, out of the tray or from under other windows: what a page's
@@ -206,6 +273,17 @@ pub fn parse_link(url: &str, source: Source) -> Option<Link> {
                 "open-file" => LocalVerb::OpenFile,
                 "reveal" => LocalVerb::Reveal(get("path")),
                 "sandbox" => LocalVerb::Sandbox,
+                "ask" => LocalVerb::Ask(get("path").filter(|path| is_relative_entry(path))?),
+                "changes" => LocalVerb::Changes,
+                // No `paths` is everything; a `paths` that is not a list of entries is no request at all.
+                "bring-back" => LocalVerb::BringBack(match get("paths") {
+                    Some(json) => Some(entries_of(&json)?),
+                    None => None,
+                }),
+                "restore" => LocalVerb::Restore(get("point").filter(|point| is_point_id(point))?),
+                "direction" => LocalVerb::Direction(
+                    get("value").filter(|value| matches!(value.as_str(), "to-sandbox" | "both"))?,
+                ),
                 _ => return None,
             }))
         }
@@ -232,13 +310,30 @@ pub fn parse_link(url: &str, source: Source) -> Option<Link> {
         "launcher" => source.is_app().then_some(Link::Launcher),
         // App-window only, like `update`, and for a sharper reason: see [`SyncArgs`]. There is nothing to
         // strip and keep — the url and the token ARE the request — so an external copy is refused whole.
-        "sync" if source.is_app() => Some(Link::Sync(SyncArgs {
-            url: get("url")?,
-            pair: get("pair")?,
-            name: get("name"),
-            takeover: get("takeover").is_some(),
-            mirror: get("mirror").is_some(),
-        })),
+        "sync" if source.is_app() => {
+            let mirror = get("mirror").is_some();
+            // A link that names a project is a project's link or nothing: read without it, it would sync the
+            // folder with the sandbox's whole `/work`, the one thing a project's folder must never be. So a name
+            // that is not a project folder's is no link, and neither is a project on a ports-only pairing, which
+            // has no folder to be one.
+            let project = match get("project") {
+                Some(name) if crate::project::is_project_dir_name(&name) && !mirror => Some(name),
+                Some(_) => return None,
+                None => None,
+            };
+            Some(Link::Sync(SyncArgs {
+                url: get("url")?,
+                pair: get("pair")?,
+                name: get("name"),
+                takeover: get("takeover").is_some(),
+                mirror,
+                // The sandbox id means something only beside the project it is remembered with.
+                sandbox_id: get("sandbox")
+                    .filter(|id| is_sandbox_id(id))
+                    .filter(|_| project.is_some()),
+                project,
+            }))
+        }
         "sync" => None,
         // App-window only, like `sync`: this link runs its script the moment it lands, with nothing left to
         // confirm, and the only page that emits one is the SPA's own Update/Environment card.
@@ -264,7 +359,10 @@ pub fn parse_link(url: &str, source: Source) -> Option<Link> {
             "ready" => WindowVerb::Ready,
             "minimize" => WindowVerb::Minimize,
             "maximize" => WindowVerb::Maximize,
-            "close" => WindowVerb::Close,
+            "close" => WindowVerb::Close {
+                confirmed: switch(get("confirmed"))?,
+            },
+            "dirty" => WindowVerb::Dirty(switch(Some(get("value")?))?),
             "drag" => WindowVerb::Drag,
             "raise" => WindowVerb::Raise,
             "fit" => WindowVerb::Fit(get("width")?.parse().ok()?),
@@ -273,6 +371,16 @@ pub fn parse_link(url: &str, source: Source) -> Option<Link> {
         })),
         "window" => None,
         _ => None,
+    }
+}
+
+/// A yes/no a window link carries: `1` or `0`, absent being no. Any other spelling is not an answer, and the
+/// link carrying it is dropped rather than guessed at.
+fn switch(value: Option<String>) -> Option<bool> {
+    match value.as_deref() {
+        None | Some("0") => Some(false),
+        Some("1") => Some(true),
+        Some(_) => None,
     }
 }
 
@@ -459,7 +567,26 @@ mod tests {
             ("intentic://window?do=ready", WindowVerb::Ready),
             ("intentic://window?do=minimize", WindowVerb::Minimize),
             ("intentic://window?do=maximize", WindowVerb::Maximize),
-            ("intentic://window?do=close", WindowVerb::Close),
+            (
+                "intentic://window?do=close",
+                WindowVerb::Close { confirmed: false },
+            ),
+            (
+                "intentic://window?do=close&confirmed=1",
+                WindowVerb::Close { confirmed: true },
+            ),
+            (
+                "intentic://window?do=close&confirmed=0",
+                WindowVerb::Close { confirmed: false },
+            ),
+            (
+                "intentic://window?do=dirty&value=1",
+                WindowVerb::Dirty(true),
+            ),
+            (
+                "intentic://window?do=dirty&value=0",
+                WindowVerb::Dirty(false),
+            ),
             ("intentic://window?do=drag", WindowVerb::Drag),
             ("intentic://window?do=raise", WindowVerb::Raise),
             ("intentic://window?do=fit&width=1280", WindowVerb::Fit(1280)),
@@ -495,6 +622,25 @@ mod tests {
         assert_eq!(parse_link("intentic://window?do=fit", APP), None);
         assert_eq!(parse_link("intentic://window?do=fit&width=wide", APP), None);
         assert_eq!(parse_link("intentic://window?do=fit&width=-4", APP), None);
+        // Unsaved changes are a yes or a no, said outright: no value, or any other spelling, is not an answer.
+        assert_eq!(parse_link("intentic://window?do=dirty", APP), None);
+        assert_eq!(
+            parse_link("intentic://window?do=dirty&value=yes", APP),
+            None
+        );
+        assert_eq!(parse_link("intentic://window?do=dirty&value=2", APP), None);
+        assert_eq!(
+            parse_link("intentic://window?do=close&confirmed=yes", APP),
+            None
+        );
+        assert_eq!(
+            parse_link("intentic://window?do=dirty&value=1", Source::External),
+            None
+        );
+        assert_eq!(
+            parse_link("intentic://window?do=close&confirmed=1", Source::External),
+            None
+        );
     }
 
     /* A LINK FROM A WINDOW NAMES THAT WINDOW, whichever of the app's own it is. */
@@ -507,7 +653,7 @@ mod tests {
         assert!(!Source::External.is_app());
         assert_eq!(
             parse_link("intentic://window?do=close", floating),
-            Some(Link::Window(WindowVerb::Close))
+            Some(Link::Window(WindowVerb::Close { confirmed: false }))
         );
     }
 
@@ -622,7 +768,179 @@ mod tests {
         assert_eq!(parse_link("intentic://local?do=delete", FILES), None);
         assert_eq!(
             parse_link("intentic://window?do=close", FILES),
-            Some(Link::Window(WindowVerb::Close))
+            Some(Link::Window(WindowVerb::Close { confirmed: false }))
+        );
+        // The unsaved-changes protocol is a local window's own bar too.
+        assert_eq!(
+            parse_link("intentic://window?do=close&confirmed=1", FILES),
+            Some(Link::Window(WindowVerb::Close { confirmed: true }))
+        );
+        assert_eq!(
+            parse_link("intentic://window?do=dirty&value=1", FILES),
+            Some(Link::Window(WindowVerb::Dirty(true)))
+        );
+    }
+
+    /// The project verbs and "Ask about this", each carrying only what its value may be.
+    #[test]
+    fn a_local_window_asks_about_a_file_and_works_its_project() {
+        for (link, verb) in [
+            (
+                "intentic://local?do=ask&path=docs%2Fbrief.docx",
+                LocalVerb::Ask("docs/brief.docx".into()),
+            ),
+            ("intentic://local?do=changes", LocalVerb::Changes),
+            ("intentic://local?do=bring-back", LocalVerb::BringBack(None)),
+            (
+                "intentic://local?do=bring-back&paths=%5B%22src%2Fa.ts%22%2C%22My%20Notes.md%22%5D",
+                LocalVerb::BringBack(Some(vec!["src/a.ts".into(), "My Notes.md".into()])),
+            ),
+            (
+                "intentic://local?do=restore&point=2026-09-28T10-00-00Z.1",
+                LocalVerb::Restore("2026-09-28T10-00-00Z.1".into()),
+            ),
+            (
+                "intentic://local?do=direction&value=to-sandbox",
+                LocalVerb::Direction("to-sandbox".into()),
+            ),
+            (
+                "intentic://local?do=direction&value=both",
+                LocalVerb::Direction("both".into()),
+            ),
+        ] {
+            assert_eq!(parse_link(link, FILES), Some(Link::Local(verb)), "{link}");
+        }
+    }
+
+    /// Every value is held to its shape before it reaches a folder or the machine agent's command line: no step out
+    /// of the folder, no absolute path, nothing that reads as a flag, no direction this app does not know.
+    #[test]
+    fn a_local_verb_carrying_a_value_it_may_not_is_refused_whole() {
+        for link in [
+            "intentic://local?do=ask",
+            "intentic://local?do=ask&path=..%2Fsecret.txt",
+            "intentic://local?do=ask&path=docs%2F..%2F..%2Fx",
+            "intentic://local?do=ask&path=%2Fetc%2Fpasswd",
+            "intentic://local?do=ask&path=C%3A%5Cx",
+            "intentic://local?do=ask&path=a%2F%2Fb",
+            "intentic://local?do=ask&path=.%2Fa",
+            "intentic://local?do=ask&path=-rf",
+            // A drive, however it is spelled, and an alternate data stream: never an entry of the folder.
+            "intentic://local?do=ask&path=C%3A%2FWindows%2Fwin.ini",
+            "intentic://local?do=ask&path=C%3Asecret.txt",
+            "intentic://local?do=ask&path=docs%2Fa.md%3Ahidden",
+            "intentic://local?do=bring-back&paths=%5B%22C%3A%2Fx%22%5D",
+            "intentic://local?do=bring-back&paths=%5B%5D",
+            "intentic://local?do=bring-back&paths=not-json",
+            "intentic://local?do=bring-back&paths=%5B1%5D",
+            "intentic://local?do=bring-back&paths=%5B%22..%2Fx%22%5D",
+            "intentic://local?do=bring-back&paths=%22a.md%22",
+            "intentic://local?do=restore",
+            "intentic://local?do=restore&point=--all",
+            "intentic://local?do=restore&point=a%2Fb",
+            "intentic://local?do=restore&point=a%20b",
+            "intentic://local?do=direction",
+            "intentic://local?do=direction&value=from-sandbox",
+            "intentic://local?do=direction&value=BOTH",
+        ] {
+            assert_eq!(parse_link(link, FILES), None, "{link}");
+        }
+        assert!(is_relative_entry("a/b c/d.md"));
+        assert!(!is_relative_entry(""));
+        assert!(!is_relative_entry("a/"));
+        assert!(!is_relative_entry("a\u{7}b"));
+        assert!(!is_relative_entry(&"a".repeat(4097)));
+        assert!(!is_relative_entry("C:/Windows/win.ini"));
+        assert!(!is_relative_entry("C:secret.txt"));
+        assert!(!is_relative_entry("notes/a.md:stream"));
+        assert!(!is_relative_entry("D:"));
+    }
+
+    /// The project verbs are a local window's alone, like every other local verb.
+    #[test]
+    fn the_project_verbs_are_refused_from_the_workspace_and_from_outside() {
+        for link in [
+            "intentic://local?do=ask&path=a.md",
+            "intentic://local?do=changes",
+            "intentic://local?do=bring-back",
+            "intentic://local?do=restore&point=p1",
+            "intentic://local?do=direction&value=both",
+        ] {
+            assert_eq!(parse_link(link, APP), None, "{link}");
+            assert_eq!(parse_link(link, Source::External), None, "{link}");
+        }
+    }
+
+    /// A hosted sandbox's project: the name is held to the same rule `setup`'s is, the sandbox id to what a
+    /// hostname carries, and the id means nothing without a project beside it.
+    #[test]
+    fn a_sync_link_may_name_a_project_and_its_sandbox() {
+        let Some(Link::Sync(args)) = parse_link(
+            "intentic://sync?url=https%3A%2F%2Fsandbox-abc.example.dev&pair=tok&project=my-app&sandbox=sbx_7",
+            APP,
+        ) else {
+            panic!("expected a sync link");
+        };
+        assert_eq!(args.project.as_deref(), Some("my-app"));
+        assert_eq!(args.sandbox_id.as_deref(), Some("sbx_7"));
+
+        // A malformed id is not remembered, and the project still is: it names nothing the sync acts on.
+        let Some(Link::Sync(bad_id)) = parse_link(
+            "intentic://sync?url=https%3A%2F%2Fx&pair=tok&project=my-app&sandbox=a%2Fb",
+            APP,
+        ) else {
+            panic!("expected a sync link");
+        };
+        assert_eq!(bad_id.project.as_deref(), Some("my-app"));
+        assert_eq!(bad_id.sandbox_id, None);
+
+        // An id with no project beside it is not carried.
+        let Some(Link::Sync(plain)) = parse_link(
+            "intentic://sync?url=https%3A%2F%2Fx&pair=tok&sandbox=sbx_7",
+            APP,
+        ) else {
+            panic!("expected a sync link");
+        };
+        assert_eq!(plain.project, None);
+        assert_eq!(plain.sandbox_id, None);
+    }
+
+    /// A link that names a project is that project's or nothing: read without its project it would sync the folder
+    /// with the sandbox's whole `/work`. A name that is not a project folder's, or a project on a ports-only pairing
+    /// (which has no folder to be one), drops the link rather than falling back to a plain enrollment.
+    #[test]
+    fn a_sync_link_naming_a_project_it_may_not_is_no_link() {
+        for link in [
+            "intentic://sync?url=https%3A%2F%2Fx&pair=tok&project=..%2Fetc&sandbox=sbx_7",
+            "intentic://sync?url=https%3A%2F%2Fx&pair=tok&project=public",
+            "intentic://sync?url=https%3A%2F%2Fx&pair=tok&project=-x",
+            "intentic://sync?url=https%3A%2F%2Fx&pair=tok&project=a%2Fb",
+            "intentic://sync?url=https%3A%2F%2Fx&pair=tok&mirror=1&project=my-app&sandbox=sbx_7",
+        ] {
+            assert_eq!(parse_link(link, APP), None, "{link}");
+        }
+        // An empty value is no value, as on every link: the plain enrollment it then is names no project.
+        let Some(Link::Sync(empty)) =
+            parse_link("intentic://sync?url=https%3A%2F%2Fx&pair=tok&project=", APP)
+        else {
+            panic!("expected a sync link");
+        };
+        assert_eq!(empty.project, None);
+
+        // Still the app's own window's alone, project or not.
+        assert_eq!(
+            parse_link(
+                "intentic://sync?url=https%3A%2F%2Fx&pair=tok&project=my-app",
+                Source::External
+            ),
+            None
+        );
+        assert_eq!(
+            parse_link(
+                "intentic://sync?url=https%3A%2F%2Fx&pair=tok&project=my-app",
+                FILES
+            ),
+            None
         );
     }
 

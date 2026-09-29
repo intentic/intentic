@@ -5,13 +5,18 @@ mod local;
 mod project;
 mod scripts;
 mod setup_link;
+mod sidecar;
 mod state;
 mod update;
 mod windows;
 
-use tauri::menu::{MenuBuilder, MenuItemBuilder};
+use std::sync::atomic::{AtomicBool, Ordering};
+
+use tauri::menu::{Menu, MenuBuilder, MenuItem, MenuItemBuilder};
 use tauri::tray::TrayIconBuilder;
-use tauri::{AppHandle, Manager, RunEvent};
+use tauri::{AppHandle, Manager, RunEvent, Wry};
+
+use state::Face;
 
 /// Every `intentic://` link — intercepted webview navigation, OS deep link, or second-instance argv — funnels
 /// through here, carrying which of those it was: only the first is a link this app watched its own window ask
@@ -34,12 +39,12 @@ enum Opening {
     Workspace,
     ParkedSetup,
     SleepingEngine,
-    /// An install that has never shown the workspace: the app's own card, which leads with opening a folder or a
-    /// document of this computer (local.rs) — the one thing a first launch can do with no account at all.
+    /// An install last used through Home (a first launch included): the app's own card, which leads with opening
+    /// a folder or a document of this computer (local.rs) — the one thing a launch can do with no account at all.
     Home,
 }
 
-/// The launch decision, as a function of three facts — pure, because a launch is the one moment with no window
+/// The launch decision, as a function of four facts — pure, because a launch is the one moment with no window
 /// for anything to go wrong in front of.
 ///
 /// A PARKED SETUP OUTRANKS THE ENGINE: it is why this launch is happening at all (RunOnce, commands.rs
@@ -52,11 +57,15 @@ enum Opening {
 /// more often than the first one: Docker Desktop does not start itself (scripts.rs has the whole of why), so a
 /// machine that hosts a sandbox has no engine, and the workspace this window would otherwise open loads onto
 /// nothing at all.
+///
+/// Past those two, the face the user was last seen choosing (state.rs `Face`): the workspace once it has been
+/// shown, Home until then or once they go back to it — except on a machine that hosts a sandbox, which was set up
+/// from the workspace and opens it.
 const fn opening(
     parked: bool,
     hosts_sandboxes: bool,
     engine_listening: bool,
-    workspace_seen: bool,
+    last_face: Face,
 ) -> Opening {
     if parked {
         return Opening::ParkedSetup;
@@ -64,7 +73,7 @@ const fn opening(
     if hosts_sandboxes && !engine_listening {
         return Opening::SleepingEngine;
     }
-    if !workspace_seen && !hosts_sandboxes {
+    if !hosts_sandboxes && matches!(last_face, Face::Home) {
         return Opening::Home;
     }
     Opening::Workspace
@@ -104,7 +113,8 @@ pub fn run() {
                 ) {
                     return;
                 }
-                windows::show_workspace(app);
+                // A bare second launch is the app being asked for: what the tray's "Open Intentic" opens.
+                windows::show_last_face(app);
             }))
             .plugin(tauri_plugin_deep_link::init());
     }
@@ -142,6 +152,8 @@ pub fn run() {
             commands::machine_report,
             commands::machine_restart,
             commands::workspace_open,
+            commands::home_facts,
+            commands::launcher_close,
             commands::setup_alert,
             commands::setup_progress,
             commands::fit_to_content,
@@ -153,12 +165,14 @@ pub fn run() {
             local::local_open,
             local::local_open_path,
             local::local_recents,
+            local::local_forget_recent,
         ])
         .setup(|app| {
             app.manage(state::AppState::load(app.handle())?);
             app.manage(auth::PendingAuth::default());
             app.manage(update::UpdateState::default());
             app.manage(local::LocalFiles::default());
+            app.manage(sidecar::Sidecar::default());
             create_tray(app.handle())?;
             // After the tray exists: the refresh loop retitles the agent row this row-handle now points at.
             agent_status::start(app.handle());
@@ -208,6 +222,7 @@ pub fn run() {
             );
 
             /* BEFORE the link, nothing opens. */
+            let mut home_at_launch = false;
             if app.webview_windows().is_empty() && !opened_local {
                 let state = app.state::<state::AppState>();
                 // The engine is asked for by its socket, never by `docker info`, which would hold the first
@@ -216,16 +231,31 @@ pub fn run() {
                     state.parked_setup().is_some(),
                     state.hosts_sandboxes(),
                     scripts::engine_listening(),
-                    state.workspace_seen(),
+                    state.last_face(),
                 );
                 if opening == Opening::SleepingEngine {
                     *state.pending_docker.lock().unwrap() = true;
                 }
-                if opening == Opening::Workspace {
-                    windows::show_workspace(app.handle());
-                } else {
-                    windows::show_launcher(app.handle());
+                match opening {
+                    Opening::Workspace => windows::show_workspace(app.handle()),
+                    // A launch into Home is Home shown by the user's own doing: remembered as the face in use.
+                    Opening::Home => {
+                        home_at_launch = true;
+                        windows::show_home(app.handle());
+                    }
+                    Opening::ParkedSetup | Opening::SleepingEngine => {
+                        windows::show_launcher(app.handle())
+                    }
                 }
+            }
+            // The file server a few seconds in, when a local window is likely: Home leads with opening one, and an
+            // install that has opened any is likely to again. Home also wants the office editor fetched for the
+            // first document (sidecar.rs), once the server is up.
+            if home_at_launch {
+                sidecar::want_office(app.handle());
+            }
+            if home_at_launch || !app.state::<state::AppState>().recents().is_empty() {
+                sidecar::start_early(app.handle());
             }
             Ok(())
         })
@@ -239,23 +269,61 @@ pub fn run() {
         RunEvent::ExitRequested {
             api, code: None, ..
         } => api.prevent_exit(),
+        // Quit, the ×'s "Quit", a restart: a local window with unsaved changes is asked about first, and the exit
+        // waits for the answer (windows.rs `hold_quit`).
+        RunEvent::ExitRequested {
+            api,
+            code: Some(code),
+            ..
+        } => {
+            if windows::hold_quit(app, code) {
+                api.prevent_exit();
+            }
+        }
         RunEvent::Exit => {
-            local::shutdown(app);
+            sidecar::shutdown(app);
             update::install_on_exit(app);
         }
         _ => {}
     });
 }
 
-/// Where the app lives once its window is closed: the × hides the workspace rather than ending the app, so
-/// `Open Intentic` here is the way back to it. That is a lot of weight on an icon the user may never have
-/// seen, which is why the × asks the first time and names this tray in the asking (windows.rs) — and why
-/// `Quit` is offered there too, rather than only here.
+/// The tray's "Open workspace" row, and whether it is in the menu yet: it is offered only once an account has
+/// been seen (state.rs `account_seen`), which can happen while the app runs, so it is inserted then rather than
+/// the menu rebuilt — a rebuilt tray menu flickers on Windows and loses whatever the user has open.
+struct TrayWorkspace {
+    menu: Menu<Wry>,
+    row: MenuItem<Wry>,
+    offered: AtomicBool,
+}
+
+/// Where the row goes: after "Open Intentic" and "Home".
+const WORKSPACE_ROW_AT: usize = 2;
+
+/// Put "Open workspace" in the tray, once, when an account has been seen (a sign-in, or the workspace shown).
+pub(crate) fn offer_workspace(app: &AppHandle) {
+    let Some(tray) = app.try_state::<TrayWorkspace>() else {
+        return;
+    };
+    if !app.state::<state::AppState>().account_seen() || tray.offered.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    if let Err(error) = tray.menu.insert(&tray.row, WORKSPACE_ROW_AT) {
+        tray.offered.store(false, Ordering::SeqCst);
+        eprintln!("intentic: the tray could not offer the workspace: {error}");
+    }
+}
+
+/// Where the app lives once its window is closed: the × hides the workspace rather than ending the app, and the
+/// launcher's steps into the tray, so `Open Intentic` here is the way back to whichever face was last in use. That
+/// is a lot of weight on an icon the user may never have seen, which is why the × asks the first time and names
+/// this tray in the asking (windows.rs) — and why `Quit` is offered there too, rather than only here.
 fn create_tray(app: &AppHandle) -> tauri::Result<()> {
     let open = MenuItemBuilder::with_id("open", "Open Intentic").build(app)?;
-    // "This device", matching the window it opens — the screen covers the machine's sandboxes AND its desktop
-    // sync, and a tray entry naming only half of that is the reason nobody looked there for the other half.
-    let manager = MenuItemBuilder::with_id("manager", "This device").build(app)?;
+    // "Home", matching the card it opens: the folders and documents of this computer first, then the machine's
+    // sandboxes and its desktop sync. The id is the one the row has always had.
+    let manager = MenuItemBuilder::with_id("manager", "Home").build(app)?;
+    let workspace = MenuItemBuilder::with_id("workspace", "Open workspace").build(app)?;
     /* This app spends most of its life as a tray icon with nothing on screen. */
     let update = MenuItemBuilder::with_id("update", "Checking for updates…")
         .enabled(false)
@@ -283,8 +351,9 @@ fn create_tray(app: &AppHandle) -> tauri::Result<()> {
         .show_menu_on_left_click(true)
         .tooltip("Intentic")
         .on_menu_event(|app, event| match event.id().as_ref() {
-            "open" => windows::show_workspace(app),
-            "manager" => windows::show_launcher(app),
+            "open" => windows::show_last_face(app),
+            "manager" => windows::show_home(app),
+            "workspace" => windows::show_workspace(app),
             "agent" => windows::show_launcher(app),
             "open-folder" => local::pick(app, true),
             "open-file" => local::pick(app, false),
@@ -300,6 +369,12 @@ fn create_tray(app: &AppHandle) -> tauri::Result<()> {
     // and loses whatever the user has open.
     app.manage(update::TrayUpdate(update));
     app.manage(agent_status::TrayAgent(agent));
+    app.manage(TrayWorkspace {
+        menu,
+        row: workspace,
+        offered: AtomicBool::new(false),
+    });
+    offer_workspace(app);
     Ok(())
 }
 
@@ -307,36 +382,57 @@ fn create_tray(app: &AppHandle) -> tauri::Result<()> {
 mod tests {
     use super::*;
 
-    /* WHAT OPENS, for the three facts that decide it. */
+    /* WHAT OPENS, for the four facts that decide it. */
 
     #[test]
     fn a_machine_whose_sandbox_has_no_engine_opens_on_that_and_not_on_a_dead_workspace() {
-        assert_eq!(opening(false, true, false, true), Opening::SleepingEngine);
+        assert_eq!(
+            opening(false, true, false, Face::Workspace),
+            Opening::SleepingEngine
+        );
+        // Last used through Home or not, the engine is still what this launch has to say something about.
+        assert_eq!(
+            opening(false, true, false, Face::Home),
+            Opening::SleepingEngine
+        );
         // Engine up: there is nothing to say, and the workspace is what the app is for.
-        assert_eq!(opening(false, true, true, true), Opening::Workspace);
+        assert_eq!(
+            opening(false, true, true, Face::Workspace),
+            Opening::Workspace
+        );
     }
 
     #[test]
     fn a_parked_setup_outranks_a_sleeping_engine_because_its_own_run_starts_it() {
-        assert_eq!(opening(true, true, false, true), Opening::ParkedSetup);
-        assert_eq!(opening(true, false, true, false), Opening::ParkedSetup);
+        assert_eq!(
+            opening(true, true, false, Face::Workspace),
+            Opening::ParkedSetup
+        );
+        assert_eq!(opening(true, false, true, Face::Home), Opening::ParkedSetup);
     }
 
     /// Somebody using this app as a window onto a sandbox we host has a perfectly good reason for their Docker
     /// to be off, and starting it for them would be this app helping itself to their machine.
     #[test]
     fn a_machine_no_sandbox_has_run_on_opens_the_workspace_whatever_docker_is_doing() {
-        assert_eq!(opening(false, false, false, true), Opening::Workspace);
-        assert_eq!(opening(false, false, true, true), Opening::Workspace);
+        assert_eq!(
+            opening(false, false, false, Face::Workspace),
+            Opening::Workspace
+        );
+        assert_eq!(
+            opening(false, false, true, Face::Workspace),
+            Opening::Workspace
+        );
     }
 
-    /// A first launch has no workspace to show anyone without an account; the card it opens instead leads with
-    /// the folder or the document they can open right now.
+    /// A launch opens the face the user was last seen choosing: Home for a first launch (there is no workspace
+    /// to show anyone without an account) and for anyone who went back to it; the card leads with the folder or
+    /// the document they can open right now.
     #[test]
-    fn an_install_that_never_showed_the_workspace_opens_home() {
-        assert_eq!(opening(false, false, true, false), Opening::Home);
-        assert_eq!(opening(false, false, false, false), Opening::Home);
-        // A machine that hosts a sandbox was set up from the workspace, whatever this file says.
-        assert_eq!(opening(false, true, true, false), Opening::Workspace);
+    fn an_install_last_used_through_home_opens_home() {
+        assert_eq!(opening(false, false, true, Face::Home), Opening::Home);
+        assert_eq!(opening(false, false, false, Face::Home), Opening::Home);
+        // A machine that hosts a sandbox was set up from the workspace, whatever the face says.
+        assert_eq!(opening(false, true, true, Face::Home), Opening::Workspace);
     }
 }

@@ -25,15 +25,18 @@ export interface TreeMenuHost {
     readonly frame: (target: WorkspaceTreeEntry | undefined, multi: boolean) => Pick<EntryMenuInput, "head" | "tail">;
     readonly beginCreate: (dir: string, type: "file" | "dir") => void;
     readonly beginRename: (path: string) => void;
-    readonly extract: (path: string) => Promise<void>;
     readonly keepFolder: (path: string) => Promise<void>;
     readonly requestDelete: () => void;
     readonly stage: (mode: "copy" | "cut", system: "async" | "event") => readonly string[];
     readonly paste: (dir: string) => Promise<void>;
+    // What the surface may not have, each left out of the menu when absent (EntryVerbs).
+    readonly extract?: (path: string) => Promise<void>;
     // `dir` is workspace-relative.
-    readonly openTerminal: (dir: string) => void;
+    readonly openTerminal?: (dir: string) => void;
     // Saves these workspace paths onto this computer.
-    readonly download: (paths: readonly string[]) => void;
+    readonly download?: (paths: readonly string[]) => void;
+    // Asks an agent about this file.
+    readonly ask?: (path: string) => void;
 }
 
 export const useTreeMenu = (host: TreeMenuHost) => {
@@ -52,41 +55,41 @@ export const useTreeMenu = (host: TreeMenuHost) => {
         target?.type === `dir` && !multi
             ? host.rowActions(target.path).map((action) => ({ label: action.tooltip, icon: action.icon, command: () => runAction(target, action) }))
             : [];
-    // The verbs of a menu opened on `target` (undefined for the background), acting in `dir`.
-    const verbsFor = (target: WorkspaceTreeEntry | undefined, dir: string, multi: boolean): EntryVerbs => ({
-        newFile: () => host.beginCreate(dir, `file`),
-        newFolder: () => host.beginCreate(dir, `dir`),
-        rename: () => {
-            if (target !== undefined) {
-                host.beginRename(target.path);
-            }
-        },
-        extract: () => {
-            if (target !== undefined) {
-                void host.extract(target.path);
-            }
-        },
-        keepFolder: () => {
-            if (target !== undefined) {
-                void host.keepFolder(target.path);
-            }
-        },
-        remove: host.requestDelete,
-        cut: () => {
-            host.stage(`cut`, `async`);
-        },
-        copy: () => {
-            host.stage(`copy`, `async`);
-        },
-        paste: () => void host.paste(dir),
-        openTerminal: () => host.openTerminal(dir),
-        // The selection it was opened in, the private entries left out as every bulk verb leaves them; else the one row.
-        download: () => {
-            if (target !== undefined) {
-                host.download(multi ? host.rules.unlockedOnly([...selection.value]) : [target.path]);
-            }
-        },
-    });
+    // The verbs of a menu opened on `target` (undefined for the background), acting in `dir`. The four the surface may lack
+    // are undefined without it, which drops their rows (EntryVerbs).
+    const verbsFor = (target: WorkspaceTreeEntry | undefined, dir: string, multi: boolean): EntryVerbs => {
+        const { extract, openTerminal, download, ask } = host;
+        return {
+            newFile: () => host.beginCreate(dir, `file`),
+            newFolder: () => host.beginCreate(dir, `dir`),
+            rename: () => {
+                if (target !== undefined) {
+                    host.beginRename(target.path);
+                }
+            },
+            keepFolder: () => {
+                if (target !== undefined) {
+                    void host.keepFolder(target.path);
+                }
+            },
+            remove: host.requestDelete,
+            cut: () => {
+                host.stage(`cut`, `async`);
+            },
+            copy: () => {
+                host.stage(`copy`, `async`);
+            },
+            paste: () => void host.paste(dir),
+            openTerminal: openTerminal === undefined ? undefined : () => openTerminal(dir),
+            extract: extract === undefined || target === undefined ? undefined : () => void extract(target.path),
+            // The selection it was opened in, the private entries left out as every bulk verb leaves them; else the one row.
+            download:
+                download === undefined || target === undefined
+                    ? undefined
+                    : () => download(multi ? host.rules.unlockedOnly([...selection.value]) : [target.path]),
+            ask: ask === undefined || target === undefined ? undefined : () => ask(target.path),
+        };
+    };
     // A right-click on empty space acts in the tree's OWN root: `` would aim every verb at /work from inside a project.
     const dirOf = (target: WorkspaceTreeEntry | undefined): string => {
         if (target === undefined) {

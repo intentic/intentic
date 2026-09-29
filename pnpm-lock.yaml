@@ -1044,6 +1044,9 @@ importers:
       '@intentic/ext-onlyoffice':
         specifier: workspace:*
         version: link:../../_extensions/onlyoffice
+      '@intentic/fileq':
+        specifier: workspace:*
+        version: link:../../_sandbox/fileq
       '@intentic/sandbox-contract':
         specifier: workspace:*
         version: link:../../_shared/sandbox-contract

@@ -5,10 +5,10 @@ import { sandboxSummary } from "../../../testing/sandboxSummary";
 import { type SetupRowHost, useSetupRow } from "./useSetupRow";
 
 // Pins the row this visit sets up: created under the next free name once at a time, failing into a notice rather than a
-// throw, a check-in baseline that follows the row, a connection that selects before entering, and a draft discarded
-// only while this visit minted it and nothing committed it.
+// throw, a check-in baseline that follows the row, a connection that selects before entering and enters only once the
+// row needs nothing more, and a draft discarded only while this visit minted it and nothing committed it.
 
-const stage = (existing: readonly SandboxSummary[] = [], name?: string) => {
+const stage = (existing: readonly SandboxSummary[] = [], name?: string, handOff?: SetupRowHost[`handOff`]) => {
     const sandbox = {
         sandboxes: ref<SandboxSummary[]>([...existing]),
         create: jest.fn(async (named: string) => sandboxSummary({ id: `new`, name: named })),
@@ -16,7 +16,7 @@ const stage = (existing: readonly SandboxSummary[] = [], name?: string) => {
         remove: jest.fn(async (_id: string) => undefined),
     } satisfies SetupRowHost[`sandbox`];
     const enter = jest.fn(async () => undefined);
-    const row = effectScope().run(() => useSetupRow({ sandbox, enter, name }))!;
+    const row = effectScope().run(() => useSetupRow({ sandbox, enter, name, handOff }))!;
     return { sandbox, enter, row };
 };
 
@@ -65,6 +65,20 @@ describe(`the row this visit sets up`, () => {
         expect(sandbox.select.mock.calls).toEqual([[`s1`]]);
         expect(enter).toHaveBeenCalledTimes(1);
         expect(row.finished.value).toBe(true);
+    });
+
+    // A hosted project's folder reaches the app before its workspace opens (hostedProject.ts): until it has, the page
+    // stays, and the next check-in reading asks again.
+    it(`opens the workspace only once the row's hand-off has gone through`, async () => {
+        const handOff = jest.fn(async (_id: string) => false);
+        const { sandbox, enter, row } = stage([], undefined, handOff);
+        await row.connected(`s1`);
+        const seen = () => ({ asked: handOff.mock.calls.length, entered: enter.mock.calls.length, finished: row.finished.value });
+        expect({ ...seen(), selected: sandbox.select.mock.calls }).toEqual({ asked: 1, entered: 0, finished: false, selected: [[`s1`]] });
+        handOff.mockResolvedValueOnce(true);
+        await row.connected(`s1`);
+        expect(seen()).toEqual({ asked: 2, entered: 1, finished: true });
+        expect(handOff.mock.calls).toEqual([[`s1`], [`s1`]]);
     });
 });
 

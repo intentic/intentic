@@ -14,6 +14,8 @@ const load = async (options: {
     readonly deployed?: unknown;
     readonly ok?: boolean;
     readonly desktopUpdate?: string | null;
+    // A local window: the desktop app's window on a folder of the user's own disk (app/environments/local.ts).
+    readonly local?: boolean;
 }) => {
     stubGlobal(`fetch`, () =>
         Promise.resolve({
@@ -25,6 +27,8 @@ const load = async (options: {
     // `window.env`, which every module in the import graph reads at load.
     window.__INTENTIC_DESKTOP__ =
         options.desktopUpdate === undefined ? undefined : { version: `1.0.0`, installId: `id`, update: options.desktopUpdate };
+    window.__INTENTIC_LOCAL__ =
+        options.local === true ? { daemonUrl: `http://127.0.0.1:4100`, token: `t`, id: `f`, name: `notes`, path: `/home/me/notes` } : undefined;
     jest.mock(`./buildEpoch`, () => ({ buildId: () => options.running, dropOutdatedMirrors: () => undefined }));
     return await freshImport<typeof import("./appUpdate")>("./appUpdate", import.meta.url);
 };
@@ -179,5 +183,33 @@ describe(`an incomplete bundle`, () => {
         window.dispatchEvent(new CustomEvent(`intentic-desktop-update`, { detail: { version: `1.214.0` } }));
         await nextTick();
         expect(offer.value).toEqual({ kind: `app`, version: `1.214.0` });
+    });
+});
+
+// The desktop app's window on a folder runs the bundle the app ships with, and the app refuses a restart asked from
+// it: an offer there would be a button that does nothing. The tray and the app's Home say when there is an update.
+describe(`a local window`, () => {
+    afterEach(() => {
+        window.__INTENTIC_LOCAL__ = undefined;
+    });
+
+    it(`offers neither a newer deploy nor a downloaded app`, async () => {
+        const { useAppUpdate } = await load({ running: `1720000000000`, deployed: { buildId: `1730000000000` }, desktopUpdate: `1.214.0`, local: true });
+        const { offer } = useAppUpdate();
+        await settled();
+        expect(offer.value).toBeUndefined();
+
+        window.dispatchEvent(new CustomEvent(`intentic-desktop-update`, { detail: { version: `1.215.0` } }));
+        await nextTick();
+        expect(offer.value).toBeUndefined();
+    });
+
+    it(`still offers the reload that repairs a missing piece of its own bundle`, async () => {
+        const { useAppUpdate, reportIncompleteBundle } = await load({ running: `1720000000000`, deployed: { buildId: `1730000000000` }, local: true });
+        const { offer } = useAppUpdate();
+        await settled();
+        reportIncompleteBundle();
+        await nextTick();
+        expect(offer.value).toEqual({ kind: `incomplete` });
     });
 });

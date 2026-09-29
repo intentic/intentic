@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BROKEN_LINK, resolveExisting, resolveWritable } from "./paths.js";
+import { resolveEntry, resolveExisting, resolveWritable } from "./paths.js";
 
 // A folder with a document, a subfolder, a link that stays inside and two that lead out (one to a file, one to a
 // folder), beside a sibling folder the links point into.
@@ -53,9 +53,9 @@ describe(`resolveWritable`, () => {
         symlinkSync(join(base, `secrets`, `planted.txt`), join(root, `dangling.txt`));
         symlinkSync(join(base, `secrets`, `made`), join(root, `dangling-dir`));
         symlinkSync(join(root, `dangling-loop`), join(root, `dangling-loop`));
-        expect(await resolveWritable(root, `dangling.txt`)).toEqual({ kind: `refused`, why: BROKEN_LINK });
-        expect(await resolveWritable(root, `dangling-dir/new.txt`)).toEqual({ kind: `refused`, why: BROKEN_LINK });
-        expect(await resolveWritable(root, `dangling-loop`)).toEqual({ kind: `refused`, why: BROKEN_LINK });
+        expect(await resolveWritable(root, `dangling.txt`)).toEqual({ kind: `refused`, why: `“dangling.txt” is a link to something that isn't there.` });
+        expect(await resolveWritable(root, `dangling-dir/new.txt`)).toEqual({ kind: `refused`, why: `“dangling-dir” is a link to something that isn't there.` });
+        expect(await resolveWritable(root, `dangling-loop`)).toEqual({ kind: `refused`, why: `“dangling-loop” is a link to something that isn't there.` });
     });
 
     // The path a write is handed has no link left in it, so nothing between resolving and writing follows one.
@@ -66,5 +66,34 @@ describe(`resolveWritable`, () => {
 
     it(`refuses a path that runs through a file as if it were a folder`, async () => {
         expect(await resolveWritable(root, `docs/a.md/b.md`)).toEqual({ kind: `refused`, why: `not a folder` });
+    });
+});
+
+describe(`a write that names a link`, () => {
+    // lstat at the name first: the link is followed only to a real place inside the root, and a link to nothing is
+    // refused even when the nothing it names would be inside, since the write would create it wherever it points.
+    it(`follows a link in to its real path, refuses one out, and refuses one to nothing wherever it points`, async () => {
+        symlinkSync(join(root, `docs`, `later.md`), join(root, `later.md`));
+        expect(await resolveWritable(root, `inside.md`)).toEqual({ kind: `found`, abs: join(root, `docs`, `a.md`) });
+        expect(await resolveWritable(root, `key.txt`)).toEqual({ kind: `refused`, why: `outside this folder` });
+        expect(await resolveWritable(root, `later.md`)).toEqual({ kind: `refused`, why: `“later.md” is a link to something that isn't there.` });
+    });
+});
+
+describe(`resolveEntry`, () => {
+    // What a move, copy or delete acts on: a link is moved or trashed as the link, never as what it points at.
+    it(`finds a link as itself, in the real folder it sits in`, async () => {
+        symlinkSync(join(root, `docs`), join(root, `docs-link`));
+        expect(await resolveEntry(root, `inside.md`)).toEqual({ kind: `found`, abs: join(root, `inside.md`) });
+        expect(await resolveEntry(root, `key.txt`)).toEqual({ kind: `found`, abs: join(root, `key.txt`) });
+        expect(await resolveEntry(root, `docs-link/a.md`)).toEqual({ kind: `found`, abs: join(root, `docs`, `a.md`) });
+    });
+
+    it(`refuses an entry below a folder that leads out, and says missing for nothing there`, async () => {
+        expect(await resolveEntry(root, `secrets/key.txt`)).toEqual({ kind: `refused`, why: `outside this folder` });
+        expect(await resolveEntry(root, `docs/b.md`)).toEqual({ kind: `missing` });
+        expect(await resolveEntry(root, `gone/b.md`)).toEqual({ kind: `missing` });
+        expect(await resolveEntry(root, ``)).toEqual({ kind: `refused`, why: `invalid path` });
+        expect(await resolveEntry(root, `../secrets`)).toEqual({ kind: `refused`, why: `invalid path` });
     });
 });

@@ -182,7 +182,7 @@ export const walkTree = async (root: string, maxEntries = MAX_ENTRIES): Promise<
 
 // The ignore rules in force at `segments` below the root, every folder's above it replayed in order, and whether one of
 // those folders is itself ignored; undefined when a folder's rules on the way cannot be read.
-const scopeAt = async (
+export const scopeAt = async (
     root: string,
     segments: readonly string[],
 ): Promise<{ readonly scope: IgnoreScope; readonly ignored: boolean } | undefined> => {

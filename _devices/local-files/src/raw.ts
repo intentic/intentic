@@ -3,8 +3,8 @@ import { dirname } from "node:path";
 import { json, type RawRoutes } from "@intentic/contract-serve";
 import type { LocalFolder, LocalOffice } from "@intentic/ext-onlyoffice/local-office";
 import { contentTypeFor, MAX_RAW_BYTES, MAX_WRITE_BYTES, openFile, writeFileWhole, writePartAt, type WriteRefusal } from "./files.js";
-import { type Grant, mayWrite } from "./grants.js";
-import { cleanRelPath, resolveExisting, resolveWritable } from "./paths.js";
+import { type Grant, mayWrite, READ_ONLY } from "./grants.js";
+import { cleanRelPath, entryOf, resolveExisting, resolveWritable } from "./paths.js";
 
 // The routes the daemon serves outside oRPC that a window on a folder uses: the bytes behind the viewers, the one write
 // path (the editor's save, a drop into the explorer), and the office extension's own namespace. Each answers in the
@@ -15,7 +15,11 @@ const REFUSAL_STATUS = {
     busy: { status: 423, error: `another program has the file open` },
     denied: { status: 403, error: `this computer does not let you change that file` },
     "too-large": { status: 413, error: `file too large` },
+    "not-text": { status: 422, error: `This file isn't UTF-8 text, so saving it here would change its characters.` },
 } as const satisfies Record<WriteRefusal, { readonly status: number; readonly error: string }>;
+
+// Why a document's own window may not write beside it.
+const ONLY_THE_FILE = `only the file that was opened can be changed from this window`;
 
 // Where an upload lands, and the byte it starts at.
 interface UploadTarget {
@@ -31,7 +35,7 @@ const uploadTarget = async (grant: Grant, url: URL, request: Request, cap: numbe
         return json({ error: `invalid path` }, 400);
     }
     if (!mayWrite(grant, path)) {
-        return json({ error: `only the file that was opened can be changed from this window` }, 403);
+        return json({ error: grant.readOnly === true ? READ_ONLY : ONLY_THE_FILE }, 403);
     }
     const resolved = await resolveWritable(grant.root, path);
     if (resolved.kind !== `found`) {
@@ -91,9 +95,10 @@ export const rawFor = (grant: Grant, office: LocalOffice, folder: LocalFolder, c
                 return json({ error: REFUSAL_STATUS[refused].error }, REFUSAL_STATUS[refused].status);
             }
             const mtime = Number(url.searchParams.get(`mtime`));
-            if (Number.isFinite(mtime)) {
-                // allow(silent-catch): the time is a hint for the next drop's diff, never worth failing the write over. Set on
-                // the entry itself: a link put where the file was since it landed is not followed either.
+            // Looked at right before, and set on the entry itself: a link put where the file was since it landed is
+            // neither followed nor given the time.
+            if (Number.isFinite(mtime) && (await entryOf(target.abs))?.isFile() === true) {
+                // allow(silent-catch): the time is a hint for the next drop's diff, never worth failing the write over.
                 await lutimes(target.abs, new Date(mtime), new Date(mtime)).catch(() => undefined);
             }
             return json({ ok: true });

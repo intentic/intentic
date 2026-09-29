@@ -15,7 +15,12 @@ export type FileWrite =
     // The owner chose to keep both: written beside the file under a free name.
     | { readonly kind: "copy" };
 
-export type FileWritten = { readonly written: true; readonly path: string; readonly version: string } | { readonly conflict: true };
+// Written, not written because the file changed on disk since, or refused outright (a copy where this window may not
+// write), with the words the page shows.
+export type FileWritten =
+    | { readonly written: true; readonly path: string; readonly version: string }
+    | { readonly conflict: true }
+    | { readonly refused: string };
 
 export interface OpenedFile {
     readonly stream: Readable;
@@ -130,6 +135,10 @@ export const createBrowserRoutes = (deps: BrowserRouteDeps, limit = MAX_SAVE_BYT
             const result = await deps.writeFile(session, limited(req, limit), write);
             if ("conflict" in result) {
                 json(res, 409, { error: "the file changed on disk" });
+                return;
+            }
+            if ("refused" in result) {
+                json(res, 403, { error: result.refused });
                 return;
             }
             deps.log(`saved ${result.path} from the browser editor`);

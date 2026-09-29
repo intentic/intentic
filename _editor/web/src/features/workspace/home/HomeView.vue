@@ -5,6 +5,7 @@ import { isLockedWorkspacePath } from "@intentic/sandbox-contract";
 import { ContextMenu, useHoverIntent, useLoadingReveal } from "@intentic/ui";
 import { basename, parentDir } from "@intentic/ui/path";
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
+import { localFace } from "../../../app/environments/local";
 import { variableRows } from "../../../lib/rowWindow";
 import { useRowWindow } from "../../../lib/useRowWindow";
 import { useLayout } from "../../../shell/window/useLayout";
@@ -168,7 +169,8 @@ const loading = computed(() => (homeDir.value === `` ? isLoading.value : childre
 const revealed = useLoadingReveal(loading, homeDir);
 
 // --- Where you are -------------------------------------------------------------------------------------------------
-const rootLabel = computed(() => (workspaceDir.value === `` ? `Workspace` : basename(workspaceDir.value)));
+// A desktop app's window on a folder of this computer names it as the folder it is, not as a workspace.
+const rootLabel = computed(() => (workspaceDir.value === `` ? (localFace()?.name ?? t(`shared.workspace`)) : basename(workspaceDir.value)));
 const crumbs = computed<readonly { readonly label: string; readonly path: string }[]>(() => {
     const root = workspaceDir.value;
     const relative = homeDir.value === root ? `` : root === `` ? homeDir.value : homeDir.value.slice(root.length + 1);

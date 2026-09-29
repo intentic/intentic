@@ -3,7 +3,7 @@ import { computed, ref, type Ref, watch } from "vue";
 import type { RouteLocationNormalizedLoaded } from "vue-router";
 import type { apiClient } from "../../../lib/useApi";
 import type { useSandbox } from "../../sandbox/client/useSandbox";
-import { type Arrival, arrivalFor, hostedIdle, rowToOpen, touched } from "../setupArrival";
+import { type Arrival, arrivalFor, type ArrivalInput, hostedIdle, projectPrefersHosted, rowToOpen, touched } from "../setupArrival";
 import { lanesFor, readOffer } from "../setupLanes";
 import { type Machine, type MachineOption, requestedRung } from "./machineLadder";
 import type { CommandLaneApi } from "./useCommandLane";
@@ -27,6 +27,7 @@ export interface SetupArrivalHost {
         | `hostedRead`
         | `hostedRow`
         | `hostedOffered`
+        | `hostedProjects`
         | `hostedSpent`
         | `hostedFull`
         | `recordOffer`
@@ -144,10 +145,7 @@ export const useSetupArrival = ({
         const idleMachine = await openRow(rows);
         // A rung picked before this page outranks the arrival: it preselects the picker and is `arrivalFor`'s own answer.
         const asked = requestedRung(ladder.value, route.query[`machine`]);
-        if (asked !== undefined) {
-            hosted.machine.value = asked;
-        }
-        arrival.value = arrivalFor({
+        const facts: ArrivalInput = {
             inApp: inApp.value,
             // Read before any create, so a row minted seconds ago is never counted as company for itself.
             onlySandbox: rows.every((entry) => entry.id === row.created.value?.id),
@@ -162,7 +160,13 @@ export const useSetupArrival = ({
             requestedMachine: asked,
             elsewhere: elsewhere.value,
             project,
-        });
+            hostedProjects: hosted.hostedProjects.value,
+        };
+        // A project's machine of ours is preselected even where the arrival starts none, so the picker opens on it.
+        if (asked !== undefined || projectPrefersHosted(facts)) {
+            hosted.machine.value = asked ?? `hosted`;
+        }
+        arrival.value = arrivalFor(facts);
         // Nothing takeable means nothing to start: the page states which lane fact holds and switches nothing.
         if (laneTakeable.value && !(await takeArrival(asked))) {
             arrival.value = `choose`;

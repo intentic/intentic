@@ -18,14 +18,14 @@
                 "type": "enum",
                 "enum": ["browser", "server"],
                 "title": "Editor engine",
-                "description": "browser: ONLYOFFICE runs in your browser from a one-time download of about 200 MB, with no Docker; two tabs on one file don't co-edit, and a save that would overwrite someone else's change asks first. server: ONLYOFFICE Docs runs as a container in this sandbox's Docker engine (a 2 GB image and a two-minute cold start), and two tabs co-edit live.",
+                "description": "browser: ONLYOFFICE runs in your browser from a one-time download of about 200 MB, with no Docker; two tabs on one file don't co-edit, and a save that would overwrite someone else's change asks first. server: ONLYOFFICE Docs runs as a container in this sandbox's Docker engine (a 2 GB image and a two-minute cold start), and two tabs co-edit live. Documents on your own computer, opened in the desktop app, always use the browser engine.",
                 "default": "browser"
             },
             {
                 "key": "autoStart",
                 "type": "boolean",
                 "title": "Prepare the editor with the sandbox",
-                "description": "Gets the chosen engine ready when the sandbox starts, in the background, so the first document opens without the wait: the browser engine's one-time download, or the document server's container (a 2 GB pull on the first boot, then a two-minute cold start). Off: the first document you open does it.",
+                "description": "Gets the chosen engine ready when the sandbox starts, in the background, so the first document opens without the wait: the browser engine's one-time download, or the document server's container (a 2 GB pull on the first boot, then a two-minute cold start). Off: the first document you open does it, which is also how documents on your own computer get it, since those have no sandbox to start with.",
                 "default": false
             }
         ],

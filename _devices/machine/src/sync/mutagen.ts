@@ -17,7 +17,7 @@ import {
 } from "@intentic/local-agent";
 import { binDir } from "../config.js";
 import { archToken, download, exe, osToken, renameIfPresent } from "../release.js";
-import { isProjectPairing, mutagenDaemonLogPath, type Pairing, pairingRemoteDir } from "./config.js";
+import { isProjectPairing, mutagenDaemonLogPath, type Pairing, pairingRemoteDir, projectDirection } from "./config.js";
 import { runProcess } from "./exec.js";
 import { clearConflictResidue, type ResidueOutcome, sweepDerivedResidue } from "./residue.js";
 import { BACKUP_IGNORES, ignoresFor, mutagenSshPath, sanitizeId, sshAlias, sshTransportAnswers } from "./ssh.js";
@@ -131,8 +131,9 @@ export interface SyncSessionSpec {
     readonly localDir: string;
     readonly alias: string;
     readonly remoteDir: string;
-    // Two-way for the both-edited workspace; one-way replica for the backup, whose only writer is the sandbox.
-    readonly mode: "two-way-safe" | "one-way-replica";
+    // Two-way for the both-edited workspace; one-way replica for the backup, whose only writer is the sandbox; one-way
+    // safe for a copy-first project (syncMode).
+    readonly mode: SyncSessionMode;
     readonly ignores: readonly string[];
     // Which end is alpha: Mutagen's one-way modes always propagate alpha→beta, so the backup must put the sandbox
     // first. Getting this backwards would not fail loudly, it would silently overwrite the sandbox's state with the
@@ -143,6 +144,17 @@ export interface SyncSessionSpec {
     readonly symlinks: SymlinkMode;
 }
 
+// Mutagen's names for the modes, as `sync create --sync-mode` takes them and `sync list` prints them back.
+export type SyncSessionMode = "two-way-safe" | "one-way-safe" | "one-way-replica";
+
+// COPY-FIRST: a project folder flows one way, this device (alpha) to the sandbox (beta), unless its owner opted into
+// two-way. One-way-safe, measured against Mutagen 0.18.1 (README): this device's edits, creations and deletions reach
+// the sandbox; nothing the sandbox does ever reaches this device; a file an agent changes or creates there is kept
+// (a change as a conflict, a creation silently) rather than overwritten, and one it deletes is put back from here.
+// Nothing an agent does in the sandbox can empty the owner's folder, which is what two-way let an `rm -rf` do.
+export const syncMode = (pairing: Pick<Pairing, "project" | "direction">): "two-way-safe" | "one-way-safe" =>
+    isProjectPairing(pairing) && projectDirection(pairing) === "to-sandbox" ? "one-way-safe" : "two-way-safe";
+
 // The workspace session for a pairing: name and alias namespace on the sandbox id; the remote side is /work, or the
 // project folder a project pairing syncs (config.ts), and each kind gets its own ignore list (ssh.ts).
 export const sessionSpec = (pairing: Pairing & { readonly localDir: string }, symlinks: SymlinkMode): SyncSessionSpec => ({
@@ -150,7 +162,7 @@ export const sessionSpec = (pairing: Pairing & { readonly localDir: string }, sy
     localDir: pairing.localDir,
     alias: sshAlias(pairing.sandboxId),
     remoteDir: pairingRemoteDir(pairing),
-    mode: "two-way-safe",
+    mode: syncMode(pairing),
     ignores: ignoresFor(pairing),
     from: "local",
     symlinks,
@@ -176,7 +188,7 @@ const backupSpec = (pairing: Pairing & { readonly localDir: string }, symlinks: 
 // The device's own end is left at the default, since Windows and macOS watch recursively for real.
 const SANDBOX_POLL_SECONDS = 2;
 
-// Two-way-safe is pinned explicitly, so a version bump or global config can't silently switch it to clobbering.
+// The mode is pinned explicitly, so a version bump or global config can't silently switch it to clobbering.
 // No --ignore-vcs: it misses the pointer-file .git this layout leaves; IGNORES' bare `.git` covers that instead.
 export const mutagenCreateArgs = (spec: SyncSessionSpec, paused: boolean): string[] => {
     const local = spec.localDir;
@@ -234,7 +246,10 @@ interface LiveConflict {
     readonly betaChanges?: readonly LiveChange[];
 }
 
-interface LiveSession {
+export interface LiveSession {
+    // `mode` in `sync list --template {{json .}}`, spelled as `--sync-mode` takes it; absent on a session created
+    // without that flag, which Mutagen runs two-way-safe (liveMode).
+    readonly mode?: string;
     // What tells one session from another under a shared name. Names are not unique; identifiers are.
     readonly identifier?: string;
     // Both ends carry an optional host since a session may run either way (the backup's alpha is the sandbox);
@@ -450,11 +465,17 @@ export const sameEnds = (session: Pick<LiveSession, "alpha" | "beta">, spec: Syn
     return session.alpha.path === alpha.path && session.alpha.host === alpha.host && session.beta.path === beta.path && session.beta.host === beta.host;
 };
 
+// The mode a live session runs in. Protobuf JSON omits the default, and a session created without `--sync-mode` (none of
+// this agent's) runs Mutagen's default, two-way-safe.
+export const liveMode = (session: Pick<LiveSession, "mode">): string => session.mode ?? "two-way-safe";
+
 // Whether the running session is what this build would create. Mutagen freezes config at `sync create` with no
-// edit verb, so a stale ignore list means a session that will never behave like this version says.
+// edit verb, so a stale ignore list means a session that will never behave like this version says. The mode is part of
+// it: a project whose direction changed, or one an older agent created two-way, is recreated in the mode it now has.
 export const sessionMatchesSpec = (session: LiveSession, spec: SyncSessionSpec): boolean => {
     return (
         sameEnds(session, spec) &&
+        liveMode(session) === spec.mode &&
         session.ignore.vcs !== true &&
         (session.ignore.paths ?? []).join("\n") === spec.ignores.join("\n") &&
         // A session made before the mode was pinned carries none, and that is portable. It must still match a portable
@@ -539,15 +560,30 @@ export const convergePlan = (sessions: readonly LiveSession[], spec: SyncSession
     return only !== undefined && sessionMatchesSpec(only, spec) ? "keep" : "replace";
 };
 
+// Whether a replacement waits for a settled pair of roots and sweeps residue first (readyForReplacement): only a
+// two-way session replaced by another. Everything else is replaced as soon as the sandbox answers:
+// - The state backup runs one-way from the sandbox into its own state dir: nothing of this device's making is there.
+// - Into copy-first (one-way-safe): settling flushes the old two-way session, which carries the sandbox's latest
+//   changes, an agent's `rm -rf` among them, into the owner's folder one last time; that is what the new mode exists to
+//   stop. Its conflicts cost nothing, since the new session never writes to this device, and the sweep removes local
+//   content because the sandbox lacks it. Whatever the sandbox holds that the folder does not stays there, for
+//   `sync changes` and `sync bring-back`.
+// - Out of copy-first (the owner chose `both`): what a one-way-safe session calls a conflict is an agent's edit it
+//   kept, two different copies whichever session holds them, so waiting on them would hold the switch until they were
+//   brought back, for nothing. A fresh two-way-safe session has no history, so it deletes nothing: it copies what one
+//   side alone holds to the other, and reports what differs as a conflict (README). And the sweep reads "absent in the
+//   sandbox" as "deleted there", which only two-way syncing makes true.
+export const settlesFirst = (spec: Pick<SyncSessionSpec, "mode">, live: readonly Pick<LiveSession, "mode">[]): boolean =>
+    spec.mode === "two-way-safe" && live.every((session) => liveMode(session) === "two-way-safe");
+
 // WHAT A REPLACEMENT COSTS, which is why one is never done blind. Mutagen's record of what the two ends last agreed on
 // lives inside the session; terminating it throws that away, and the replacement reconciles two trees with no history
 // between them. Every path that differs at that moment then reads as created on BOTH sides at once — the one shape
 // two-way-safe can never settle — so a session is replaced only from a settled state, and residue is swept first so it
 // is not propagated back to the sandbox as empty directories by a sync with nothing to compare against.
+// That is a rule about a TWO-WAY session replaced by another, the only replacement that settles first (settlesFirst).
 const readyForReplacement = async (mutagen: string, spec: SyncSessionSpec, live: readonly LiveSession[], log: Log): Promise<boolean> => {
-    // The backup session is one-way from the sandbox and its root is the sandbox's own state dir: nothing of this
-    // device's making is in there to settle or to sweep, so it is replaced as it always was.
-    if (spec.mode !== "two-way-safe") {
+    if (!settlesFirst(spec, live)) {
         return true;
     }
     await flushSession(mutagen, spec.name);
@@ -613,7 +649,7 @@ const convergeSession = async (mutagen: string, spec: SyncSessionSpec, log: Log)
             return false;
         }
         log(
-            `${spec.name}: the running sync session does not match this build's rules (its ignores, its folder, or what it does with symbolic links): recreating it so they apply. This starts the comparison from scratch, which is why it only happens from a settled state.`,
+            `${spec.name}: the running sync session does not match this build's rules (its ignores, its folder, which way it syncs, or what it does with symbolic links): recreating it so they apply, as ${spec.mode}. This starts the comparison from scratch.`,
         );
         spawnSync(mutagen, ["sync", "terminate", spec.name], { stdio: "ignore", windowsHide: true });
     }
@@ -633,7 +669,9 @@ const SWEEP_TIMEOUT_MS = 60_000;
 // the thing itself.
 export const healDerivedConflicts = async (mutagen: string, pairing: Pairing, log: Log, asked = false): Promise<ResidueOutcome> => {
     const idle = { removed: [], standing: 0 } as const;
-    if (pairing.mode !== "sync" || pairing.localDir === undefined) {
+    // A copy-first project never has anything removed here on the sandbox's say-so; its deletions are not carried back
+    // at all, so none is ever held up by build output on this device.
+    if (pairing.mode !== "sync" || pairing.localDir === undefined || syncMode(pairing) !== "two-way-safe") {
         return idle;
     }
     if (!asked && (pairing.autoHealOff === true || pairing.fileSyncAutoPaused === true)) {

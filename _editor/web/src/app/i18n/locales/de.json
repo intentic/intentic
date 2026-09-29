@@ -4003,7 +4003,7 @@
         },
         "setupSyncOption": {
             "alsoSyncLocalFolder": "Auch einen lokalen Ordner synchronisieren",
-            "syncsWithFolderYouPicked": "Synchronisiert live mit dem Ordner, den Sie gewählt haben"
+            "syncsWithFolderYouPicked": "Kopiert aus dem Ordner, den Sie gewählt haben"
         },
         "words": {
             "useLettersNumbersHyphens": "Nur Buchstaben, Ziffern und Bindestriche."

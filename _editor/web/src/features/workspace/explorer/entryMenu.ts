@@ -11,18 +11,23 @@ export interface EntryVerbs {
     readonly newFile: () => void;
     readonly newFolder: () => void;
     readonly rename: () => void;
-    // Unpacks an archive into a new entry beside it; the daemon names it, having seen what is inside.
-    readonly extract: () => void;
     // Drops a placeholder into an empty folder chain so it stops counting as empty.
     readonly keepFolder: () => void;
     readonly remove: () => void;
     readonly cut: () => void;
     readonly copy: () => void;
     readonly paste: () => void;
+    // The verbs below are ones a surface may not have, and one it was not handed is left out of the menu: a folder on
+    // this computer has no shell, no archive to unpack into, and nowhere to download to, being already there (fileVerbs.ts'
+    // seams), and only its window has a way to an agent.
+    // Unpacks an archive into a new entry beside it; the daemon names it, having seen what is inside.
+    readonly extract?: () => void;
     // Starts a shell in the right-clicked folder.
-    readonly openTerminal: () => void;
+    readonly openTerminal?: () => void;
     // Saves the entry, or the whole selection, onto this computer; a folder or several entries come as one ZIP.
-    readonly download: () => void;
+    readonly download?: () => void;
+    // Asks an agent about the one file right-clicked: the desktop app's way from a folder on this computer to an agent.
+    readonly ask?: () => void;
 }
 
 export interface EntryMenuInput {
@@ -81,7 +86,7 @@ const withSeparator = (items: readonly MenuItem[]): MenuItem[] => (items.length 
 // Says up front that a folder or a selection arrives zipped, so the file that lands is the one the row promised.
 const downloadRow = (input: EntryMenuInput): MenuItem[] => {
     const { target, multi, count, verbs } = input;
-    if (target === undefined || ((multi || target.type === `dir`) && !offers(input, ZIP_ROUTE))) {
+    if (target === undefined || verbs.download === undefined || ((multi || target.type === `dir`) && !offers(input, ZIP_ROUTE))) {
         return [];
     }
     const label = multi
@@ -92,10 +97,14 @@ const downloadRow = (input: EntryMenuInput): MenuItem[] => {
     return [{ label, icon: `download`, command: verbs.download }];
 };
 
+// Changes nothing, so a reader keeps it too; one file only, since the conversation it starts is about that file.
+const askRow = ({ target, multi, verbs }: EntryMenuInput): MenuItem[] =>
+    target?.type === `file` && !multi && verbs.ask !== undefined ? [{ label: t(`local.entryMenu.askAgent`), icon: `robot`, command: verbs.ask }] : [];
+
 // A download changes nothing, so a reader keeps it.
 const readOnlyMenu = (input: EntryMenuInput): MenuItem[] => {
     const { head = [], lead = [], tail = [] } = input;
-    return joinGroups(head, lead, downloadRow(input), tail, [readOnlyNote()]);
+    return joinGroups(head, askRow(input), lead, downloadRow(input), tail, [readOnlyNote()]);
 };
 
 // Joins the groups that have rows, a rule between them, so a menu never opens or closes on a separator.
@@ -116,7 +125,7 @@ const soleVerbs = (target: WorkspaceTreeEntry, input: EntryMenuInput): MenuItem[
     const { barren, verbs } = input;
     const items: MenuItem[] = [];
     // Offered by the same rule the daemon unpacks by, so the row can't promise what it would then refuse.
-    if (target.type === `file` && archiveFormat(target.name) !== undefined && offers(input, VERB_ROUTES.extract)) {
+    if (target.type === `file` && archiveFormat(target.name) !== undefined && verbs.extract !== undefined && offers(input, VERB_ROUTES.extract)) {
         items.push({ label: t(`workspace.entryMenu.extract`), icon: `box`, command: verbs.extract });
     }
     if (offers(input, VERB_ROUTES.rename)) {
@@ -158,13 +167,14 @@ export const entryMenuItems = (input: EntryMenuInput): MenuItem[] => {
         return archiveMenu(input);
     }
     const { head = [], lead = [], tail = [], verbs, clipboardFull } = input;
+    const opening = [...head, ...askRow(input)];
     return [
-        ...head,
-        ...(head.length > 0 ? [{ separator: true }] : []),
+        ...opening,
+        ...(opening.length > 0 ? [{ separator: true }] : []),
         { label: t(`workspace.entryMenu.newFile`), icon: `file`, command: verbs.newFile },
         ...(offers(input, VERB_ROUTES.newFolder) ? [{ label: t(`workspace.entryMenu.newFolder`), icon: `folder`, command: verbs.newFolder }] : []),
         ...lead,
-        ...(input.target?.type === `dir` && !input.multi && offers(input, VERB_ROUTES.openTerminal)
+        ...(input.target?.type === `dir` && !input.multi && verbs.openTerminal !== undefined && offers(input, VERB_ROUTES.openTerminal)
             ? [{ label: t(`workspace.entryMenu.openTerminal`), icon: `terminal`, command: verbs.openTerminal }]
             : []),
         ...entryVerbs(input),

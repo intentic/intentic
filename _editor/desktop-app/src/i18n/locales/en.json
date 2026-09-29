@@ -78,11 +78,28 @@
         "tryOpeningItYourself": "Try opening it yourself, then check again.",
         "waitedOf": "Waiting {elapsed} · gives up after {limit}"
     },
-    "localHome": {
-        "title": "On this computer",
-        "lead": "Open a folder or a file in its own window. No sandbox or account needed.",
-        "openFolder": "Open a folder",
-        "openFile": "Open a file"
+    "home": {
+        "agentsLead": "It works on a copy and hands changes back when you say so.",
+        "agentsTitle": "Put an AI agent on a folder",
+        "dropHere": "or drop files and folders here",
+        "filterRecents": "Filter recent folders and files",
+        "finishInBrowser": "Finish signing in in your browser. Your workspace opens when you're done.",
+        "forget": "Remove {name} from this list",
+        "forgetShort": "Remove from this list",
+        "goneOffer": "It isn't there any more. Remove it from this list?",
+        "hoursAgo": "{count} h ago",
+        "justNow": "just now",
+        "minutesAgo": "{count} min ago",
+        "movedOrDeleted": "Moved or deleted",
+        "noMatch": "Nothing you opened recently matches “{query}”.",
+        "openAnything": "Open anything on this computer",
+        "openFile": "Open file…",
+        "openFolder": "Open folder…",
+        "recent": "Recent",
+        "sandbox": "Sandbox",
+        "workspaceLead": "Your agents and sandboxes.",
+        "workspaceTitle": "Your workspace",
+        "yesterday": "yesterday"
     },
     "requirements": {
         "beforeSandboxRunHere": "Before your sandbox can run here:",

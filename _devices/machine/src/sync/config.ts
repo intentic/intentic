@@ -68,6 +68,7 @@ export type SyncMode = "sync" | "mirror";
 // watcher learns ever rewrites it. remoteDir is which sandbox folder localDir holds, /work itself when absent (every
 // pairing made before it existed); `project` marks the owner's own folder synced into `/work/<name>`, which carries
 // no state backup and no git bridge (`isProjectPairing`), and the two only ever come together (`pairingProblem`).
+// `direction` is which way a project's files flow (`projectDirection`), and means nothing on any other pairing.
 export interface Pairing {
     readonly sandboxUrl: string;
     readonly sandboxId: string;
@@ -83,7 +84,18 @@ export interface Pairing {
     readonly autoHealOff?: boolean | undefined;
     readonly remoteDir?: string | undefined;
     readonly project?: true | undefined;
+    readonly direction?: ProjectDirection | undefined;
 }
+
+// COPY-FIRST unless the owner opted into two-way. "to-sandbox": the folder flows one way into the sandbox, and what an
+// agent changes there comes back only through `sync bring-back`, after a restore point; "both": the two-way sync every
+// other pairing has.
+export type ProjectDirection = "to-sandbox" | "both";
+
+// Read leniently, and never held to a schema the way the placement below is: absent is every project made before the
+// field existed, and a value this build has no word for (a later release's) is read as the protective default rather
+// than refusing the whole file, which would stop every pairing's sync.
+export const projectDirection = (pairing: Pick<Pairing, "direction">): ProjectDirection => (pairing.direction === "both" ? "both" : "to-sandbox");
 
 // The sandbox folder a pairing syncs.
 export const pairingRemoteDir = (pairing: Pick<Pairing, "remoteDir">): string => pairing.remoteDir ?? WORKSPACE_ROOT;
@@ -219,4 +231,12 @@ export const setFileSyncAutoPaused = async (sandboxId: string, paused: boolean):
 export const setFileSyncSwapPaused = async (sandboxId: string, paused: boolean): Promise<void> =>
     await updateState((state) => ({
         pairings: state.pairings.map((held) => (held.sandboxId === sandboxId ? { ...held, fileSyncSwapPaused: paused ? true : undefined } : held)),
+    }));
+
+// Stored spelled out rather than as an absent key: the file says which way the owner chose. An agent older than the
+// field carries it through every write but a `setup` (each spreads the pairing it read), and its drift check never
+// compared the sync mode, so it keeps the copy-first session it finds unless something else about that session drifted.
+export const setProjectDirection = async (sandboxId: string, direction: ProjectDirection): Promise<void> =>
+    await updateState((state) => ({
+        pairings: state.pairings.map((held) => (held.sandboxId === sandboxId ? { ...held, direction } : held)),
     }));

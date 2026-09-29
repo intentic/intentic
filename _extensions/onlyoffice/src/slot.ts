@@ -1,3 +1,4 @@
+import { sandboxValue } from "@intentic/extension-api";
 import type { DocsState, Engine, OpenRequest, OpenResult } from "./contract.js";
 import { frameId, keep, take, type KeptFrame } from "./frames.js";
 import { CHANNEL, pageMessage, type ConflictChoice, type PageMessage, type ViewerMessage } from "./protocol.js";
@@ -34,8 +35,127 @@ export interface Opening {
 // (another document, the viewer going) took over.
 export type Loaded = { readonly framed: true } | { readonly status: DocsState } | { readonly superseded: true };
 
+// What decides the mode a document opens in.
+export interface ModeRules {
+    // Whether the reader may edit this document here at all: their role, the copy it is read from, the host's word.
+    readonly mayEdit: boolean;
+    // The backend asked for documents to open for reading first (`openAs: "view"`, a desktop app's local window).
+    readonly viewFirst: boolean;
+    // The reader pressed Edit on this document.
+    readonly editAsked: boolean;
+}
+
+// A document the reader may edit opens for editing, unless the backend asked for reading first and the reader has not
+// pressed Edit yet.
+export const openingMode = (rules: ModeRules): Opening[`mode`] => (rules.mayEdit && (!rules.viewFirst || rules.editAsked) ? `edit` : `view`);
+
+// Edit is offered on a document opened for reading first, which the reader may edit, in a format the engine can write
+// back (`formatWritable`: the browser engine can't write the legacy binary ones), and hasn't asked to edit yet.
+export const offersEdit = (rules: ModeRules, formatWritable: boolean): boolean => rules.viewFirst && rules.mayEdit && formatWritable && !rules.editAsked;
+
+// The documents the reader pressed Edit on, for as long as the page looks at this sandbox: coming back to one opens it
+// for editing again, in the editor kept alive for it if it still is.
+const editsChosen = sandboxValue(() => new Set<string>());
+export const editChosen = (path: string): boolean => editsChosen.value.has(path);
+export const chooseEdit = (path: string): void => {
+    editsChosen.value.add(path);
+};
+
+/* UNSAVED EDITS, BY THE EDITOR THAT HOLDS THEM. Every editor frame this page runs, in a slot or kept out of sight
+   (frames.ts), with what its page last said about edits its file doesn't have; and per document, where the host is
+   told. Apart from any one EditorSlot on purpose: a kept editor saves, fails or meets a conflict after its viewer has
+   gone, and what it holds counts until its page says it is written, the reader discards it, or the frame goes. */
+
+// The host's word on a document: told whether any editor of it holds unsaved edits, whenever that may have changed.
+export type UnsavedReport = (dirty: boolean) => void;
+
+interface Tracked {
+    readonly path: string;
+    readonly origin: string;
+    dirty: boolean;
+}
+
+const unsaved = sandboxValue(
+    () => ({ frames: new Map<HTMLIFrameElement, Tracked>(), reports: new Map<string, UnsavedReport>() }),
+    // A switch ends every editor of the sandbox left (frames.ts), and what they held with them.
+    (previous) => {
+        for (const path of new Set([...previous.frames.values()].filter((entry) => entry.dirty).map((entry) => entry.path))) {
+            previous.reports.get(path)?.(false);
+        }
+    },
+);
+
+const reportUnsavedOf = (path: string): void => {
+    let dirty = false;
+    for (const [frame, entry] of unsaved.value.frames) {
+        // A frame no longer on the page runs no editor: what it held went with it.
+        if (!frame.isConnected) {
+            unsaved.value.frames.delete(frame);
+        } else if (entry.path === path && entry.dirty) {
+            dirty = true;
+        }
+    }
+    unsaved.value.reports.get(path)?.(dirty);
+};
+
+/** Where the host is told about `path`'s unsaved edits, from now on; told where they stand at once. */
+export const reportUnsaved = (path: string, report: UnsavedReport): void => {
+    unsaved.value.reports.set(path, report);
+    reportUnsavedOf(path);
+};
+
+// What a tracked frame's page says about its edits. `saved` of the document itself says nothing about them: the reader
+// may have typed on while it ran, and the page's own `dirty` says how things stand after it. Saved beside the document
+// (a conflict's copy), the page loads the file as it is on disk, and holds nothing.
+const heardUnsaved = (event: MessageEvent): void => {
+    for (const [frame, entry] of unsaved.value.frames) {
+        if (event.source !== frame.contentWindow || event.origin !== entry.origin) {
+            continue;
+        }
+        const message = pageMessage(event.data);
+        if (message?.type === `dirty`) {
+            entry.dirty = message.dirty;
+            reportUnsavedOf(entry.path);
+        } else if (message?.type === `saved` && message.path !== entry.path) {
+            entry.dirty = false;
+            reportUnsavedOf(entry.path);
+        }
+        return;
+    }
+};
+
+// One listener for every tracked frame, from the first on: a kept frame has no slot listening for it.
+let hearing = false;
+const track = (frame: HTMLIFrameElement, path: string, origin: string): void => {
+    if (!hearing) {
+        hearing = true;
+        window.addEventListener(`message`, heardUnsaved);
+    }
+    if (!unsaved.value.frames.has(frame)) {
+        unsaved.value.frames.set(frame, { path, origin, dirty: false });
+    }
+};
+
+// Whether the frame's editor holds edits its file doesn't have.
+const holding = (frame: HTMLIFrameElement): boolean => unsaved.value.frames.get(frame)?.dirty === true;
+
+// The frame's edits are gone: the frame with them (dropped, discarded, not kept), or at the reader's word (`clean`).
+const forget = (frame: HTMLIFrameElement, { clean = false }: { readonly clean?: boolean } = {}): void => {
+    const entry = unsaved.value.frames.get(frame);
+    if (entry === undefined) {
+        return;
+    }
+    if (clean) {
+        entry.dirty = false;
+    } else {
+        unsaved.value.frames.delete(frame);
+    }
+    reportUnsavedOf(entry.path);
+};
+
 interface Current extends KeptFrame {
     readonly id: string;
+    readonly path: string;
     readonly mode: Opening[`mode`];
 }
 
@@ -83,7 +203,7 @@ export class EditorSlot {
             const kept = take(id, this.element);
             if (kept !== undefined) {
                 kept.frame.toggleAttribute(`inert`, true);
-                this.show({ ...kept, id, mode: opening.mode });
+                this.show({ ...kept, id, path: opening.path, mode: opening.mode });
             }
         }
         const resume = this.current?.session;
@@ -131,7 +251,7 @@ export class EditorSlot {
         }
         const frame = frameFor(address, opening.path);
         this.element.append(frame);
-        this.show({ frame, session: result.session, engine: result.engine, origin: new URL(address).origin, id, mode: opening.mode });
+        this.show({ frame, session: result.session, engine: result.engine, origin: new URL(address).origin, id, path: opening.path, mode: opening.mode });
         return { framed: true };
     }
 
@@ -151,8 +271,11 @@ export class EditorSlot {
             // Told before it moves: a page that cannot be kept goes with its viewer, and is still told to save first.
             tell(leaving, { channel: CHANNEL, type: `save` });
         }
-        if (!keep(leaving.id, leaving)) {
-            leaving.frame.remove();
+        // Kept, its editor still counts for what it holds, and is not let go while it holds anything.
+        const { frame } = leaving;
+        if (!keep(leaving.id, { ...leaving, holding: () => holding(frame), dropped: () => forget(frame) })) {
+            frame.remove();
+            forget(frame);
             return;
         }
         if (leaving.mode === `edit` && leaving.engine === `server`) {
@@ -168,10 +291,14 @@ export class EditorSlot {
         }
     }
 
-    // Tells the page in the slot how the owner settled a conflict.
+    // Tells the page in the slot how the owner settled a conflict. Discard mine drops the edits at the owner's word: the
+    // page loads the file as it is on disk.
     resolve(choice: ConflictChoice): void {
         if (this.current?.engine === `browser`) {
             tell(this.current, { channel: CHANNEL, type: `resolve`, choice });
+            if (choice === `reload`) {
+                forget(this.current.frame, { clean: true });
+            }
         }
     }
 
@@ -186,6 +313,7 @@ export class EditorSlot {
 
     private show(current: Current): void {
         this.current = current;
+        track(current.frame, current.path, current.origin);
         this.deps.framed(true);
     }
 
@@ -194,6 +322,7 @@ export class EditorSlot {
             return;
         }
         this.current.frame.remove();
+        forget(this.current.frame);
         this.current = undefined;
         this.deps.framed(false);
     }

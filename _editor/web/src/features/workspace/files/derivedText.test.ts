@@ -84,6 +84,30 @@ describe("which files are worth offering a derived reading of", () => {
     });
 });
 
+// The desktop app's sidecar renders the same shadow a sandbox keeps, so a window on a folder of this computer is offered
+// the same readings, by the same rules.
+describe("a folder on this computer", () => {
+    test("is offered a file's text exactly where a sandbox is", () => {
+        window.__INTENTIC_LOCAL__ = {
+            daemonUrl: `http://127.0.0.1:47201`,
+            token: `t`.repeat(64),
+            id: `w1`,
+            name: `project`,
+            path: `/home/me/project`,
+        };
+        try {
+            expect([
+                mayHaveDerivedText(`docs/spec.pdf`, `viewer`),
+                derivedIsOnlyView(`release.tar.gz`, `binary`),
+                mayHaveDerivedText(`src/index.ts`, `code`),
+                mayHaveDerivedText(`empty.pdf`, `empty`),
+            ]).toEqual([true, true, false, false]);
+        } finally {
+            delete window.__INTENTIC_LOCAL__;
+        }
+    });
+});
+
 describe("which files open on their text rather than offering it", () => {
     test("the ones with no other surface at all", () => {
         expect(derivedIsOnlyView(`release.tar.gz`, `binary`)).toBe(true);

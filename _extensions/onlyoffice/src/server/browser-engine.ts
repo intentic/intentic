@@ -26,9 +26,14 @@ export interface BrowserEngineDeps {
     readonly scopedRaw: (path: string, agent: string) => Promise<Response>;
     // What the bytes of a document are right now: the stat of a shared-tree file, the digest of a copy.
     readonly identify: (path: string, agent: string | undefined) => Promise<{ stat?: FileStat; digest?: string } | undefined>;
-    // Where the browser reaches the listener, or undefined while the sandbox has no public address.
+    // Where the browser reaches the listener, or undefined while it has no address yet.
     readonly exposure: () => Promise<string | undefined>;
     readonly log: (line: string) => void;
+    // Whether a root-relative path may be written, for a write beside the document (a copy); everything may when absent.
+    readonly writable?: (path: string) => boolean;
+    // Runs right before a write replaces the document at `path` (a save, or writing over a change), with the bytes it
+    // replaces still on disk: the desktop app keeps the original there (local-office.ts).
+    readonly beforeOverwrite?: (path: string) => Promise<void>;
 }
 
 export interface BrowserEngine {
@@ -43,6 +48,16 @@ export interface BrowserEngine {
 
 // The version a save names: size and modification time, which a write by anyone else moves.
 export const versionOfStat = (found: FileStat): string => `${found.size}-${Math.trunc(found.mtimeMs)}`;
+
+// What every scratch file a write leaves beside a document carries in its name, so a watcher can tell its own
+// writes' debris from a change: `.brief.docx.onlyoffice-1a2b3c4d.tmp`.
+export const SCRATCH_MARK = ".onlyoffice-";
+
+// A fresh scratch name beside `target`, for bytes that replace it by rename once they are all there.
+export const scratchBeside = (target: string): string => join(dirname(target), `.${basename(target)}${SCRATCH_MARK}${randomBytes(4).toString("hex")}.tmp`);
+
+// Why a copy is not written beside a document opened on its own: the window may write that document and nothing else.
+export const NO_COPY_HERE = "Only the document itself can be saved from this window, so a copy can't be kept beside it.";
 
 const stateOfBundle = (bundle: BundleState): DocsState => {
     switch (bundle.state) {
@@ -78,13 +93,19 @@ export const copyNameFor = async (root: string, path: string): Promise<string> =
 // The app's language as the editor takes it: a short tag, or English.
 const langOf = (lang: string | undefined): string => (lang !== undefined && /^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})?$/.test(lang) ? lang : "en");
 
-// An origin the page may post to, or undefined for anything that is not one.
+// An origin the page may post to, or undefined for anything that is not one: a bare http(s) origin, or the desktop app's
+// own `tauri://<host>`, where its windows live on Linux and macOS. The URL parser calls that scheme's origin opaque, but
+// the webview gives the page it as scheme, host and port, and matches a message's target against exactly that; turned
+// away here, the page had nowhere to post, and the viewer heard nothing (not a save, not an unsaved edit, not a conflict).
 export const originOf = (origin: string | undefined): string | undefined => {
     if (origin === undefined) {
         return undefined;
     }
     try {
         const parsed = new URL(origin);
+        if (parsed.protocol === "tauri:") {
+            return parsed.host !== "" && origin === `tauri://${parsed.host}` ? origin : undefined;
+        }
         return (parsed.protocol === "https:" || parsed.protocol === "http:") && parsed.origin === origin ? origin : undefined;
     } catch {
         // allow(silent-catch): a value that is not a URL is not an origin, which the undefined says.
@@ -146,10 +167,14 @@ export const createBrowserEngine = (deps: BrowserEngineDeps): BrowserEngine => {
     };
 
     // Streams the body beside the file first, so the file is only ever the old bytes or the new ones, and checks the
-    // version it replaces at the last moment before the rename.
+    // version it replaces at the last moment before the rename. A copy goes only where this window may write.
     const writeFile = async (session: Session, body: Readable, write: FileWrite): Promise<FileWritten> => {
+        if (write.kind === "copy" && deps.writable !== undefined && !deps.writable(await copyNameFor(workspaceRoot, session.path))) {
+            body.resume();
+            return { refused: NO_COPY_HERE };
+        }
         const target = join(workspaceRoot, session.path);
-        const temporary = join(dirname(target), `.${basename(target)}.onlyoffice-${randomBytes(4).toString("hex")}.tmp`);
+        const temporary = scratchBeside(target);
         try {
             await pipeline(body, createWriteStream(temporary));
             if (write.kind === "save" && (await currentVersion(target)) !== write.expected) {
@@ -157,6 +182,9 @@ export const createBrowserEngine = (deps: BrowserEngineDeps): BrowserEngine => {
                 return { conflict: true };
             }
             const path = write.kind === "copy" ? await copyNameFor(workspaceRoot, session.path) : session.path;
+            if (write.kind !== "copy") {
+                await deps.beforeOverwrite?.(session.path);
+            }
             await rename(temporary, join(workspaceRoot, path));
             const written = await stat(join(workspaceRoot, path));
             if (write.kind !== "copy") {
@@ -189,7 +217,7 @@ export const createBrowserEngine = (deps: BrowserEngineDeps): BrowserEngine => {
         }
         const build = await pageBuild();
         if (build === undefined) {
-            return { status: 409, body: { state: "error", detail: "This sandbox's copy of the extension has no editor page built." } };
+            return { status: 409, body: { state: "error", detail: "The document editor isn't included in this copy of Intentic." } };
         }
         const identity = await deps.identify(request.path, request.agent);
         if (identity === undefined) {

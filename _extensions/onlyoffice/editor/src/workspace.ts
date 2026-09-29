@@ -25,14 +25,15 @@ export const writeDocument = async (fileUrl: string, bytes: ArrayBuffer, kind: W
         if (response.status === 409) {
             return { conflict: true };
         }
+        // Worded for wherever the listener runs, a sandbox or the user's own computer: the page cannot tell which.
         if (!response.ok) {
-            return { failed: `the sandbox answered ${response.status}: ${await response.text()}` };
+            return { failed: `writing the file failed (${response.status}): ${await response.text()}` };
         }
         // SAFETY: the listener's own answer to a write; both fields are checked before they are used.
         const answer = (await response.json()) as WriteAnswer;
         return answer.path !== undefined && answer.version !== undefined
             ? { written: true, path: answer.path, version: answer.version }
-            : { failed: `the sandbox's answer to the save was not understood` };
+            : { failed: `the answer to the save was not understood` };
     } catch (error) {
         return { failed: error instanceof Error ? error.message : String(error) };
     }

@@ -473,13 +473,13 @@ describe("a project pairing's sessions", () => {
     const project: Pairing & { readonly localDir: string } = { ...workspace, localDir: "/home/u/code/my-app", remoteDir: `${WORKSPACE_ROOT}/my-app`, project: true };
     const projectSpec = sessionSpec(project, "portable");
 
-    it("syncs the project folder rather than /work, two-way, under the pairing's own name", () => {
+    it("syncs the project folder rather than /work, copy-first, under the pairing's own name", () => {
         expect(projectSpec).toEqual({
             name: "intentic-x",
             localDir: "/home/u/code/my-app",
             alias: "intentic-sync-x",
             remoteDir: "/work/my-app",
-            mode: "two-way-safe",
+            mode: "one-way-safe",
             ignores: PROJECT_IGNORES,
             from: "local",
             symlinks: "portable",
@@ -514,7 +514,7 @@ describe("a project pairing's sessions", () => {
         expect(sessionMatchesSpec(onWorkspace, projectSpec)).toBe(false);
         expect(sameEnds(onWorkspace, projectSpec)).toBe(false);
         expect(convergePlan([onWorkspace], projectSpec)).toBe("replace");
-        const moved = { ...onWorkspace, beta: { host: "intentic-sync-x", path: "/work/my-app" } };
+        const moved = { ...onWorkspace, mode: "one-way-safe", beta: { host: "intentic-sync-x", path: "/work/my-app" } };
         expect(sessionMatchesSpec(moved, projectSpec)).toBe(true);
         expect(sameEnds(moved, projectSpec)).toBe(true);
     });

@@ -1654,6 +1654,10 @@
         "limitReset": {
             "sandboxDidntAnswer": "Your sandbox didn't answer."
         },
+        "localHandoff": {
+            "attached": "Attached {name} from your computer",
+            "failed": "Couldn't bring {name} from your computer. Open it there and ask again."
+        },
         "modelPicker": {
             "access": "Access",
             "allAiAccounts": "Connect a model, or manage accounts",
@@ -1991,6 +1995,39 @@
         }
     },
     "local": {
+        "bringBackReview": {
+            "header": "Bring back from the sandbox",
+            "intro": "Choose the changes to copy into this folder. Undo puts the folder back as it was.",
+            "all": "The one change | All {count} changes",
+            "truncated": "The sandbox changed more files than are listed here. Only the ones chosen here come back; check again for the rest.",
+            "conflict": "changed on both sides: kept as yours",
+            "tooMany": "That is more than {max} changes at once. Untick some and bring the rest back afterwards.",
+            "bring": "Bring back {count} change | Bring back {count} changes"
+        },
+        "entryMenu": {
+            "askAgent": "Ask an agent about this"
+        },
+        "localBringBack": {
+            "title": "Bring back changes",
+            "copyFirst": "Agents work on a copy of this folder.",
+            "bothWays": "This folder and its sandbox sync both ways.",
+            "check": "Check for changes",
+            "checkAgain": "Check again",
+            "changes": "{count} change in the sandbox | {count} changes in the sandbox",
+            "noChanges": "No changes",
+            "review": "Review",
+            "bringing": "Bringing back {count} file… | Bringing back {count} files…",
+            "brought": "Brought back {count} file | Brought back {count} files",
+            "broughtSkipped": "Brought back {count} file, {skipped} skipped | Brought back {count} files, {skipped} skipped",
+            "restoring": "Putting the folder back…",
+            "restored": "Restored {count} file | Restored {count} files",
+            "switchToCopyFirst": "Switch to copy-first",
+            "copyFirstHint": "Agents' changes then stay in the sandbox until you bring them back",
+            "syncBothWays": "Sync both ways…",
+            "bothWaysHeader": "Sync both ways?",
+            "bothWaysConfirm": "Sync both ways",
+            "bothWaysWarning": "Agents' edits and deletions will then reach this folder immediately, with nothing to review first."
+        },
         "localFiles": {
             "keepsFolderSynced": "Keeps this folder synced",
             "newSandbox": "New sandbox",
@@ -2000,7 +2037,20 @@
             "openFolder": "Open folder",
             "reveal": "Reveal file",
             "withAgent": "Work on this with an agent",
-            "openSandbox": "Open this folder's sandbox"
+            "openSandbox": "Open this folder's sandbox",
+            "askAgent": "Ask an agent",
+            "askAgentHint": "Starts a conversation with an agent about this file",
+            "closingDiscardsUnsaved": "Closing this window discards their unsaved edits. This can't be undone.",
+            "closingTabDiscardsUnsaved": "Closing this tab discards its unsaved edits. This can't be undone."
+        },
+        "quickOpen": {
+            "goToFile": "Go to a file",
+            "fileName": "Go to a file by name…",
+            "typeFileName": "Type part of a file's name."
+        },
+        "trash": {
+            "recycleBin": "Moved to the Recycle Bin",
+            "trash": "Moved to the Trash"
         }
     },
     "needs": {
@@ -4325,6 +4375,7 @@
             "copied": "Copied.",
             "copyCommand": "Copy command",
             "copyPasteIntoTerminal": "Copy it, then paste it into a terminal on the machine that will host your sandbox.",
+            "couldNotCreateSandbox": "Could not create your sandbox.",
             "daemonsWebOrigin": "The daemon's",
             "domainAlreadyAnswersOn": "a domain it already answers on",
             "download": "Download for {label}",
@@ -4332,6 +4383,8 @@
             "fix": "Fix: {remedy}",
             "fixAbovePressAgain": "Fix the above, then press \"{button}\" again.",
             "fixAboveRunSame": "Fix the above, then run the same command again. It stays valid.",
+            "folderCopiedIntoSandbox": "Your folder is copied into the sandbox, where agents work on the copy. Their changes come back when you press \"Bring back changes\" in the folder's window.",
+            "folderNotHandedToApp": "Couldn't hand your folder to the app yet. Trying again…",
             "followInIntenticWindow": "Follow it in the Intentic window. This page opens your workspace the moment it answers.",
             "getDomainIntenticInstead": "← Get a domain from intentic instead",
             "getDomainIntenticRun": ", or get a domain from intentic and run the install command instead",
@@ -4463,7 +4516,7 @@
         },
         "setupSyncOption": {
             "alsoSyncLocalFolder": "Also sync a local folder",
-            "syncsWithFolderYouPicked": "Syncs live with the folder you picked"
+            "syncsWithFolderYouPicked": "Copied from the folder you picked"
         },
         "words": {
             "useLettersNumbersHyphens": "Use letters, numbers and hyphens only."
@@ -5256,6 +5309,7 @@
             "hideComments": "Hide comments",
             "insideArchive": "Inside archive",
             "notInItsCopy": "Not in its copy",
+            "notUtf8ReadOnly": "This file isn't UTF-8 text, so it opens read-only here.",
             "noWriteAccess": "No write access",
             "readAsText": "Read as text",
             "reloadDisk": "Reload from disk",
@@ -5264,7 +5318,8 @@
             "saveFile": "Save file",
             "sharedVersion": "Shared version",
             "showComments": "Show comments",
-            "showFile": "Show file"
+            "showFile": "Show file",
+            "soleDocumentOnly": "This window was opened for {name} alone, so the other files in its folder open read-only."
         },
         "healthCodebaseHealth": {
             "all": "All",

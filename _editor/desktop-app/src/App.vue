@@ -9,7 +9,6 @@ import {
     type DeviceSandboxRow,
     Notice,
     type ResourcesForm,
-    Row,
     RowGroup,
     RowNote,
     SandboxResourcesDialog,
@@ -28,13 +27,16 @@ import { confirm, open } from "@tauri-apps/plugin-dialog";
 import { computed, onMounted, onUnmounted, ref, watch, watchEffect } from "vue";
 import { initAnalytics, track, trackBeforeExit } from "./analytics";
 import DockerCard from "./components/DockerCard.vue";
+import HomeAgents from "./components/HomeAgents.vue";
 import LocalHome from "./components/LocalHome.vue";
 import Requirements from "./components/Requirements.vue";
 import { desktopAgentPanel } from "./deviceAgent";
 import SetupProgress from "./components/SetupProgress.vue";
 import { dragWindow } from "./dragWindow";
 import { useFitToContent } from "./fitWindow";
+import { deviceShown } from "./home";
 import { advance, type PlanStep, progressView, setupPlan, startProgress, tick, type Progress } from "./setupPlan";
+import { useWhenShown } from "./whenShown";
 import {
     desktopInfo,
     // Aliased so the ref below can use the plain name `dockerReady`.
@@ -47,8 +49,10 @@ import {
     folderEntries,
     forgetResumableSetup,
     hostsSandboxes,
+    homeFacts,
     deviceAgentRestart,
     deviceStatus,
+    launcherClose,
     onPendingRecreate,
     onPendingSetup,
     onPendingSync,
@@ -84,6 +88,7 @@ import {
     type DeviceStatus,
     type DockerEngine,
     type DockerStart,
+    type HomeFacts,
     type Requirement,
     type RequirementProgress,
     type RunEvent,
@@ -199,6 +204,33 @@ const DEVICES_PATH = `/sandbox/devices`;
 // Wrapped since `workspaceOpen` takes an optional path; a bare click handler would pass it a MouseEvent.
 const openWorkspace = (path?: string): void => void workspaceOpen(path);
 
+/* HOME'S THREE FACTS (desktop.ts `HomeFacts`), read on mount and again whenever the window comes back: a sign-in or a
+   setup that finished while it was hidden changes what Home offers and where its × goes. Undefined until read, which
+   every reader below takes as the files-only answer, so nothing about sandboxes flashes up on a machine without one. */
+const home = ref<HomeFacts | undefined>(undefined);
+const loadFacts = async (): Promise<void> => {
+    try {
+        home.value = await homeFacts();
+    } catch (error) {
+        console.error(`[home] home_facts could not be read:`, error);
+    }
+};
+useWhenShown(() => void loadFacts());
+
+// The × SAYS WHERE IT GOES: back to the workspace when that is the face the reader came from, otherwise the card simply
+// goes and the app stays in the tray. Either way it is `launcher_close`, which never makes the workspace the face the
+// next launch opens on, as `workspace_open` would.
+const closeLabel = computed(() => (home.value?.lastFace === `workspace` ? t(`desktop.app.backToWorkspace`) : t(`ui.action.close`)));
+// The way back says where it goes (as the setup screen's does, `dismissTip`); a plain close says only that.
+const closeTip = computed(() => (home.value?.lastFace === `workspace` ? t(`desktop.app.openWorkspace`) : closeLabel.value));
+const closeLauncher = async (): Promise<void> => {
+    try {
+        await launcherClose();
+    } catch (error) {
+        console.error(`[home] launcher_close failed:`, error);
+    }
+};
+
 const eventsOf = (run: string): RunEvent[] => runs.value[run] ?? [];
 const running = computed(() => activeRun.value !== undefined);
 
@@ -247,7 +279,7 @@ watchEffect(() => {
     if (!faceKnown.value) {
         return;
     }
-    void getCurrentWindow().setTitle(setupMode.value ? `Intentic, Setting up your sandbox` : `Intentic, This device`);
+    void getCurrentWindow().setTitle(setupMode.value ? `Intentic, Setting up your sandbox` : `Intentic`);
 });
 
 // Install progress (setupPlan.ts): the plan is built before the script starts; `now` only exists so a silent step
@@ -818,12 +850,12 @@ const reshape = async (slug: string, shape: ResourcesForm | undefined, when: `no
     busy.value = undefined;
 };
 
-/* Escape dismisses the card when no dialog is consuming the key. */
+/* Escape is the header's × when no dialog is consuming the key: a setup's own way back, or Home's. */
 const onKey = (event: KeyboardEvent): void => {
     if (event.key !== `Escape` || reshaping.value !== undefined) {
         return;
     }
-    void (setupMode.value ? dismissSetup() : workspaceOpen());
+    void (setupMode.value ? dismissSetup() : closeLauncher());
 };
 // The form rather than a run: nothing happens until it is applied. A container docker did not describe (its
 // inspect failed) has nothing to open the form on, and says so where every other refusal on this row lands.
@@ -926,6 +958,19 @@ const retrySync = async (): Promise<void> => {
     await runSync(held.args, held.dir);
 };
 
+// THIS DEVICE IS SHOWN TO THE PEOPLE WHO HOST SANDBOXES ON IT (home.ts `deviceShown`): a machine that has run one,
+// has one listed, has an agent, or has a setup, a sync or a start of Docker under way. Everyone else is here to open
+// their own files, and a Docker card, a list of nothing and a raw app address are all noise to them.
+const deviceBlock = computed(() =>
+    deviceShown({
+        hostsSandboxes: home.value?.hostsSandboxes ?? false,
+        sandboxes: groups.value.length,
+        // A thrown report is an agent that is installed and failed to answer, which is this machine's business too.
+        agent: agentPanel.value !== undefined || reportError.value !== undefined,
+        inFlight: running.value || syncSetup.value !== undefined || pending.value !== undefined || dockerStarting.value || dockerCardShown.value,
+    }),
+);
+
 // One click on one row: the kit decides which buttons exist and what they ask; this decides what each does here —
 // a script or docker call, versus a socket message from the SPA's Devices tab.
 // Log tail toggle, not a run: opened before lines arrive so an empty pane reads as "reading," not ignored. Doesn't
@@ -1002,6 +1047,8 @@ const paneLines = (group: DeviceSandboxGroup): string[] => {
 let stop: Array<() => void> = [];
 onMounted(async () => {
     window.addEventListener(`keydown`, onKey);
+    // Not awaited: Home draws its files part without it, and nothing below waits on what it says.
+    void loadFacts();
     // Awaited, and safe to await, because it asks this process what it is and nothing else — see desktop.ts.
     // The question about the MACHINE used to be answered in the same breath, and that is what made this line
     // the one everything below queued behind.
@@ -1220,38 +1267,19 @@ onUnmounted(() => {
                 </footer>
             </template>
 
-            <!-- THE MANAGER: what this machine is running, once nothing is being handed over. -->
+            <!-- HOME: this computer's own files first, an agent next, and the machine's sandboxes only for a machine that has them. -->
             <template v-else>
-                <!-- THE MASTHEAD IS THE TITLE BAR: the SPA's device page masthead (DevicePage.vue), and every press on it that isn't a control moves the window (dragWindow.ts). -->
-                <Row :flush="true" :heading="2" density="comfortable" :title="t(`desktop.app.device`)" class="select-none" @mousedown="dragWindow">
-                    <template #lead="{ mark }">
-                        <span
-                            class="flex shrink-0 items-center justify-center rounded-md bg-content/10 text-content"
-                            :style="{ width: `${mark}px`, height: `${mark}px` }"
-                        >
-                            <Icon name="desktop" class="text-sm" />
-                        </span>
-                    </template>
-                    <template v-if="hardware !== ``" #description>{{ hardware }}</template>
-                    <!-- This app's own version, not the agent's: the agent states its build in the group below, as it does on the web page. -->
-                    <template v-if="info" #meta
-                        ><span class="font-mono">v{{ info.version }}</span></template
-                    >
-                    <template #control>
-                        <Button size="small" severity="secondary" :text="true" :label="t(`ui.action.refresh`)" :disabled="running" @click="refresh">
-                            <template #icon><Icon name="refresh" /></template>
-                        </Button>
-                        <button
-                            type="button"
-                            :class="ui.iconButton(`h-7 w-7`)"
-                            :aria-label="t(`desktop.app.backToWorkspace`)"
-                            v-tooltip.left="t(`desktop.app.openWorkspace`)"
-                            @click="openWorkspace()"
-                        >
-                            <Icon name="times" />
-                        </button>
-                    </template>
-                </Row>
+                <!-- THE HEADER IS THE TITLE BAR: every press on it that isn't the × moves the window (dragWindow.ts). -->
+                <header class="flex items-center gap-2.5 select-none" @mousedown="dragWindow">
+                    <AppBrand shape="mark" class="shrink-0 text-xl" />
+                    <span class="text-base leading-tight font-semibold">Intentic</span>
+                    <!-- This app's own version, not the agent's, with the workspace it opens behind it for whoever needs to know which one. -->
+                    <span v-if="info" class="font-mono text-2xs text-subtle" v-tooltip.bottom="info.appUrl">v{{ info.version }}</span>
+                    <span class="flex-1" />
+                    <button type="button" :class="ui.iconButton(`h-7 w-7`)" :aria-label="closeLabel" v-tooltip.left="closeTip" @click="closeLauncher">
+                        <Icon name="times" />
+                    </button>
+                </header>
 
                 <!-- Describes what's true now, never what will happen later. -->
                 <Notice v-if="update.kind === `ready`" tone="info" class="items-center">
@@ -1274,150 +1302,152 @@ onUnmounted(() => {
                 <!-- A folder or a document of this computer, which needs none of what follows: no Docker, no sandbox, no account. -->
                 <LocalHome />
 
-                <!-- THE ENGINE, while this window is starting it and after a start that did not work out. It leads
-                     the screen because a sandbox list drawn above a dead Docker is a list of things that are not there. -->
-                <DockerCard
-                    v-if="dockerCardShown"
-                    :starting="dockerStarting"
-                    :started-at="dockerStartedAt"
-                    :limit-seconds="info?.engineLimitSeconds"
-                    :report="dockerReport"
-                    :os="info?.os"
-                    @start="startDocker"
-                    @open="openDocker"
-                    @install="openUrl(DOCKER_DOCS)"
-                />
-                <!-- Docker answered and refused, or never answered: its own words, and the press that asks again. -->
-                <Notice v-else-if="listError" tone="warning" class="items-start text-2xs">
-                    <span class="block font-medium">{{ t(`desktop.app.dockerDidntAnswer`) }}</span>
-                    <span class="mt-0.5 block font-mono break-words text-subtle">{{ listError }}</span>
-                    <Button class="mt-2" size="small" severity="secondary" :label="t(`desktop.docker.checkAgain`)" :disabled="running" @click="refresh" />
-                </Notice>
-                <!-- Docker is down and nothing here started it on its own: no sandbox has run on this machine yet, so
-                     the start is offered rather than taken. -->
-                <p v-else-if="engineListening === false" class="flex flex-wrap items-center gap-x-3 gap-y-2 text-2xs text-muted">
-                    <Icon name="box" class="shrink-0" />
-                    <span class="min-w-0 flex-1">{{ t(`desktop.app.dockerIsntReachableNothing`) }}</span>
-                    <Button size="small" severity="secondary" :label="t(`desktop.app.startDocker`)" @click="startDocker" />
-                </p>
-                <!-- Hidden while a sync enrollment is on screen, or the empty-state message would contradict it. -->
-                <p v-else-if="groups.length === 0 && !syncSetup" class="text-2xs text-muted">
-                    {{ t(`desktop.app.noSandboxesHereYet`) }}
-                </p>
+                <!-- An agent on one of those folders, which needs an account and nothing more. Undrawn until the facts are read, so a reader who has signed in is never shown Sign in first. -->
+                <HomeAgents v-if="home" :account-seen="home.accountSeen" />
 
-                <!-- The agent didn't answer, which is a different absence from having none: said here rather than under a list it explains the emptiness of. -->
-                <Notice v-if="reportError" tone="danger" class="text-2xs">{{ reportError }}</Notice>
-
-                <!--
-    The SPA's own agent group (DeviceAgentGroup), drawn from this machine's own reading instead of a device
-    registry. This window IS the device, so its one verb never needs a command to go and type.
--->
-                <DeviceAgentGroup
-                    v-if="agentPanel"
-                    :panel="agentPanel"
-                    :subject="machineName"
-                    :busy="running || busy !== undefined"
-                    :running="agentRestarting ? `restart` : undefined"
-                    :activity="agentRestartError !== undefined || agentRestartOutcome !== undefined"
-                    @run="void restartAgent()"
-                >
-                    <!-- The agent's own answer, refusal or otherwise; the row above already shows whether the loop came back. -->
-                    <template #activity>
-                        <Notice v-if="agentRestartError" tone="danger" class="text-2xs">{{ agentRestartError }}</Notice>
-                        <p v-else class="text-xs text-muted">{{ agentRestartOutcome }}</p>
-                    </template>
-                </DeviceAgentGroup>
-
-                <!-- A sync enrollment in flight: folder picked in the system dialog, same script as the card's one-liner, narrating here. -->
-                <section v-if="syncSetup" class="flex flex-col gap-3 rounded-xl border border-line bg-canvas p-4">
-                    <div class="flex items-start gap-2.5">
-                        <Icon name="sync" class="mt-0.5 text-primary-400" />
-                        <div class="min-w-0 flex-1">
-                            <h2 class="text-sm font-semibold leading-tight">
-                                {{
-                                    syncSetup.args.mirror
-                                        ? t(`desktop.app.mirroringPortsFrom`, { sandbox: syncSetup.args.name ?? t(`desktop.app.yourSandbox`) })
-                                        : t(`desktop.app.connectingFolderTo`, { sandbox: syncSetup.args.name ?? t(`desktop.app.yourSandbox`) })
-                                }}
-                            </h2>
-                            <p v-if="syncSetup.dir" class="break-all font-mono text-2xs text-subtle">{{ syncSetup.dir }}</p>
+                <!-- THIS DEVICE, for a machine that hosts sandboxes (deviceBlock): the manager this face used to open on, whole, under a heading of its own. -->
+                <section v-if="deviceBlock" class="mt-2 flex flex-col gap-3 border-t border-line pt-4">
+                    <header class="flex flex-wrap items-center gap-x-3 gap-y-1">
+                        <h2 class="text-base leading-tight font-semibold">{{ t(`desktop.app.device`) }}</h2>
+                        <span v-if="hardware !== ``" class="min-w-0 truncate text-2xs text-subtle">{{ hardware }}</span>
+                        <div class="ml-auto flex items-center gap-1">
+                            <Button size="small" severity="secondary" :text="true" :label="t(`ui.action.refresh`)" :disabled="running" @click="refresh">
+                                <template #icon><Icon name="refresh" /></template>
+                            </Button>
+                            <!-- The other screen that manages these same containers, reached through the machine's own connection rather than natively. -->
+                            <Button size="small" severity="secondary" :text="true" :label="t(`desktop.app.seeAllDevices`)" @click="openWorkspace(DEVICES_PATH)">
+                                <template #icon><Icon name="desktop" /></template>
+                            </Button>
                         </div>
-                        <Button
-                            v-if="syncSetup.error"
-                            size="small"
-                            severity="secondary"
-                            :text="true"
-                            class="-my-1 shrink-0"
-                            @click="() => (syncSetup = undefined)"
-                        >
-                            {{ t(`ui.action.dismiss`) }}
-                        </Button>
-                    </div>
-                    <Notice v-if="syncSetup.error" tone="danger" class="text-2xs">{{ syncSetup.error }}</Notice>
-                    <DeviceRunLog
-                        :lines="syncLines"
-                        :running="activeRun === `sync-setup`"
-                        :empty="t(`desktop.app.startingOnDevice`)"
-                        :note="t(`desktop.app.installingSyncAgentStarting`)"
+                    </header>
+
+                    <!-- THE ENGINE, while this window is starting it and after a start that did not work out. It leads
+                         the screen because a sandbox list drawn above a dead Docker is a list of things that are not there. -->
+                    <DockerCard
+                        v-if="dockerCardShown"
+                        :starting="dockerStarting"
+                        :started-at="dockerStartedAt"
+                        :limit-seconds="info?.engineLimitSeconds"
+                        :report="dockerReport"
+                        :os="info?.os"
+                        @start="startDocker"
+                        @open="openDocker"
+                        @install="openUrl(DOCKER_DOCS)"
                     />
-                    <!-- The pairing is single-use, so a failed-after-enrolling run needs a fresh one from the sandbox's Desktop sync card. -->
-                    <div v-if="syncSetup.error" class="flex flex-wrap items-center gap-3">
-                        <Button :label="t(`ui.action.tryAgain`)" size="small" :disabled="running" @click="retrySync">
-                            <template #icon><Icon name="refresh" /></template>
-                        </Button>
-                        <span class="text-2xs text-subtle">{{ t(`desktop.app.saysPairingAlreadyUsed`) }}</span>
-                    </div>
+                    <!-- Docker answered and refused, or never answered: its own words, and the press that asks again. -->
+                    <Notice v-else-if="listError" tone="warning" class="items-start text-2xs">
+                        <span class="block font-medium">{{ t(`desktop.app.dockerDidntAnswer`) }}</span>
+                        <span class="mt-0.5 block font-mono break-words text-subtle">{{ listError }}</span>
+                        <Button class="mt-2" size="small" severity="secondary" :label="t(`desktop.docker.checkAgain`)" :disabled="running" @click="refresh" />
+                    </Notice>
+                    <!-- Docker is down and nothing here started it on its own: no sandbox has run on this machine yet, so
+                         the start is offered rather than taken. -->
+                    <p v-else-if="engineListening === false" class="flex flex-wrap items-center gap-x-3 gap-y-2 text-2xs text-muted">
+                        <Icon name="box" class="shrink-0" />
+                        <span class="min-w-0 flex-1">{{ t(`desktop.app.dockerIsntReachableNothing`) }}</span>
+                        <Button size="small" severity="secondary" :label="t(`desktop.app.startDocker`)" @click="startDocker" />
+                    </p>
+                    <!-- Hidden while a sync enrollment is on screen, or the empty-state message would contradict it. -->
+                    <p v-else-if="groups.length === 0 && !syncSetup" class="text-2xs text-muted">
+                        {{ t(`desktop.app.noSandboxesHereYet`) }}
+                    </p>
+
+                    <!-- The agent didn't answer, which is a different absence from having none: said here rather than under a list it explains the emptiness of. -->
+                    <Notice v-if="reportError" tone="danger" class="text-2xs">{{ reportError }}</Notice>
+
+                    <!-- The SPA's own agent group (DeviceAgentGroup), drawn from this machine's own reading instead of a device
+                         registry. This window IS the device, so its one verb never needs a command to go and type. -->
+                    <DeviceAgentGroup
+                        v-if="agentPanel"
+                        :panel="agentPanel"
+                        :subject="machineName"
+                        :busy="running || busy !== undefined"
+                        :running="agentRestarting ? `restart` : undefined"
+                        :activity="agentRestartError !== undefined || agentRestartOutcome !== undefined"
+                        @run="void restartAgent()"
+                    >
+                        <!-- The agent's own answer, refusal or otherwise; the row above already shows whether the loop came back. -->
+                        <template #activity>
+                            <Notice v-if="agentRestartError" tone="danger" class="text-2xs">{{ agentRestartError }}</Notice>
+                            <p v-else class="text-xs text-muted">{{ agentRestartOutcome }}</p>
+                        </template>
+                    </DeviceAgentGroup>
+
+                    <!-- A sync enrollment in flight: folder picked in the system dialog, same script as the card's one-liner, narrating here. -->
+                    <section v-if="syncSetup" class="flex flex-col gap-3 rounded-xl border border-line bg-canvas p-4">
+                        <div class="flex items-start gap-2.5">
+                            <Icon name="sync" class="mt-0.5 text-primary-400" />
+                            <div class="min-w-0 flex-1">
+                                <h3 class="text-sm font-semibold leading-tight">
+                                    {{
+                                        syncSetup.args.mirror
+                                            ? t(`desktop.app.mirroringPortsFrom`, { sandbox: syncSetup.args.name ?? t(`desktop.app.yourSandbox`) })
+                                            : t(`desktop.app.connectingFolderTo`, { sandbox: syncSetup.args.name ?? t(`desktop.app.yourSandbox`) })
+                                    }}
+                                </h3>
+                                <p v-if="syncSetup.dir" class="break-all font-mono text-2xs text-subtle">{{ syncSetup.dir }}</p>
+                            </div>
+                            <Button
+                                v-if="syncSetup.error"
+                                size="small"
+                                severity="secondary"
+                                :text="true"
+                                class="-my-1 shrink-0"
+                                @click="() => (syncSetup = undefined)"
+                            >
+                                {{ t(`ui.action.dismiss`) }}
+                            </Button>
+                        </div>
+                        <Notice v-if="syncSetup.error" tone="danger" class="text-2xs">{{ syncSetup.error }}</Notice>
+                        <DeviceRunLog
+                            :lines="syncLines"
+                            :running="activeRun === `sync-setup`"
+                            :empty="t(`desktop.app.startingOnDevice`)"
+                            :note="t(`desktop.app.installingSyncAgentStarting`)"
+                        />
+                        <!-- The pairing is single-use, so a failed-after-enrolling run needs a fresh one from the sandbox's Desktop sync card. -->
+                        <div v-if="syncSetup.error" class="flex flex-wrap items-center gap-3">
+                            <Button :label="t(`ui.action.tryAgain`)" size="small" :disabled="running" @click="retrySync">
+                                <template #icon><Icon name="refresh" /></template>
+                            </Button>
+                            <span class="text-2xs text-subtle">{{ t(`desktop.app.saysPairingAlreadyUsed`) }}</span>
+                        </div>
+                    </section>
+
+                    <!-- One row per sandbox with its folder, ports, image and verbs, in the SPA's Devices tab's own group. -->
+                    <RowGroup v-if="groups.length > 0" :label="t(`desktop.app.sandboxesOnDevice`)" :count="groups.length">
+                        <RowNote variant="block">
+                            <DeviceDetail :pairings="status?.sync.pairings" :ports="status?.sync.ports" :sandboxes="sandboxRows">
+                                <template #actions="{ group }">
+                                    <SandboxVerbs
+                                        v-if="group.sandbox"
+                                        :running="group.sandbox.running"
+                                        :busy="busyVerb(group)"
+                                        :disabled="running || busy !== undefined"
+                                        :logs-open="logOpen(group)"
+                                        @act="(verb) => act(group, verb)"
+                                    />
+                                </template>
+                                <!-- The machine's own output, while a row works and for as long as its log tail stays open. -->
+                                <template #footer="{ group }">
+                                    <DeviceRunLog
+                                        v-if="busyVerb(group) || logOpen(group)"
+                                        :lines="paneLines(group)"
+                                        :running="busyVerb(group) !== undefined"
+                                        :empty="t(`desktop.app.startingOnDevice`)"
+                                        :note="t(`desktop.app.runningOnDeviceKeeps`)"
+                                    />
+                                    <Notice v-if="rowFailure && rowFailure.slug === group.sandbox?.slug" tone="danger" class="text-2xs">
+                                        {{ rowFailure.message }}
+                                    </Notice>
+                                </template>
+                            </DeviceDetail>
+                        </RowNote>
+                    </RowGroup>
                 </section>
 
-                <!-- One row per sandbox with its folder, ports, image and verbs, in the SPA's Devices tab's own group. -->
-                <RowGroup v-if="groups.length > 0" :label="t(`desktop.app.sandboxesOnDevice`)" :count="groups.length">
-                    <RowNote variant="block">
-                        <DeviceDetail :pairings="status?.sync.pairings" :ports="status?.sync.ports" :sandboxes="sandboxRows">
-                            <template #actions="{ group }">
-                                <SandboxVerbs
-                                    v-if="group.sandbox"
-                                    :running="group.sandbox.running"
-                                    :busy="busyVerb(group)"
-                                    :disabled="running || busy !== undefined"
-                                    :logs-open="logOpen(group)"
-                                    @act="(verb) => act(group, verb)"
-                                />
-                            </template>
-                            <!-- The machine's own output, while a row works and for as long as its log tail stays open. -->
-                            <template #footer="{ group }">
-                                <DeviceRunLog
-                                    v-if="busyVerb(group) || logOpen(group)"
-                                    :lines="paneLines(group)"
-                                    :running="busyVerb(group) !== undefined"
-                                    :empty="t(`desktop.app.startingOnDevice`)"
-                                    :note="t(`desktop.app.runningOnDeviceKeeps`)"
-                                />
-                                <Notice v-if="rowFailure && rowFailure.slug === group.sandbox?.slug" tone="danger" class="text-2xs">
-                                    {{ rowFailure.message }}
-                                </Notice>
-                            </template>
-                        </DeviceDetail>
-                    </RowNote>
-                </RowGroup>
-
-                <footer class="flex flex-wrap items-center gap-2 pt-1">
-                    <Button size="small" severity="secondary" :label="t(`desktop.app.openWorkspace`)" @click="openWorkspace()">
-                        <template #icon><Icon name="arrow-up-right" /></template>
-                    </Button>
-                    <!-- The other screen that manages these same containers, reached through the machine's own connection rather than natively. -->
-                    <Button
-                        size="small"
-                        severity="secondary"
-                        :text="true"
-                        :label="t(`desktop.app.seeAllDevices`)"
-                        @click="openWorkspace(DEVICES_PATH)"
-                    >
-                        <template #icon><Icon name="desktop" /></template>
-                    </Button>
-                    <span v-if="info" class="truncate font-mono text-2xs text-subtle">{{ info.appUrl }}</span>
-                </footer>
-
-                <!-- The sandbox's shape as ic reports it (running and saved for the next restart) and this engine's size for the form's rails; no self-warning. -->
+                <!-- The sandbox's shape as ic reports it (running and saved for the next restart) and this engine's size for the form's rails; no self-warning.
+                     Outside the block, so a sign that changes under an open form cannot take the form away and leave the window dialog-tall. -->
                 <SandboxResourcesDialog
                     :open="reshaping !== undefined"
                     :name="reshaping?.title ?? ``"

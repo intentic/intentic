@@ -26,6 +26,7 @@
         "@intentic/base": "workspace:*",
         "@intentic/contract-serve": "workspace:*",
         "@intentic/ext-onlyoffice": "workspace:*",
+        "@intentic/fileq": "workspace:*",
         "@intentic/sandbox-contract": "workspace:*",
         "@intentic/workspace-ignore": "workspace:*",
         "zod": "catalog:"

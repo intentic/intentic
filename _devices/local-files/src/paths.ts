@@ -1,6 +1,6 @@
 import type { Stats } from "node:fs";
 import { lstat, realpath, stat } from "node:fs/promises";
-import { dirname, isAbsolute, join, relative, sep } from "node:path";
+import hostPath, { basename, dirname, join, type PlatformPath, relative } from "node:path";
 
 // Every path a window names is root-relative with forward slashes, as the contract carries it, and is only ever
 // resolved here: lexically first (no `..`, no drive, no NUL), then on disk, where the real path of whatever exists must
@@ -12,10 +12,11 @@ export type Unresolved = { readonly kind: "refused"; readonly why: string } | { 
 export type Resolved = { readonly kind: "found"; readonly abs: string } | Unresolved;
 
 // Whether `abs` is `root` itself or somewhere under it; both real paths. `..name` is a legal file name, so only a
-// whole `..` segment counts as leaving.
-export const within = (root: string, abs: string): boolean => {
-    const rel = relative(root, abs);
-    return rel === "" || (rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel));
+// whole `..` segment counts as leaving. Read by this platform's path rules unless others are named: Windows compares
+// without case.
+export const within = (root: string, abs: string, rules: PlatformPath = hostPath): boolean => {
+    const rel = rules.relative(root, abs);
+    return rel === "" || (rel !== ".." && !rel.startsWith(`..${rules.sep}`) && !rules.isAbsolute(rel));
 };
 
 // The path's segments once it is known not to leave the root by spelling alone; undefined when it tries to. A
@@ -35,6 +36,9 @@ export const segmentsOf = (path: string): readonly string[] | undefined => {
 // The root-relative spelling of a path, `""` for the root: the key every grant and event speaks in.
 export const cleanRelPath = (path: string): string | undefined => segmentsOf(path)?.join(`/`);
 
+// Why a path is refused whose real path leaves the folder, however it was spelled.
+export const OUTSIDE = `outside this folder`;
+
 const realOf = (abs: string): Promise<string | undefined> =>
     // allow(silent-catch): a path that does not resolve is the undefined its callers read as "nothing there".
     realpath(abs).catch(() => undefined);
@@ -49,20 +53,31 @@ export const resolveExisting = async (root: string, path: string): Promise<Resol
     if (real === undefined) {
         return { kind: `missing` };
     }
-    return within(root, real) ? { kind: `found`, abs: real } : { kind: `refused`, why: `outside this folder` };
+    return within(root, real) ? { kind: `found`, abs: real } : { kind: `refused`, why: OUTSIDE };
 };
 
 // Why a write is refused at a link that resolves to nothing (dangling, or a loop): where it would land is unknowable
 // until the write creates it, and a link can name any place on the disk.
-export const BROKEN_LINK = `a link that points at nothing cannot be written through`;
+export const brokenLink = (name: string): string => `“${name}” is a link to something that isn't there.`;
 
-const entryOf = (abs: string): Promise<Stats | undefined> =>
+export const entryOf = (abs: string): Promise<Stats | undefined> =>
     // allow(silent-catch): nothing at the path at all, not even a link, is the undefined its caller walks past.
     lstat(abs).catch(() => undefined);
 
+// Where a link at `abs` leads when a write names it: the real path it resolves to inside the root, never past it, and
+// never a place that is not there yet.
+const throughLink = async (root: string, abs: string): Promise<Resolved> => {
+    const real = await realOf(abs);
+    if (real === undefined) {
+        return { kind: `refused`, why: brokenLink(basename(abs)) };
+    }
+    return within(root, real) ? { kind: `found`, abs: real } : { kind: `refused`, why: OUTSIDE };
+};
+
 // Where a write to `path` lands, as a path with no link anywhere in it: the real path of the file when it exists, else
 // the real path of its nearest existing ancestor with the missing names below it, which the write creates fresh. The
-// ancestor is found by lstat, so a link that resolves to nothing is met as the thing it is and refused rather than
+// name itself is looked at by lstat first, so a link there is followed only to a real place inside the root. The
+// ancestor is found by lstat too, so a link that resolves to nothing is met as the thing it is and refused rather than
 // walked past: a write through it would create whatever it names, anywhere on the disk.
 export const resolveWritable = async (root: string, path: string): Promise<Resolved> => {
     const segments = segmentsOf(path);
@@ -70,9 +85,12 @@ export const resolveWritable = async (root: string, path: string): Promise<Resol
         return { kind: `refused`, why: `invalid path` };
     }
     const abs = join(root, ...segments);
+    if ((await entryOf(abs))?.isSymbolicLink() === true) {
+        return throughLink(root, abs);
+    }
     const real = await realOf(abs);
     if (real !== undefined) {
-        return within(root, real) ? { kind: `found`, abs: real } : { kind: `refused`, why: `outside this folder` };
+        return within(root, real) ? { kind: `found`, abs: real } : { kind: `refused`, why: OUTSIDE };
     }
     for (let probe = abs; ; probe = dirname(probe)) {
         // oxlint-disable-next-line eslint/no-await-in-loop -- one ancestor at a time, nearest first, stopping at the first that exists
@@ -82,7 +100,7 @@ export const resolveWritable = async (root: string, path: string): Promise<Resol
             return landingUnder(root, probe, relative(probe, abs), entry);
         }
         if (probe === root || dirname(probe) === probe) {
-            return { kind: `refused`, why: `outside this folder` };
+            return { kind: `refused`, why: OUTSIDE };
         }
     }
 };
@@ -92,12 +110,32 @@ export const resolveWritable = async (root: string, path: string): Promise<Resol
 const landingUnder = async (root: string, ancestor: string, rest: string, entry: Stats): Promise<Resolved> => {
     const real = await realOf(ancestor);
     if (real === undefined) {
-        return { kind: `refused`, why: entry.isSymbolicLink() ? BROKEN_LINK : `invalid path` };
+        return { kind: `refused`, why: entry.isSymbolicLink() ? brokenLink(basename(ancestor)) : `invalid path` };
     }
     if (!within(root, real)) {
-        return { kind: `refused`, why: `outside this folder` };
+        return { kind: `refused`, why: OUTSIDE };
     }
     // allow(silent-catch): an ancestor gone since it was resolved holds nothing to write into.
     const folder = await stat(real).catch(() => undefined);
     return folder?.isDirectory() === true ? { kind: `found`, abs: join(real, rest) } : { kind: `refused`, why: `not a folder` };
+};
+
+// An existing entry to move, copy or delete as itself: a link is the link, never what it points at, so a delete or a
+// move never reaches past it. The folder the entry sits in is resolved by its real path, which must be inside the root,
+// so the answer has no link above the entry either.
+export const resolveEntry = async (root: string, path: string): Promise<Resolved> => {
+    const segments = segmentsOf(path);
+    const name = segments?.at(-1);
+    if (segments === undefined || name === undefined) {
+        return { kind: `refused`, why: `invalid path` };
+    }
+    const folder = await realOf(join(root, ...segments.slice(0, -1)));
+    if (folder === undefined) {
+        return { kind: `missing` };
+    }
+    if (!within(root, folder)) {
+        return { kind: `refused`, why: OUTSIDE };
+    }
+    const abs = join(folder, name);
+    return (await entryOf(abs)) === undefined ? { kind: `missing` } : { kind: `found`, abs };
 };

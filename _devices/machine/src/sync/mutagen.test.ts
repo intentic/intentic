@@ -1,17 +1,96 @@
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import { clearableOnDevice } from "@intentic/sandbox-contract";
+import type { Pairing } from "./config.js";
 import {
     CONFLICT_PATHS_MAX,
     conflictsFrom,
+    convergePlan,
     forwardSessionName,
     isOwnMutagen,
+    type LiveSession,
+    liveMode,
+    mutagenCreateArgs,
     parseForwardNames,
     parseForwardPorts,
     parseOrphanForwardNames,
     parseOrphanSyncNames,
+    sessionMatchesSpec,
     sessionName,
+    sessionSpec,
+    sessionSpecs,
+    settlesFirst,
     strayBackupSessions,
+    syncMode,
     syncSessionNames,
 } from "./mutagen.js";
+import { PROJECT_IGNORES } from "./ssh.js";
+
+// COPY-FIRST: a project folder syncs one way into the sandbox unless its owner opted into two-way, and a session in the
+// other mode is drift like any other, recreated in the mode the pairing now has.
+describe("a project's sync mode", () => {
+    const project: Pairing & { readonly localDir: string } = {
+        sandboxUrl: "https://x.example.dev/",
+        sandboxId: "x",
+        mode: "sync",
+        localDir: "/home/u/code/app",
+        remoteDir: `${WORKSPACE_ROOT}/app`,
+        project: true,
+    };
+    const workspace: Pairing & { readonly localDir: string } = { sandboxUrl: "https://x.example.dev/", sandboxId: "x", mode: "sync", localDir: "/home/u/intentic/x" };
+
+    it("is one-way-safe from this device unless the project says both, and two-way for a workspace whatever it says", () => {
+        expect(syncMode(project)).toBe("one-way-safe");
+        expect(syncMode({ ...project, direction: "to-sandbox" })).toBe("one-way-safe");
+        expect(syncMode({ ...project, direction: "both" })).toBe("two-way-safe");
+        expect(syncMode(workspace)).toBe("two-way-safe");
+        expect(syncMode({ ...workspace, direction: "to-sandbox" })).toBe("two-way-safe");
+    });
+
+    // A direction a later release wrote, read by this one: the protective default, never a refusal of the whole file.
+    it("reads a direction it has no word for as copy-first", () => {
+        // SAFETY: stands in for a sync.json a newer agent wrote, which this build reads as raw JSON (config.ts readState).
+        expect(syncMode({ ...project, direction: "from-sandbox" as "both" })).toBe("one-way-safe");
+    });
+
+    it("creates a copy-first session with Mutagen's own mode name, this device as alpha", () => {
+        const args = mutagenCreateArgs(sessionSpec(project, "portable"), false);
+        expect(args.slice(args.indexOf("--sync-mode"), args.indexOf("--sync-mode") + 2)).toEqual(["--sync-mode", "one-way-safe"]);
+        expect(args.slice(-2)).toEqual(["/home/u/code/app", `intentic-sync-x:${WORKSPACE_ROOT}/app`]);
+        expect(sessionSpecs(project, "portable").map((spec) => spec.mode)).toEqual(["one-way-safe"]);
+        expect(sessionSpecs(workspace, "portable").map((spec) => spec.mode)).toEqual(["two-way-safe", "one-way-replica"]);
+    });
+
+    const live = (mode?: string): LiveSession => {
+        const session: LiveSession = { alpha: { path: "/home/u/code/app" }, beta: { host: "intentic-sync-x", path: `${WORKSPACE_ROOT}/app` }, ignore: { paths: [...PROJECT_IGNORES] } };
+        return mode === undefined ? session : { ...session, mode };
+    };
+
+    it("counts the mode as drift: a changed direction replaces the session, a matching one keeps it", () => {
+        const copyFirst = sessionSpec(project, "portable");
+        const both = sessionSpec({ ...project, direction: "both" }, "portable");
+        expect([sessionMatchesSpec(live("one-way-safe"), copyFirst), convergePlan([live("one-way-safe")], copyFirst)]).toEqual([true, "keep"]);
+        expect([sessionMatchesSpec(live("two-way-safe"), copyFirst), convergePlan([live("two-way-safe")], copyFirst)]).toEqual([false, "replace"]);
+        expect([sessionMatchesSpec(live("one-way-safe"), both), convergePlan([live("one-way-safe")], both)]).toEqual([false, "replace"]);
+        expect(sessionMatchesSpec(live("two-way-safe"), both)).toBe(true);
+    });
+
+    // Protobuf JSON leaves the default out: a session created without --sync-mode runs two-way-safe, and says nothing.
+    it("reads a session that names no mode as two-way-safe", () => {
+        expect(liveMode(live())).toBe("two-way-safe");
+        expect(sessionMatchesSpec(live(), sessionSpec({ ...project, direction: "both" }, "portable"))).toBe(true);
+        expect(sessionMatchesSpec(live(), sessionSpec(project, "portable"))).toBe(false);
+    });
+
+    // A replacement settles and sweeps first only between two two-way sessions: into copy-first that would carry the
+    // sandbox's latest changes into the folder one last time, and out of it there is nothing a wait would settle.
+    it("settles first only when a two-way session is replaced by another", () => {
+        expect(settlesFirst({ mode: "two-way-safe" }, [{ mode: "two-way-safe" }])).toBe(true);
+        expect(settlesFirst({ mode: "two-way-safe" }, [{}])).toBe(true);
+        expect(settlesFirst({ mode: "one-way-safe" }, [{ mode: "two-way-safe" }])).toBe(false);
+        expect(settlesFirst({ mode: "two-way-safe" }, [{ mode: "one-way-safe" }])).toBe(false);
+        expect(settlesFirst({ mode: "one-way-replica" }, [{ mode: "one-way-replica" }])).toBe(false);
+    });
+});
 
 // `sync uninstall` stops and unregisters Mutagen's daemon only when it is this agent's own copy: a user's own install,
 // found on PATH, may hold sessions of theirs. The old check compared against a bare name ensureMutagen never answers.

@@ -2,8 +2,9 @@ import type { HostedOffer } from "@intentic/api-contract";
 import { t } from "@intentic/ui/i18n";
 
 // The picker's rungs: one card per place the sandbox can run, each stating its cost and what it asks before it is
-// clicked. A machine we host while the platform hosts at all, and the reader's own computer while a command can be
-// minted for it; `value` doubles as the drawing's name (SetupRungArt), so rung and picture cannot drift.
+// clicked. A machine we host while the platform hosts at all (for a project, only where its machines can hold one), and
+// the reader's own computer while a command can be minted for it; `value` doubles as the drawing's name
+// (SetupRungArt), so rung and picture cannot drift.
 
 export type Machine = `hosted` | `mine`;
 
@@ -18,6 +19,10 @@ export interface MachineOption {
 
 export interface LadderInput {
     readonly hostedOffered: boolean;
+    // A project setup (`?project=`), and whether the platform's machines can hold one (`hostedOffer.projects`): a platform
+    // from before them has no rung for a project but the reader's own computer.
+    readonly project: boolean;
+    readonly hostedProjects: boolean;
     readonly hostedFull: boolean;
     readonly hostedSuspended: boolean;
     // On the hosted plan (or comped): the account's machines are never collected. A new machine still arrives on the
@@ -51,7 +56,7 @@ const hostedMeta = ({ hostedFull, hostedSuspended, plan, hours }: LadderInput): 
 };
 
 export const ladderOptionsOf = (input: LadderInput): readonly MachineOption[] => [
-    ...(input.hostedOffered
+    ...(input.hostedOffered && (!input.project || input.hostedProjects)
         ? [{ value: `hosted` as const, title: t(`setup.setup.startInstantly`), meta: hostedMeta(input), note: t(`setup.setup.runsOnOurServers`) }]
         : []),
     // The own machine says no more than its three lines; the note names the actual next step.

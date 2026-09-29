@@ -2,13 +2,16 @@
 import type { WorkspaceFileWindow, WorkspaceTreeEntry } from "@intentic/api-contract";
 import { Button, CopyButton, type Tip, ui, useDevice } from "@intentic/ui";
 import { errorMessage, useLatest } from "@intentic/ui/async";
+import { extensionOf } from "@intentic/ui/file-format";
 import { computed, onBeforeUnmount, ref, shallowRef, watch, type Component } from "vue";
+import { localFace } from "../../../app/environments/local";
 import { sandboxBlob } from "../../sandbox/client/sandboxClient";
 import { SandboxHttpError } from "../../sandbox/client/sandboxHttpError";
 import { supportsRoute } from "../../sandbox/overview/useDaemonRoutes";
 import { isArchiveContent } from "../files/archiveEntries";
 import { sha256Hex } from "../files/contentHash";
 import { downloadEntries } from "../files/downloadEntries";
+import { setExternalDirty } from "../files/externalDirty";
 import { readFileWindow } from "../files/fileWindow";
 import { mediaUrl } from "../files/mediaUrl";
 import { useEditBuffers } from "../files/useEditBuffers";
@@ -32,7 +35,7 @@ import { TEXT_EDIT_MAX_BYTES } from "../explorer/fileType";
 import type { LineJump } from "../tabs/workspaceTabs";
 import MarkdownViewer from "./MarkdownViewer.vue";
 import { resolveOpenFile, type OpenFile } from "./openFile";
-import type { RegisteredViewer } from "../../../core-views/viewerRegistry";
+import { type RegisteredViewer, viewerForExtension } from "../../../core-views/viewerRegistry";
 import { useT } from "@intentic/ui/i18n";
 
 // Dispatches an open file to its surface (editor, an extension's viewer, or a can't-show state) and owns the
@@ -50,11 +53,17 @@ const emit = defineEmits<{ gone: [path: string] }>();
 const open = ref<OpenFile>({ kind: `empty` });
 const lang = ref<string | undefined>(undefined);
 const text = ref<string | null>(null);
-// Held in the shape produced, not split into optional props: an unset prop still falls through as an attr. A `path`
-// viewer gets only the scope it is viewed in (beside the path every viewer gets), and nothing when there is none.
-const viewerContent = shallowRef<{ text: string } | { blob: Blob } | { src: string } | { agent: string } | Record<never, never> | undefined>(
-    undefined,
-);
+// What a `path` viewer is handed beside the path: the scope it is viewed in, `readOnly` where this window may not write
+// the file, and `unsaved`, where it says whether an editor of the file holds edits the file doesn't have. That one is
+// bound to the file rather than to this surface, since an editor it keeps alive may still hold them after the tab has
+// gone (externalDirty.ts, which the window's close guard reads).
+interface PathViewerProps {
+    agent?: string;
+    readOnly?: true;
+    unsaved?: (dirty: boolean) => void;
+}
+// Held in the shape produced, not split into optional props: an unset prop still falls through as an attr.
+const viewerContent = shallowRef<{ text: string } | { blob: Blob } | { src: string } | PathViewerProps | undefined>(undefined);
 // The extension viewer component itself, lazily imported alongside its content.
 const viewerComponent = shallowRef<Component | undefined>(undefined);
 const loading = ref(false);
@@ -63,6 +72,9 @@ const error = ref<string | null>(null);
 const staleOnDisk = ref(false);
 // The reader asked for this file's derived text instead of its own surface; reset on every open.
 const textWanted = ref(false);
+// The last read said the bytes aren't UTF-8 (the contract's `lossy`): the text on screen holds replacement characters,
+// and saving it back would change the file, so it is shown read-only.
+const lossy = ref(false);
 // Bumped by Reload to remount the editable surface (uncontrolled, seeded via :key) from disk text.
 const reloadNonce = ref(0);
 // Edit buffers: the read trigger's dirty-guard below reads this, so it must exist before the watch.
@@ -92,8 +104,25 @@ const mediaSource = async (target: string): Promise<string> => {
 };
 onBeforeUnmount(letGo);
 
+// A document window (the desktop app opened one file on its own, `LocalFace.file`) may change that document and nothing
+// else: the folder's other files open read-only there, and its file server refuses their writes anyway.
+const soleDocument = localFace()?.file;
+const writableHere = (target: string): boolean => soleDocument === undefined || target === soleDocument;
+
+// A `path` viewer's props for `target`, each only where it applies: an unset prop would still fall through as an attr.
+const pathViewerProps = (target: string, agent: string | undefined): PathViewerProps => {
+    const props: PathViewerProps = { unsaved: (dirty) => setExternalDirty(target, dirty) };
+    if (agent !== undefined) {
+        props.agent = agent;
+    }
+    if (!writableHere(target)) {
+        props.readOnly = true;
+    }
+    return props;
+};
+
 // The one content prop a viewer's manifest `fetch` kind asks for; a `path` viewer reads through its own backend, so
-// it gets the scope it is viewed in and nothing when there is none.
+// it gets the scope it is viewed in and whether this window may write the file instead.
 const viewerContentFor = (
     fetch: RegisteredViewer[`fetch`],
     target: string,
@@ -107,7 +136,7 @@ const viewerContentFor = (
         case `url`:
             return mediaSource(target).then((src) => ({ src }));
         case `path`:
-            return Promise.resolve(agent === undefined ? {} : { agent });
+            return Promise.resolve(pathViewerProps(target, agent));
     }
 };
 
@@ -135,12 +164,16 @@ const readText = async (target: string): Promise<WorkspaceFileWindow> => {
 };
 // An aborted read is this component replacing its own request: never an error to show the user.
 const superseded = (err: unknown): boolean => err instanceof DOMException && err.name === `AbortError`;
+// The contract's `lossy` (WorkspaceFilePresentSchema), set by a file server that checks the decode and absent where the
+// bytes decoded cleanly.
+const decodedLossily = (window: WorkspaceFileWindow): boolean => window.lossy === true;
 // A same-path refire is either an external change or the user's own save echo; reconciled by content, not a
 // reset (no flicker), against the last known disk baseline. A save sets baseline = disk, so the echo no-ops.
 const reconcileOpenFile = (currentPath: string): void => {
     const isLatest = latest();
     readText(currentPath).then(
-        ({ content }) => {
+        (window) => {
+            const { content } = window;
             if (!isLatest()) {
                 return;
             }
@@ -163,6 +196,7 @@ const reconcileOpenFile = (currentPath: string): void => {
                 open.value = { kind: `binary` };
                 return;
             }
+            lossy.value = decodedLossily(window);
             text.value = content;
             edit.markSaved(currentPath, content);
             reloadNonce.value++;
@@ -185,17 +219,30 @@ const reconcileOpenFile = (currentPath: string): void => {
     );
 };
 
-// Whether a refire is the same file in the same scope changing on disk, rather than another file taking the tab.
-const sameFileRefire = (previous: readonly [string, unknown, string | undefined] | undefined, currentPath: string): boolean =>
-    previous !== undefined && currentPath === previous[0] && workspaceAgent.value === previous[2];
+// Which viewer claims this file's extension, read where the watch below tracks it: resolveOpenFile reads the registry
+// inside the callback, where nothing is tracked, so a viewer registering after the tab opened (an extension activating
+// late, a restored tab, a local window's one document) would otherwise leave it on "no preview" for good. Named by what
+// identifies a claim rather than by its registration object, which every activation builds anew: an extension
+// activated again (a language change) is the same viewer, and must not reload every tab it draws.
+const claimed = computed(() => {
+    const viewer = viewerForExtension(extensionOf(path));
+    return viewer === undefined ? undefined : JSON.stringify([viewer.owner, viewer.id, viewer.fetch, viewer.edit]);
+});
+
+type Trigger = readonly [string, unknown, string | undefined, string | undefined];
+// Whether a refire is the same file in the same scope, claimed by the same viewer, changing on disk, rather than another
+// file or another surface taking the tab.
+const sameFileRefire = (previous: Trigger | undefined, currentPath: string): boolean =>
+    previous !== undefined && currentPath === previous[0] && workspaceAgent.value === previous[2] && claimed.value === previous[3];
 // A `path` viewer's backend either made the change (its own save) or reads it on the next open; remounting it would
 // reload an editor mid-session.
 const keepsOwnSurface = (current: OpenFile): boolean => current.kind === `viewer` && current.viewer.fetch === `path`;
 
 watch(
     // changeEpochOf is the complete change signal; the tree's size isn't a trigger, or a post-save refetch would
-    // race markSaved. Scope is a trigger too: the same path in another copy is a different file.
-    () => [path, changeEpochOf(path), workspaceAgent.value] as const,
+    // race markSaved. Scope is a trigger too: the same path in another copy is a different file. So is the claiming
+    // viewer: one registering (or going) re-resolves the tab.
+    (): Trigger => [path, changeEpochOf(path), workspaceAgent.value, claimed.value] as const,
     ([currentPath], previous, onCleanup) => {
         // Same-path re-fire in an editable view reconciles by content; anything else resets and re-fetches below.
         if (sameFileRefire(previous, currentPath) && (open.value.kind === `code` || open.value.kind === `markdown`)) {
@@ -210,6 +257,7 @@ watch(
 
         staleOnDisk.value = false;
         textWanted.value = false;
+        lossy.value = false;
         text.value = null;
         viewerContent.value = undefined;
         viewerComponent.value = undefined;
@@ -251,6 +299,7 @@ watch(
                 }
                 loading.value = false;
                 fromShared.value = window.shared;
+                lossy.value = decodedLossily(window);
                 // An unknown-extension file that is actually binary: NUL bytes => download fallback, not mojibake.
                 if (textKind === `code` && content.includes("\u0000")) {
                     open.value = { kind: `binary` };
@@ -300,9 +349,10 @@ watch(
 const reloadFromDisk = (): void => {
     staleOnDisk.value = false;
     readText(path).then(
-        ({ content }) => {
-            text.value = content;
-            edit.markSaved(path, content);
+        (window) => {
+            lossy.value = decodedLossily(window);
+            text.value = window.content;
+            edit.markSaved(path, window.content);
             reloadNonce.value++;
         },
         (err) => {
@@ -349,12 +399,19 @@ const { mobile } = useDevice();
 // editable state, the other whether its absence needs explaining.
 const editableKind = computed(() => (open.value.kind === `code` || open.value.kind === `markdown`) && text.value !== null);
 // Off in a scope: the daemon can't write into a checkout at all, so a Save here would silently hit the shared
-// file of the same path, possibly racing the agent's own writes to it.
-const canEdit = computed(() => canEditFiles.value && workspaceAgent.value === undefined && !inArchive.value && editableKind.value);
+// file of the same path, possibly racing the agent's own writes to it. Off for a lossy read, whose save would write the
+// replacement characters back, and for any file but a document window's own.
+const canEdit = computed(
+    () => canEditFiles.value && workspaceAgent.value === undefined && !inArchive.value && editableKind.value && !lossy.value && writableHere(path),
+);
 // Reason lives here, where a reader would look for edit capability.
-// Three causes: tier (checked first, outranks the rest), scope, or an archive; any one disables Edit.
+// Four causes: tier (checked first, outranks the rest), scope, an archive, or a document window's other file; any one
+// disables Edit. A lossy read says why in a line of its own over the text instead.
 const scopedReadOnly = computed(
-    () => !mobile.value && editableKind.value && (!canEditFiles.value || workspaceAgent.value !== undefined || inArchive.value),
+    () =>
+        !mobile.value &&
+        editableKind.value &&
+        (!canEditFiles.value || workspaceAgent.value !== undefined || inArchive.value || !writableHere(path)),
 );
 const scopeTitle = useScopeTitle();
 const words = useVocabulary();
@@ -364,6 +421,9 @@ const readOnlyReason = computed((): Tip => {
     }
     if (inArchive.value) {
         return { title: t(`workspace.fileViewer.insideArchive`), note: t(`workspace.fileViewer.extractToEdit`) };
+    }
+    if (soleDocument !== undefined && !writableHere(path)) {
+        return { title: t(`workspace.fileViewer.soleDocumentOnly`, { name: soleDocument.slice(soleDocument.lastIndexOf(`/`) + 1) }) };
     }
     return {
         title: t(`workspace.words.privateCopy`),
@@ -381,6 +441,11 @@ const sharedTip = computed(
 );
 // Monaco's own save chord, drawn the platform's way.
 const saveKeys = formatChord(`Mod+S`, isApplePlatform());
+// The lossy line's place: over text this viewer shows, which a big file's window is too.
+const lossyShown = computed(() => lossy.value && (open.value.kind === `code` || open.value.kind === `markdown` || open.value.kind === `big-text`));
+// A local window's file server derives text too, which a viewer that cannot draw its file yet (ONLYOFFICE downloading
+// its editor) may show meanwhile, through its `text` slot; a viewer with no use for it never renders the slot.
+const quickLookOffered = computed(() => localFace() !== undefined && workspaceAgent.value === undefined);
 const markdownHere = computed(() => open.value.kind === `markdown`);
 // Text files are continuously editable on desktop whenever permissions allow.
 const editingThis = computed(() => !mobile.value && canEdit.value && !markdownHere.value);
@@ -486,20 +551,6 @@ const onEditorSave = (value: string): void =>
             </button>
         </FileBreadcrumb>
 
-        <!-- Floating copy button on top-right corner of content on hover -->
-        <div
-            v-if="text !== null"
-            class="pointer-events-none absolute right-4 top-2 z-20 opacity-0 transition-opacity duration-150 group-hover/viewer:pointer-events-auto group-hover/viewer:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100"
-        >
-            <CopyButton
-                :text="editorSeed"
-                :label="t(`ui.action.copy`)"
-                class="bg-card/90 shadow-sm backdrop-blur"
-                v-tooltip.bottom="t(`workspace.words.wholeFile`)"
-                :aria-label="t(`workspace.fileViewer.copyFileContent`)"
-            />
-        </div>
-
         <!-- The open file changed on disk under unsaved edits: the buffer is kept; Reload adopts disk (discards edits). -->
         <div v-if="staleOnDisk" class="flex shrink-0 items-center gap-2 border-b border-warning/40 bg-warning/10 px-3 py-1.5 text-2xs text-warning">
             <Icon name="exclamation-triangle" class="text-[0.7rem]" />
@@ -509,7 +560,26 @@ const onEditorSave = (value: string): void =>
             </Button>
         </div>
 
+        <!-- The bytes aren't UTF-8: what shows is their best decoding, and a save would write that back over them. -->
+        <div v-if="lossyShown" class="flex shrink-0 items-center gap-2 border-b border-line px-3 py-1.5 text-2xs text-muted">
+            <Icon name="info-circle" class="text-[0.7rem]" />
+            <span class="flex-1">{{ t(`workspace.fileViewer.notUtf8ReadOnly`) }}</span>
+        </div>
+
         <div class="relative min-h-0 flex-1">
+            <!-- Floating copy button on the content's top-right corner on hover; inside the content, so it never covers a banner's action above. -->
+            <div
+                v-if="text !== null"
+                class="pointer-events-none absolute right-4 top-2 z-20 opacity-0 transition-opacity duration-150 group-hover/viewer:pointer-events-auto group-hover/viewer:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100"
+            >
+                <CopyButton
+                    :text="editorSeed"
+                    :label="t(`ui.action.copy`)"
+                    class="bg-card/90 shadow-sm backdrop-blur"
+                    v-tooltip.bottom="t(`workspace.words.wholeFile`)"
+                    :aria-label="t(`workspace.fileViewer.copyFileContent`)"
+                />
+            </div>
             <!-- Ahead of every other surface, including the editor's: this is the reader's own choice for formats that have another view. -->
             <DerivedTextView v-if="showDerived" :path="path" :downloadable="derivedDownloadable" @download="download" />
             <div v-else-if="error" class="flex h-full flex-col items-center justify-center gap-2 px-6 text-center">
@@ -546,8 +616,13 @@ const onEditorSave = (value: string): void =>
             />
             <!-- Over the editable cap: windowed, read-only, seeded with the window the read above already got. -->
             <BigTextView v-else-if="open.kind === 'big-text' && firstWindow" :path="path" :first="firstWindow" @download="download" />
-            <!-- Extension-contributed viewer: gets the path plus exactly one content prop (the manifest's `fetch` kind, never the others as undefined); a `path` viewer gets the scope instead, or nothing. -->
-            <component :is="viewerComponent" v-else-if="viewerComponent" :path="path" v-bind="viewerContent" @download="download" />
+            <!-- Extension-contributed viewer: gets the path plus exactly one content prop (the manifest's `fetch` kind, never the others as undefined); a `path` viewer gets the scope, `readOnly` and `unsaved` instead (pathViewerProps). -->
+            <!-- It may show the file's derived text through the `text` slot while it can't draw the file. -->
+            <component :is="viewerComponent" v-else-if="viewerComponent" :path="path" v-bind="viewerContent" @download="download">
+                <template v-if="quickLookOffered" #text>
+                    <DerivedTextView :path="path" />
+                </template>
+            </component>
             <FileUnsupported v-else-if="open.kind === 'too-large'" mode="too-large" :size="meta?.size" @download="download" />
             <FileUnsupported v-else-if="open.kind === 'empty'" mode="empty" />
             <!-- Sandbox keeps this one to itself; resolveOpenFile knows from the path alone, no fetch needed. -->

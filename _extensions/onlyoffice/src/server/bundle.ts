@@ -9,9 +9,10 @@ import { createGunzip } from "node:zlib";
 import type { BundlePin } from "./bundle-pin.js";
 import { readTar, type TarBody } from "./tar.js";
 
-// The browser engine's editor bundle on this sandbox's disk. It is fetched once per pin, every kept file hashed on the
+// The browser engine's editor bundle on this machine's disk. It is fetched once per pin, every kept file hashed on the
 // way in, and the tree becomes the one the listener serves only once all of it matched the pin: an interrupted or
-// altered download is never half-served. It lives in the workspace's rebuildable cache, which the watcher ignores.
+// altered download is never half-served. In a sandbox it lives in the workspace's rebuildable cache, which the watcher
+// ignores; on the desktop app, in the app's own cache.
 
 export type BundleState =
     | { readonly state: "absent" }
@@ -24,7 +25,7 @@ export interface BundleDeps {
     readonly root: string;
     readonly pin: BundlePin;
     readonly log: (line: string) => void;
-    readonly fetch?: typeof fetch;
+    readonly fetch?: typeof fetch | undefined;
     // A download that receives nothing for this long has stalled, and fails rather than holding the ring forever.
     readonly stallMs?: number;
 }

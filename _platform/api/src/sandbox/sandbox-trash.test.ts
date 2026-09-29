@@ -1,8 +1,10 @@
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import { installFakeFly } from "@intentic/testing/fly-fake";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import type { Config } from "../config.js";
 import { RECOVERY_WINDOW_MS } from "../durations.js";
 import { testIngressConfig } from "../testing.js";
+import { ENV_PROJECT_DIR } from "./hosted/hosted-project.js";
 import { listTrash, restoreSandbox, sweepSandboxTrash, TrashedSandboxGone } from "./sandbox-trash.js";
 
 const config = () =>
@@ -166,6 +168,25 @@ describe(`restoreSandbox`, () => {
         await restoreSandbox(prisma, config(), `u1`, `t1`);
         expect(fly.machines.get(`m1`)?.config[`image`]).toBe(`registry.test/sandbox@sha256:m1`);
         expect(fly.called(`POST`, `/machines/m1/start`)).toEqual([]);
+    });
+
+    // Nothing but the machine's own environment records the folder a project's machine was made for, and the identity a
+    // restore pushes onto it is a whole new config: the folder has to ride over from the one the machine kept.
+    it(`brings a project's machine back as that project's`, async () => {
+        const fly = stubFly();
+        const kept = fly.machines.get(`m1`);
+        if (kept === undefined) {
+            throw new Error(`the fake holds no machine m1`);
+        }
+        kept.config = { ...kept.config, env: { [ENV_PROJECT_DIR]: `${WORKSPACE_ROOT}/my-app` } };
+        const prisma = fakePrisma({
+            hostedMachine: { create: jest.fn().mockResolvedValue({ region: `iad`, warm: false }), count: jest.fn().mockResolvedValue(0) },
+            sandboxTrash: { delete: jest.fn().mockResolvedValue({}) },
+        });
+        await restoreSandbox(prisma, config(), `u1`, `t1`);
+        // SAFETY: the fake holds the config fly.ts last wrote, which is a FlyMachineConfig.
+        const env = fly.machines.get(`m1`)?.config[`env`] as Record<string, string> | undefined;
+        expect(env?.[ENV_PROJECT_DIR]).toBe(`${WORKSPACE_ROOT}/my-app`);
     });
 
     it(`mints a fresh identity: the deleted sandbox's connect token died with its row`, async () => {

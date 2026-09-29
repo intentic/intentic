@@ -39,6 +39,8 @@
         "allow-machine-report",
         "allow-machine-restart",
         "allow-workspace-open",
+        "allow-home-facts",
+        "allow-launcher-close",
         "allow-setup-alert",
         "allow-setup-progress",
         "allow-fit-to-content",
@@ -48,6 +50,7 @@
         "allow-update-install",
         "allow-local-open",
         "allow-local-open-path",
-        "allow-local-recents"
+        "allow-local-recents",
+        "allow-local-forget-recent"
     ]
 }

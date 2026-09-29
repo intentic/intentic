@@ -12,7 +12,25 @@ import { useSandbox } from "../../client/useSandbox";
 // key). Mode reflects what the daemon granted, never what was requested. Everything else about an existing
 // pairing now lives on that device's row in the Devices list.
 
-type SyncMode = `sync` | `mirror`;
+export type SyncMode = `sync` | `mirror`;
+
+// A pairing token, single-use and expiring (~10 min) server-side, and the mode the daemon granted, which may be less than
+// the one asked for (a member's "sync" comes back "mirror").
+export interface SyncPairing {
+    readonly token: string;
+    readonly mode: SyncMode;
+}
+
+// Mints a pairing on the active sandbox: this card's Enable, and the setup page's hand-off of a hosted project's folder
+// to the desktop app.
+export const mintSyncPairing = async (mode: SyncMode): Promise<SyncPairing> => {
+    const response = await sandboxRequest(`/system/sync/pair${mode === `mirror` ? `?mode=mirror` : ``}`, { method: `POST` });
+    if (!response.ok) {
+        throw new Error(`Couldn't start desktop sync (${response.status}).`);
+    }
+    const body = (await response.json()) as { token: string; mode?: SyncMode };
+    return { token: body.token, mode: body.mode ?? `sync` };
+};
 
 // SYNC_DIR is quoted, so a leading ~ must become $HOME to expand; Windows also flips separators. Anything past
 // the leading ~ is preserved verbatim.
@@ -89,18 +107,13 @@ export function useDesktopSync() {
               }),
     );
 
-    // Mints (or re-mints) a pairing token, single-use and expiring (~10 min) server-side. The daemon may grant a
-    // lesser mode than requested (a member's "sync" comes back "mirror").
+    // Mints (or re-mints) a pairing token.
     const enable = async (mode: SyncMode): Promise<void> => {
         minting.value = true;
         try {
-            const response = await sandboxRequest(`/system/sync/pair${mode === `mirror` ? `?mode=mirror` : ``}`, { method: `POST` });
-            if (!response.ok) {
-                throw new Error(`Couldn't start desktop sync (${response.status}).`);
-            }
-            const body = (await response.json()) as { token: string; mode?: SyncMode };
-            pairMode.value = body.mode ?? `sync`;
-            pairToken.value = body.token;
+            const pairing = await mintSyncPairing(mode);
+            pairMode.value = pairing.mode;
+            pairToken.value = pairing.token;
         } finally {
             minting.value = false;
         }

@@ -8,6 +8,7 @@ import type { Config } from "../../../config.js";
 import { digestOf, parseImageRef } from "../build/hosted-image.js";
 import { execMachine, type FlyExecAnswer, type FlyMachineCurrent, getMachineConfig, stopMachine, updateMachine } from "../fly/fly.js";
 import { withHostedAppLock } from "../hosted-app-lock.js";
+import { ENV_PROJECT_DIR } from "../hosted-project.js";
 import { awaitDaemon, baselineOf, type DaemonVerdict } from "./daemon-health.js";
 import { checkInSince, type HostedGateRecord, type HostedImageFacts, imageColumns, type KeptImage, type KeptVersions, keptVersionsOf, writeKept } from "./gate-row.js";
 import { startAfterUpdate } from "./start-after-update.js";
@@ -194,14 +195,20 @@ export const pinnedImage = (image: string, digest: string | undefined): string =
     image.includes(`@sha256:`) || digest === undefined || digest === `` ? image : `${image.replace(/:[^/:@]+$/, ``)}@${digest}`;
 
 // The target config as a probe: same image and volume, the daemon's entrypoint replaced by a sleep so nothing boots and
-// nothing converts, no restart. Its environment is the marker alone: the platform's credentials (the
-// connect token, the tunnel grant) stay out of a machine that has a network and a writable volume, and the planner reads
-// none of them, as ic's probe is given none. The marker holds the image the machine ran before, so a gate that died
-// mid-probe still knows what to go back to.
+// nothing converts, no restart. Its environment is the marker and the project folder alone: the platform's credentials
+// (the connect token, the tunnel grant) stay out of a machine that has a network and a writable volume, and the planner
+// reads none of them, as ic's probe is given none. The marker holds the image the machine ran before, so a gate that died
+// mid-probe still knows what to go back to; the folder is no credential, and the config that replaces a dead probe
+// reads it back off this one (../hosted-project.ts).
 export const probeConfig = (target: FlyMachineConfig, previousImage: string): FlyMachineConfig => {
+    const env: FlyMachineConfig[`env`] = { [STATE_PROBE_ENV]: previousImage };
+    const project = target.env[ENV_PROJECT_DIR];
+    if (project !== undefined) {
+        env[ENV_PROJECT_DIR] = project;
+    }
     return {
         ...target,
-        env: { [STATE_PROBE_ENV]: previousImage },
+        env,
         // The image's CMD, if it has one, lands after `--` as the shell's positional parameters and is never run.
         init: { entrypoint: [`/bin/sh`, `-c`, `sleep ${PROBE_SECONDS}`, `--`] },
         restart: { policy: `no` },

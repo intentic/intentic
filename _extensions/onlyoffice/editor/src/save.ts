@@ -240,6 +240,9 @@ export class SaveController {
         this.version = outcome.version;
         // Clears the editor's modified flag, unless the reader typed on while the save ran.
         effects.markSaved(pending.point);
+        // `saved` is no clean document: what was typed while the save ran is still unsaved. So the page says where it
+        // stands after every save of the document itself, and the editor's own word follows should its flag change.
+        effects.post({ channel: CHANNEL, type: "dirty", dirty: this.dirty });
         if (this.again) {
             this.again = false;
             this.start({ kind: "save", expected: this.version });

@@ -1,10 +1,12 @@
-import { type LadderInput, ladderOptionsOf, requestedRung } from "./machineLadder";
+import { type LadderInput, ladderOptionsOf, type Machine, requestedRung } from "./machineLadder";
 
 // Pins the picker's cards as values: which rungs exist for which offers, what each badge says about cost (or why the
 // rung cannot be taken), what the own-computer rung names as its next step, and which asked-for rung is honoured.
 
 const offered: LadderInput = {
     hostedOffered: true,
+    project: false,
+    hostedProjects: true,
     hostedFull: false,
     hostedSuspended: false,
     plan: false,
@@ -27,6 +29,18 @@ describe(`the picker's rungs`, () => {
         expect(ladderOptionsOf({ ...offered, hostedOffered: false }).map((option) => option.value)).toEqual([`mine`]);
         expect(ladderOptionsOf({ ...offered, commandOffered: false }).map((option) => option.value)).toEqual([`hosted`]);
         expect(ladderOptionsOf({ ...offered, hostedOffered: false, commandOffered: false })).toEqual([]);
+    });
+
+    // A project's folder reaches a machine of ours only where the platform's machines can hold one (`hostedOffer.projects`);
+    // a platform from before them offers a project this computer alone, and an ordinary setup its machine either way.
+    it(`offers a project a machine of ours only where the platform's machines can hold one`, () => {
+        const rungs = (over: Partial<LadderInput>): Machine[] => ladderOptionsOf({ ...offered, ...over }).map((option) => option.value);
+        expect({
+            project: rungs({ project: true }),
+            olderPlatform: rungs({ project: true, hostedProjects: false }),
+            ordinary: rungs({ hostedProjects: false }),
+            noMachines: rungs({ project: true, hostedOffered: false }),
+        }).toEqual({ project: [`hosted`, `mine`], olderPlatform: [`mine`], ordinary: [`hosted`, `mine`], noMachines: [`mine`] });
     });
 
     it.each<[string, Partial<LadderInput>, string]>([

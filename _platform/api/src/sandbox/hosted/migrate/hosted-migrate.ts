@@ -22,6 +22,7 @@ import {
 } from "../fly/fly.js";
 import { HostedAtCapacity, AT_CAPACITY_MESSAGE, noteProviderAtCapacity, providerWords } from "../hosted-capacity.js";
 import { withHostedAppLock } from "../hosted-app-lock.js";
+import { hostedProjectOf } from "../hosted-project.js";
 import { hostedEnabled, hostedInstanceId, hostedMachineConfig, type HostedProvisionArgs, startAfterUpdate } from "../hosted.js";
 import { hostedShapeFor, sameShape, shapeOfRow } from "../hosted-shape.js";
 import { runningImageOf } from "../gate/state-gate.js";
@@ -139,12 +140,14 @@ export const planMigration = (config: Config, machine: MigratableMachine, target
 export const planChangesNothing = (plan: MigrationPlan): boolean =>
     plan.from.tier === plan.to.tier && plan.from.region === plan.to.region && sameShape(plan.from.shape, plan.to.shape);
 
-const provisionArgsOf = (config: Config, machine: MigratableMachine, tier: HostedTierId): HostedProvisionArgs => ({
+// The machine's identity at `tier`, and its project folder, read off the config it holds (../hosted-project.ts).
+const provisionArgsOf = async (config: Config, machine: MigratableMachine, tier: HostedTierId): Promise<HostedProvisionArgs> => ({
     sandboxId: machine.sandboxId,
     connectToken: decryptSecret(config, machine.sandbox.token),
     ownerEmail: machine.sandbox.owner.email,
     region: machine.region,
     tier,
+    project: await hostedProjectOf(config, machine),
 });
 
 /** How a wait passes the time; the suites hand in one that does not, so a poll loop cannot outlive a test. */
@@ -268,7 +271,7 @@ const applyResize = async (prisma: PrismaClient, config: Config, machine: Migrat
     if (plan.to.shape.volumeGb > plan.from.shape.volumeGb) {
         await extendVolume(flyApiToken, machine.appName, machine.volumeId, plan.to.shape.volumeGb);
     }
-    const args = provisionArgsOf(config, machine, plan.to.tier);
+    const args = await provisionArgsOf(config, machine, plan.to.tier);
     const overlay = { image: machine.image, environmentHash: machine.environmentHash };
     const mark = (await prisma.sandbox.findUnique({ where: { id: machine.sandboxId }, select: { lastSeenAt: true } }))?.lastSeenAt ?? null;
     await updateMachine(
@@ -284,7 +287,7 @@ const applyResize = async (prisma: PrismaClient, config: Config, machine: Migrat
 // Puts the old guest back on the machine it never left. The disk keeps whatever size it was grown to, which is
 // harmless: a smaller guest on a bigger disk is a working machine, and shrinking it is not a thing Fly does.
 const undoResize = async (config: Config, machine: MigratableMachine, plan: MigrationPlan): Promise<void> => {
-    const args = provisionArgsOf(config, machine, plan.from.tier);
+    const args = await provisionArgsOf(config, machine, plan.from.tier);
     const overlay = { image: machine.image, environmentHash: machine.environmentHash };
     await updateMachine(
         config.hosted.flyApiToken,
@@ -335,7 +338,7 @@ const applyMove = async (
         compute: { cpuKind: plan.to.shape.cpuKind, cpus: plan.to.shape.cpus, memoryMb: plan.to.shape.memoryMb },
         ...(config.hosted.snapshotRetentionDays === 0 ? {} : { snapshotRetention: config.hosted.snapshotRetentionDays }),
     });
-    const args = provisionArgsOf(config, machine, plan.to.tier);
+    const args = await provisionArgsOf(config, machine, plan.to.tier);
     const overlay = { image: machine.image, environmentHash: machine.environmentHash };
     const mark = (await prisma.sandbox.findUnique({ where: { id: machine.sandboxId }, select: { lastSeenAt: true } }))?.lastSeenAt ?? null;
     try {

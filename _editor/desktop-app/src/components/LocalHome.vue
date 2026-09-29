@@ -1,51 +1,40 @@
 <script setup lang="ts">
-import { Button, Icon, Row, RowGroup } from "@intentic/ui";
+import { Button, Icon } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
-import { onMounted, ref } from "vue";
-import { localOpen, localOpenPath, localRecents, type LocalRecent } from "../desktop";
+import { localOpen } from "../desktop";
+import { useDraggingOver } from "../dropHighlight";
+import RecentList from "./RecentList.vue";
 
-// The first thing this card offers: a folder or a document of this computer, opened in a window of its own with the
-// editor's own views (src-tauri/src/local.rs). Nothing here needs a sandbox, an account or Docker, so it stands
-// above everything that does. A folder or a file dropped on the card opens the same way.
+// The first thing Home offers, and the whole of what needs nothing else: a folder or a document of this computer,
+// opened in a window of its own with the editor's own views (src-tauri/src/local.rs). No sandbox, account or Docker,
+// so it stands above everything that needs one. A drop anywhere on the window opens the same way (windows.rs); the
+// zone is where the reader is told so, and it lights up while something is over the window.
 
 const t = useT();
-const recents = ref<LocalRecent[]>([]);
-const failure = ref<string | undefined>(undefined);
-
-const reload = async (): Promise<void> => {
-    recents.value = await localRecents();
-};
-onMounted(() => void reload());
-
-// The recent path as the reader recognises it: its own name, with the folder it is in beside it.
-const nameOf = (path: string): string => path.split(/[\\/]/).findLast((part) => part !== ``) ?? path;
-const whereOf = (path: string): string => path.slice(0, Math.max(0, path.length - nameOf(path).length)).replace(/[\\/]$/, ``);
-
-const reopen = async (path: string): Promise<void> => {
-    failure.value = undefined;
-    try {
-        await localOpenPath(path);
-    } catch (error) {
-        failure.value = String(error);
-    }
-    await reload();
-};
+const dragging = useDraggingOver();
 </script>
 
 <template>
-    <RowGroup :label="t(`desktop.localHome.title`)">
-        <Row :title="t(`desktop.localHome.lead`)">
-            <template #control>
-                <Button size="small" severity="secondary" :label="t(`desktop.localHome.openFolder`)" @click="localOpen(true)" />
-                <Button size="small" severity="secondary" :text="true" :label="t(`desktop.localHome.openFile`)" @click="localOpen(false)" />
-            </template>
-        </Row>
-        <Row v-for="recent in recents.slice(0, 5)" :key="recent.path" as="button" :title="nameOf(recent.path)" @click="reopen(recent.path)">
-            <template #lead>
-                <Icon :name="recent.folder ? `folder` : `file`" class="text-sm text-muted" />
-            </template>
-            <template #description>{{ whereOf(recent.path) }}</template>
-        </Row>
-        <p v-if="failure" class="px-3 py-1 text-2xs text-danger">{{ failure }}</p>
-    </RowGroup>
+    <section class="flex flex-col gap-4">
+        <div
+            class="flex flex-col gap-3 rounded-xl border border-dashed px-4 py-4 transition-colors"
+            :class="dragging ? `border-primary-500 bg-primary-500/10` : `border-line`"
+        >
+            <h1 class="text-lg leading-tight font-semibold">{{ t(`desktop.home.openAnything`) }}</h1>
+            <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
+                <!-- The system dialog, then a window for what was chosen (local.rs `pick`); nothing chosen opens nothing. -->
+                <Button :label="t(`desktop.home.openFolder`)" @click="localOpen(true)">
+                    <template #icon><Icon name="folder-open" /></template>
+                </Button>
+                <Button :label="t(`desktop.home.openFile`)" @click="localOpen(false)">
+                    <template #icon><Icon name="file" /></template>
+                </Button>
+                <span class="flex min-w-0 items-center gap-2 text-xs transition-colors" :class="dragging ? `text-link` : `text-muted`">
+                    <Icon name="download" class="shrink-0" />
+                    <span>{{ t(`desktop.home.dropHere`) }}</span>
+                </span>
+            </div>
+        </div>
+        <RecentList />
+    </section>
 </template>

@@ -186,6 +186,9 @@ const start = (config: EditorPageConfig, api: DocsApi): void => {
                 }
                 save.opened();
                 post({ channel: CHANNEL, type: `ready` });
+                // Where things stand on a page loaded again (a conflict settled by a copy, or by taking the file on disk):
+                // the viewer last heard the page before it.
+                save.sync();
             },
             onDocumentStateChange: (event: { data?: boolean }) => save.modified(event.data === true),
             // Declared for the api layer, which only runs an export when it exists; the bytes arrive as a message.

@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { FREE_TIER, type HostedShape, type HostedTierId } from "@intentic/constants";
+import { projectRemoteDir } from "@intentic/sandbox-contract";
 import { Prisma, type PrismaClient } from "@intentic/prisma";
 import { ENV_INGRESS_URL, ENV_SANDBOX_GRANT, verifyReachabilityGrant } from "@intentic/sandbox-contract/ingress-contract";
 import { ENV_PLATFORM_PUBLIC_KEY, publicKeyPemOf } from "@intentic/sandbox-contract/owner-ticket";
@@ -34,6 +35,7 @@ import { AT_CAPACITY_MESSAGE, HostedAtCapacity, hostedCapacity, noteProviderAtCa
 import { digestIn, resolveHostedImage } from "./build/hosted-image.js";
 import { hostedSlotUse } from "./hosted-plan.js";
 import { assertHostedIdentity, HostedAlreadyProvisioned, HostedProvisionCancelled, lockHostedSandbox, withHostedApp } from "./hosted-cleanup.js";
+import { ENV_PROJECT_DIR, hostedProjectOf, projectOfEnv } from "./hosted-project.js";
 import { hostedShapeFor, shapeOfRow, volumeOptions } from "./hosted-shape.js";
 import { dropHostedMachine } from "./hosted-usage.js";
 import { startAfterUpdate } from "./gate/start-after-update.js";
@@ -134,6 +136,9 @@ export interface HostedProvisionArgs {
     readonly tier: HostedTierId;
     // Which profile the browser arrived in, if any; decides the definition this machine seeds itself from on first boot.
     readonly profile?: string | undefined;
+    // The folder a project sandbox is made for (`/work/<project>`, a name the api contract validated); absent for any
+    // other sandbox. A config replacing a machine's reads it off the config it replaces (hosted-project.ts).
+    readonly project?: string | undefined;
 }
 
 // Single composer for both cold-provision and pool-claim configs, so the two origins cannot drift. A hosted machine
@@ -184,6 +189,8 @@ export const hostedMachineConfig = (
                 // Re-applied on every claim, overlay and restart, like the rest of this config; the daemon applies it
                 // only to a workspace that arrived empty, so re-applying it cannot run over work.
                 ...(seed === undefined ? [] : [[ENV_DEFINITION_SEED, seed] as const]),
+                // The folder a project sandbox is made for, exactly as `ic` names it to a project container (connect.rs).
+                ...(args.project === undefined ? [] : [[ENV_PROJECT_DIR, projectRemoteDir(args.project)] as const]),
             ],
         }),
         // The owner rides along: this config is replaced on every claim, overlay and restart, so the stamp stays
@@ -329,12 +336,16 @@ export const wakeHosted = async (
     logger?: Logger,
     record?: HostedGateRecord,
 ): Promise<boolean> => {
+    // The environment the machine holds, once read: a heal and a trial's way back are composed around the project folder
+    // it names (hosted-project.ts).
+    let held: Readonly<Record<string, string>> | undefined;
     if (heal !== undefined && ingressEnabled(config)) {
         // allow(silent-catch): a read that fails is not a verdict; the plain start below runs and the next wake asks again
         const launch = await getMachineLaunch(config.hosted.flyApiToken, hosted.appName, hosted.machineId).catch(() => undefined);
         const probing = launch?.env?.[STATE_PROBE_ENV] !== undefined;
+        held = launch?.env;
         if (launch?.env !== undefined && HEALABLE_STATES.has(launch.state)) {
-            const args = heal();
+            const args = { ...heal(), project: projectOfEnv(launch.env) };
             if (!tunnelEnvCurrent(config, args.connectToken, launch.env) || probing) {
                 await healHosted(config, hosted, args, logger, record);
                 return true;
@@ -344,7 +355,8 @@ export const wakeHosted = async (
         }
     }
     if (heal !== undefined && record !== undefined && (hosted.unprovenImage ?? null) !== null) {
-        await startTrialHosted(config, hosted, heal(), logger, record);
+        const project = held === undefined ? await hostedProjectOf(config, hosted) : projectOfEnv(held);
+        await startTrialHosted(config, hosted, { ...heal(), project }, logger, record);
         return false;
     }
     await startHosted(config, hosted);
@@ -375,8 +387,9 @@ const claimPoolMachine = async (
     args: HostedProvisionArgs,
 ): Promise<HostedProvisioned | undefined> => {
     // Warm stock is built to the free rung's shape, so only a free-rung arrival can take one as it stands; anything
-    // bigger is built to order rather than handed a machine that is not what it was sold as.
-    if (args.tier !== FREE_TIER.id) {
+    // bigger is built to order rather than handed a machine that is not what it was sold as. A project is built to order
+    // too: warm stock's prewarm boot already put the starter site on its volume, which never sits beside a project.
+    if (args.tier !== FREE_TIER.id || args.project !== undefined) {
         return undefined;
     }
     const ready = await prisma.hostedPoolMachine.findMany({
@@ -569,16 +582,18 @@ export const refreshHosted = async (
     logger?: Logger,
     record?: HostedGateRecord,
 ): Promise<void> => {
+    // The machine's project folder rides over from the config it holds (hosted-project.ts).
+    const placed: HostedProvisionArgs = { ...args, project: await hostedProjectOf(config, hosted) };
     // Keeps the machine's existing overlay; a moved base image is a rebuild's job (hosted-build.ts), not this call's.
     const overlay: HostedOverlay = { image: hosted.image ?? null, environmentHash: hosted.environmentHash ?? null };
     // Resolved to a digest, so a restart on the digest the machine already runs converts nothing and asks nothing.
     const stockImage = overlay.image === null ? await stockTargetOf(config, hosted, logger) : config.hosted.image;
-    const target = hostedMachineConfig(config, args, hosted.appName, hosted.volumeId, overlay, stockImage);
+    const target = hostedMachineConfig(config, placed, hosted.appName, hosted.volumeId, overlay, stockImage);
     await switchHostedImage(config, hosted, target, {
         start: true,
         keepImage: true,
         record,
-        compose: composerFor(config, args, hosted),
+        compose: composerFor(config, placed, hosted),
         facts: overlay.image === null ? STOCK_FACTS : undefined,
         logger,
     });
@@ -629,7 +644,8 @@ export const rollbackHosted = async (
         throw new HostedNothingKept(`this sandbox has no earlier version kept to go back to`);
     }
     const environmentHash = hosted.previousEnvironmentHash ?? null;
-    const compose = composerFor(config, args, hosted, shapeOfRow(hosted));
+    // The machine's project folder rides over from the config it holds (hosted-project.ts).
+    const compose = composerFor(config, { ...args, project: await hostedProjectOf(config, hosted) }, hosted, shapeOfRow(hosted));
     const skip = await leftDigestOf(config, hosted, logger);
     // The base an earlier overlay was built on is not kept beside it: unknown, which the next rebuild check reads as moved.
     // A refusal puts back the config the machine held as it was: this target's recipe is the earlier version's, not its.

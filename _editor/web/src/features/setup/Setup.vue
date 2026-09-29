@@ -20,7 +20,7 @@ import { useT } from "@intentic/ui/i18n";
 import Checkbox from "primevue/checkbox";
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
-import { desktopVersion, openDesktopLink } from "../../app/environments/desktop";
+import { desktopTakesProjects, desktopVersion, openDesktopLink } from "../../app/environments/desktop";
 import { desktopInstaller } from "../../app/environments/desktopDownloads";
 import { environment } from "../../app/environments/environment";
 import { apiClient } from "../../lib/useApi";
@@ -31,9 +31,11 @@ import CloudflareTokenField from "../capabilities/connect/CloudflareTokenField.v
 import { composingConversation } from "../chat/panel/useChat-reveal";
 import { useCloudflareZones } from "../extensions/useCloudflareZones";
 import { useSandbox } from "../sandbox/client/useSandbox";
+import { mintSyncPairing } from "../sandbox/devices/sync/useDesktopSync";
 import { sandboxIdFromToken } from "../sandbox/session/sandboxIdFromToken";
 import DesktopSetupProgress from "./DesktopSetupProgress.vue";
 import { useDesktopSetup } from "./desktopSetup";
+import { useProjectHandoff } from "./hostedProject";
 import SetupCompose from "./SetupCompose.vue";
 import SetupHandoff from "./SetupHandoff.vue";
 import SetupNudge from "./SetupNudge.vue";
@@ -97,14 +99,23 @@ const enterWorkspace = async (): Promise<void> => {
     revealConversation(composingConversation());
 };
 
-const row = useSetupRow({ sandbox, enter: enterWorkspace, name: project?.name });
+// A hosted project's folder goes to the app before its workspace opens (hostedProject.ts).
+const { refusal: handoffRefusal, handOff } = useProjectHandoff({
+    project,
+    inApp: () => desktop.value,
+    sandboxOf: (id) => sandbox.sandboxes.value.find((entry) => entry.id === id),
+    mint: () => mintSyncPairing(`sync`),
+    open: openDesktopLink,
+});
+const row = useSetupRow({ sandbox, enter: enterWorkspace, handOff, name: project?.name });
 const { created, resuming, finished, creating, error, claimedAt, report, announced, autoCreate } = row;
-const hosted = useHostedLane({ platform: apiClient.sandbox, sandbox, row });
+const hosted = useHostedLane({ platform: apiClient.sandbox, sandbox, row, project: project?.dirName, appTakesProjects: desktopTakesProjects });
 const {
     machine,
     hostedRow,
     hostedOffer,
     hostedOffered,
+    hostedProjects,
     hostedSpent,
     hostedSuspended,
     hostedFull,
@@ -162,8 +173,9 @@ const provisionOffered = computed(() => addressed.value || hostedOffered.value);
 const collectedUnopened = computed(() => hostedOffer.value?.plan !== true);
 const ladderOptions = computed(() =>
     ladderOptionsOf({
-        // A machine of ours cannot hold a folder on this computer: a project has no rung but its own.
-        hostedOffered: hostedOffered.value && project === undefined,
+        hostedOffered: hostedOffered.value,
+        project: project !== undefined,
+        hostedProjects: hostedProjects.value,
         hostedFull: hostedFull.value,
         hostedSuspended: hostedSuspended.value,
         plan: hostedOffer.value?.plan === true,
@@ -375,6 +387,8 @@ onUnmounted(() => row.discardDraft(committed.value));
                     <template v-if="lane === `attach`">{{ t(`setup.setup.pointIntenticAtSandbox`) }}</template>
                     <!-- Nothing to start, so no promised minute or two; reads the same verdict the card below does. -->
                     <template v-else-if="loaded && !laneTakeable">{{ t(`setup.setup.heresWhatPlatformDo`) }}</template>
+                    <!-- A project's one fact before anything runs, whichever machine: what happens to the folder. -->
+                    <template v-else-if="project !== undefined">{{ t(`setup.setup.folderCopiedIntoSandbox`) }}</template>
                     <template v-else-if="ladderShown">{{ t(`setup.setup.pickWhereRunsYoull`) }}</template>
                     <template v-else-if="machine === `hosted`">{{ t(`setup.setup.startingMachineYoullWorking`) }}</template>
                     <template v-else-if="desktop">{{ t(`setup.setup.settingUpOnComputer`) }}</template>
@@ -765,6 +779,8 @@ onUnmounted(() => row.discardDraft(committed.value));
 
                         <!-- Kept separate from the arrival notice so a lane change doesn't erase it; a full fleet isn't shown twice. -->
                         <Notice v-if="hostedError && !hostedFull" :of="hostedError" />
+                        <!-- The machine answers, but the folder has not reached the app yet; the registry's next reading tries again. -->
+                        <Notice v-if="handoffRefusal && machine === `hosted`" :of="handoffRefusal" />
 
                         <!-- Show progress steps or the failure, never both. -->
                         <template v-if="machine === `hosted`">
@@ -918,9 +934,10 @@ onUnmounted(() => row.discardDraft(committed.value));
                             <SetupHandoff v-if="mobile && created" :sandbox-id="created.id" :email="user?.email ?? ``" @sent="onEmailed" />
 
                             <!-- One row naming both alternatives by outcome, not stacked disclosures: one changes where, the other how.
-                                 A project has neither: no machine of ours holds its folder, and no command syncs it. -->
+                                 A project has no command (only the app knows its folder), and a machine of ours only where the
+                                 platform's machines can hold one. -->
                             <nav
-                                v-if="project === undefined && (desktop || mobile || appFirst || otherMachinesFolded)"
+                                v-if="otherMachinesFolded || (project === undefined && (desktop || mobile || appFirst))"
                                 :aria-label="t(`setup.setup.otherWaysToSet`)"
                                 class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted"
                             >
@@ -930,9 +947,9 @@ onUnmounted(() => row.discardDraft(committed.value));
                                     <button type="button" :class="ui.linkButton()" @click="showOtherMachines">
                                         {{ t(`setup.setup.useMachineWeHost`) }}
                                     </button>
-                                    <span aria-hidden="true" class="text-subtle">·</span>
+                                    <span v-if="project === undefined" aria-hidden="true" class="text-subtle">·</span>
                                 </template>
-                                <button type="button" :class="ui.linkButton()" @click="showCommand = !showCommand">
+                                <button v-if="project === undefined" type="button" :class="ui.linkButton()" @click="showCommand = !showCommand">
                                     <template v-if="showCommand">{{ t(`setup.setup.hideCommand`) }}</template>
                                     <template v-else-if="desktop">{{ t(`setup.setup.showCommandServer`) }}</template>
                                     <template v-else>{{ t(`setup.setup.showCommand`) }}</template>

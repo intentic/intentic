@@ -1,10 +1,11 @@
-import { FREE_TIER, hostedTier } from "@intentic/constants";
+import { FREE_TIER, hostedTier, WORKSPACE_ROOT } from "@intentic/constants";
 import type { PrismaClient } from "@intentic/prisma";
 import type { Logger } from "pino";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { type Config, configSchema } from "../../../config.js";
 import { installFakeFly } from "@intentic/testing/fly-fake";
 import { fakeHostedAppLock, testIngressConfig } from "../../../testing.js";
+import { ENV_PROJECT_DIR } from "../hosted-project.js";
 import {
     hostedMigrationsOf,
     HostedMigrationRefused,
@@ -334,6 +335,36 @@ describe(`moving to another machine`, () => {
         expect(fly.called(`POST`, `/machines/m1/start`).length).toBeGreaterThan(0);
         expect(state).toMatchObject({ machineId: `m1`, volumeId: `vol_1`, region: `iad`, tier: FREE_TIER.id, migratingId: null });
         expect(migrations[0]?.state).toBe(`rolledBack`);
+    });
+});
+
+/* A PROJECT'S MACHINE: nothing but its own environment records the folder it was made for, and a resize and a move each
+ * write a whole new config, so the folder rides over from the one the machine held. */
+describe(`a project's machine`, () => {
+    const FOLDER = `${WORKSPACE_ROOT}/my-app`;
+    const projectFly = () => {
+        const fly = stubFly();
+        const held = fly.machines.get(`m1`);
+        if (held === undefined) {
+            throw new Error(`the fake holds no machine m1`);
+        }
+        held.config = { ...held.config, env: { [ENV_PROJECT_DIR]: FOLDER } };
+        return fly;
+    };
+    // SAFETY: the fake holds the config fly.ts last wrote, which is a FlyMachineConfig.
+    const folderOf = (written: Record<string, unknown> | undefined): string | undefined =>
+        (written?.[`env`] as Record<string, string> | undefined)?.[ENV_PROJECT_DIR];
+
+    it(`keeps its folder through a resize`, async () => {
+        const fly = projectFly();
+        await migrateHosted(fakePrisma().prisma, config(), logger, machine(), { tier: `standard` }, `owner@example.test`, noSleep);
+        expect(folderOf(fly.machines.get(`m1`)?.config)).toBe(FOLDER);
+    });
+
+    it(`keeps its folder through a move`, async () => {
+        const fly = projectFly();
+        await migrateHosted(fakePrisma().prisma, config(), logger, machine(), { tier: `standard`, region: `arn` }, `platform`, noSleep);
+        expect(folderOf(fly.machines.get(built(fly, machine()).machineId)?.config)).toBe(FOLDER);
     });
 });
 

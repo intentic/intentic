@@ -26,7 +26,7 @@ const render = (props: { readonly folder?: string; readonly project?: string }) 
 
 it(`states the folder a project setup is for, with no switch to turn it off`, () => {
     const seen = render({ project: `My App`, folder: `~/intentic/my-app-7` });
-    expect(seen.text).toContain(`Syncs live with the folder you picked`);
+    expect(seen.text).toContain(`Copied from the folder you picked`);
     expect({ folder: seen.folder, switches: seen.switches }).toEqual({ folder: `My App`, switches: 0 });
 });
 

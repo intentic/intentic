@@ -15,6 +15,10 @@ flowchart LR
 - `src/schemas.ts` holds two kinds of shape. Platform-native ones (users, hosted plans, invites, tokens) are defined
   here; daemon wire shapes are re-exported from `@intentic/sandbox-contract`, so the editor imports one module for
   both.
+- A field the platform adds is optional on both sides, so an older editor and an older platform keep talking to a newer
+  one. A capability the editor acts on is announced rather than inferred: `hostedOffer.projects` says the platform
+  reads `hostedProvision`'s `project` (a folder name held to sandbox-contract's `isProjectDirName`), and an editor
+  that does not see it keeps a project on the reader's own computer.
 - Nothing between the editor and a sandbox travels over it: the editor talks to the daemon directly over
   `sandbox-contract`.
 - `ResourceType` comes from `_deploy/resources`, a recorded exception to the rule that `_shared/` depends on no other

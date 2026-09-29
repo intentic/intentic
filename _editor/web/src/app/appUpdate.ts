@@ -1,5 +1,6 @@
 import { computed, ref, type ComputedRef } from "vue";
 import { DESKTOP_UPDATE_EVENT, DESKTOP_UPDATE_LINK, desktopApp, openDesktopLink, type DesktopUpdateEvent } from "./environments/desktop";
+import { localFace } from "./environments/local";
 import { buildId } from "./buildEpoch";
 
 // One offer merges two causes, a stale tab (the deploy moved) and a stale desktop app (a build finished
@@ -81,12 +82,20 @@ export const reportIncompleteBundle = (): void => {
     available.value ??= { kind: `incomplete` };
 };
 
-/** Start watching, once per document. Idempotent, so every mount can call it without coordinating. */
+/**
+ * Start watching, once per document. Idempotent, so every mount can call it without coordinating. A local window (the
+ * desktop app's window on a folder, app/environments/local.ts) watches for neither kind of update: its bundle ships
+ * inside the app, the app refuses a restart asked from it, and the tray and the app's Home already say when there is
+ * one. A missing chunk is still its own to repair (reportIncompleteBundle).
+ */
 const watchForUpdates = (): void => {
     if (started) {
         return;
     }
     started = true;
+    if (localFace() !== undefined) {
+        return;
+    }
 
     // The desktop app's answer, in both orderings: injected at load if the download finished first, dispatched as an
     // event if this page was already open.

@@ -10,6 +10,7 @@ import {
     type StreamingMarkdown,
 } from "@intentic/ui/markdown";
 import { linkifyFileRefs } from "./markdownFileLinks";
+import { resolvePictures } from "./markdownImages";
 
 // App's markdown entry point: the shared design-system engine plus file-path linking, added here as a decorator so
 // route knowledge stays out of the design system. Every call site imports from here, so no surface can render prose
@@ -19,11 +20,17 @@ export { markdownParseCount, renderParsedMarkdown, settledEnd } from "@intentic/
 export type { MarkdownPart, ParsedMarkdown, RenderedMarkdown, StreamingMarkdown };
 
 // The app's file-link decorator, handed to the engine directly or as the kit's <Markdown> `decorate` prop. `dir`
-// resolves a relative reference; `agent` scopes links to that conversation's workspace copy.
+// resolves a relative reference; `agent` scopes links to that conversation's workspace copy. A document with a folder
+// can also draw the pictures it names relative to it (markdownImages.ts), from what `picture` answers for a workspace
+// path; agent prose has no folder to resolve them in.
 export const fileLinkDecorator =
-    (options?: { readonly dir?: string; readonly agent?: string }): MarkdownDecorator =>
-    (fragment) =>
+    (options?: { readonly dir?: string; readonly agent?: string; readonly picture?: (path: string) => string | undefined }): MarkdownDecorator =>
+    (fragment) => {
         linkifyFileRefs(fragment, options?.dir, options?.agent);
+        if (options?.dir !== undefined && options.picture !== undefined) {
+            resolvePictures(fragment, options.dir, options.picture);
+        }
+    };
 
 export const renderMarkdown = (source: string, agent?: string): string => renderEngine(source, fileLinkDecorator({ agent }));
 

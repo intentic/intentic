@@ -25,6 +25,14 @@ describe(`readWindow`, () => {
         expect(await readWindow(join(dir, `zl.txt`), 0, 2)).toEqual({ content: `ż`, size: 7, offset: 0, bytes: 2 });
         expect(await readWindow(join(dir, `zl.txt`), 0, 3)).toEqual({ content: `ż`, size: 7, offset: 0, bytes: 2 });
     });
+
+    // Latin-1 `café\n`: 0xE9 alone is no UTF-8 character, so the text shows a replacement character, and says so.
+    it(`marks a window that is not UTF-8 as lossy, and one that is as nothing`, async () => {
+        writeFileSync(join(dir, `latin1.txt`), Uint8Array.from([0x63, 0x61, 0x66, 0xe9, 0x0a]));
+        expect(await readWindow(join(dir, `latin1.txt`))).toEqual({ content: `caf\uFFFD\n`, size: 5, offset: 0, bytes: 5, lossy: true });
+        writeFileSync(join(dir, `utf8.txt`), `café\n`);
+        expect(await readWindow(join(dir, `utf8.txt`))).toEqual({ content: `café\n`, size: 6, offset: 0, bytes: 6 });
+    });
 });
 
 describe(`writeFileWhole`, () => {
@@ -38,6 +46,17 @@ describe(`writeFileWhole`, () => {
         writeFileSync(join(dir, `a.md`), `changed by another program`);
         expect(await writeFileWhole(join(dir, `a.md`), new TextEncoder().encode(`mine`), sha256Text(`old`))).toBe(`changed`);
         expect(readFileSync(join(dir, `a.md`), `utf8`)).toBe(`changed by another program`);
+    });
+
+    // The editor read it with replacement characters; writing those back would change every byte they stand for.
+    it(`refuses a text save over a file that is not UTF-8, whatever hash it names, and leaves the file as it is`, async () => {
+        const latin1 = Uint8Array.from([0x63, 0x61, 0x66, 0xe9, 0x0a]);
+        writeFileSync(join(dir, `latin1.txt`), latin1);
+        expect(await writeFileWhole(join(dir, `latin1.txt`), new TextEncoder().encode(`cafe\n`), sha256Text(`caf\uFFFD\n`))).toBe(`not-text`);
+        expect(readFileSync(join(dir, `latin1.txt`))).toEqual(Buffer.from(latin1));
+        // A drop's bytes name no text: the same file is replaced whole, as any upload is.
+        expect(await writeFileWhole(join(dir, `latin1.txt`), new TextEncoder().encode(`cafe\n`), undefined)).toBeUndefined();
+        expect(readFileSync(join(dir, `latin1.txt`), `utf8`)).toBe(`cafe\n`);
     });
 
     // A save of a script must not quietly make it unrunnable.

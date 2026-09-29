@@ -1,8 +1,9 @@
 import "@intentic/testing/dom";
+import { resetSandboxScope } from "@intentic/extension-api";
 import type { OpenRequest, OpenResult } from "./contract.js";
-import { drop, frameId } from "./frames.js";
+import { drop, frameId, KEEP_MS } from "./frames.js";
 import { CHANNEL, type PageMessage, type ViewerMessage } from "./protocol.js";
-import { EditorSlot, type Opening } from "./slot.js";
+import { chooseEdit, EditorSlot, editChosen, offersEdit, openingMode, reportUnsaved, type Opening } from "./slot.js";
 
 // The viewer's frame against scripted backend answers, in jsdom with a stand-in `moveBefore` (jsdom has none, and a
 // browser without one keeps nothing). What is checked is which frame ends up in the slot, when it may be used, and what
@@ -290,5 +291,157 @@ describe(`the browser engine's page`, () => {
 
     it(`is a different editor from the document server's for the same document`, () => {
         expect(frameId(`brief.docx`, undefined, `edit`, `light`, `browser`)).not.toBe(frameId(`brief.docx`, undefined, `edit`, `light`, `server`));
+    });
+});
+
+// A backend that asks for reading first (a desktop app's local window, `openAs: "view"`): the document opens for
+// reading, Edit is a press away where the reader may edit it, and the press opens an editing editor in the same slot.
+describe(`a document opened for reading first`, () => {
+    const may = { mayEdit: true, viewFirst: true, editAsked: false };
+
+    it(`opens for reading until the reader asks to edit, and for editing where nobody asked for reading first`, () => {
+        expect(openingMode(may)).toBe(`view`);
+        expect(openingMode({ ...may, editAsked: true })).toBe(`edit`);
+        expect(openingMode({ ...may, viewFirst: false })).toBe(`edit`);
+    });
+
+    it(`never opens for editing a document the reader may not edit, whatever was pressed`, () => {
+        expect(openingMode({ ...may, mayEdit: false, editAsked: true })).toBe(`view`);
+        expect(openingMode({ ...may, mayEdit: false, viewFirst: false })).toBe(`view`);
+    });
+
+    it(`offers Edit only where pressing it can open an editor`, () => {
+        expect(offersEdit(may, true)).toBe(true);
+        // Already asked, nobody asked for reading first, not the reader's to edit, a format the engine can't write back.
+        expect(offersEdit({ ...may, editAsked: true }, true)).toBe(false);
+        expect(offersEdit({ ...may, viewFirst: false }, true)).toBe(false);
+        expect(offersEdit({ ...may, mayEdit: false }, true)).toBe(false);
+        expect(offersEdit(may, false)).toBe(false);
+    });
+
+    it(`remembers the documents the reader chose to edit, so coming back to one opens it for editing`, () => {
+        expect(editChosen(`chosen.docx`)).toBe(false);
+        chooseEdit(`chosen.docx`);
+        expect(editChosen(`chosen.docx`)).toBe(true);
+        expect(editChosen(`other.docx`)).toBe(false);
+        expect(openingMode({ ...may, editAsked: editChosen(`chosen.docx`) })).toBe(`edit`);
+    });
+
+    it(`swaps the reading editor for an editing one in the same slot, asking nothing of the one it throws away`, async () => {
+        const state = fake();
+        await state.slot.load({ ...brief, mode: openingMode(may) });
+        const [reading] = frames(state.element);
+        state.answer = async () => ({ url: `https://port-1.example/editor?s=two`, session: `two`, engine: `server` });
+        state.slot.reset();
+        expect(await state.slot.load({ ...brief, mode: openingMode({ ...may, editAsked: true }) })).toEqual({ framed: true });
+        expect(state.opened.map((request) => request.mode)).toEqual([`view`, `edit`]);
+        expect(state.saved).toEqual([]);
+        expect(reading?.isConnected).toBe(false);
+        expect(frames(state.element).map((frame) => frame.src)).toEqual([`http://port-1.localhost/editor?s=two`]);
+    });
+});
+
+// Unsaved edits belong to the editor holding them, not to the viewer on screen: a kept editor still saves, fails or
+// meets a conflict after its viewer has gone, and what it holds counts until its page says it is written, the owner
+// discards it, or the editor itself is let go.
+describe(`what an editor holds unsaved`, () => {
+    const browser: Opening = { ...brief, engine: `browser` };
+    const told: boolean[] = [];
+    const browserFake = (): Fake => {
+        const state = fake();
+        state.answer = async () => ({ url: `https://port-1.example/editor?s=one`, session: `one`, engine: `browser` });
+        return state;
+    };
+    // What the page in `frame` says, from its own window and origin; read at the time it speaks, since jsdom gives a
+    // moved frame a new window.
+    const page = (frame: HTMLIFrameElement | undefined, message: PageMessage): void => {
+        window.dispatchEvent(new MessageEvent(`message`, { data: message, origin: `http://port-1.localhost`, source: frame?.contentWindow ?? null }));
+    };
+    const dirty = (value: boolean): PageMessage => ({ channel: CHANNEL, type: `dirty`, dirty: value });
+
+    beforeEach(() => {
+        told.length = 0;
+        reportUnsaved(brief.path, (value) => told.push(value));
+        told.length = 0;
+    });
+
+    it(`is what the page says, and a save of the document itself is not a clean document`, async () => {
+        const state = browserFake();
+        await state.slot.load(browser);
+        const [frame] = frames(state.element);
+        page(frame, dirty(true));
+        // Ctrl+S, typing on while it runs: the page saved up to the export, and says nothing more, since its flag stayed.
+        page(frame, { channel: CHANNEL, type: `saved`, path: brief.path });
+        expect(told).toEqual([true]);
+        page(frame, dirty(false));
+        expect(told).toEqual([true, false]);
+    });
+
+    it(`is nothing once a conflict's copy is written beside the document, whose page loads the file as it is`, async () => {
+        const state = browserFake();
+        await state.slot.load(browser);
+        const [frame] = frames(state.element);
+        page(frame, dirty(true));
+        page(frame, { channel: CHANNEL, type: `saved`, path: `brief (copy).docx` });
+        expect(told).toEqual([true, false]);
+    });
+
+    it(`is still heard from a kept editor after its viewer has gone`, async () => {
+        const state = browserFake();
+        await state.slot.load(browser);
+        const [frame] = frames(state.element);
+        page(frame, dirty(true));
+        state.slot.leave();
+        state.slot.dispose();
+        expect(told).toEqual([true]);
+        // The kept page's save, asked for on leaving, lands.
+        page(frame, dirty(false));
+        expect(told).toEqual([true, false]);
+    });
+
+    it(`keeps a kept editor holding edits past its time, and stops counting what it held once it is let go`, async () => {
+        jest.useFakeTimers();
+        try {
+            const state = browserFake();
+            await state.slot.load(browser);
+            const [frame] = frames(state.element);
+            page(frame, dirty(true));
+            state.slot.leave();
+            jest.advanceTimersByTime(KEEP_MS * 3);
+            expect(frame?.isConnected).toBe(true);
+            // A switch to another sandbox ends every editor, and what they held with them.
+            resetSandboxScope();
+            expect(frame?.isConnected).toBe(false);
+            expect(told).toEqual([true, false]);
+        } finally {
+            jest.useRealTimers();
+            reportUnsaved(brief.path, (value) => told.push(value));
+        }
+    });
+
+    it(`is nothing once the editor is thrown away, or the owner discards what it held`, async () => {
+        const state = browserFake();
+        await state.slot.load(browser);
+        const [first] = frames(state.element);
+        page(first, dirty(true));
+        state.slot.reset();
+        expect(told).toEqual([true, false]);
+
+        await state.slot.load(browser);
+        const [second] = frames(state.element);
+        page(second, dirty(true));
+        // Discard mine: the page loads the file as it is on disk.
+        state.slot.resolve(`reload`);
+        expect(told).toEqual([true, false, true, false]);
+        expect(second?.isConnected).toBe(true);
+    });
+
+    it(`is nothing once an editor that could not be kept goes with its viewer`, async () => {
+        delete prototype.moveBefore;
+        const state = browserFake();
+        await state.slot.load(browser);
+        page(frames(state.element)[0], dirty(true));
+        state.slot.leave();
+        expect(told).toEqual([true, false]);
     });
 });

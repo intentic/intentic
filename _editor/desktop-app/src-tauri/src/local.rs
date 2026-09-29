@@ -1,40 +1,49 @@
 //! THE WINDOWS ON THE USER'S OWN DISK: a folder or a document opened from the tray, Home, a double-click or a
 //! second launch, shown by the editor's own file views (the local face, `files/local` in the bundle) and served by
-//! one sidecar process, `intentic-files` (`_devices/local-files`).
+//! one sidecar process, `intentic-files` (`_devices/local-files`, kept alive by sidecar.rs).
 //!
 //! The sidecar listens on a loopback port and serves only what this module grants it on its stdin: one grant per
 //! window, a random token that decides the folder. A page presents its token and nothing else, so no page, the
 //! window's own included, can widen what it reads. The window holds no capability at all (see `setup_link.rs`
 //! `Source::Files` for the two links it is heard on).
 
-use std::collections::HashMap;
-use std::io::{BufRead, BufReader, Write};
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
-use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::mpsc::{self, SyncSender};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::Mutex;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
-use serde::Deserialize;
+use base64::Engine;
 use sha2::{Digest, Sha256};
-use tauri::{AppHandle, Manager};
-use tauri_plugin_dialog::DialogExt;
+use tauri::{AppHandle, Manager, WebviewWindow};
+use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 use tauri_plugin_opener::OpenerExt;
 
 use crate::setup_link::LocalVerb;
-use crate::state::AppState;
+use crate::sidecar::Granted;
+use crate::state::{AppState, RecentView};
+use crate::windows::FilesWindow;
 
-/// The label prefix of a local window: `files-1`, `files-2`, one per grant.
+/// The label prefix of a local window: `files-1`, `files-2`, one per grant (and one for the spare).
 pub const FILES: &str = "files-";
 
-/// How long a sidecar may take to say where it listens: a cold start of a compiled binary is well under this.
-const READY_WAIT: Duration = Duration::from_secs(20);
+/// How long the workspace may read a file handed to it by "Ask about this": long enough to open it, never a
+/// standing door into the folder.
+const HANDOFF_LIFE: Duration = Duration::from_secs(15 * 60);
 
-/// How long a grant may take: a `realpath` and a `stat`.
-const GRANT_WAIT: Duration = Duration::from_secs(10);
+/// How long after a window opens the next spare is built: after the window's own page has loaded, not against it.
+const SPARE_AFTER: Duration = Duration::from_secs(2);
 
-/// What the app asks the sidecar to serve, and what the sidecar made of it (the real folder, the name).
+/// How long a spare is kept with no local window open: a hidden editor is memory, and a user who has stopped
+/// opening folders is not about to open the next one this second.
+const SPARE_IDLE: Duration = Duration::from_secs(5 * 60);
+
+/// Where a window's face is kept for its reloads: the window's own session storage, which a reload keeps and no
+/// other window shares. Written only by the app ([`face_given`], [`face_moved`]).
+const FACE_KEY: &str = "intentic.local.face";
+
+/// What the app asks the sidecar to serve for one window, and what the sidecar made of it (the real folder, the
+/// name, and the face the window was told).
 #[derive(Clone, Debug)]
 struct Grant {
     token: String,
@@ -44,166 +53,124 @@ struct Grant {
     folder: bool,
     root: PathBuf,
     file: Option<String>,
+    /// What the window was told about itself (`__INTENTIC_LOCAL__`), kept so a sidecar that comes back on another
+    /// port can tell it again ([`moved`]).
+    face: serde_json::Value,
 }
 
-/// One line the sidecar writes on stdout (`_devices/local-files/src/control.ts`).
-#[derive(Debug, Deserialize, PartialEq)]
-#[serde(tag = "event", rename_all = "lowercase")]
-enum Event {
-    Ready {
-        port: u16,
-    },
-    Granted {
-        token: String,
-        root: String,
-        name: String,
-        file: Option<String>,
-    },
-    Refused {
-        token: String,
-        error: String,
-    },
-    Revoked {
-        token: String,
-    },
+/// A file handed to the workspace read-only by "Ask about this" ([`hand_off`]): a grant of its own that no window
+/// shows, so it never counts as one, kept until it expires so a restart hands it back to the sidecar.
+#[derive(Clone, Debug)]
+struct Handoff {
+    token: String,
+    id: String,
+    path: PathBuf,
+    /// The workspace's origin, the one page allowed to read it.
+    origin: String,
+    expires: Instant,
 }
 
-/// What a grant came back as: the folder served and the names the window shows.
-struct Granted {
-    root: String,
-    name: String,
-    file: Option<String>,
-}
-
-struct Running {
-    child: Child,
-    stdin: ChildStdin,
-    port: u16,
+/// The hidden files window kept ready for the next open (the warm window): a page that has already loaded the
+/// editor and waits for its face, so the next folder or document appears as soon as it is granted.
+struct Spare {
+    label: String,
+    /// Its page has finished loading: only then can a face evaluated into it land in it.
+    loaded: bool,
 }
 
 #[derive(Default)]
 pub struct LocalFiles {
-    running: Mutex<Option<Running>>,
-    /// The port the first run took, asked for again by a restart so the open windows keep their address.
-    port: Mutex<Option<u16>>,
     /// Open windows, by label.
     windows: Mutex<HashMap<String, Grant>>,
-    ready: Mutex<Option<SyncSender<u16>>>,
-    waiting: Mutex<HashMap<String, SyncSender<Result<Granted, String>>>>,
+    handoffs: Mutex<Vec<Handoff>>,
+    /// Paths an open is working on right now. A second open of one of them is dropped: the first raises its window
+    /// when it is ready. Always locked BEFORE `windows`, never after.
+    opening: Mutex<HashSet<PathBuf>>,
+    spare: Mutex<Option<Spare>>,
     next: AtomicU32,
+    next_handoff: AtomicU32,
+    /// A local window has been shown this run: the first one is what wants the office editor and starts the spares.
+    shown_any: AtomicBool,
+    /// Moved on by every open and by the last window closing, so a spare's retirement scheduled at a close can tell
+    /// whether anything has happened since.
+    idle: AtomicU64,
 }
 
-/* THE SIDECAR. */
+/* WHAT GOES WRONG, in the words the user reads. */
 
-/// Where the binary is: beside this app's own executable, where the installer puts it (tauri.conf.json
-/// `externalBin`), unless `INTENTIC_FILES_BIN` names another (a dev build of `_devices/local-files`).
-fn sidecar_binary() -> Result<PathBuf, String> {
-    if let Some(path) = std::env::var_os("INTENTIC_FILES_BIN") {
-        return Ok(PathBuf::from(path));
-    }
-    let exe = std::env::current_exe()
-        .map_err(|error| format!("cannot find this app's own executable: {error}"))?;
-    let name = if cfg!(windows) {
-        "intentic-files.exe"
-    } else {
-        "intentic-files"
-    };
-    let path = exe
-        .parent()
-        .map(|dir| dir.join(name))
-        .ok_or_else(|| "this app's executable has no folder".to_string())?;
-    if path.exists() {
-        Ok(path)
-    } else {
-        Err(format!(
-            "the file server is missing from this install ({})",
-            path.display()
-        ))
-    }
+/// Why an open failed. The words shown are [`Trouble::friendly`]'s; the detail is the original error, which goes
+/// to stderr and nowhere else.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Trouble {
+    /// The path is not there.
+    Gone(String),
+    /// The OS will not let this user read it.
+    NotAllowed(String),
+    /// The sidecar's binary is not where the installer puts it.
+    Missing(String),
+    /// The sidecar would not start, did not say where it listens, or did not answer a grant in time.
+    NotStarted(String),
+    /// The sidecar refused the grant.
+    Refused(String),
+    Failed(String),
 }
 
-/// The page origins the sidecar answers: the bundle under the scheme each platform serves it by, and the dev
-/// server's in a debug build.
-fn origins() -> Vec<&'static str> {
-    let mut origins = vec![
-        "tauri://localhost",
-        "http://tauri.localhost",
-        "https://tauri.localhost",
-    ];
-    if cfg!(debug_assertions) {
-        origins.push("http://localhost:47146");
-    }
-    origins
-}
-
-fn spawn(app: &AppHandle, port: Option<u16>) -> Result<(Child, ChildStdin, ChildStdout), String> {
-    let paths = app.path();
-    let cache = paths
-        .app_cache_dir()
-        .map_err(|error| format!("no cache folder for this app: {error}"))?
-        .join("office");
-    let page = match std::env::var_os("INTENTIC_OFFICE_PAGE") {
-        Some(page) => PathBuf::from(page),
-        None => paths
-            .resource_dir()
-            .map_err(|error| format!("no resource folder for this app: {error}"))?
-            .join("onlyoffice-page"),
-    };
-    let mut command = Command::new(sidecar_binary()?);
-    command.arg("serve");
-    for origin in origins() {
-        command.arg("--origin").arg(origin);
-    }
-    command
-        .arg("--cache")
-        .arg(&cache)
-        .arg("--office-page")
-        .arg(&page)
-        .arg("--port")
-        .arg(port.unwrap_or(0).to_string())
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::inherit());
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-        command.creation_flags(CREATE_NO_WINDOW);
-    }
-    let mut child = command
-        .spawn()
-        .map_err(|error| format!("the file server did not start: {error}"))?;
-    let stdin = child.stdin.take().ok_or("the file server has no stdin")?;
-    let stdout = child.stdout.take().ok_or("the file server has no stdout")?;
-    Ok((child, stdin, stdout))
-}
-
-/// The sidecar's port, starting it if it is not running. A restart takes the port the last run had and hands
-/// every open window's grant back to it, so a page mid-session reconnects to the same address.
-fn ensure(app: &AppHandle) -> Result<u16, String> {
-    let files = app.state::<LocalFiles>();
-    let mut running = files.running.lock().unwrap();
-    if let Some(held) = running.as_mut() {
-        if matches!(held.child.try_wait(), Ok(None)) {
-            return Ok(held.port);
+impl Trouble {
+    fn io(error: &std::io::Error) -> Trouble {
+        match error.kind() {
+            std::io::ErrorKind::NotFound => Trouble::Gone(error.to_string()),
+            std::io::ErrorKind::PermissionDenied => Trouble::NotAllowed(error.to_string()),
+            _ => Trouble::Failed(error.to_string()),
         }
     }
-    let (sender, receiver) = mpsc::sync_channel(1);
-    *files.ready.lock().unwrap() = Some(sender);
-    let last = *files.port.lock().unwrap();
-    let (child, mut stdin, stdout) = spawn(app, last)?;
-    let reader = app.clone();
-    std::thread::spawn(move || read_events(&reader, stdout));
-    let port = receiver
-        .recv_timeout(READY_WAIT)
-        .map_err(|_| "the file server did not say where it listens".to_string())?;
-    for grant in files.windows.lock().unwrap().values() {
-        let _ = stdin.write_all(grant_line(grant).as_bytes());
+
+    pub fn detail(&self) -> &str {
+        match self {
+            Trouble::Gone(detail)
+            | Trouble::NotAllowed(detail)
+            | Trouble::Missing(detail)
+            | Trouble::NotStarted(detail)
+            | Trouble::Refused(detail)
+            | Trouble::Failed(detail) => detail,
+        }
     }
-    *files.port.lock().unwrap() = Some(port);
-    *running = Some(Running { child, stdin, port });
-    Ok(port)
+
+    /// The sentence the dialog or Home shows, about the thing called `name`.
+    pub fn friendly(&self, name: &str) -> String {
+        match self {
+            Trouble::Gone(_) => {
+                format!("“{name}” isn't there any more. It may have been moved or deleted.")
+            }
+            Trouble::NotAllowed(_) => format!("Intentic isn't allowed to open “{name}”."),
+            Trouble::Missing(_) => {
+                "Part of Intentic is missing. Reinstalling Intentic fixes this.".to_string()
+            }
+            Trouble::NotStarted(_) => {
+                "Intentic's file server didn't start. Try again, or restart Intentic.".to_string()
+            }
+            Trouble::Refused(_) | Trouble::Failed(_) => format!("Intentic couldn't open “{name}”."),
+        }
+    }
 }
+
+/// What a path is called where the user reads about it: its own name, or the whole of it for a drive root.
+pub fn shown_name(path: &Path) -> String {
+    path.file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_else(|| path.display().to_string())
+}
+
+/// An open that failed where nothing on screen was waiting for its answer (a dialog's pick, a double-click, a drop,
+/// the tray): said in a native error dialog, since a Windows build has no console for stderr to reach.
+fn say(app: &AppHandle, text: &str) {
+    app.dialog()
+        .message(text)
+        .title("Intentic couldn't open this")
+        .kind(MessageDialogKind::Error)
+        .show(|_| {});
+}
+
+/* THE GRANTS, as the sidecar is handed them. */
 
 fn grant_line(grant: &Grant) -> String {
     let kind = if grant.folder { "folder" } else { "file" };
@@ -218,79 +185,192 @@ fn grant_line(grant: &Grant) -> String {
     )
 }
 
-fn send(app: &AppHandle, line: &str) -> Result<(), String> {
-    let files = app.state::<LocalFiles>();
-    let mut running = files.running.lock().unwrap();
-    let held = running.as_mut().ok_or("the file server is not running")?;
-    held.stdin
-        .write_all(line.as_bytes())
-        .and_then(|()| held.stdin.flush())
-        .map_err(|error| format!("the file server stopped listening: {error}"))
+/// A handoff's grant, with what is left of its life at `now`; none once it has expired. Read-only, one file, and
+/// readable only from the workspace's origin (`_devices/local-files`, handoff grants).
+fn handoff_line(handoff: &Handoff, now: Instant) -> Option<String> {
+    let left = handoff.expires.checked_duration_since(now)?;
+    let millis = u64::try_from(left.as_millis()).unwrap_or(u64::MAX);
+    Some(format!(
+        "{}\n",
+        serde_json::json!({
+            "op": "grant",
+            "token": handoff.token,
+            "id": handoff.id,
+            "path": handoff.path.display().to_string(),
+            "kind": "file",
+            "readOnly": true,
+            "origins": [handoff.origin],
+            "expiresInMs": millis,
+        })
+    ))
 }
 
-/// Everything the sidecar says, until it exits. An exit with windows still open is a crash, answered by a
-/// restart that serves them again.
-fn read_events(app: &AppHandle, stdout: ChildStdout) {
-    let files = app.state::<LocalFiles>();
-    for line in BufReader::new(stdout).lines() {
-        let Ok(line) = line else { break };
-        match serde_json::from_str::<Event>(&line) {
-            Ok(Event::Ready { port }) => {
-                if let Some(sender) = files.ready.lock().unwrap().take() {
-                    let _ = sender.send(port);
-                }
-            }
-            Ok(Event::Granted {
-                token,
-                root,
-                name,
-                file,
-            }) => {
-                if let Some(sender) = files.waiting.lock().unwrap().remove(&token) {
-                    let _ = sender.send(Ok(Granted { root, name, file }));
-                }
-            }
-            Ok(Event::Refused { token, error }) => {
-                if let Some(sender) = files.waiting.lock().unwrap().remove(&token) {
-                    let _ = sender.send(Err(error));
-                }
-            }
-            Ok(Event::Revoked { .. }) => {}
-            Err(error) => {
-                eprintln!("intentic-files said something this app does not read: {line} ({error})")
-            }
+fn revoke_line(token: &str) -> String {
+    format!(
+        "{}\n",
+        serde_json::json!({ "op": "revoke", "token": token })
+    )
+}
+
+impl LocalFiles {
+    /// Every grant the app still holds, as lines for a sidecar that has just (re)started: each window's, and each
+    /// handoff that has not expired at `now`. Expired handoffs are dropped here.
+    fn grant_lines(&self, now: Instant) -> Vec<String> {
+        let mut lines: Vec<String> = self
+            .windows
+            .lock()
+            .unwrap()
+            .values()
+            .map(grant_line)
+            .collect();
+        let mut handoffs = self.handoffs.lock().unwrap();
+        handoffs.retain(|handoff| handoff.expires > now);
+        lines.extend(
+            handoffs
+                .iter()
+                .filter_map(|handoff| handoff_line(handoff, now)),
+        );
+        lines
+    }
+
+    /// The roots of the folders windows show: the only places a delete may reach (sidecar.rs `trashable`). A
+    /// document window's folder is not among them, since it may write only its own document, and neither is a
+    /// handoff's, which is not a window at all.
+    fn folder_roots(&self) -> Vec<PathBuf> {
+        self.windows
+            .lock()
+            .unwrap()
+            .values()
+            .filter(|grant| grant.folder)
+            .map(|grant| grant.root.clone())
+            .collect()
+    }
+
+    /// The sidecar is coming back on `port`, another than before, where whatever took the old one may be collecting
+    /// the tokens pages still send there, to replay against the new one. So before anything is granted again,
+    /// every window and every handoff gets a fresh token, and each window's face carries it with the new address.
+    fn rehome(&self, port: u16) {
+        for grant in self.windows.lock().unwrap().values_mut() {
+            grant.token = token();
+            grant.face["token"] = serde_json::Value::String(grant.token.clone());
+            grant.face["daemonUrl"] = serde_json::Value::String(daemon_url(port));
+        }
+        for handoff in self.handoffs.lock().unwrap().iter_mut() {
+            handoff.token = token();
         }
     }
-    *files.running.lock().unwrap() = None;
-    if files.windows.lock().unwrap().is_empty() {
-        return;
-    }
-    eprintln!("intentic-files stopped with windows open: starting it again");
-    std::thread::sleep(Duration::from_secs(1));
-    if let Err(error) = ensure(app) {
-        eprintln!("{error}");
+
+    /// Each window's face, by label.
+    fn faces(&self) -> Vec<(String, serde_json::Value)> {
+        self.windows
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|(label, grant)| (label.clone(), grant.face.clone()))
+            .collect()
     }
 }
 
-/// Stops the sidecar with the app, which would otherwise leave it waiting on a stdin nobody holds.
-pub fn shutdown(app: &AppHandle) {
-    let files = app.state::<LocalFiles>();
-    files.windows.lock().unwrap().clear();
-    let running = files.running.lock().unwrap().take();
-    if let Some(mut running) = running {
-        let _ = running.child.kill();
+/// Every grant the app still holds, for a sidecar that has just (re)started (sidecar.rs `ensure`).
+pub fn live_grant_lines(app: &AppHandle) -> Vec<String> {
+    app.state::<LocalFiles>().grant_lines(Instant::now())
+}
+
+/// Whether any window is being served: what makes a sidecar that stopped one to start again. Handoffs never count.
+pub fn serving(app: &AppHandle) -> bool {
+    !app.state::<LocalFiles>().windows.lock().unwrap().is_empty()
+}
+
+/// The roots of the folders windows show (`LocalFiles::folder_roots`).
+pub fn folder_roots(app: &AppHandle) -> Vec<PathBuf> {
+    app.state::<LocalFiles>().folder_roots()
+}
+
+/// Fresh tokens for every grant before a sidecar on a new port is granted anything (`LocalFiles::rehome`).
+pub fn rehome(app: &AppHandle, port: u16) {
+    app.state::<LocalFiles>().rehome(port);
+}
+
+/* WHAT A WINDOW IS TOLD ABOUT ITSELF. */
+
+/// What a local window is told about itself before any of its modules run: the web app's `LocalFace`
+/// (`_editor/web/src/app/environments/local.ts`). `file` is there only for a document opened alone: the face reads an
+/// absent one as a folder, and a `null` would read as a document with no name.
+fn face_of(port: u16, grant: &Grant, granted: &Granted, has_sandbox: bool) -> serde_json::Value {
+    let mut face = serde_json::json!({
+        "daemonUrl": daemon_url(port),
+        "token": grant.token,
+        "id": grant.id,
+        "name": granted.name,
+        "path": granted.root,
+        "sandbox": has_sandbox,
+    });
+    if let Some(file) = &granted.file {
+        face["file"] = serde_json::Value::String(file.clone());
+    }
+    face
+}
+
+fn daemon_url(port: u16) -> String {
+    format!("http://127.0.0.1:{port}")
+}
+
+/// The initialization script that tells a window its face before any of its modules run, on every load: the face
+/// kept for this window's reloads if the app has handed it one since (a spare worn, a sidecar moved), else the one
+/// it was built with. A spare is built with none, and its page waits for `intentic:face`.
+fn face_init(face: Option<&serde_json::Value>) -> String {
+    let built = face.map_or_else(|| "null".to_string(), serde_json::Value::to_string);
+    format!(
+        "(function () {{ var face = {built}; try {{ var kept = window.sessionStorage.getItem(\"{FACE_KEY}\"); if (kept) {{ face = JSON.parse(kept); }} }} catch (error) {{}} if (face) {{ window.__INTENTIC_LOCAL__ = Object.freeze(face); }} }})();"
+    )
+}
+
+/// The spare being worn: its page, already loaded and waiting, is handed its face, which is kept for its reloads
+/// (its init script has none of its own).
+fn face_given(face: &serde_json::Value) -> String {
+    format!(
+        "(function () {{ var face = {face}; try {{ window.sessionStorage.setItem(\"{FACE_KEY}\", JSON.stringify(face)); }} catch (error) {{}} window.__INTENTIC_LOCAL__ = Object.freeze(face); window.dispatchEvent(new CustomEvent('intentic:face')); }})();"
+    )
+}
+
+/// A running page whose sidecar came back on another port: its new face is kept, and the page reloads onto it.
+fn face_moved(face: &serde_json::Value) -> String {
+    format!(
+        "(function () {{ try {{ window.sessionStorage.setItem(\"{FACE_KEY}\", JSON.stringify({face})); }} catch (error) {{}} window.location.reload(); }})();"
+    )
+}
+
+/// A document handed to the folder window that holds it (`intentic:open`), at its root-relative path.
+fn open_in_window(path: &str) -> String {
+    let detail = serde_json::json!({ "path": path });
+    format!("window.dispatchEvent(new CustomEvent('intentic:open', {{ detail: {detail} }}));")
+}
+
+/// The sidecar came back on another port, so every window's page holds an address nobody listens on and a token
+/// nothing honours any more ([`rehome`] gave each a new one). Each window is handed its new face and reloaded onto
+/// it ([`face_moved`]): the simplest thing that leaves every window working, and one that loses nothing a page could
+/// still have saved, its server having gone. Closing them instead would lose the same and the windows too.
+pub fn moved(app: &AppHandle) {
+    for (label, face) in app.state::<LocalFiles>().faces() {
+        if let Some(window) = app.get_webview_window(&label) {
+            eprintln!("intentic-files moved to another port: reloading {label} onto it");
+            let _ = window.eval(face_moved(&face));
+        }
     }
 }
 
 /* OPENING. */
 
-/// A path without the `\\?\` prefix Windows' canonical form carries, which no dialog, file manager or person
-/// reads as the same folder.
-fn plain(path: PathBuf) -> PathBuf {
+/// A path without the verbatim prefix Windows' canonical form carries, which no dialog, file manager or person
+/// reads as the same folder: `\\?\C:\x` is `C:\x`, and `\\?\UNC\server\share\x` is `\\server\share\x`.
+pub fn plain(path: PathBuf) -> PathBuf {
     let text = path.display().to_string();
+    if let Some(share) = text.strip_prefix(r"\\?\UNC\") {
+        return PathBuf::from(format!(r"\\{share}"));
+    }
     match text.strip_prefix(r"\\?\") {
-        Some(rest) if !rest.starts_with("UNC\\") => PathBuf::from(rest),
-        _ => path,
+        Some(rest) => PathBuf::from(rest),
+        None => path,
     }
 }
 
@@ -313,59 +393,129 @@ fn token() -> String {
 }
 
 /// [`open`], off the calling thread: it may wait on the sidecar's first start, and the thread asking is often
-/// the one that draws every window (a dialog's answer, a second launch, a link).
+/// the one that draws every window (a dialog's answer, a second launch, a link). What fails is said in a dialog.
 pub fn open_later(app: &AppHandle, path: PathBuf) {
     let app = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        if let Err(error) = open(&app, &path) {
-            eprintln!("{error}");
+        if let Err(text) = open(&app, &path) {
+            say(&app, &text);
         }
     });
 }
 
-/// Open `path` in a window of its own, or bring back the one already showing it.
+/// Open `path` in a window of its own, or bring back the one already showing it, or hand a document to the folder
+/// window that holds it. What fails comes back as the sentence to show; the original goes to stderr.
 pub fn open(app: &AppHandle, path: &Path) -> Result<(), String> {
-    let asked = plain(
-        std::fs::canonicalize(path)
-            .map_err(|error| format!("{} cannot be opened: {error}", path.display()))?,
-    );
+    open_path(app, path).map_err(|trouble| {
+        eprintln!(
+            "intentic: could not open {}: {}",
+            path.display(),
+            trouble.detail()
+        );
+        trouble.friendly(&shown_name(path))
+    })
+}
+
+/// Where an open goes, given the windows open now.
+#[derive(Debug, PartialEq, Eq)]
+enum Destination {
+    /// A window already shows it: raised.
+    Shown(String),
+    /// A document inside the root of a folder window: that window is raised and opens it itself (`intentic:open`),
+    /// at this root-relative, forward-slashed path. The deepest such root, when folders nest.
+    Inside { label: String, path: String },
+    /// A window of its own.
+    New,
+}
+
+fn destination(windows: &HashMap<String, Grant>, asked: &Path, folder: bool) -> Destination {
+    if let Some((label, _)) = windows.iter().find(|(_, grant)| grant.asked == asked) {
+        return Destination::Shown(label.clone());
+    }
+    if folder {
+        return Destination::New;
+    }
+    let owner = windows
+        .iter()
+        .filter(|(_, grant)| grant.folder && asked.starts_with(&grant.root) && asked != grant.root)
+        .max_by_key(|(_, grant)| grant.root.components().count());
+    match owner.and_then(|(label, grant)| Some((label, asked.strip_prefix(&grant.root).ok()?))) {
+        Some((label, relative)) => Destination::Inside {
+            label: label.clone(),
+            path: slashed(relative),
+        },
+        None => Destination::New,
+    }
+}
+
+/// A relative path as the page names entries: its segments joined by forward slashes, whatever the platform.
+fn slashed(relative: &Path) -> String {
+    relative
+        .components()
+        .map(|part| part.as_os_str().to_string_lossy().into_owned())
+        .collect::<Vec<_>>()
+        .join("/")
+}
+
+fn open_path(app: &AppHandle, path: &Path) -> Result<(), Trouble> {
+    let asked = plain(std::fs::canonicalize(path).map_err(|error| Trouble::io(&error))?);
     let folder = std::fs::metadata(&asked)
-        .map_err(|error| format!("{} cannot be read: {error}", asked.display()))?
+        .map_err(|error| Trouble::io(&error))?
         .is_dir();
     let files = app.state::<LocalFiles>();
-    let existing = files
-        .windows
-        .lock()
-        .unwrap()
-        .iter()
-        .find(|(_, grant)| grant.asked == asked)
-        .map(|(label, _)| label.clone());
-    if let Some(window) = existing.and_then(|label| app.get_webview_window(&label)) {
-        crate::windows::raise_window(&window);
+    let mut opening = files.opening.lock().unwrap();
+    let destination = destination(&files.windows.lock().unwrap(), &asked, folder);
+    if destination == Destination::New && !opening.insert(asked.clone()) {
+        // Already being opened: that open brings its window up when it is ready.
         return Ok(());
     }
-    let port = ensure(app)?;
+    drop(opening);
+    match destination {
+        Destination::Shown(label) => {
+            if let Some(window) = app.get_webview_window(&label) {
+                crate::windows::raise_window(&window);
+            }
+            Ok(())
+        }
+        Destination::Inside { label, path } => {
+            if let Some(window) = app.get_webview_window(&label) {
+                crate::windows::raise_window(&window);
+                let _ = window.eval(open_in_window(&path));
+                app.state::<AppState>().remember_recent(&asked, false);
+            }
+            Ok(())
+        }
+        Destination::New => {
+            let opened = open_new(app, &asked, folder);
+            files.opening.lock().unwrap().remove(&asked);
+            opened
+        }
+    }
+}
+
+/// A window of its own for `asked`: granted, then shown, in the spare when there is one ready.
+fn open_new(app: &AppHandle, asked: &Path, folder: bool) -> Result<(), Trouble> {
+    let port = crate::sidecar::ensure(app)?;
+    let files = app.state::<LocalFiles>();
     let mut grant = Grant {
         token: token(),
-        id: id_of(&asked),
-        asked: asked.clone(),
+        id: id_of(asked),
+        asked: asked.to_path_buf(),
         folder,
-        root: asked.clone(),
+        root: asked.to_path_buf(),
         file: None,
+        face: serde_json::Value::Null,
     };
-    let (sender, receiver) = mpsc::sync_channel(1);
-    files
-        .waiting
-        .lock()
-        .unwrap()
-        .insert(grant.token.clone(), sender);
-    send(app, &grant_line(&grant))?;
-    let granted = receiver
-        .recv_timeout(GRANT_WAIT)
-        .map_err(|_| "the file server did not answer".to_string())??;
+    let granted =
+        crate::sidecar::grant(app, &grant.token, &grant_line(&grant)).map_err(|trouble| {
+            match trouble {
+                // Refused because it went between the look and the grant: said as gone, which is what it is.
+                Trouble::Refused(detail) if !asked.exists() => Trouble::Gone(detail),
+                other => other,
+            }
+        })?;
     grant.root = PathBuf::from(&granted.root);
     grant.file.clone_from(&granted.file);
-    let label = format!("{FILES}{}", files.next.fetch_add(1, Ordering::Relaxed) + 1);
     // Whether the way to an agent is a new sandbox or this folder's own (project.rs).
     let has_sandbox = folder
         && app
@@ -373,62 +523,170 @@ pub fn open(app: &AppHandle, path: &Path) -> Result<(), String> {
             .projects()
             .iter()
             .any(|project| Path::new(&project.path) == grant.root);
-    let face = face_of(port, &grant, &granted, has_sandbox);
-    let init = format!("window.__INTENTIC_LOCAL__ = Object.freeze({face});");
-    files
-        .windows
-        .lock()
-        .unwrap()
-        .insert(label.clone(), grant.clone());
-    if let Err(error) = crate::windows::show_files_window(
-        app,
-        &label,
-        &format!("{} · Intentic", granted.name),
-        &init,
-    ) {
-        files.windows.lock().unwrap().remove(&label);
-        let _ = send(app, &revoke_line(&grant.token));
-        return Err(error);
+    grant.face = face_of(port, &grant, &granted, has_sandbox);
+    let title = format!("{} · Intentic", granted.name);
+    match take_spare(app) {
+        Some(window) => {
+            files
+                .windows
+                .lock()
+                .unwrap()
+                .insert(window.label().to_string(), grant.clone());
+            crate::windows::wear_face(app, &window, &title, &face_given(&grant.face));
+        }
+        None => {
+            let label = next_label(&files);
+            files
+                .windows
+                .lock()
+                .unwrap()
+                .insert(label.clone(), grant.clone());
+            if let Err(error) = crate::windows::show_files_window(
+                app,
+                &label,
+                &title,
+                &face_init(Some(&grant.face)),
+                FilesWindow::Shown,
+            ) {
+                files.windows.lock().unwrap().remove(&label);
+                let _ = crate::sidecar::send(app, &revoke_line(&grant.token));
+                return Err(Trouble::Failed(error));
+            }
+        }
     }
-    app.state::<AppState>().remember_recent(&asked, folder);
+    app.state::<AppState>().remember_recent(asked, folder);
+    shown_one(app);
     Ok(())
 }
 
-/// What a local window is told about itself before any of its modules run: the web app's `LocalFace`
-/// (`_editor/web/src/app/environments/local.ts`). `file` is there only for a document opened alone: the face reads an
-/// absent one as a folder, and a `null` would read as a document with no name.
-fn face_of(port: u16, grant: &Grant, granted: &Granted, has_sandbox: bool) -> serde_json::Value {
-    let mut face = serde_json::json!({
-        "daemonUrl": format!("http://127.0.0.1:{port}"),
-        "token": grant.token,
-        "id": grant.id,
-        "name": granted.name,
-        "path": granted.root,
-        "sandbox": has_sandbox,
-    });
-    if let Some(file) = &granted.file {
-        face["file"] = serde_json::Value::String(file.clone());
-    }
-    face
+fn next_label(files: &LocalFiles) -> String {
+    format!("{FILES}{}", files.next.fetch_add(1, Ordering::Relaxed) + 1)
 }
 
-fn revoke_line(token: &str) -> String {
-    format!(
-        "{}\n",
-        serde_json::json!({ "op": "revoke", "token": token })
-    )
+/// A local window came up. The first of the run is what asks for the office editor (sidecar.rs); every one moves
+/// the idle clock on and keeps a spare coming for the next.
+fn shown_one(app: &AppHandle) {
+    let files = app.state::<LocalFiles>();
+    files.idle.fetch_add(1, Ordering::SeqCst);
+    if !files.shown_any.swap(true, Ordering::SeqCst) {
+        crate::sidecar::want_office(app);
+    }
+    keep_a_spare(app);
+}
+
+/* THE WARM WINDOW — one hidden files window, already loaded, that the next open wears. */
+
+/// Build a spare after [`SPARE_AFTER`], unless there is one. `INTENTIC_WARM_WINDOW=0` turns spares off.
+fn keep_a_spare(app: &AppHandle) {
+    if std::env::var("INTENTIC_WARM_WINDOW").is_ok_and(|value| value == "0") {
+        return;
+    }
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(SPARE_AFTER).await;
+        build_spare(&app);
+    });
+}
+
+/// The spare: the same window a grant gets (`show_files_window`: builder, label, desktop facts, handlers), hidden,
+/// with no face. Its slot is taken before it is built and not held while it is: building waits on the main thread,
+/// which is where [`page_loaded`] takes the same lock.
+fn build_spare(app: &AppHandle) {
+    let files = app.state::<LocalFiles>();
+    let label = {
+        let mut spare = files.spare.lock().unwrap();
+        if spare.is_some() {
+            return;
+        }
+        let label = next_label(&files);
+        *spare = Some(Spare {
+            label: label.clone(),
+            loaded: false,
+        });
+        label
+    };
+    if let Err(error) = crate::windows::show_files_window(
+        app,
+        &label,
+        "Intentic",
+        &face_init(None),
+        FilesWindow::Spare,
+    ) {
+        eprintln!("the spare local window did not open: {error}");
+        let mut spare = files.spare.lock().unwrap();
+        if spare.as_ref().is_some_and(|held| held.label == label) {
+            *spare = None;
+        }
+    }
+}
+
+/// A files window's page finished loading: the spare's is what makes it wearable.
+pub fn page_loaded(app: &AppHandle, label: &str) {
+    if let Some(spare) = app
+        .state::<LocalFiles>()
+        .spare
+        .lock()
+        .unwrap()
+        .as_mut()
+        .filter(|spare| spare.label == label)
+    {
+        spare.loaded = true;
+    }
+}
+
+/// The spare, taken to be worn, when its page has loaded; otherwise none, and it stays for the next open.
+fn take_spare(app: &AppHandle) -> Option<WebviewWindow> {
+    let files = app.state::<LocalFiles>();
+    let label = {
+        let mut spare = files.spare.lock().unwrap();
+        match spare.as_ref() {
+            Some(held) if held.loaded => spare.take().map(|held| held.label),
+            _ => None,
+        }
+    }?;
+    app.get_webview_window(&label)
+}
+
+/// The last local window closed: the spare goes too if nothing opens for [`SPARE_IDLE`].
+fn retire_spare_later(app: &AppHandle) {
+    let epoch = app
+        .state::<LocalFiles>()
+        .idle
+        .fetch_add(1, Ordering::SeqCst)
+        + 1;
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(SPARE_IDLE).await;
+        let files = app.state::<LocalFiles>();
+        if files.idle.load(Ordering::SeqCst) != epoch || !files.windows.lock().unwrap().is_empty() {
+            return;
+        }
+        let label = files.spare.lock().unwrap().take().map(|held| held.label);
+        if let Some(window) = label.and_then(|label| app.get_webview_window(&label)) {
+            let _ = window.destroy();
+        }
+    });
 }
 
 /// The window is gone, and so is what it could read.
 pub fn window_closed(app: &AppHandle, label: &str) {
-    let removed = app
-        .state::<LocalFiles>()
-        .windows
-        .lock()
-        .unwrap()
-        .remove(label);
+    let files = app.state::<LocalFiles>();
+    {
+        let mut spare = files.spare.lock().unwrap();
+        if spare.as_ref().is_some_and(|held| held.label == label) {
+            *spare = None;
+        }
+    }
+    let (removed, none_left) = {
+        let mut windows = files.windows.lock().unwrap();
+        let removed = windows.remove(label);
+        (removed, windows.is_empty())
+    };
     if let Some(grant) = removed {
-        let _ = send(app, &revoke_line(&grant.token));
+        let _ = crate::sidecar::send(app, &revoke_line(&grant.token));
+        if none_left {
+            retire_spare_later(app);
+        }
     }
 }
 
@@ -451,19 +709,34 @@ pub fn open_args<I: IntoIterator<Item = String>>(
 }
 
 fn path_of_arg(arg: &str, cwd: Option<&Path>) -> Option<PathBuf> {
+    arg_path(arg, cwd).filter(|path| path.exists())
+}
+
+/// `arg` read as a path, before anything asks whether it is there.
+fn arg_path(arg: &str, cwd: Option<&Path>) -> Option<PathBuf> {
     if arg.is_empty() || arg.starts_with('-') || arg.starts_with("intentic://") {
         return None;
     }
     let path = if arg.starts_with("file://") {
         url::Url::parse(arg).ok()?.to_file_path().ok()?
     } else {
-        PathBuf::from(arg)
+        PathBuf::from(drive_root(arg).unwrap_or_else(|| arg.to_string()))
     };
-    let path = match cwd {
+    Some(match cwd {
         Some(cwd) if path.is_relative() => cwd.join(path),
         _ => path,
-    };
-    path.exists().then_some(path)
+    })
+}
+
+/// A drive root as Explorer hands it to "Open with Intentic" on the empty space of one: the command is `"%V"`, `%V`
+/// is `E:\`, and the command line reads the `\"` of `"E:\"` as an escaped quote, so the argument arrives as `E:"`.
+fn drive_root(arg: &str) -> Option<String> {
+    match arg.as_bytes() {
+        [letter, b':', b'"'] if letter.is_ascii_alphabetic() => {
+            Some(format!("{}:\\", char::from(*letter)))
+        }
+        _ => None,
+    }
 }
 
 /* WHAT A LOCAL WINDOW ASKS FOR (setup_link.rs `LocalVerb`). */
@@ -474,20 +747,32 @@ pub fn act(app: &AppHandle, label: &str, verb: LocalVerb) {
         LocalVerb::OpenFile => pick(app, false),
         LocalVerb::Reveal(path) => reveal(app, label, path.as_deref()),
         LocalVerb::Sandbox => sandbox(app, label),
+        LocalVerb::Ask(path) => ask(app, label, &path),
+        LocalVerb::Changes
+        | LocalVerb::BringBack(_)
+        | LocalVerb::Restore(_)
+        | LocalVerb::Direction(_) => {
+            // A project is a folder: a document window has none to work.
+            if let Some(grant) = grant_of(app, label).filter(|grant| grant.folder) {
+                crate::project::work(app, label, &grant.root, &verb);
+            }
+        }
     }
 }
 
-/// "Work on this with an agent", for the folder a window shows (project.rs); a document opened alone has no
-/// folder of its own to hand over, so the window is told to open its folder first.
-fn sandbox(app: &AppHandle, label: &str) {
-    let Some(grant) = app
-        .state::<LocalFiles>()
+fn grant_of(app: &AppHandle, label: &str) -> Option<Grant> {
+    app.state::<LocalFiles>()
         .windows
         .lock()
         .unwrap()
         .get(label)
         .cloned()
-    else {
+}
+
+/// "Work on this with an agent", for the folder a window shows (project.rs); a document opened alone has no
+/// folder of its own to hand over, so the window is told to open its folder first.
+fn sandbox(app: &AppHandle, label: &str) {
+    let Some(grant) = grant_of(app, label) else {
         return;
     };
     if grant.folder {
@@ -519,14 +804,7 @@ pub fn pick(app: &AppHandle, folder: bool) {
 /// Show an entry of the window's own folder in the file manager: `path` is resolved inside that folder and
 /// refused anywhere else; none means the folder (or, for a document opened alone, the document).
 fn reveal(app: &AppHandle, label: &str, path: Option<&str>) {
-    let Some(grant) = app
-        .state::<LocalFiles>()
-        .windows
-        .lock()
-        .unwrap()
-        .get(label)
-        .cloned()
-    else {
+    let Some(grant) = grant_of(app, label) else {
         return;
     };
     let target = match path.and_then(|path| inside(&grant.root, path)) {
@@ -560,6 +838,85 @@ fn inside(root: &Path, path: &str) -> Option<PathBuf> {
     real.starts_with(root).then_some(real)
 }
 
+/* "ASK ABOUT THIS" — one file of a window's, handed to the workspace. */
+
+/// The file a window asks about: `path` inside a folder window's own folder, or a document window's document
+/// whatever it names. Only a file: a folder is not something the workspace can be handed to read.
+fn ask(app: &AppHandle, label: &str, path: &str) {
+    let Some(grant) = grant_of(app, label) else {
+        return;
+    };
+    let target = if grant.folder {
+        inside(&grant.root, path)
+    } else {
+        Some(grant.asked.clone())
+    };
+    let Some(file) = target.filter(|target| target.is_file()) else {
+        eprintln!("{label} asked about {path}, which is not a file of its own");
+        return;
+    };
+    let app = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        if let Err(trouble) = hand_off(&app, &file) {
+            eprintln!(
+                "intentic: could not hand {} to the workspace: {}",
+                file.display(),
+                trouble.detail()
+            );
+            say(&app, &trouble.friendly(&shown_name(&file)));
+        }
+    });
+}
+
+/// A read-only grant of `file` for the workspace's origin alone, for [`HANDOFF_LIFE`], and the workspace opened on
+/// it (`/?handoff=…`). The grant is never a window's: it is not shown, not counted, and gone when it expires.
+fn hand_off(app: &AppHandle, file: &Path) -> Result<(), Trouble> {
+    let port = crate::sidecar::ensure(app)?;
+    let files = app.state::<LocalFiles>();
+    let now = Instant::now();
+    let handoff = Handoff {
+        token: token(),
+        id: format!(
+            "handoff-{}",
+            files.next_handoff.fetch_add(1, Ordering::Relaxed) + 1
+        ),
+        path: file.to_path_buf(),
+        origin: origin_of(&app.state::<AppState>().app_url()),
+        expires: now + HANDOFF_LIFE,
+    };
+    let line = handoff_line(&handoff, now)
+        .ok_or_else(|| Trouble::Failed("a handoff expired before it was granted".to_string()))?;
+    let granted = crate::sidecar::grant(app, &handoff.token, &line)?;
+    files.handoffs.lock().unwrap().push(handoff.clone());
+    crate::windows::show_workspace_at(app, Some(&handoff_path(port, &handoff.token, &granted)));
+    Ok(())
+}
+
+/// The origin of the workspace's address, the one page the handoff may be read from.
+fn origin_of(app_url: &str) -> String {
+    let parsed = url::Url::parse(app_url)
+        .ok()
+        .filter(|url| url.origin().is_tuple())
+        .unwrap_or_else(|| {
+            url::Url::parse(crate::state::APP_URL).expect("the static app url parses")
+        });
+    parsed.origin().ascii_serialization()
+}
+
+/// Where the workspace opens to take the handoff (`/?handoff=`, the web's side): base64url, unpadded, of
+/// `{ url, token, name }`, where `url` reads the file from the sidecar by its name relative to the grant's root.
+fn handoff_path(port: u16, token: &str, granted: &Granted) -> String {
+    let relative = granted.file.clone().unwrap_or_else(|| granted.name.clone());
+    let mut url = url::Url::parse(&format!("{}/workspace/raw", daemon_url(port)))
+        .expect("a loopback url parses");
+    url.query_pairs_mut().append_pair("path", &relative);
+    let handoff = serde_json::json!({ "url": url.as_str(), "token": token, "name": granted.name });
+    format!(
+        "/?handoff={}",
+        base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(handoff.to_string())
+    )
+}
+
 /* THE LAUNCHER'S COMMANDS (Home). */
 
 #[tauri::command]
@@ -567,6 +924,7 @@ pub fn local_open(app: AppHandle, folder: bool) {
     pick(&app, folder);
 }
 
+/// Home's own open: what fails comes back as the sentence Home shows under the row, so no dialog is raised.
 #[tauri::command]
 pub async fn local_open_path(app: AppHandle, path: String) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || open(&app, Path::new(&path)))
@@ -574,9 +932,21 @@ pub async fn local_open_path(app: AppHandle, path: String) -> Result<(), String>
         .map_err(|error| format!("opening stopped: {error}"))?
 }
 
+/// The recents with whether each is there now: off the main thread, since asking a network drive that has gone
+/// away whether a path exists can take the OS's whole timeout.
 #[tauri::command]
-pub fn local_recents(app: AppHandle) -> Vec<crate::state::Recent> {
-    app.state::<AppState>().recents()
+pub async fn local_recents(app: AppHandle) -> Result<Vec<RecentView>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        crate::state::recent_views(state.recents(), &state.projects(), Path::exists)
+    })
+    .await
+    .map_err(|error| format!("the recents could not be read: {error}"))
+}
+
+#[tauri::command]
+pub fn local_forget_recent(app: AppHandle, path: String) {
+    app.state::<AppState>().forget_recent(&path);
 }
 
 #[cfg(test)]
@@ -601,6 +971,20 @@ mod tests {
         // A path that is not there is not opened, rather than opened onto an error.
         assert_eq!(path_of_arg("missing.docx", Some(&dir)), None);
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// "Open with Intentic" on the empty space of a drive: `"%V"` delivers `E:"`, which is the root `E:\`.
+    #[test]
+    fn a_drive_root_delivered_with_a_stray_quote_is_that_root() {
+        assert_eq!(drive_root("E:\""), Some(r"E:\".to_string()));
+        assert_eq!(drive_root("c:\""), Some(r"c:\".to_string()));
+        assert_eq!(arg_path("E:\"", None), Some(PathBuf::from(r"E:\")));
+        // Only a bare drive: anything longer is a path of its own, and a quote elsewhere is not this.
+        assert_eq!(drive_root("E:"), None);
+        assert_eq!(drive_root("E:\\"), None);
+        assert_eq!(drive_root("EE\""), None);
+        assert_eq!(drive_root("1:\""), None);
+        assert_eq!(arg_path("E:\\work", None), Some(PathBuf::from(r"E:\work")));
     }
 
     #[test]
@@ -636,46 +1020,22 @@ mod tests {
         assert_ne!(one, token());
     }
 
-    #[test]
-    fn reads_every_event_the_sidecar_writes() {
-        assert_eq!(
-            serde_json::from_str::<Event>(r#"{"event":"ready","port":4100,"version":"1.2.3"}"#)
-                .unwrap(),
-            Event::Ready { port: 4100 }
-        );
-        assert_eq!(
-            serde_json::from_str::<Event>(
-                r#"{"event":"granted","token":"t","root":"/r","name":"r"}"#
-            )
-            .unwrap(),
-            Event::Granted {
-                token: "t".into(),
-                root: "/r".into(),
-                name: "r".into(),
-                file: None
-            }
-        );
-        assert_eq!(
-            serde_json::from_str::<Event>(r#"{"event":"refused","token":"t","error":"gone"}"#)
-                .unwrap(),
-            Event::Refused {
-                token: "t".into(),
-                error: "gone".into()
-            }
-        );
+    fn grant(asked: &str, folder: bool, root: &str) -> Grant {
+        Grant {
+            token: "t".repeat(64),
+            id: "abc".into(),
+            asked: PathBuf::from(asked),
+            folder,
+            root: PathBuf::from(root),
+            file: None,
+            face: serde_json::Value::Null,
+        }
     }
 
     /// A folder's face has no `file` at all: the window shows its tree only when the key is absent.
     #[test]
     fn a_folder_window_is_told_of_no_file_and_a_document_window_of_its_own() {
-        let grant = Grant {
-            token: "t".repeat(64),
-            id: "abc".into(),
-            asked: PathBuf::from("/home/me/app"),
-            folder: true,
-            root: PathBuf::from("/home/me/app"),
-            file: None,
-        };
+        let grant = grant("/home/me/app", true, "/home/me/app");
         let folder = Granted {
             root: "/home/me/app".into(),
             name: "app".into(),
@@ -697,15 +1057,374 @@ mod tests {
     }
 
     #[test]
-    fn windows_paths_lose_the_verbatim_prefix_but_not_a_share() {
+    fn windows_paths_lose_the_verbatim_prefix_a_share_included() {
         assert_eq!(
             plain(PathBuf::from(r"\\?\C:\Users\me")),
             PathBuf::from(r"C:\Users\me")
         );
         assert_eq!(
+            plain(PathBuf::from(r"\\?\UNC\server\share\x")),
+            PathBuf::from(r"\\server\share\x")
+        );
+        assert_eq!(
             plain(PathBuf::from(r"\\?\UNC\server\share")),
-            PathBuf::from(r"\\?\UNC\server\share")
+            PathBuf::from(r"\\server\share")
         );
         assert_eq!(plain(PathBuf::from("/home/me")), PathBuf::from("/home/me"));
+    }
+
+    /// Each failure in the words the user reads: named for what could not be opened, never an OS error code.
+    #[test]
+    fn every_open_failure_is_said_in_the_user_s_words() {
+        let gone = std::io::Error::from(std::io::ErrorKind::NotFound);
+        assert_eq!(
+            Trouble::io(&gone).friendly("brief.docx"),
+            "“brief.docx” isn't there any more. It may have been moved or deleted."
+        );
+        let denied = std::io::Error::from(std::io::ErrorKind::PermissionDenied);
+        assert_eq!(
+            Trouble::io(&denied).friendly("Finance"),
+            "Intentic isn't allowed to open “Finance”."
+        );
+        assert_eq!(
+            Trouble::Missing("no binary".into()).friendly("x"),
+            "Part of Intentic is missing. Reinstalling Intentic fixes this."
+        );
+        assert_eq!(
+            Trouble::NotStarted("timed out".into()).friendly("x"),
+            "Intentic's file server didn't start. Try again, or restart Intentic."
+        );
+        assert_eq!(
+            Trouble::Refused("is not a folder".into()).friendly("x"),
+            "Intentic couldn't open “x”."
+        );
+        // The original survives for stderr.
+        assert_eq!(
+            Trouble::NotStarted("timed out".into()).detail(),
+            "timed out"
+        );
+        assert_eq!(shown_name(Path::new("/home/me/brief.docx")), "brief.docx");
+        assert_eq!(shown_name(Path::new("/")), "/");
+    }
+
+    fn windows_of(grants: &[(&str, Grant)]) -> HashMap<String, Grant> {
+        grants
+            .iter()
+            .map(|(label, grant)| (label.to_string(), grant.clone()))
+            .collect()
+    }
+
+    /// Where an open goes: the window already showing it, the deepest folder window holding a document, or a window
+    /// of its own. A document window never takes another document, and a folder is never handed to a window.
+    #[test]
+    fn an_open_goes_to_the_window_that_shows_or_holds_it() {
+        let windows = windows_of(&[
+            ("files-1", grant("/home/me/app", true, "/home/me/app")),
+            (
+                "files-2",
+                grant("/home/me/app/web", true, "/home/me/app/web"),
+            ),
+            (
+                "files-3",
+                grant("/home/me/notes/todo.md", false, "/home/me/notes"),
+            ),
+        ]);
+        assert_eq!(
+            destination(&windows, Path::new("/home/me/app"), true),
+            Destination::Shown("files-1".into())
+        );
+        assert_eq!(
+            destination(&windows, Path::new("/home/me/notes/todo.md"), false),
+            Destination::Shown("files-3".into())
+        );
+        assert_eq!(
+            destination(&windows, Path::new("/home/me/app/docs/a b.md"), false),
+            Destination::Inside {
+                label: "files-1".into(),
+                path: "docs/a b.md".into()
+            }
+        );
+        assert_eq!(
+            destination(&windows, Path::new("/home/me/app/web/src/main.ts"), false),
+            Destination::Inside {
+                label: "files-2".into(),
+                path: "src/main.ts".into()
+            }
+        );
+        assert_eq!(
+            destination(&windows, Path::new("/home/me/notes/other.md"), false),
+            Destination::New
+        );
+        assert_eq!(
+            destination(&windows, Path::new("/home/me/app/docs"), true),
+            Destination::New
+        );
+        assert_eq!(
+            destination(&windows, Path::new("/home/me/apple.md"), false),
+            Destination::New
+        );
+    }
+
+    /// What a page is handed by eval is one statement whatever the path holds: serde escapes it.
+    #[test]
+    fn a_document_handed_to_its_folder_window_arrives_as_a_path() {
+        assert_eq!(
+            open_in_window("docs/it's \"here\".md"),
+            r#"window.dispatchEvent(new CustomEvent('intentic:open', { detail: {"path":"docs/it's \"here\".md"} }));"#
+        );
+    }
+
+    /// The face a window reads on every load: the one kept for its reloads first, then the one it was built with,
+    /// none for a spare; and what a spare is handed is kept, set and announced.
+    #[test]
+    fn a_face_survives_the_window_s_reloads() {
+        let face = serde_json::json!({ "daemonUrl": "http://127.0.0.1:4100", "token": "t" });
+        let built = face_init(Some(&face));
+        assert!(
+            built.contains(r#"var face = {"daemonUrl":"http://127.0.0.1:4100","token":"t"};"#),
+            "{built}"
+        );
+        assert!(
+            built.contains(r#"sessionStorage.getItem("intentic.local.face")"#),
+            "{built}"
+        );
+        assert!(
+            built.contains("window.__INTENTIC_LOCAL__ = Object.freeze(face)"),
+            "{built}"
+        );
+        assert!(face_init(None).contains("var face = null;"));
+        let given = face_given(&face);
+        assert!(
+            given.contains(r#"sessionStorage.setItem("intentic.local.face""#),
+            "{given}"
+        );
+        assert!(
+            given.contains("window.dispatchEvent(new CustomEvent('intentic:face'))"),
+            "{given}"
+        );
+        let moved = face_moved(&face);
+        assert!(moved.contains("window.location.reload()"), "{moved}");
+    }
+
+    /// The handoff grant: one file, read-only, for the workspace's origin alone, for a quarter of an hour, never a
+    /// window's; and none at all once it has expired.
+    #[test]
+    fn a_handoff_is_a_read_only_grant_for_the_workspace_alone() {
+        let now = Instant::now();
+        let handoff = Handoff {
+            token: "k".repeat(64),
+            id: "handoff-1".into(),
+            path: PathBuf::from("/home/me/app/brief.docx"),
+            origin: origin_of("https://app.intentic.dev/"),
+            expires: now + HANDOFF_LIFE,
+        };
+        let line = handoff_line(&handoff, now).unwrap();
+        assert!(line.ends_with('\n'));
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&line).unwrap(),
+            serde_json::json!({
+                "op": "grant",
+                "token": "k".repeat(64),
+                "id": "handoff-1",
+                "path": "/home/me/app/brief.docx",
+                "kind": "file",
+                "readOnly": true,
+                "origins": ["https://app.intentic.dev"],
+                "expiresInMs": 900_000,
+            })
+        );
+        assert_eq!(
+            handoff_line(&handoff, now + HANDOFF_LIFE + Duration::from_secs(1)),
+            None
+        );
+        assert_eq!(
+            origin_of("http://localhost:47146/app"),
+            "http://localhost:47146"
+        );
+        assert_eq!(origin_of("not a url"), "https://app.intentic.dev");
+    }
+
+    /// Where the workspace opens to take a handoff: base64url of `{ url, token, name }`, the url naming the file by
+    /// its path relative to the grant's root, encoded.
+    #[test]
+    fn the_workspace_is_handed_a_url_a_token_and_a_name() {
+        let granted = Granted {
+            root: "/home/me/app/docs".into(),
+            name: "Q3 & plans.docx".into(),
+            file: Some("Q3 & plans.docx".into()),
+        };
+        let path = handoff_path(4100, "tok", &granted);
+        let encoded = path.strip_prefix("/?handoff=").unwrap();
+        assert!(
+            encoded
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_'),
+            "{encoded}"
+        );
+        let decoded = base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .decode(encoded)
+            .unwrap();
+        assert_eq!(
+            serde_json::from_slice::<serde_json::Value>(&decoded).unwrap(),
+            serde_json::json!({
+                "url": "http://127.0.0.1:4100/workspace/raw?path=Q3+%26+plans.docx",
+                "token": "tok",
+                "name": "Q3 & plans.docx",
+            })
+        );
+    }
+
+    fn handoff_of(path: &Path, now: Instant) -> Handoff {
+        Handoff {
+            token: "h".repeat(64),
+            id: "handoff-1".into(),
+            path: path.to_path_buf(),
+            origin: "https://app.intentic.dev".into(),
+            expires: now + HANDOFF_LIFE,
+        }
+    }
+
+    /// A delete reaches only inside the folder a folder window shows: never the folder of a document window, which
+    /// may write only its document, nor a handoff's, which is not a window at all. `folder_roots` is what the trash
+    /// is checked against (sidecar.rs `trashable`), so it is asked here with all three granted.
+    #[test]
+    fn only_a_folder_window_s_folder_is_a_place_a_delete_may_reach() {
+        let base = plain(std::fs::canonicalize(std::env::temp_dir()).unwrap())
+            .join(format!("intentic-roots-{}", uuid::Uuid::new_v4()));
+        let (app, notes, shared) = (base.join("app"), base.join("notes"), base.join("shared"));
+        for dir in [&app, &notes, &shared] {
+            std::fs::create_dir_all(dir).unwrap();
+        }
+        for file in [
+            app.join("a.md"),
+            notes.join("todo.md"),
+            notes.join("other.md"),
+            shared.join("brief.docx"),
+        ] {
+            std::fs::write(file, b"x").unwrap();
+        }
+        let files = LocalFiles::default();
+        files.windows.lock().unwrap().extend([
+            (
+                "files-1".to_string(),
+                grant(&app.display().to_string(), true, &app.display().to_string()),
+            ),
+            (
+                "files-2".to_string(),
+                grant(
+                    &notes.join("todo.md").display().to_string(),
+                    false,
+                    &notes.display().to_string(),
+                ),
+            ),
+        ]);
+        files
+            .handoffs
+            .lock()
+            .unwrap()
+            .push(handoff_of(&shared.join("brief.docx"), Instant::now()));
+
+        let roots = files.folder_roots();
+        assert_eq!(roots, vec![app.clone()]);
+        assert_eq!(
+            crate::sidecar::trashable(&roots, &app.join("a.md")),
+            Ok(app.join("a.md"))
+        );
+        for reached in [
+            notes.join("todo.md"),
+            notes.join("other.md"),
+            shared.join("brief.docx"),
+        ] {
+            assert!(
+                crate::sidecar::trashable(&roots, &reached).is_err(),
+                "{} is not inside a folder window",
+                reached.display()
+            );
+        }
+        std::fs::remove_dir_all(&base).unwrap();
+    }
+
+    /// A sidecar back on another port: every window and handoff has a new token before anything is granted again,
+    /// each window's face carries its new token and address, and no line handed to the new process names an old one.
+    #[test]
+    fn a_new_port_means_new_tokens_for_every_grant() {
+        let now = Instant::now();
+        let files = LocalFiles::default();
+        let mut window = grant("/home/me/app", true, "/home/me/app");
+        window.face = serde_json::json!({ "daemonUrl": daemon_url(4100), "token": window.token, "id": "abc" });
+        files
+            .windows
+            .lock()
+            .unwrap()
+            .insert("files-1".into(), window);
+        files
+            .handoffs
+            .lock()
+            .unwrap()
+            .push(handoff_of(Path::new("/home/me/app/brief.docx"), now));
+        let before = files.grant_lines(now);
+        assert_eq!(before.len(), 2);
+
+        files.rehome(4200);
+
+        let windows = files.windows.lock().unwrap();
+        let moved = &windows["files-1"];
+        assert_ne!(moved.token, "t".repeat(64));
+        assert_eq!(moved.token.len(), 64);
+        assert_eq!(moved.face["token"], moved.token.as_str());
+        assert_eq!(moved.face["daemonUrl"], "http://127.0.0.1:4200");
+        assert_eq!(
+            moved.face["id"], "abc",
+            "the rest of the face is the window's still"
+        );
+        drop(windows);
+        assert_ne!(files.handoffs.lock().unwrap()[0].token, "h".repeat(64));
+        let after = files.grant_lines(now);
+        assert_eq!(after.len(), 2);
+        for line in &after {
+            assert!(
+                !line.contains(&"t".repeat(64)) && !line.contains(&"h".repeat(64)),
+                "{line}"
+            );
+        }
+        assert_eq!(
+            files.faces()[0].1["token"],
+            files.windows.lock().unwrap()["files-1"].token.as_str()
+        );
+    }
+
+    /// Only the handoffs still alive are handed to a new process, with what is left of their life.
+    #[test]
+    fn a_restart_hands_back_every_window_and_the_handoffs_still_alive() {
+        let now = Instant::now();
+        let files = LocalFiles::default();
+        files.windows.lock().unwrap().insert(
+            "files-1".into(),
+            grant("/home/me/app", true, "/home/me/app"),
+        );
+        let mut expired = handoff_of(Path::new("/home/me/app/old.docx"), now);
+        expired.expires = now;
+        files.handoffs.lock().unwrap().extend([
+            expired,
+            handoff_of(Path::new("/home/me/app/brief.docx"), now),
+        ]);
+        let lines = files.grant_lines(now + Duration::from_secs(60));
+        assert_eq!(lines.len(), 2);
+        assert!(lines[0].contains("\"kind\":\"folder\""), "{}", lines[0]);
+        assert!(lines[1].contains("\"expiresInMs\":840000"), "{}", lines[1]);
+        assert_eq!(
+            files.handoffs.lock().unwrap().len(),
+            1,
+            "the expired one is dropped"
+        );
+    }
+
+    #[test]
+    fn a_relative_path_is_forward_slashed_on_every_platform() {
+        assert_eq!(
+            slashed(Path::new("a").join("b").join("c.md").as_path()),
+            "a/b/c.md"
+        );
+        assert_eq!(slashed(Path::new("c.md")), "c.md");
     }
 }

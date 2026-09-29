@@ -78,6 +78,8 @@ jest.mock(`../sandbox/client/useSandbox`, () => ({
 // Mint never settles, keeping step 3 locked; hostedOffer defaults to false so classic lanes stay hosted-free.
 type Minted = { code: string; hostname: string; expiresAt: string };
 const setupCode = jest.fn<() => Promise<Minted>>(() => new Promise<Minted>(() => {}));
+// A project's machine, asked of the platform itself with its folder: the store's provision names none.
+const platformProvision = jest.fn<(input: { sandboxId: string; token: string; project?: string; profile?: string }) => Promise<SandboxSummary>>();
 const hostedOffer = jest.fn().mockResolvedValue({ enabled: false, remaining: 0 });
 // Address minting is on by default; the world every lane below assumes unless a test says otherwise.
 const addressOffer = jest.fn().mockResolvedValue({ enabled: true });
@@ -86,7 +88,12 @@ const hostedStatus = jest.fn().mockResolvedValue({ machine: `unknown` });
 const hostedRestart = jest.fn().mockResolvedValue({ ok: true });
 // The wait's own recovery: the platform is asked to start a machine the provider reports down.
 const wake = jest.fn().mockResolvedValue({ ok: true });
-jest.mock(`../../lib/useApi`, () => ({ apiClient: { sandbox: { setupCode, hostedOffer, addressOffer, hostedStatus, hostedRestart, wake } } }));
+jest.mock(`../../lib/useApi`, () => ({
+    apiClient: { sandbox: { setupCode, hostedOffer, addressOffer, hostedStatus, hostedRestart, wake, hostedProvision: platformProvision } },
+}));
+// The Desktop sync card's pairing mint, which a hosted project's hand-over spends on a daemon this mount does not run.
+const mintSyncPairing = jest.fn<() => Promise<{ token: string; mode: `sync` | `mirror` }>>();
+jest.mock(`../sandbox/devices/sync/useDesktopSync`, () => ({ mintSyncPairing }));
 jest.mock(`../sandbox/session/sandboxIdFromToken`, () => ({ sandboxIdFromToken: jest.fn().mockResolvedValue(`0f310c3c4db4`) }));
 jest.mock(`../../app/analytics`, () => ({ track: jest.fn() }));
 jest.mock(`../auth/useAuth`, () => ({ useAuth: () => ({ user: ref({ email: `owner@example.com` }) }) }));
@@ -118,11 +125,17 @@ const desktopInstaller = jest.fn<typeof import("../../app/environments/desktopDo
 // A browser unless a test sets a version: only the presence of one says "running inside the app", which is the
 // arrival that installs on this computer.
 const desktopApp = ref<string | undefined>(undefined);
+// Whether that app copies a folder into a hosted sandbox's project (`projectSync`); every build that has a version here
+// does unless a test says otherwise.
+const appTakesProjects = ref(true);
+// Every link the page hands the app; a sync link carries the pairing a hosted project's folder is copied in with.
+const openDesktopLink = jest.fn<(link: string) => void>();
 jest.mock(`../../app/environments/desktop`, () => ({
     ...actualDesktop,
     desktopSetupLink: () => ``,
     desktopVersion: () => desktopApp.value,
-    openDesktopLink: jest.fn(),
+    desktopTakesProjects: () => desktopApp.value !== undefined && appTakesProjects.value,
+    openDesktopLink,
 }));
 jest.mock(`../../app/environments/desktopDownloads`, () => ({
     ...actualDesktopDownloads,
@@ -194,6 +207,9 @@ const nodeWithText = (text: string): Element =>
 const afterThePicker = (text: string): boolean =>
     (document.querySelector(`[role="radiogroup"]`)!.compareDocumentPosition(nodeWithText(text)) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
 
+// What a project's page says happens to its folder, on either machine.
+const FOLDER_COPIED = `Your folder is copied into the sandbox, where agents work on the copy.`;
+
 // A settled mint, so the run card clears its lock; earlier tests leave the mint hanging on purpose.
 const MINTED = { code: `vphf-3wk`, hostname: `sandbox-fa0b431303b8.sbx.intentic.dev`, expiresAt: new Date(Date.now() + 600_000).toISOString() };
 
@@ -203,6 +219,7 @@ beforeEach(() => {
     wake.mockReset().mockResolvedValue({ ok: true });
     mobileDevice.value = false;
     desktopApp.value = undefined;
+    appTakesProjects.value = true;
     desktopInstaller.mockReset().mockReturnValue(undefined);
     setupCode.mockReset().mockImplementation(() => new Promise<Minted>(() => {}));
     sandboxes.value = [];
@@ -212,6 +229,9 @@ beforeEach(() => {
     hostedRestart.mockReset().mockResolvedValue({ ok: true });
     hostedProvision.mockReset().mockImplementation(async (id: string) => sandboxRow({ id, hosted: { region: `iad`, warm: true } }));
     hostedRelease.mockReset().mockImplementation(async (id: string) => sandboxRow({ id }));
+    platformProvision.mockReset().mockImplementation(async ({ sandboxId }) => sandboxRow({ id: sandboxId, hosted: { region: `iad`, warm: false } }));
+    mintSyncPairing.mockReset().mockResolvedValue({ token: `pair-token`, mode: `sync` });
+    openDesktopLink.mockReset();
     hostedOffer.mockReset().mockResolvedValue({ enabled: false, remaining: 0 });
     addressOffer.mockReset().mockResolvedValue({ enabled: true });
     create.mockReset().mockImplementation(async (name: string) => {
@@ -586,9 +606,9 @@ it(`keeps a machine the app finds mid-errand, and asks instead`, async () => {
     expect(el.textContent).toContain(`Starting the machine`);
 });
 
-// The app opened the page for a folder the reader picked (`?project=`): a sandbox named after it goes straight to the
-// app on this computer, even beside the account's other sandbox, and nothing is offered that could not sync the folder:
-// no machine of ours, no command.
+// The app opened the page for a folder the reader picked (`?project=`), on a platform whose machines cannot hold one: a
+// sandbox named after it goes straight to the app on this computer, even beside the account's other sandbox, and nothing
+// is offered that could not take the folder: no machine of ours, no command.
 it(`hands a folder the app picked straight to the app, offering no machine and no command in its place`, async () => {
     desktopApp.value = `1.275.0`;
     query.value = { project: `My App` };
@@ -606,6 +626,87 @@ it(`hands a folder the app picked straight to the app, offering no machine and n
     expect(el.querySelectorAll(`[role="radio"]`)).toHaveLength(0);
     expect(buttonLabelled(`Set it up now`)?.tagName).toBe(`BUTTON`);
     expect(el.textContent).not.toContain(`Other ways to set up`);
+    expect(el.textContent).toContain(FOLDER_COPIED);
+});
+
+/* WHERE THE PLATFORM'S MACHINES CAN HOLD A PROJECT (`hostedOffer.projects`), the folder the app picked goes to one of
+ * them, asked for with the folder's name; once it answers, the app is handed a pairing to copy the folder in with, and
+ * only then does the workspace open. This computer stays one pick away. */
+describe(`a folder the app picked, where the platform's machines can hold it`, () => {
+    // The row the registry lists once the machine has checked in and answers.
+    const answering = (): SandboxSummary =>
+        sandboxRow({
+            id: `new`,
+            name: `My App`,
+            daemonUrl: `https://sandbox-abc.sbx.test`,
+            hosted: { region: `iad`, warm: false },
+            lastSeenAt: new Date().toISOString(),
+            bootReport: { reach: `reachable`, at: new Date().toISOString() },
+        });
+    const arriveWithFolder = (): void => {
+        desktopApp.value = `1.275.0`;
+        query.value = { project: `My App` };
+        hostedOffer.mockResolvedValue({ enabled: true, remaining: 1, projects: true });
+    };
+    // The poll's read, which the hand-over also finds the sandbox's address in.
+    const registryLists = (row: SandboxSummary): void => {
+        refresh.mockImplementation(async () => {
+            sandboxes.value = [row];
+            return [row];
+        });
+    };
+
+    it(`starts a machine of ours for it, asked for with its name, and says what happens to the folder`, async () => {
+        arriveWithFolder();
+        const el = await mount();
+        await waitFor(() => expect(platformProvision.mock.calls).toEqual([[{ sandboxId: `new`, token: `tok`, project: `My-App` }]]));
+        expect(hostedProvision).not.toHaveBeenCalled();
+        expect(el.textContent).toContain(FOLDER_COPIED);
+        expect(buttonLabelled(`Run it on my own computer`)?.tagName).toBe(`BUTTON`);
+    });
+
+    it(`hands the app a pairing to copy the folder in with once the machine answers, then opens the workspace`, async () => {
+        arriveWithFolder();
+        registryLists(answering());
+        jest.useFakeTimers();
+        await mount();
+        await advanceTimersByTimeAsync(3_000);
+        await waitFor(() => expect(push).toHaveBeenCalledWith(`/`));
+        expect(mintSyncPairing).toHaveBeenCalledTimes(1);
+        expect(openDesktopLink.mock.calls).toEqual([
+            [`intentic://sync?url=https%3A%2F%2Fsandbox-abc.sbx.test&pair=pair-token&name=My+App&project=My-App&sandbox=new`],
+        ]);
+    });
+
+    // An app from before project syncs would read the hand-over's link as a whole-`/work` sync into the folder, so its
+    // folder goes to the app on this computer exactly as on a platform without projects.
+    it(`hands the folder to an app that can't copy it into a project straight to this computer, starting no machine`, async () => {
+        arriveWithFolder();
+        appTakesProjects.value = false;
+        setupCode.mockResolvedValue(MINTED);
+        const el = await mount();
+        jest.useFakeTimers();
+        await advanceTimersByTimeAsync(500);
+        await waitFor(() => expect(el.textContent).toContain(`Handed to the app`));
+        // The one link the app is handed is the setup link (stubbed as empty above), never a sync link.
+        expect({ platform: platformProvision.mock.calls.length, store: hostedProvision.mock.calls.length, opened: openDesktopLink.mock.calls }).toEqual({
+            platform: 0,
+            store: 0,
+            opened: [[``]],
+        });
+        expect(el.querySelectorAll(`[role="radio"]`)).toHaveLength(0);
+    });
+
+    it(`stays, saying so, while the folder cannot be handed to the app`, async () => {
+        arriveWithFolder();
+        registryLists(answering());
+        mintSyncPairing.mockRejectedValue(new Error(`Couldn't start desktop sync (503).`));
+        jest.useFakeTimers();
+        const el = await mount();
+        await advanceTimersByTimeAsync(3_000);
+        await waitFor(() => expect(el.textContent).toContain(`Couldn't hand your folder to the app yet. Trying again…`));
+        expect({ pushed: push.mock.calls.length, opened: openDesktopLink.mock.calls.length }).toEqual({ pushed: 0, opened: 0 });
+    });
 });
 
 // A refused check-in means alive but turned away, not slow to boot; waiting alone can't fix it, so the card must say so

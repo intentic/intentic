@@ -14,7 +14,9 @@ import type { MultiSelect } from "../../../../lib/multiSelect";
 
 // Deleting from the tree, and the empty-folder sweep line. Neither asks first: a delete goes to the daemon's trash, and
 // the receipt's Undo (or Mod+Z, anywhere in the workspace) puts back exactly what went. A confirm in front of an undo
-// only makes the common case slower, and a drop that was the wrong file should leave as fast as it came.
+// only makes the common case slower, and a drop that was the wrong file should leave as fast as it came. A folder on
+// this computer sends it to the system's own trash instead, where the file manager restores it, and its receipt says
+// so rather than offering an Undo with nothing to take back (useDeleteUndo.ts).
 
 // `where` is the ancestor path that is staying; `label` is the barren chain itself, about to be deleted. Kept apart,
 // since a joined path could read as one folder being deleted when only the tail is.

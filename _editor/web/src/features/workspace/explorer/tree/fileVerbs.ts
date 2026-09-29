@@ -22,7 +22,9 @@ import { useTreeTransfer } from "./useTreeTransfer";
 // than wiring the parts in `tree/` by hand, so a new verb is added here and nowhere else.
 
 // What the verbs reach outside the surface: the daemon's files, the upload queue, the notices, the terminal panel.
-// `fileVerbSeams.ts` hands out the app's own; a test passes fakes.
+// `fileVerbSeams.ts` hands out the app's own; a test passes fakes. What a surface may not have is optional, and a seam
+// left out takes its verb out of the menu rather than offering it to fail: a folder on this computer (the desktop app's
+// local window) has no archive to unpack into, no shell, and nowhere to download to, being already there.
 export interface FileVerbSeams {
     readonly store: Pick<
         ReturnType<typeof useWorkspaceTree>,
@@ -36,18 +38,19 @@ export interface FileVerbSeams {
         | "clipboard"
         | "copyEntries"
         | "moveIntoMany"
-        | "extractEntry"
         | "loadChildren"
         | "canEditFiles"
-    >;
+    > &
+        // Unpacks an archive beside itself (the daemon's `workspace.extract`).
+        Partial<Pick<ReturnType<typeof useWorkspaceTree>, "extractEntry">>;
     readonly uploads: Pick<ReturnType<typeof useUploadQueue>, "enqueueFromDataTransfer">;
     readonly say: ReturnType<typeof useNotifications>["say"];
     // The receipt for a delete that landed, offering to take back exactly that batch.
     readonly sayDeleted: (receipt: string, batch: DeleteBatch) => void;
     // `dir` is workspace-relative.
-    readonly openTerminal: (dir: string) => void;
+    readonly openTerminal?: (dir: string) => void;
     // Hands entries to the browser's own download manager; answers the archive's name when they come zipped.
-    readonly download: (targets: readonly DownloadTarget[]) => Promise<string | undefined>;
+    readonly download?: (targets: readonly DownloadTarget[]) => Promise<string | undefined>;
 }
 
 export interface FileVerbsOptions {
@@ -89,6 +92,8 @@ export interface FileVerbsOptions {
     // A surface where a row changing its own name is easy to miss (the phone's, under a thumb) names the new one once
     // the move lands.
     readonly sayRenamed?: boolean;
+    // Starts an agent's conversation about one file, on a surface that has a way to one (a local window's tree).
+    readonly ask?: (path: string) => void;
 }
 
 const nowhere = (): void => undefined;
@@ -142,6 +147,7 @@ export const createFileVerbs = (options: FileVerbsOptions) => {
         say,
     });
     const createIn = options.createIn;
+    const { openTerminal, download } = seams;
     const menu = useTreeMenu({
         rootDir: options.rootDir,
         rowActions: options.rowActions,
@@ -152,27 +158,31 @@ export const createFileVerbs = (options: FileVerbsOptions) => {
         frame: options.frame,
         beginCreate: createIn === undefined ? edits.beginCreate : (dir, type) => edits.beginCreate(createIn(dir), type),
         beginRename: edits.beginRename,
-        extract: transfer.extract,
         keepFolder: deleting.keepFolder,
         requestDelete: deleting.requestDelete,
         stage: transfer.stage,
         paste: transfer.paste,
-        // Read when the row is chosen, so a surface that never opens a terminal (a test's) need not supply one.
-        openTerminal: (dir) => seams.openTerminal(dir),
-        download: (paths) => {
-            const targets = paths.map((path): DownloadTarget => ({ path, type: byPath.value.get(path)?.type === `dir` ? `dir` : `file` }));
-            const one = targets.length === 1 && targets[0]?.type === `file`;
-            void store.run(
-                async () => {
-                    const archive = await seams.download(targets);
-                    // A ZIP starts once the daemon has walked the selection; saying so covers the wait before the browser shows it.
-                    if (archive !== undefined) {
-                        say(t(`workspace.fileVerbs.downloadingArchive`, { name: archive }));
-                    }
-                },
-                one ? t(`workspace.fileVerbs.couldntDownload`) : t(`workspace.fileVerbs.couldntDownloadThese`),
-            );
-        },
+        // Each only where its seam is: the menu drops a verb it is not handed.
+        extract: store.extractEntry === undefined ? undefined : transfer.extract,
+        openTerminal,
+        download:
+            download === undefined
+                ? undefined
+                : (paths) => {
+                      const targets = paths.map((path): DownloadTarget => ({ path, type: byPath.value.get(path)?.type === `dir` ? `dir` : `file` }));
+                      const one = targets.length === 1 && targets[0]?.type === `file`;
+                      void store.run(
+                          async () => {
+                              const archive = await download(targets);
+                              // A ZIP starts once the daemon has walked the selection; saying so covers the wait before the browser shows it.
+                              if (archive !== undefined) {
+                                  say(t(`workspace.fileVerbs.downloadingArchive`, { name: archive }));
+                              }
+                          },
+                          one ? t(`workspace.fileVerbs.couldntDownload`) : t(`workspace.fileVerbs.couldntDownloadThese`),
+                      );
+                  },
+        ask: options.ask,
     });
 
     return { rules, selecting, inline, edits, deleting, transfer, menu };

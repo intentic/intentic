@@ -1,5 +1,7 @@
+import { apiContract } from "@intentic/api-contract";
 import { generateKeyPairSync } from "node:crypto";
-import { FREE_TIER, type HostedTier, PAID_TIERS } from "@intentic/constants";
+import { readFileSync } from "node:fs";
+import { FREE_TIER, type HostedTier, PAID_TIERS, WORKSPACE_ROOT } from "@intentic/constants";
 import { FLY_VOLUME_PATH } from "@intentic/sandbox-run/fly";
 import { Prisma } from "@intentic/prisma";
 import { call, ORPCError } from "@orpc/server";
@@ -11,6 +13,7 @@ import { hostOwnerId, mintReachabilityGrant, verifyReachabilityGrant } from "@in
 import { publicKeyPemOf } from "@intentic/sandbox-contract/owner-ticket";
 import { sandboxIdFromToken, sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import {
+    hostedMachineConfig,
     hostedEnabled,
     hostedInstanceId,
     HostedNothingKept,
@@ -23,10 +26,12 @@ import {
     type HostedProvisionArgs,
 } from "./hosted.js";
 import { HostedAlreadyProvisioned } from "./hosted-cleanup.js";
+import { ENV_PROJECT_DIR } from "./hosted-project.js";
+import { definitionSeedFor, ENV_DEFINITION_SEED } from "../profiles/profiles.js";
 import { hostedShapeFor } from "./hosted-shape.js";
 import { AT_CAPACITY_MESSAGE, forgetProviderCapacity, HostedAtCapacity } from "./hosted-capacity.js";
 import { forgetHostedImage } from "./build/hosted-image.js";
-import { HostedImageKept, HostedMachineBusy, STATE_PROBE_ENV } from "./gate/state-gate.js";
+import { HostedImageKept, HostedMachineBusy, probeConfig, STATE_PROBE_ENV } from "./gate/state-gate.js";
 import { CLEAR_STATE_PLAN, type FakeFly, type FakeFlyCall, type FakeFlyMachine, installFakeFly } from "@intentic/testing/fly-fake";
 import { checkingIn, fakeGateRecord, fakeHostedAppLock, healthAnswer, machineAnswers, testIngressConfig } from "../../testing.js";
 import { DAEMON_HEALTH_COMMAND } from "./gate/daemon-health.js";
@@ -279,6 +284,35 @@ describe(`hostedShapeFor`, () => {
     });
 });
 
+// The cases `ic` and the desktop app are held to (_sandbox/ic/src/sandbox/project_dir.rs, setup_link.rs), read from the
+// one file every side runs.
+interface ProjectDirCases {
+    readonly names: readonly { readonly name: string; readonly valid: boolean }[];
+}
+// SAFETY: the fixture is this repository's own file, written to this shape; one that drifted fails every case below.
+const PROJECT_DIR_CASES = JSON.parse(
+    readFileSync(new URL(`../../../../../_shared/sandbox-contract/src/ids/project-dir.fixture.json`, import.meta.url), `utf8`),
+) as ProjectDirCases;
+
+/* A HOSTED PROJECT'S FOLDER NAME is held at the door to the rule `ic` and the desktop app hold it to: a name that could
+ * land on the daemon's own state, outside /work or on a starter it seeds would reach the machine's environment, where
+ * the daemon would refuse to boot on it. */
+describe(`the folder a hosted project is provisioned for`, () => {
+    const input = apiContract.sandbox.hostedProvision[`~orpc`].inputSchema;
+    if (input === undefined) {
+        throw new Error(`hostedProvision declares no input schema`);
+    }
+
+    it.each([...PROJECT_DIR_CASES.names])(`takes $name exactly when ic and the desktop app would ($valid)`, ({ name, valid }) => {
+        expect(input.safeParse({ sandboxId: `s1`, token: `t0k3n`, project: name }).success).toBe(valid);
+    });
+
+    // An editor from before hosted projects names none, and gets the ordinary sandbox it always got.
+    it(`is optional`, () => {
+        expect(input.parse({ sandboxId: `s1`, token: `t0k3n` })).toEqual({ sandboxId: `s1`, token: `t0k3n` });
+    });
+});
+
 describe(`provisionHosted`, () => {
     const args = {
         sandboxId: `s1`,
@@ -289,6 +323,19 @@ describe(`provisionHosted`, () => {
         // The rung an arrival with no plan lands on, and the only one warm stock can serve.
         tier: FREE_TIER.id,
     };
+    /* A PROJECT'S MACHINE is told its folder exactly as `ic` tells a project container (connect.rs): the whole of
+     * `/work/<name>`, and the profile's seed beside it as any machine gets it. A probe keeps the folder and nothing
+     * else of the config, since the folder is no credential and a dead probe's replacement reads it back. */
+    it(`names a project's folder in its environment, and nobody else's`, () => {
+        const before = `ghcr.io/intentic/sandbox@sha256:${`a`.repeat(64)}`;
+        const project = hostedMachineConfig(config(), { ...args, project: `My_App.v2`, profile: `desk` }, `intentic-sbx-a`, `vol_1`);
+        expect([project.env[ENV_PROJECT_DIR], project.env[ENV_DEFINITION_SEED]]).toEqual([`${WORKSPACE_ROOT}/My_App.v2`, definitionSeedFor(`desk`)]);
+        expect(probeConfig(project, before).env).toEqual({ [STATE_PROBE_ENV]: before, [ENV_PROJECT_DIR]: `${WORKSPACE_ROOT}/My_App.v2` });
+        const ordinary = hostedMachineConfig(config(), args, `intentic-sbx-a`, `vol_1`);
+        expect(Object.keys(ordinary.env)).not.toContain(ENV_PROJECT_DIR);
+        expect(probeConfig(ordinary, before).env).toEqual({ [STATE_PROBE_ENV]: before });
+    });
+
     // Hostname a machine answers under, derived from its connect token.
     const hostnameOf = (token: string): string => `sandbox-${sandboxIdFromToken(token)}.sbx.test`;
 
@@ -931,6 +978,38 @@ describe(`wakeHosted`, () => {
         expect(runningIn(fly)).toBe(true);
     });
 
+    /* A PROJECT'S MACHINE KEEPS ITS FOLDER through every config written over it, the state gate's probe included: nothing
+     * but the machine's own environment records it (hosted-project.ts). */
+    describe(`a project's machine`, () => {
+        const FOLDER = `${WORKSPACE_ROOT}/my-app`;
+        const foldersWritten = (fly: FakeFly): (string | undefined)[] =>
+            // SAFETY: fly.ts sends every config replacement as `{ config }`, a FlyMachineConfig.
+            updatesIn(fly).map((update) => (update.body as { config: { env: Record<string, string> } }).config.env[ENV_PROJECT_DIR]);
+
+        it(`keeps its folder through a wake's heal and a restart, their probes included`, async () => {
+            const fly = configuredFly({ ...PRE_TUNNEL_ENV, [ENV_PROJECT_DIR]: FOLDER });
+            await expect(wakeHosted(config(), WAKE_TARGET, wakeArgs)).resolves.toBe(true);
+            await refreshHosted(config(), wakeArgs(), WAKE_TARGET);
+            expect(execsIn(fly)).toContain(`planner`);
+            expect(new Set(foldersWritten(fly))).toEqual(new Set([FOLDER]));
+        });
+
+        // A gate that died mid-probe left the folder beside its marker, which is where the config replacing it reads it.
+        it(`gets its folder back from a dead gate's probe`, async () => {
+            const fly = configuredFly({ ...currentTunnelEnv(), [STATE_PROBE_ENV]: PINNED, [ENV_PROJECT_DIR]: FOLDER });
+            await expect(wakeHosted(config(), WAKE_TARGET, wakeArgs)).resolves.toBe(true);
+            expect([finalConfigOf(fly).env[STATE_PROBE_ENV], finalConfigOf(fly).env[ENV_PROJECT_DIR]]).toEqual([undefined, FOLDER]);
+        });
+
+        it(`goes back to an earlier version with its folder`, async () => {
+            const fly = configuredFly({ ...currentTunnelEnv(), [ENV_PROJECT_DIR]: FOLDER });
+            machineIn(fly).config = { image: `ghcr.io/intentic/sandbox@${STABLE_DIGEST}`, env: { ...currentTunnelEnv(), [ENV_PROJECT_DIR]: FOLDER } };
+            const { record, row } = fakeGateRecord({ previousImage: PINNED });
+            await rollbackHosted(config(), wakeArgs(), { ...WAKE_TARGET, ...row }, logger, record);
+            expect([finalConfigOf(fly).image, ...new Set(foldersWritten(fly))]).toEqual([PINNED, FOLDER]);
+        });
+    });
+
     // A probe caught starting or stopping is a gate at work: never started as if it were the sandbox.
     it(`answers busy for a probe caught mid-transition, and starts nothing`, async () => {
         const fly = configuredFly({ [STATE_PROBE_ENV]: PINNED }, `replacing`);
@@ -1152,12 +1231,12 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         const off = await call(sandboxRoutes.hostedOffer, undefined, {
             context: routeContext({ config: config({ hosted: { ...config().hosted, flyApiToken: `` } }) }),
         });
-        expect(off).toEqual({ enabled: false, remaining: 0 });
+        expect(off).toEqual({ enabled: false, remaining: 0, projects: true });
         const on = await call(sandboxRoutes.hostedOffer, undefined, {
             context: routeContext({ prisma: fakePrisma({ hostedMachine: { count: jest.fn().mockResolvedValue(0) } }) }),
         });
         // Ceiling is surfaced before any of it is spent, so the offer card doesn't say "free" and correct itself later.
-        expect(on).toEqual({ enabled: true, remaining: 1, hours: { allowance: 40, remaining: 40 } });
+        expect(on).toEqual({ enabled: true, projects: true, remaining: 1, hours: { allowance: 40, remaining: 40 } });
     });
 
     /* THE CARD OFFERS A FREE MACHINE, so it states the free plan's hours even to somebody on the plan: a plan buys
@@ -1171,6 +1250,7 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         });
         expect(await call(sandboxRoutes.hostedOffer, undefined, { context: routeContext({ prisma: member }) })).toEqual({
             enabled: true,
+            projects: true,
             remaining: 1,
             hours: { allowance: config().hosted.monthlyHours, remaining: config().hosted.monthlyHours },
         });
@@ -1178,7 +1258,7 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
             prisma: fakePrisma({ hostedMachine: { count: jest.fn().mockResolvedValue(0) } }),
             config: config({ hosted: { ...config().hosted, monthlyHours: 0 } }),
         });
-        expect(await call(sandboxRoutes.hostedOffer, undefined, { context: uncapped })).toEqual({ enabled: true, remaining: 1 });
+        expect(await call(sandboxRoutes.hostedOffer, undefined, { context: uncapped })).toEqual({ enabled: true, remaining: 1, projects: true });
         // Where the plan is actually for sale, the same owner is told they're on it (`plan: true`), distinguishing this
         // from the uncapped case above.
         const selling = routeContext({
@@ -1187,6 +1267,7 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         });
         expect(await call(sandboxRoutes.hostedOffer, undefined, { context: selling })).toEqual({
             enabled: true,
+            projects: true,
             remaining: 1,
             // The hours are the free plan's, which is what the machine on offer would be; the plan buys a rung beside it.
             hours: { allowance: config().hosted.monthlyHours, remaining: config().hosted.monthlyHours },
@@ -1278,6 +1359,47 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         expect(fetchSpy).toHaveLength(0);
     });
 
+    // Refused at the door, before anything is read or made: which folder names may reach a machine is the contract's call.
+    it(`hostedProvision refuses a project folder ic would refuse, before reading anything`, async () => {
+        const fetchSpy = stubFetch([]);
+        const findFirst = jest.fn().mockResolvedValue(ownedRow);
+        const prisma = fakePrisma({ sandbox: { findFirst } });
+        await expect(
+            call(sandboxRoutes.hostedProvision, { sandboxId: `s1`, token: `t0k3n`, project: `public` }, { context: routeContext({ prisma }) }),
+        ).rejects.toMatchObject({ code: `BAD_REQUEST` });
+        expect({ fetched: fetchSpy.length, read: findFirst.mock.calls.length }).toEqual({ fetched: 0, read: 0 });
+    });
+
+    /* A PROJECT'S MACHINE is built to order, never claimed from warm stock, whose prewarm boot put the starter site on its
+     * volume; and it boots with the folder the editor named. */
+    it(`hostedProvision builds a project's machine to order, booting with its folder`, async () => {
+        const calls = stubFetch([
+            {
+                match: (method, url) => method === `GET` && url.endsWith(`/api/v2/namespaces`),
+                respond: () => json([{ namespaceToken: `ns-1`, name: `public`, open: true }]),
+            },
+            { match: (method, url) => method === `POST` && url.endsWith(`/apps`), respond: () => json({ id: `app1` }) },
+            { match: (method, url) => method === `POST` && url.includes(`/volumes`), respond: () => json({ id: `vol_1` }) },
+            { match: (method, url) => method === `POST` && url.includes(`/machines`), respond: () => json({ id: `m1`, state: `created` }) },
+        ]);
+        const stock = jest.fn().mockResolvedValue([]);
+        const create = jest.fn().mockResolvedValue({});
+        const prisma = fakePrisma({
+            sandbox: {
+                findFirst: jest.fn().mockResolvedValue(ownedRow),
+                findUniqueOrThrow: jest.fn().mockResolvedValue({ ...ownedRow, hosted: { region: `iad`, warm: false } }),
+            },
+            hostedMachine: { findUnique: jest.fn().mockResolvedValue(null), count: jest.fn().mockResolvedValue(0), create },
+            hostedPoolMachine: { findMany: stock },
+        });
+        await call(sandboxRoutes.hostedProvision, { sandboxId: `s1`, token: `t0k3n`, project: `my-app` }, { context: routeContext({ prisma }) });
+        expect(stock).not.toHaveBeenCalled();
+        expect(calls.find((entry) => entry.method === `POST` && entry.url.includes(`/machines`))?.body).toMatchObject({
+            config: { env: { [ENV_PROJECT_DIR]: `${WORKSPACE_ROOT}/my-app` } },
+        });
+        expect(create.mock.calls[0]?.[0]).toMatchObject({ data: { sandboxId: `s1`, warm: false } });
+    });
+
     // `remaining` here is this account's own untouched allowance, separate from the fleet-wide ceiling being tested.
     it(`hostedOffer says the lane is full when the fleet is at its ceiling with no stock left`, async () => {
         const full = fakePrisma({
@@ -1288,6 +1410,7 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         const context = routeContext({ prisma: full, config: config({ hosted: { ...config().hosted, maxMachines: 100 } }) });
         expect(await call(sandboxRoutes.hostedOffer, undefined, { context })).toEqual({
             enabled: true,
+            projects: true,
             remaining: 1,
             full: true,
             hours: { allowance: 40, remaining: 40 },
@@ -1306,6 +1429,7 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         const context = routeContext({ prisma: stocked, config: config({ hosted: { ...config().hosted, maxMachines: 100 } }) });
         expect(await call(sandboxRoutes.hostedOffer, undefined, { context })).toEqual({
             enabled: true,
+            projects: true,
             remaining: 1,
             hours: { allowance: 40, remaining: 40 },
         });

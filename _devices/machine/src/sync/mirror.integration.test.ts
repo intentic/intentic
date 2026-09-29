@@ -3,6 +3,7 @@ import { mkdtempSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import { pidFileBody } from "@intentic/local-agent";
 import type { PortSummary } from "@intentic/sandbox-contract";
 import { stubGlobal } from "@intentic/testing/bun";
@@ -85,6 +86,18 @@ describe("unpreparedSetups", () => {
         const moved = { ...pairing, localDir: "/home/u/elsewhere" };
         expect(unpreparedSetups([again], prepared)).toEqual([again]);
         expect(unpreparedSetups([moved], prepared)).toEqual([moved]);
+    });
+
+    // `sync direction` rewrites only the pairing's direction, and the mode it decides is what the session is recreated for.
+    it("prepares a project again once its direction switched, and never a workspace for one", () => {
+        const project = { ...pairing, remoteDir: `${WORKSPACE_ROOT}/a`, project: true } as const;
+        const prepared = new Set<string>();
+        markPrepared(prepared, project);
+        expect(unpreparedSetups([{ ...project, direction: "to-sandbox" }], prepared)).toEqual([]);
+        const both = { ...project, direction: "both" } as const;
+        expect(unpreparedSetups([both], prepared)).toEqual([both]);
+        markPrepared(prepared, pairing);
+        expect(unpreparedSetups([{ ...pairing, direction: "both" }], prepared)).toEqual([]);
     });
 
     it("prepares a second pairing added while the first is already served", () => {

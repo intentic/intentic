@@ -26,18 +26,27 @@ export const canonicalFolder = async (dir: string): Promise<string> => await rea
 // folder there and two elsewhere.
 const foldsCase = (platform: NodeJS.Platform): boolean => platform === "win32" || platform === "darwin";
 
+// A folder spelled the one way the platform compares it: resolved, and lower-cased where names ignore case.
+const folded = (dir: string, platform: NodeJS.Platform): string => {
+    const resolved = (platform === "win32" ? win32 : posix).resolve(dir);
+    return foldsCase(platform) ? resolved.toLowerCase() : resolved;
+};
+
 // Whether two absolute folders are the same one, or one holds the other. Pure, the platform passed in, so the Windows and
 // macOS rules are checkable from any host.
 export const foldersOverlap = (first: string, second: string, platform: NodeJS.Platform = process.platform): boolean => {
     const path = platform === "win32" ? win32 : posix;
-    const fold = (dir: string): string => (foldsCase(platform) ? path.resolve(dir).toLowerCase() : path.resolve(dir));
     const within = (inner: string, outer: string): boolean => {
         const rel = path.relative(outer, inner);
         return rel === "" || (rel !== ".." && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel));
     };
-    const [a, b] = [fold(first), fold(second)];
+    const [a, b] = [folded(first, platform), folded(second, platform)];
     return within(a, b) || within(b, a);
 };
+
+// Whether two absolute folders are the same one, by the same rules.
+export const sameFolder = (first: string, second: string, platform: NodeJS.Platform = process.platform): boolean =>
+    folded(first, platform) === folded(second, platform);
 
 // The pairing of ANOTHER sandbox whose folder this one would be, hold, or sit inside; undefined when none. The same
 // sandbox's own pairing is not a clash: setting it up again, here or in a new folder, replaces it.

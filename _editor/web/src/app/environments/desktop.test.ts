@@ -134,26 +134,66 @@ test("a browser window is closed, raised and widened by the page itself", async 
     expect(location.href).toBe(``);
 });
 
+// Every address the page is sent to, in order: what the app's navigation handler would see.
+const recordedLocation = () => {
+    const sent: string[] = [];
+    (globalThis as { location?: unknown }).location = {
+        get href(): string {
+            return sent.at(-1) ?? ``;
+        },
+        set href(link: string) {
+            sent.push(link);
+        },
+    };
+    (globalThis as { document?: unknown }).document = { readyState: `complete` };
+    return { sent };
+};
+
 test("a window of the app is closed, raised and widened by the app, one link each", async () => {
     const { closeOwnWindow, raiseOwnWindow, widenOwnWindow } = await load();
-    const location = { href: `` };
-    (globalThis as { location?: unknown }).location = location;
-    (globalThis as { document?: unknown }).document = { readyState: `complete` };
+    const { sent } = recordedLocation();
     const own = fakeWindow();
     own.__INTENTIC_DESKTOP__ = { version: `1.0.0`, installId: `id`, update: null, frameless: true };
     own.close = jest.fn();
     own.focus = jest.fn();
     own.resizeTo = jest.fn();
+    jest.useFakeTimers();
+    try {
+        closeOwnWindow();
+        raiseOwnWindow();
+        widenOwnWindow(1279.6);
+        jest.advanceTimersByTime(1_000);
+    } finally {
+        jest.useRealTimers();
+    }
 
-    closeOwnWindow();
-    expect(location.href).toBe(`intentic://window?do=close`);
-    raiseOwnWindow();
-    expect(location.href).toBe(`intentic://window?do=raise`);
-    widenOwnWindow(1279.6);
-    expect(location.href).toBe(`intentic://window?do=fit&width=1280`);
-
+    expect(sent).toEqual([`intentic://window?do=close`, `intentic://window?do=raise`, `intentic://window?do=fit&width=1280`]);
     // Nothing is asked of a window that would ignore it.
     expect(own.close).not.toHaveBeenCalled();
     expect(own.focus).not.toHaveBeenCalled();
     expect(own.resizeTo).not.toHaveBeenCalled();
+});
+
+/* WEBKIT KEEPS ONLY THE LAST ADDRESS SET IN ONE TASK: links sent together leave one per task, a beat apart, in order. */
+test("links sent together reach the app one at a time, the first at once", async () => {
+    const { openDesktopLink } = await load();
+    const { sent } = recordedLocation();
+    jest.useFakeTimers();
+    try {
+        openDesktopLink(`intentic://window?do=ready`);
+        openDesktopLink(`intentic://window?do=mode&mode=dark`);
+        openDesktopLink(`intentic://window?do=dirty&value=1`);
+        expect(sent).toEqual([`intentic://window?do=ready`]);
+        jest.advanceTimersByTime(49);
+        expect(sent).toEqual([`intentic://window?do=ready`]);
+        jest.advanceTimersByTime(1);
+        expect(sent).toEqual([`intentic://window?do=ready`, `intentic://window?do=mode&mode=dark`]);
+        jest.advanceTimersByTime(1_000);
+        expect(sent).toEqual([`intentic://window?do=ready`, `intentic://window?do=mode&mode=dark`, `intentic://window?do=dirty&value=1`]);
+        // Once the queue is empty, the next link leaves at once again.
+        openDesktopLink(`intentic://window?do=raise`);
+        expect(sent.at(-1)).toBe(`intentic://window?do=raise`);
+    } finally {
+        jest.useRealTimers();
+    }
 });

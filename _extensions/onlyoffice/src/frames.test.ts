@@ -106,6 +106,38 @@ describe(`a browser with moveBefore`, () => {
         }
     });
 
+    // An editor still holding edits (a save that failed, a conflict nobody settled) is the one thing that outlives its
+    // time and the cap: letting it go would lose what was typed without a word.
+    it(`keeps an editor holding unsaved edits past its time, and lets it go once it holds nothing`, () => {
+        jest.useFakeTimers();
+        try {
+            withMoveBefore();
+            let holds = true;
+            const dropped: string[] = [];
+            const frame = frameIn(slot());
+            keep(ids[0]!, { ...kept(frame, `s`), holding: () => holds, dropped: () => dropped.push(`s`) });
+            jest.advanceTimersByTime(KEEP_MS * 3);
+            expect(frame.isConnected).toBe(true);
+            holds = false;
+            jest.advanceTimersByTime(KEEP_MS);
+            expect(frame.isConnected).toBe(false);
+            expect(dropped).toEqual([`s`]);
+        } finally {
+            jest.useRealTimers();
+        }
+    });
+
+    it(`passes over editors holding unsaved edits when the cap ends one, and says which it ended`, () => {
+        withMoveBefore();
+        const dropped: string[] = [];
+        const frames = ids.map(() => frameIn(slot()));
+        ids.forEach((id, index) =>
+            keep(id, { ...kept(frames[index]!, id), holding: () => index === 0, dropped: () => dropped.push(id) }),
+        );
+        expect(frames.map((frame) => frame.isConnected)).toEqual([true, false, true, true]);
+        expect(dropped).toEqual([ids[1]!]);
+    });
+
     it(`ends every kept editor when the shell switches to another sandbox`, () => {
         withMoveBefore();
         const frames = ids.slice(0, 2).map(() => frameIn(slot()));

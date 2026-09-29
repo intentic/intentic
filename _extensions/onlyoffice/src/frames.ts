@@ -15,6 +15,11 @@ export interface KeptFrame {
     // app, and only a message from that origin is taken as its answer.
     readonly engine: Engine;
     readonly origin: string;
+    // Whether its editor still holds edits its file doesn't have (a save that failed, a conflict nobody settled). Such
+    // an editor outlives its time and the cap: letting it go would lose them without a word. Absent: it holds nothing.
+    readonly holding?: () => boolean;
+    // Told once the frame is let go while kept, and what its editor held with it.
+    readonly dropped?: () => void;
 }
 
 interface Parked extends KeptFrame {
@@ -24,7 +29,8 @@ interface Parked extends KeptFrame {
 type Movable = Element & { moveBefore(node: Node, child: Node | null): void };
 
 // Enough to go back and forth among a few documents. Each kept editor holds a few hundred MB of the browser's memory
-// and a session on the document server, so both are bounded, and an editor nobody came back to is let go.
+// and a session on the document server, so both are bounded, and an editor nobody came back to is let go; one still
+// holding unsaved edits is the exception to both (`holding`).
 export const MAX_KEPT = 3;
 export const KEEP_MS = 10 * 60_000;
 
@@ -86,6 +92,17 @@ export const drop = (id: string): void => {
     clearTimeout(found.timer);
     parked.value.delete(id);
     found.frame.remove();
+    found.dropped?.();
+};
+
+// An editor's time is up: it goes, unless it still holds edits, in which case it is given another term.
+const expire = (id: string): void => {
+    const found = parked.value.get(id);
+    if (found?.holding?.() === true) {
+        parked.value.set(id, { ...found, timer: setTimeout(() => expire(id), KEEP_MS) });
+        return;
+    }
+    drop(id);
 };
 
 const move = (target: Element, frame: HTMLIFrameElement): boolean => {
@@ -110,12 +127,15 @@ export const keep = (id: string, kept: KeptFrame): boolean => {
         return false;
     }
     drop(id);
-    parked.value.set(id, { ...kept, timer: setTimeout(() => drop(id), KEEP_MS) });
-    for (const oldest of parked.value.keys()) {
+    parked.value.set(id, { ...kept, timer: setTimeout(() => expire(id), KEEP_MS) });
+    // Oldest first, passing over any that still hold edits: past the cap rather than lose them.
+    for (const [oldest, found] of parked.value) {
         if (parked.value.size <= MAX_KEPT) {
             break;
         }
-        drop(oldest);
+        if (found.holding?.() !== true) {
+            drop(oldest);
+        }
     }
     return true;
 };
@@ -130,6 +150,7 @@ export const take = (id: string, slot: Element): KeptFrame | undefined => {
     parked.value.delete(id);
     if (!move(slot, found.frame)) {
         found.frame.remove();
+        found.dropped?.();
         return undefined;
     }
     unpin(found.frame);

@@ -19,6 +19,7 @@ import { setupRedirect } from "./setupGate";
 import { signInAt } from "./signIn";
 import { t } from "@intentic/ui/i18n";
 import { localFace } from "../app/environments/local";
+import { receiveHandoff } from "../features/chat/drafts/localHandoff";
 
 declare module "vue-router" {
     interface RouteMeta {
@@ -326,6 +327,10 @@ export const router = createRouter({
     // pushState navigations. `{ el }` finds whichever pane owns the scrollbar; no hash means no opinion.
     scrollBehavior: (to) => (to.hash === `` ? false : { el: to.hash, behavior: `smooth` }),
 });
+
+// The desktop app's "Ask an agent about this" arrives as `?handoff=` on whatever route it lands: kept for the chat that
+// takes the file, and out of the address before any other guard reads it (features/chat/drafts/localHandoff.ts).
+router.beforeEach((to) => receiveHandoff(to));
 
 // A link naming a conversation opens it wherever it lands: the daemon's push notifications point at
 // `/?conversation=<id>`, and a shell that rewrites its entry path before the router runs (the demo does) must not

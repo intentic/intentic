@@ -225,12 +225,43 @@ export const openUrl = (url: string): Promise<void> => invoke(`open_url`, { url 
 export interface LocalRecent {
     path: string;
     folder: boolean;
-    openedAt: number;
+    // When it was last opened: Unix seconds as state.rs keeps them, or an ISO 8601 instant. Read it through
+    // home.ts `openedAtMs`, which takes either, rather than as a number.
+    openedAt: number | string;
+    // Whether the path is still there, asked as the list is read: a recent that has moved is drawn as moved.
+    exists: boolean;
+    // Whether the folder has a sandbox of its own (projects.json, src-tauri/src/project.rs).
+    sandbox: boolean;
 }
 // The system dialog, then a window for what was chosen; nothing chosen opens nothing.
 export const localOpen = (folder: boolean): Promise<void> => invoke(`local_open`, { folder });
+// Rejects with a sentence written for the reader ("isn't there any more", "isn't allowed"), shown beside the row.
 export const localOpenPath = (path: string): Promise<void> => invoke(`local_open_path`, { path });
 export const localRecents = (): Promise<LocalRecent[]> => invoke(`local_recents`);
+/** Takes one entry off the recents, wherever it is in them; the folder or file itself is not touched. */
+export const localForgetRecent = (path: string): Promise<void> => invoke(`local_forget_recent`, { path });
+
+/* WHAT HOME IS DRAWN FROM: three facts the app keeps across launches (src-tauri/src/state.rs). */
+
+// Which face the app last showed by the user's own choice: what a launch opens onto, and where the launcher's ×
+// goes.
+export type LastFace = `home` | `workspace`;
+
+export interface HomeFacts {
+    // A sign-in has completed in this install (or the workspace was shown, before that was remembered): Home offers
+    // the workspace instead of signing in.
+    accountSeen: boolean;
+    lastFace: LastFace;
+    // A sandbox has been set up on this machine, so its Docker and its agent are this window's business.
+    hostsSandboxes: boolean;
+}
+export const homeFacts = (): Promise<HomeFacts> => invoke(`home_facts`);
+// The launcher's × and Esc: back to the workspace when that is the face the user came from, else the card goes
+// and the app stays in the tray. Unlike `workspaceOpen`, it never makes the workspace the face the next launch
+// opens.
+export const launcherClose = (): Promise<void> => invoke(`launcher_close`);
+// Platform sign-in in the default browser (auth.rs); the account comes back over `intentic://auth`.
+export const signIn = (): Promise<void> => invoke(`sign_in`);
 // `remember` makes this answer the × from now on and retires the dialog; otherwise it applies once.
 export const closeWorkspace = (action: CloseAction, remember: boolean): Promise<void> => invoke(`close_workspace`, { action, remember });
 

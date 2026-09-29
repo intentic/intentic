@@ -43,6 +43,17 @@
                 "default": "./dist/lib/sidecar.js"
             }
         },
+        "./derive": {
+            "types": "./dist/lib/derive.d.ts",
+            "import": {
+                "@intentic/src": "./src/lib/derive.ts",
+                "default": "./dist/lib/derive.js"
+            },
+            "require": {
+                "@intentic/src": "./src/lib/derive.ts",
+                "default": "./dist/lib/derive.js"
+            }
+        },
         "./skill": {
             "types": "./dist/skill.d.ts",
             "import": {

@@ -1,18 +1,25 @@
 //! A FOLDER BECOMING A SANDBOX'S PROJECT: "Work on this with an agent" in a local window (local.rs).
 //!
 //! One sandbox per folder. The folder is not the sandbox's `/work` (the daemon keeps its own state, a public
-//! `public/` and its starter at that root), but a project inside it, `/work/<name>`, kept in two-way sync with the
-//! folder by the machine agent's Mutagen (`_devices/machine/src/sync`). The setup is the ordinary one: the workspace's
-//! `/setup` page mints the code and hands it back as `intentic://setup?…&project=<name>`, and only then does this
-//! module attach the folder, which it parked itself. The path never rides a link, so no page can point a sandbox at
-//! a folder the user did not pick.
+//! `public/` and its starter at that root), but a project inside it, `/work/<name>`. COPY-FIRST: the folder is
+//! copied into the sandbox and the copy is kept up to date from here by the machine agent (`_devices/machine/src/sync`);
+//! agents change the copy, and nothing in the folder changes until the window's "Bring back changes" brings what
+//! they did back, keeping a restore point first ([`work`]). The setup is the ordinary one: the workspace's `/setup`
+//! page mints the code and hands it back as `intentic://setup?…&project=<name>` (a sandbox on this machine), or
+//! enrolls the folder with a hosted one as `intentic://sync?…&project=<name>` ([`sync_project`]), and only then does
+//! this module attach the folder, which it parked itself. The path never rides a link, so no page can point a
+//! sandbox at a folder the user did not pick.
 
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
+use std::sync::{LazyLock, Mutex};
+use std::time::Duration;
 
 use tauri::{AppHandle, Manager};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 
-use crate::setup_link::SetupArgs;
+use crate::scripts::AgentSilence;
+use crate::setup_link::{LocalVerb, SetupArgs, SyncArgs};
 use crate::state::{AppState, Project};
 
 /// Past this many files the first sync is a long upload, and the confirmation says so.
@@ -119,6 +126,27 @@ pub fn refusal(path: &Path, home: Option<&Path>, taken: &[PathBuf]) -> Option<St
             "{shown} holds your home folder. Pick the folder of one project in it."
         ));
     }
+    // Fedora Atomic (Silverblue, Kinoite, Bazzite…) keeps the homes under `/var/home`, `/home` being a link to it:
+    // a folder in somebody's home there is theirs, not the system's, whatever the rule for `/var` below says. The
+    // homes' own folder, and a home itself, are refused as the ones at `/home` are.
+    match path
+        .strip_prefix("/var/home")
+        .ok()
+        .map(|rest| rest.components().count())
+    {
+        Some(0) => {
+            return Some(format!(
+                "{shown} holds everyone's home folders. Pick the folder of one project in yours."
+            ))
+        }
+        Some(1) => {
+            return Some(format!(
+                "{shown} is a whole home folder. Pick the folder of one project in it."
+            ))
+        }
+        Some(_) => return nested(path, taken),
+        None => {}
+    }
     let system: &[&str] = if cfg!(windows) {
         &[
             r"C:\Windows",
@@ -148,6 +176,12 @@ pub fn refusal(path: &Path, home: Option<&Path>, taken: &[PathBuf]) -> Option<St
             "{shown} belongs to the system. Pick a folder of your own."
         ));
     }
+    nested(path, taken)
+}
+
+/// Why `path` cannot become a project for being inside or around one that already is.
+fn nested(path: &Path, taken: &[PathBuf]) -> Option<String> {
+    let shown = path.display();
     for other in taken {
         if path != other && path.starts_with(other) {
             return Some(format!(
@@ -275,11 +309,30 @@ fn urlencode(value: &str) -> String {
     url::form_urlencoded::byte_serialize(value.as_bytes()).collect()
 }
 
+/// Why `root` cannot become a project on this machine, against the projects it already has and the user's home.
+fn refusal_here(app: &AppHandle, root: &Path) -> Option<String> {
+    let taken: Vec<PathBuf> = app
+        .state::<AppState>()
+        .projects()
+        .iter()
+        .map(|project| PathBuf::from(&project.path))
+        .collect();
+    let home = app.path().home_dir().ok();
+    refusal(root, home.as_deref(), &taken)
+}
+
+fn refuse(app: &AppHandle, why: String) {
+    app.dialog()
+        .message(why)
+        .title("This folder can't have a sandbox")
+        .kind(MessageDialogKind::Warning)
+        .show(|_| {});
+}
+
 /// "Work on this with an agent", from the local window showing `root`: the sandbox it already has, or the question
 /// that makes one.
 pub fn start(app: &AppHandle, root: PathBuf) {
-    let state = app.state::<AppState>();
-    let projects = state.projects();
+    let projects = app.state::<AppState>().projects();
     if let Some(project) = projects
         .iter()
         .find(|project| Path::new(&project.path) == root)
@@ -287,17 +340,8 @@ pub fn start(app: &AppHandle, root: PathBuf) {
         open_existing(app, project);
         return;
     }
-    let taken: Vec<PathBuf> = projects
-        .iter()
-        .map(|project| PathBuf::from(&project.path))
-        .collect();
-    let home = app.path().home_dir().ok();
-    if let Some(why) = refusal(&root, home.as_deref(), &taken) {
-        app.dialog()
-            .message(why)
-            .title("This folder can't have a sandbox")
-            .kind(MessageDialogKind::Warning)
-            .show(|_| {});
+    if let Some(why) = refusal_here(app, &root) {
+        refuse(app, why);
         return;
     }
     let (files, bytes) = weigh(&root);
@@ -317,21 +361,22 @@ pub fn start(app: &AppHandle, root: PathBuf) {
     let handle = app.clone();
     let name = folder_name(&root);
     app.dialog()
-        .message(format!(
-            "Intentic will create a sandbox for {} and keep this folder in sync with it, both ways.\n\n\
-             Agents in the sandbox edit and delete these files directly, on your disk. Your .git, node_modules, build output \
-             and .env and .env.local files stay on this computer only, and your git history is never changed.{caution_text}",
-            root.display()
-        ))
+        .message(copy_first(&root, &caution_text))
         .title(format!("Work on {name} with an agent?"))
         .kind(MessageDialogKind::Info)
-        .buttons(MessageDialogButtons::OkCancelCustom("Create sandbox".into(), "Cancel".into()))
+        .buttons(MessageDialogButtons::OkCancelCustom(
+            "Create sandbox".into(),
+            "Cancel".into(),
+        ))
         .show(move |confirmed| {
             if !confirmed {
                 return;
             }
             *handle.state::<AppState>().pending_project.lock().unwrap() = Some(root);
-            crate::windows::show_workspace_at(&handle, Some(&format!("/setup?project={}", urlencode(&name))));
+            crate::windows::show_workspace_at(
+                &handle,
+                Some(&format!("/setup?project={}", urlencode(&name))),
+            );
         });
 }
 
@@ -364,6 +409,326 @@ pub fn remember(app: &AppHandle, args: &SetupArgs, slug: Option<String>) {
         dir,
         sandbox_id: args.sandbox_id.clone(),
         slug,
+    });
+}
+
+/// What "Work on this with an agent" says before anything is made: copy-first, in the order it happens. The folder
+/// is copied and kept up to date from here; agents change the copy; this folder changes only when the window's
+/// "Bring back changes" is pressed, and each of those keeps a restore point.
+fn copy_first(root: &Path, cautions: &str) -> String {
+    format!(
+        "Intentic will copy {} into a sandbox and keep the copy up to date from here as you work.\n\n\
+         Agents change the copy, never this folder. Nothing here changes until you press \"Bring back changes\" \
+         in this window, and every bring-back keeps a restore point you can go back to. Your .git, node_modules, \
+         build output and .env and .env.local files stay on this computer only.{cautions}",
+        root.display()
+    )
+}
+
+/* WHAT A PROJECT'S WINDOW ASKS OF ITS SYNC — each one run of the machine agent, answered into that window. */
+
+/// One run of `intentic-machine` for a project verb: what the window called it, what its answer is called, the
+/// arguments, and how long it may take (a bring-back copies a whole folder's worth of changes back).
+#[derive(Debug, PartialEq, Eq)]
+struct AgentRun {
+    verb: &'static str,
+    kind: &'static str,
+    args: Vec<String>,
+    limit: Duration,
+}
+
+/// The name a project verb goes by on the window's side, for the verbs this module runs; none for any other.
+fn project_verb(verb: &LocalVerb) -> Option<&'static str> {
+    match verb {
+        LocalVerb::Changes => Some("changes"),
+        LocalVerb::BringBack(_) => Some("bring-back"),
+        LocalVerb::Restore(_) => Some("restore"),
+        LocalVerb::Direction(_) => Some("direction"),
+        _ => None,
+    }
+}
+
+/// The machine agent's command for `verb` on the project at `root` (the commands `_devices/machine` names). A
+/// bring-back of chosen paths names them in `paths_file` (`--paths-file`, a JSON array of the root-relative paths),
+/// never on the command line: Windows caps a command line at 32,767 characters, which a few hundred paths reach.
+/// Chosen paths with no file to name them in are no run at all, rather than a bring-back of everything.
+fn agent_run(verb: &LocalVerb, root: &Path, paths_file: Option<&Path>) -> Option<AgentRun> {
+    let dir = root.display().to_string();
+    let base = |command: &str| -> Vec<String> {
+        vec!["sync".into(), command.into(), "--dir".into(), dir.clone()]
+    };
+    let (verb, kind, mut args, seconds) = match verb {
+        LocalVerb::Changes => ("changes", "changes", base("changes"), 90),
+        LocalVerb::BringBack(paths) => {
+            let mut args = base("bring-back");
+            if paths.is_some() {
+                args.push("--paths-file".into());
+                args.push(paths_file?.display().to_string());
+            }
+            ("bring-back", "brought-back", args, 600)
+        }
+        LocalVerb::Restore(point) => {
+            let mut args = base("restore");
+            args.push("--point".into());
+            args.push(point.clone());
+            ("restore", "restored", args, 120)
+        }
+        LocalVerb::Direction(value) => {
+            let mut args = base("direction");
+            args.push(value.clone());
+            ("direction", "direction", args, 60)
+        }
+        _ => return None,
+    };
+    args.push("--json".into());
+    Some(AgentRun {
+        verb,
+        kind,
+        args,
+        limit: Duration::from_secs(seconds),
+    })
+}
+
+/// The chosen paths of a bring-back, written where `--paths-file` reads them: a JSON array of root-relative paths,
+/// in a file of its own under `dir`, named so no two runs meet.
+fn write_paths(dir: &Path, paths: &[String]) -> std::io::Result<PathBuf> {
+    std::fs::create_dir_all(dir)?;
+    let file = dir.join(format!("bring-back-{}.json", uuid::Uuid::new_v4().simple()));
+    std::fs::write(&file, serde_json::to_vec(paths)?)?;
+    Ok(file)
+}
+
+/// A bring-back's paths file, in the app's own cache folder, removed however the run ends.
+struct PathsFile(PathBuf);
+
+impl PathsFile {
+    fn write(app: &AppHandle, paths: &[String]) -> Result<PathsFile, String> {
+        let dir = app
+            .path()
+            .app_cache_dir()
+            .map_err(|error| format!("no cache folder for this app: {error}"))?
+            .join("bring-back");
+        write_paths(&dir, paths)
+            .map(PathsFile)
+            .map_err(|error| format!("the paths could not be written: {error}"))
+    }
+}
+
+impl Drop for PathsFile {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.0);
+    }
+}
+
+/// Folders a changing run is under way for right now.
+static WORKING: LazyLock<Mutex<HashSet<PathBuf>>> = LazyLock::new(Mutex::default);
+
+/// Whether a bring-back, a restore or a direction change is under way: what an update waits for, like a script run
+/// (update.rs `refusal`), since a restart in the middle would leave the window that asked with no answer.
+pub fn busy() -> bool {
+    WORKING.lock().map(|held| !held.is_empty()).unwrap_or(true)
+}
+
+/// A folder's claim on its one changing run at a time, given back however the run ends.
+struct Working(PathBuf);
+
+impl Working {
+    fn claim(root: &Path) -> Option<Working> {
+        WORKING
+            .lock()
+            .unwrap()
+            .insert(root.to_path_buf())
+            .then(|| Working(root.to_path_buf()))
+    }
+}
+
+impl Drop for Working {
+    fn drop(&mut self) {
+        if let Ok(mut working) = WORKING.lock() {
+            working.remove(&self.0);
+        }
+    }
+}
+
+/// A project verb from the window showing `root` (local.rs): only for a folder that IS a project of this machine's
+/// (`projects.json`), run off the main thread, and answered into that window as `intentic:project` whatever
+/// happens, so the page is never left waiting on a button it pressed.
+pub fn work(app: &AppHandle, label: &str, root: &Path, verb: &LocalVerb) {
+    let Some(name) = project_verb(verb) else {
+        return;
+    };
+    let is_project = app
+        .state::<AppState>()
+        .projects()
+        .iter()
+        .any(|project| Path::new(&project.path) == root);
+    if !is_project {
+        eprintln!(
+            "{label} asked to {name} {}, which has no sandbox of its own",
+            root.display()
+        );
+        return;
+    }
+    let refused =
+        |error: &str| serde_json::json!({ "kind": "error", "verb": name, "error": error });
+    let claim = match name {
+        "changes" => None,
+        _ => match Working::claim(root) {
+            Some(claim) => Some(claim),
+            None => {
+                tell(
+                    app,
+                    label,
+                    &refused("Intentic is still working on this folder's last request. Try again when it's done."),
+                );
+                return;
+            }
+        },
+    };
+    let paths = match verb {
+        LocalVerb::BringBack(Some(paths)) => match PathsFile::write(app, paths) {
+            Ok(file) => Some(file),
+            Err(error) => {
+                eprintln!("{label} asked to bring back {} paths: {error}", paths.len());
+                tell(
+                    app,
+                    label,
+                    &refused("Intentic couldn't hand the machine agent the files to bring back. Try again."),
+                );
+                return;
+            }
+        },
+        _ => None,
+    };
+    let Some(run) = agent_run(verb, root, paths.as_ref().map(|file| file.0.as_path())) else {
+        return;
+    };
+    let app = app.clone();
+    let label = label.to_string();
+    tauri::async_runtime::spawn_blocking(move || {
+        let answer = crate::scripts::agent_json(&run.args, run.limit);
+        // Given back before the window hears, so a request it makes on hearing is not turned away.
+        drop(paths);
+        drop(claim);
+        tell(&app, &label, &project_detail(&run, answer));
+    });
+}
+
+/// What the window is told: the agent's own object as `result`, or why there is none as a sentence.
+fn project_detail(
+    run: &AgentRun,
+    answer: Result<serde_json::Value, AgentSilence>,
+) -> serde_json::Value {
+    match answer {
+        Ok(result) => serde_json::json!({ "kind": run.kind, "result": result }),
+        Err(silence) => {
+            eprintln!("intentic-machine {}: {silence:?}", run.args.join(" "));
+            serde_json::json!({ "kind": "error", "verb": run.verb, "error": said(&silence) })
+        }
+    }
+}
+
+/// Why the agent gave no answer, in the words the window shows. An agent that is there and would not start says
+/// why, rather than being called missing.
+fn said(silence: &AgentSilence) -> String {
+    match silence {
+        AgentSilence::Missing => "Intentic's machine agent isn't on this computer, so this folder's sandbox can't be reached from here. Setting the sandbox up again installs it.".to_string(),
+        AgentSilence::WouldNotStart(reason) => format!("The machine agent on this computer wouldn't start ({reason})."),
+        AgentSilence::TimedOut(_) => "The machine agent didn't answer in time. Try again in a moment.".to_string(),
+        AgentSilence::Unreadable(_) => "The machine agent's answer couldn't be read. Updating Intentic may fix this.".to_string(),
+    }
+}
+
+/// `intentic:project` into the window `label`, one event carrying `detail`.
+fn tell(app: &AppHandle, label: &str, detail: &serde_json::Value) {
+    if let Some(window) = app.get_webview_window(label) {
+        let _ = window.eval(project_event(detail));
+    }
+}
+
+/// The event as the page receives it: JSON is a JavaScript literal, and serde escapes what the agent said.
+fn project_event(detail: &serde_json::Value) -> String {
+    format!("window.dispatchEvent(new CustomEvent('intentic:project', {{ detail: {detail} }}));")
+}
+
+/* A HOSTED SANDBOX'S PROJECT — `intentic://sync?…&project=<name>`, the desktop half of a folder whose sandbox is not
+ * on this machine. */
+
+/// The workspace enrolled the parked folder with a hosted sandbox's `/work/<name>`: run the sync script on it here,
+/// with no launcher screen in between, and remember the project once it runs. Nothing parked (the question was
+/// asked before a restart of this app) is a folder asked for in a system dialog, and held to the same refusals the
+/// window's own question is.
+pub fn sync_project(app: &AppHandle, args: SyncArgs) {
+    let Some(name) = args.project.clone() else {
+        return;
+    };
+    let parked = app
+        .state::<AppState>()
+        .pending_project
+        .lock()
+        .unwrap()
+        .take();
+    if let Some(folder) = parked {
+        run_project_sync(app, args, folder);
+        return;
+    }
+    let handle = app.clone();
+    app.dialog()
+        .file()
+        .set_title(format!("Choose the folder to work on as {name}"))
+        .pick_folder(move |picked| {
+            let Some(picked) = picked.and_then(|picked| picked.into_path().ok()) else {
+                return;
+            };
+            let folder = match std::fs::canonicalize(&picked) {
+                Ok(folder) => crate::local::plain(folder),
+                Err(error) => {
+                    eprintln!("{} cannot be read: {error}", picked.display());
+                    return;
+                }
+            };
+            if let Some(why) = refusal_here(&handle, &folder) {
+                refuse(&handle, why);
+                return;
+            }
+            run_project_sync(&handle, args, folder);
+        });
+}
+
+/// The sync script for `folder` as the project `args` names, off the main thread; on success the project is
+/// remembered with its sandbox, so the folder's window reaches it from then on. A failure is said in a dialog: the
+/// page that sent the link is waiting for an enrollment, and has no other way to hear this one will not come.
+fn run_project_sync(app: &AppHandle, args: SyncArgs, folder: PathBuf) {
+    let app = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let Some(dir) = args.project.clone() else {
+            return;
+        };
+        let path = folder.display().to_string();
+        let run = crate::commands::sync_script(
+            &args,
+            Some(&path),
+            crate::scripts::Host::current(),
+            crate::commands::VERSION,
+        );
+        match crate::scripts::run(&app, &format!("project-sync:{dir}"), run) {
+            Ok(()) => app.state::<AppState>().remember_project(Project {
+                path,
+                dir,
+                sandbox_id: args.sandbox_id.clone(),
+                slug: None,
+            }),
+            Err(error) => {
+                eprintln!("the sync for {path} did not start: {error}");
+                app.dialog()
+                    .message(format!(
+                        "Intentic couldn't start keeping {path} up to date in the sandbox ({error}). Try again from the workspace."
+                    ))
+                    .title("The folder isn't syncing")
+                    .kind(MessageDialogKind::Error)
+                    .show(|_| {});
+            }
+        }
     });
 }
 
@@ -472,6 +837,226 @@ mod tests {
         let home = Path::new("/home/me");
         assert!(refusal(Path::new("/home"), Some(home), &[]).is_some());
         assert_eq!(refusal(Path::new("/home/me/code"), Some(home), &[]), None);
+    }
+
+    /// Fedora Atomic's homes live under `/var/home`: a folder in one is the user's own, while the homes' folder and a
+    /// home itself are refused as they are at `/home` — whichever of the two spellings the OS reports the home by.
+    #[cfg(not(windows))]
+    #[test]
+    fn a_folder_in_a_fedora_atomic_home_is_the_user_s_own() {
+        for home in [Path::new("/var/home/me"), Path::new("/home/me")] {
+            assert_eq!(
+                refusal(Path::new("/var/home/me/code/app"), Some(home), &[]),
+                None,
+                "home {}",
+                home.display()
+            );
+            assert!(refusal(Path::new("/var/home/me"), Some(home), &[]).is_some());
+            assert!(refusal(Path::new("/var/home"), Some(home), &[]).is_some());
+            assert!(refusal(Path::new("/var/home/other"), Some(home), &[]).is_some());
+        }
+        // The rest of /var is still the system's, and a project's neighbours are still refused in there.
+        assert!(refusal(Path::new("/var/lib/app"), None, &[]).is_some());
+        let taken = [PathBuf::from("/var/home/me/code/app")];
+        assert!(refusal(Path::new("/var/home/me/code/app/web"), None, &taken).is_some());
+        assert!(refusal(Path::new("/var/home/me/code"), None, &taken).is_some());
+    }
+
+    /// The question says what copy-first is, in the order it happens: a copy, kept up to date from here, changed by
+    /// agents, and nothing here changing until "Bring back changes", which keeps a restore point.
+    #[test]
+    fn the_question_before_a_sandbox_is_made_says_copy_first() {
+        let text = copy_first(Path::new("/home/me/app"), "");
+        for said in [
+            "copy /home/me/app into a sandbox",
+            "keep the copy up to date from here",
+            "Agents change the copy, never this folder.",
+            "Nothing here changes until you press \"Bring back changes\" in this window",
+            "restore point",
+        ] {
+            assert!(text.contains(said), "{said:?} missing from {text:?}");
+        }
+        assert!(!text.contains("both ways"));
+        assert!(copy_first(Path::new("/a"), "\n\nCAUTION").ends_with("\n\nCAUTION"));
+    }
+
+    /// Each project verb is the machine agent's own command, with the folder and only the values the link carried.
+    #[test]
+    fn each_project_verb_is_one_machine_agent_command() {
+        let root = Path::new("/home/me/app");
+        let run = |verb: LocalVerb| agent_run(&verb, root, None).unwrap();
+        let changes = run(LocalVerb::Changes);
+        assert_eq!(
+            changes.args,
+            vec!["sync", "changes", "--dir", "/home/me/app", "--json"]
+        );
+        assert_eq!(
+            (changes.kind, changes.limit),
+            ("changes", Duration::from_secs(90))
+        );
+        let all = run(LocalVerb::BringBack(None));
+        assert_eq!(
+            all.args,
+            vec!["sync", "bring-back", "--dir", "/home/me/app", "--json"]
+        );
+        assert_eq!(
+            (all.kind, all.limit),
+            ("brought-back", Duration::from_secs(600))
+        );
+        let restore = run(LocalVerb::Restore("p-1".into()));
+        assert_eq!(
+            restore.args,
+            vec![
+                "sync",
+                "restore",
+                "--dir",
+                "/home/me/app",
+                "--point",
+                "p-1",
+                "--json"
+            ]
+        );
+        assert_eq!(
+            (restore.kind, restore.limit),
+            ("restored", Duration::from_secs(120))
+        );
+        let direction = run(LocalVerb::Direction("both".into()));
+        assert_eq!(
+            direction.args,
+            vec![
+                "sync",
+                "direction",
+                "--dir",
+                "/home/me/app",
+                "both",
+                "--json"
+            ]
+        );
+        assert_eq!(
+            (direction.kind, direction.limit),
+            ("direction", Duration::from_secs(60))
+        );
+        assert_eq!(agent_run(&LocalVerb::Sandbox, root, None), None);
+        assert_eq!(agent_run(&LocalVerb::Ask("a.md".into()), root, None), None);
+        // Which verbs these are, by the names the window's side knows them by; only `changes` changes nothing.
+        assert_eq!(project_verb(&LocalVerb::Changes), Some("changes"));
+        assert_eq!(
+            project_verb(&LocalVerb::BringBack(None)),
+            Some("bring-back")
+        );
+        assert_eq!(
+            project_verb(&LocalVerb::Restore("p".into())),
+            Some("restore")
+        );
+        assert_eq!(
+            project_verb(&LocalVerb::Direction("both".into())),
+            Some("direction")
+        );
+        assert_eq!(project_verb(&LocalVerb::OpenFolder), None);
+    }
+
+    /// Chosen paths ride in a file, never on the command line (Windows caps one at 32,767 characters, which a few
+    /// hundred paths pass): the command names the file, and chosen paths with no file are no run, never a bring-back
+    /// of everything.
+    #[test]
+    fn a_bring_back_of_chosen_paths_names_them_in_a_file() {
+        let root = Path::new("/home/me/app");
+        let chosen = LocalVerb::BringBack(Some(vec!["a.md".into(), "src/b c.ts".into()]));
+        let file = Path::new("/cache/bring-back/bring-back-1.json");
+        let run = agent_run(&chosen, root, Some(file)).unwrap();
+        assert_eq!(
+            run.args,
+            vec![
+                "sync",
+                "bring-back",
+                "--dir",
+                "/home/me/app",
+                "--paths-file",
+                "/cache/bring-back/bring-back-1.json",
+                "--json"
+            ]
+        );
+        assert_eq!(agent_run(&chosen, root, None), None);
+        // A thousand long paths still make a short command.
+        let many: Vec<String> = (0..1000)
+            .map(|index| format!("src/{}/file-{index}.ts", "deep/".repeat(10)))
+            .collect();
+        let long = agent_run(&LocalVerb::BringBack(Some(many)), root, Some(file)).unwrap();
+        assert!(long.args.iter().map(String::len).sum::<usize>() < 200);
+    }
+
+    /// The file is the JSON array of the chosen paths as the link carried them, and goes when its run is over.
+    #[test]
+    fn the_paths_file_holds_the_chosen_paths_and_goes_with_its_run() {
+        let dir = std::env::temp_dir().join(format!("intentic-paths-{}", uuid::Uuid::new_v4()));
+        let paths = vec!["a.md".to_string(), "src/b \"c\".ts".to_string()];
+        let file = write_paths(&dir, &paths).unwrap();
+        assert!(file.starts_with(&dir));
+        assert_eq!(
+            serde_json::from_slice::<Vec<String>>(&std::fs::read(&file).unwrap()).unwrap(),
+            paths
+        );
+        let second = write_paths(&dir, &paths).unwrap();
+        assert_ne!(file, second, "no two runs share a file");
+        drop(PathsFile(file.clone()));
+        assert!(!file.exists());
+        drop(PathsFile(second.clone()));
+        assert!(!second.exists());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// One changing run per folder at a time, and the claim is given back however the run ends.
+    #[test]
+    fn a_folder_has_one_changing_run_at_a_time() {
+        let root = std::env::temp_dir().join(format!("intentic-working-{}", uuid::Uuid::new_v4()));
+        let claim = Working::claim(&root).expect("the first run claims the folder");
+        assert!(Working::claim(&root).is_none(), "a second is turned away");
+        assert!(busy());
+        drop(claim);
+        assert!(Working::claim(&root).is_some(), "the folder is free again");
+    }
+
+    /// The window hears the agent's own object, or a sentence when there was none, never silence.
+    #[test]
+    fn the_window_hears_the_agents_answer_or_why_there_is_none() {
+        let run = agent_run(&LocalVerb::BringBack(None), Path::new("/home/me/app"), None).unwrap();
+        assert_eq!(
+            project_detail(&run, Ok(serde_json::json!({ "ok": true, "point": "p-1" }))),
+            serde_json::json!({ "kind": "brought-back", "result": { "ok": true, "point": "p-1" } })
+        );
+        assert_eq!(
+            project_detail(
+                &run,
+                Ok(serde_json::json!({ "ok": false, "error": "conflict" }))
+            ),
+            serde_json::json!({ "kind": "brought-back", "result": { "ok": false, "error": "conflict" } })
+        );
+        for silence in [
+            AgentSilence::Missing,
+            AgentSilence::WouldNotStart("Permission denied (os error 13)".into()),
+            AgentSilence::TimedOut(Duration::from_secs(600)),
+            AgentSilence::Unreadable("garbage".into()),
+        ] {
+            let error = said(&silence);
+            assert_eq!(
+                project_detail(&run, Err(silence)),
+                serde_json::json!({ "kind": "error", "verb": "bring-back", "error": error })
+            );
+        }
+        // An agent that is there and would not start is said as that, with the OS's reason, never as missing.
+        assert_eq!(
+            said(&AgentSilence::WouldNotStart(
+                "Permission denied (os error 13)".into()
+            )),
+            "The machine agent on this computer wouldn't start (Permission denied (os error 13))."
+        );
+        assert!(said(&AgentSilence::Missing).contains("isn't on this computer"));
+        assert_eq!(
+            project_event(
+                &serde_json::json!({ "kind": "changes", "result": { "note": "it's \"done\"" } })
+            ),
+            r#"window.dispatchEvent(new CustomEvent('intentic:project', { detail: {"kind":"changes","result":{"note":"it's \"done\""}} }));"#
+        );
     }
 
     /// Only a sandbox this machine lists as stopped is started; a running one, another machine's, or a row it

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from "vue";
 import { type JumpScope, jumpScopes, scopedQuery } from "./jumpSearch";
-import { type PaletteRow, useJumpRows } from "./useJumpRows";
+import { type PaletteRow, useFileJumpRows, useJumpRows } from "./useJumpRows";
 import { useQuickOpen } from "./useQuickOpen";
 import { type IconName, Modal } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
@@ -12,11 +12,25 @@ import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
 
+// Given `openFile`, the palette is files alone, each opened by it: a local window's (local/LocalFiles.vue), which has
+// no agents, terminals or commands to jump to and no route but its own. Read once, as a window is one kind or the other.
+const { openFile } = defineProps<{ openFile?: (path: string) => void }>();
+const filesOnly = openFile !== undefined;
+
 const { isOpen, mode } = useQuickOpen();
 const query = ref(``);
-const { parsed, sections: grouped, rows, floor, searching, pending, truncated, error } = useJumpRows(query, isOpen);
+const {
+    parsed,
+    sections: grouped,
+    rows,
+    floor,
+    searching,
+    pending,
+    truncated,
+    error,
+} = openFile === undefined ? useJumpRows(query, isOpen) : useFileJumpRows(query, isOpen, openFile);
 
-const scopes = computed<readonly JumpScope[]>(() => jumpScopes());
+const scopes = computed<readonly JumpScope[]>(() => (filesOnly ? [] : jumpScopes()));
 
 // Each section's first row's place in the flat list, so a row can name its own index without the list being walked
 // again per row.
@@ -82,11 +96,11 @@ const narrow = async (scope: JumpScope): Promise<void> => {
 // Focuses the field and resets to the top row each time the palette opens. Seeds the query from the shortcut that
 // opened it: `> ` for the Command Palette, empty for the unscoped jump.
 const onShow = async (): Promise<void> => {
-    query.value = mode.value === `commands` ? `> ` : ``;
+    query.value = mode.value === `commands` && !filesOnly ? `> ` : ``;
     await nextTick();
     input.value?.focus();
     // Caret at the end, not selected, so the next keystroke can't wipe the `> ` prefix.
-    if (mode.value === `commands`) {
+    if (mode.value === `commands` && !filesOnly) {
         const end = input.value?.value.length ?? 0;
         input.value?.setSelectionRange(end, end);
     } else {
@@ -98,7 +112,12 @@ const onShow = async (): Promise<void> => {
 
 <template>
     <Modal v-model:open="isOpen" size="md" :chrome="false" :scroll="false" position="top" @show="onShow">
-        <div role="combobox" aria-haspopup="listbox" aria-expanded="true" :aria-label="t(`shell.quickOpen.jumpTo`)">
+        <div
+            role="combobox"
+            aria-haspopup="listbox"
+            aria-expanded="true"
+            :aria-label="filesOnly ? t(`local.quickOpen.goToFile`) : t(`shell.quickOpen.jumpTo`)"
+        >
             <!-- field-bare: the search is the panel's top band, not a boxed field — the panel border and this divider are already its frame. -->
             <div class="ui-search-row relative border-b border-line">
                 <Icon
@@ -111,7 +130,7 @@ const onShow = async (): Promise<void> => {
                     ref="input"
                     v-model="query"
                     type="text"
-                    :placeholder="t(`shell.quickOpen.jumpToPaste`)"
+                    :placeholder="filesOnly ? t(`local.quickOpen.fileName`) : t(`shell.quickOpen.jumpToPaste`)"
                     class="field-bare w-full min-w-0 py-2.5 pl-9 pr-3"
                     role="searchbox"
                     aria-controls="quick-open-list"
@@ -123,7 +142,12 @@ const onShow = async (): Promise<void> => {
                 />
             </div>
             <!-- The only place the prefixes are taught: a press is the mouse's way in, the glyph beside it is the keyboard's. -->
-            <div class="flex flex-wrap items-center gap-1 border-b border-line px-2 py-1.5" role="group" :aria-label="t(`shell.quickOpen.narrowTo`)">
+            <div
+                v-if="scopes.length > 0"
+                class="flex flex-wrap items-center gap-1 border-b border-line px-2 py-1.5"
+                role="group"
+                :aria-label="t(`shell.quickOpen.narrowTo`)"
+            >
                 <button
                     v-for="scope in scopes"
                     :key="scope.label"
@@ -138,7 +162,12 @@ const onShow = async (): Promise<void> => {
                     <kbd v-if="scope.prefix" class="font-mono text-subtle">{{ scope.prefix }}</kbd>
                 </button>
             </div>
-            <div id="quick-open-list" class="max-h-80 overflow-auto py-1" role="listbox" :aria-label="t(`shell.quickOpen.jumpTo`)">
+            <div
+                id="quick-open-list"
+                class="max-h-80 overflow-auto py-1"
+                role="listbox"
+                :aria-label="filesOnly ? t(`local.quickOpen.goToFile`) : t(`shell.quickOpen.jumpTo`)"
+            >
                 <p
                     v-if="truncated"
                     class="mx-1.5 mb-1 inline-flex items-center gap-1 rounded border border-warning/40 bg-warning/10 px-2 py-0.5 text-2xs text-warning"
@@ -171,6 +200,10 @@ const onShow = async (): Promise<void> => {
                 <p v-if="error" class="px-3 py-3 text-center text-2xs text-danger">{{ error }}</p>
                 <p v-else-if="rows.length === 0 && (searching || pending)" class="px-3 py-3 text-center text-2xs text-subtle">
                     <Icon name="spinner" spin />
+                </p>
+                <!-- Files alone, nothing typed and no tab open: what to type, since there are no kinds above to pick. -->
+                <p v-else-if="filesOnly && rows.length === 0 && parsed.text.length === 0" class="px-3 py-3 text-center text-2xs text-subtle">
+                    {{ t(`local.quickOpen.typeFileName`) }}
                 </p>
                 <!-- The floor is the file half's alone, so it is only worth saying while the palette is pointed at files. -->
                 <p

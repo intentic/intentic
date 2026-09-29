@@ -2,7 +2,6 @@ import { lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathS
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type Grant, Grants } from "./grants.js";
-import { BROKEN_LINK } from "./paths.js";
 import type { LocalFilesServer } from "./server.js";
 import { type Ask, askerOf, localServer, PORT } from "./testing.js";
 
@@ -80,7 +79,7 @@ describe(`a write never follows a link out of its folder`, () => {
     it(`refuses a link that points at nothing, and creates nothing where it points`, async () => {
         const answer = await upload(`dangling.txt`, `escaped`);
         expect(answer.status).toBe(400);
-        expect(await answer.json()).toEqual({ error: BROKEN_LINK });
+        expect(await answer.json()).toEqual({ error: `“dangling.txt” is a link to something that isn't there.` });
         expect(readdirSync(outside)).toEqual([]);
         expect(lstatSync(join(project, `dangling.txt`)).isSymbolicLink()).toBe(true);
     });
@@ -91,7 +90,7 @@ describe(`a write never follows a link out of its folder`, () => {
         expect(await Promise.all(answers.map(async (answer) => [answer.status, await answer.json()]))).toEqual([
             [400, { error: `outside this folder` }],
             [400, { error: `outside this folder` }],
-            [400, { error: BROKEN_LINK }],
+            [400, { error: `“dangling-dir” is a link to something that isn't there.` }],
         ]);
         expect(readdirSync(outside)).toEqual([`existing.txt`]);
         expect(readFileSync(join(outside, `existing.txt`), `utf8`)).toBe(`kept`);

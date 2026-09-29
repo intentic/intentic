@@ -1,5 +1,5 @@
 import { PROFILE_IDS } from "@intentic/constants";
-import { GrantedRoleSchema } from "@intentic/sandbox-contract";
+import { GrantedRoleSchema, isProjectDirName } from "@intentic/sandbox-contract";
 import { oc } from "@orpc/contract";
 import { z } from "zod";
 import {
@@ -58,6 +58,10 @@ const sandboxIdInput = z.object({ sandboxId: z.string() });
 // Which profile the browser arrived in, on the two calls that compose a new machine's environment. Optional
 // everywhere: a caller that names none gets a sandbox with nothing applied to it, which is the default profile.
 const profileInput = z.object({ profile: z.enum(PROFILE_IDS).optional() });
+// The folder a project sandbox is made for, as `/work/<project>` names it, held to the rule `ic` and the desktop app
+// hold it to (sandbox-contract's `isProjectDirName`). Optional: any other sandbox names none, and a platform from before
+// hosted projects drops it unread, which is why the editor sends it only where `hostedOffer` answers `projects`.
+const projectInput = z.object({ project: z.string().refine(isProjectDirName, `not a project folder name`).optional() });
 export const sandboxContract = {
     list: oc.route({ method: "GET", path: "/sandbox/list" }).output(z.object({ sandboxes: z.array(SandboxSummarySchema) })),
     create: oc
@@ -87,7 +91,7 @@ export const sandboxContract = {
     hostedOffer: oc.route({ method: "GET", path: "/sandbox/hosted-offer" }).output(HostedOfferSchema),
     hostedProvision: oc
         .route({ method: "POST", path: "/sandbox/hosted-provision" })
-        .input(z.object({ sandboxId: z.string(), token: z.string().min(1) }).extend(profileInput.shape))
+        .input(z.object({ sandboxId: z.string(), token: z.string().min(1) }).extend(profileInput.shape).extend(projectInput.shape))
         .output(SandboxSummarySchema),
     hostedRelease: oc.route({ method: "POST", path: "/sandbox/hosted-release" }).input(sandboxIdInput).output(SandboxSummarySchema),
     // What the machine is doing, asked of the provider; polled only during a hosted wait, never from `list`.

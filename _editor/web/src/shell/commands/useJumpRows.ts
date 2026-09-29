@@ -4,7 +4,7 @@ import { basename, parentDir } from "@intentic/ui/path";
 import { computed, type Ref } from "vue";
 import { useRouter } from "vue-router";
 import { nameScore, rankCommands } from "./commandSearch";
-import { groupJumpRows, type JumpGroup, type JumpKind, parseJumpQuery, type ScoredRow, UNSCOPED_CAP } from "./jumpSearch";
+import { groupJumpRows, type JumpGroup, type JumpKind, type JumpQuery, parseJumpQuery, type ScoredRow, UNSCOPED_CAP } from "./jumpSearch";
 import { formatChord, isApplePlatform } from "./keybindings";
 import { recentCommandIds, rememberCommand } from "./recentCommands";
 import { commandLabel, commands, executeCommand, type RegisteredCommand } from "./useCommands";
@@ -46,6 +46,22 @@ export interface JumpSection {
     readonly heading: string;
     readonly rows: readonly PaletteRow[];
 }
+
+// One file as a row: ranked against the query, or listed with a score of 0 when it is an open tab offered below the
+// search floor.
+const fileRow = (path: string, text: string, recent: boolean, open: (path: string) => void): PaletteRow => ({
+    kind: `file`,
+    key: `file:${path}`,
+    // Clamped: fuzzyScore's short-path bonus can exceed 1, which would outrank every other kind by arithmetic.
+    score: recent ? 0 : Math.min(1, fuzzyScore(text, path) ?? 0),
+    title: basename(path),
+    detail: parentDir(path),
+    icon: iconForEntry(basename(path), `file`, false),
+    tone: undefined,
+    chord: undefined,
+    recent,
+    run: () => open(path),
+});
 
 const headingOf = (kind: JumpKind, recent: boolean): string => {
     switch (kind) {
@@ -145,19 +161,7 @@ export function useJumpRows(query: Ref<string>, isOpen: Ref<boolean>) {
             return [];
         }
         const paths = listingTabs.value ? tabs.value.flatMap((tab) => (tab.kind === `file` ? [tab.path] : [])) : filePaths.value;
-        return paths.map((path) => ({
-            kind: `file`,
-            key: `file:${path}`,
-            // Clamped: fuzzyScore's short-path bonus can exceed 1, which would outrank every other kind by arithmetic.
-            score: listingTabs.value ? 0 : Math.min(1, fuzzyScore(text.value, path) ?? 0),
-            title: basename(path),
-            detail: parentDir(path),
-            icon: iconForEntry(basename(path), `file`, false),
-            tone: undefined,
-            chord: undefined,
-            recent: listingTabs.value,
-            run: () => openFile(path),
-        }));
+        return paths.map((path) => fileRow(path, text.value, listingTabs.value, openFile));
     });
 
     const terminalRows = computed<readonly PaletteRow[]>(() => {
@@ -286,4 +290,25 @@ export function useJumpRows(query: Ref<string>, isOpen: Ref<boolean>) {
         truncated,
         error,
     };
+}
+
+/**
+ * The palette over files alone, for a window with nothing else to jump to (local/LocalFiles.vue: no fleet, no terminals,
+ * no command registry, no route to navigate). The same file half as above, each row opened by `open`, and the whole
+ * query is the file query: no prefix narrows it, since there is nothing else to narrow to.
+ */
+export function useFileJumpRows(query: Ref<string>, isOpen: Ref<boolean>, open: (path: string) => void) {
+    const { tabs } = useWorkspaceTabs();
+    const parsed = computed<JumpQuery>(() => ({ kind: `file`, text: query.value.trim() }));
+    const text = computed(() => parsed.value.text);
+    const { paths, floor, searching, pending, truncated, error } = useFuzzyFiles(text, isOpen);
+    const listingTabs = computed(() => text.value.length < floor.value);
+    const rows = computed<readonly PaletteRow[]>(() => {
+        const listed = listingTabs.value ? tabs.value.flatMap((tab) => (tab.kind === `file` ? [tab.path] : [])) : paths.value;
+        return listed.map((path) => fileRow(path, text.value, listingTabs.value, open));
+    });
+    const sections = computed<readonly JumpSection[]>(() =>
+        rows.value.length === 0 ? [] : [{ kind: `file`, heading: headingOf(`file`, listingTabs.value), rows: rows.value }],
+    );
+    return { parsed, sections, rows, floor, searching, pending, truncated, error };
 }

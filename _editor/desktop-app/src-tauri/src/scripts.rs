@@ -143,14 +143,26 @@ pub struct Captured {
 /// Why a bounded child has no answer. Displayed as it stands, so each reads as a sentence about `what`.
 #[derive(Debug, PartialEq, Eq)]
 pub enum Unanswered {
-    NotStarted { what: String, reason: String },
-    TimedOut { what: String, limit: Duration },
+    /// It could not be started. `kind` is the OS's own answer, kept because only `NotFound` means there is no such
+    /// binary: a binary that is there and would not start (a command line too long, no permission to run it) is a
+    /// different sentence, and a caller looking in several places must not read it as "not here" and move on.
+    NotStarted {
+        what: String,
+        reason: String,
+        kind: std::io::ErrorKind,
+    },
+    TimedOut {
+        what: String,
+        limit: Duration,
+    },
 }
 
 impl std::fmt::Display for Unanswered {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Unanswered::NotStarted { what, reason } => write!(f, "{what} would not run: {reason}"),
+            Unanswered::NotStarted { what, reason, .. } => {
+                write!(f, "{what} would not run: {reason}")
+            }
             Unanswered::TimedOut { what, limit } => {
                 write!(f, "{what} did not answer within {}s", limit.as_secs())
             }
@@ -166,6 +178,7 @@ pub fn capture(what: &str, command: Command, limit: Duration) -> Result<Captured
         |error| Unanswered::NotStarted {
             what: what.to_string(),
             reason: error.to_string(),
+            kind: error.kind(),
         },
     )?;
     if ran.timed_out {
@@ -857,7 +870,9 @@ const AGENT_STOP_LIMIT: Duration = Duration::from_secs(30);
 /// Seconds `intentic-machine run` gets: a logon task gets 20s to raise the loop, then the launch stub 10s more.
 const AGENT_START_LIMIT: Duration = Duration::from_secs(90);
 
-/// Ask one `intentic-machine` candidate, or None when there is no such binary at that path.
+/// Ask one `intentic-machine` candidate, or None when there is no such binary at that path. Only a missing binary
+/// is None: one that is there and would not start is its own answer, which the caller says as it is, rather than
+/// trying the next place and ending on "not installed" about an agent that is installed.
 fn ask_agent(
     candidate: &str,
     args: &[&str],
@@ -870,7 +885,10 @@ fn ask_agent(
         command,
         limit,
     ) {
-        Err(Unanswered::NotStarted { .. }) => None,
+        Err(Unanswered::NotStarted {
+            kind: std::io::ErrorKind::NotFound,
+            ..
+        }) => None,
         answer => Some(answer),
     }
 }
@@ -943,6 +961,68 @@ pub fn agent_restart() -> Result<String, String> {
             "the agent on this device would not restart: {error}"
         )),
     }
+}
+
+/// Why the machine agent gave no answer to pass on. The screen that asked says each in its own words (project.rs).
+#[derive(Debug, PartialEq, Eq)]
+pub enum AgentSilence {
+    /// No `intentic-machine` at any of the places it is installed.
+    Missing,
+    /// It is there and would not start: the OS's reason (a command line too long, no permission to run it).
+    WouldNotStart(String),
+    /// It did not answer within its limit, and was stopped.
+    TimedOut(Duration),
+    /// It answered, with no JSON object to read on stdout; what it said instead, for stderr.
+    Unreadable(String),
+}
+
+/// One `intentic-machine` call whose answer is a JSON object on stdout (`sync changes --json` and its siblings),
+/// passed on whole: `{ok:true, …}` or `{ok:false, error}` is the agent's to say, and an exit status that is not zero
+/// with an object printed is still that object. Resolved as [`sync_report`] resolves the agent, bounded by `limit`.
+pub fn agent_json(args: &[String], limit: Duration) -> Result<serde_json::Value, AgentSilence> {
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .ok();
+    let args: Vec<&str> = args.iter().map(String::as_str).collect();
+    for candidate in sync_agent_candidates(Host::current(), home.as_deref()) {
+        match ask_agent(&candidate, &args, limit) {
+            None => continue,
+            Some(Err(Unanswered::TimedOut { limit, .. })) => {
+                return Err(AgentSilence::TimedOut(limit))
+            }
+            Some(Err(Unanswered::NotStarted { reason, .. })) => {
+                return Err(AgentSilence::WouldNotStart(reason))
+            }
+            Some(Ok(answer)) => {
+                return json_object_in(&answer.stdout).ok_or_else(|| {
+                    AgentSilence::Unreadable(format!(
+                        "no JSON on stdout: {}{}",
+                        answer.stdout.trim(),
+                        answer.stderr.trim()
+                    ))
+                })
+            }
+        }
+    }
+    Err(AgentSilence::Missing)
+}
+
+/// The JSON object an agent printed: its whole stdout, or failing that the last line of it that is one, for an
+/// agent that said something else first (a notice, a fetch).
+pub fn json_object_in(stdout: &str) -> Option<serde_json::Value> {
+    let object = |text: &str| {
+        serde_json::from_str::<serde_json::Value>(text)
+            .ok()
+            .filter(serde_json::Value::is_object)
+    };
+    object(stdout.trim()).or_else(|| {
+        stdout
+            .lines()
+            .map(str::trim)
+            .filter(|line| line.starts_with('{'))
+            .rev()
+            .find_map(object)
+    })
 }
 
 /// The container's last `tail` log lines, BOTH streams merged in the order docker hands them over. The daemon
@@ -1053,8 +1133,38 @@ mod tests {
         );
         assert!(matches!(
             answer,
-            Err(Unanswered::NotStarted { ref what, .. }) if what == "nothing"
+            Err(Unanswered::NotStarted { ref what, kind: std::io::ErrorKind::NotFound, .. }) if what == "nothing"
         ));
+    }
+
+    /// Only an agent that is not at a place is looked for at the next one. One that is there and will not start is
+    /// that answer, not "not installed": a folder where the binary should be stands in for any start the OS refuses
+    /// (a command line longer than Windows allows, a binary without the right to run).
+    #[cfg(unix)]
+    #[test]
+    fn an_agent_that_is_there_and_will_not_start_is_not_taken_for_a_missing_one() {
+        let missing = std::env::temp_dir().join(format!(
+            "intentic-no-agent-{}/intentic-machine",
+            std::process::id()
+        ));
+        assert!(ask_agent(
+            missing.to_str().unwrap(),
+            &["status"],
+            Duration::from_secs(5)
+        )
+        .is_none());
+
+        let refused = std::env::temp_dir();
+        match ask_agent(
+            refused.to_str().unwrap(),
+            &["status"],
+            Duration::from_secs(5),
+        ) {
+            Some(Err(Unanswered::NotStarted { kind, .. })) => {
+                assert_ne!(kind, std::io::ErrorKind::NotFound)
+            }
+            other => panic!("a start the OS refused came back as {other:?}"),
+        }
     }
 
     #[test]
@@ -1091,6 +1201,27 @@ mod tests {
         assert_eq!(listing_from("[]"), Some(vec![]));
         assert_eq!(listing_from("running   work\n"), None);
         assert_eq!(listing_from(""), None);
+    }
+
+    /// The agent's answer is one JSON object: all of stdout, or the last line of it that is one when something was
+    /// said first. An array, a number or prose is not an answer.
+    #[test]
+    fn an_agent_answer_is_the_json_object_it_printed() {
+        assert_eq!(
+            json_object_in("{\"ok\":true,\"changes\":[]}\n"),
+            Some(serde_json::json!({ "ok": true, "changes": [] }))
+        );
+        assert_eq!(
+            json_object_in("{\n  \"ok\": false,\n  \"error\": \"no session\"\n}\n"),
+            Some(serde_json::json!({ "ok": false, "error": "no session" }))
+        );
+        assert_eq!(
+            json_object_in("mutagen: starting daemon\r\n{\"ok\":true}\r\n"),
+            Some(serde_json::json!({ "ok": true }))
+        );
+        assert_eq!(json_object_in("[1,2]"), None);
+        assert_eq!(json_object_in("done\n"), None);
+        assert_eq!(json_object_in(""), None);
     }
 
     #[test]

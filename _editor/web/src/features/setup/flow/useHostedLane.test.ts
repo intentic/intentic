@@ -19,13 +19,16 @@ const hostedRow = (over: Partial<SandboxSummary> = {}): SandboxSummary =>
 // Every lane a case stands up is stopped after it, so none of them keeps the shared wall clock armed for the next.
 const scopes: EffectScope[] = [];
 
-const stage = (offer: HostedOffer = { enabled: true, remaining: 1 }) => {
+const stage = (offer: HostedOffer = { enabled: true, remaining: 1 }, project?: string, appTakesProjects = true) => {
     const rows: SetupRowHost[`sandbox`] = unstubbed(`sandbox`, { sandboxes: ref([]), select: jest.fn(), remove: jest.fn(async () => undefined) });
     const platform = {
         hostedOffer: jest.fn(async () => offer),
         hostedStatus: jest.fn(async (_input: { sandboxId: string }): Promise<HostedStatus> => ({ machine: `unknown` })),
         hostedRestart: jest.fn(async (_input: { sandboxId: string }) => ({ ok: true as const })),
         wake: jest.fn(async (_input: { sandboxId: string }) => ({ ok: true as const })),
+        hostedProvision: jest.fn(async ({ sandboxId }: { sandboxId: string; token: string; project?: string; profile?: string }) =>
+            hostedRow({ id: sandboxId, hosted: { region: `iad`, warm: false } }),
+        ),
     };
     const sandbox = {
         hostedProvision: jest.fn(async (id: string, _token: string) => hostedRow({ id })),
@@ -41,6 +44,8 @@ const stage = (offer: HostedOffer = { enabled: true, remaining: 1 }) => {
                 platform: unstubbed<HostedLaneHost[`platform`]>(`platform`, platform),
                 sandbox: unstubbed<HostedLaneHost[`sandbox`]>(`sandbox`, sandbox),
                 row: setupRow,
+                project,
+                appTakesProjects: () => appTakesProjects,
             }),
         };
     })!;
@@ -88,6 +93,34 @@ describe(`starting a machine`, () => {
         expect(hosted.hostedSince.value).toBe(Date.parse(`2026-09-23T10:00:00Z`));
         expect(hosted.lane.value).toEqual({ kind: `idle`, action: 1, asked: `machine` });
         expect(platform.hostedOffer).toHaveBeenCalledTimes(1);
+    });
+
+    // The store's provision names no folder, so a project's machine is asked of the platform with it; the machine boots
+    // with that folder as its project.
+    it(`asks the platform for a project's machine with its folder, and the store for nobody's`, async () => {
+        const { platform, sandbox, row, hosted } = stage({ enabled: true, remaining: 1, projects: true }, `My-App`);
+        row.created.value = draft;
+        hosted.machine.value = `hosted`;
+        expect(await hosted.provisionHosted()).toBe(true);
+        expect(platform.hostedProvision.mock.calls).toEqual([[{ sandboxId: `new`, token: `tok`, project: `My-App` }]]);
+        expect({ store: sandbox.hostedProvision.mock.calls.length, hosted: row.created.value?.hosted }).toEqual({
+            store: 0,
+            hosted: { region: `iad`, warm: false },
+        });
+        expect(hosted.hostedProjects.value).toBe(true);
+    });
+
+    // A platform from before hosted projects says nothing about them, which is no.
+    it(`reads a platform that says nothing about projects as holding none`, () => {
+        const { hosted } = stage();
+        expect(hosted.hostedProjects.value).toBe(false);
+    });
+
+    // An app from before project syncs would read the hand-over's link as a whole-`/work` sync into the folder, so the
+    // platform's word alone holds nothing.
+    it(`holds no project for an app that doesn't copy a folder into one, whatever the platform says`, () => {
+        const { hosted } = stage({ enabled: true, remaining: 1, projects: true }, `My-App`, false);
+        expect(hosted.hostedProjects.value).toBe(false);
     });
 
     it(`starts nothing without a row of the owner's, or while the lane is busy`, async () => {

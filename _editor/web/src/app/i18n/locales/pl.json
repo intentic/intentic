@@ -4026,7 +4026,7 @@
         },
         "setupSyncOption": {
             "alsoSyncLocalFolder": "Synchronizuj też lokalny folder",
-            "syncsWithFolderYouPicked": "Synchronizuje się na bieżąco z wybranym przez Ciebie folderem"
+            "syncsWithFolderYouPicked": "Skopiowano z wybranego przez Ciebie folderu"
         },
         "words": {
             "useLettersNumbersHyphens": "Używaj tylko liter, cyfr i myślników."

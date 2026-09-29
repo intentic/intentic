@@ -36,7 +36,9 @@ export interface TreeTransferHost {
     readonly inline: Pick<ReturnType<typeof useInlineEdit>, "edit" | "editing">;
     // The tree element: a clipboard write goes through its window, so a popped-out explorer writes to its own.
     readonly el: Readonly<Ref<HTMLElement | undefined>>;
-    readonly store: Pick<ReturnType<typeof useWorkspaceTree>, "clipboard" | "run" | "copyEntries" | "moveIntoMany" | "extractEntry" | "loadChildren">;
+    // `extractEntry` is left out where nothing unpacks (fileVerbs.ts' seams), and Extract with it.
+    readonly store: Pick<ReturnType<typeof useWorkspaceTree>, "clipboard" | "run" | "copyEntries" | "moveIntoMany" | "loadChildren"> &
+        Partial<Pick<ReturnType<typeof useWorkspaceTree>, "extractEntry">>;
     readonly uploads: Pick<ReturnType<typeof useUploadQueue>, "enqueueFromDataTransfer">;
     readonly say: ReturnType<typeof useNotifications>["say"];
 }
@@ -240,11 +242,12 @@ export const useTreeTransfer = (host: TreeTransferHost) => {
     // Unpacks an archive into the folder holding it, selected once the daemon answers: only it can say what the entry is
     // called, and a guessed name would mark the wrong row whenever the archive turned out to hold its own folder.
     const extract = async (path: string): Promise<void> => {
-        if (!supportsRoute(VERB_ROUTES.extract) || rules.refuseIn(host.targetDir(path))) {
+        const unpack = store.extractEntry;
+        if (unpack === undefined || !supportsRoute(VERB_ROUTES.extract) || rules.refuseIn(host.targetDir(path))) {
             return;
         }
         await store.run(async () => {
-            const landed = await store.extractEntry(path);
+            const landed = await unpack(path);
             // An extract lands a folder unless the listing already says otherwise.
             revealLanded(parentDir(landed), [{ path: landed, type: host.byPath.value.get(landed)?.type ?? `dir` }]);
             host.say(t(`workspace.fileVerbs.extractedTo`, { name: basename(landed) }));

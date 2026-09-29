@@ -1,7 +1,7 @@
 import type { SandboxSummary } from "@intentic/api-contract";
 import { projectDirNameFor } from "@intentic/sandbox-contract";
 import { sandboxSummary } from "../../testing/sandboxSummary";
-import { arrivalFor, type ArrivalInput, hostedIdle, rowToOpen, setupProjectOf, touched } from "./setupArrival";
+import { arrivalFor, type ArrivalInput, hostedIdle, projectPrefersHosted, rowToOpen, setupProjectOf, touched } from "./setupArrival";
 
 // A blank first arrival on a platform offering everything; each test overrides the one field it is about.
 const arrival = (over: Partial<ArrivalInput> = {}): ArrivalInput => ({
@@ -17,6 +17,7 @@ const arrival = (over: Partial<ArrivalInput> = {}): ArrivalInput => ({
     requestedMachine: undefined,
     elsewhere: false,
     project: false,
+    hostedProjects: false,
     ...over,
 });
 
@@ -118,7 +119,7 @@ it(`shows the options rather than installing when the app says this computer can
 });
 
 // The app opened this page for a folder on this computer, so the folder already answered where it runs: only the app
-// can sync it, and no machine of ours can hold it.
+// can hand it to a sandbox, and on a platform from before hosted projects no machine of ours can hold it.
 describe(`a project setup`, () => {
     it(`installs on this computer however many sandboxes the account has, and from a browser starts no machine`, () => {
         expect(arrivalFor(arrival({ project: true, inApp: true, onlySandbox: false }))).toBe(`local`);
@@ -175,5 +176,62 @@ describe(`the row an arrival settles on`, () => {
         expect(acted.map(touched)).toEqual([false, true, true, true]);
         const machine = { region: `iad`, warm: true };
         expect([draft, { ...draft, hosted: machine }, { ...live, hosted: machine }].map(hostedIdle)).toEqual([false, true, false]);
+    });
+});
+
+/* A PROJECT WHERE THE PLATFORM'S MACHINES CAN HOLD ONE (`hostedOffer.projects`): the folder goes to a machine of ours,
+ * which the app copies it into once it runs, and this computer stays one pick away. Where no machine can be started,
+ * the folder goes to this computer, as every project did before the platform's machines could hold one. */
+describe(`a project where the platform's machines can hold one`, () => {
+    const hostedProject = (over: Partial<ArrivalInput> = {}): ArrivalInput => arrival({ project: true, hostedProjects: true, inApp: true, ...over });
+
+    it(`starts a machine for the row this visit made, in the app or a browser, beside another sandbox or not`, () => {
+        const answers = [{}, { onlySandbox: false }, { inApp: false }].map((over) => arrivalFor(hostedProject(over)));
+        expect(answers).toEqual([`hosted`, `hosted`, `hosted`]);
+    });
+
+    // A stale reload spends nothing, as a browser's does: the picker opens on the machine instead.
+    it(`preselects the machine on a row it found rather than made, starting nothing`, () => {
+        const found = hostedProject({ fresh: false });
+        expect({ arrival: arrivalFor(found), preselected: projectPrefersHosted(found) }).toEqual({ arrival: `choose`, preselected: true });
+        expect(arrivalFor({ ...found, requestedMachine: `hosted` })).toBe(`hosted`);
+    });
+
+    // In the app a machine on the row is otherwise handed back, since the app installs here; a project's is its own.
+    it(`resumes a machine already on the row rather than handing it back`, () => {
+        const resumed = hostedProject({ hostedIdle: true });
+        expect({ arrival: arrivalFor(resumed), preselected: projectPrefersHosted(resumed) }).toEqual({ arrival: `choose`, preselected: false });
+    });
+
+    it(`goes to this computer when that is the rung asked for, a machine on the row or not`, () => {
+        const asked = [{}, { hostedIdle: true }].map((over) => hostedProject({ requestedMachine: `mine`, ...over }));
+        expect(asked.map(arrivalFor)).toEqual([`local`, `local`]);
+        expect(asked.map(projectPrefersHosted)).toEqual([false, false]);
+    });
+
+    it.each<[string, Partial<ArrivalInput>]>([
+        [`an allowance already spent`, { hostedSpent: true }],
+        [`a full fleet`, { hostedFull: true }],
+        [`a platform that hosts nothing`, { hostedOffered: false }],
+    ])(`goes to this computer where no machine can be started: %s`, (_, over) => {
+        expect({ arrival: arrivalFor(hostedProject(over)), preselected: projectPrefersHosted(hostedProject(over)) }).toEqual({
+            arrival: `local`,
+            preselected: false,
+        });
+    });
+
+    it(`still leaves an errand in progress alone, and needs a code to hand the app`, () => {
+        const answers = [{ touched: true }, { elsewhere: true }, { hostedSpent: true, commandOffered: false }].map((over) => arrivalFor(hostedProject(over)));
+        expect(answers).toEqual([`choose`, `choose`, `choose`]);
+    });
+});
+
+describe(`a project where the platform's machines cannot hold one`, () => {
+    it(`goes to this computer however it arrived, and preselects no machine of ours`, () => {
+        const olderPlatform = [{}, { requestedMachine: `hosted` as const }, { hostedIdle: true }, { fresh: false }].map((over) =>
+            arrival({ project: true, inApp: true, ...over }),
+        );
+        expect(olderPlatform.map(arrivalFor)).toEqual([`local`, `local`, `local`, `local`]);
+        expect(olderPlatform.map(projectPrefersHosted)).toEqual([false, false, false, false]);
     });
 });

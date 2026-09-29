@@ -56,6 +56,8 @@ const {
     manageableDirs = new Set<string>(),
     rowActions,
     cover,
+    onCover,
+    onAsk,
 } = defineProps<{
     tree: readonly WorkspaceTreeEntry[];
     // The folder `tree` is the contents of, "" for the workspace root: where a create or a drop with no target lands.
@@ -73,15 +75,19 @@ const {
     // A file name read in every folder (home/homeCover.ts): the tree lists folders alone, marks the ones holding it, and
     // picks whatever row an arrow lands on, since the page beside it reads that folder's copy.
     cover?: string;
+    // Two gestures only some hosts answer, so they are handlers rather than events and a row is offered only where one
+    // is passed (`@cover`, `@ask`): a row nobody listens to would do nothing. `cover` asks for a file's name to be read
+    // in every folder, which needs a page beside the tree to read it; `ask` starts an agent's conversation about a
+    // file, which only a local window has a way to (local/LocalFiles.vue).
+    onCover?: (name: string) => void;
+    onAsk?: (path: string) => void;
 }>();
 // `openFile`'s `mode` is the gesture (a click previews, a double-click keeps); `pick` is the click or Enter itself.
-// `cover` asks for a file's name to be read in every folder, from its row's menu.
 const emit = defineEmits<{
     openFile: [path: string, mode: OpenMode];
     openDirectory: [path: string];
     pick: [entry: WorkspaceTreeEntry];
     clear: [];
-    cover: [name: string];
 }>();
 
 const seams = fileVerbSeams();
@@ -129,11 +135,12 @@ const { rules, selecting, inline, edits, deleting, transfer, menu: entryMenu } =
         layout.setEditMode(true);
     },
     rowActions: actionsFor,
+    ask: onAsk,
     frame: (target, multi) => ({
         // A file is the example of the name to read in every folder, as on the home's tiles.
         head:
-            target?.type === `file` && !multi && !opensAsFolder(target)
-                ? [{ label: t(`workspace.homeCover.showInEveryFolder`, { name: target.name }), icon: `book`, command: () => emit(`cover`, target.name) }]
+            onCover !== undefined && target?.type === `file` && !multi && !opensAsFolder(target)
+                ? [{ label: t(`workspace.homeCover.showInEveryFolder`, { name: target.name }), icon: `book`, command: () => onCover(target.name) }]
                 : [],
         tail:
             store.expanded.value.size > 0

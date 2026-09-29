@@ -4,6 +4,7 @@ import type { Logger } from "pino";
 import type { Config } from "../config.js";
 import { RECOVERY_WINDOW_MS } from "../durations.js";
 import { isFlyGone, stopMachine, updateMachine } from "./hosted/fly/fly.js";
+import { hostedProjectOf } from "./hosted/hosted-project.js";
 import { hostedMachineConfig, withHostedSlot, type HostedProvisionArgs } from "./hosted/hosted.js";
 import { shapeOfRow } from "./hosted/hosted-shape.js";
 import { runningImageOf } from "./hosted/gate/state-gate.js";
@@ -140,6 +141,8 @@ export const restoreSandbox = async (prisma: PrismaClient, config: Config, owner
         ownerEmail: owner.email,
         region: machine.region,
         tier: machine.tier,
+        // The folder a project's machine was made for, off the config the trashed machine still holds.
+        project: await hostedProjectOf(config, machine),
     };
     // A stock machine comes back on the version it ran, pinned: a restore is not an update, so it has no stored
     // state to convert (gate/state-gate.ts). The next restart or wake heal moves it, under the gate. Read before the

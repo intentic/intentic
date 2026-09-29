@@ -90,6 +90,27 @@ impl Mode {
     }
 }
 
+/// Which of the app's two faces the user was last seen choosing: the workspace (the hosted editor) or Home (the
+/// launcher's own card, which leads with the folders and documents of this computer). What a launch and the tray's
+/// "Open Intentic" open onto (lib.rs `opening`), kept on disk as `last-face.json`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Face {
+    Home,
+    Workspace,
+}
+
+/// The face an install that has no `last-face.json` yet was last using. Before the file existed the only record
+/// was whether the workspace had ever been shown, and from its first showing a launch always opened it; an
+/// install that never showed it opened Home. The file, once written, is the answer.
+fn face_or_migrated(stored: Option<Face>, workspace_seen: bool) -> Face {
+    match stored {
+        Some(face) => face,
+        None if workspace_seen => Face::Workspace,
+        None => Face::Home,
+    }
+}
+
 /// A folder or document the user opened in a local window (local.rs), newest first: what Home and the tray
 /// offer to open again. The path is the one the user chose, as the app resolved it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -99,6 +120,45 @@ pub struct Recent {
     pub folder: bool,
     /// Unix seconds.
     pub opened_at: u64,
+}
+
+/// A recent as Home shows it (`local_recents`): the stored entry, plus two facts read at the moment of asking and
+/// never stored, since both change behind this app's back. `exists` is whether the path is there now (a folder
+/// moved or a drive unplugged is shown as such, with the way to forget it); `sandbox` is whether the folder has a
+/// sandbox of its own in `projects.json` (project.rs).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecentView {
+    pub path: String,
+    pub folder: bool,
+    pub opened_at: u64,
+    pub exists: bool,
+    pub sandbox: bool,
+}
+
+/// The views of `recents`, in their order. `exists` is asked of the caller so the rule is testable without a disk.
+pub fn recent_views(
+    recents: Vec<Recent>,
+    projects: &[Project],
+    exists: impl Fn(&Path) -> bool,
+) -> Vec<RecentView> {
+    recents
+        .into_iter()
+        .map(|recent| {
+            let path = Path::new(&recent.path);
+            let sandbox = recent.folder
+                && projects
+                    .iter()
+                    .any(|project| Path::new(&project.path) == path);
+            RecentView {
+                exists: exists(path),
+                sandbox,
+                path: recent.path,
+                folder: recent.folder,
+                opened_at: recent.opened_at,
+            }
+        })
+        .collect()
 }
 
 /// How many recents are kept: what fits a menu without scrolling.
@@ -135,15 +195,25 @@ pub struct AppState {
     /// Minted on first read, then held for the process — see [`AppState::install_id`].
     install_id: Mutex<Option<String>>,
     /// The workspace's colour scheme, as last announced; `None` until any page has said. Kept on disk so a
-    /// card opened before the workspace (a resume after a restart, the tray's "This device") is drawn the
+    /// card opened before the workspace (a resume after a restart, the tray's "Home") is drawn the
     /// way the workspace was last seen rather than the way this binary happens to default.
     ui_mode: Mutex<Option<Mode>>,
     /// Whether a sandbox has ever run on THIS machine. Kept on disk because the question is asked at the one
     /// moment nothing can be measured: a launch whose Docker is not running cannot be asked what it hosts.
     hosts_sandboxes: Mutex<bool>,
-    /// Whether this install has ever shown the workspace. Until it has, a launch opens the app's own card, where a
-    /// folder or a document of this computer can be opened with no account (lib.rs `opening`).
+    /// Whether this install has ever shown the workspace. What decided a launch before `last_face` existed, and
+    /// still the migration for an install that has no `last-face.json` (see [`face_or_migrated`]), and the older
+    /// half of [`AppState::account_seen`].
     workspace_seen: Mutex<bool>,
+    /// The face a launch and the tray's "Open Intentic" open onto (lib.rs `opening`).
+    last_face: Mutex<Face>,
+    /// Whether a sign-in has ever completed here (`intentic://auth`, auth.rs). What earns the tray its "Open
+    /// workspace" row and tells Home whether this install has an account to go back to.
+    account_seen: Mutex<bool>,
+    /// Held across every read-modify-write of `recent-local.json` and `projects.json`. Each file is written whole
+    /// (`write_json`), but two opens finishing together each read the list, add their own entry and write it
+    /// back, and without this the second write drops the first one's entry.
+    lists: Mutex<()>,
     /// The folder a local window asked a sandbox for, waiting for the setup page's code (project.rs). In-process
     /// only: a question a quit left unanswered is asked again.
     pub pending_project: Mutex<Option<PathBuf>>,
@@ -158,6 +228,11 @@ impl AppState {
         let ui_mode = read_json(&config_dir.join("ui-mode.json"));
         let hosts_sandboxes = read_json(&config_dir.join("hosts-sandboxes.json")).unwrap_or(false);
         let workspace_seen = read_json(&config_dir.join("workspace-seen.json")).unwrap_or(false);
+        let last_face = face_or_migrated(
+            read_json(&config_dir.join("last-face.json")),
+            workspace_seen,
+        );
+        let account_seen = read_json(&config_dir.join("account-seen.json")).unwrap_or(false);
         Ok(AppState {
             config_dir,
             settings: Mutex::new(settings),
@@ -170,6 +245,9 @@ impl AppState {
             ui_mode: Mutex::new(ui_mode),
             hosts_sandboxes: Mutex::new(hosts_sandboxes),
             workspace_seen: Mutex::new(workspace_seen),
+            last_face: Mutex::new(last_face),
+            account_seen: Mutex::new(account_seen),
+            lists: Mutex::new(()),
             pending_project: Mutex::new(None),
         })
     }
@@ -196,8 +274,7 @@ impl AppState {
         *self.workspace_seen.lock().unwrap()
     }
 
-    /// Written the first time the workspace is on screen, and never unwritten: from then on a launch opens it, as
-    /// it always did for anyone who uses this app as a window onto a sandbox.
+    /// Written the first time the workspace is on screen, and never unwritten.
     pub fn remember_workspace_seen(&self) {
         let mut held = self.workspace_seen.lock().unwrap();
         if *held {
@@ -205,6 +282,39 @@ impl AppState {
         }
         *held = true;
         write_json(&self.config_dir.join("workspace-seen.json"), &true);
+    }
+
+    /* THE FACE THE USER WAS LAST USING, and whether they have an account to go back to. */
+
+    pub fn last_face(&self) -> Face {
+        *self.last_face.lock().unwrap()
+    }
+
+    /// Written only on a change, like [`AppState::remember_ui_mode`]: the workspace is shown far more often than the
+    /// face changes.
+    pub fn remember_last_face(&self, face: Face) {
+        let mut held = self.last_face.lock().unwrap();
+        if *held == face {
+            return;
+        }
+        *held = face;
+        write_json(&self.config_dir.join("last-face.json"), &face);
+    }
+
+    /// A sign-in completed here, or (before `account-seen.json` existed) the workspace was shown, which an install
+    /// only did for somebody with an account.
+    pub fn account_seen(&self) -> bool {
+        *self.account_seen.lock().unwrap() || self.workspace_seen()
+    }
+
+    /// Written the first time a sign-in completes, and never unwritten: signing out is not the account going away.
+    pub fn remember_account_seen(&self) {
+        let mut held = self.account_seen.lock().unwrap();
+        if *held {
+            return;
+        }
+        *held = true;
+        write_json(&self.config_dir.join("account-seen.json"), &true);
     }
 
     pub fn ui_mode(&self) -> Option<Mode> {
@@ -297,6 +407,7 @@ impl AppState {
 
     /// One entry per folder: a folder set up again (its sandbox removed, a new one made) replaces its entry.
     pub fn remember_project(&self, project: Project) {
+        let _held = self.lists.lock().unwrap();
         let mut projects = self.projects();
         projects.retain(|held| held.path != project.path);
         projects.push(project);
@@ -311,6 +422,7 @@ impl AppState {
 
     /// Moves `path` to the front, or puts it there; the oldest past [`RECENTS`] fall off.
     pub fn remember_recent(&self, path: &Path, folder: bool) {
+        let _held = self.lists.lock().unwrap();
         let path = path.display().to_string();
         let mut recents = self.recents();
         recents.retain(|recent| recent.path != path);
@@ -327,6 +439,18 @@ impl AppState {
         );
         recents.truncate(RECENTS);
         write_json(&self.config_dir.join("recent-local.json"), &recents);
+    }
+
+    /// Home's "Forget": the entry goes, whether or not its path is still there. Nothing is written when there was
+    /// nothing to forget.
+    pub fn forget_recent(&self, path: &str) {
+        let _held = self.lists.lock().unwrap();
+        let mut recents = self.recents();
+        let before = recents.len();
+        recents.retain(|recent| recent.path != path);
+        if recents.len() != before {
+            write_json(&self.config_dir.join("recent-local.json"), &recents);
+        }
     }
 
     /* The launcher and the workspace are separate webviews with separate storage. */
@@ -430,6 +554,14 @@ mod tests {
             workspace_seen: Mutex::new(
                 read_json(&config_dir.join("workspace-seen.json")).unwrap_or(false),
             ),
+            last_face: Mutex::new(face_or_migrated(
+                read_json(&config_dir.join("last-face.json")),
+                read_json(&config_dir.join("workspace-seen.json")).unwrap_or(false),
+            )),
+            account_seen: Mutex::new(
+                read_json(&config_dir.join("account-seen.json")).unwrap_or(false),
+            ),
+            lists: Mutex::new(()),
             pending_project: Mutex::new(None),
         }
     }
@@ -590,6 +722,142 @@ mod tests {
         assert!(!state_in(&dir).workspace_seen());
         state_in(&dir).remember_workspace_seen();
         assert!(state_in(&dir).workspace_seen());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// An install from before `last-face.json` keeps opening what it opened: the workspace once it had been shown,
+    /// Home until then. The file, once there, is the answer whatever the older one says.
+    #[test]
+    fn the_last_face_is_migrated_from_the_workspace_having_been_seen() {
+        assert_eq!(face_or_migrated(None, true), Face::Workspace);
+        assert_eq!(face_or_migrated(None, false), Face::Home);
+        assert_eq!(face_or_migrated(Some(Face::Home), true), Face::Home);
+        assert_eq!(
+            face_or_migrated(Some(Face::Workspace), false),
+            Face::Workspace
+        );
+    }
+
+    #[test]
+    fn the_last_face_survives_a_launch_and_its_file_is_the_wire_word() {
+        let dir = std::env::temp_dir().join(format!("intentic-face-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        state_in(&dir).remember_workspace_seen();
+        assert_eq!(state_in(&dir).last_face(), Face::Workspace);
+        state_in(&dir).remember_last_face(Face::Home);
+        assert_eq!(state_in(&dir).last_face(), Face::Home);
+        assert_eq!(
+            std::fs::read_to_string(dir.join("last-face.json")).unwrap(),
+            "\"home\""
+        );
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// A sign-in completing is the new record; an install that only ever showed the workspace had an account too.
+    #[test]
+    fn an_account_is_seen_by_a_sign_in_or_by_the_workspace_having_been_shown() {
+        let dir = std::env::temp_dir().join(format!("intentic-account-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        assert!(!state_in(&dir).account_seen());
+        state_in(&dir).remember_account_seen();
+        assert!(state_in(&dir).account_seen());
+
+        let legacy =
+            std::env::temp_dir().join(format!("intentic-account-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&legacy).unwrap();
+        state_in(&legacy).remember_workspace_seen();
+        assert!(state_in(&legacy).account_seen());
+        std::fs::remove_dir_all(&dir).unwrap();
+        std::fs::remove_dir_all(&legacy).unwrap();
+    }
+
+    /// Forgetting takes exactly the one entry, and leaves the file untouched when there was nothing to forget.
+    #[test]
+    fn a_forgotten_recent_goes_and_the_rest_keep_their_order() {
+        let dir = std::env::temp_dir().join(format!("intentic-forget-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let state = state_in(&dir);
+        for name in ["/a", "/b", "/c"] {
+            state.remember_recent(Path::new(name), true);
+        }
+        state.forget_recent("/b");
+        let paths: Vec<String> = state
+            .recents()
+            .into_iter()
+            .map(|recent| recent.path)
+            .collect();
+        assert_eq!(paths, vec!["/c".to_string(), "/a".to_string()]);
+        std::fs::remove_file(dir.join("recent-local.json")).unwrap();
+        state.forget_recent("/a");
+        assert!(
+            !dir.join("recent-local.json").exists(),
+            "nothing to forget, nothing written"
+        );
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// What Home is told about each recent: whether it is still there, and whether a FOLDER has a sandbox of its
+    /// own. A document never does, even one at a path a project once had.
+    #[test]
+    fn a_recent_says_whether_it_is_there_and_whether_its_folder_has_a_sandbox() {
+        let recents = vec![
+            Recent {
+                path: "/home/me/app".into(),
+                folder: true,
+                opened_at: 3,
+            },
+            Recent {
+                path: "/home/me/gone".into(),
+                folder: true,
+                opened_at: 2,
+            },
+            Recent {
+                path: "/home/me/app".into(),
+                folder: false,
+                opened_at: 1,
+            },
+        ];
+        let projects = [Project {
+            path: "/home/me/app".into(),
+            dir: "app".into(),
+            sandbox_id: Some("sbx".into()),
+            slug: None,
+        }];
+        let views = recent_views(recents, &projects, |path| {
+            path != Path::new("/home/me/gone")
+        });
+        assert_eq!(
+            views
+                .iter()
+                .map(|view| (view.exists, view.sandbox))
+                .collect::<Vec<_>>(),
+            vec![(true, true), (false, false), (true, false)]
+        );
+        let wire = serde_json::to_value(&views[0]).unwrap();
+        assert_eq!(
+            wire,
+            serde_json::json!({ "path": "/home/me/app", "folder": true, "openedAt": 3, "exists": true, "sandbox": true })
+        );
+    }
+
+    /// Two opens finishing together each read the list and write it back; the lock is what keeps both entries.
+    #[test]
+    fn recents_remembered_at_once_from_many_threads_are_all_kept() {
+        let dir = std::env::temp_dir().join(format!("intentic-race-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let state = std::sync::Arc::new(state_in(&dir));
+        let threads: Vec<_> = (0..8)
+            .map(|index| {
+                let state = std::sync::Arc::clone(&state);
+                std::thread::spawn(move || {
+                    state.remember_recent(Path::new(&format!("/folder-{index}")), true)
+                })
+            })
+            .collect();
+        for thread in threads {
+            thread.join().unwrap();
+        }
+        assert_eq!(state.recents().len(), 8);
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }

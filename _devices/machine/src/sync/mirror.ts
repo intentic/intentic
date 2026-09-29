@@ -35,6 +35,7 @@ import {
     resumeAutoPausedSync,
     resumeSwapPausedSync,
     runMutagenAsync,
+    syncMode,
     syncSessionNames,
 } from "./mutagen.js";
 import { quieted } from "./repeats.js";
@@ -478,7 +479,8 @@ const healPairing = async (mutagen: string, pairing: Pairing, tick: number, log:
 
 // Which setup of a pairing this is. Every `setup` mints a fresh sync token, so a pairing set up again (another folder,
 // a takeover, a re-pair after an unpair) reads as new here and is prepared again; one that is merely re-read does not.
-const setupOf = (pairing: Pairing): string => [pairing.sandboxId, pairing.localDir ?? "", pairing.syncToken ?? ""].join("\n");
+// So does a project whose direction was switched (`sync direction`): the mode is what its session is recreated for.
+const setupOf = (pairing: Pairing): string => [pairing.sandboxId, pairing.localDir ?? "", pairing.syncToken ?? "", syncMode(pairing)].join("\n");
 
 // The pairings this pass has to prepare: every setup the watcher has not seen. Pure, so "each setup exactly once" is a
 // rule with a test rather than a branch in the loop.

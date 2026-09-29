@@ -11,6 +11,7 @@ import { conversationView, PANE_VIEW } from "./useChat-view";
 import { useChatRoute } from "../routing/chatRoute";
 import { useRole } from "../../sandbox/secrets/useRole";
 import { useChatAttachments } from "../drafts/useChatAttachments";
+import { useQueuedAttachments } from "../drafts/pendingAttachments";
 import { useComposerVoice } from "../composer/useComposerVoice";
 import { useEditorContextChip } from "../composer/useEditorContextChip";
 import { useRunThrough } from "../models/run-settings/useRunThrough";
@@ -218,6 +219,8 @@ const {
 // Files staged for the next turn; bytes go to the conversation's own box and path.
 const staging = useChatAttachments({ attachments, reachable, connected, at: conversationBox });
 const { dragDepth } = staging;
+// Files handed to this chat from outside its composer (the desktop app's "Ask an agent about this"), staged like a drop.
+useQueuedAttachments({ conversationId: () => props.conversation.conversationId, reachable: () => reachable.value, attach: staging.attach });
 
 // The chip offering the file the user is looking at, only for a conversation running where that file lives.
 const { target: editorTarget, include: includeEditorContext, label: editorChipLabel, forSend: editorContextForSend } = useEditorContextChip();

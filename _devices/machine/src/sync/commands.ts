@@ -32,6 +32,7 @@ import {
 import { overlappingPairing } from "./folders.js";
 import { realBridgeExec, runGitBridge } from "./git-bridge.js";
 import { retireMirroredPort, retirePairingMirror, teardownAllForwards } from "./mirror.js";
+import { projectCommands } from "./project-commands.js";
 import {
     ensureMutagen,
     existingSyncSessions,
@@ -758,4 +759,4 @@ const uninstall = buildCommand<SandboxFlags>({
 const pause = fileSyncSwitch("Pause file syncing", "pause");
 const resume = fileSyncSwitch("Resume file syncing", "resume");
 
-export const syncCommands = { setup, pause, resume, mirror, clean, autoheal, uninstall };
+export const syncCommands = { setup, pause, resume, mirror, clean, autoheal, uninstall, ...projectCommands };

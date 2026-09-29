@@ -303,6 +303,9 @@ export interface WorkspaceFileWindow {
     readonly bytes: number;
     // Which tree answered: the shared /work tree, or the conversation's own checkout (`?agent=`).
     readonly shared: boolean;
+    // The bytes aren't valid UTF-8, so `content` holds replacement characters and a save would change them; set only
+    // by a file server that checks the decode (the desktop app's), absent everywhere else (sandbox-contract's `lossy`).
+    readonly lossy?: true;
 }
 // A read of a path with nothing at it is a successful answer, not a failure; a disallowed read still fails.
 export type WorkspaceFileResponse = WorkspaceFileWindow | { readonly present: false; readonly path: string };
@@ -649,6 +652,10 @@ export const HostedOfferSchema = z.object({
     plan: z.boolean().optional(),
     // True when the hosted lane is switched off for this account (hosted-standing.ts); `remaining` is 0 with it.
     suspended: z.boolean().optional(),
+    // True when a machine of ours can hold a project folder (`hostedProvision`'s `project`). Absent from a platform from
+    // before hosted projects, which would drop that field unread, so the editor keeps a project on the reader's own
+    // computer there.
+    projects: z.boolean().optional(),
 });
 export type HostedOffer = z.infer<typeof HostedOfferSchema>;
 

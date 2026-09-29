@@ -1,5 +1,6 @@
 import type { LocalFace } from "@intentic/web/local";
 import { installPlatform, LOCAL_EMAIL, sandboxIdOf } from "./platform";
+import { editorChunk, FACE_EVENT, faceArrives, warmModule } from "./warm";
 
 // The local face's entry: what must be true before the editor's own entry runs, the way the demo prepares it
 // (_site/demo/src/main.ts), with the app's intentic-files sidecar standing where the demo's fixture daemon stands. The
@@ -25,20 +26,45 @@ const devFace = (): LocalFace | undefined => {
     return face;
 };
 
-const face = window.__INTENTIC_LOCAL__ ?? devFace();
-if (face === undefined) {
-    throw new Error(`This window was opened without a folder.`);
+// The editor's entry, imported only once the window has a face. A function the boot calls rather than an import
+// statement, so that a window still waiting for its face can name the editor's chunk without running it (warm.ts).
+const loadEditor = async (): Promise<void> => {
+    await import(`@intentic/web/main`);
+};
+
+const boot = async (face: LocalFace): Promise<void> => {
+    window.__INTENTIC_LOCAL__ = face;
+    const id = sandboxIdOf(face);
+    localStorage.setItem(`intentic.activeSandboxId`, id);
+    localStorage.setItem(`intentic.session.${id}`, JSON.stringify({ token: face.token, expiresAt: Date.now() + 365 * 86_400_000, email: LOCAL_EMAIL }));
+    // The loopback shortcut is for reaching a sandbox faster; the sidecar is already on loopback.
+    localStorage.setItem(`intentic.localShortcut.declined.${id}`, `yes`);
+    installPlatform(face);
+    // The editor's one screen for a local window, whatever address the window was opened at.
+    window.history.replaceState(window.history.state, ``, `${import.meta.env.BASE_URL}local`);
+    await loadEditor();
+};
+
+// While a window waits for its face, the webview can already fetch and compile the editor's chunk, so the face lands
+// on a page with only the running left to do. A build only: the dev server names its modules by path, and serves them
+// fast enough. Anything that goes wrong here is the warm-up's loss alone, never the window's.
+const warmEditor = (): void => {
+    if (import.meta.env.DEV) {
+        console.warn(`This window has no folder yet. It waits for the app's ${FACE_EVENT}, or opens with ?daemon=…&token=…&id=…&name=…&path=…`);
+        return;
+    }
+    try {
+        const chunk = editorChunk(loadEditor.toString(), import.meta.url);
+        if (chunk !== undefined) {
+            warmModule(chunk, document);
+        }
+    } catch (error) {
+        console.warn(`[local] the editor could not be warmed; it loads when the folder arrives:`, error);
+    }
+};
+
+const given = window.__INTENTIC_LOCAL__ ?? devFace();
+if (given === undefined) {
+    warmEditor();
 }
-window.__INTENTIC_LOCAL__ = face;
-
-const id = sandboxIdOf(face);
-localStorage.setItem(`intentic.activeSandboxId`, id);
-localStorage.setItem(`intentic.session.${id}`, JSON.stringify({ token: face.token, expiresAt: Date.now() + 365 * 86_400_000, email: LOCAL_EMAIL }));
-// The loopback shortcut is for reaching a sandbox faster; the sidecar is already on loopback.
-localStorage.setItem(`intentic.localShortcut.declined.${id}`, `yes`);
-installPlatform(face);
-
-// The editor's one screen for a local window, whatever address the window was opened at.
-window.history.replaceState(window.history.state, ``, `${import.meta.env.BASE_URL}local`);
-
-await import(`@intentic/web/main`);
+await boot(given ?? (await faceArrives(window)));

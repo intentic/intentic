@@ -122,6 +122,12 @@ describe(`saving the document`, () => {
         expect(await answered.json()).toEqual({ error: `the file changed on disk` });
     });
 
+    it(`answers a write the backend refuses with its reason, as a 403`, async () => {
+        answer = { refused: `no copies here` };
+        const answered = await put(opened(), `both`, {}, `&write=copy`);
+        expect([answered.status, await answered.json()]).toEqual([403, { error: `no copies here` }]);
+    });
+
     it(`refuses a save that names no version, unless it asks to overwrite or copy`, async () => {
         const session = opened();
         expect((await put(session, `edited`)).status).toBe(428);

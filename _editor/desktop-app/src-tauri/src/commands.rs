@@ -3,7 +3,7 @@ use tauri::{AppHandle, Manager, State};
 
 use crate::scripts::{self, Host, ScriptRun};
 use crate::setup_link::{RecreateArgs, SetupArgs, SyncArgs};
-use crate::state::{AppState, CloseAction, SessionEnd, Settings};
+use crate::state::{AppState, CloseAction, Face, SessionEnd, Settings};
 
 type CommandResult<T> = Result<T, String>;
 
@@ -758,6 +758,17 @@ pub fn sync_script(args: &SyncArgs, dir: Option<&str>, host: Host, version: &str
     if args.takeover && !args.mirror {
         env.push(("TAKEOVER".into(), "1".into()));
     }
+    // A folder of this computer as a project of a hosted sandbox (project.rs `sync_project`): synced with
+    // `/work/<name>` rather than `/work`, and marked a project, exactly as a local project's setup does
+    // (`setup_script`). Only beside a folder: with none there is nothing of the user's to call a project.
+    if let Some(project) = args
+        .project
+        .as_ref()
+        .filter(|_| !args.mirror && dir.is_some_and(|dir| !dir.is_empty()))
+    {
+        env.push(("SYNC_REMOTE_DIR".into(), format!("/work/{project}")));
+        env.push(("SYNC_PROJECT".into(), "1".into()));
+    }
     ScriptRun {
         file: host.script("sync.sh", "sync.ps1"),
         args: Vec::new(),
@@ -838,6 +849,32 @@ pub async fn sandbox_logs(slug: String, tail: u32) -> CommandResult<String> {
 #[tauri::command]
 pub fn workspace_open(app: AppHandle, path: Option<String>) {
     crate::windows::show_workspace_at(&app, path.as_deref());
+}
+
+/// What Home needs to know about this install to decide what it offers: whether there is an account to go back to,
+/// which face the app was last used through, and whether this machine hosts a sandbox.
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct HomeFacts {
+    pub account_seen: bool,
+    pub last_face: Face,
+    pub hosts_sandboxes: bool,
+}
+
+#[tauri::command]
+pub fn home_facts(state: State<'_, AppState>) -> HomeFacts {
+    HomeFacts {
+        account_seen: state.account_seen(),
+        last_face: state.last_face(),
+        hosts_sandboxes: state.hosts_sandboxes(),
+    }
+}
+
+/// The launcher's × and Esc: back to the workspace when that is what the app is used through, otherwise into the
+/// tray (windows.rs `close_launcher`, which the platform's own close of this window reaches too).
+#[tauri::command]
+pub fn launcher_close(app: AppHandle) {
+    crate::windows::close_launcher(&app);
 }
 
 /// Ask the OS to point at this window, bringing it back to the front first — a stopped setup that nobody is
@@ -977,6 +1014,8 @@ mod tests {
             name: Some("work".into()),
             takeover: false,
             mirror: false,
+            project: None,
+            sandbox_id: None,
         }
     }
 
@@ -1476,6 +1515,49 @@ mod tests {
     fn an_empty_folder_is_no_folder() {
         let run = sync_script(&sync_args(), Some(""), Host::Unix, RELEASE);
         assert_eq!(env_of(&run, "SYNC_DIR"), None);
+    }
+
+    /// A hosted sandbox's project syncs the folder with `/work/<name>`, marked a project, the same three values a
+    /// local project's setup passes; with no folder, or for a mirror, there is no project to mark.
+    #[test]
+    fn a_hosted_project_syncs_its_folder_with_its_own_folder_in_work() {
+        let mut args = sync_args();
+        args.project = Some("my-app".into());
+        args.sandbox_id = Some("sbx_7".into());
+        for host in [Host::Unix, Host::Windows] {
+            let run = sync_script(&args, Some("/home/ada/my-app"), host, RELEASE);
+            assert_eq!(env_of(&run, "SYNC_DIR"), Some("/home/ada/my-app"));
+            assert_eq!(env_of(&run, "SYNC_REMOTE_DIR"), Some("/work/my-app"));
+            assert_eq!(env_of(&run, "SYNC_PROJECT"), Some("1"));
+        }
+        let folderless = sync_script(&args, None, Host::Unix, RELEASE);
+        assert_eq!(env_of(&folderless, "SYNC_REMOTE_DIR"), None);
+        assert_eq!(env_of(&folderless, "SYNC_PROJECT"), None);
+        args.mirror = true;
+        let mirror = sync_script(&args, Some("/home/ada/my-app"), Host::Unix, RELEASE);
+        assert_eq!(env_of(&mirror, "SYNC_PROJECT"), None);
+        // An ordinary enrollment carries neither.
+        let plain = sync_script(&sync_args(), Some("/home/ada"), Host::Unix, RELEASE);
+        assert_eq!(env_of(&plain, "SYNC_REMOTE_DIR"), None);
+        assert_eq!(env_of(&plain, "SYNC_PROJECT"), None);
+    }
+
+    /// Home's facts on the wire: camelCase, and the face as the word the launcher switches on.
+    #[test]
+    fn home_is_told_its_facts_in_the_launchers_words() {
+        assert_eq!(
+            serde_json::to_value(HomeFacts {
+                account_seen: true,
+                last_face: Face::Home,
+                hosts_sandboxes: false,
+            })
+            .unwrap(),
+            serde_json::json!({ "accountSeen": true, "lastFace": "home", "hostsSandboxes": false })
+        );
+        assert_eq!(
+            serde_json::to_value(Face::Workspace).unwrap(),
+            serde_json::json!("workspace")
+        );
     }
 
     /* The machine agent's own install location, per host. */

@@ -3,8 +3,9 @@ import { projectDirNameFor } from "@intentic/sandbox-contract";
 import type { LocationQueryValue } from "vue-router";
 
 // Decides, in one place, what arriving on /setup does by itself: the desktop app hands the setup code to itself;
-// a browser starts a hosted machine. The picker survives only when a surface's own answer is unavailable or
-// refused. `Arrival` is the action taken on arrival, not what the page renders.
+// a browser starts a hosted machine, and so does a project wherever the platform's machines can hold one. The picker
+// survives only when a surface's own answer is unavailable or refused. `Arrival` is the action taken on arrival, not
+// what the page renders.
 
 // A PROJECT SETUP: the desktop app opens this page as `/setup?project=<folder name>` for a folder the reader picked on
 // their computer, and keeps the folder's path to itself. The page only ever needs its name.
@@ -57,13 +58,35 @@ export interface ArrivalInput {
     readonly requestedMachine: "hosted" | "mine" | undefined;
     // `?elsewhere=1`: this computer can't run it; the one app arrival that must not install anything.
     readonly elsewhere: boolean;
-    // A project setup (`setupProjectOf`): the folder is on this computer and only the app can sync it.
+    // A project setup (`setupProjectOf`): the folder is on this computer and only the app can hand it to a sandbox.
     readonly project: boolean;
+    // The platform's machines can hold a project (`hostedOffer.projects`); false on a platform from before them.
+    readonly hostedProjects: boolean;
 }
 
 // Whether there's a machine to give: platform hosts, isn't full, and this account's allowance isn't spent. Shared
 // so the explicit ask and the browser default never disagree.
 const hostedTakeable = (input: ArrivalInput): boolean => input.hostedOffered && !input.hostedSpent && !input.hostedFull;
+
+// A project's rung, where the platform's machines can hold one: a machine of ours, which the app copies the folder into
+// once it runs, whenever one can be started for this row and the reader did not ask for this computer. The picker
+// preselects it even where the arrival starts nothing (a row found rather than made).
+export const projectPrefersHosted = (input: ArrivalInput): boolean =>
+    input.project && input.hostedProjects && input.requestedMachine !== `mine` && !input.hostedIdle && hostedTakeable(input);
+
+// A project's arrival. A machine of ours when the platform can give it one: started for a row this visit made or a
+// rung asked for by name, preselected otherwise. A machine already on the row is this folder's, still coming up, and
+// is resumed rather than handed back. Anything else goes to this computer, as every project did before the platform's
+// machines could hold one, wherever a code can be minted for the app to redeem.
+const projectArrival = (input: ArrivalInput): Arrival => {
+    if (projectPrefersHosted(input)) {
+        return input.fresh || input.requestedMachine === `hosted` ? `hosted` : `choose`;
+    }
+    if (input.hostedProjects && input.hostedIdle && input.requestedMachine !== `mine`) {
+        return `choose`;
+    }
+    return input.commandOffered ? `local` : `choose`;
+};
 
 // Nothing this arrival may answer for itself: an errand already in progress, a reader sent here to read the
 // options, or a machine already on the row — which is the browser's own errand to resume, but never the app's,
@@ -78,10 +101,10 @@ export const arrivalFor = (input: ArrivalInput): Arrival => {
     if (settled(input)) {
         return `choose`;
     }
-    // The folder already answered where it runs, however many sandboxes the account has: the app that picked it installs
-    // here, from a browser too (its setup link reaches the app by the OS), wherever a code can be minted for it.
+    // The folder already answered where it runs, however many sandboxes the account has, and from a browser too (its
+    // setup link reaches the app by the OS).
     if (input.project) {
-        return input.commandOffered ? `local` : `choose`;
+        return projectArrival(input);
     }
     // A row that already has a machine has nothing to start, whoever asked for it.
     const startable = !input.hostedIdle && hostedTakeable(input);

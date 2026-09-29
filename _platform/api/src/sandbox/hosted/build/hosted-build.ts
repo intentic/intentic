@@ -23,6 +23,7 @@ import { mintAppDeployToken, organizationIdOf, revokeDeployToken } from "../fly/
 import { hostedCapacity, noteProviderAtCapacity, providerWords } from "../hosted-capacity.js";
 import { BUILD_ENV, BUILD_PATHS, buildScript, dockerConfigJson, LOG_TAIL_BYTES } from "./hosted-build-script.js";
 import { digestIn, resolveHostedImage } from "./hosted-image.js";
+import { hostedProjectOf } from "../hosted-project.js";
 import { composerFor, hostedInstanceId, hostedMachineConfig, type HostedProvisionArgs } from "../hosted.js";
 import { switchHostedImage } from "../gate/state-gate.js";
 import { chargeMinutes, hostedBudgetOf, usageMonth } from "../hosted-usage.js";
@@ -214,7 +215,8 @@ const applyHostedBuild = async (prisma: PrismaClient, config: Config, logger: Lo
         return undefined;
     });
     const running = before !== undefined && RUNNING_STATES.has(before.state);
-    const args = provisionArgsOf(config, machine);
+    // The machine's project folder rides over from the config it holds (../hosted-project.ts).
+    const args = { ...provisionArgsOf(config, machine), project: await hostedProjectOf(config, machine) };
     // Under the state gate: an overlay on a new base is a new daemon over the same volume. A refusal, or a version that
     // does not start or come up, leaves the machine on the image it had and throws, and the row still names that one.
     await switchHostedImage(config, machine, hostedMachineConfig(config, args, machine.appName, machine.volumeId, { image, environmentHash: build.hash }), {

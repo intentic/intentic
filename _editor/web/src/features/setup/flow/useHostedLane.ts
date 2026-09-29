@@ -1,8 +1,9 @@
 import type { HostedOffer, HostedStatus, SandboxSummary } from "@intentic/api-contract";
 import type { NoticeModel } from "@intentic/ui";
 import { noticeFrom, noticeOf, useNow } from "@intentic/ui/async";
-import { computed, onScopeDispose, ref } from "vue";
+import { computed, onScopeDispose, type Ref, ref } from "vue";
 import { track } from "../../../app/analytics";
+import { arrivingProfile } from "../../../app/useProfile";
 import type { apiClient } from "../../../lib/useApi";
 import type { useSandbox } from "../../sandbox/client/useSandbox";
 import { hostedWaitView, machineStartable } from "../hostedWait";
@@ -43,12 +44,31 @@ const hostOf = (url: string | null | undefined): string | undefined => {
 };
 
 export interface HostedLaneHost {
-    readonly platform: Pick<Platform, `hostedOffer` | `hostedStatus` | `hostedRestart` | `wake`>;
+    readonly platform: Pick<Platform, `hostedOffer` | `hostedStatus` | `hostedRestart` | `wake` | `hostedProvision`>;
     readonly sandbox: Pick<SandboxStore, `hostedProvision` | `hostedRelease`>;
     readonly row: SetupRow;
+    // The folder a project setup is for (`SetupProject.dirName`), which its machine is asked for with, so that it boots
+    // with the folder as its project; undefined for any other setup.
+    readonly project?: string | undefined;
+    // Whether the app this page runs in copies a folder into a hosted sandbox's project (`desktopTakesProjects`). An
+    // older build reads the hand-over's sync link as a whole-`/work` sync, so without its word no folder goes hosted.
+    readonly appTakesProjects: () => boolean;
 }
 
-export const useHostedLane = ({ platform, sandbox, row }: HostedLaneHost) => {
+// A hosted machine can take the folder: the platform's machines can hold a project (`hostedOffer.projects`; a platform
+// from before them says nothing, which reads as no), and the app can copy the folder into one.
+const holdsProjects = (offer: Readonly<Ref<HostedOffer | null>>, appTakesProjects: () => boolean) => (): boolean =>
+    offer.value?.projects === true && appTakesProjects();
+
+// The store's provision names no folder, so a project's machine is asked of the platform directly, with the profile the
+// store would have sent; the store's list learns the machine at the registry watch's next read.
+const provisionFor = ({ platform, sandbox, project }: HostedLaneHost, sandboxId: string, token: string): Promise<SandboxSummary> =>
+    project === undefined
+        ? sandbox.hostedProvision(sandboxId, token)
+        : platform.hostedProvision({ sandboxId, token, project, profile: arrivingProfile() });
+
+export const useHostedLane = (host: HostedLaneHost) => {
+    const { platform, sandbox, row } = host;
     const { created } = row;
     // Which machine runs the sandbox: set by the arrival, and by the reader only through the picker.
     const machine = ref<Machine>(`mine`);
@@ -83,6 +103,7 @@ export const useHostedLane = ({ platform, sandbox, row }: HostedLaneHost) => {
     // The row carries a machine: the wait card renders off this rather than the picker, so a resumed row narrates right.
     const hostedRow = computed(() => created.value?.hosted ?? null);
     const hostedOffered = computed(() => hostedOffer.value?.enabled === true);
+    const hostedProjects = computed(holdsProjects(hostedOffer, host.appTakesProjects));
     // The account's allowance is already spent on a different sandbox; the card still renders, explaining why.
     const hostedSpent = computed(() => hostedOffered.value && (hostedOffer.value?.remaining ?? 0) === 0 && hostedRow.value === null);
     // Switched off for this account (an acceptable-use verdict): reads as spent, in its own words.
@@ -149,7 +170,7 @@ export const useHostedLane = ({ platform, sandbox, row }: HostedLaneHost) => {
         const { action } = lane.value;
         hostedError.value = undefined;
         try {
-            const updated = await sandbox.hostedProvision(target.id, target.token);
+            const updated = await provisionFor(host, target.id, target.token);
             if (!provisionLands(action, target.id)) {
                 return false;
             }
@@ -354,6 +375,7 @@ export const useHostedLane = ({ platform, sandbox, row }: HostedLaneHost) => {
         hostedOffer,
         hostedRow,
         hostedOffered,
+        hostedProjects,
         hostedSpent,
         hostedSuspended,
         hostedFull,

@@ -101,6 +101,10 @@ pub fn complete(app: &AppHandle, args: &crate::setup_link::AuthArgs) {
     }
     let attempt = slot.take().unwrap();
     drop(slot);
+    // An account now exists for this install to go back to: Home says so, and the tray offers the workspace.
+    app.state::<crate::state::AppState>()
+        .remember_account_seen();
+    crate::offer_workspace(app);
     let path = complete_path(&args.handoff, &attempt.verifier, args.profile.as_deref());
     // The profile decides the page's scheme before it paints (web index.html), so the app's own faces can
     // be drawn in that light from here on rather than waiting for the page to announce it.

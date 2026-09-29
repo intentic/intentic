@@ -422,11 +422,12 @@ export const sandboxRoutes = {
         }
     }),
     // Whether this platform hosts sandboxes at all, and how many more the caller may create; read before the editor or
-    // wizard offers anything.
+    // wizard offers anything. `projects` says a provision here reads `project` (hosted.ts): a fact about this code, so it
+    // is said whatever else the offer says.
     hostedOffer: os.sandbox.hostedOffer.handler(async ({ context }) => {
         const user = requireUser(context);
         if (!hostedEnabled(context.config)) {
-            return { enabled: false, remaining: 0 };
+            return { enabled: false, remaining: 0, projects: true };
         }
         const [slots, budget, plan, capacity, suspension] = await Promise.all([
             // The free rung's, like the gate above: the card offers a machine, and the one on offer is a free one.
@@ -443,6 +444,7 @@ export const sandboxRoutes = {
         ]);
         return {
             enabled: true,
+            projects: true,
             // A suspended account is offered nothing, whatever its slots say.
             remaining: suspension === undefined ? Math.max(0, slots.left) : 0,
             // Absent unless true: a lane with room says nothing, so this can't age into a false scare.
@@ -486,6 +488,7 @@ export const sandboxRoutes = {
                 region: hostedRegionFor(context.config.hosted, context.headers),
                 tier: FREE_TIER.id,
                 profile: input.profile,
+                project: input.project,
             });
             // Written once the machine exists, so a refused build leaves no count behind; a lost write costs the
             // caps one row, never the owner a machine.

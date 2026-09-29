@@ -4,9 +4,13 @@ import type { WorkspaceTreeEntry } from "@intentic/api-contract";
 import { resetSandboxScope } from "@intentic/extension-api";
 import { SANDBOX_ROUTE_NAMES } from "@intentic/sandbox-contract";
 import type { MenuItem } from "primevue/menuitem";
+import { unstubbed } from "@intentic/testing";
+import { ref } from "vue";
+import { useMultiSelect } from "../../../../lib/multiSelect";
 import { setDaemonRoutes } from "../../../sandbox/overview/useDaemonRoutes";
-import { dir, file, type SurfaceOptions, treeSurface } from "../../../../testing/treeSurface";
+import { dir, fakeTreeStore, file, type SurfaceOptions, treeSurface } from "../../../../testing/treeSurface";
 import type { RowAction } from "../rowActions";
+import { type TreeMenuHost, useTreeMenu } from "./useTreeMenu";
 
 // Pins the right-click menu: where each verb acts, what a multi-selection counts, and what a guarded target keeps.
 
@@ -207,6 +211,53 @@ describe(`what the backend serves`, () => {
         expect([onArchive, labels(menu.menuItems.value)]).toEqual([
             [`New File`, `New Folder`, `—`, `Extract`, `Rename`, `Delete`, `—`, `Cut`, `Copy`, `Download`],
             [`New File`, `New Folder`, `What src is`, `Open Terminal`, `—`, `Rename`, `Delete`, `—`, `Cut`, `Copy`, `Download as ZIP`],
+        ]);
+    });
+});
+
+// A folder on this computer (the desktop app's local window): its seams hand the menu no terminal, no unpacking and no
+// download (fileVerbSeams.ts), and its tree hands it the one way to an agent there is (local/LocalFiles.vue). Built on
+// the menu's own host, since the shared surface always has a sandbox's seams.
+describe(`a surface without a sandbox's seams`, () => {
+    const localMenu = () => {
+        const asked: string[] = [];
+        const { store } = fakeTreeStore([SRC, ZIP, WEB]);
+        const menu = useTreeMenu(
+            unstubbed<TreeMenuHost>(`treeMenuHost`, {
+                rootDir: () => `app`,
+                rowActions: () => [],
+                isBarren: (path) => path === WEB.path,
+                rules: { archiveDir: () => false, unlockedOnly: (paths) => [...paths] },
+                selecting: useMultiSelect(ref([SRC.path, MAIN.path, ZIP.path, WEB.path])),
+                store,
+                frame: () => ({}),
+                extract: undefined,
+                openTerminal: undefined,
+                download: undefined,
+                ask: (path) => asked.push(path),
+            }),
+        );
+        menu.menu.value = { show: jest.fn() };
+        const press = (target: WorkspaceTreeEntry, ...rows: string[]): void => {
+            menu.openMenu(new MouseEvent(`contextmenu`), target);
+            for (const label of rows) {
+                const item = menu.menuItems.value.find((row) => row.label === label);
+                item?.command?.({ originalEvent: new Event(`click`), item });
+            }
+        };
+        return { menu, asked, press };
+    };
+
+    it(`offers no terminal, Extract or Download, and asks an agent about the file right-clicked`, () => {
+        const { menu, asked, press } = localMenu();
+        press(ZIP, `Ask an agent about this`);
+        const onArchive = labels(menu.menuItems.value);
+        press(WEB);
+        const onFolder = labels(menu.menuItems.value);
+        expect([onArchive, onFolder, asked]).toEqual([
+            [`Ask an agent about this`, `—`, `New File`, `New Folder`, `—`, `Rename`, `Delete`, `—`, `Cut`, `Copy`],
+            [`New File`, `New Folder`, `—`, `Rename`, `Keep folder`, `Delete`, `—`, `Cut`, `Copy`],
+            [ZIP.path],
         ]);
     });
 });

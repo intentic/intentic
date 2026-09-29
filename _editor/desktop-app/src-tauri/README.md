@@ -22,9 +22,16 @@ flowchart LR
   with no Docker library in the crate.
 - **Talking back to pages.** The workspace learns it is inside the app from `window.__INTENTIC_DESKTOP__`, set by
   an initialization script, and hears about updates and setups through `intentic-desktop-update` and
-  `intentic-desktop-setup` DOM events.
+  `intentic-desktop-setup` DOM events. A local window learns its folder from `window.__INTENTIC_LOCAL__` (local.rs)
+  and hears `intentic:face`, `intentic:open`, `intentic:close-requested` and `intentic:project`
+  (`../README.md` has what each carries).
 - **State on disk.** `state.rs` keeps `settings.json` (`appUrl`, `platformUrl`), the install id, the close choice,
-  the colour mode and a setup parked across a Windows restart.
+  the colour mode, a setup parked across a Windows restart, the face last in use (`last-face.json`), whether an
+  account was ever seen (`account-seen.json`), the recents and the folders that have a sandbox of their own
+  (`projects.json`).
+- **Local windows.** `local.rs` owns the windows on the user's own folders and documents, and `sidecar.rs` the
+  `intentic-files` process that serves them; `project.rs` is a folder becoming a sandbox's project and the machine
+  agent's runs on it.
 - **Staged scripts.** `staged-scripts/` is gitignored and filled by `pnpm stage:scripts`. `test:rust` and `lint:rust`
   run it first; a bare `cargo` call does not.
 

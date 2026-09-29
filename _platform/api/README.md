@@ -29,6 +29,17 @@ flowchart LR
 - The hosted lane is one Fly app, machine and volume per sandbox, named `<HOSTED_APP_PREFIX>-<id>`. The background
   jobs started in `src/main.ts` (warm pool, meter, abuse watch, builds, health) take a Postgres advisory lock per run
   (`src/jobs-lock.ts`), so two replicas never double-bill or double-provision.
+- A hosted sandbox can be made for one folder of the owner's computer. `hostedProvision` takes an optional `project`,
+  a folder name held to the rule `ic` and the desktop app hold it to (sandbox-contract's `isProjectDirName`), and the
+  machine boots with `SANDBOX_PROJECT_DIR=/work/<project>`, as `ic` starts a project container, so its daemon seeds no
+  starter site beside the folder. It is built to order: warm stock's prewarm boot already put the starter site on its
+  volume. No row records the folder; the machine's environment does, and every config that replaces a machine's (a
+  restart, a rollback, a rebuild, a resize or a move, a restore from the trash, a wake's heal, the state gate's probe)
+  carries it over from the config it replaces (`src/sandbox/hosted/hosted-project.ts`). A machine the provider lost is
+  rebuilt as an ordinary sandbox. `hostedOffer` answers `projects: true` so an editor knows it may ask; an editor that
+  never sends `project` gets an ordinary sandbox, as before. The folder itself arrives from the desktop app, which the
+  editor's setup page hands a sync pairing once the machine is reachable: agents work on that copy, and the owner
+  brings their changes back from the folder's window.
 - A hosted image change goes through the state gate (`src/sandbox/hosted/gate/state-gate.ts`), the hosted half of
   the stored-state promise in [COMPATIBILITY.md](../../COMPATIBILITY.md#stored-data). A restart, a rebuild, a rollback,
   or a wake that heals a stale tunnel first runs the target image's planner (`state-plan.js`) over the machine's own

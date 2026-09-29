@@ -1,3 +1,4 @@
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import type { PrismaClient } from "@intentic/prisma";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
@@ -18,6 +19,7 @@ import {
 import { hostedInstanceId } from "../hosted.js";
 import { forgetHostedImage } from "./hosted-image.js";
 import { STATE_PROBE_ENV } from "../gate/state-gate.js";
+import { ENV_PROJECT_DIR } from "../hosted-project.js";
 import * as timersPromisesOriginal from "node:timers/promises";
 
 // The state gate holds the app's lock around a swap; the in-process one stands in for Postgres's.
@@ -561,6 +563,19 @@ describe(`the builder's report`, () => {
         const lastUpdate = fly.calls.findLastIndex((call: FakeFlyCall) => call.method === `POST` && call.path.endsWith(`/machines/m1`));
         const lastStart = fly.calls.findLastIndex((call: FakeFlyCall) => call.method === `POST` && call.path.endsWith(`/machines/m1/start`));
         expect(lastStart).toBeGreaterThan(lastUpdate);
+    });
+
+    // Nothing but the machine's own environment records the folder a project's machine was made for, and the image a
+    // build boots comes in a whole new config: the folder rides over from the one the machine held.
+    it(`boots a project's machine on the new image with its folder`, async () => {
+        const fly = sandboxFly(`stopped`);
+        const held = fly.machines.get(`m1`);
+        if (held === undefined) {
+            throw new Error(`the fake holds no machine m1`);
+        }
+        held.config = { ...held.config, env: { [ENV_PROJECT_DIR]: `${WORKSPACE_ROOT}/my-app` } };
+        expect(await reportHostedBuild(withBuild(buildRow()), config(), logger, `b1`, `s3cret`, { exitCode: 0, digest: DIGEST, log: `` })).toBe(`done`);
+        expect([configOf(fly).image, configOf(fly).env[ENV_PROJECT_DIR]]).toEqual([`registry.fly.io/intentic-sbx-abc@${DIGEST}`, `${WORKSPACE_ROOT}/my-app`]);
     });
 
     // The state gate's refusal reaches the owner where every failed switch already does: the build's own error.

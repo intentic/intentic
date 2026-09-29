@@ -1,15 +1,24 @@
 <script setup lang="ts">
-import { Button, Icon, ui } from "@intentic/ui";
+import { Button, ConfirmDialog, Icon, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
-import { computed, onMounted, provide, ref } from "vue";
-import { askLocalApp, localFace } from "../app/environments/local";
+import { computed, nextTick, onMounted, onUnmounted, provide, ref } from "vue";
+import { askLocalApp, LOCAL_OPEN_EVENT, localFace } from "../app/environments/local";
 import { useExtensionHost } from "../extension-host/useExtensionHost";
 import WorkspaceTree from "../features/workspace/explorer/WorkspaceTree.vue";
 import { useWorkspaceTree } from "../features/workspace/explorer/useWorkspaceTree";
 import EditorPane from "../features/workspace/files/EditorPane.vue";
-import { useEditBuffers } from "../features/workspace/files/useEditBuffers";
 import { HOISTED_CONTEXT } from "../features/workspace/files/viewerChrome";
+import WorkspaceSearchResults from "../features/workspace/search/WorkspaceSearchResults.vue";
+import { matchToggles } from "../features/workspace/search/useSearchOptions";
+import { type SearchScope, useWorkspaceSearch } from "../features/workspace/search/useWorkspaceSearch";
 import { useWorkspaceTabs } from "../features/workspace/tabs/useWorkspaceTabs";
+import { isApplePlatform } from "../shell/commands/keybindings";
+import QuickOpen from "../shell/commands/QuickOpen.vue";
+import { useQuickOpen } from "../shell/commands/useQuickOpen";
+import { openedPath } from "./appEvents";
+import LocalBringBack from "./LocalBringBack.vue";
+import { type LocalChord, localChord } from "./localKeys";
+import { useUnsavedGuard } from "./useUnsavedGuard";
 
 // A desktop window on a folder of the user's own disk: the workspace's own explorer and editor pane, reading through the
 // app's sidecar (app/environments/local.ts), and nothing that needs a sandbox. A document opened on its own shows alone
@@ -26,10 +35,15 @@ const tree = computed(() => listingOf(``) ?? []);
 keepListed(() => ``);
 const rootHidden = computed(() => hiddenIn(``));
 
-const { openFile, openDirectory, selectTab, keepTab, closeTabIds } = useWorkspaceTabs();
-const { forget } = useEditBuffers();
-// The pane shows a closed tab's edits nowhere else, so they go with it, as in the workspace.
-const closeTab = (id: string): void => closeTabIds(new Set([id])).forEach(forget);
+const { activeId, activeTab, openFile, openAtLine, openDirectory, selectTab, keepTab } = useWorkspaceTabs();
+// Every close that would lose unsaved edits asks first, the window's and a tab's alike (useUnsavedGuard.ts): the pane
+// shows a closed tab's edits nowhere else, so a tab holding some closes only once the reader agrees.
+const { question, asking, closeTab, closeAnyway, keepOpen } = useUnsavedGuard();
+// The workspace's own words for the same question.
+const questionHeader = computed(() => {
+    const count = question.value?.paths.length ?? 0;
+    return count === 1 ? t(`workspace.workspaceDesktop.discardUnsavedChanges`) : t(`workspace.workspaceDesktop.discardUnsavedChangesIn`, { count });
+});
 
 // The breadcrumb and the viewer's actions ride the tab row, as they do in the workspace.
 provide(HOISTED_CONTEXT, true);
@@ -37,10 +51,98 @@ provide(HOISTED_CONTEXT, true);
 const selected = ref<string | undefined>(undefined);
 const treeShown = ref(face?.file === undefined);
 
+// The way from a file to an agent: a conversation about it, which the app starts (the tree's menu offers the same).
+const activePath = computed(() => (activeTab.value?.kind === `file` ? activeTab.value.path : undefined));
+const ask = (path: string): void => askLocalApp(`ask`, { path });
+const askActive = (): void => {
+    if (activePath.value !== undefined) {
+        ask(activePath.value);
+    }
+};
+
+// --- Finding things: a file by name (the palette), the folder's text (the search above the tree) ----------------------
+const { isOpen: paletteOpen } = useQuickOpen();
+const openKept = (path: string): void => openFile(path, `keep`);
+
+// The folder's text, answered in place of the tree while a query stands; the same search the workspace's explorer runs.
+const query = ref(``);
+const searchShown = computed(() => query.value.trim() !== ``);
+const {
+    groups: searchGroups,
+    total: searchTotal,
+    files: searchFiles,
+    partial: searchPartial,
+    truncated: searchTruncated,
+    searching,
+    pending: searchPending,
+    loadingMore: searchLoadingMore,
+    loadMore: searchLoadMore,
+    error: searchError,
+    note: searchNote,
+} = useWorkspaceSearch(query, ref<SearchScope>(`text`), searchShown);
+const searchInput = ref<HTMLInputElement>();
+const focusSearch = async (): Promise<void> => {
+    treeShown.value = true;
+    await nextTick();
+    searchInput.value?.focus();
+    searchInput.value?.select();
+};
+// Back to the tree.
+const clearSearch = (): void => {
+    query.value = ``;
+};
+// Enter in the field opens the first match, at its line.
+const openFirstMatch = (): void => {
+    const [group] = searchGroups.value;
+    const [hit] = group?.hits ?? [];
+    if (group !== undefined && hit !== undefined) {
+        openAtLine(group.path, hit.line, `keep`);
+    }
+};
+
+// The window's own chords (localKeys.ts); every other key goes on to whatever has focus.
+const CHORD_ACTIONS = {
+    "find-file": () => {
+        paletteOpen.value = true;
+    },
+    "search-text": () => void focusSearch(),
+    // Exactly what the active tab's × does, the question about its unsaved edits included.
+    "close-tab": () => {
+        if (activeId.value !== null) {
+            closeTab(activeId.value);
+        }
+    },
+} satisfies Readonly<Record<LocalChord, () => void>>;
+const isMac = isApplePlatform();
+const onKeydown = (event: KeyboardEvent): void => {
+    const chord = localChord(event, isMac);
+    if (chord === undefined) {
+        return;
+    }
+    event.preventDefault();
+    CHORD_ACTIONS[chord]();
+};
+
+// A file of this folder opened from outside the window (a double-click in the file manager): here, kept, and found in
+// the tree.
+const onOpened = (event: Event): void => {
+    const path = openedPath(event);
+    if (path !== undefined) {
+        openFile(path, `keep`);
+        selected.value = path;
+    }
+};
+
 onMounted(() => {
     if (face?.file !== undefined) {
         openFile(face.file, `keep`);
     }
+    window.addEventListener(`keydown`, onKeydown);
+    window.addEventListener(LOCAL_OPEN_EVENT, onOpened);
+});
+onUnmounted(() => {
+    window.removeEventListener(`keydown`, onKeydown);
+    window.removeEventListener(LOCAL_OPEN_EVENT, onOpened);
 });
 </script>
 
@@ -51,15 +153,94 @@ onMounted(() => {
                 <Icon name="folder" class="shrink-0 text-sm text-muted" />
                 <span class="min-w-0 flex-1 truncate text-xs font-medium" v-tooltip.bottom="face?.path">{{ face?.name }}</span>
                 <Icon v-if="busy || isLoading" name="spinner" class="text-sm text-muted" spin :aria-label="t(`workspace.words.working`)" />
-                <button type="button" :class="ui.iconButton(`h-7 w-7`)" v-tooltip.bottom="t(`local.localFiles.reveal`)" :aria-label="t(`local.localFiles.reveal`)" @click="askLocalApp(`reveal`, selected)">
+                <button
+                    type="button"
+                    :class="ui.iconButton(`h-7 w-7`)"
+                    v-tooltip.bottom="t(`local.localFiles.reveal`)"
+                    :aria-label="t(`local.localFiles.reveal`)"
+                    @click="askLocalApp(`reveal`, { path: selected })"
+                >
                     <Icon name="external-link" class="text-sm" />
                 </button>
-                <button type="button" :class="ui.iconButton(`h-7 w-7`)" v-tooltip.bottom="t(`local.localFiles.openFolder`)" :aria-label="t(`local.localFiles.openFolder`)" @click="askLocalApp(`open-folder`)">
+                <button
+                    type="button"
+                    :class="ui.iconButton(`h-7 w-7`)"
+                    v-tooltip.bottom="t(`local.localFiles.openFolder`)"
+                    :aria-label="t(`local.localFiles.openFolder`)"
+                    @click="askLocalApp(`open-folder`)"
+                >
                     <Icon name="folder-open" class="text-sm" />
                 </button>
             </div>
+            <!-- The folder's text (Ctrl/Cmd+Shift+F): matches take the tree's place while a query stands, and Esc brings it back. -->
+            <div class="relative m-1.5 shrink-0">
+                <Icon
+                    class="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-2xs text-subtle"
+                    aria-hidden="true"
+                    :name="searchShown && (searching || searchPending) ? `spinner` : `search`"
+                    :spin="searchShown && (searching || searchPending)"
+                />
+                <input
+                    ref="searchInput"
+                    v-model="query"
+                    type="text"
+                    :placeholder="t(`workspace.words.searchInFiles`)"
+                    :aria-label="t(`workspace.words.searchInFiles`)"
+                    class="ui-field-box ui-field-sm w-full min-w-0 pl-7 pr-[4.75rem]"
+                    @keydown.esc="clearSearch"
+                    @keydown.enter.prevent="openFirstMatch"
+                />
+                <div class="absolute right-1.5 top-1/2 flex -translate-y-1/2 items-center gap-0.5">
+                    <!-- The workspace's own three switches, in its order: they are one setting, wherever it is searched from. -->
+                    <button
+                        v-for="toggle in matchToggles()"
+                        :key="toggle.label"
+                        type="button"
+                        :class="
+                            ui.iconButton(
+                                `h-4 w-4 rounded font-mono text-3xs leading-none text-subtle`,
+                                toggle.state.value ? `bg-primary-600/20 text-link` : ``,
+                            )
+                        "
+                        :aria-pressed="toggle.state.value"
+                        v-tooltip.bottom="toggle.title"
+                        :aria-label="toggle.title"
+                        @mousedown.prevent
+                        @click="toggle.state.value = !toggle.state.value"
+                    >
+                        {{ toggle.label }}
+                    </button>
+                    <button
+                        v-if="searchShown"
+                        type="button"
+                        class="flex items-center rounded text-2xs text-subtle transition-colors hover:text-content"
+                        v-tooltip.bottom="t(`workspace.workspaceDesktop.clearEsc`)"
+                        :aria-label="t(`ui.action.clear`)"
+                        @click="clearSearch"
+                    >
+                        <Icon name="times" />
+                    </button>
+                </div>
+            </div>
             <p v-if="error" class="px-3 py-2 text-2xs text-danger">{{ error }}</p>
-            <div class="min-h-0 flex-1 overflow-hidden">
+            <div v-if="searchShown" class="min-h-0 flex-1" @keydown.esc="clearSearch">
+                <WorkspaceSearchResults
+                    :groups="searchGroups"
+                    :total="searchTotal"
+                    :files="searchFiles"
+                    :partial="searchPartial"
+                    :truncated="searchTruncated"
+                    :searching="searching"
+                    :pending="searchPending"
+                    :loading-more="searchLoadingMore"
+                    :error="searchError"
+                    :note="searchNote"
+                    :query="query"
+                    @open-match="openAtLine"
+                    @load-more="searchLoadMore"
+                />
+            </div>
+            <div v-else class="min-h-0 flex-1 overflow-hidden">
                 <WorkspaceTree
                     :tree="tree"
                     root-dir=""
@@ -69,8 +250,11 @@ onMounted(() => {
                     @open-directory="openDirectory"
                     @pick="(entry) => (selected = entry.path)"
                     @clear="selected = undefined"
+                    @ask="ask"
                 />
             </div>
+            <!-- What agents changed in the folder's own sandbox, brought back on request (LocalBringBack.vue). -->
+            <LocalBringBack v-if="face !== undefined && face.file === undefined && face.sandbox === true" />
             <!-- The way from this folder to an agent: a sandbox of its own, kept in sync with it (the app's project.rs). -->
             <div v-if="face !== undefined && face.file === undefined" class="shrink-0 border-t border-line p-2">
                 <Button
@@ -100,7 +284,40 @@ onMounted(() => {
                         <Icon name="bars" class="text-sm" />
                     </button>
                 </template>
+                <template #status>
+                    <Button
+                        v-if="activePath !== undefined"
+                        class="mx-1.5 shrink-0 self-center"
+                        size="small"
+                        severity="secondary"
+                        :label="t(`local.localFiles.askAgent`)"
+                        v-tooltip.bottom="t(`local.localFiles.askAgentHint`)"
+                        @click="askActive"
+                    >
+                        <template #icon><Icon name="robot" /></template>
+                    </Button>
+                </template>
             </EditorPane>
         </div>
+        <!-- Ctrl/Cmd+P: this folder's files alone, each opened here. -->
+        <QuickOpen :open-file="openKept" />
+        <!-- A close that would discard unsaved edits, the window's (held back by the app) or a tab's: it happens only on the reader's word. -->
+        <ConfirmDialog
+            :open="asking"
+            :header="questionHeader"
+            :confirm-label="t(`workspace.workspaceDesktop.closeAnyway`)"
+            confirm-icon="times"
+            :items="question?.paths ?? []"
+            @cancel="keepOpen"
+            @confirm="closeAnyway"
+        >
+            <template #item="{ item }">
+                <Icon name="circle-fill" class="shrink-0 text-[0.4rem] text-warning" />
+                <span class="truncate text-content">{{ item }}</span>
+            </template>
+            <p class="mt-3 text-xs text-muted">
+                {{ question?.what === `tab` ? t(`local.localFiles.closingTabDiscardsUnsaved`) : t(`local.localFiles.closingDiscardsUnsaved`) }}
+            </p>
+        </ConfirmDialog>
     </div>
 </template>

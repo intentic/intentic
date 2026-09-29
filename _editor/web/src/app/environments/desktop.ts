@@ -14,6 +14,9 @@ interface DesktopWebview {
     loopbackUngated?: boolean;
     /* THIS WINDOW HAS NO TITLE BAR OF ITS OWN, so the page draws one. */
     frameless?: boolean;
+    /* THIS BUILD COPIES A FOLDER INTO ITS PROJECT on a sync link carrying `project=`. An older one reads that link as a
+     * whole-`/work` sync, so setup hands a folder to a hosted machine only when this is said. */
+    projectSync?: boolean;
 }
 
 declare global {
@@ -29,6 +32,10 @@ declare global {
 export const desktopApp = (): DesktopWebview | undefined => window.__INTENTIC_DESKTOP__;
 
 export const desktopVersion = (): string | undefined => desktopApp()?.version;
+
+// Whether this app copies a folder into a hosted sandbox's project (`intentic://sync?…&project=`); false in a browser
+// and in a build from before it.
+export const desktopTakesProjects = (): boolean => desktopApp()?.projectSync === true;
 
 // The app announcing, mid-session, that an update finished downloading (update.rs). A plain DOM event: no
 // handshake, and a browser with no app simply never fires it.
@@ -110,6 +117,24 @@ export const workDesktopWindow = (verb: DesktopWindowVerb): void => {
         return;
     }
     openDesktopLink(`intentic://window?do=${verb}`);
+};
+
+/* A LOCAL WINDOW'S GUARD ON ITS OWN CLOSE (the app's local window): the app asks before closing a window it last heard
+   was holding unsaved edits, so the page says each time that changes, and answers the question once the reader has. */
+
+export const markDesktopWindowDirty = (dirty: boolean): void => {
+    if (desktopVersion() === undefined) {
+        return;
+    }
+    openDesktopLink(`intentic://window?do=dirty&value=${dirty ? 1 : 0}`);
+};
+
+/* The close the app held back, now agreed to: unsaved edits and all. */
+export const confirmDesktopWindowClose = (): void => {
+    if (desktopVersion() === undefined) {
+        return;
+    }
+    openDesktopLink(`intentic://window?do=close&confirmed=1`);
 };
 
 /* THE TWO LINK PRESSES THIS WEBVIEW DROPS ON THE FLOOR: `target="_blank"`, and Ctrl/Shift-click. */
@@ -271,19 +296,30 @@ export interface DesktopSyncArgs {
     pair: string;
     /// The sandbox's display name, so the app's screen can say what the folder is being connected to.
     name?: string;
+    /// A hosted project's folder name (`/work/<project>`): the app copies the folder it parked for that project into it,
+    /// with no folder dialog, and the path still never rides the link.
+    project?: string;
+    /// The sandbox's id, which the app remembers the project by; heard only beside `project`.
+    sandbox?: string;
     takeover?: boolean;
     /// A ports-only pairing: the app skips the folder dialog, because there is no folder.
     mirror?: boolean;
 }
 
 // Enrolls via a button instead of a pasted one-liner, for the one computer running the app itself. Deliberately no
-// folder on the link (the app collects that via a system dialog); the Rust side honors this only from the app's
-// own window, since honoring it from any page would let one folder-pick two-way-sync into a sandbox the sender is
-// signed into.
+// folder on the link (the app collects that via a system dialog, or for a project uses the folder it parked); the Rust
+// side honors this only from the app's own window, since honoring it from any page would let one folder-pick
+// two-way-sync into a sandbox the sender is signed into.
 export const desktopSyncLink = (args: DesktopSyncArgs): string => {
     const params = new URLSearchParams({ url: args.url, pair: args.pair });
     if (args.name !== undefined && args.name !== ``) {
         params.set(`name`, args.name);
+    }
+    if (args.project !== undefined && args.project !== ``) {
+        params.set(`project`, args.project);
+    }
+    if (args.sandbox !== undefined && args.sandbox !== ``) {
+        params.set(`sandbox`, args.sandbox);
     }
     if (args.takeover === true) {
         params.set(`takeover`, `1`);
@@ -311,18 +347,36 @@ export const desktopRecreateLink = (slug: string, hash?: string, rollback = fals
 const pageLoaded = (): boolean => document.readyState === `complete`;
 
 /* A navigation, not a fetch, since that's what the app intercepts. */
-export const openDesktopLink = (link: string): void => {
-    if (pageLoaded()) {
-        globalThis.location.href = link;
+// Handed over one at a time, a beat apart. WebKit (the Linux and macOS webviews) schedules a `location.href` change and
+// lets a second one in the same task replace it, so links sent together (WindowControls' `ready` beside `mode`, a local
+// window's `dirty` beside both) reached the app as the last of them: the app then took the page for one that draws no
+// title bar, or a window with unsaved edits for a clean one. Each link now leaves only after the one before it has been
+// started, which the app's navigation handler sees one by one.
+const LINK_GAP_MS = 50;
+const waitingLinks: string[] = [];
+let handingOver = false;
+
+const handNextLink = (): void => {
+    const link = waitingLinks.shift();
+    if (link === undefined) {
+        handingOver = false;
         return;
     }
-    window.addEventListener(
-        `load`,
-        () => {
-            globalThis.location.href = link;
-        },
-        { once: true },
-    );
+    globalThis.location.href = link;
+    setTimeout(handNextLink, LINK_GAP_MS);
+};
+
+export const openDesktopLink = (link: string): void => {
+    waitingLinks.push(link);
+    if (handingOver) {
+        return;
+    }
+    handingOver = true;
+    if (pageLoaded()) {
+        handNextLink();
+        return;
+    }
+    window.addEventListener(`load`, handNextLink, { once: true });
 };
 
 // Every sign-in surface funnels through here rather than reimplementing "this webview can't ask Google" each time.

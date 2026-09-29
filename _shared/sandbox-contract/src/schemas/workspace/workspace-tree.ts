@@ -182,6 +182,13 @@ export const WorkspaceFilePresentSchema = z.object({
         .describe(
             "Which tree answered. True when no conversation was named, and also when one was but its own copy has no such file, which is the case a reader has to be told about rather than left to assume.",
         ),
+    // Absent means the window decoded cleanly. Set by a server that checks (the desktop app's folder server does).
+    lossy: z
+        .literal(true)
+        .optional()
+        .describe(
+            "The bytes are not valid UTF-8, so `content` holds replacement characters where they failed to decode. Saving that text back would change the file, so treat it as read-only.",
+        ),
 });
 // Nothing there is an answer, not a failure: most reads here are read-it-if-there, and a 404 would spam the browser's
 // network log per miss. A refused read (an escape, a denylisted path) is still an error.

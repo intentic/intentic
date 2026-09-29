@@ -45,6 +45,11 @@ sha2 = "0.11"
 tokio = { version = "1", features = ["time"] }
 # The time-limited child every short read here goes through, shared with `ic` so a fix to it reaches both.
 intentic-bounded = { path = "../../../_sandbox/ic/bounded" }
+# A delete in a local window goes to the Recycle Bin or the Trash, never straight off the disk (local.rs): the one
+# platform API behind a crate rather than written here, because each OS spells it differently (the freedesktop
+# trash spec on Linux, the shell's IFileOperation on Windows). MIT. Default features: `chrono` is what writes the
+# DeletionDate a file manager shows, and `coinit_apartmentthreaded` is the COM mode for the thread the move runs on.
+trash = "5"
 
 [target.'cfg(any(target_os = "linux", target_os = "windows"))'.dependencies]
 tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }

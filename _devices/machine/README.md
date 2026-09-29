@@ -33,17 +33,21 @@ flowchart LR
   A fetch that fails is logged with its reason and reported in the device's facts (`icOutOfDate`, beside `features`),
   so a stale `ic` explains why logs and saving a shape are missing; the next sandbox action tries again.
 - **sync** (`src/sync/`): `sync setup` enrolls an SSH key and runs Mutagen against the sandbox's sshd, reached
-  through a loopback port tunnelled over a WebSocket. It keeps a folder two-way synced, forwards every workspace
-  port to the same localhost port, and fast-forwards local git clones from the sandbox.
+  through a loopback port tunnelled over a WebSocket. It keeps a folder two-way synced (a project copy-first, below),
+  forwards every workspace port to the same localhost port, and fast-forwards local git clones from the sandbox.
 - A **project pairing** (`sync setup --remote-dir /work/<name> --project`, what the desktop app asks for when it
   makes a sandbox for a folder the owner picked) syncs that folder with `/work/<name>` rather than `/work`, and nothing
   of the sandbox's is written into it: no state backup session, no git bridge, and an ignore list that keeps a
   project's own `.intentic/` and `refs/` ([`sync/config.ts`](src/sync/config.ts) holds a remote dir to those two
   shapes, and refuses `sync.json` whole otherwise). `setup` refuses a folder that is, holds or sits inside another
-  sandbox's, and a set-up-again that would change where a paired sandbox's folder syncs.
+  sandbox's, and a set-up-again that would change where a paired sandbox's folder syncs. It is **copy-first** unless
+  its owner opted into two-way: see [Copy-first projects](#copy-first-projects).
 - Only the resident agent creates Mutagen sessions: `setup` records the pairing and waits for the session to
   appear, since two creators racing left one name holding two identical sessions. The agent keeps one session per
-  name, terminating any extras, and recreates a session whose rules drifted once there are no conflicts left.
+  name, terminating any extras, and recreates a session whose rules drifted (its ignores, its folders, its sync mode,
+  its symlink mode). A two-way session replaced by another waits until no conflicts are left and has its derived
+  residue swept first; every other replacement happens as soon as the sandbox answers (`settlesFirst` in
+  [`sync/mutagen.ts`](src/sync/mutagen.ts) says why for each).
 - `setup` replaces what this agent's `known_hosts` holds for the pairing's alias (hashed entries included): with the
   host key the enrollment carries when it carries one (a sandbox reads its sshd's public key off its history volume and
   answers with it, `SyncEnrollmentAnswerSchema` in the contract), else with nothing, so `accept-new` records the key
@@ -82,6 +86,114 @@ flowchart LR
   on a timer and pre-downloads sandbox updates with `ic sandbox prepare --auto`.
 - The install shims only put a first binary down and run `setup`; `install.ts` decides the rest. `status --json`
   is what the desktop app's tray reads.
+
+### Copy-first projects
+
+A project's folder flows **one way**, this device to the sandbox, so nothing an agent does in `/work/<name>` (an
+`rm -rf` included) reaches the owner's files. What an agent changed comes back only when the owner asks, through
+`sync bring-back`, which keeps a restore point first. Two-way stays one switch away.
+
+- **Direction** is the pairing's `direction` in `sync.json`: `"to-sandbox"` (Mutagen's `one-way-safe`, this device as
+  alpha) or `"both"` (`two-way-safe`, as every workspace pairing). Absent, as on every project paired before it existed,
+  means `"to-sandbox"`, and so does a value this build has no word for; it means nothing on a workspace pairing
+  ([`sync/config.ts`](src/sync/config.ts) `projectDirection`). An older agent keeps the field through every write but a
+  `setup` (which resets it, with the pairing's other switches), and keeps the copy-first session it finds, since it never
+  compared sync modes. `sync direction` rewrites the field; the watcher sees the new mode on its next tick and recreates
+  the session (`sessionMatchesSpec` compares the live session's `mode`).
+- **Replacements** into copy-first happen at once, conflicts or not, with no flush and no residue sweep: a last flush
+  of a two-way session would carry the sandbox's latest changes into the folder, and the new session never writes here.
+  Out of copy-first too: a one-way session's conflicts are the agent's kept edits, which differ whoever holds them. This
+  is how every existing project becomes copy-first on its first start of this build.
+
+**What one-way-safe does**, measured with Mutagen 0.18.1 over ssh against an sshd whose `/work` was a scratch folder,
+driving this agent's own session code and CLI (alpha is this device, beta the sandbox):
+
+| The sandbox (an agent)… | Mutagen one-way-safe |
+|---|---|
+| edits a file this folder has | keeps the sandbox's version and reports it as a conflict; this folder is untouched |
+| creates a file | keeps it in the sandbox, no conflict; nothing reaches this folder |
+| deletes a file or a folder | puts it back from this folder on the next cycle |
+| runs `rm -rf /work/<name>/*`, or removes `/work/<name>` | refills the sandbox's copy from this folder; this folder is untouched |
+
+| This device… | Mutagen one-way-safe |
+|---|---|
+| edits, creates or deletes a file | carries it to the sandbox, except over a file the sandbox changed, which is kept |
+| deletes a file the sandbox changed | the sandbox keeps its version, and the conflict clears |
+
+A fresh session over two copies that already differ (what any replacement starts from) deletes nothing on either side.
+One-way-safe copies what only this folder has into the sandbox and keeps every sandbox file that differs, as a conflict.
+Two-way-safe also copies what only the sandbox has into this folder, and reports what differs on both as a conflict.
+`mutagen sync list --template '{{json .}}'` prints the mode as a top-level `mode`, absent on a session created without
+`--sync-mode`, which Mutagen runs two-way-safe.
+
+**The commands**, all under `intentic-machine sync`, name the project by `--dir <its folder>` (links resolved, case
+folded where the platform folds it). With `--json` each prints exactly one JSON object on stdout, and on failure
+`{ "ok": false, "error": "<sentence>" }` with exit code 1. The desktop app parses these, so fields are only ever added.
+
+| Command | Success output |
+|---|---|
+| `sync changes` | `{ "ok": true, "pairing": "<id>", "direction": "to-sandbox"\|"both", "changes": [{ "path", "kind": "added"\|"modified"\|"deleted", "size"?, "conflict"?: true }], "truncated"?: true }` |
+| `sync bring-back [--path <p>]... [--paths-file <file>]` | `{ "ok": true, "point": "<id>", "applied": [{ "path", "kind" }], "skipped": [{ "path", "reason" }] }` |
+| `sync restore-points` | `{ "ok": true, "points": [{ "id", "createdAt", "entries": n }] }` |
+| `sync restore --point <id>` | `{ "ok": true, "restored": n, "skipped": [{ "path", "reason" }] }` |
+| `sync direction <to-sandbox\|both>` | `{ "ok": true, "direction": "…" }` |
+
+- **`sync changes`** lists what the sandbox did, relative paths with `/`, sorted, the first 5,000 (`truncated` when
+  there were more): `added` exists only in the sandbox's copy, `modified` on both with different content (`size` is the
+  sandbox copy's), `deleted` was removed there. The sandbox is listed by ONE command over the pairing's ssh alias, a
+  node program that walks `/work/<name>` and prints path, size and sha256 NUL-separated, so any name survives. This
+  device is walked the same way, reading a file only where its size matches the sandbox's, through a hash cache keyed
+  by path, size and times in `~/.intentic/machine/hashes/<pairing>.json`. Both walks prune by the pairing's ignore list
+  read as Mutagen reads it: a name, `*` within it, at any depth (or at the root with a leading `/`), taking a matched
+  folder's contents along; any other spelling is refused rather than approximated. Mutagen's `.mutagen-temporary-*`
+  scratch files are left out too, and so are links and anything else that is not a regular file, on either side.
+- **Whose change it is, and never over a newer edit.** The same cache file records each path's content when both
+  copies were last seen equal. A difference the sandbox did not move away from (an edit made here, still on its way) is
+  not listed at all. A file only this device holds is offered as `deleted` only when that record shows the sandbox had
+  exactly this copy. A `modified` file is written over here only when this device's copy is still what the two last
+  agreed on, which only a session that was running and whose flush just finished a whole cycle can show. Mutagen's own
+  record says so for the files it reports in conflict (ten at most, each with SHA-1 digests of what the two last agreed
+  on and of this device's copy, the latter checked against the file here now); the listing record says so for the rest.
+  Anything else is listed with `conflict: true` and skipped by bring-back with its reason, even when named by `--path`:
+  both copies moved (a record gone stale while the sync was paused, say, with the owner's own older version in the
+  sandbox), no record of the two ever agreeing on it, or a session that was paused, absent, or whose flush did not
+  finish. Since one-way-safe puts an agent's deletions back, `deleted` shows up mainly while the session is paused, and
+  a rename in the sandbox comes back as an addition (the old name is put back there). The record is written only by
+  whoever holds the folder's lock, so a listing beside a running bring-back never undoes what that one recorded.
+- **`sync bring-back`** runs with the session paused (after a flush) if it was running, and leaves one somebody paused
+  as it is. It lists both sides and fetches the `added` and `modified` files in ONE ssh stream into a private staging
+  folder, each checked against the listing's sha256 (a file that changed since is skipped with the reason). Then it
+  writes the restore point, and only then touches the folder: each file renamed into place from a copy beside it, only
+  where the folder still holds what the point kept of it. `deleted` files are removed with the folders they leave
+  empty. `--path` takes a file or a folder, repeatable; `--paths-file` names a UTF-8 file holding a JSON array of such
+  paths (a Windows command line holds 32,767 characters, fewer than a long selection), taken together with any
+  `--path`. An unreadable file, one that is not such an array, or an empty one (which would otherwise mean every change)
+  is refused before anything is listed. A new file gets the sandbox copy's executable bit. Nothing is written through a
+  link: every folder on the way is checked.
+- **Why the session pushes nothing stale back.** Paused, it runs no cycle between the listing, the fetch and the writes,
+  and on resume it rescans both sides. What was written here is byte for byte the sandbox's, so both sides moved from
+  their last agreement to the same content: Mutagen records that and transfers nothing. A sandbox file that changed
+  again meanwhile is a sandbox modification one-way-safe keeps, as a conflict. The e2e run checked all of it: no
+  conflicts after resume, the sandbox still holding the agent's content, and a later edit here carried over as usual.
+- **Restore points** live in `~/.intentic/machine/restore/<pairing>/<id>/`, the id being the creation time in ISO 8601
+  basic format (`20260928T213000.123Z`, a folder name on every system). Each holds `manifest.json`, which is
+  `{ id, createdAt, dir, entries: [{ path, kind, backedUp, applied, backup?, mode? }] }` (`applied` is the sha256
+  bring-back left, null for a deletion), and `files/<path>`, a copy of every file bring-back overwrote or deleted. Only
+  what was actually written stays in the manifest. All of it is on the disk before the first write here: each copy is
+  flushed as it is made, the manifest by a durable write, then every folder of the point up to `restore/<pairing>`, so a
+  crash right after a bring-back never finds the folder rewritten and the copies empty. Files put in the folder are
+  flushed before the rename that places them.
+- **Retention**, after each bring-back and under its lock: a pairing keeps its newest 20 points that hold files, plus
+  every such point younger than 30 days. A point that holds nothing (a bring-back that wrote nothing, or one cut off
+  before its manifest) never counts toward the 20, is never listed, and goes at the next bring-back. Until then it is
+  the `point` that bring-back answered with, so that answer always names a real point, as the desktop app expects.
+- **`sync restore --point <id>`** puts each backed-up file back and removes each file bring-back added, where the
+  folder still holds exactly what bring-back left (by sha256). Anything else is skipped and reported, one already put
+  back included. Copy-first then carries the restored files to the sandbox, as it does any edit here, so the agent's
+  versions they replace are gone from there too.
+- One bring-back or restore runs per folder at a time (`restore/<pairing>/.operation.pid`, a pid of this boot, checked
+  alive). A pause an operation made and never lifted (the process killed in between) is recorded in
+  `restore/<pairing>/.paused`, and the next command about that folder resumes the session.
 
 ### Upgrades that can be undone
 

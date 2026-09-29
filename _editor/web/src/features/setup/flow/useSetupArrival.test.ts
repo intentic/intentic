@@ -20,6 +20,8 @@ interface World {
     readonly hosted?: HostedOffer | Error;
     readonly address?: AddressOffer | Error;
     readonly inApp?: boolean;
+    // Whether that app copies a folder into a hosted sandbox's project (`projectSync`); every app here does unless said.
+    readonly appTakesProjects?: boolean;
     readonly query?: Record<string, string>;
     // `?project=`, which the page reads ahead of every lane and hands to each.
     readonly project?: string;
@@ -39,6 +41,10 @@ const stage = (world: World = {}) => {
     const platform = {
         hostedOffer: jest.fn(() => answer(world.hosted ?? { enabled: true, remaining: 1 })),
         addressOffer: jest.fn(() => answer(world.address ?? { enabled: true })),
+        // A project's machine, asked of the platform with its folder (the store's provision names none).
+        hostedProvision: jest.fn(async ({ sandboxId }: { sandboxId: string; token: string; project?: string; profile?: string }) =>
+            sandboxSummary({ id: sandboxId, token: `tok`, hosted: { region: `iad`, warm: false } }),
+        ),
         setupCode: jest.fn(async ({ sandboxId }: { sandboxId: string }): Promise<SetupCode> => ({
             code: `code-${sandboxId}`,
             hostname: `h.sbx.test`,
@@ -58,9 +64,11 @@ const stage = (world: World = {}) => {
             name: project?.name,
         });
         const hosted = useHostedLane({
-            platform: unstubbed<HostedLaneHost[`platform`]>(`platform`, { hostedOffer: platform.hostedOffer }),
+            platform: unstubbed<HostedLaneHost[`platform`]>(`platform`, { hostedOffer: platform.hostedOffer, hostedProvision: platform.hostedProvision }),
             sandbox: unstubbed<HostedLaneHost[`sandbox`]>(`sandbox`, { hostedProvision, hostedRelease }),
             row,
+            project: project?.dirName,
+            appTakesProjects: () => (world.inApp ?? false) && (world.appTakesProjects ?? true),
         });
         const lane = ref<`provision` | `attach`>(`provision`);
         const command = useCommandLane({
@@ -71,7 +79,9 @@ const stage = (world: World = {}) => {
         });
         const ladder = computed(() =>
             ladderOptionsOf({
-                hostedOffered: hosted.hostedOffered.value && project === undefined,
+                hostedOffered: hosted.hostedOffered.value,
+                project: project !== undefined,
+                hostedProjects: hosted.hostedProjects.value,
                 hostedFull: hosted.hostedFull.value,
                 hostedSuspended: hosted.hostedSuspended.value,
                 plan: false,
@@ -169,7 +179,7 @@ describe(`the app's arrival`, () => {
 });
 
 // The app opened this page for a folder the reader picked: whatever else the account runs, the sandbox is made for that
-// folder, named after it, and handed to the app on this computer.
+// folder, named after it, and handed to the app on this computer, unless the platform's machines can hold it.
 describe(`a project's arrival`, () => {
     it(`names the sandbox it makes after the folder, and hands it to the app beside another sandbox`, async () => {
         const live = sandboxSummary({ id: `live`, token: `tok`, lastSeenAt: `2026-09-23T10:00:00Z` });
@@ -186,6 +196,59 @@ describe(`a project's arrival`, () => {
         await advanceTimersByTimeAsync(500);
         expect(hostedProvision).not.toHaveBeenCalled();
         expect({ machine: hosted.machine.value, handedOff: runHere.mock.calls.length }).toEqual({ machine: `mine`, handedOff: 1 });
+    });
+
+    // On a platform whose machines can hold a project: the folder goes to one of them, asked for with its name.
+    describe(`where the platform's machines can hold one`, () => {
+        const HOLDS_PROJECTS: HostedOffer = { enabled: true, remaining: 1, projects: true };
+
+        it(`starts a machine of ours for the folder, asked for with its name, and hands nothing to this computer`, async () => {
+            const { platform, hostedProvision, runHere, hosted, arrival } = stage({ inApp: true, project: `My App`, hosted: HOLDS_PROJECTS });
+            await arrival.readArrival();
+            await advanceTimersByTimeAsync(500);
+            expect(platform.hostedProvision.mock.calls).toEqual([[{ sandboxId: `new`, token: `tok`, project: `My-App` }]]);
+            expect({ machine: hosted.machine.value, arrival: arrival.arrival.value }).toEqual({ machine: `hosted`, arrival: `hosted` });
+            expect({ storeProvisions: hostedProvision.mock.calls.length, handedOff: runHere.mock.calls.length }).toEqual({ storeProvisions: 0, handedOff: 0 });
+        });
+
+        it(`hands the folder to this computer when that is the rung asked for`, async () => {
+            const { platform, runHere, hosted, arrival } = stage({ inApp: true, project: `My App`, query: { machine: `mine` }, hosted: HOLDS_PROJECTS });
+            await arrival.readArrival();
+            await advanceTimersByTimeAsync(500);
+            expect({ machine: hosted.machine.value, arrival: arrival.arrival.value, handedOff: runHere.mock.calls.length }).toEqual({
+                machine: `mine`,
+                arrival: `local`,
+                handedOff: 1,
+            });
+            expect(platform.hostedProvision).not.toHaveBeenCalled();
+        });
+
+        // An app from before project syncs would read the hand-over's sync link as a whole-`/work` sync into the folder.
+        it(`hands the folder to this computer from an app that can't copy it into a project`, async () => {
+            const { platform, runHere, hosted, arrival } = stage({ inApp: true, appTakesProjects: false, project: `My App`, hosted: HOLDS_PROJECTS });
+            await arrival.readArrival();
+            await advanceTimersByTimeAsync(500);
+            expect({ machine: hosted.machine.value, arrival: arrival.arrival.value, handedOff: runHere.mock.calls.length }).toEqual({
+                machine: `mine`,
+                arrival: `local`,
+                handedOff: 1,
+            });
+            expect(platform.hostedProvision).not.toHaveBeenCalled();
+        });
+
+        // A row found rather than made spends nothing unasked, as a browser's reload does: the picker opens on the machine.
+        it(`opens the picker on the machine for a row it found, starting nothing`, async () => {
+            const found = sandboxSummary({ id: `s1`, name: `My App`, token: `tok` });
+            const { platform, runHere, hosted, arrival } = stage({ rows: [found], query: { sandbox: `s1` }, inApp: true, project: `My App`, hosted: HOLDS_PROJECTS });
+            await arrival.readArrival();
+            await advanceTimersByTimeAsync(500);
+            expect({ machine: hosted.machine.value, arrival: arrival.arrival.value, handedOff: runHere.mock.calls.length }).toEqual({
+                machine: `hosted`,
+                arrival: `choose`,
+                handedOff: 0,
+            });
+            expect(platform.hostedProvision).not.toHaveBeenCalled();
+        });
     });
 
     it(`keeps the name of a row it found rather than made`, async () => {

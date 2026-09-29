@@ -48,6 +48,8 @@ const COMMANDS: &[&str] = &[
     "machine_report",
     "machine_restart",
     "workspace_open",
+    "home_facts",
+    "launcher_close",
     "setup_alert",
     "setup_progress",
     "fit_to_content",
@@ -59,4 +61,5 @@ const COMMANDS: &[&str] = &[
     "local_open",
     "local_open_path",
     "local_recents",
+    "local_forget_recent",
 ];

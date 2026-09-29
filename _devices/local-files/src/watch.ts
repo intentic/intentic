@@ -1,17 +1,23 @@
 import { type FSWatcher, watch } from "node:fs";
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
+import { SCRATCH_MARK } from "@intentic/ext-onlyoffice/local-office";
 import { isLockedWorkspacePath } from "@intentic/sandbox-contract";
-import { createIgnoreScope, type IgnoreScope, toRelPath, walkMatchers } from "@intentic/workspace-ignore";
+import { createIgnoreScope, IGNORED_DIRS, type IgnoreScope, toRelPath, walkMatchers } from "@intentic/workspace-ignore";
 import { TEMPORARY_MARK } from "./files.js";
 
 // What moved on disk under a folder, batched the way the daemon batches /work (250 ms) and handed out as root-relative
-// paths; an empty batch means "something moved, refetch it all". Windows and macOS watch a whole tree natively. Linux
-// watches one folder at a time, so there only the folders the explorer would open are watched: ignored ones
-// (node_modules, .git, build output) are skipped, up to a cap, and a folder that appears later is picked up as it does.
-// A folder past the cap still shows what changed in it the next time the explorer lists it.
+// paths; an empty batch means "something moved, refetch it all", which is also what a batch too long to be worth
+// walking is sent as. Windows and macOS watch a whole tree natively, so what moves inside the folders nobody opens
+// (node_modules, .git, build output) is dropped from the batch on every platform. Linux watches one folder at a time, so
+// there only the folders the explorer would open are watched, up to a cap, and a folder that appears later is picked up
+// as it does. A folder past the cap still shows what changed in it the next time the explorer lists it.
 
 const BATCH_MS = 250;
+
+// Past this many paths a batch is sent as "everything moved", as the daemon's is: a checkout or an unpacked archive is
+// cheaper to refetch than to walk path by path.
+const MAX_BATCH_PATHS = 200;
 
 // Linux's per-folder watches: the tree walk's own entry budget bounds what anyone can see, and this bounds what is kept
 // open behind it, well under the smallest default inotify allowance.
@@ -21,8 +27,23 @@ export interface FolderWatch {
     readonly close: () => void;
 }
 
-// A path this side wrote on its way to a save, which the save's own rename reports as the change it is.
-const ownDebris = (path: string): boolean => path.includes(TEMPORARY_MARK);
+// A path this side wrote on its way to a save, a text save's or the office editor's (`.brief.docx.onlyoffice-….tmp`),
+// which the save's own rename reports as the change it is.
+const ownDebris = (path: string): boolean => {
+    const name = path.slice(path.lastIndexOf(`/`) + 1);
+    return name.includes(TEMPORARY_MARK) || (name.startsWith(`.`) && name.includes(SCRATCH_MARK) && name.endsWith(`.tmp`));
+};
+
+// Whether a window is told a path moved: not this side's own debris, and not inside a folder the explorer never opens
+// or a version history, whose churn (an install, a commit) says nothing about the folder's own files. The folder
+// itself appearing or going is told.
+export const reported = (path: string): boolean =>
+    !ownDebris(path) &&
+    !isLockedWorkspacePath(path) &&
+    !path
+        .split(`/`)
+        .slice(0, -1)
+        .some((segment) => IGNORED_DIRS.has(segment));
 
 // Changes gathered for one flush: a path, or undefined for "something moved, no telling what".
 interface Batch {
@@ -43,13 +64,16 @@ const batcher = (onChange: (paths: readonly string[]) => void): Batch => {
     };
     return {
         add: (path) => {
-            if (path !== undefined && ownDebris(path)) {
+            if (path !== undefined && !reported(path)) {
                 return;
             }
-            if (path === undefined) {
-                everything = true;
-            } else {
+            if (path !== undefined && !everything) {
                 (pending ??= new Set()).add(path);
+            }
+            // Past the bound nothing more is gathered: the batch already says "everything".
+            if (path === undefined || (pending?.size ?? 0) > MAX_BATCH_PATHS) {
+                everything = true;
+                pending = undefined;
             }
             timer ??= setTimeout(flush, BATCH_MS);
         },

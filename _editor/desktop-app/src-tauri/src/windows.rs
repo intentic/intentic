@@ -1,9 +1,9 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, LazyLock, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
-use tauri::webview::NewWindowResponse;
+use tauri::webview::{NewWindowResponse, PageLoadEvent};
 use tauri::{
     AppHandle, LogicalSize, Manager, Monitor, PhysicalPosition, PhysicalSize, Url, WebviewUrl,
     WebviewWindow, WebviewWindowBuilder, WindowEvent,
@@ -13,7 +13,7 @@ use tauri_plugin_opener::OpenerExt;
 
 use crate::commands::SetupReport;
 use crate::setup_link::{parse_link, Link, SetupArgs, Source, WindowVerb};
-use crate::state::{AppState, CloseAction, Mode};
+use crate::state::{AppState, CloseAction, Face, Mode};
 
 /* ONE WINDOW OF THE APP ON SCREEN — these two labels are two FACES of it, not two windows. The only second window is one the PAGE asked for: a panel of its own floated out (`FLOATING`), which is what a browser gives that same page. */
 pub const WORKSPACE: &str = "workspace";
@@ -286,15 +286,31 @@ fn over_workspace(window: &WebviewWindow, workspace: Option<&WebviewWindow>) {
 /// top of every column (the SPA's WindowControls.vue). It is a claim about the window rather than a permission,
 /// and it is the half that stops an app OLDER than the page from ending up with two sets of controls: a build
 /// that still opens a decorated window simply never says this, and the page draws nothing.
+///
+/// `projectSync` is the sixth and is about what this BUILD understands: a sync link carrying `project=` (a
+/// hosted sandbox holding one folder, setup_link.rs) is copied into that folder's project and nowhere else. The
+/// web setup hands a folder to a hosted machine only when the app says this, because an older build reads the
+/// same link as a whole-`/work` sync and would pour the sandbox's workspace into the user's folder.
 fn workspace_init_script(install_id: &str, update: Option<&str>) -> String {
     let update = match update {
         Some(version) => format!("\"{}\"", crate::update::escape_js(version)),
         None => "null".to_string(),
     };
     format!(
-        "(function () {{ if (!window.__INTENTIC_DESKTOP__) {{ window.__INTENTIC_DESKTOP__ = Object.freeze({{ version: \"{}\", installId: \"{install_id}\", update: {update}, loopbackUngated: true, frameless: true }}); }} }})();",
+        "(function () {{ if (!window.__INTENTIC_DESKTOP__) {{ window.__INTENTIC_DESKTOP__ = Object.freeze({{ version: \"{}\", installId: \"{install_id}\", update: {update}, loopbackUngated: true, frameless: true, projectSync: true }}); }} }})();",
         env!("CARGO_PKG_VERSION")
     )
+}
+
+/// The downloaded update a window of the page is told of (`update` above): the workspace's and its floating panels',
+/// whose banner offers it. A local window is told of none and draws no banner: the app's own version is the
+/// workspace's to offer, and a banner over somebody's document offering a restart is one more way to lose what they
+/// typed.
+fn update_told(stage: &crate::update::Stage, local: bool) -> Option<&str> {
+    if local {
+        return None;
+    }
+    stage.ready_version()
 }
 
 /* THE APP'S OWN FACES ARE DRAWN IN THE WORKSPACE'S LIGHT. */
@@ -398,6 +414,10 @@ fn open_in_browser(app: &AppHandle, url: &str) {
 pub fn show_workspace_at(app: &AppHandle, path: Option<&str>) {
     let state = app.state::<AppState>();
     state.remember_workspace_seen();
+    // Whatever brought it up, the workspace is now the face this app is being used through: the next launch and
+    // the tray's "Open Intentic" open it (lib.rs `opening`), and the launcher's × goes back to it.
+    state.remember_last_face(Face::Workspace);
+    crate::offer_workspace(app);
     let base = state.app_url();
     let target = match path {
         Some(path) => format!("{}{path}", base.trim_end_matches('/')),
@@ -471,6 +491,37 @@ pub fn show_workspace(app: &AppHandle) {
     show_workspace_at(app, None);
 }
 
+/// Home, because the user asked for it (a launch into it, the tray's "Home", "Open Intentic" on an install last
+/// used through Home): the launcher, remembered as the face this app is being used through. The launcher shown
+/// for a setup, a recreate or an engine that is asleep is NOT this, and changes nothing about what opens next.
+pub fn show_home(app: &AppHandle) {
+    app.state::<AppState>().remember_last_face(Face::Home);
+    show_launcher(app);
+}
+
+/// The face this app was last used through, as a bare launch and the tray's "Open Intentic" open it.
+pub fn show_last_face(app: &AppHandle) {
+    match app.state::<AppState>().last_face() {
+        Face::Home => show_home(app),
+        Face::Workspace => show_workspace(app),
+    }
+}
+
+/// What closing the launcher does: its ×, its Esc (`launcher_close`) and the platform's own close alike. Back to
+/// the workspace when that is the face this app was last used through and it is still there to go back to (the
+/// "Back to your workspace" this always was); otherwise the card steps into the tray, HIDDEN rather than
+/// destroyed so the tray brings it back as it was, and the face remembered stays what it was.
+pub fn close_launcher(app: &AppHandle) {
+    let workspace = app.get_webview_window(WORKSPACE);
+    if app.state::<AppState>().last_face() == Face::Workspace && workspace.is_some() {
+        show_workspace(app);
+        return;
+    }
+    if let Some(window) = app.get_webview_window(LAUNCHER) {
+        let _ = window.hide();
+    }
+}
+
 /// The origin the page is served from, which is also the one origin whose links stay inside a page window.
 fn app_origin(state: &AppState) -> Url {
     state.app_url().parse().unwrap_or_else(|_| {
@@ -510,7 +561,7 @@ fn page_window<'a>(
         .additional_browser_args(BROWSER_ARGS)
         .initialization_script(workspace_init_script(
             &install_id,
-            crate::update::stage(app).ready_version(),
+            update_told(&crate::update::stage(app), false),
         ))
         .on_navigation({
             let app = app.clone();
@@ -657,15 +708,28 @@ fn stays_in_files_window(url: &Url) -> bool {
     }
 }
 
+/// How a files window comes up: on screen for the grant it was built for, or hidden as the spare the next open
+/// wears (local.rs, the warm window) — a window whose page has already loaded the editor and waits for its face.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FilesWindow {
+    Shown,
+    Spare,
+}
+
 /// Build the window that shows one grant of the sidecar: the local face of the app's own bundle
-/// (`files/local`), told who it is by `init` (`__INTENTIC_LOCAL__`, local.rs) before any of its script runs.
-/// Frameless like every page window, drawn by the same page bar; unlike them it holds NO capability, so its
-/// only ways into the app are the `window` and `local` links (setup_link.rs) and the sidecar's own port.
+/// (`files/local`), told who it is by `init` (`__INTENTIC_LOCAL__`, local.rs) before any of its script runs, or,
+/// for a [`FilesWindow::Spare`], by [`wear_face`] later. Frameless like every page window, drawn by the same page
+/// bar; unlike them it holds NO capability, so its only ways into the app are the `window` and `local` links
+/// (setup_link.rs) and the sidecar's own port.
+///
+/// Built hidden and placed before it is shown, as the workspace is, so it never appears for a frame wherever the
+/// platform's cascade put it.
 pub fn show_files_window(
     app: &AppHandle,
     label: &str,
     title: &str,
     init: &str,
+    how: FilesWindow,
 ) -> Result<WebviewWindow, String> {
     let state = app.state::<AppState>();
     let screen = work_area(app);
@@ -678,13 +742,26 @@ pub fn show_files_window(
         // Drops land in the page: the explorer copies a dragged file into the folder, as the workspace does.
         .disable_drag_drop_handler()
         .additional_browser_args(BROWSER_ARGS)
+        // No update: a local window draws no update banner (`update_told`).
         .initialization_script(workspace_init_script(
             &state.install_id(),
-            crate::update::stage(app).ready_version(),
+            update_told(&crate::update::stage(app), true),
         ))
         .initialization_script(init)
         .inner_size(size.0, size.1)
         .min_inner_size(min.0, min.1)
+        .visible(false)
+        // A page starting over has no unsaved changes yet: it says again what it holds once it mounts, and until then
+        // nothing of the page before it may hold a close. And whether a spare's page has loaded, so only one that
+        // has is worn: a face evaluated into a page still navigating lands in the document it is leaving (local.rs
+        // `take_spare`).
+        .on_page_load({
+            let app = app.clone();
+            move |window, payload| match payload.event() {
+                PageLoadEvent::Started => page_started(window.label()),
+                PageLoadEvent::Finished => crate::local::page_loaded(&app, window.label()),
+            }
+        })
         .on_navigation({
             let app = app.clone();
             let label = label.to_string();
@@ -723,19 +800,328 @@ pub fn show_files_window(
                 announce_frame(&window, false);
             }
         }
+        // Unsaved changes hold the close, whoever asked for it (the platform's ×, the page's own, Alt+F4): the
+        // window comes to the front and its page asks what to do with them, answering with a confirmed close — or,
+        // for a page that never takes the question, the app asks in its place (`close_turn`).
+        WindowEvent::CloseRequested { api, .. } => {
+            let turn = UNSAVED.lock().unwrap().close_turn(&own, Instant::now());
+            if turn != CloseTurn::Close {
+                api.prevent_close();
+                if let Some(window) = handle.get_webview_window(&own) {
+                    match turn {
+                        CloseTurn::AskPage(id) => ask_page(&handle, &window, id),
+                        CloseTurn::AskHere => ask_here(&handle, &window),
+                        CloseTurn::Wait | CloseTurn::Close => raise(&window),
+                    }
+                }
+            }
+        }
         // The folder stops being served the moment nothing shows it (local.rs).
         WindowEvent::Destroyed => {
             forget_chrome(&own);
+            forget_unsaved(&own);
             crate::local::window_closed(&handle, &own);
         }
         _ => {}
     });
-    arm_frame_fallback(app, label);
     if let Some(screen) = screen {
         place_in_work_area(&window, screen, size);
     }
-    let _ = window.set_focus();
+    // A spare's bar is judged from when it is worn, not from when it was built: its page draws nothing until it
+    // has a face, and a fallback fired meanwhile would hand it the platform's frame for no reason.
+    if how == FilesWindow::Shown {
+        arm_frame_fallback(app, label);
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
     Ok(window)
+}
+
+/// The spare becoming a window of its own (local.rs): `script` hands its page the face, and the window takes the
+/// title, the frame and the place a window built for this grant would have had, and only then comes on screen.
+pub fn wear_face(app: &AppHandle, window: &WebviewWindow, title: &str, script: &str) {
+    let _ = window.eval(script);
+    let _ = window.set_title(title);
+    let screen = work_area(app);
+    let (size, min) = opening_bounds(screen.map(|screen| screen.size));
+    let _ = window.set_min_size(Some(LogicalSize::new(min.0, min.1)));
+    let _ = window.set_size(LogicalSize::new(size.0, size.1));
+    if let Some(screen) = screen {
+        place_in_work_area(window, screen, size);
+    }
+    arm_frame_fallback(app, window.label());
+    let _ = window.show();
+    let _ = window.set_focus();
+}
+
+/* A LOCAL WINDOW'S UNSAVED CHANGES — what its close and the app's Quit ask about first. */
+
+/// What the page of a local window dispatches when a close is held for its changes: it asks the reader, then
+/// saves and sends `window?do=close`, or sends `window?do=close&confirmed=1` to let them go.
+const CLOSE_REQUESTED: &str = "window.dispatchEvent(new CustomEvent('intentic:close-requested'));";
+
+/// How long a page has to take the question it was handed (its script to run the dispatch) before the app asks in
+/// its place: a page that has died or hung never will, and would otherwise hold its window open for good.
+const PAGE_SILENCE: Duration = Duration::from_secs(3);
+
+/// A second close within this of the first is the same press twice (a double-click on the ×), not a page that
+/// failed to take the question.
+const SAME_PRESS: Duration = Duration::from_millis(800);
+
+/// What the app asks when the page cannot, under the page's own title and buttons ("Discard unsaved changes?",
+/// "Close anyway").
+const NOT_ANSWERING: &str = "This window isn't responding, so it can't ask about its unsaved edits itself. Closing it discards them. This can't be undone.";
+
+/// A close held for a page to ask about: which question it was (so a late receipt of an earlier one counts for
+/// nothing), when it was handed over, and whether the page's script has run it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Held {
+    id: u64,
+    at: Instant,
+    received: bool,
+}
+
+/// What local windows' pages have said about their changes, by label: `dirty` is the page's own word
+/// (`window?do=dirty&value=1`), `confirmed` a close its page has already asked about (`close&confirmed=1`), `held` the
+/// close last handed to the page, `asking` the windows the app's own question is up for. All of it goes with the
+/// window (`Destroyed`), and all but `asking` with the page when a new one starts in the window.
+#[derive(Default)]
+struct Unsaved {
+    dirty: HashSet<String>,
+    confirmed: HashSet<String>,
+    held: HashMap<String, Held>,
+    asking: HashSet<String>,
+    next: u64,
+}
+
+/// What one close request of a local window comes to.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum CloseTurn {
+    /// Nothing unsaved, or its page has already asked: it closes.
+    Close,
+    /// Held, and its page is handed the question; the id is the one its receipt names.
+    AskPage(u64),
+    /// Held, and the app asks: the page never took the question it was last handed.
+    AskHere,
+    /// Held with nothing new to do: the same press twice, or the app's own question already up.
+    Wait,
+}
+
+impl Unsaved {
+    /// A close request at `now`. A page that took the question it was last handed is alive, and is asked again
+    /// (its reader may have kept the window open, which the page tells nobody); one that did not take it is asked
+    /// in its place, unless this is the same press twice.
+    fn close_turn(&mut self, label: &str, now: Instant) -> CloseTurn {
+        if !self.dirty.contains(label) || self.confirmed.contains(label) {
+            return CloseTurn::Close;
+        }
+        if self.asking.contains(label) {
+            return CloseTurn::Wait;
+        }
+        match self.held.get(label) {
+            Some(held) if !held.received && now.saturating_duration_since(held.at) < SAME_PRESS => {
+                CloseTurn::Wait
+            }
+            Some(held) if !held.received => {
+                self.asking.insert(label.to_string());
+                CloseTurn::AskHere
+            }
+            _ => {
+                self.next += 1;
+                self.held.insert(
+                    label.to_string(),
+                    Held {
+                        id: self.next,
+                        at: now,
+                        received: false,
+                    },
+                );
+                CloseTurn::AskPage(self.next)
+            }
+        }
+    }
+
+    /// The page's script ran question `id`: the page is alive, and the question is its reader's to answer.
+    fn received(&mut self, label: &str, id: u64) {
+        if let Some(held) = self.held.get_mut(label).filter(|held| held.id == id) {
+            held.received = true;
+        }
+    }
+
+    /// [`PAGE_SILENCE`] after question `id` was handed over: whether the app asks in the page's place, which it does
+    /// only while that same question is still held and untaken, and nothing else is asking.
+    fn unanswered(&mut self, label: &str, id: u64) -> bool {
+        let silent = self.dirty.contains(label)
+            && !self.confirmed.contains(label)
+            && !self.asking.contains(label)
+            && self
+                .held
+                .get(label)
+                .is_some_and(|held| held.id == id && !held.received);
+        if silent {
+            self.asking.insert(label.to_string());
+        }
+        silent
+    }
+
+    fn mark_dirty(&mut self, label: &str, dirty: bool) {
+        if dirty {
+            self.dirty.insert(label.to_string());
+        } else {
+            // Clean again, so a close handed to the page before is moot.
+            self.dirty.remove(label);
+            self.held.remove(label);
+        }
+    }
+
+    /// A new page in the window: nothing of the one before it holds a close. The app's own question, if it is up,
+    /// is answered by its own dialog.
+    fn page_started(&mut self, label: &str) {
+        self.dirty.remove(label);
+        self.confirmed.remove(label);
+        self.held.remove(label);
+    }
+
+    fn forget(&mut self, label: &str) {
+        self.page_started(label);
+        self.asking.remove(label);
+    }
+}
+
+static UNSAVED: LazyLock<Mutex<Unsaved>> = LazyLock::new(Mutex::default);
+
+/// Set by "Quit anyway": the exit that follows is not asked about again, and nothing counts as unsaved any more,
+/// so an update staged for the way out still installs (update.rs `refusal`).
+static QUITTING: AtomicBool = AtomicBool::new(false);
+
+/// A Quit question is on screen. A second Quit while it is up is held without asking twice.
+static ASKING_QUIT: AtomicBool = AtomicBool::new(false);
+
+/// Only local windows keep the question: the workspace's × hides it and a floating panel's docks, so neither loses
+/// anything by closing.
+fn is_files_window(label: &str) -> bool {
+    label.starts_with(crate::local::FILES)
+}
+
+fn page_started(label: &str) {
+    if is_files_window(label) {
+        UNSAVED.lock().unwrap().page_started(label);
+    }
+}
+
+fn forget_unsaved(label: &str) {
+    UNSAVED.lock().unwrap().forget(label);
+}
+
+/// Hand the page the question, and give it [`PAGE_SILENCE`] to take it. The eval's own completion is the receipt:
+/// it runs only if the page's script does, so a page that has died or hung never sends one, and the app asks in its
+/// place ([`ask_here`]).
+fn ask_page(app: &AppHandle, window: &WebviewWindow, id: u64) {
+    raise(window);
+    let label = window.label().to_string();
+    let receipt = label.clone();
+    if let Err(error) = window.eval_with_callback(CLOSE_REQUESTED, move |_| {
+        UNSAVED.lock().unwrap().received(&receipt, id);
+    }) {
+        eprintln!("{label} could not be asked about its unsaved changes: {error}");
+    }
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(PAGE_SILENCE).await;
+        let unanswered = UNSAVED.lock().unwrap().unanswered(&label, id);
+        if !unanswered {
+            return;
+        }
+        match app.get_webview_window(&label) {
+            Some(window) => ask_here(&app, &window),
+            None => forget_unsaved(&label),
+        }
+    });
+}
+
+/// The page's question, asked by the app, over the window, for a page that never took it: "Close anyway" closes
+/// the window with its edits, "Cancel" keeps it, and the next close hands the question to the page again.
+fn ask_here(app: &AppHandle, window: &WebviewWindow) {
+    raise(window);
+    let label = window.label().to_string();
+    let handle = app.clone();
+    app.dialog()
+        .message(NOT_ANSWERING)
+        .title("Discard unsaved changes?")
+        .kind(MessageDialogKind::Warning)
+        .buttons(MessageDialogButtons::OkCancelCustom(
+            "Close anyway".into(),
+            "Cancel".into(),
+        ))
+        .parent(window)
+        .show(move |close| {
+            {
+                let mut unsaved = UNSAVED.lock().unwrap();
+                unsaved.asking.remove(&label);
+                unsaved.held.remove(&label);
+                if close {
+                    unsaved.confirmed.insert(label.clone());
+                }
+            }
+            // Destroyed rather than closed: the answer is in, and a page that cannot take a question cannot be
+            // relied on to let its window go either.
+            if close {
+                if let Some(window) = handle.get_webview_window(&label) {
+                    let _ = window.destroy();
+                }
+            }
+        });
+}
+
+/// How many local windows hold unsaved changes: what the app's Quit asks about, and what an update waits for.
+pub fn unsaved_windows() -> usize {
+    if QUITTING.load(Ordering::SeqCst) {
+        return 0;
+    }
+    UNSAVED.lock().unwrap().dirty.len()
+}
+
+/// The app is about to end with `code` (the tray's Quit, the ×'s "Quit", a restart): with local windows holding
+/// unsaved changes, ask first, in a native dialog. `true` means the exit was held for the question, and the caller
+/// prevents it; "Quit anyway" ends the app with the same code, and nothing is asked a second time.
+///
+/// A restart cannot be held (Tauri ignores a prevented restart), which is why an update refuses to start while
+/// anything is unsaved (update.rs `refusal`) rather than relying on this.
+pub fn hold_quit(app: &AppHandle, code: i32) -> bool {
+    let count = unsaved_windows();
+    if count == 0 || code == tauri::RESTART_EXIT_CODE {
+        return false;
+    }
+    if ASKING_QUIT.swap(true, Ordering::SeqCst) {
+        return true;
+    }
+    let handle = app.clone();
+    app.dialog()
+        .message(quit_question(count))
+        .title("Quit Intentic?")
+        .kind(MessageDialogKind::Warning)
+        .buttons(MessageDialogButtons::OkCancelCustom(
+            "Quit anyway".into(),
+            "Cancel".into(),
+        ))
+        .show(move |quit| {
+            ASKING_QUIT.store(false, Ordering::SeqCst);
+            if quit {
+                QUITTING.store(true, Ordering::SeqCst);
+                handle.exit(code);
+            }
+        });
+    true
+}
+
+/// The question, counted the way it is read.
+fn quit_question(count: usize) -> String {
+    let windows = if count == 1 {
+        "1 window has".to_string()
+    } else {
+        format!("{count} windows have")
+    };
+    format!("{windows} unsaved changes. If you quit now, those changes are lost.")
 }
 
 /// Bring a window back in front of the reader, as the tray or a second double-click on the same file asks.
@@ -786,8 +1172,22 @@ const FRAME_EVENT: &str = "intentic-desktop-window";
 /* The app and the SPA ship separately — a binary somebody installed once, against a page deployed continuously. */
 const CHROME_GRACE: Duration = Duration::from_secs(8);
 
-/// Hand the platform's frame back if nothing draws a bar in time. Armed once, when the window is built; the
-/// record it holds is that build's, so a window destroyed and rebuilt within the grace is judged by its own.
+/// What a page that has drawn its bar carries on its root element: WindowControls sets it as it mounts, in the same
+/// breath as it sends `ready`.
+const BAR_DRAWN: &str = "document.documentElement.hasAttribute('data-frameless')";
+
+/// How long a page gets to answer whether its bar is drawn, before the frame comes back anyway.
+const BAR_ANSWER: Duration = Duration::from_secs(2);
+
+/// Hand the platform's frame back if nothing draws a bar in time. Armed once, when the window is built (a spare's,
+/// when it is worn); the record it holds is that build's, so a window destroyed and rebuilt within the grace is
+/// judged by its own.
+///
+/// A missing `ready` is not yet a missing bar. `ready` is a link, and a page that sets two links in one task keeps
+/// only the last: WebKit schedules each `location.href` and drops the one pending when the next is set, and the bar
+/// announces its scheme right behind `ready` (a local window's unsaved-changes guard says its state in the same
+/// breath). So the page is asked whether its bar is drawn, and only a page that says no, or says nothing, gets the
+/// frame back.
 fn arm_frame_fallback(app: &AppHandle, label: &str) {
     let app = app.clone();
     let label = label.to_string();
@@ -797,11 +1197,43 @@ fn arm_frame_fallback(app: &AppHandle, label: &str) {
         if chrome.ready.load(Ordering::Relaxed) || !Arc::ptr_eq(&chrome, &chrome_of(&label)) {
             return;
         }
-        if let Some(window) = app.get_webview_window(&label) {
-            eprintln!("no title bar from the page in {label}: handing back the platform's frame");
-            let _ = window.set_decorations(true);
+        let Some(window) = app.get_webview_window(&label) else {
+            return;
+        };
+        if bar_drawn(&window).await {
+            chrome_is_up(&window);
+            return;
         }
+        eprintln!("no title bar from the page in {label}: handing back the platform's frame");
+        let _ = window.set_decorations(true);
     });
+}
+
+/// Whether the page in `window` has drawn its bar ([`BAR_DRAWN`]), within [`BAR_ANSWER`]; a page that does not
+/// answer has not.
+async fn bar_drawn(window: &WebviewWindow) -> bool {
+    let (tell, heard) = std::sync::mpsc::channel::<String>();
+    let asked = window.eval_with_callback(BAR_DRAWN, move |answer| {
+        let _ = tell.send(answer);
+    });
+    if asked.is_err() {
+        return false;
+    }
+    let started = Instant::now();
+    loop {
+        if let Ok(answer) = heard.try_recv() {
+            return says_yes(&answer);
+        }
+        if started.elapsed() >= BAR_ANSWER {
+            return false;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+}
+
+/// An evaluated script's answer, as the webview hands it back (JSON), read as a yes.
+fn says_yes(answer: &str) -> bool {
+    answer.trim() == "true"
 }
 
 /// The page saying its bar is up. `set_decorations(false)` is a no-op in the ordinary case and the whole point
@@ -854,10 +1286,19 @@ fn work_the_window(app: &AppHandle, label: &str, verb: WindowVerb) {
             announce_frame(&window, false);
         }
         // The workspace's × is a question and hides (`request_close`); a floating panel's × is its dock, and
-        // the window simply goes.
-        WindowVerb::Close if label == WORKSPACE => request_close(app),
-        WindowVerb::Close => {
+        // the window simply goes. A local window's goes through its CloseRequested, where unsaved changes hold it
+        // until its page has asked (`close_turn`) — which `confirmed` says it has.
+        WindowVerb::Close { .. } if label == WORKSPACE => request_close(app),
+        WindowVerb::Close { confirmed } => {
+            if confirmed && is_files_window(label) {
+                UNSAVED.lock().unwrap().confirmed.insert(label.to_string());
+            }
             let _ = window.close();
+        }
+        WindowVerb::Dirty(dirty) => {
+            if is_files_window(label) {
+                UNSAVED.lock().unwrap().mark_dirty(label, dirty);
+            }
         }
         // The platform's own move loop, started while the button is still down — the same call a Tauri drag
         // region makes, reached by a link instead of by a command.
@@ -1063,17 +1504,16 @@ fn launcher(app: &AppHandle) -> Option<WebviewWindow> {
     match result {
         Ok(window) => {
             settle_background(&window, mode);
-            // Closing this face means "I am done here", not "quit" — so the workspace comes back. Ending the
-            // app here instead would take it away from a user one gesture after the setup they just ran, and
-            // the screen that setup was for is the one behind this window.
+            // Closing this face means "I am done here", not "quit": back to the workspace when that is what the
+            // app is used through, otherwise into the tray (`close_launcher`). Ending the app here instead would
+            // take it away from a user one gesture after the setup they just ran.
             let handle = app.clone();
             window.on_window_event(move |event| match event {
-                // An install that never showed the workspace has none to go back to: the card simply goes, and the
-                // app stays in the tray (lib.rs keeps it running with no window).
-                WindowEvent::CloseRequested { .. } => {
-                    if handle.state::<AppState>().workspace_seen() {
-                        show_workspace(&handle);
-                    }
+                // Held, then decided, so the card is hidden rather than destroyed whichever way it goes: the tray
+                // brings back the same window, and a setup it is running keeps running.
+                WindowEvent::CloseRequested { api, .. } => {
+                    api.prevent_close();
+                    close_launcher(&handle);
                 }
                 // A folder or a document dropped on the card opens in a window of its own (local.rs).
                 WindowEvent::DragDrop(tauri::DragDropEvent::Drop { paths, .. }) => {
@@ -1174,6 +1614,11 @@ pub fn handle_link(app: &AppHandle, link: &str, source: Source) {
                 .unwrap() = Some(args);
             show_launcher(app);
             let _ = tauri::Emitter::emit(app, "desktop://pending-recreate", ());
+        }
+        // A folder of this computer becoming a project of a hosted sandbox: bound to the folder this app parked
+        // for it and run here, with no launcher screen in between (project.rs `sync_project`).
+        Some(Link::Sync(args)) if args.project.is_some() => {
+            crate::project::sync_project(app, args);
         }
         // The Desktop sync card's enrollment, handed over so the folder can be picked in a system dialog
         // rather than typed into a one-liner. App-source only by construction (setup_link.rs), so unlike a
@@ -1303,6 +1748,185 @@ mod loopback_tests {
     fn the_page_is_told_the_window_has_no_frame_of_its_own() {
         let script = workspace_init_script("install-1", None);
         assert!(script.contains("frameless: true"), "{script}");
+    }
+
+    /// The web hands a folder to a hosted machine only on this word (setup's `desktopTakesProjects`): a build
+    /// that parses `project=` on a sync link says so, and one that doesn't never reaches that lane.
+    #[test]
+    fn the_page_is_told_this_build_copies_a_folder_into_its_project() {
+        let script = workspace_init_script("install-1", None);
+        assert!(script.contains("projectSync: true"), "{script}");
+    }
+}
+
+#[cfg(test)]
+mod unsaved_tests {
+    use super::*;
+
+    /// The Quit question counts the windows the way it is read, and says what quitting costs.
+    #[test]
+    fn the_quit_question_counts_the_windows_holding_changes() {
+        assert_eq!(
+            quit_question(1),
+            "1 window has unsaved changes. If you quit now, those changes are lost."
+        );
+        assert_eq!(
+            quit_question(3),
+            "3 windows have unsaved changes. If you quit now, those changes are lost."
+        );
+    }
+
+    /// A close is held only while the page says it has changes and has not itself asked about them, and it is the
+    /// page that is handed the question.
+    #[test]
+    fn a_close_is_held_only_for_changes_nobody_has_asked_about() {
+        let now = Instant::now();
+        let mut unsaved = Unsaved::default();
+        assert_eq!(unsaved.close_turn("files-1", now), CloseTurn::Close);
+        unsaved.mark_dirty("files-1", true);
+        assert_eq!(unsaved.close_turn("files-1", now), CloseTurn::AskPage(1));
+        unsaved.confirmed.insert("files-1".into());
+        assert_eq!(
+            unsaved.close_turn("files-1", now),
+            CloseTurn::Close,
+            "the page asked, and was answered"
+        );
+        // Clean again: nothing to ask, and nothing held.
+        unsaved.confirmed.clear();
+        unsaved.mark_dirty("files-1", false);
+        assert_eq!(unsaved.close_turn("files-1", now), CloseTurn::Close);
+        assert!(unsaved.held.is_empty());
+    }
+
+    /// A page that has died or hung never takes the question: a second close asks in its place, the same press
+    /// twice does not, and while the app's question is up nothing more is asked.
+    #[test]
+    fn a_page_that_never_takes_the_question_is_asked_for_by_the_app() {
+        let now = Instant::now();
+        let mut unsaved = Unsaved::default();
+        unsaved.mark_dirty("files-1", true);
+        assert_eq!(unsaved.close_turn("files-1", now), CloseTurn::AskPage(1));
+        assert_eq!(
+            unsaved.close_turn("files-1", now + SAME_PRESS - Duration::from_millis(1)),
+            CloseTurn::Wait,
+            "a double press is one press"
+        );
+        assert_eq!(
+            unsaved.close_turn("files-1", now + SAME_PRESS),
+            CloseTurn::AskHere
+        );
+        assert_eq!(
+            unsaved.close_turn("files-1", now + Duration::from_secs(10)),
+            CloseTurn::Wait,
+            "the app's own question is up"
+        );
+    }
+
+    /// A page that took the question is alive, and its reader may have kept the window (which the page tells
+    /// nobody): the next close hands it the question again rather than asking over it.
+    #[test]
+    fn a_page_that_took_the_question_is_asked_again_and_a_late_receipt_counts_for_nothing() {
+        let now = Instant::now();
+        let mut unsaved = Unsaved::default();
+        unsaved.mark_dirty("files-1", true);
+        assert_eq!(unsaved.close_turn("files-1", now), CloseTurn::AskPage(1));
+        unsaved.received("files-1", 1);
+        assert!(!unsaved.unanswered("files-1", 1), "taken in time");
+        assert_eq!(
+            unsaved.close_turn("files-1", now + Duration::from_secs(60)),
+            CloseTurn::AskPage(2)
+        );
+        // The receipt of the first question says nothing about the second.
+        unsaved.received("files-1", 1);
+        assert!(unsaved.unanswered("files-1", 2));
+        assert_eq!(
+            unsaved.close_turn("files-1", now + Duration::from_secs(61)),
+            CloseTurn::Wait,
+            "the app is asking already"
+        );
+    }
+
+    /// PAGE_SILENCE after the question, the app asks only for that question, still untaken, with nothing else
+    /// asking and the changes still unsaved.
+    #[test]
+    fn the_app_asks_after_the_silence_only_for_the_question_still_held() {
+        let now = Instant::now();
+        let mut unsaved = Unsaved::default();
+        unsaved.mark_dirty("files-1", true);
+        let CloseTurn::AskPage(id) = unsaved.close_turn("files-1", now) else {
+            panic!("the page is asked first");
+        };
+        unsaved.mark_dirty("files-1", false);
+        assert!(!unsaved.unanswered("files-1", id), "saved meanwhile");
+        unsaved.mark_dirty("files-1", true);
+        let CloseTurn::AskPage(id) = unsaved.close_turn("files-1", now) else {
+            panic!("the page is asked again");
+        };
+        assert!(unsaved.unanswered("files-1", id));
+        assert!(
+            !unsaved.unanswered("files-1", id),
+            "asked once, not once per timer"
+        );
+    }
+
+    /// A page starting over in the window has no changes until it says so, and holds no close of the page before
+    /// it; a destroyed window takes everything with it.
+    #[test]
+    fn a_new_page_starts_with_nothing_unsaved() {
+        let now = Instant::now();
+        let mut unsaved = Unsaved::default();
+        unsaved.mark_dirty("files-1", true);
+        unsaved.confirmed.insert("files-1".into());
+        let _ = unsaved.close_turn("files-1", now);
+        unsaved.page_started("files-1");
+        assert!(
+            unsaved.dirty.is_empty() && unsaved.confirmed.is_empty() && unsaved.held.is_empty()
+        );
+        assert_eq!(unsaved.close_turn("files-1", now), CloseTurn::Close);
+        unsaved.mark_dirty("files-1", true);
+        unsaved.asking.insert("files-1".into());
+        unsaved.forget("files-1");
+        assert!(unsaved.dirty.is_empty() && unsaved.asking.is_empty());
+    }
+
+    #[test]
+    fn only_local_windows_keep_the_question() {
+        assert!(is_files_window("files-3"));
+        assert!(!is_files_window(WORKSPACE));
+        assert!(!is_files_window("floating-chat"));
+    }
+
+    /// A local window draws no update banner: the choice `show_files_window` makes names no downloaded version,
+    /// where the workspace's names the one that is ready.
+    #[test]
+    fn a_local_window_is_told_of_no_update() {
+        let ready = crate::update::Stage::Ready {
+            version: "9.9.9".into(),
+        };
+        assert_eq!(update_told(&ready, true), None);
+        assert_eq!(update_told(&ready, false), Some("9.9.9"));
+        assert!(
+            workspace_init_script("install-1", update_told(&ready, true)).contains("update: null")
+        );
+        assert!(
+            workspace_init_script("install-1", update_told(&ready, false))
+                .contains("update: \"9.9.9\"")
+        );
+        assert_eq!(update_told(&crate::update::Stage::Current, false), None);
+    }
+
+    /// The page's answer to whether its bar is drawn, as a webview hands an evaluated boolean back.
+    #[test]
+    fn a_page_says_its_bar_is_drawn_with_a_plain_true() {
+        assert!(says_yes("true"));
+        assert!(says_yes(" true\n"));
+        assert!(!says_yes("false"));
+        assert!(!says_yes("null"));
+        assert!(!says_yes(""));
+        assert_eq!(
+            BAR_DRAWN,
+            "document.documentElement.hasAttribute('data-frameless')"
+        );
     }
 }
 

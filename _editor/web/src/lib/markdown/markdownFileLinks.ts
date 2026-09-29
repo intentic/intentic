@@ -32,8 +32,9 @@ const workspaceHref = (path: string, agent: string | undefined): string => {
 
 // allow(md-links): `docs/a.md` and `docs/b.md` are an example of the rule, not pages in this repository
 // Resolves a relative reference against the document's directory, markdown's own rule (`docs/a.md` linking `./b.md`
-// means `docs/b.md`). `dir` is empty at root, undefined for agent/tool output (workspace-root-relative).
-const resolveIn = (dir: string | undefined, path: string): string => {
+// means `docs/b.md`). `dir` is empty at root, undefined for agent/tool output (workspace-root-relative). A `..` past
+// the top stays at the top. Shared with the document's pictures (markdownImages.ts).
+export const resolveIn = (dir: string | undefined, path: string): string => {
     if (dir === undefined || dir === ``) {
         return path;
     }

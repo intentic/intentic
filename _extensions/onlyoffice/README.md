@@ -81,7 +81,27 @@ flowchart LR
   no daemon: `@intentic/ext-onlyoffice/local-office` (`src/server/local-office.ts`) answers the viewer's four routes
   for one folder per window inside the app's `intentic-files` sidecar ([local-files](../../_devices/local-files)).
   Its listener keeps to loopback (`host` in `listener.ts`), where a sandbox's listens on every interface for the
-  document server's container, and the bundle is downloaded once into the app's cache.
+  document server's container, and the bundle is downloaded once into the app's cache. The app can ask for that
+  download before any document is open (`prefetch`, the sidecar's `prefetch-office`).
+  - The sidecar's settings say `{ engine: "browser", openAs: "view" }`: a document opens to read, and the viewer's
+    Edit opens it again in `edit` mode, which the backend grants wherever the window may write the document.
+  - **Originals** (`src/server/originals.ts`). Before the first save of a document in a run of the app (an autosave
+    or an explicit one), the document as it stood is copied into `office-originals/` beside the bundle's cache, one
+    folder per document named by the hash of its real path, holding each kept copy under the time it was kept and a
+    `meta.json` (`{ path, name, keptAt }`) naming the latest. Later saves in that run leave it alone. `GET
+    /x/intentic.onlyoffice/original?path=` answers `{ kept: true, keptAt }` or `{ kept: false }`, and `POST
+    /x/intentic.onlyoffice/restore-original` with `{ path }` writes the original back and keeps the version it
+    replaced as the original, so a restore can itself be restored; one that cannot replace the document (Windows
+    refuses while another program holds it) leaves the document and its original as they were, to be tried again. It
+    is refused (403) where the window may not write the document. Copies kept more than a week ago are removed at the
+    next start.
+  - Keep both writes the copy beside the document only where the window may write it: a document opened on its own
+    may write itself and nothing beside it, so its copy is refused (403).
+  - The viewer shows the document's text (the host's `text` slot, the sidecar's `workspace.derive`) under a one-line
+    status while the editor can't show it: the bundle still downloading, a failed start, or no network. After the
+    first save it asks for the original and offers "Restore original"; a daemon answers 404 there, and nothing shows.
+  - The page's `dirty` messages reach the host as the viewer's `dirty` event, so a window closing over unsaved
+    edits asks first, as it does for a text file.
 
 ## Key files
 

@@ -39,9 +39,12 @@ flowchart LR
   device row's card is its own `card`, never parsed out of its key.
 - **A folder on this computer.** The desktop app's local face reaches a sidecar, not a daemon, whose hello says
   `surface: "folder"` and lists only what it serves (`useDaemonRoutes.ts`). The file tree offers no verb whose route is
-  missing (`VERB_ROUTES` in `entryMenu.ts`: new folder, rename, delete, cut, copy, extract, a ZIP, a terminal), a
-  refused call says the feature is not there for a folder rather than asking for an update, and a recording plays or a
-  file downloads from its bytes over `/workspace/raw` where no media ticket is minted.
+  missing (`VERB_ROUTES` in `entryMenu.ts`) and none whose seam the window leaves out (`fileVerbSeams.ts`: a terminal,
+  extract, download, a ZIP), so a folder window renames, moves, copies and deletes (to the OS trash, with no in-app
+  undo) and offers "Ask an agent about this". A refused call says the feature is not there for a folder rather than
+  asking for an update, and a recording plays from its bytes over `/workspace/raw` where no media ticket is minted.
+  `local/` holds the window's own parts: Ctrl+P, Ctrl+Shift+F and Ctrl+W (`localKeys.ts`), the close guard for unsaved
+  edits (`useUnsavedGuard.ts`), and a project folder's Bring back section (`LocalBringBack.vue`).
 - **Routes.** `/login` and `/setup` sit outside the shell. Everything else lives under `/` in
   `WorkspaceShell.vue`, guarded by `requireAuth` and `requireSetup`, which renders `ShellDesktop.vue` (rail, docked
   chat and terminal) or `ShellMobile.vue` (tab bar, full-screen views). A link naming a sandbox (`/?sandbox=<id>`, the
@@ -82,7 +85,7 @@ every reader's open panel.
 | `app/` | Boot-time services: environment, i18n, analytics, diagnostics, self-heal |
 | `router/` | Route table, auth and setup guards, prefetch |
 | `shell/` | Workspace chrome: desktop rail, mobile tab bar, commands, windows, notifications |
-| `features/` | One directory per screen: chat, workspace, terminal, agents, sandbox, setup, settings |
+| `features/` | One directory per screen: chat, workspace, terminal, agents, sandbox, setup ([setup](src/features/setup/README.md)), settings |
 | `extension-host/` | Extension loading, the `IntenticApi` implementation, host module sharing |
 | `core-views/` | Rail views that stay in-app and the view/viewer registries |
 | `components/` | App-specific components not shared through [ui](../ui) |
@@ -91,6 +94,7 @@ every reader's open panel.
 | `skins/` | Whole-app looks; see [skins](src/skins/README.md) |
 | `styles/` | Self-hosted font faces |
 | `design-system/` | Suites for `@intentic/ui` components and composables, run in this app |
+| `local/` | The desktop app's local window on a folder or document of this computer |
 | `testing/` | Fakes for suites: daemon client, router, workers |
 
 ## Key files

@@ -4022,7 +4022,7 @@
         },
         "setupSyncOption": {
             "alsoSyncLocalFolder": "Sincronizar también una carpeta local",
-            "syncsWithFolderYouPicked": "Se sincroniza en directo con la carpeta que elegiste"
+            "syncsWithFolderYouPicked": "Copiado de la carpeta que elegiste"
         },
         "words": {
             "useLettersNumbersHyphens": "Usa solo letras, números y guiones."
