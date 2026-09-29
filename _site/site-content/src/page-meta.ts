@@ -44,12 +44,6 @@ export const pageMeta: Record<string, PageMeta> = {
         datePublished: "2026-08-13",
     },
     // Every sitemap route needs an entry here, or it falls back to BaseLayout's generic brand line.
-    "/credits/": {
-        title: "Credits · intentic",
-        description:
-            "The open-source works intentic uses that ask to be credited, with each licence and what was changed. DiceBear avatars and the Clay style.",
-        datePublished: "2026-08-15",
-    },
     "/about/": aboutMeta,
     // Only the blog index is here; a post's title/description live in its own frontmatter instead.
     "/blog/": {
