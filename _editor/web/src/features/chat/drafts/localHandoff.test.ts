@@ -8,6 +8,9 @@ jest.mock("./localHandoffArrival", () => ({ startLocalHandoff: () => arrivals.pu
 
 const { HANDOFF_KEY, HANDOFF_STALE_MS, handoffWaiting, keepHandoff, parseHandoff, receiveHandoff, takeHandoff } = await import("./localHandoff");
 
+// Someone is signed in: the arrival's to wait on, not this half's.
+const signedIn = (): boolean => true;
+
 // What the desktop app puts on the link: base64url of the JSON.
 const encode = (value: unknown): string => Buffer.from(JSON.stringify(value), `utf8`).toString(`base64url`);
 
@@ -102,28 +105,33 @@ describe(`keeping it until a chat can take it`, () => {
 describe(`the router's half`, () => {
     it(`keeps a handoff and replays the navigation without it, every other key riding along`, async () => {
         const to = { path: `/workspace`, query: { handoff: encode(handoff), sandbox: `box-2` }, hash: `#top` };
-        expect(receiveHandoff(to)).toEqual({ path: `/workspace`, query: { sandbox: `box-2` }, hash: `#top`, replace: true });
+        expect(receiveHandoff(to, signedIn)).toEqual({ path: `/workspace`, query: { sandbox: `box-2` }, hash: `#top`, replace: true });
         expect(takeHandoff()).toEqual(handoff);
         await settle();
         expect(arrivals).toEqual([`arrive`]);
     });
 
     it(`takes a handoff that doesn't validate out of the address too, and keeps nothing`, async () => {
-        expect(receiveHandoff({ path: `/`, query: { handoff: `!!!` }, hash: `` })).toEqual({ path: `/`, query: {}, hash: ``, replace: true });
+        expect(receiveHandoff({ path: `/`, query: { handoff: `!!!` }, hash: `` }, signedIn)).toEqual({
+            path: `/`,
+            query: {},
+            hash: ``,
+            replace: true,
+        });
         expect(handoffWaiting()).toBe(false);
         await settle();
         expect(arrivals).toEqual([]);
     });
 
     it(`is inert without the query`, async () => {
-        expect(receiveHandoff({ path: `/workspace`, query: { sandbox: `box-2` }, hash: `` })).toBe(true);
+        expect(receiveHandoff({ path: `/workspace`, query: { sandbox: `box-2` }, hash: `` }, signedIn)).toBe(true);
         await settle();
         expect(arrivals).toEqual([]);
     });
 
     it(`does nothing in a local window, which is never where the app hands a file`, async () => {
         window.__INTENTIC_LOCAL__ = { daemonUrl: `http://127.0.0.1:4100`, token: `t`, id: `f`, name: `notes`, path: `/home/me/notes` };
-        expect(receiveHandoff({ path: `/local`, query: { handoff: encode(handoff) }, hash: `` })).toBe(true);
+        expect(receiveHandoff({ path: `/local`, query: { handoff: encode(handoff) }, hash: `` }, signedIn)).toBe(true);
         expect(handoffWaiting()).toBe(false);
         await settle();
         expect(arrivals).toEqual([]);
@@ -132,8 +140,8 @@ describe(`the router's half`, () => {
     it(`looks once, on a page's first navigation, for a handoff kept before a reload`, async () => {
         const reloaded = await freshImport<typeof import("./localHandoff")>(`./localHandoff`, import.meta.url);
         reloaded.keepHandoff(handoff);
-        expect(reloaded.receiveHandoff({ path: `/workspace`, query: {}, hash: `` })).toBe(true);
-        expect(reloaded.receiveHandoff({ path: `/chat`, query: {}, hash: `` })).toBe(true);
+        expect(reloaded.receiveHandoff({ path: `/workspace`, query: {}, hash: `` }, signedIn)).toBe(true);
+        expect(reloaded.receiveHandoff({ path: `/chat`, query: {}, hash: `` }, signedIn)).toBe(true);
         await settle();
         expect(arrivals).toEqual([`arrive`]);
     });

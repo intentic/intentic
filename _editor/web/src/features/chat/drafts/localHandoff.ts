@@ -116,8 +116,8 @@ export const takeHandoff = (now: number = Date.now()): LocalHandoff | undefined 
 
 // Started on the first handoff this page hears of, then told of each later one: the arrival is a chunk of its own,
 // imported only by a page that has something to bring.
-const arrive = (): void => {
-    void import(`./localHandoffArrival`).then(({ startLocalHandoff }) => startLocalHandoff());
+const arrive = (signedIn: () => boolean): void => {
+    void import(`./localHandoffArrival`).then(({ startLocalHandoff }) => startLocalHandoff(signedIn));
 };
 
 // A handoff kept by this tab before a reload (the sign-in on the way here, say) is looked for once, on the first
@@ -128,9 +128,9 @@ let lookedForKept = false;
  * The router's half, for every navigation: a `handoff` query is kept (when it validates) and the navigation replayed
  * without it, every other key riding along, so the bearer never sits in the address bar, the history or a sign-in's
  * return address. True for a navigation with nothing to take. Inert in a local window, which is never where the app
- * hands a file.
+ * hands a file. `signedIn` says whether someone is, for the arrival to wait on.
  */
-export const receiveHandoff = (to: Pick<RouteLocationNormalized, `path` | `query` | `hash`>): true | RouteLocationRaw => {
+export const receiveHandoff = (to: Pick<RouteLocationNormalized, `path` | `query` | `hash`>, signedIn: () => boolean): true | RouteLocationRaw => {
     if (localFace() !== undefined) {
         return true;
     }
@@ -139,7 +139,7 @@ export const receiveHandoff = (to: Pick<RouteLocationNormalized, `path` | `query
     lookedForKept = true;
     if (raw === undefined) {
         if (firstLook && handoffWaiting()) {
-            arrive();
+            arrive(signedIn);
         }
         return true;
     }
@@ -147,7 +147,7 @@ export const receiveHandoff = (to: Pick<RouteLocationNormalized, `path` | `query
     const handoff = value === null || value === undefined ? undefined : parseHandoff(value);
     if (handoff !== undefined) {
         keepHandoff(handoff);
-        arrive();
+        arrive(signedIn);
     }
     const { [HANDOFF_QUERY]: _taken, ...query } = to.query;
     return { path: to.path, query, hash: to.hash, replace: true };

@@ -164,6 +164,7 @@
     "local -> extension-host": "",
     "local -> features/sandbox": "",
     "local -> features/workspace": "",
+    "local -> shell": "the desktop local window reuses the shell's quick-open palette and chord matcher (shell/commands), as features/workspace does; the way back is the route table (router -> local)",
     "push -> features/sandbox": "",
     "push -> lib": "",
     "push -> shell": "",

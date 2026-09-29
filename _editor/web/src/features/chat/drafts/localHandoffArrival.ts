@@ -4,7 +4,6 @@ import type { RouteLocationNormalizedLoaded } from "vue-router";
 import { router } from "../../../router";
 import { useNotifications } from "../../../shell/notifications/notifications";
 import { startAgent } from "../../agents/fleet/agentActions";
-import { useAuth } from "../../auth/useAuth";
 import { useSandbox } from "../../sandbox/client/useSandbox";
 import { drawsChat } from "../run/chatEcho";
 import { type LocalHandoff, takeHandoff } from "./localHandoff";
@@ -55,18 +54,15 @@ const bringWaiting = (): void => {
     }
 };
 
-/** Brings a kept handoff's file in now if this window can show a chat, else as soon as it can. Idempotent. */
-export const startLocalHandoff = (): void => {
+/**
+ * Brings a kept handoff's file in now if this window can show a chat, else as soon as it can. Idempotent. `signedIn` is
+ * the router's to answer (features/auth sits above chat), read reactively like the rest of what the window waits on.
+ */
+export const startLocalHandoff = (signedIn: () => boolean): void => {
     if (ready === undefined) {
-        const { user } = useAuth();
         const { activeSandboxId, reachable } = useSandbox();
         const canShow = computed(
-            () =>
-                user.value !== null &&
-                activeSandboxId.value !== undefined &&
-                reachable.value &&
-                drawsChat.value &&
-                inShell(router.currentRoute.value),
+            () => signedIn() && activeSandboxId.value !== undefined && reachable.value && drawsChat.value && inShell(router.currentRoute.value),
         );
         ready = () => canShow.value;
         watch(canShow, bringWaiting);

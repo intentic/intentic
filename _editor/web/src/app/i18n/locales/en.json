@@ -6387,6 +6387,7 @@
         },
         "workspaceDesktop": {
             "anywhere": "Anywhere",
+            "clearEsc": "Clear (Esc)",
             "closeAll": "Close All",
             "closeAllTabs": "Close All Tabs",
             "closeAnyway": "Close anyway",

@@ -11,7 +11,6 @@ const drawsChat = ref(true);
 const currentRoute = ref({ matched: [{ path: `/` }, { path: `/workspace/:path(.*)*` }] });
 const started: string[] = [];
 const said: { kind: string; text: string }[] = [];
-jest.mock("../../auth/useAuth", () => ({ useAuth: () => ({ user }) }));
 jest.mock("../../sandbox/client/useSandbox", () => ({ useSandbox: () => ({ activeSandboxId: ref(`box-1`), reachable }) }));
 jest.mock("../run/chatEcho", () => ({ drawsChat }));
 jest.mock("../../../router", () => ({ router: { currentRoute } }));
@@ -67,7 +66,7 @@ afterEach(() => {
 describe(`bringing a file from the user's computer into a chat`, () => {
     it(`reads it with its bearer, opens a new chat, and queues it there under its name and type`, async () => {
         keepHandoff(handoff);
-        startLocalHandoff();
+        startLocalHandoff(() => user.value !== null);
         await settle();
         expect(asked).toEqual([{ url: handoff.url, authorization: `Bearer ${handoff.token}` }]);
         expect(started).toEqual([`c-1`]);
@@ -86,7 +85,7 @@ describe(`bringing a file from the user's computer into a chat`, () => {
     it(`says it couldn't, and lets the handoff go, when the file server refuses`, async () => {
         answer = () => new Response(`token expired`, { status: 401 });
         keepHandoff(handoff);
-        startLocalHandoff();
+        startLocalHandoff(() => user.value !== null);
         await settle();
         expect(started).toEqual([]);
         expect(said).toEqual([{ kind: `warn`, text: `Couldn't bring Q3.docx from your computer. Open it there and ask again.` }]);
@@ -97,7 +96,7 @@ describe(`bringing a file from the user's computer into a chat`, () => {
         reachable.value = false;
         currentRoute.value = { matched: [{ path: `/setup` }] };
         keepHandoff(handoff);
-        startLocalHandoff();
+        startLocalHandoff(() => user.value !== null);
         await settle();
         expect(asked).toEqual([]);
         expect(handoffWaiting()).toBe(true);
