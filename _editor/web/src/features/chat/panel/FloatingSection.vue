@@ -1,5 +1,6 @@
 <!-- Whole window for a popped-out panel (/floating/chat, /floating/terminal, /floating/preview). -->
 <script setup lang="ts">
+import { useDevice } from "@intentic/ui";
 import { computed, onMounted, onUnmounted, useTemplateRef, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { closeOwnWindow } from "../../../app/environments/desktop";
@@ -12,6 +13,11 @@ import { ACTIVE_KEY } from "../../sandbox/overview/activeSandbox";
 import { useSandbox } from "../../sandbox/client/useSandbox";
 import { useLayout } from "../../../shell/window/useLayout";
 import { chatFullSlot, previewSlot, terminalSlot } from "../../../shell/window/panelSlots";
+import { uiLength } from "../../../shell/window/uiScale";
+import { registerCoreSideViews } from "../../../shell/side/coreSideViews";
+import { sideDocked } from "../../../shell/side/sideTabs";
+import { shownSideTabs } from "../../../shell/side/sideViews";
+import SidePanel from "../../../shell/side/SidePanel.vue";
 
 const route = useRoute();
 const router = useRouter();
@@ -76,6 +82,27 @@ onUnmounted(() => window.removeEventListener(`storage`, followSandbox));
 useShellCommands();
 useKeybindings();
 
+// A popped-out chat has a side panel of its own, right of the chat, where the checklist and usage strip stood: a file
+// or the running app the chat names is looked at here, beside the conversation that named it, rather than in the main
+// window behind this one. Under the phone breakpoint there is no room beside, and references go to the main window.
+const { mobile } = useDevice();
+if (panel === `chat`) {
+    const coreSideViews = registerCoreSideViews();
+    watch(mobile, (narrow) => (sideDocked.value = !narrow), { immediate: true });
+    onUnmounted(() => {
+        sideDocked.value = false;
+        for (const view of coreSideViews) {
+            view.dispose();
+        }
+    });
+}
+const sideShown = computed(() => panel === `chat` && !mobile.value && shownSideTabs.value.length > 0);
+const layoutStyle = computed(() => ({
+    gridTemplateAreas: `"chat side"`,
+    gridTemplateColumns: `minmax(0, 1fr) ${sideShown.value ? uiLength(layout.floatingSideWidth.value) : `0px`}`,
+    gridTemplateRows: `1fr`,
+}));
+
 const slot = useTemplateRef(`slot`);
 const dockRef = computed(() => (panel === `chat` ? chatFullSlot : panel === `terminal` ? terminalSlot : previewSlot));
 onMounted(() => {
@@ -87,13 +114,11 @@ onUnmounted(() => {
 </script>
 
 <template>
-<!-- The chat panel styles itself with `grid-area: chat`, so its slot's parent must be a grid with that area; the other two fill a plain flex column. -->
-    <div
-        v-if="panel === `chat`"
-        class="chat-floating-root grid h-screen w-screen overflow-hidden"
-        style="grid-template-areas: &quot;chat&quot;; grid-template-columns: 1fr; grid-template-rows: 1fr"
-    >
+<!-- The chat panel styles itself with `grid-area: chat`, so its slot's parent must be a grid with that area; the side
+         panel takes `side` beside it. The other two fill a plain flex column. -->
+    <div v-if="panel === `chat`" class="chat-floating-root grid h-screen w-screen overflow-hidden" :style="layoutStyle">
         <div ref="slot" class="contents"></div>
+        <SidePanel v-if="sideShown" floating />
     </div>
     <div v-else class="flex h-screen w-screen flex-col overflow-hidden">
         <div ref="slot" class="contents"></div>

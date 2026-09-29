@@ -1,5 +1,4 @@
 import { browserOwnsClick } from "@intentic/ui";
-import { handOffToMainWindow } from "../window/mainWindow";
 import { type SideInput, sideTabId } from "./sideTabs";
 import { claimLink, describeTab, revealSideView, sideViewOf } from "./sideViews";
 
@@ -14,10 +13,9 @@ export interface ClaimedLink {
     readonly label: string;
 }
 
-// Opens what a claim names where this window can show it: beside, the app's own window for a popped-out one, or the
-// view's home on a phone. Answers whether anything opened, so a claimed link that can't be shown stays a link.
-export const openClaimed = (claimed: Pick<ClaimedLink, `view` | `input`>): boolean =>
-    handOffToMainWindow({ kind: `side`, view: claimed.view, input: claimed.input, keep: false }) || revealSideView(claimed.view, claimed.input);
+// Opens what a claim names where this window can show it (revealSideView). Answers whether anything opened, so a
+// claimed link that can't be shown stays a link.
+export const openClaimed = (claimed: Pick<ClaimedLink, `view` | `input`>): boolean => revealSideView(claimed.view, claimed.input);
 
 // A link written into plain text, up to where prose would end it: whitespace, or a closing bracket or stop after it.
 const LINK_IN_TEXT = /https?:\/\/[^\s<>"'`]+/gu;

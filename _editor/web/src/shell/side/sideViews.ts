@@ -1,6 +1,7 @@
 import type { Disposable } from "@intentic/extension-api";
 import type { IconName, Tip } from "@intentic/ui";
 import { type Component, computed, shallowRef } from "vue";
+import { handOffToMainWindow } from "../window/mainWindow";
 import { type OpenBesideOptions, openBeside, type SideInput, type SideTab, sideDocked, sideTabId, useSidePanel } from "./sideTabs";
 
 // WHAT THE SIDE PANEL CAN SHOW, one entry per side view: the core's own (a file, the running app) and each extension's.
@@ -105,9 +106,14 @@ export const claimLink = (url: string): { readonly view: string; readonly input:
     return undefined;
 };
 
-// Opens a side view where this window can show it: beside the section, with a side panel; in its home otherwise (a
-// phone). Answers whether it could be shown at all, so a claimed link that can't be shows as the link it was.
+// Opens a side view where this window can show it: beside the section, with a side panel (a popped-out chat has its own);
+// in the app's own window, from a popped-out panel with none; in its home otherwise (a phone). Answers whether it could
+// be shown at all, so a claimed link that can't be shows as the link it was.
 export const revealSideView = (view: string, input: SideInput, options: OpenBesideOptions = {}): boolean => {
+    // Before `opening`, which acts on this window's own state (the preview's target), the errand being the other's.
+    if (!sideDocked.value && handOffToMainWindow({ kind: `side`, view, input, keep: options.keep === true })) {
+        return true;
+    }
     const entry = sideViewOf(view);
     const kept = entry?.opening?.(input) ?? input;
     if (sideDocked.value) {

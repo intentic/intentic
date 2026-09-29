@@ -11,6 +11,7 @@ import { openInWorkspace } from "../../features/workspace/files/refs/openFileRef
 import { PORTS } from "../../lib/queryKeys";
 import { queryClient } from "../../lib/queryPersistence";
 import { router } from "../../router";
+import { handOffToMainWindow } from "../window/mainWindow";
 import { previewSlot } from "../window/panelSlots";
 import { FILE_SIDE_VIEW, FileSideInputSchema } from "./sideFileInput";
 import { registerSideView } from "./sideViews";
@@ -39,8 +40,8 @@ const heldPorts = (): readonly PortSummary[] => queryClient.getQueryData<{ reado
 // What a claimed link hands the preview: the target it names, which the one tab then shows.
 const PreviewInputSchema = z.object({ target: z.string().min(1).optional() });
 
-// The side views the core draws itself, registered once by the desktop shell, the only shell with a side panel. Each
-// names its home, the section its thing belongs to, so a peek can be moved there whole.
+// The side views the core draws itself, registered by each window with a side panel (the desktop shell, a popped-out
+// chat). Each names its home, the section its thing belongs to, so a peek can be moved there whole.
 
 export const registerCoreSideViews = (): readonly Disposable[] => {
     const words = useVocabulary();
@@ -90,7 +91,15 @@ export const registerCoreSideViews = (): readonly Disposable[] => {
             const name = targetName(previewSelectedId.value);
             return { title: name === undefined ? words.value.preview : `${words.value.preview} · ${name}`, icon: `eye`, tip: { title: words.value.preview, note: name } };
         },
-        home: () => ({ label: words.value.preview, open: () => openPreview(router) }),
+        // From a popped-out chat, the app's own window goes to its Preview; this one has no section to go to.
+        home: () => ({
+            label: words.value.preview,
+            open: () => {
+                if (!handOffToMainWindow({ kind: `route`, path: `/preview` })) {
+                    openPreview(router);
+                }
+            },
+        }),
         claim: (url) => {
             const target = loopbackPreviewTarget(url, heldPorts());
             return target === undefined ? undefined : { target };

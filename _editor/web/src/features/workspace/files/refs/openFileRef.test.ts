@@ -23,7 +23,7 @@ jest.mock("../../../../core-views/registry", () => ({ sectionReachable }));
 
 const { fileLinkDecorator, renderMarkdown } = await import("../../../../lib/markdown/renderMarkdown");
 const { renderMarkdown: renderEngine } = await import("@intentic/ui/markdown");
-const { openFileRefFromEvent } = await import("./openFileRef");
+const { openFileRefFromEvent, openInWorkspace } = await import("./openFileRef");
 const { workspaceAgent } = await import("../../health/workspaceScope");
 const { claimFloating } = await import("../../../../shell/window/floating");
 const { sideDocked, sideTabId, useSidePanel, closeAllTabs } = await import("../../../../shell/side/sideTabs");
@@ -142,6 +142,37 @@ describe(`clicking a file in a popped-out panel`, () => {
         expect(openAtLine).not.toHaveBeenCalled();
         expect(openFile).not.toHaveBeenCalled();
         expect(push).not.toHaveBeenCalled();
+        expect(open).toHaveBeenCalledWith(`/workspace`, `intentic-main`);
+        scope.stop();
+    });
+
+    // A popped-out chat draws a side panel of its own (FloatingSection.vue), so the file is looked at where it was named.
+    it(`peeks it in a popped-out chat's own side panel`, async () => {
+        const open = jest.fn(() => null);
+        stubGlobal(`open`, open);
+        const scope = effectScope();
+        scope.run(() => claimFloating(`chat`, jest.fn()));
+        sideDocked.value = true;
+        currentRoute.value = { name: `floating` };
+
+        clickFileLink(surface(`Fixed in src/foo.ts:42.`));
+
+        await waitFor(() => expect(useSidePanel().tabs.value.map((tab) => tab.input)).toEqual([{ path: `src/foo.ts` }]));
+        expect(open).not.toHaveBeenCalled();
+        expect(push).not.toHaveBeenCalled();
+        scope.stop();
+    });
+
+    it(`sends "Open in Workspace" from there to the app's own window, never routing this one`, async () => {
+        const open = jest.fn(() => null);
+        stubGlobal(`open`, open);
+        const scope = effectScope();
+        scope.run(() => claimFloating(`chat`, jest.fn()));
+
+        await openInWorkspace(`src/foo.ts`, undefined, { agent: undefined });
+
+        expect(push).not.toHaveBeenCalled();
+        expect(openFile).not.toHaveBeenCalled();
         expect(open).toHaveBeenCalledWith(`/workspace`, `intentic-main`);
         scope.stop();
     });

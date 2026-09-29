@@ -28,7 +28,6 @@ import { documentProvider, registerDocumentProvider } from "../core-views/docume
 import { extensionSideViewId, registerExtensionSideView } from "../core-views/extensionSideViews";
 import { SideInputSchema } from "../shell/side/sideTabs";
 import { revealSideView, sideViewOf } from "../shell/side/sideViews";
-import { handOffToMainWindow } from "../shell/window/mainWindow";
 import { onFilesChanged } from "./fileEvents";
 import { onRefsChanged, onReposChanged } from "./repoEvents";
 import { registerView } from "../core-views/registry";
@@ -130,9 +129,7 @@ const sideViewsApi = (
                 return;
             }
             const keep = options?.keep === true;
-            if (!handOffToMainWindow({ kind: `side`, view, input: plain, keep })) {
-                revealSideView(view, plain, { keep });
-            }
+            revealSideView(view, plain, { keep });
         },
     };
 };

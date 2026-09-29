@@ -19,20 +19,22 @@ export const sharedStatePath = (path: string): boolean => path.startsWith(`${STA
 // Resolves the reference before opening it, since a path written in prose is often a suffix of the real one;
 // an unresolved reference opens as written.
 // Where it opens is the file's home or beside it: standing in the Workspace, the file opens there; anywhere else it is
-// peeked in the side panel and the section the rail put in the main area stays put. A window with no side panel (a
-// phone), and a reader the Workspace is closed to, keep the Workspace route.
+// peeked in the side panel and the section the rail put in the main area stays put. A popped-out chat has a side panel of
+// its own, so a file mentioned there is looked at there. A window with no side panel (a phone, a popped-out terminal),
+// and a reader the Workspace is closed to, keep the Workspace route.
 export const openWorkspaceRef = async (path: string, line?: number, asked?: { readonly agent: string | undefined }): Promise<void> => {
     // Set before the hand-off below, so both windows resolve the same file.
     const scope = sharedStatePath(path) ? { agent: undefined } : asked;
-    // A floating panel has no app to route to; hand off unresolved so the app's own window resolves it.
-    if (handOffToMainWindow({ kind: `file`, path, line, scope })) {
-        return;
-    }
     if (sideDocked.value && router.currentRoute.value.name !== `workspace` && sectionReachable(`/workspace`)) {
         // Resolved in the copy it names, which the Workspace's own scope is left alone by: a look is not a move.
         const { agent } = scope ?? workspaceScope();
         const target = (await resolveWorkspaceRef(path, { agent })) ?? path;
         openBeside(FILE_SIDE_VIEW, fileSideInput(target, agent), line === undefined ? {} : { line });
+        return;
+    }
+    // Any other popped-out panel has no app to route to; hand off unresolved so the app's own window resolves it, and
+    // decides there whether it opens beside.
+    if (handOffToMainWindow({ kind: `file`, path, line, scope })) {
         return;
     }
     await openInWorkspace(path, line, scope);
@@ -41,6 +43,10 @@ export const openWorkspaceRef = async (path: string, line?: number, asked?: { re
 // The Workspace route itself, with the file open in its editor: what a reference did before the side panel, and what a
 // peek's "Open in Workspace" still does. Switches the Workspace to the copy the reference named.
 export const openInWorkspace = async (path: string, line?: number, scope?: { readonly agent: string | undefined }): Promise<void> => {
+    // A floating panel has no Workspace to route to; hand off unresolved so the app's own window resolves it.
+    if (handOffToMainWindow({ kind: `file`, path, line, scope, home: true })) {
+        return;
+    }
     // `{ agent: undefined }` means the shared tree, not "leave as is"; set before resolving, which reads it.
     if (scope !== undefined) {
         workspaceAgent.value = scope.agent;

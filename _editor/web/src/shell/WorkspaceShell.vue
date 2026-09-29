@@ -5,7 +5,7 @@ import { useRoute, useRouter } from "vue-router";
 import { watchAgentsScope } from "../features/agents/board/agentsTile";
 import { useExtensionHost } from "../extension-host/useExtensionHost";
 import { useMainWindow } from "./window/mainWindow";
-import { openWorkspaceRef } from "../features/workspace/files/refs/openFileRef";
+import { openInWorkspace, openWorkspaceRef } from "../features/workspace/files/refs/openFileRef";
 import { openPreviewBeside } from "../features/preview/previewSurface";
 import { revealSideView } from "./side/sideViews";
 import { prefetchViewsAtIdle } from "../router/prefetch";
@@ -36,7 +36,7 @@ const route = useRoute();
 // from here, since only a mounted shell can promise there's somewhere to put it (mainWindow.ts).
 useMainWindow((errand) => {
     if (errand.kind === `file`) {
-        void openWorkspaceRef(errand.path, errand.line, errand.scope);
+        void (errand.home === true ? openInWorkspace : openWorkspaceRef)(errand.path, errand.line, errand.scope);
     } else if (errand.kind === `preview`) {
         openPreviewBeside(router, errand.target);
     } else if (errand.kind === `side`) {

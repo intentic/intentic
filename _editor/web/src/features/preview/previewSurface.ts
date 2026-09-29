@@ -63,14 +63,15 @@ export const PREVIEW_SIDE_VIEW = `preview`;
 
 // A reference to a running app (a server a turn left running, a localhost link): selects it, and shows it beside the
 // section the reader is in rather than taking the main area. Standing on /preview it is simply selected there; a window
-// with no side panel, or a reader the preview is closed to, goes to /preview as before; a popped-out panel hands it to
-// the app's own window. Kept, not a peek: replacing it with the next file looked at would reload the app.
+// with no side panel, or a reader the preview is closed to, goes to /preview as before; a popped-out chat shows it in
+// its own side panel, and any other popped-out panel hands it to the app's own window. Kept, not a peek: replacing it
+// with the next file looked at would reload the app.
 export const openPreviewBeside = (router: Router, targetId?: string): void => {
-    if (handOffToMainWindow({ kind: `preview`, target: targetId })) {
-        return;
-    }
-    if (!sideDocked.value || router.currentRoute.value.name === `preview` || (useRole().isGuest.value && !guestAllowedPath(`/preview`))) {
-        openPreview(router, targetId);
+    const beside = sideDocked.value && router.currentRoute.value.name !== `preview` && (!useRole().isGuest.value || guestAllowedPath(`/preview`));
+    if (!beside) {
+        if (!handOffToMainWindow({ kind: `preview`, target: targetId })) {
+            openPreview(router, targetId);
+        }
         return;
     }
     if (targetId !== undefined) {

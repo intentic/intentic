@@ -54,8 +54,10 @@ flowchart LR
   things without leaving the one they picked. A reference (a file a chat names, a server a turn left running, an
   extension's side view) opens in its home while that home is the main area, and beside it everywhere else, as a peek
   the next one replaces unless kept. "Open in …" moves it into its home. The chat whose home is the side is the
-  panel's lower part, under the tabs, and a popped-out window hands its references to the main window's panel. A phone
-  has no side panel: there every reference navigates as before. A file peek reads the copy it names (`VIEW_SCOPE`)
+  panel's lower part, under the tabs. A popped-out chat has a panel of its own, right of the chat where its checklist
+  and usage strip stand while it is empty; "Open in …" from there goes to the main window, and a popped-out terminal
+  or preview hands its references to the main window's panel. A phone has no side panel: there every reference
+  navigates as before. A file peek reads the copy it names (`VIEW_SCOPE`)
   without switching the Workspace's scope, and never edits, since the Workspace may hold the same path unsaved.
   _2026-09-29: peeks stack above the chat rather than sharing tabs with it. A tab would hide the chat that linked to
   the file, and typing to an agent while its preview updates needs both on screen. References from the side panel's

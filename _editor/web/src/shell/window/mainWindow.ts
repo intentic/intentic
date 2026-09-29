@@ -17,11 +17,14 @@ export type MainWindowErrand =
           readonly path: string;
           readonly line: number | undefined;
           readonly scope: { readonly agent: string | undefined } | undefined;
+          // The Workspace itself, not beside the section there: a peek's "Open in Workspace" pressed in a popped-out
+          // chat, which the main window must not turn into a peek of its own.
+          readonly home?: boolean;
       }
     | { readonly kind: `route`; readonly path: string }
     // The running app, on a target or the one last shown: beside the main window's section, or its own route.
     | { readonly kind: `preview`; readonly target: string | undefined }
-    // A side view on an input (an extension's run, a CI run): the popped-out window has no side panel of its own.
+    // A side view on an input (an extension's run, a CI run), from a popped-out window with no side panel of its own.
     | { readonly kind: `side`; readonly view: string; readonly input: SideInput; readonly keep: boolean };
 
 // Notes windows exchange; only `here` carries state. `roll` lets a newly loaded window learn who's out there without

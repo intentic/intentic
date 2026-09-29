@@ -48,7 +48,10 @@ export const sideTabId = (view: string, input: SideInput): string =>
 // may be looking at different things. The id is captured at restore rather than read at write, since the active sandbox
 // flips before this scope re-reads its state.
 
-const storageKey = (sandboxId: string): string => `intentic.sidePanel.${sandboxId}`;
+// A popped-out chat's panel is its own: the window starts with a copy of its opener's session storage, which would
+// otherwise hand it the main window's tabs. Read once, since a window never changes which kind it is.
+const floatingWindow = globalThis.location?.pathname.startsWith(`${import.meta.env.BASE_URL}floating/`) === true;
+const storageKey = (sandboxId: string): string => (floatingWindow ? `intentic.sidePanel.floating.${sandboxId}` : `intentic.sidePanel.${sandboxId}`);
 
 // A side view's input as it may arrive from outside the app's own code (a stored tab, an extension's call): plain values.
 export const SideInputSchema = z.record(z.string(), z.union([z.string(), z.number(), z.boolean()]));
@@ -120,8 +123,9 @@ watch(serialized, (json) => {
     }
 });
 
-// Whether this window has a side panel to open things in: the desktop shell of a main window. A phone, and a popped-out
-// panel's own window, have none, and a reference there does what it did before the panel existed.
+// Whether this window has a side panel to open things in: the desktop shell of a main window, or a popped-out chat's
+// window (FloatingSection.vue). A phone, and a popped-out terminal or preview, have none, and a reference there does
+// what it did before the panel existed.
 // allow(module-state): whether the desktop shell is mounted in this window, which no sandbox switch changes
 export const sideDocked = ref(false);
 

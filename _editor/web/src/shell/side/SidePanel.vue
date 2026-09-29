@@ -9,7 +9,15 @@ import { SIDE_PANEL } from "../commands/categories";
 import { type CommandRegistration, registerCommand } from "../commands/useCommands";
 import { chatSlot } from "../window/panelSlots";
 import { toAppPx, toScreenPx, uiLength } from "../window/uiScale";
-import { DEFAULT_SIDE_SPLIT, defaultChatWidth, maxChatWidth, MIN_CHAT_WIDTH, useLayout } from "../window/useLayout";
+import {
+    DEFAULT_SIDE_SPLIT,
+    defaultChatWidth,
+    defaultFloatingSideWidth,
+    maxChatWidth,
+    maxFloatingSideWidth,
+    MIN_CHAT_WIDTH,
+    useLayout,
+} from "../window/useLayout";
 import { closeAllTabs, closeOtherTabs, closeTab, cycleTab, keepTab, activateTab, type SideTab, toggleCollapsed, useSidePanel } from "./sideTabs";
 import { describeTab, homeOf, shownSideActive, shownSideTabs, type SideViewEntry, type SideViewLabel, sideViewOf } from "./sideViews";
 import SideStrip, { type SideStripItem } from "./SideStrip.vue";
@@ -19,6 +27,9 @@ import SideUnavailable from "./SideUnavailable.vue";
 // when the chat's home is the side. Peeks stack above the chat rather than hiding it behind a tab, so the chat that
 // linked to a file, or the preview it is changing, stays in reach while you look. The column's width is the one the chat
 // column always had (`ui-chat-width`), so nobody's width moved when the chat became one of the panel's two parts.
+
+// `floating`: drawn in a popped-out chat's window, beside the chat rather than over it, at that window's own width.
+const { floating = false } = defineProps<{ floating?: boolean }>();
 
 const t = useT();
 const layout = useLayout();
@@ -52,8 +63,8 @@ onBeforeUnmount(() => observer?.disconnect());
 
 // The seams speak pointer pixels; what is stored is app pixels for the width and a fraction for the split.
 const widthSeam = computed<number>({
-    get: () => toScreenPx(layout.chatWidth.value),
-    set: (px) => layout.setChatWidth(toAppPx(px)),
+    get: () => toScreenPx(floating ? layout.floatingSideWidth.value : layout.chatWidth.value),
+    set: (px) => (floating ? layout.setFloatingSideWidth(toAppPx(px)) : layout.setChatWidth(toAppPx(px))),
 });
 const splitSeam = computed<number>({
     get: () => Math.round(layout.sideSplit.value * height.value),
@@ -207,8 +218,8 @@ onBeforeUnmount(() => {
             place="edge"
             pane="after"
             :min="toScreenPx(MIN_CHAT_WIDTH)"
-            :max="toScreenPx(maxChatWidth())"
-            :reset="toScreenPx(defaultChatWidth())"
+            :max="toScreenPx(floating ? maxFloatingSideWidth() : maxChatWidth())"
+            :reset="toScreenPx(floating ? defaultFloatingSideWidth() : defaultChatWidth())"
             :title="t(`ui.resizeSeam.doubleClickResets`)"
         />
 

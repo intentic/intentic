@@ -9,6 +9,7 @@ import { traceFocus } from "../run/focusTrace";
 import { openRunSessions } from "../run/openRun";
 import { DEFAULT_RAIL_WIDTH, railWidth } from "../../agents/board/columnWidth";
 import { quickBarTranscript, chatOnRail, chatWide } from "./chatPanelLayout";
+import { shownSideTabs } from "../../../shell/side/sideViews";
 import { useChat } from "../run/useChat";
 import { useChatFloating } from "./chatFloating";
 import { useWorkflowRuns } from "../../agents/fleet/useWorkflowRuns";
@@ -134,6 +135,8 @@ const showsRail = computed(
     () =>
         floating.value &&
         !mobile.value &&
+        // The window's side panel stands where the rail would, while it holds anything (FloatingSection.vue).
+        shownSideTabs.value.length === 0 &&
         (!accountsLoaded.value || hasCapacity()) &&
         railFitsBeside(panelWidth.value, tabs ? railWidth.value : 0, shown.value.length),
 );

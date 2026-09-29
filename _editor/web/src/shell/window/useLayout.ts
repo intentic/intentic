@@ -150,6 +150,13 @@ const { iconRailSize } = useIconRailSize();
 export const maxChatWidth = (): number => Math.min(MAX_CHAT_WIDTH, toAppPx((window.innerWidth - iconRailScreenPx(iconRailSize.value)) * 0.95));
 const clampWidth = (px: number): number => Math.round(Math.max(MIN_CHAT_WIDTH, Math.min(px, maxChatWidth())));
 
+// A popped-out chat's side panel (FloatingSection.vue), its own width since that window holds no rail and no section:
+// at most all but one chat pane of it, and a little under half of it until dragged, room for a file beside the chat.
+const FLOATING_SIDE_WIDTH_KEY = `ui-floating-side-width`;
+export const maxFloatingSideWidth = (): number => Math.max(MIN_CHAT_WIDTH, toAppPx(window.innerWidth) - MIN_PANE_PX);
+const clampFloatingSideWidth = (px: number): number => Math.round(Math.max(MIN_CHAT_WIDTH, Math.min(px, maxFloatingSideWidth())));
+export const defaultFloatingSideWidth = (): number => clampFloatingSideWidth(toAppPx(window.innerWidth) * 0.45);
+
 const clampSidebarWidth = (px: number): number => Math.round(Math.max(MIN_SIDEBAR_WIDTH, Math.min(px, MAX_SIDEBAR_WIDTH)));
 
 const clampReviewListWidth = (px: number): number => Math.round(Math.max(MIN_REVIEW_LIST_WIDTH, Math.min(px, MAX_REVIEW_LIST_WIDTH)));
@@ -189,6 +196,7 @@ const terminalOpen = sandboxRef<boolean>(() => readWindowState(terminalOpenKey(a
 const position = enumPref(STORAGE_KEY, [`left`, `right`] as const, `left`);
 const chatHome = enumPref(CHAT_HOME_KEY, [`side`, `rail`] as const, `side`);
 const chatWidth = widthPref(WIDTH_KEY, clampWidth, defaultChatWidth);
+const floatingSideWidth = widthPref(FLOATING_SIDE_WIDTH_KEY, clampFloatingSideWidth, defaultFloatingSideWidth);
 const sidebarWidth = widthPref(SIDEBAR_WIDTH_KEY, clampSidebarWidth, defaultSidebarWidth);
 const reviewListWidth = widthPref(REVIEW_LIST_WIDTH_KEY, clampReviewListWidth, defaultReviewListWidth);
 const sidePaneWidth = widthPref(SIDE_PANE_WIDTH_KEY, clampSidePaneWidth, () => DEFAULT_SIDE_PANE_WIDTH);
@@ -244,6 +252,10 @@ const setChatWidth = (px: number): void => {
 
 const resetChatWidth = (): void => {
     setChatWidth(defaultChatWidth());
+};
+
+const setFloatingSideWidth = (px: number): void => {
+    floatingSideWidth.value = clampFloatingSideWidth(px);
 };
 
 const setSidebarWidth = (px: number): void => {
@@ -352,6 +364,7 @@ export function useLayout() {
         position,
         chatHome,
         chatWidth,
+        floatingSideWidth,
         sidebarWidth,
         reviewListWidth,
         sidePaneWidth,
@@ -376,6 +389,7 @@ export function useLayout() {
         setChatHome,
         setChatWidth,
         resetChatWidth,
+        setFloatingSideWidth,
         setSidebarWidth,
         resetSidebarWidth,
         setReviewListWidth,
