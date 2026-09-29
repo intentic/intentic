@@ -1,7 +1,7 @@
 <!-- The rail's Personas cut: everyone this sandbox can speak as, in a list that holds still, and the chats of the one picked. -->
 <script setup lang="ts">
 import { personaBounds } from "@intentic/sandbox-contract";
-import { ContextMenu, FACE_SIZES, Icon, PersonaFace, StatusBadge, ui } from "@intentic/ui";
+import { Button, ContextMenu, FACE_SIZES, Icon, PersonaFace, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, nextTick, ref, useId, watch } from "vue";
@@ -13,7 +13,6 @@ import { canArchive, FINISHED_WINDOW, type FleetAgent, windowFinished } from "..
 import { supportsRoute } from "../../sandbox/overview/useDaemonRoutes";
 import SandboxOutdatedNotice from "../../sandbox/overview/version/SandboxOutdatedNotice.vue";
 import { usePersonas } from "../../sandbox/personas/usePersonas";
-import LaneHeader from "../../../components/LaneHeader.vue";
 import RailCard from "../../../components/RailCard.vue";
 import { relativeTime } from "../models/catalog";
 import { previewOf } from "../panel/useChat-strip";
@@ -197,6 +196,10 @@ const newChatLabel = (entry: Entry): string =>
 // Its hover: the row or header beside it already names the persona, so two words say the rest.
 const newChatTip = (entry: Entry): string => (entry.persona === undefined ? t(`chat.words.newAgent`) : t(`chat.words.newChat`));
 
+// The one sweep kept above the list: the tiles already name whose chats these are and the composer below starts one,
+// so a header bar only repeated them. Counted off the set the press sends, so the label can't name a number it doesn't close.
+const finishedOfSelected = computed(() => tabsOfPersona(selected.value.persona?.id, known.value, `finished`));
+
 // A persona's own menu: what can be done to all of its chats at once. Sweeps skip pinned chats (tabsOfPersona).
 const groupMenu = ref<{ show: (event: Event) => void } | undefined>();
 const menuKey = ref<string>();
@@ -244,6 +247,8 @@ const groupMenuItems = computed<MenuItem[]>(() => {
                       command: () => void router.push({ path: `/sandbox/personas`, query: { open: persona } }),
                   },
               ]),
+        { separator: true },
+        { label: t(`chat.words.managePersonas`), icon: `users`, command: () => void router.push(`/sandbox/personas`) },
     ];
 });
 const openGroupMenu = (entry: Entry, event: Event): void => {
@@ -266,15 +271,26 @@ watch(
 );
 watch([activeId, tabReveal], () => void reveal(false), { immediate: true });
 
-// A vertical tab list: the arrows, Home and End move the pick and the focus with it; only the picked row is a tab stop.
+// A grid of tabs: Left and Right step one tile, Up and Down a row, Home and End to either end, each moving the pick and
+// the focus with it; only the picked tile is a tab stop. The row length is read off the laid-out grid, since it follows
+// the column's width; unlaid (a test's DOM) it reads as one, so Up and Down step a tile.
+const grid = ref<HTMLElement | null>(null);
+const columns = (): number => {
+    const template = grid.value === null ? `` : getComputedStyle(grid.value).gridTemplateColumns;
+    return Math.max(1, template.split(` `).filter((track) => track !== `` && track !== `none`).length);
+};
 const uid = useId();
 // Distinct prefixes, since a persona may well be called `anyone`; an entryId is a safe id as it stands.
 const tabId = (entry: Entry): string => (entry.persona === undefined ? `${uid}-anyone` : `${uid}-persona-${entry.key}`);
 const panelId = `${uid}-chats`;
-const headingId = `${uid}-heading`;
+const next = (at: number, last: number): number => (at === last ? 0 : at + 1);
+const previous = (at: number, last: number): number => (at === 0 ? last : at - 1);
+// A row step off either edge lands on the first or last tile rather than wrapping into a column that may be short.
 const STEPS = {
-    ArrowDown: (at: number, last: number) => (at === last ? 0 : at + 1),
-    ArrowUp: (at: number, last: number) => (at === 0 ? last : at - 1),
+    ArrowRight: next,
+    ArrowLeft: previous,
+    ArrowDown: (at: number, last: number) => (at === last ? 0 : Math.min(last, at + columns())),
+    ArrowUp: (at: number, last: number) => (at === 0 ? last : Math.max(0, at - columns())),
     Home: () => 0,
     End: (_at: number, last: number) => last,
 } satisfies Record<string, (at: number, last: number) => number>;
@@ -285,9 +301,9 @@ const onTabKey = (event: KeyboardEvent): void => {
     }
     event.preventDefault();
     const at = STEPS[event.key](entries.value.indexOf(selected.value), entries.value.length - 1);
-    const next = entries.value[at] ?? anyone.value;
-    picked.value = next.key;
-    void nextTick(() => document.getElementById(tabId(next))?.focus());
+    const target = entries.value[at] ?? anyone.value;
+    picked.value = target.key;
+    void nextTick(() => document.getElementById(tabId(target))?.focus());
 };
 </script>
 
@@ -295,9 +311,15 @@ const onTabKey = (event: KeyboardEvent): void => {
     <div class="flex min-h-0 min-w-0 flex-1 flex-col">
         <SandboxOutdatedNotice v-if="outdated" :missing="t(`chat.chatPersonaRail.outdatedMissing`)" class="mx-2 mt-2 shrink-0" />
 
-        <!-- The list that holds still: one row per persona whether it has chats or not, so nothing here moves when a chat starts or ends. Capped, so a long roster scrolls in place rather than pushing the chats off the column. -->
-        <div class="flex max-h-1/2 shrink-0 flex-col gap-0.5 overflow-y-auto p-2">
-            <div role="tablist" aria-orientation="vertical" :aria-label="t(`shared.personas`)" class="flex min-w-0 flex-col gap-0.5" @keydown="onTabKey">
+        <!-- The grid that holds still: one tile per persona whether it has chats or not, so nothing here moves when a chat starts or ends. Tiles rather than rows, so a face is big enough to be the thing recognised. Capped, so a long roster scrolls in place rather than pushing the chats off the column. -->
+        <div class="max-h-1/2 shrink-0 overflow-y-auto p-2">
+            <div
+                ref="grid"
+                role="tablist"
+                :aria-label="t(`shared.personas`)"
+                class="grid min-w-0 grid-cols-[repeat(auto-fill,minmax(5.25rem,1fr))] gap-1"
+                @keydown="onTabKey"
+            >
                 <button
                     v-for="entry in entries"
                     :id="tabId(entry)"
@@ -309,102 +331,93 @@ const onTabKey = (event: KeyboardEvent): void => {
                     :aria-labelledby="`${tabId(entry)}-name`"
                     :aria-describedby="entry.facts === `` ? undefined : `${tabId(entry)}-facts`"
                     :tabindex="entry.key === selected.key ? 0 : -1"
-                    class="ui-row-select group flex min-h-8 w-full min-w-0 items-center gap-2 rounded-lg px-1.5 text-left"
+                    v-tooltip.bottom="entry.persona?.bounds"
+                    class="ui-row-select group relative flex min-w-0 flex-col items-center gap-1 rounded-lg px-1 pb-1.5 pt-2.5"
                     :class="{ 'ui-row-select-on': entry.key === selected.key }"
                     @click="picked = entry.key"
                     @contextmenu.prevent.stop="openGroupMenu(entry, $event)"
                 >
-                    <PersonaFace v-if="entry.persona !== undefined" :persona="entry.persona" :size="FACE_SIZES.pill" />
+                    <PersonaFace v-if="entry.persona !== undefined" :persona="entry.persona" :size="FACE_SIZES.card" />
                     <!-- Anyone has no face: the glyph the composer's Acts as menu gives it, on a disc the size of one. -->
-                    <span v-else class="flex h-5.5 w-5.5 shrink-0 items-center justify-center rounded-full bg-primary-600/15">
-                        <Icon name="users" class="text-2xs text-link" />
+                    <span v-else class="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-primary-600/15">
+                        <Icon name="users" class="text-lg text-link" />
                     </span>
                     <span
                         :id="`${tabId(entry)}-name`"
-                        class="min-w-0 flex-1 truncate text-xs font-medium"
+                        class="line-clamp-2 w-full min-w-0 break-words text-center text-xs font-medium leading-tight"
                         :class="entry.key === selected.key ? 'text-content' : 'text-muted'"
                         >{{ entry.label }}</span
                     >
-                    <!-- What needs you and what works, in the marks the chat bar's header uses for the same two facts; then how many chats the list below would hold. -->
-                    <span
-                        v-if="entry.needsYou > 0"
-                        aria-hidden="true"
-                        v-tooltip.top="t(`agents.agentStatus.needsYou`)"
-                        class="ui-status-pill flex shrink-0 items-center gap-1 bg-warning/15 text-2xs font-semibold text-warning"
-                    >
-                        <Icon name="exclamation-circle" class="text-2xs" />{{ entry.needsYou }}
+                    <!-- What needs you, what works and how many chats the list below would hold, in the marks the chat bar's header uses; a seat held even when empty, so tiles in a row keep one height. -->
+                    <span aria-hidden="true" class="flex h-4 items-center justify-center gap-1.5">
+                        <span
+                            v-if="entry.needsYou > 0"
+                            v-tooltip.top="t(`agents.agentStatus.needsYou`)"
+                            class="ui-status-pill flex shrink-0 items-center gap-1 bg-warning/15 text-2xs font-semibold text-warning"
+                        >
+                            <Icon name="exclamation-circle" class="text-2xs" />{{ entry.needsYou }}
+                        </span>
+                        <!-- A spinner without a number: beside the chat count a second figure read as a sum, and how many work is the hover's to say. -->
+                        <span
+                            v-if="entry.working > 0"
+                            v-tooltip.top="t(`chat.chatPersonaRail.working`, { count: entry.working }, entry.working)"
+                            class="flex shrink-0 items-center text-link"
+                        >
+                            <Icon name="spinner" spin class="text-2xs" />
+                        </span>
+                        <span
+                            v-if="entry.chats > 0"
+                            v-tooltip.top="t(`chat.chatPersonaRail.chats`, { count: entry.chats }, entry.chats)"
+                            class="shrink-0 text-2xs tabular-nums text-subtle"
+                            >{{ entry.chats }}</span
+                        >
                     </span>
-                    <!-- A spinner without a number: beside the chat count a second figure read as a sum, and how many work is the hover's to say. -->
-                    <span
-                        v-if="entry.working > 0"
-                        aria-hidden="true"
-                        v-tooltip.top="t(`chat.chatPersonaRail.working`, { count: entry.working }, entry.working)"
-                        class="flex shrink-0 items-center text-link"
-                    >
-                        <Icon name="spinner" spin class="text-2xs" />
-                    </span>
-                    <span
-                        v-if="entry.chats > 0"
-                        aria-hidden="true"
-                        v-tooltip.top="t(`chat.chatPersonaRail.chats`, { count: entry.chats }, entry.chats)"
-                        class="shrink-0 text-2xs tabular-nums text-subtle"
-                        >{{ entry.chats }}</span
-                    >
                     <span v-if="entry.facts !== ``" :id="`${tabId(entry)}-facts`" class="sr-only">{{ entry.facts }}</span>
-                    <!-- One press to start as anyone on the list, without picking them first; its seat is held at rest, so the counts never shift under the pointer. -->
+                    <!-- One press to start as anyone here, without picking them first: in the tile's corner, shown on hover. -->
                     <span
                         role="button"
                         :aria-label="newChatLabel(entry)"
                         v-tooltip.top="newChatTip(entry)"
-                        class="-my-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted opacity-0 transition hover:bg-overlay hover:text-content focus-visible:opacity-100 group-hover:opacity-100"
+                        class="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded text-muted opacity-0 transition hover:bg-overlay hover:text-content focus-visible:opacity-100 group-hover:opacity-100"
                         @click.stop="startAs(entry)"
                     >
                         <Icon name="plus" class="text-2xs" />
                     </span>
                 </button>
+                <!-- Nobody to pick yet: the one door to making someone. Once there are personas, their page is in each tile's menu. -->
+                <RouterLink
+                    v-if="personas.length === 0"
+                    to="/sandbox/personas"
+                    class="ui-row-select flex min-w-0 flex-col items-center gap-1 rounded-lg border border-dashed border-line px-1 pb-1.5 pt-2.5 text-subtle hover:text-content"
+                >
+                    <span class="flex h-14 w-14 shrink-0 items-center justify-center rounded-full">
+                        <Icon name="plus" class="text-lg" />
+                    </span>
+                    <span class="w-full min-w-0 truncate text-center text-xs">{{ t(`chat.words.setUpPersona`) }}</span>
+                </RouterLink>
             </div>
-            <!-- A real link, since the sandbox hub has an address and this is often the first place someone finds it. -->
-            <RouterLink
-                to="/sandbox/personas"
-                class="ui-row-select flex min-h-7 min-w-0 items-center gap-2 rounded-lg px-1.5 text-2xs text-subtle hover:text-content"
-            >
-                <span class="flex h-5.5 w-5.5 shrink-0 items-center justify-center">
-                    <Icon :name="personas.length === 0 ? `plus` : `cog`" class="text-2xs" />
-                </span>
-                <span class="min-w-0 truncate">{{ personas.length === 0 ? t(`chat.words.setUpPersona`) : t(`chat.words.managePersonas`) }}</span>
-            </RouterLink>
         </div>
 
-        <!-- The picked persona's chats: the very rows the Agents cut draws, so every close, pin, rename and menu is here too, drawn without the trays of agents each one started, since what this cut asks is who a chat speaks as. -->
-        <section :id="panelId" role="tabpanel" :aria-labelledby="headingId" class="flex min-h-0 flex-1 flex-col border-t border-line">
-            <LaneHeader class="shrink-0 px-3">
-                <template #mark>
-                    <span :id="headingId" class="min-w-0 truncate text-2xs font-semibold uppercase tracking-wide text-muted">{{ selected.label }}</span>
-                    <StatusBadge v-if="selected.persona?.bounds !== undefined" variant="neutral" size="xs">{{ selected.persona.bounds }}</StatusBadge>
-                </template>
-                <template #actions>
-                    <button
-                        type="button"
-                        :class="ui.iconButton()"
-                        :aria-label="newChatLabel(selected)"
-                        v-tooltip.bottom="newChatTip(selected)"
-                        @click="startAs(selected)"
-                    >
-                        <Icon name="plus" class="text-2xs" />
-                    </button>
-                    <button
-                        type="button"
-                        :class="ui.iconButton()"
-                        :aria-label="t(`chat.chatPersonaRail.more`, { label: selected.label })"
-                        v-tooltip.bottom="t(`chat.chatPersonaRail.moreShort`)"
-                        @click="openGroupMenu(selected, $event)"
-                    >
-                        <Icon name="ellipsis" class="text-2xs" />
-                    </button>
-                </template>
-            </LaneHeader>
+        <!-- The picked persona's chats: the very rows the Agents cut draws, so every close, pin, rename and menu is here too, drawn without the trays of agents each one started, since what this cut asks is who a chat speaks as. Named by the picked tile, which says whose they are. -->
+        <section :id="panelId" role="tabpanel" :aria-labelledby="`${tabId(selected)}-name`" class="flex min-h-0 flex-1 flex-col border-t border-line">
+            <div v-if="finishedOfSelected.size > 0" class="flex shrink-0 justify-end px-2 pt-1.5">
+                <Button
+                    size="small"
+                    severity="secondary"
+                    :text="true"
+                    :aria-label="t(`chat.chatTabList.clearFinished`, { count: finishedOfSelected.size }, finishedOfSelected.size)"
+                    v-tooltip.bottom="{
+                        title: t(`chat.chatPersonaRail.closeFinishedOf`, { label: selected.label }),
+                        rows: [{ label: t(`chat.chatTabList.chats`), value: finishedOfSelected.size }],
+                        note: t(`chat.chatTabList.keepsFinished`),
+                    }"
+                    @click="actions.closeSet(finishedOfSelected)"
+                >
+                    {{ t(`ui.action.clear`) }}
+                </Button>
+            </div>
 
-            <div ref="scroller" class="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-2 pb-2">
+            <div ref="scroller" class="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto p-2">
                 <ChatRowList v-if="listing.chats.length > 0" :entries="listing.chats" :trays="false" />
                 <!-- Not a pager: the count itself is the point, one press away rather than gone. -->
                 <button

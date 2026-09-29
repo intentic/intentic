@@ -84,7 +84,7 @@ afterEach(() => {
 const NO_ATTENTION = { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false };
 
 // The persona list is the vertical tab list; the cut switch above it is a tab list of its own.
-const personaList = (el: HTMLElement): HTMLElement | null => el.querySelector<HTMLElement>(`[role="tablist"][aria-orientation="vertical"]`);
+const personaList = (el: HTMLElement): HTMLElement | null => el.querySelector<HTMLElement>(`[role="tablist"][aria-label="${t(`shared.personas`)}"]`);
 const personaTabs = (el: HTMLElement): HTMLElement[] => [...(personaList(el)?.querySelectorAll<HTMLElement>(`[role="tab"]`) ?? [])];
 // A row is named by its persona alone (aria-labelledby) and described by what it holds (aria-describedby).
 const nameOf = (tab: HTMLElement): string => document.getElementById(tab.getAttribute(`aria-labelledby`) ?? ``)?.textContent?.trim() ?? ``;
@@ -248,13 +248,24 @@ it(`offers a persona with nothing open its one next step, and starts the chat fr
     expect(rows(el)).toEqual([useChat().activeId.value]);
 });
 
-it(`starts a chat as the picked persona from the list's own header`, async () => {
+it(`closes the picked persona's finished chats from the one button above its list, passing pinned ones by`, async () => {
     const el = await mountList();
-    await openAs(`work`, [`first`]);
-    panel(el).querySelector<HTMLElement>(`[aria-label="New chat as Work"]`)!.click();
+    await openAs(`work`, [`done-a`, `kept`, `live`]);
+    await openAs(`inbox`, [`inbox-done`]);
+    for (const id of [`done-a`, `kept`, `inbox-done`]) {
+        finish(id);
+    }
+    useChat().setPinned(`kept`, true);
+    await pick(el, `Work`);
+
+    panel(el).querySelector<HTMLElement>(`[aria-label="Close 1 finished chat"]`)!.click();
     await settle();
-    expect(useChat().active.value.selection.actsAs.value).toBe(`work`);
-    expect(rows(el)).toHaveLength(2);
+
+    const open = useChat().conversations.value.map((conversation) => conversation.conversationId);
+    expect(open).toEqual(expect.arrayContaining([`kept`, `live`, `inbox-done`]));
+    expect(open).not.toContain(`done-a`);
+    // Nothing left to sweep: the button goes rather than offering a press that closes nothing.
+    expect(panel(el).querySelector(`[aria-label^="Close "][aria-label*="finished"]`)).toBeNull();
 });
 
 it(`moves the pick with the arrow keys, Home and End, wrapping at either end`, async () => {
@@ -270,7 +281,11 @@ it(`moves the pick with the arrow keys, Home and End, wrapping at either end`, a
     expect(picked(el)).toEqual([`Inbox Manager`]);
     await pressKey(el, `Home`);
     expect(picked(el)).toEqual([`Anyone`]);
-    // Only the picked row is a stop on the Tab key's way through the column.
+    await pressKey(el, `ArrowRight`);
+    expect(picked(el)).toEqual([`Work`]);
+    await pressKey(el, `ArrowLeft`);
+    expect(picked(el)).toEqual([`Anyone`]);
+    // Only the picked tile is a stop on the Tab key's way through the column.
     expect(personaTabs(el).map((candidate) => candidate.getAttribute(`tabindex`))).toEqual([`0`, `-1`, `-1`]);
 });
 
@@ -399,19 +414,19 @@ it(`sweeps only its own persona's finished chats from the persona's menu, passin
     expect(open).not.toContain(`done-b`);
 });
 
-it(`offers a new chat, the sweeps and the persona's own page from its row and from the list's header alike`, async () => {
+it(`offers a new chat, the sweeps and the persona's own page from its tile's menu`, async () => {
     const el = await mountList();
     await openAs(`work`, [`first`]);
-    const WORK_MENU = [`New chat as Work`, `Close Work's finished chats`, `Close all of Work's chats`, `Archive Work's finished agents`, `Edit persona…`];
 
     await rightClick(tab(el, `Work`));
-    expect(menuLabels()).toEqual(WORK_MENU);
-
-    document.body.dispatchEvent(new KeyboardEvent(`keydown`, { key: `Escape`, bubbles: true }));
-    await settle();
-    panel(el).querySelector<HTMLElement>(`[aria-label="More for Work"]`)!.click();
-    await settle();
-    expect(menuLabels()).toEqual(WORK_MENU);
+    expect(menuLabels()).toEqual([
+        `New chat as Work`,
+        `Close Work's finished chats`,
+        `Close all of Work's chats`,
+        `Archive Work's finished agents`,
+        `Edit persona…`,
+        `Manage personas`,
+    ]);
 });
 
 it(`says what each persona holds: what needs you and what works, open here or not`, async () => {
