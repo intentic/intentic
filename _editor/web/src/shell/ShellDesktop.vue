@@ -5,6 +5,7 @@ import { AnchoredOverlay, browserOwnsClick, ui, ContextMenu, type IconName, type
 import type { MenuItem } from "primevue/menuitem";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { RouterView, useRoute, useRouter } from "vue-router";
+import { useWallpaperedRoute } from "../skins/useWallpaper";
 import { agentsBadge, agentsScopeNote } from "../features/agents/board/agentsTile";
 import { useBrowsersQuery } from "../features/browsers/browsersQuery";
 import { useCapabilities } from "../features/capabilities/connect/useCapabilities";
@@ -542,6 +543,8 @@ useShellCommands();
 useNavigationCommands();
 // The single global-shortcut dispatcher: matches any registered command's keybinding to the keystroke.
 useKeybindings();
+// The extension pages a wallpaper shows behind; painted on the scroller so the picture stays put as the page scrolls.
+const wallpapered = useWallpaperedRoute();
 </script>
 
 <template>
@@ -755,7 +758,7 @@ useKeybindings();
 
         <main ref="page" class="relative flex min-w-0 flex-col overflow-hidden" style="grid-area: workspace">
             <SandboxGate>
-                <div class="min-h-0 flex-1 overflow-auto">
+                <div class="min-h-0 flex-1 overflow-auto" :class="{ 'wallpaper-surface': wallpapered }">
                     <RouterView />
                 </div>
                 <!-- Inside the gate: a docked terminal stays mounted through a stall, its own recovery keeping scrollback. -->

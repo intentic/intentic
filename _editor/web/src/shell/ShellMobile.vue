@@ -2,6 +2,7 @@
 import { type PageBack, providePageBack, useDevice } from "@intentic/ui";
 import { computed } from "vue";
 import { RouterView, useRoute, useRouter } from "vue-router";
+import { useWallpaperedRoute } from "../skins/useWallpaper";
 import MobileTabBar from "./MobileTabBar.vue";
 import { useTabRoots } from "./mobileTabs";
 import { onTabRoot } from "./tabRoots";
@@ -37,13 +38,15 @@ const back = computed<PageBack | undefined>(() => {
     };
 });
 providePageBack(back);
+// The extension pages a wallpaper shows behind; painted on the scroller so the picture stays put as the page scrolls.
+const wallpapered = useWallpaperedRoute();
 </script>
 
 <template>
     <div class="flex h-dvh flex-col overflow-hidden bg-canvas text-content" style="overscroll-behavior: none">
         <main class="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
             <SandboxGate>
-                <div class="min-h-0 flex-1 overflow-auto" style="overscroll-behavior: contain">
+                <div class="min-h-0 flex-1 overflow-auto" :class="{ 'wallpaper-surface': wallpapered }" style="overscroll-behavior: contain">
                     <RouterView />
                 </div>
             </SandboxGate>

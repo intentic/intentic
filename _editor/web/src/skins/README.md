@@ -1,6 +1,6 @@
 # skins
 
-A skin is the editor's whole look, worn as one `data-skin` attribute on `<html>`; this directory holds the skin's stylesheet, the preference that picks it, and the agents board's wallpapers.
+A skin is the editor's whole look, worn as one `data-skin` attribute on `<html>`; this directory holds the skin's stylesheet, the preference that picks it, and the wallpapers behind the agents board and a few extension pages.
 
 ```mermaid
 flowchart LR
@@ -26,10 +26,13 @@ flowchart LR
 
 ## Wallpapers
 
-A wallpaper is a picture behind the agents board, picked on its own row in Appearance and worn under any of the
-four looks. `useWallpaper.ts` stores it under `ui-wallpaper` (`none` or `mist`, `none` by default) and writes it as
-`data-wallpaper` on `<html>`; `wallpapers.css` draws it as the backgrounds of `.agents-board`, with the scheme
-picking each picture's dark or light version and its scrims. While one is worn the board's lane headers drop their
+A wallpaper is a picture behind the agents board and the full-width card pages named in `WALLPAPERED_EXTENSIONS`
+(`/ext/workflows`, `/ext/automations`, `/ext/projects`), picked on its own row in Appearance and worn under any of
+the four looks. `useWallpaper.ts` stores it under `ui-wallpaper` (`none` or `mist`, `none` by default) and writes it as
+`data-wallpaper` on `<html>`; `wallpapers.css` draws it as the backgrounds of `.agents-board`, and of the shell's
+main scroller (`.wallpaper-surface`, set by `useWallpaperedRoute`) on those pages, so the picture stays put while the
+page scrolls. The scheme picks each picture's dark or light version and its scrims, and every picture is toned the
+same way: a veil of the canvas colour and half its saturation taken out, so it reads as a ground rather than a poster. While one is worn the board's lane headers drop their
 canvas band and stop pinning, since a pinned header with nothing behind it would slide over the cards under it.
 
 - A picture's masters are `src/assets/wallpaper/<name>-dark.png` and `<name>-light.png`, 16:9;

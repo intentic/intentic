@@ -1,7 +1,8 @@
-import { watch, type Ref } from "vue";
+import { computed, watch, type ComputedRef, type Ref } from "vue";
+import { useRoute } from "vue-router";
 import { definePreference } from "@intentic/ui/preference";
 
-// A wallpaper is a picture behind the agents board, chosen on its own and worn under any look: it is one
+// A wallpaper is a picture behind the agents board and a few full-width extension pages, chosen on its own and worn under any look: it is one
 // `data-wallpaper` attribute on <html>, and wallpapers.css draws it, picking each picture's dark or light master from
 // the scheme. `none` writes no attribute, and is the default: the board keeps its plain canvas until someone picks one.
 
@@ -31,4 +32,16 @@ watch(wallpaper, apply, { immediate: true, flush: `sync` });
 
 export function useWallpaper() {
     return { wallpaper };
+}
+
+/**
+ * The extension views a wallpaper also shows behind (`/ext/<id>`): full-width pages of cards with no navigation of
+ * their own down the left, where a picture has room to be seen. A view with a sidebar or a dense list stays plain.
+ */
+export const WALLPAPERED_EXTENSIONS: ReadonlySet<string> = new Set([`workflows`, `automations`, `projects`]);
+
+/** Whether the shell's main column should wear the wallpaper for the route on screen. The board draws its own. */
+export function useWallpaperedRoute(): ComputedRef<boolean> {
+    const route = useRoute();
+    return computed(() => wallpaper.value !== `none` && route.name === `extension` && WALLPAPERED_EXTENSIONS.has(String(route.params[`ext`])));
 }
