@@ -4074,6 +4074,7 @@
             "offline": "Offline"
         },
         "hubLayout": {
+            "backTo": "Zurück zu {title}",
             "sections": "Bereiche"
         },
         "mobileMenu": {

@@ -1,18 +1,22 @@
 <!-- Shared shell for a hub page — title, section index, and the active section's body — used by the sandbox hub and settings hub. -->
 <script setup lang="ts">
-import { type IconName, type NavGroup, NavRail, Row, SegmentedControl, SplitView } from "@intentic/ui";
+import { type IconName, type NavGroup, NavRail, providePageBack, Row, SegmentedControl, SplitView, useDevice, usePageBack } from "@intentic/ui";
 import { sectionIcon } from "@intentic/ui/icons";
 import { computed, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { badgeSpeaks, RUNNING_MARK_CLASS } from "../../core-views/viewBadge";
-import ViewBadgeChip from "../../core-views/ViewBadgeChip.vue";
+import { badgeSpeaks } from "../../core-views/viewBadge";
+import { hubDrills, hubSectionParam } from "./hubDrill";
 import type { HubTab } from "./hubNav";
+import HubIndex from "./HubIndex.vue";
+import HubRowBadge from "./HubRowBadge.vue";
 import { hubWorkKey, provideHubSection } from "./hubWork";
 import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
 
 const {
+    title,
+    description,
     groups,
     routeName,
     defaultSlug,
@@ -42,9 +46,16 @@ const router = useRouter();
 const tabs = computed<readonly HubTab[]>(() => groups.flatMap((group) => group.items));
 const slugs = computed<readonly string[]>(() => tabs.value.map((tab) => tab.slug));
 
-const activeSlug = computed<string>(() => {
+// The section the address names, if it names one: the param-less URL is the default section on a desktop and the
+// index itself on a phone.
+const named = computed<string | undefined>(() => {
     const tab = route.params[`tab`];
-    if (typeof tab !== `string` || tab.length === 0) {
+    return typeof tab === `string` && tab.length > 0 ? tab : undefined;
+});
+
+const activeSlug = computed<string>(() => {
+    const tab = named.value;
+    if (tab === undefined) {
         return defaultSlug;
     }
     // Unknown while the set is still filling means unknown YET: falling back would draw one section and swap it for
@@ -52,19 +63,49 @@ const activeSlug = computed<string>(() => {
     return slugs.value.includes(tab) || !ready ? tab : defaultSlug;
 });
 
-const linkTo = (slug: string) => ({ name: routeName, params: { tab: slug === defaultSlug && !addressable ? undefined : slug } });
+// A PHONE DRILLS DOWN: the hub's root is its index, and a section is a page of its own with a way back to it. The
+// strip this replaced wrapped every section into a cloud of pills above every page (seventeen on a sandbox with
+// extensions), which put the whole index between the reader and the page they had already picked. A reader who may
+// not stand on the root (a guest, `addressable`) or a hub of one section has no index worth a page of its own.
+const { mobile } = useDevice();
+const drill = computed(() => hubDrills(mobile.value, addressable, tabs.value.length));
+const onIndex = computed(() => drill.value && named.value === undefined);
+
+// Drilling names every section, the default one included: its param-less URL is the index there.
+const linkTo = (slug: string) => ({ name: routeName, params: { tab: hubSectionParam(slug, defaultSlug, addressable || drill.value) } });
+const indexLink = { name: routeName, params: { tab: undefined } };
+
+// A drilled section wears its own name; the hub's moves to the way back.
+const activeLabel = computed(() => tabs.value.find((tab) => tab.slug === activeSlug.value)?.label);
+const pageTitle = computed(() => (drill.value && !onIndex.value ? (activeLabel.value ?? title) : title));
+const pageDescription = computed(() => (drill.value && !onIndex.value ? undefined : description));
+
+// Back from a section is back to the index: a step back when that is where the reader came from, so history holds no
+// loop, and a replace otherwise (a link from a chat straight into a section), so the index's own way back still leads
+// to wherever they were before.
+const backToIndex = (): void => {
+    if (router.options.history.state[`back`] === router.resolve(indexLink).fullPath) {
+        router.back();
+        return;
+    }
+    void router.replace(indexLink);
+};
+const shellBack = usePageBack();
+providePageBack(
+    computed(() => (drill.value && !onIndex.value ? { label: t(`shell.hubLayout.backTo`, { title }), go: backToIndex } : shellBack.value)),
+);
 
 // The address the section on screen reports its long-running work under, so no view has to be told which row it
 // lives on. The hub draws the mark; what it says comes back through this hub's own badges.
 provideHubSection(computed(() => hubWorkKey(routeName, activeSlug.value)));
 
-// The strip is a control, not a link, so the mobile branch still navigates by hand.
+// The strip is a control, not a link, so it navigates by hand.
 const select = (slug: string): void => {
     void router.push(linkTo(slug));
 };
 
-// The strip flattens the groups away: it has no headings, which is the other half of why it is the mobile
-// answer only: the grouping this component exists to show is exactly what does not survive the trip.
+// The strip flattens the groups away: it has no headings, which is why it is only the answer for a desktop pane too
+// narrow for the rail: the grouping this component exists to show is exactly what does not survive the trip.
 // A section's own mark keeps the chip; a run takes it only where there is none, turning, and says what it is in the
 // pill's title — the strip has no second corner to put it in.
 const options = computed(() =>
@@ -81,12 +122,13 @@ const options = computed(() =>
     }),
 );
 
-// An unknown slug (/sandbox/nonsense) resolves to the default: clean the URL back to the canonical one.
+// An unknown slug (/sandbox/nonsense) resolves to the default: clean the URL back to the canonical one, which on a
+// phone is the index.
 watch(
     [() => route.params[`tab`], slugs, () => ready],
     ([tab, known, settled]) => {
         if (settled && typeof tab === `string` && tab.length > 0 && !known.includes(tab)) {
-            void router.replace(linkTo(defaultSlug));
+            void router.replace(drill.value ? indexLink : linkTo(defaultSlug));
         }
     },
     { immediate: true },
@@ -95,17 +137,18 @@ watch(
 
 <template>
     <!-- Wide because the index spends 14rem of it: at the 56rem default the body would be left narrower than it was before the column arrived. -->
-    <SplitView :title="title" :description="description" scroll="page">
-        <!-- Mobile keeps the strip. -->
-        <!-- It wraps rather than scrolls: this is the index of everything the hub holds, and a section a reader can't see is a section they won't look for. -->
-        <template #compact>
+    <!-- A phone swaps: the index or one section, never both on screen (see `drill`). -->
+    <SplitView :title="pageTitle" :description="pageDescription" scroll="page" :mobile="drill ? `swap` : `collapse`" :detail-open="!onIndex">
+        <!-- A desktop pane too narrow for the rail keeps the strip. It wraps rather than scrolls: this is the index of everything the hub holds, and a section a reader can't see is a section they won't look for. -->
+        <template v-if="!drill" #compact>
             <div class="border-b border-line-subtle pb-2">
                 <SegmentedControl :model-value="activeSlug" :options="options" wrap @update:model-value="select" />
             </div>
         </template>
 
         <template #rail>
-            <NavRail :aria-label="t(`shell.hubLayout.sections`)" :groups="groups">
+            <HubIndex v-if="drill" :groups="groups" :link-to="linkTo" />
+            <NavRail v-else :aria-label="t(`shell.hubLayout.sections`)" :groups="groups">
                 <template #row="{ item: tab }">
                     <!-- Internal navigation wraps the presentational row to provide its href. -->
                     <RouterLink :key="tab.slug" :to="linkTo(tab.slug)" class="block">
@@ -120,19 +163,7 @@ watch(
                             <!-- A fact about the section, so it rides the row's #meta cluster. -->
                             <!-- The test stays out here, unlike the corner badges, because `#meta` is a slot Row only draws when it is filled. -->
                             <template v-if="tab.badge !== undefined && badgeSpeaks(tab.badge)" #meta>
-                                <!-- Work in flight behind the section, in the rail tiles' own mark and ink: a hub mounts one section at a time,
-     so this is all that is left on screen of a run the reader walked away from. The sentence rides the tooltip
-     and the reader's screen reader — a 14rem row has no width to spend on it. -->
-                                <span
-                                    v-if="tab.badge.running !== undefined"
-                                    class="inline-flex items-center"
-                                    :class="RUNNING_MARK_CLASS"
-                                    v-tooltip.right="tab.badge.running"
-                                >
-                                    <Icon name="spinner" spin aria-hidden="true" />
-                                    <span class="sr-only">{{ tab.badge.running }}</span>
-                                </span>
-                                <ViewBadgeChip :badge="tab.badge" class="text-2xs" />
+                                <HubRowBadge :badge="tab.badge" />
                             </template>
                         </Row>
                     </RouterLink>
@@ -140,6 +171,7 @@ watch(
             </NavRail>
         </template>
 
-        <template #detail><slot :slug="activeSlug" /></template>
+        <!-- Nothing mounts under the index: a section is a page a phone goes to, not one it keeps under the list. -->
+        <template #detail><slot v-if="!onIndex" :slug="activeSlug" /></template>
     </SplitView>
 </template>

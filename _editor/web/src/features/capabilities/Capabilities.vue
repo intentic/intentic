@@ -13,6 +13,7 @@ import {
     SplitView,
     StatusBadge,
     ui,
+    useDevice,
 } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
@@ -77,6 +78,7 @@ const { links: netdiskLinks } = useLiveLinks(`netdisk`);
 const { rows: processRows, busy: processBusy, start: startProcess, stop: stopProcess } = useBackgroundProcesses();
 // Desktop sync, the other door a machine arrives through, holds no tile; read off the Devices tab's list, never polled here.
 const { devices: fleet, readAt: fleetReadAt, refetch: refetchFleet } = useDevices({ poll: false });
+const { mobile } = useDevice();
 // Devices (host-kind) and browsers (webext-kind) of the user's own, each paired through its own door.
 const hosts = usePeerConnect<HostSummary>(HOST_DOOR);
 const browsers = usePeerConnect<WebExtSummary>(WEBEXT_DOOR);
@@ -189,7 +191,9 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-    <SplitView :title="t(`shared.capabilities`)" :description="description">
+    <!-- A phone scrolls the page, not the catalog inside it: clamped, the title, the scope and the filter held a third of the
+         screen still while the tiles scrolled in what was left, under a second scrollbar. -->
+    <SplitView :title="t(`shared.capabilities`)" :description="description" :scroll="mobile ? `page` : `panes`">
         <template #strips>
             <Notice v-if="topError" :of="topError" />
         </template>

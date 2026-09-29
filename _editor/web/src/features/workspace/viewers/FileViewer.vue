@@ -548,6 +548,8 @@ const onEditorSave = (value: string): void =>
     <div class="group/viewer relative flex h-full min-h-0 flex-col">
         <!-- Top bar actions teleported into tab row header -->
         <FileBreadcrumb :path="path">
+            <!-- The three reading toggles keep their words on a phone: this bar has the width to itself there, and an eye alone
+                 did not say whether it hid comments or showed a preview. -->
             <!-- Same Comments toggle as the diff surface, one habit across both; starts shown here, since opening a file asks what it says. -->
             <button
                 v-if="canHideComments"
@@ -559,7 +561,7 @@ const onEditorSave = (value: string): void =>
                 v-tooltip.bottom="hideFileComments ? t(`workspace.fileViewer.showComments`) : t(`workspace.fileViewer.hideComments`)"
             >
                 <Icon :name="hideFileComments ? 'eye-slash' : 'eye'" class="text-2xs" />
-                <span class="max-md:hidden">{{ t(`workspace.words.comments`) }}</span>
+                <span>{{ t(`workspace.words.comments`) }}</span>
             </button>
             <!-- Second reading of the same file, one click away: what a pdf, a spreadsheet or a picture becomes as text. -->
             <button
@@ -576,7 +578,7 @@ const onEditorSave = (value: string): void =>
                 "
             >
                 <Icon :name="textWanted ? 'file' : 'align-left'" class="text-2xs" />
-                <span class="max-md:hidden">{{ t(`workspace.words.text`) }}</span>
+                <span>{{ t(`workspace.words.text`) }}</span>
             </button>
             <!-- A web page's rendered view and its source, one press apart, like the Text chip above. -->
             <button
@@ -593,7 +595,7 @@ const onEditorSave = (value: string): void =>
                 "
             >
                 <Icon :name="previewing ? 'code' : 'eye'" class="text-2xs" />
-                <span class="max-md:hidden">{{ t(`workspace.fileViewer.preview`) }}</span>
+                <span>{{ t(`workspace.fileViewer.preview`) }}</span>
             </button>
             <!-- Tab row's chip says the view shows an agent's copy; this says this file specifically came from the shared workspace. -->
             <span

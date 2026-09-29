@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { NavGroup } from "@intentic/ui";
+import { type NavGroup, useDevice } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import HubLayout from "../../shell/hub/HubLayout.vue";
 import type { HubTab } from "../../shell/hub/hubNav";
@@ -23,6 +23,8 @@ const t = useT();
 // Billing joins the index only once the plan read answers, so until then the hub must not read `/settings/billing`
 // as an unknown slug: that is the address Stripe returns a payer to, and the redirect would drop `?plan=welcome`.
 const { offered: planOffered, isLoading: planLoading } = useHostedPlan();
+// A phone's index leaves out what is about a keyboard (settingsNav.ts).
+const { mobile } = useDevice();
 
 const HUB = `settings`;
 const DEFAULT = SETTINGS_DEFAULT_SECTION;
@@ -32,7 +34,7 @@ const DEFAULT = SETTINGS_DEFAULT_SECTION;
 const GROUPS = computed<readonly NavGroup<HubTab>[]>(() => [
     {
         key: `settings`,
-        items: settingsSections(planOffered.value).map((section) => {
+        items: settingsSections(planOffered.value, mobile.value).map((section) => {
             const running = hubWorkRunning(hubWorkKey(HUB, section.slug));
             return running === undefined ? section : { ...section, badge: { running } };
         }),

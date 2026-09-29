@@ -187,6 +187,9 @@ onMounted(async () => {
         // Always-visible slider: with scrollbars off, a hover-only slider would leave no position indicator at all.
         // No minimap on a phone: it spends a seventh of the width on a picture a finger cannot use.
         minimap: { enabled: !mobile.value, showSlider: `always` },
+        // Nor the diff's own overview strip, for the same reason: a grey column down the right of a 360px screen, when
+        // the chunk buttons already move between changes.
+        renderOverviewRuler: !mobile.value,
         // Wraps both panes: a half-width pane folds lines the full-width file viewer wouldn't have to.
         wordWrap: `bounded`,
         wordWrapColumn: 160,

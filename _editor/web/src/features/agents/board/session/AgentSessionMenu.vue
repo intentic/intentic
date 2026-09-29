@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import type { TurnBreakPolicy } from "@intentic/sandbox-contract";
 import { computed } from "vue";
-import { effectiveAutoLand, landedAway, limited, writingNow } from "../../fleet/agentStatus";
+import { effectiveAutoLand, landedAway, limited, unregistered, writingNow } from "../../fleet/agentStatus";
+import AgentReactions from "../cards/AgentReactions.vue";
 import { breakAnswers, effectivePolicy, sandboxPolicy } from "../../../chat/run/turnBreak";
 import type { useAgentChanges } from "../../review/useAgentChanges";
 import { useAgents } from "../../fleet/useAgents";
@@ -41,6 +42,11 @@ const emit = defineEmits<{ selected: []; discard: []; forceLand: []; rename: [];
 
 const { agentById, restore, busyIds, setBreakPolicy, setKeepWarm } = useAgents();
 const archived = computed(() => agentById(agentId)?.archivedAt !== undefined);
+// The session as its marks see it, or nothing for one the daemon has no entry for (a mark would answer 404).
+const marked = computed(() => {
+    const agent = agentById(agentId);
+    return agent === undefined || unregistered(agent.status) ? undefined : agent;
+});
 // Whose the session is, and what that lets this reader do about it. Claim and take over both make it the reader's
 // own; hand over goes up as a dialog, since it needs a name.
 const { user } = useAuth();
@@ -143,6 +149,10 @@ const ITEM = `flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left t
 
 <template>
     <div class="flex flex-col p-1">
+        <!-- What people have made of this session, and the press that adds a mark: on a phone the header gives its width to the title, so the marks lead this menu instead. -->
+        <div v-if="phone && marked !== undefined" class="px-2.5 pb-2 pt-1">
+            <AgentReactions :agent-id="agentId" :reactions="marked.reactions" :sandbox-id="marked.sandboxId" />
+        </div>
         <button
             v-if="phone && away === undefined && canShip"
             type="button"

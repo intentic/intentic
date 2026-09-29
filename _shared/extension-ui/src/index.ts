@@ -47,6 +47,11 @@ export {
     CodeField,
     ConfirmDialog,
     ContextMenu,
+    // A row's own presses: icon buttons with a pointer, folded behind one ⋯ into a sheet on a phone. `ActionSheet` is
+    // that sheet on its own, the touch twin of `ContextMenu`.
+    OverflowActions,
+    ActionSheet,
+    type ActionItem,
     CopyButton,
     StatusTally,
     type TallyItem,

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, ui, ContextMenu, Modal, ProjectChip, SearchBar, SegmentedControl, useDevice, useNarrow } from "@intentic/ui";
+import { Button, ui, ContextMenu, FloatingAction, Modal, ProjectChip, SearchBar, SegmentedControl, useDevice, useNarrow } from "@intentic/ui";
 import { computed, nextTick, provide, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { composeAgent, startAgent } from "../fleet/agentActions";
@@ -242,7 +242,10 @@ const starters = computed(() => boardStarters(workspaceRepos.value.length, works
                     <Icon :name="synthesizing ? `spinner` : `sparkles`" :spin="synthesizing" />{{ t(`agents.agentsView.synthesize`) }}
                     {{ chatStrip.panes.length }}
                 </Button>
-                <Button size="small" class="ui-button-thumb shrink-0" @click="startAgent()"> <Icon name="plus" />{{ t(`chat.words.newAgent`) }} </Button>
+                <!-- A phone floats it over the board instead (below), where the thumb is and the filters get the row. -->
+                <Button v-if="!mobile" size="small" class="ui-button-thumb shrink-0" @click="startAgent()">
+                    <Icon name="plus" />{{ t(`chat.words.newAgent`) }}
+                </Button>
             </div>
         </div>
         <!-- Failures only: the layout shift and dismissal this costs suit something the user must read, not a routine action's receipt (which floats instead). -->
@@ -294,9 +297,10 @@ const starters = computed(() => boardStarters(workspaceRepos.value.length, works
         <!-- No padding of its own: the stacked board's sticky lane headers pin to top-0, and padding would leave a gap above them. -->
         <div v-else class="scrollbar-stable min-h-0 flex-1 overflow-auto">
             <!-- `content-start` stops the stacked grid's rows from stretching to fill `h-full`, which would otherwise float a lane's cards above the next header. -->
+            <!-- A phone's board ends with room for the floating New agent, so its last card never sits under the press. -->
             <div
                 class="grid gap-3.5 p-3.5 sm:gap-4 sm:p-4"
-                :class="[narrow ? 'content-start' : 'grid-cols-3 items-start lg:gap-6 lg:p-6', noMatches ? '' : 'h-full']"
+                :class="[narrow ? 'content-start' : 'grid-cols-3 items-start lg:gap-6 lg:p-6', noMatches ? '' : 'h-full', mobile ? 'pb-24' : '']"
             >
                 <section
                     v-for="lane in LANES"
@@ -638,6 +642,9 @@ const starters = computed(() => boardStarters(workspaceRepos.value.length, works
                 {{ hint }}
             </p>
         </div>
+        <!-- The board's one creating press on a phone: over the board's corner rather than in its header, where it spent a
+             thumb-high row the filters needed and sat furthest from the thumb. -->
+        <FloatingAction v-if="mobile" icon="plus" labelled :label="t(`chat.words.newAgent`)" @click="startAgent()" />
         <!-- One menu for every card on the board; see cardMenuItems. -->
         <ContextMenu ref="cardMenu" :model="cardMenuItems" :min-width="12" />
     </div>

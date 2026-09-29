@@ -232,8 +232,8 @@ const hasSpend = computed(() => current.value.length > 0);
             <!-- Skeleton mirrors the real layout (hero, tiles, chart) so a returning reader recognises it while the ledger sums. -->
             <div v-if="isLoading && outline" role="status" aria-busy="true" class="flex flex-col gap-6">
                 <span class="sr-only">{{ t(`sandbox.sandboxUsage.readingLedger`) }}</span>
-                <div class="grid gap-3 @lg:grid-cols-2 @3xl:grid-cols-4" aria-hidden="true">
-                    <Card v-for="tile in 4" :key="tile" class="flex min-w-0 flex-col gap-2">
+                <div class="grid grid-cols-2 gap-3 @3xl:grid-cols-4" aria-hidden="true">
+                    <Card v-for="tile in 4" :key="tile" class="flex min-w-0 flex-col gap-2" :class="tile === 1 || tile === 4 ? `col-span-2 @lg:col-span-1` : ``">
                         <span class="skeleton block h-2.5 w-16" />
                         <span class="skeleton block" :class="tile === 1 ? `h-8 w-32` : `h-5 w-20`" />
                         <span class="skeleton mt-auto block h-2 w-24" />
@@ -262,9 +262,11 @@ const hasSpend = computed(() => current.value.length > 0);
             </p>
 
             <template v-else-if="!isLoading">
-                <!-- Spend alone is hero-sized, the rest are stat tiles. -->
-                <div class="grid gap-3 @lg:grid-cols-2 @3xl:grid-cols-4">
-                    <Card class="@container flex min-w-0 flex-col">
+                <!-- Spend alone is hero-sized, the rest are stat tiles. Two to a row even on a phone, with the hero and the one
+                     tile that is a sentence rather than a chart spanning it: one to a row, four tiles were a screen and a
+                     half of mostly empty card before the first chart. -->
+                <div class="grid grid-cols-2 gap-3 @3xl:grid-cols-4">
+                    <Card class="@container col-span-2 flex min-w-0 flex-col @lg:col-span-1">
                         <div class="text-xs text-muted">{{ t(`sandbox.sandboxUsage.spend`) }}</div>
                         <div class="mt-1 truncate text-[clamp(1.5rem,13cqi,3rem)] font-semibold leading-none tabular-nums text-content">
                             {{ formatUsdHero(totals.costUsd) }}
@@ -302,7 +304,7 @@ const hasSpend = computed(() => current.value.length > 0);
                         <UsageSparkline :points="tokenPoints" class="mt-auto pt-2 text-subtle" />
                     </Card>
 
-                    <Card class="@container flex min-w-0 flex-col">
+                    <Card class="@container col-span-2 flex min-w-0 flex-col @lg:col-span-1">
                         <div class="text-xs text-muted">{{ t(`sandbox.sandboxUsage.cacheHitRate`) }}</div>
                         <div class="mt-1 truncate text-[clamp(1.25rem,9cqi,1.75rem)] font-semibold leading-none tabular-nums text-content">
                             {{ formatPercent(cacheHitRate(totals)) }}

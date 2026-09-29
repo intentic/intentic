@@ -1,9 +1,8 @@
 <script setup lang="ts">
 import type { SandboxSummary } from "@intentic/api-contract";
 import type { ViewBadge } from "@intentic/extension-api";
-import { Avatar, type IconName, SandboxLogo, vAction } from "@intentic/ui";
+import { Avatar, type IconName, Row, RowGroup, SandboxLogo, vAction } from "@intentic/ui";
 import { computed, onMounted } from "vue";
-import { RouterLink } from "vue-router";
 import { useAudience } from "../app/useAudience";
 import { useAuth } from "../features/auth/useAuth";
 import { useCapabilities } from "../features/capabilities/connect/useCapabilities";
@@ -35,6 +34,7 @@ import { useWorkspaceTree } from "../features/workspace/explorer/useWorkspaceTre
 import { environment } from "../app/environments/environment";
 import { usePushNotifications } from "../push/usePushNotifications";
 import { pushMenuRow } from "./pushMenuRow";
+import MenuRow from "./MenuRow.vue";
 import RailIcon from "./rail/RailIcon.vue";
 import { useT } from "@intentic/ui/i18n";
 
@@ -135,149 +135,87 @@ const logout = async (): Promise<void> => {
 </script>
 
 <template>
+    <!-- Every band is a group of the kit's own rows (MenuRow), the shape a phone's Sandbox and Settings indexes take too, so
+         the Menu reads as one list of places in labelled cards rather than a flat run of lines in three type sizes. -->
     <div class="mx-auto flex w-full max-w-lg flex-col gap-6 p-4">
         <!-- First on the page: the tab's badge is what brought the reader here, one row per pending item. -->
-        <section v-if="sandboxAttention.length > 0" class="flex flex-col gap-1">
-            <h2 class="px-1 text-2xs font-semibold uppercase tracking-wide text-subtle">{{ t(`shared.needs`) }}</h2>
-            <RouterLink
-                v-for="item in sandboxAttention"
-                :key="item.message"
-                :to="item.to"
-                class="flex h-12 items-center gap-3 rounded-lg px-2 text-sm text-content transition-colors active:bg-overlay"
-            >
-                <span class="flex h-8 w-8 shrink-0 items-center justify-center" :class="item.tone === 'warning' ? 'text-warning' : 'text-link'">
-                    <Icon :name="item.icon" class="text-base" />
-                </span>
-                <span class="min-w-0 flex-1 text-xs">{{ item.message }}</span>
-                <Icon name="chevron-right" class="shrink-0 text-xs text-subtle" />
-            </RouterLink>
-        </section>
+        <RowGroup v-if="sandboxAttention.length > 0" :label="t(`shared.needs`)">
+            <MenuRow v-for="item in sandboxAttention" :key="item.message" :to="item.to" :icon="item.icon" :tone="item.tone" :title="item.message" />
+        </RowGroup>
 
         <!-- Quieter ink; none of these carry the tab's badge, so none should read as the reason it's flagged. -->
-        <section v-if="sandboxNotes.length > 0" class="flex flex-col gap-1">
-            <h2 class="px-1 text-2xs font-semibold uppercase tracking-wide text-subtle">{{ t(`shared.worthKnowing`) }}</h2>
-            <RouterLink
-                v-for="item in sandboxNotes"
-                :key="item.message"
-                :to="item.to"
-                class="flex h-12 items-center gap-3 rounded-lg px-2 text-sm text-muted transition-colors active:bg-overlay"
-            >
-                <span class="flex h-8 w-8 shrink-0 items-center justify-center text-subtle">
-                    <Icon :name="item.icon" class="text-base" />
-                </span>
-                <span class="min-w-0 flex-1 text-xs">{{ item.message }}</span>
-                <Icon name="chevron-right" class="shrink-0 text-xs text-subtle" />
-            </RouterLink>
-        </section>
+        <RowGroup v-if="sandboxNotes.length > 0" :label="t(`shared.worthKnowing`)">
+            <MenuRow v-for="item in sandboxNotes" :key="item.message" :to="item.to" :icon="item.icon">
+                <template #title><span class="font-normal text-muted">{{ item.message }}</span></template>
+            </MenuRow>
+        </RowGroup>
 
         <!-- This device, not the sandbox: push is registered per phone, so the ask belongs on the phone's own page. -->
-        <section v-if="pushRow !== undefined" class="flex flex-col gap-1">
-            <h2 class="px-1 text-2xs font-semibold uppercase tracking-wide text-subtle">{{ t(`shell.mobileMenu.phone`) }}</h2>
-            <RouterLink
-                to="/settings/notifications"
-                class="flex min-h-12 items-center gap-3 rounded-lg px-2 py-1.5 text-sm text-content transition-colors active:bg-overlay"
-            >
-                <span class="flex h-8 w-8 shrink-0 items-center justify-center" :class="pushRow.tone === 'warning' ? 'text-warning' : 'text-link'">
-                    <Icon name="bolt" class="text-base" />
-                </span>
-                <span class="min-w-0 flex-1">
-                    <span class="block text-xs">{{ pushRow.message }}</span>
-                    <span class="mt-0.5 block text-xs text-muted">{{ pushRow.detail }}</span>
-                </span>
-                <Icon name="chevron-right" class="shrink-0 text-xs text-subtle" />
-            </RouterLink>
-        </section>
+        <RowGroup v-if="pushRow !== undefined" :label="t(`shell.mobileMenu.phone`)">
+            <MenuRow to="/settings/notifications" icon="bolt" :tone="pushRow.tone" :title="pushRow.message" :description="pushRow.detail" />
+        </RowGroup>
 
         <!-- Sandboxes: tap to switch; the active one's placement mark carries its live status. -->
-        <section class="flex flex-col gap-1">
-            <h2 class="px-1 text-2xs font-semibold uppercase tracking-wide text-subtle">{{ t(`shared.sandboxes`) }}</h2>
-            <button
-                v-for="option in switchable"
-                :key="option.id"
-                type="button"
-                class="flex h-12 items-center gap-3 rounded-lg px-2 text-left text-sm transition-colors active:bg-overlay"
-                :class="option.id === sandbox.activeSandboxId.value ? 'bg-primary-600/15' : ''"
-                @click="sandbox.select(option.id)"
-            >
-                <SandboxLogo :size="32" :image="option.image ?? null" :name="option.name" />
-                <span class="min-w-0 flex-1 truncate" :class="option.id === sandbox.activeSandboxId.value ? 'text-link' : 'text-content'">{{
-                    option.name
-                }}</span>
-                <!-- Same mark, same meaning as the desktop rail's tile: which machine this box is on, inked on the
-                     active row by whether that machine answers. Drawn there even under a "Shared" pill, which says
-                     whose the box is and not whether it is up. No tooltip on a phone, so the sentence is the icon's
-                     own label and the row reads it out in full. -->
-                <Icon
-                    v-if="isActive(option) || placementFor(option).kind !== 'shared'"
-                    :name="placementFor(option).icon"
-                    class="shrink-0 text-xs"
-                    :class="isActive(option) ? availabilityVisual.inkClass : 'text-subtle'"
-                    :aria-label="isActive(option) ? `${placementFor(option).detail} · ${availabilityVisual.label}` : placementFor(option).detail"
-                />
-                <span v-if="option.role !== 'owner'" class="ui-status-pill shrink-0 bg-content/10 text-2xs font-medium text-subtle">{{
-                    t(`shared.shared`)
-                }}</span>
-            </button>
-            <RouterLink
-                to="/setup"
-                class="flex h-12 items-center gap-3 rounded-lg px-2 text-left text-sm text-content transition-colors active:bg-overlay"
-            >
-                <span class="flex h-8 w-8 shrink-0 items-center justify-center"><Icon name="plus" class="text-base text-muted" /></span>
-                {{ t(`sandbox.words.addSandbox`) }}
-            </RouterLink>
+        <RowGroup :label="t(`shared.sandboxes`)">
+            <MenuRow v-for="option in switchable" :key="option.id" :selected="isActive(option)" @press="sandbox.select(option.id)">
+                <template #lead="{ mark }"><SandboxLogo :size="mark" :image="option.image ?? null" :name="option.name" /></template>
+                <template #title>
+                    <span :class="isActive(option) ? 'text-link' : ''">{{ option.name }}</span>
+                </template>
+                <template #meta>
+                    <!-- Same mark, same meaning as the desktop rail's tile: which machine this box is on, inked on the
+                         active row by whether that machine answers. Drawn there even under a "Shared" pill, which says
+                         whose the box is and not whether it is up. No tooltip on a phone, so the sentence is the icon's
+                         own label and the row reads it out in full. -->
+                    <Icon
+                        v-if="isActive(option) || placementFor(option).kind !== 'shared'"
+                        :name="placementFor(option).icon"
+                        class="shrink-0 text-xs"
+                        :class="isActive(option) ? availabilityVisual.inkClass : 'text-subtle'"
+                        :aria-label="isActive(option) ? `${placementFor(option).detail} · ${availabilityVisual.label}` : placementFor(option).detail"
+                    />
+                    <span v-if="option.role !== 'owner'" class="ui-status-pill shrink-0 bg-content/10 text-2xs font-medium text-subtle">{{
+                        t(`shared.shared`)
+                    }}</span>
+                </template>
+            </MenuRow>
+            <MenuRow to="/setup" icon="plus" :title="t(`sandbox.words.addSandbox`)" plain />
+        </RowGroup>
 
-            <!-- Same wording as the desktop switcher: offers the move left, not a machine that doesn't exist yet. -->
-            <template v-if="unfinished.length > 0">
-                <h2 class="mt-2 px-1 text-2xs font-semibold uppercase tracking-wide text-subtle">{{ t(`shared.unfinishedSetup`) }}</h2>
-                <RouterLink
-                    v-for="option in unfinished"
-                    :key="option.id"
-                    :to="resumeSetup(option.id)"
-                    class="flex h-12 items-center gap-3 rounded-lg px-2 text-left text-sm transition-colors active:bg-overlay"
-                >
-                    <span class="flex h-8 w-8 shrink-0 items-center justify-center text-subtle"><Icon name="wrench" /></span>
-                    <span class="min-w-0 flex-1 truncate text-muted">{{ t(`sandbox.words.finishSettingUp`, { name: option.name }) }}</span>
-                    <Icon name="chevron-right" class="shrink-0 text-xs text-subtle" />
-                </RouterLink>
-            </template>
-        </section>
+        <!-- Same wording as the desktop switcher: offers the move left, not a machine that doesn't exist yet. -->
+        <RowGroup v-if="unfinished.length > 0" :label="t(`shared.unfinishedSetup`)">
+            <MenuRow
+                v-for="option in unfinished"
+                :key="option.id"
+                :to="resumeSetup(option.id)"
+                icon="wrench"
+                :title="t(`sandbox.words.finishSettingUp`, { name: option.name })"
+            />
+        </RowGroup>
 
         <!-- The other members connected right now: same roster the desktop rail stacks. -->
-        <section v-if="presenceOthers.length > 0" class="flex flex-col gap-2">
-            <h2 class="px-1 text-2xs font-semibold uppercase tracking-wide text-subtle">{{ t(`shared.hereNow`) }}</h2>
-            <div class="flex flex-col gap-1">
-                <div v-for="member in presenceOthers" :key="member.email" class="flex h-11 items-center gap-3 px-2">
-                    <Avatar
-                        :size="32"
-                        :name="member.name ?? member.email"
-                        :src="member.picture"
-                        :hue="identityHue(member.email)"
-                        :idle="member.idle"
-                    />
-                    <span class="min-w-0 flex-1">
-                        <span class="block truncate text-sm text-content">{{ member.name ?? member.email }}</span>
-                        <span class="block truncate text-xs text-muted"
-                            >{{ presenceActivity(member) }}{{ member.idle ? t(`shell.mobileMenu.away`) : "" }}</span
-                        >
-                    </span>
-                </div>
-            </div>
-        </section>
+        <RowGroup v-if="presenceOthers.length > 0" :label="t(`shared.hereNow`)">
+            <Row
+                v-for="member in presenceOthers"
+                :key="member.email"
+                lead="face"
+                :title="member.name ?? member.email"
+                :description="`${presenceActivity(member)}${member.idle ? t(`shell.mobileMenu.away`) : ``}`"
+            >
+                <template #lead="{ mark }">
+                    <Avatar :size="mark" :name="member.name ?? member.email" :src="member.picture" :hue="identityHue(member.email)" :idle="member.idle" />
+                </template>
+            </Row>
+        </RowGroup>
 
         <!-- Sections the desktop rail links to, minus the tab bar, grouped into the rail's own bands. -->
         <!-- A badge's tooltip renders as a second line under the name, never a shrink-0 pill beside it — a sentence-length pill would push or truncate the name. -->
-        <section v-for="band in sectionBands" :key="band.group.id" class="flex flex-col gap-1">
-            <h2 class="px-1 text-2xs font-semibold uppercase tracking-wide text-subtle">{{ band.group.label }}</h2>
-            <RouterLink
-                v-for="section in band.items"
-                :key="section.to"
-                :to="section.to"
-                class="flex min-h-12 items-center gap-3 rounded-lg px-2 py-1.5 text-sm text-content transition-colors active:bg-overlay"
-            >
-                <span class="flex h-8 w-8 shrink-0 items-center justify-center">
-                    <RailIcon :section="section.id" :fallback="section.icon" :label="section.label" class="text-base text-muted" />
-                </span>
-                <span class="min-w-0 flex-1">
+        <RowGroup v-for="band in sectionBands" :key="band.group.id" :label="band.group.label">
+            <MenuRow v-for="section in band.items" :key="section.to" :to="section.to">
+                <template #lead="{ iconClass }">
+                    <RailIcon :section="section.id" :fallback="section.icon" :label="section.label" :class="[iconClass, 'shrink-0 text-muted']" />
+                </template>
+                <template #title>
                     <span class="flex items-center gap-2">
                         <span class="min-w-0 truncate">{{ section.label }}</span>
                         <!-- The count only, when there's no tooltip; min-w-0 shrinks a long number instead of pushing the name off. -->
@@ -288,53 +226,32 @@ const logout = async (): Promise<void> => {
                             >{{ section.badge.count }}</span
                         >
                     </span>
-                    <span v-if="section.badge?.tooltip !== undefined" class="mt-0.5 block text-xs" :class="badgeToneClass(section.badge)">{{
-                        section.badge.tooltip
-                    }}</span>
+                </template>
+                <template v-if="section.badge?.tooltip !== undefined || section.badge?.running !== undefined" #description>
+                    <span v-if="section.badge?.tooltip !== undefined" class="block" :class="badgeToneClass(section.badge)">{{ section.badge.tooltip }}</span>
                     <!-- Running gets a line of its own rather than the rail's corner mark: a row this wide can afford the sentence. -->
-                    <span v-if="section.badge?.running !== undefined" class="mt-0.5 flex items-center gap-1 text-xs" :class="RUNNING_MARK_CLASS">
+                    <span v-if="section.badge?.running !== undefined" class="flex items-center gap-1" :class="RUNNING_MARK_CLASS">
                         <Icon name="spinner" spin />{{ section.badge.running }}
                     </span>
-                </span>
-                <Icon name="chevron-right" class="shrink-0 text-xs text-subtle" />
-            </RouterLink>
-        </section>
+                </template>
+            </MenuRow>
+        </RowGroup>
 
         <!-- The box rather than the work, matching what the desktop rail keeps below its last divider. -->
-        <section class="flex flex-col gap-1">
-            <h2 class="px-1 text-2xs font-semibold uppercase tracking-wide text-subtle">{{ t(`shared.sandboxHub`) }}</h2>
-            <RouterLink
-                v-for="row in sandboxRows"
-                :key="row.to"
-                :to="row.to"
-                class="flex h-12 items-center gap-3 rounded-lg px-2 text-sm text-content transition-colors active:bg-overlay"
-            >
-                <span class="flex h-8 w-8 shrink-0 items-center justify-center">
-                    <RailIcon :section="row.id" :fallback="row.icon" :label="row.label" class="text-base text-muted" />
-                </span>
-                <span class="min-w-0 flex-1 truncate">{{ row.label }}</span>
-                <Icon name="chevron-right" class="shrink-0 text-xs text-subtle" />
-            </RouterLink>
-        </section>
+        <RowGroup :label="t(`shared.sandboxHub`)">
+            <MenuRow v-for="row in sandboxRows" :key="row.to" :to="row.to" :title="row.label">
+                <template #lead="{ iconClass }">
+                    <RailIcon :section="row.id" :fallback="row.icon" :label="row.label" :class="[iconClass, 'shrink-0 text-muted']" />
+                </template>
+            </MenuRow>
+        </RowGroup>
 
         <!-- Account: identity and the actions the desktop avatar popover holds. -->
-        <section class="flex flex-col gap-1 pb-4">
-            <h2 class="px-1 text-2xs font-semibold uppercase tracking-wide text-subtle">{{ t(`shell.words.account`) }}</h2>
-            <div class="flex h-14 items-center gap-3 px-2">
-                <Avatar :size="40" :src="user?.image" />
-                <span class="min-w-0 flex-1">
-                    <span class="truncate text-sm font-medium text-content">{{ user?.email }}</span>
-                    <span v-if="user?.name" class="block truncate text-xs text-muted">{{ user.name }}</span>
-                </span>
-            </div>
-            <button
-                type="button"
-                class="flex h-12 items-center gap-3 rounded-lg px-2 text-left text-sm text-content transition-colors active:bg-overlay"
-                v-action="logout"
-            >
-                <span class="flex h-8 w-8 shrink-0 items-center justify-center"><Icon name="sign-out" class="text-base text-muted" /></span>
-                {{ t(`shell.words.signOut`) }}
-            </button>
-        </section>
+        <RowGroup :label="t(`shell.words.account`)" class="pb-4">
+            <Row lead="face" :title="user?.email" :description="user?.name ?? undefined">
+                <template #lead="{ mark }"><Avatar :size="mark" :src="user?.image" /></template>
+            </Row>
+            <MenuRow v-action="logout" icon="sign-out" :title="t(`shell.words.signOut`)" />
+        </RowGroup>
     </div>
 </template>

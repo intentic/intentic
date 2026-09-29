@@ -1,7 +1,21 @@
 <script setup lang="ts">
 import type { AutomationRun, AutomationSummary, AutomationTemplate, Trigger } from "@intentic/sandbox-contract";
 import { localZone } from "@intentic/sandbox-contract/time";
-import { Button, ui, CopyButton, DisclosureRow, formatDateTime, Icon, Notice, noticeOf, ToggleSwitch, type IconName } from "@intentic/extension-ui";
+import {
+    type ActionItem,
+    Button,
+    ui,
+    CopyButton,
+    DisclosureRow,
+    formatDateTime,
+    Icon,
+    Notice,
+    noticeOf,
+    OverflowActions,
+    ToggleSwitch,
+    type IconName,
+    useDevice,
+} from "@intentic/extension-ui";
 import { computed, ref } from "vue";
 import { nextIn, scheduleTriggerLabel, since } from "./cronSchedule";
 import { host } from "./host";
@@ -260,6 +274,19 @@ const settings = computed<readonly { label: string; value: string }[]>(() => [
 // One recipe (kit's icon button plus reveal) for all three verbs; hand-written before, it had no touch hit-area growth
 // or disabled tone.
 const VERB = ui.iconButton(`md:opacity-0 md:group-hover/row:opacity-100 md:focus-visible:opacity-100`);
+
+// A phone keeps the switch and folds the verbs behind one ⋯: four glyphs beside a switch took a second line under
+// every automation and read as a toolbar, and there is no hover there to hide them until wanted. The sheet names each
+// verb in words, which the glyphs only did in a tooltip a finger never raises.
+const { mobile } = useDevice();
+const verbs = computed((): ActionItem[] => [
+    ...(visitorChat.value === undefined ? [] : [{ id: `install`, label: t(`automationRow.embedCode`), icon: `globe` as const, run: () => emit(`install`) }]),
+    { id: `edit`, label: t(`automationRow.edit2`), icon: `pencil`, run: () => startEdit() },
+    ...(trigger.value.kind === `listener`
+        ? []
+        : [{ id: `run`, label: t(`automationRow.runNow2`), icon: `play` as const, disabled: props.busy === true, run: () => emit(`run`) }]),
+    { id: `remove`, label: t(`automationRow.delete2`), icon: `trash`, danger: true, run: () => emit(`remove`) },
+]);
 </script>
 
 <template>
@@ -346,58 +373,60 @@ const VERB = ui.iconButton(`md:opacity-0 md:group-hover/row:opacity-100 md:focus
         </template>
 
         <template #control>
+            <OverflowActions v-if="mobile" :actions="verbs" :header="automation.id" />
             <!-- Reserved boxes keep conditional verbs from shifting the row. -->
+            <template v-else>
+                <!-- Keep the install snippet visible because it is the deliverable. -->
+                <span class="flex w-6 shrink-0 items-center justify-center">
+                    <button
+                        v-if="visitorChat"
+                        type="button"
+                        :class="ui.iconButton()"
+                        :aria-label="t(`automationRow.installOnWebsite`, { id: automation.id })"
+                        v-tooltip.top="t(`automationRow.embedCode`)"
+                        @click="emit(`install`)"
+                    >
+                        <Icon name="globe" class="text-xs" />
+                    </button>
+                </span>
 
-            <!-- Keep the install snippet visible because it is the deliverable. -->
-            <span class="flex w-6 shrink-0 items-center justify-center">
+                <!-- Place verbs before the switch so the right edge stays fixed. -->
                 <button
-                    v-if="visitorChat"
-                    type="button"
-                    :class="ui.iconButton()"
-                    :aria-label="t(`automationRow.installOnWebsite`, { id: automation.id })"
-                    v-tooltip.top="t(`automationRow.embedCode`)"
-                    @click="emit(`install`)"
-                >
-                    <Icon name="globe" class="text-xs" />
-                </button>
-            </span>
-
-            <!-- Place verbs before the switch so the right edge stays fixed. -->
-            <button
-                type="button"
-                :class="VERB"
-                :aria-label="t(`automationRow.edit`, { id: automation.id })"
-                v-tooltip.top="t(`automationRow.edit2`)"
-                @click="startEdit"
-            >
-                <Icon name="pencil" class="text-xs" />
-            </button>
-
-            <!-- Lets you test a 3am cron or a webhook without waiting or forging one, even on a disabled row. -->
-            <span class="flex w-6 shrink-0 items-center justify-center">
-                <button
-                    v-if="trigger.kind !== `listener`"
                     type="button"
                     :class="VERB"
-                    :disabled="busy"
-                    :aria-label="t(`automationRow.runNow`, { id: automation.id })"
-                    v-tooltip.top="t(`automationRow.runNow2`)"
-                    @click="emit(`run`)"
+                    :aria-label="t(`automationRow.edit`, { id: automation.id })"
+                    v-tooltip.top="t(`automationRow.edit2`)"
+                    @click="startEdit"
                 >
-                    <Icon name="play" class="text-xs" />
+                    <Icon name="pencil" class="text-xs" />
                 </button>
-            </span>
 
-            <!-- Destructive and rare, so it hides from the scan on a pointer device, but stays put on touch, where there's no hover. -->
-            <button
-                type="button"
-                :class="ui.iconButton(`hover:text-danger md:opacity-0 md:group-hover/row:opacity-100 md:focus-visible:opacity-100`)"
-                :aria-label="t(`automationRow.delete`, { id: automation.id })"
-                v-tooltip.top="t(`automationRow.delete2`)"
-                @click="emit(`remove`)"
-            >
-                <Icon name="trash" class="text-xs" />
-            </button>
+                <!-- Lets you test a 3am cron or a webhook without waiting or forging one, even on a disabled row. -->
+                <span class="flex w-6 shrink-0 items-center justify-center">
+                    <button
+                        v-if="trigger.kind !== `listener`"
+                        type="button"
+                        :class="VERB"
+                        :disabled="busy"
+                        :aria-label="t(`automationRow.runNow`, { id: automation.id })"
+                        v-tooltip.top="t(`automationRow.runNow2`)"
+                        @click="emit(`run`)"
+                    >
+                        <Icon name="play" class="text-xs" />
+                    </button>
+                </span>
+
+                <!-- Destructive and rare, so it hides from the scan on a pointer device, but stays put on touch, where there's no hover. -->
+                <button
+                    type="button"
+                    :class="ui.iconButton(`hover:text-danger md:opacity-0 md:group-hover/row:opacity-100 md:focus-visible:opacity-100`)"
+                    :aria-label="t(`automationRow.delete`, { id: automation.id })"
+                    v-tooltip.top="t(`automationRow.delete2`)"
+                    @click="emit(`remove`)"
+                >
+                    <Icon name="trash" class="text-xs" />
+                </button>
+            </template>
 
             <!-- A spent one-time wake cannot be re-armed by the switch: its moment is in the past, so the daemon would
                  fire it on the spot rather than schedule anything. Edit it to a new moment instead. -->

@@ -21,6 +21,12 @@ flowchart LR
   of a short title, an optional status dot and key cap, label/figure rows and one short note. A sentence belongs in
   neither. The `tooltip-words` check holds every label it can resolve to that length, and `tipText` gives a card's
   words as one line for an accessible name.
+- **Phones.** Components that hold a menu or a row of buttons pick their phone layout themselves, from `useDevice`,
+  so callers don't have to. `ResponsiveOverlay` is an anchored panel on a desktop and a `BottomSheet` on a phone.
+  `OverflowActions` is a row of icon buttons on a desktop and one ⋯ on a phone, opening an `ActionSheet` (the touch
+  equivalent of `ContextMenu`). `FloatingAction` is a phone screen's one create button. When the title and the
+  actions don't fit on one line, `PageHeader` and `Row` put the actions on a line of their own. They never cut the
+  title short or let the actions run off the edge.
 - **Styling.** `src/styles/index.css` is the one stylesheet import. `theme.ts` points PrimeVue's `--p-*` tokens at
   the CSS variables behind the Tailwind utilities, so light and dark switch at runtime on `[data-mode="dark"]`.
   Class recipes live in `ui` (`src/lib/ui.ts`) and merge through `tailwind-merge`, so the caller's classes win.

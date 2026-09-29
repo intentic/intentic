@@ -4098,6 +4098,7 @@
             "offline": "Sin conexión"
         },
         "hubLayout": {
+            "backTo": "Volver a {title}",
             "sections": "Secciones"
         },
         "mobileMenu": {

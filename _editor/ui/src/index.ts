@@ -29,6 +29,8 @@ export { isTip, tipText } from "./lib/tipText.js";
 export { default as BarChart } from "./components/charts/BarChart.vue";
 export { type BarItem } from "./components/charts/barChart.js";
 export { default as BottomSheet } from "./components/layout/BottomSheet.vue";
+// A phone screen's one creating press, floating over its bottom-right corner.
+export { default as FloatingAction } from "./components/layout/FloatingAction.vue";
 // <Avatar> for things rather than people: the logo, then glyph, then initials fallback ladder.
 export { default as BrandMark } from "./components/brand/BrandMark.vue";
 // PrimeVue's Button wrapped so a press whose handler returns a promise locks the button and shows a working state
@@ -47,6 +49,11 @@ export { default as Code } from "./components/primitives/Code.vue";
 export { default as CodeField } from "./components/forms/CodeField.vue";
 export { default as ConfirmDialog } from "./components/overlays/ConfirmDialog.vue";
 export { default as ContextMenu } from "./components/overlays/ContextMenu.vue";
+// A row's or card's own presses: icon buttons with a pointer, one ⋯ and a sheet of them on a phone. <ActionSheet> is
+// that sheet on its own, the touch twin of <ContextMenu>.
+export { default as OverflowActions } from "./components/overlays/OverflowActions.vue";
+export { default as ActionSheet } from "./components/overlays/ActionSheet.vue";
+export { type ActionItem } from "./components/overlays/actionItem.js";
 export { default as CopyButton } from "./components/primitives/CopyButton.vue";
 export { type TallyItem, default as StatusTally } from "./components/charts/StatusTally.vue";
 export { default as DagEditor } from "./components/charts/DagEditor.vue";

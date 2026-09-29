@@ -4629,6 +4629,7 @@
             "offline": "Offline"
         },
         "hubLayout": {
+            "backTo": "Back to {title}",
             "sections": "Sections"
         },
         "mobileMenu": {

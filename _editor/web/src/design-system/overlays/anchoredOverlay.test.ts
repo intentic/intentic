@@ -119,3 +119,12 @@ it(`hands focus back to its anchor on close, unless told not to`, async () => {
     await settle();
     expect(document.activeElement).toBe(document.body);
 });
+
+// The anchor is usually a template ref, so it arrives a render after the overlay mounts, with the panel still shut. A
+// close handing focus back must not fire then: it put a focus ring, and its tooltip, on the page's first control.
+it(`leaves focus where it was when its anchor arrives with the panel shut`, async () => {
+    mountPicker();
+    await settle();
+    expect(anchor.value).toBeInstanceOf(HTMLElement);
+    expect(document.activeElement).toBe(document.body);
+});

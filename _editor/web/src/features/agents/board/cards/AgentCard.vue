@@ -1,5 +1,17 @@
 <script setup lang="ts">
-import { Button, ProgressRing, ResponsiveOverlay, SandboxLogo, SegmentRing, type Tip, type TooltipValue, ui, useDevice } from "@intentic/ui";
+import {
+    type ActionItem,
+    Button,
+    OverflowActions,
+    ProgressRing,
+    ResponsiveOverlay,
+    SandboxLogo,
+    SegmentRing,
+    type Tip,
+    type TooltipValue,
+    ui,
+    useDevice,
+} from "@intentic/ui";
 import { createInlineRename } from "@intentic/ui/inline-rename";
 import { errorMessage } from "@intentic/ui/async";
 import { computed, ref, useTemplateRef } from "vue";
@@ -435,6 +447,62 @@ const reviewCard = (): void => {
 // A surface-named fill would vanish on a selected card (whose own fill is that overlay) and in the light scheme, where
 // overlay equals card.
 const HOVER_ACTION = `touch-target flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted transition-opacity hover:bg-content/10 hover:text-content`;
+// Hidden until the card is hovered or one of them is focused, since at rest they are forty cards of glyphs; a phone has
+// no hover, so what it keeps of them (one ⋯, or a lone press) stays drawn, quieter than the ink around it.
+const actionClass = computed(() => `${HOVER_ACTION} ${mobile.value ? `opacity-60` : `opacity-0 focus-visible:opacity-100 group-hover:opacity-100`}`);
+
+// Every press the header offers, in the order the row draws them. Keep leads, since it is the one with a deadline (the
+// look closes on the next click elsewhere); the drill-in closes the row. Adding a mark rides with the card's other
+// actions, not with the marks themselves: this row reserves its seats and lets the title take what is left, so
+// revealing it resizes nothing, while the stats row below has no seat to spare.
+const cardActions = computed((): ActionItem[] => {
+    const actions: ActionItem[] = [];
+    if (props.peek === true) {
+        actions.push({
+            id: `keep`,
+            label: t(`chat.words.keepChatOpen`),
+            icon: `pin`,
+            hint: { title: t(`ui.action.keepOpen`), note: t(`agents.agentCard.closesWhenAnotherOpens`) },
+            run: () => emit(`keep`),
+        });
+    }
+    if (localOnly.value) {
+        actions.push({ id: `rename`, label: t(`agents.agentCard.renameAgent`), icon: `pencil`, hint: t(`ui.action.rename`), disabled: busy.value, run: () => edit.begin() });
+    }
+    if (archivable.value) {
+        actions.push({
+            id: `archive`,
+            label: t(`agents.agentCard.archiveAgent`),
+            icon: `box`,
+            hint: archiveHint.value,
+            note: archiveHint.value.note,
+            disabled: busy.value,
+            run: () => emit(`archive`),
+        });
+    }
+    if (closable.value) {
+        actions.push({
+            id: `close`,
+            label: t(`agents.agentCard.closeAgent`),
+            icon: `times`,
+            hint: closeHint.value,
+            note: closeHint.value.note,
+            disabled: busy.value,
+            run: () => emit(`close`),
+        });
+    }
+    if (props.agent.archivedAt !== undefined) {
+        actions.push({ id: `restore`, label: t(`agents.agentCard.restoreAgent`), icon: `undo`, hint: restoreHint.value, disabled: busy.value, run: () => emit(`restore`) });
+    }
+    if (reactable.value) {
+        actions.push({ id: `react`, label: t(`agents.agentReactions.addReaction`), icon: `plus`, run: (from) => reactionsStrip.value?.open(from) });
+    }
+    // An icon, not a spelled-out link, so it costs no space at rest; the words move to the tooltip (and the sheet).
+    if (review.value !== undefined && lane.value !== `attention`) {
+        actions.push({ id: `review`, label: review.value, icon: `arrow-right`, run: () => reviewCard() });
+    }
+    return actions;
+});
 
 // Starts the drag only when the press begins on the card body; the rename pencil and its input run their own pointer
 // gestures. The card moves by pointer and nothing native may start inside it (`@dragstart.prevent` on the root): a
@@ -538,83 +606,8 @@ const grab = (event: PointerEvent): void => {
                     <!-- Italic is invisible to a screen reader, so the peek state rides along as text, not an aria-label with no role. -->
                     <span v-if="peek" class="sr-only">{{ t(`agents.agentCard.temporary`) }}</span>
                 </span>
-                <!-- Keeps a peeked chat open; leads the affordance row since it's the one press with a deadline (the tab closes on the next click elsewhere). -->
-                <button
-                    v-if="peek"
-                    type="button"
-                    :aria-label="t(`chat.words.keepChatOpen`)"
-                    v-tooltip.top="{ title: t(`ui.action.keepOpen`), note: t(`agents.agentCard.closesWhenAnotherOpens`) }"
-                    :class="[HOVER_ACTION, mobile ? 'opacity-60' : 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100']"
-                    @click.stop="emit(`keep`)"
-                >
-                    <Icon name="pin" class="text-sm" />
-                </button>
-                <button
-                    v-if="localOnly"
-                    type="button"
-                    :aria-label="t(`agents.agentCard.renameAgent`)"
-                    v-tooltip.top="t(`ui.action.rename`)"
-                    :disabled="busy"
-                    :class="[HOVER_ACTION, mobile ? 'opacity-60' : 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100']"
-                    @click.stop="edit.begin()"
-                >
-                    <Icon name="pencil" class="text-sm" />
-                </button>
-                <button
-                    v-if="archivable"
-                    type="button"
-                    :aria-label="t(`agents.agentCard.archiveAgent`)"
-                    v-tooltip.top="archiveHint"
-                    :disabled="busy"
-                    :class="[HOVER_ACTION, mobile ? 'opacity-60' : 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100']"
-                    @click.stop="emit(`archive`)"
-                >
-                    <Icon name="box" class="text-sm" />
-                </button>
-                <button
-                    v-if="closable"
-                    type="button"
-                    :aria-label="t(`agents.agentCard.closeAgent`)"
-                    v-tooltip.top="closeHint"
-                    :disabled="busy"
-                    :class="[HOVER_ACTION, mobile ? 'opacity-60' : 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100']"
-                    @click.stop="emit(`close`)"
-                >
-                    <Icon name="times" class="text-sm" />
-                </button>
-                <button
-                    v-if="agent.archivedAt !== undefined"
-                    type="button"
-                    :aria-label="t(`agents.agentCard.restoreAgent`)"
-                    v-tooltip.top="restoreHint"
-                    :disabled="busy"
-                    :class="[HOVER_ACTION, mobile ? 'opacity-60' : 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100']"
-                    @click.stop="emit(`restore`)"
-                >
-                    <Icon name="undo" class="text-sm" />
-                </button>
-                <!-- The press that leaves a mark rides with the card's other actions, not with the marks themselves: this row reserves its seats and lets the title take what is left, so revealing it resizes nothing, while the stats row below has no seat to spare. -->
-                <button
-                    v-if="reactable"
-                    type="button"
-                    :aria-label="t(`agents.agentReactions.addReaction`)"
-                    v-tooltip.top="t(`agents.agentReactions.addReaction`)"
-                    :class="[HOVER_ACTION, mobile ? 'opacity-60' : 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100']"
-                    @click.stop="reactionsStrip?.open($event.currentTarget as HTMLElement)"
-                >
-                    <Icon name="plus" class="text-sm" />
-                </button>
-                <!-- An icon, not a spelled-out link, so it costs no space at rest; the words move to the tooltip. -->
-                <button
-                    v-if="review !== undefined && lane !== 'attention'"
-                    type="button"
-                    :aria-label="review"
-                    v-tooltip.top="review"
-                    :class="[HOVER_ACTION, mobile ? 'opacity-60' : 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100']"
-                    @click.stop="reviewCard"
-                >
-                    <Icon name="arrow-right" class="text-sm" />
-                </button>
+                <!-- The card's own presses (cardActions), revealed on hover where there is a pointer and folded behind one ⋯ on a phone. -->
+                <OverflowActions :actions="cardActions" :button-class="actionClass" :header="displayTitle" />
             </template>
             <!-- Same pill, same tones, same precedence as a rail row's corner (RailCard): one standing, one reading. -->
             <span
@@ -686,7 +679,7 @@ const grab = (event: PointerEvent): void => {
                     provenance !== undefined ||
                     model !== undefined ||
                     agent.branch !== undefined ||
-                    account !== undefined
+                    (account !== undefined && !mobile)
                 "
                 class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-subtle"
             >
@@ -722,7 +715,8 @@ const grab = (event: PointerEvent): void => {
                     <span v-if="model !== undefined || provenance !== undefined">·</span>
                     <SessionChip :branch="agent.branch" />
                 </span>
-                <span v-if="account !== undefined" class="inline-flex min-w-0 shrink items-center gap-1">
+                <!-- Not on a phone: which login served the turn is the line's least-read fact, and on a phone's width it was the one that broke the line in two. -->
+                <span v-if="account !== undefined && !mobile" class="inline-flex min-w-0 shrink items-center gap-1">
                     <span v-if="model !== undefined || provenance !== undefined || (agent.branch !== undefined && !maker)">·</span>
                     <span v-tooltip.top="account.hint" class="inline-flex min-w-0 shrink items-center gap-1">
                         <Icon name="user" class="shrink-0 text-2xs" />

@@ -15,6 +15,8 @@ export interface SettingsSection {
     readonly icon: IconName;
     /** Absent where the platform sells no plan. Present-or-absent, never `false`, so `in` is the whole test. */
     readonly plan?: true;
+    /** About a keyboard, so a phone's index leaves it out. Present-or-absent, like `plan`. */
+    readonly keyboard?: true;
 }
 
 /** The section a param-less `/settings` shows. */
@@ -32,16 +34,17 @@ const SETTINGS_SECTIONS = [
     { slug: `billing`, icon: `credit-card`, plan: true },
     { slug: `appearance`, icon: `palette` },
     { slug: `notifications`, icon: `volume-up` },
-    { slug: `keybindings`, icon: `bolt` },
+    { slug: `keybindings`, icon: `bolt`, keyboard: true },
     // Account credentials, not this sandbox's: a token minted here acts for the person on every sandbox they own,
     // which is why it lives beside the account's own rows rather than on a Sandbox tab.
     { slug: `tokens`, icon: `key` },
     { slug: `data`, icon: `database` },
-] as const satisfies readonly { slug: string; icon: IconName; plan?: true }[];
+] as const satisfies readonly { slug: string; icon: IconName; plan?: true; keyboard?: true }[];
 
-// Named inside a `computed` by both callers, so `t` is read where a language change can re-run it.
-export const settingsSections = (planOffered: boolean): readonly SettingsSection[] =>
-    SETTINGS_SECTIONS.filter((section) => planOffered || !(`plan` in section)).map((section) => ({
+// Named inside a `computed` by both callers, so `t` is read where a language change can re-run it. `phone` drops the
+// sections about a keyboard a phone does not have.
+export const settingsSections = (planOffered: boolean, phone = false): readonly SettingsSection[] =>
+    SETTINGS_SECTIONS.filter((section) => (planOffered || !(`plan` in section)) && !(phone && `keyboard` in section)).map((section) => ({
         ...section,
         label: t(`settings.section.${section.slug}`),
     }));

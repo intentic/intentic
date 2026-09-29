@@ -461,6 +461,10 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                             ></textarea>
 
                             <!-- The control row keeps model controls and actions in separate groups. -->
+                            <!-- ONE LINE ON A PHONE: the icon presses there are 40px wide rather than 44 (their height keeps the 44, and the
+                                 row's gap keeps them a thumb apart), and a pill that has already dropped its name to its glyph drops its
+                                 chevron with it. Seven 44px presses and two chevrons were a 360px phone's whole row and more, so the row
+                                 broke in two under the text and moved every press it held. -->
                             <div class="flex flex-wrap items-center gap-x-1 gap-y-1.5 px-2.5 pb-2.5">
                                 <!-- Workflow sends disable controls that do not affect the workflow step. -->
                                 <!-- `min-w-0` lets the model name truncate first, since it's the one shrinkable middle in the row. -->
@@ -505,7 +509,7 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                                     >
                                         <Icon :name="modeIcon" class="text-2xs text-link" />
                                         <span class="@max-md:hidden">{{ modeLabel }}</span>
-                                        <Icon name="chevron-down" class="text-2xs text-subtle" />
+                                        <span class="inline-flex max-md:hidden"><Icon name="chevron-down" class="text-2xs text-subtle" /></span>
                                     </button>
 
                                     <!-- Placement controls the machine, not the message. -->
@@ -521,7 +525,7 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                                     >
                                         <Icon :name="remote ? `boxes` : `desktop`" class="text-2xs text-link" />
                                         <span class="@max-lg:hidden">{{ placementLabel }}</span>
-                                        <Icon name="chevron-down" class="text-2xs text-subtle" />
+                                        <span class="inline-flex max-md:hidden"><Icon name="chevron-down" class="text-2xs text-subtle" /></span>
                                     </button>
 
                                     <!-- Persona: who the chat is to the outside world. -->
@@ -596,7 +600,7 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                                     <button
                                         v-if="canDrive"
                                         type="button"
-                                        class="composer-ghost h-8 w-8 shrink-0 max-md:h-11 max-md:w-11"
+                                        class="composer-ghost h-8 w-8 shrink-0 max-md:h-11 max-md:w-10"
                                         :disabled="!reachable || !connected"
                                         @click="filePicker?.click()"
                                         v-tooltip.top="t(`chat.chatPane.attachFiles`)"
@@ -619,7 +623,7 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                                         v-if="moreRows.length > 0"
                                         ref="morePill"
                                         type="button"
-                                        class="composer-ghost h-8 w-8 shrink-0 max-md:h-11 max-md:w-11"
+                                        class="composer-ghost h-8 w-8 shrink-0 max-md:h-11 max-md:w-10"
                                         :class="{ 'composer-steered': pickedWorkflow !== undefined }"
                                         :disabled="pickedWorkflow !== undefined"
                                         @click="moreOpen = !moreOpen"
@@ -634,7 +638,7 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                                     <button
                                         v-if="canDrive"
                                         type="button"
-                                        class="composer-ghost h-8 w-8 shrink-0 max-md:h-11 max-md:w-11"
+                                        class="composer-ghost h-8 w-8 shrink-0 max-md:h-11 max-md:w-10"
                                         :class="{ 'composer-active': voiceOn }"
                                         :disabled="!reachable && !voiceOn"
                                         @click="toggleVoice"

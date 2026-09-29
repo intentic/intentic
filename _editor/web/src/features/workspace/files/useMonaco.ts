@@ -84,6 +84,11 @@ const init = async (): Promise<typeof Monaco> => {
     self.MonacoEnvironment = { getWorker: () => new EditorWorker() };
     bridge = shikiToMonaco;
     applyBridge(monaco, core);
+    // Monaco measures the mono face once, as its first editor opens. A face still downloading then is measured as its
+    // fallback, and every line wraps at the fallback's width: on a phone, past the pane's right edge and out of sight.
+    // Measured again as soon as a face finishes loading, which re-wraps every open editor.
+    document.fonts?.addEventListener(`loadingdone`, () => monaco.editor.remeasureFonts());
+    void document.fonts?.ready.then(() => monaco.editor.remeasureFonts());
     // Reruns the bridge (not setTheme) on scheme or accent change, so the background is re-resolved and rebaked.
     const { scheme, accent } = useTheme();
     watch([scheme, accent], () => applyBridge(monaco, core));

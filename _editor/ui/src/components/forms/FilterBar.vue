@@ -27,7 +27,8 @@ const query = defineModel<string>({ required: true });
 
 <template>
     <div class="flex flex-wrap items-center gap-2">
-        <div class="ui-search-row flex h-8 min-w-40 flex-1 items-center overflow-hidden rounded-md border border-line bg-canvas">
+        <!-- 14rem before the controls beside it wrap to a line of their own: narrower, a phone's 16px field showed "Name, publishe…" of its placeholder and none of what was typed past it. -->
+        <div class="ui-search-row flex h-8 min-w-[min(100%,14rem)] flex-1 items-center overflow-hidden rounded-md border border-line bg-canvas">
             <SearchBar
                 v-model="query"
                 :placeholder="placeholder ?? t(`ui.action.filter`)"

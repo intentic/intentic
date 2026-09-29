@@ -3,6 +3,7 @@ import type { WorkspaceTreeEntry } from "@intentic/api-contract";
 import {
     BottomSheet,
     Button,
+    FloatingAction,
     clipboardOf,
     Modal,
     type NoticeModel,
@@ -633,18 +634,8 @@ const onPick = (event: Event): void => {
                     </div>
                 </PullToRefresh>
 
-                <!-- The upload FAB stays on a wrapper so PrimeVue cannot override its absolute position. -->
                 <input ref="fileInput" type="file" multiple class="hidden" @change="onPick" />
-                <div v-if="!contentMode" class="absolute bottom-4 right-4 z-10">
-                    <Button
-                        rounded
-                        class="h-14 w-14 px-0 py-0 shadow-lg"
-                        :aria-label="t(`workspace.workspaceMobile.uploadFilesHere`)"
-                        @click="fileInput?.click()"
-                    >
-                        <Icon name="upload" class="text-xl" />
-                    </Button>
-                </div>
+                <FloatingAction v-if="!contentMode" icon="upload" :label="t(`workspace.workspaceMobile.uploadFilesHere`)" @click="fileInput?.click()" />
             </template>
         </template>
 

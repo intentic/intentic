@@ -20,6 +20,8 @@ export const extensionUiNames = [
     "CodeField",
     "ConfirmDialog",
     "ContextMenu",
+    "OverflowActions",
+    "ActionSheet",
     "CopyButton",
     "DagEditor",
     "DagGraph",

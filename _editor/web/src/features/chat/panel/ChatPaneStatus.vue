@@ -158,7 +158,10 @@ const usageChip = computed(() => {
             <span class="truncate">{{ block }}</span>
         </span>
         <span v-else-if="!mobile" class="@max-md:hidden">{{ hint }}</span>
-        <div class="ml-auto flex items-center gap-3">
+        <!-- ONE LINE, EVERY READOUT WHOLE: on a phone each one used to break inside itself ("1 job / running", "online · / Manage")
+             and the row stood two lines tall. There the readouts a tap explains keep only their mark (the cache opens its
+             panel, the meter its page), and the sandbox's state drops the word naming where it links. -->
+        <div class="ml-auto flex items-center gap-3 whitespace-nowrap">
             <!-- What this chat left running past its turns; first, since it is the one readout here that ends on its own. -->
             <ChatJobsReadout />
             <!-- Whether this transcript shows its tool calls (ChatToolCallsToggle); joins the other readouts under the composer. -->
@@ -175,7 +178,7 @@ const usageChip = computed(() => {
                     @click="cacheOpen = !cacheOpen"
                 >
                     <Icon :name="cacheChip.icon" class="text-2xs" />
-                    <span class="tabular-nums @max-xs:hidden">{{ cacheChip.text }}</span>
+                    <span v-if="!mobile" class="tabular-nums @max-xs:hidden">{{ cacheChip.text }}</span>
                 </button>
                 <ResponsiveOverlay v-model="cacheOpen" :anchor="cacheTrigger" cross="end" :header="t(`agents.keepWarm.title`)" panel-class="w-80">
                     <KeepWarmPanel :agent="card" @done="cacheOpen = false" />
@@ -192,7 +195,7 @@ const usageChip = computed(() => {
                 class="touch-target inline-flex cursor-pointer items-center transition-colors hover:text-content"
             >
                 <UsageMeter :headroom="usageChip.headroom"
-                    ><span class="@max-xs:hidden">{{ usageChip.label }}</span></UsageMeter
+                    ><span v-if="!mobile" class="@max-xs:hidden">{{ usageChip.label }}</span></UsageMeter
                 >
             </RouterLink>
             <!-- Every chip here names a page, so each is a link: hover shows the address, Ctrl/Cmd-click opens it without leaving the chat. -->
@@ -205,7 +208,7 @@ const usageChip = computed(() => {
             <RouterLink v-else to="/sandbox/agent" class="touch-target inline-flex items-center gap-1 transition-colors hover:text-content">
                 <!-- One spelling and colour for sandbox state, shared with the rail chip and switcher (availability.ts); a short retry keeps the healthy look. -->
                 <span class="inline-block h-1.5 w-1.5 rounded-full" :class="availabilityVisual.dotClass"></span>
-                {{ availabilityVisual.label }} {{ t(`chat.chatPaneStatus.manage`) }}
+                {{ mobile ? availabilityVisual.label : `${availabilityVisual.label} ${t(`chat.chatPaneStatus.manage`)}` }}
             </RouterLink>
         </div>
     </div>

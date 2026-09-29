@@ -17,6 +17,7 @@ import {
     StatusBadge,
     type StatusVariant,
     ui,
+    useDevice,
 } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { formatDate } from "@intentic/ui/format";
@@ -39,6 +40,7 @@ import AreaPicker from "./AreaPicker.vue";
 import PasskeysSection from "./PasskeysSection.vue";
 import { type AccessGrant, grantBody, grantSendable } from "./accessGrant";
 import { usePersonaReach } from "./usePersonaReach";
+import AccessMemberBadges from "./AccessMemberBadges.vue";
 import { useT } from "@intentic/ui/i18n";
 
 // Owner-only invites: daemon's enforced /members list first, fail-closed (sandboxJson throws on non-2xx), then the
@@ -48,6 +50,7 @@ import { useT } from "@intentic/ui/i18n";
 const t = useT();
 
 const { user } = useAuth();
+const { mobile } = useDevice();
 const sandbox = useSandbox();
 const { sessionExpiresAt } = useSandboxSession();
 
@@ -127,6 +130,8 @@ const { namesOf } = usePersonaReach();
 // the person still holds it.
 // Held for a guest with no fence, the one tier the daemon refuses this read to; every other tier may list the names.
 const { areas: sandboxAreas, labelOf: areaLabel } = useAreas(() => sandbox.active.value?.role !== `guest`);
+// The names of the areas a row reaches, for its badges; empty when the grant is the whole workspace.
+const areaNames = (address: string): readonly string[] => (rowAreas(address) ?? []).map((area) => areaLabel(area));
 // What a guest row reaches, since for that tier the fence IS the answer: the badges say which folders, this says who.
 // Only on a guest — every other tier does work of its own, and which assistants it may wear is a secondary fact.
 const guestLine = (member: InviteRecord): string | undefined => {
@@ -454,17 +459,18 @@ const revoke = async (target: string): Promise<void> => {
                 </div>
                 <template v-for="member in members" :key="member.email">
                     <!-- A guest's description is the assistants its fence reaches, the whole of what that tier can do. -->
-                    <Row icon="user" :title="member.email" :description="guestLine(member)">
-                        <!-- Status belongs in metadata, not the action slot. -->
-                        <template #meta>
-                            <StatusBadge
-                                :variant="STATUS[member.status].variant"
-                                :label="STATUS[member.status].label"
-                                :dot="STATUS[member.status].dot"
-                                size="xs"
-                            />
-                            <!-- Which parts of the workspace they see; no badge at all is the whole of it. -->
-                            <StatusBadge v-for="area in rowAreas(member.email) ?? []" :key="area" variant="info" :label="areaLabel(area)" size="xs" />
+                    <Row icon="user" :title="member.email" :description="mobile ? undefined : guestLine(member)">
+                        <!-- Status belongs in metadata, not the action slot. Which parts of the workspace they see rides with it; no badge at all is the whole of it. -->
+                        <template v-if="!mobile" #meta>
+                            <AccessMemberBadges :status="STATUS[member.status]" :areas="areaNames(member.email)" />
+                        </template>
+                        <!-- On a phone the facts go under the address instead, so the row's trailing cluster holds the controls alone and they
+                             fit one line: shared with the facts, they broke across two and left the remove press on a line by itself. -->
+                        <template v-else #description>
+                            <span v-if="guestLine(member) !== undefined" class="block">{{ guestLine(member) }}</span>
+                            <span class="mt-1.5 flex flex-wrap gap-1.5">
+                                <AccessMemberBadges :status="STATUS[member.status]" :areas="areaNames(member.email)" />
+                            </span>
                         </template>
                         <template #control>
                             <!-- Changeable in place, since a re-grade is routine and shouldn't cost a revoke + re-invite. -->

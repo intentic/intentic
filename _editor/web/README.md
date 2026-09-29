@@ -50,6 +50,13 @@ flowchart LR
   panel and terminal) or `ShellMobile.vue` (tab bar, full-screen views). A link naming a sandbox (`/?sandbox=<id>`, the
   desktop app's) opens the shell on it if the account lists it, and the id leaves the address either way
   (`router/sandboxArrival.ts`).
+- **On a phone.** `ShellMobile.vue` shows one screen at a time. The Sandbox and Settings hubs open on an index of
+  their sections, grouped as the desktop rail groups them, and each section is a page with a way back to that
+  index (`shell/hub/hubDrill.ts`). The Menu tab uses the same grouped rows (`shell/MenuRow.vue`). A card's or row's
+  own buttons fold behind one ⋯ that opens a sheet (`OverflowActions`). A screen's one create button floats over its
+  corner (`FloatingAction`): New agent on the board, upload in the file tree. The review's Land button sits under the
+  Changes tab instead of in the header. _2026-09-29: an index page, not a strip of section chips wrapping above
+  every section. With extensions installed that strip was seventeen chips over every page of the sandbox hub._
 - **The side panel.** The rail owns the main area; `shell/side/` is where the reader looks at another section's
   things without leaving the one they picked. A reference (a file a chat names, a server a turn left running, an
   extension's side view) opens in its home while that home is the main area, and beside it everywhere else, as a peek

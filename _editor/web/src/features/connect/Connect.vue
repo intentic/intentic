@@ -237,7 +237,7 @@ watch([accessKnown, () => route.query[`provider`]], settleLane);
             >
                 <template #badge>
                     <!-- What is in it wins over what it costs: a lane already holding something is past the price. -->
-                    <span v-if="laneHolds(lane.key)" class="shrink-0 truncate text-2xs text-success">{{ laneHolds(lane.key) }}</span>
+                    <span v-if="laneHolds(lane.key)" class="min-w-0 max-w-[40%] truncate text-2xs text-success">{{ laneHolds(lane.key) }}</span>
                     <span
                         v-else-if="lane.free"
                         class="shrink-0 rounded bg-success/15 px-1.5 py-0.5 text-[0.6rem] font-medium text-success"

@@ -124,15 +124,17 @@ const arm = (): void => {
 
 watch(
     [open, () => anchor],
-    async ([isOpen]) => {
+    async ([isOpen], [wasOpen]) => {
         disarm();
         placement.value = undefined;
         if (!isOpen) {
             // If focus fell to <body> when the panel closed, return it to the anchor so Tab doesn't restart at the
             // document top.
-            // Left alone if the user has already focused something else since.
+            // Left alone if the user has already focused something else since. And only on a close: the anchor
+            // arriving (a template ref filling in after mount) runs this too, with the panel shut, and focusing it then
+            // put a focus ring and its tooltip on the page's first control (a sandbox's logo said "Add logo" on arrival).
             const doc = anchor?.ownerDocument;
-            if (restoreFocus && doc !== undefined && doc.activeElement === doc.body) {
+            if (wasOpen === true && restoreFocus && doc !== undefined && doc.activeElement === doc.body) {
                 anchor?.focus();
             }
             return;

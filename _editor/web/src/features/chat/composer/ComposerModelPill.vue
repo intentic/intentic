@@ -51,6 +51,8 @@ defineExpose({ el, label: modelLabelText });
         <Icon v-else-if="auto" name="sparkles" class="shrink-0 text-2xs text-link" aria-hidden="true" />
         <ProviderLogo v-else :provider="provider" class="shrink-0 text-2xs text-link" />
         <span class="truncate" :class="labelClass">{{ modelLabelText }}</span>
-        <Icon name="chevron-down" class="shrink-0 text-2xs text-subtle" />
+        <!-- Goes with the name: a pill down to its logo is a glyph press like its neighbours, and the chevron was width it no longer
+             had. The wrapper is what hides, since the icon's own display rule outranks a utility put on it. -->
+        <span class="inline-flex shrink-0" :class="labelClass"><Icon name="chevron-down" class="text-2xs text-subtle" /></span>
     </button>
 </template>

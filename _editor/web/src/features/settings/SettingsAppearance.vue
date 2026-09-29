@@ -5,6 +5,7 @@ import {
     Row,
     RowGroup,
     SegmentedControl,
+    useDevice,
     useExplorerStyle,
     useTextSize,
     useTheme,
@@ -35,6 +36,7 @@ const { choice: schemeChoice, set: setScheme, accent, setAccent } = useTheme();
 const { textSize, setTextSize } = useTextSize();
 const { explorerStyle, explorerStyles } = useExplorerStyle();
 const { iconRailSize } = useIconRailSize();
+const { mobile } = useDevice();
 const { fileNesting } = useFileNesting();
 // Review-list reading: groupByModule also has a toggle on the Changes panel; largestFirst is set only here.
 const { groupByModule } = useChangeGrouping();
@@ -191,7 +193,8 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
                     ><SegmentedControl :model-value="textSize" :options="textSizeOptions" @update:model-value="setTextSize"
                 /></template>
             </Row>
-            <Row icon="sliders-h" :title="t(`settings.appearance.look.iconRail`)">
+            <!-- A phone has no rail to size: its sections are the tab bar and the Menu page. -->
+            <Row v-if="!mobile" icon="sliders-h" :title="t(`settings.appearance.look.iconRail`)">
                 <template #control>
                     <SegmentedControl
                         :model-value="iconRailSize"

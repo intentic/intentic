@@ -4090,6 +4090,7 @@
             "signOut2": "Wyloguj się"
         },
         "hubLayout": {
+            "backTo": "Wróć do {title}",
             "sections": "Sekcje"
         },
         "mobileMenu": {

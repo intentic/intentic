@@ -173,10 +173,11 @@ const picked = as === `button`;
                         </div>
                     </component>
                     <!-- `ml-auto` only bites on the line this wraps onto, where it keeps the cluster on the row's right edge rather than under the icon. -->
+                    <!-- Never wider than the row: a cluster that outgrows even a line of its own (a member's role, areas and remove on a phone) breaks between its own items instead of running off the card's edge. -->
                     <div
                         v-if="$slots[`meta`] || $slots[`control`] || chevron || href !== undefined"
-                        class="flex items-center gap-2"
-                        :class="wideControl ? `grow basis-auto flex-wrap justify-end` : `ml-auto shrink-0`"
+                        class="flex max-w-full flex-wrap items-center justify-end gap-2"
+                        :class="wideControl ? `grow basis-auto` : `ml-auto shrink-0`"
                     >
                         <!-- Facts, not controls: tabular so a column of sizes/times lines up, muted so the row's name still leads. -->
                         <div v-if="$slots[`meta`]" class="flex shrink-0 items-center gap-2 text-2xs tabular-nums text-subtle">

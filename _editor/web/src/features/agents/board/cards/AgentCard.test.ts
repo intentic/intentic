@@ -99,7 +99,8 @@ const refused = (): FleetAgent => ({
 });
 
 // The corner's status glyph: the one element that says how the card settled, by its accessible name.
-const corner = (el: HTMLElement): HTMLElement | null => el.querySelector(`[role="img"]`);
+// The glyph that speaks: the header's action buttons draw the kit's own icons ahead of it, silent (aria-hidden) ones.
+const corner = (el: HTMLElement): HTMLElement | null => el.querySelector(`[role="img"]:not([aria-hidden="true"])`);
 
 /* THE CORNER SAYS HOW THE CARD SETTLED, AND THAT IS ALL: how far its list got is the identity tile's rim (tileRim). */
 it(`leaves a turn that stopped short to the rim, wearing the same bare glyph as one that did not`, () => {

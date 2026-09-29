@@ -21,6 +21,7 @@ import { useVocabulary } from "../../../core-views/vocabulary";
 import { useChat } from "../../chat/run/useChat";
 import AgentReviewPanel from "./AgentReviewPanel.vue";
 import AgentReviewOutline from "./AgentReviewOutline.vue";
+import AgentLandPress from "./AgentLandPress.vue";
 import AgentReactions from "../board/cards/AgentReactions.vue";
 import AgentSessionMenu from "../board/session/AgentSessionMenu.vue";
 import SessionChip from "../board/session/SessionChip.vue";
@@ -175,9 +176,10 @@ watch(
 
 // Mode switch only exists on mobile; desktop always renders the review.
 const view = ref<`chat` | `changes`>(mobile.value ? `chat` : `changes`);
-const viewOptions = computed((): { label: string; value: `chat` | `changes` }[] => [
+// The Changes tab counts what is still to land, so the chat says there is work to review without being left.
+const viewOptions = computed((): { label: string; value: `chat` | `changes`; badge?: number }[] => [
     { label: t(`shared.chat`), value: `chat` },
-    { label: t(`shared.changes`), value: `changes` },
+    { label: t(`shared.changes`), value: `changes`, badge: changes.pending.value.length },
 ]);
 
 // The name this page can honestly print: the roster's, or the open conversation's. Absent while the id is still a
@@ -238,8 +240,10 @@ const confirmForceLand = async (): Promise<void> => {
 
 // Role split on the primary action: maintainers land, collaborators ask (the daemon enforces the floor itself).
 const { canDrive, canShip } = useRole();
-// Whichever of the three land presses this reader gets, they all answer the same condition.
-const landOffered = computed(() => !mobile.value && reviewable.value && changes.pending.value.length > 0 && (canShip.value || canDrive.value));
+// Whichever of the three land presses this reader gets, they all answer the same condition: in the header on a desktop,
+// under the review on a phone, where the header's width is the title's and the thumb is at the bottom of the screen.
+const landPending = computed(() => reviewable.value && changes.pending.value.length > 0 && (canShip.value || canDrive.value));
+const landOffered = computed(() => !mobile.value && landPending.value);
 // `ready` says "ready to land", which the button beside it says in a stronger voice: the press IS the status, and two
 // controls 60px apart stating one fact is what makes a header read as clutter. Every other status keeps its words —
 // running, failed, conflict are things no button here says.
@@ -263,6 +267,9 @@ const requestLand = async (): Promise<void> => {
 // daemon's roster only), and asking the agent needs a conversation. Absent rather than disabled, with the
 // crossing offered instead.
 const localOnly = computed(() => !remote.value);
+// Whether the header draws the session menu (☰): a local agent with work to review. On a phone it also carries the
+// session's marks, which is what frees the header's width for the title.
+const sessionMenuShown = computed(() => reviewable.value && localOnly.value);
 
 // `heardFrom` tells "not told yet" apart from "told, and this agent isn't in it" (fleetAcross's `readAt`), so a
 // box that answered but lacks this id gets a sentence saying so, not a false "hasn't answered".
@@ -435,7 +442,8 @@ const confirmHandOver = async (): Promise<void> => {
             <span v-else-if="headerOutline" class="skeleton block h-2.5 w-14 shrink-0" aria-hidden="true"></span>
             <!-- What people have made of this session, beside the name of it. The size comes from this wrapper, not a
                  class on the component: its template is a fragment, so anything passed to it is dropped. -->
-            <template v-if="fleetAgent !== undefined">
+            <!-- On a phone they lead the session menu instead (AgentSessionMenu): the header's width is the title's there. -->
+            <template v-if="fleetAgent !== undefined && !(mobile && sessionMenuShown)">
                 <span class="inline-flex shrink-0 items-center text-2xs">
                     <AgentReactions ref="reactionChips" :agent-id="fleetAgent.id" :reactions="fleetAgent.reactions" :sandbox-id="remoteBox" dense />
                 </span>
@@ -452,38 +460,20 @@ const confirmHandOver = async (): Promise<void> => {
             </template>
             <template v-if="reviewable">
                 <Icon v-if="changes.actionBusy.value" name="spinner" class="shrink-0 text-xs text-muted" spin />
-                <!-- The page's one primary action: appearing only when something is pending is itself the "not landed" signal, replacing the toolbar's old pill. -->
-                <Button
-                    v-if="!mobile && changes.pending.value.length > 0 && canShip"
-                    size="small"
-                    severity="success"
-                    class="shrink-0 whitespace-nowrap"
-                    :disabled="!canLand"
-                    @click="pressLand"
-                    v-tooltip.bottom="landHint"
-                >
-                    <Icon name="check" />{{ words.land }}
-                </Button>
-                <!-- The collaborator's copy of the button above; once asked it becomes a fact instead of a press. -->
-                <span
-                    v-else-if="!mobile && changes.pending.value.length > 0 && canDrive && fleetAgent?.landRequested !== undefined"
-                    class="inline-flex shrink-0 items-center gap-1 text-2xs text-muted"
-                >
-                    <Icon name="clock" class="text-2xs" />{{ words.landRequested }}
-                </span>
-                <Button
-                    v-else-if="!mobile && changes.pending.value.length > 0 && canDrive"
-                    size="small"
-                    severity="secondary"
-                    class="shrink-0 whitespace-nowrap"
-                    :disabled="requestingLand"
-                    @click="requestLand"
-                    v-tooltip.bottom="requestLandHint"
-                >
-                    <Icon :name="requestingLand ? 'spinner' : 'send'" :spin="requestingLand" />{{ words.requestLand }}
-                </Button>
+                <!-- The page's one primary action: appearing only when something is pending is itself the "not landed" signal, replacing the toolbar's old pill. A phone draws it under the review instead (below). -->
+                <AgentLandPress
+                    v-if="landOffered"
+                    :can-ship="canShip"
+                    :requested="fleetAgent?.landRequested !== undefined"
+                    :land-disabled="!canLand"
+                    :requesting="requestingLand"
+                    :land-hint="landHint"
+                    :request-hint="requestLandHint"
+                    @land="pressLand"
+                    @request="requestLand"
+                />
                 <button
-                    v-if="localOnly"
+                    v-if="sessionMenuShown"
                     ref="menuAnchor"
                     type="button"
                     :class="ui.iconButton(`h-7 w-7`)"
@@ -511,10 +501,12 @@ const confirmHandOver = async (): Promise<void> => {
         <!-- Here rather than inside the review: the presses that raise it are this header's and the session menu's, and
              the review is not on screen for either a phone reading the chat or a land pressed from the menu over it. -->
         <Notice v-if="changes.actionError.value" :of="changes.actionError.value" class="mx-2 mt-2 shrink-0" />
-        <!-- Chat|Changes gets its own row on a phone: crowding the header left too little width for the title. -->
+        <!-- Chat|Changes gets its own row on a phone: crowding the header left too little width for the title. Tabs, not a
+             boxed track: the switch says what the whole screen is, and a second bordered box under the header cost the
+             transcript a row of its height. -->
         <!-- Local-only like the chat below; a remote conversation lives elsewhere, so mobile gets the full review. -->
-        <div v-if="mobile && reviewable && localOnly" class="shrink-0 border-b border-line px-2 py-1.5">
-            <SegmentedControl v-model="view" :options="viewOptions" stretch />
+        <div v-if="mobile && reviewable && localOnly" class="shrink-0 border-b border-line px-4 pt-1.5">
+            <SegmentedControl v-model="view" :options="viewOptions" variant="underline" />
         </div>
         <!-- `:tabs="false"`: this screen's header names the conversation, as does the panel's own mobile header. -->
         <ChatPanel v-if="mobile && localOnly && (view === 'chat' || !reviewable)" :tabs="false" class="min-h-0 flex-1" />
@@ -537,6 +529,24 @@ const confirmHandOver = async (): Promise<void> => {
             class="min-h-0 flex-1"
             @chat="view = 'chat'"
         />
+
+        <!-- A phone's review ends in its one press, full width at the thumb, for as long as the review is on screen. -->
+        <div
+            v-if="mobile && landPending && localOnly && view === 'changes'"
+            class="shrink-0 border-t border-line bg-card px-4 py-3"
+        >
+            <AgentLandPress
+                block
+                :can-ship="canShip"
+                :requested="fleetAgent?.landRequested !== undefined"
+                :land-disabled="!canLand"
+                :requesting="requestingLand"
+                :land-hint="landHint"
+                :request-hint="requestLandHint"
+                @land="pressLand"
+                @request="requestLand"
+            />
+        </div>
 
         <!-- The phone's switcher, from the title above; desktop switches chats on the docked panel's own strip. -->
         <ChatSwitcherSheet v-if="mobile" v-model="switcherOpen" @select="switchTo" @close="closeTabs" @open="openPast" @new="startAgent()" />
