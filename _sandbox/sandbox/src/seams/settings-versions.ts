@@ -32,6 +32,7 @@ const uncommitted = async (services: SettingsVersionHost, paths: readonly string
         const { stdout } = await git(services.agentWorktrees.mainDir("root"), ["status", "--porcelain", "--untracked-files=all", "--", ...paths]);
         return stdout.trim() !== "";
     } catch {
+        // allow(silent-catch): a doubt is the answer here, and the caller acts on it by leaving the write uncommitted
         return true;
     }
 };
