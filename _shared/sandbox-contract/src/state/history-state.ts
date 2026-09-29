@@ -92,6 +92,13 @@ export const HISTORY_STATE_FILES: readonly StateFile[] = [
         portability: "secret",
         note: "Re-add each ssh host on the Capabilities view, its key does not travel.",
     },
+    // The container sshd's host key (docker-entrypoint.sh generates it once): the sandbox's SSH identity, which desktop
+    // sync pins. A private key, so it stays; the target makes its own on first boot.
+    {
+        path: "ssh-host-keys/",
+        portability: "secret",
+        note: "Clear this sandbox's old host key from your computer's known_hosts before syncing it again.",
+    },
     // The cli-proxy's config, which holds the routed subscriptions' provider tokens.
     {
         path: "translator/",
