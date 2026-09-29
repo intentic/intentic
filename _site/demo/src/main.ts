@@ -3,7 +3,6 @@ import { daemon, sockets } from "./daemon";
 import { openTabSnapshot } from "./fixture/openChats";
 import { demoMode } from "./mode";
 import { DEMO_SANDBOX, DEMO_USER, platform } from "./platform";
-import { installSwitcher } from "./switcher";
 import { installFetch, installWebSocket, installWebTransport, installXhr } from "./transport";
 import { coverage } from "./unserved";
 
@@ -52,8 +51,6 @@ installWebTransport();
 seedCredentials();
 seedOpenChats();
 openOnFleet();
-// Before the app: the switcher is demo chrome and must be in the first frame.
-installSwitcher();
 
 const served = coverage();
 console.info(

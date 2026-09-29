@@ -1,6 +1,6 @@
 import { AWAITING_AGENT_ID, FEATURED_AGENT_ID, REVIEW_AGENT_ID } from "./fixture/fleet";
 
-// Three levels of how full the recording is, picked from the switcher (switcher.ts). Mainly two knobs, which agents the
+// Three levels of how full the recording is, picked by `?mode=` (no on-screen switcher; minimal is the default). Mainly two knobs, which agents the
 // roster carries and which extensions are on, plus teammate presence and open chats. Applied where served (daemon.ts,
 // sandbox.ts), not by rewriting the fixtures.
 
