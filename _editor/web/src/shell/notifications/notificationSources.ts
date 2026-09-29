@@ -205,11 +205,8 @@ export const startNotificationSources = (): void => {
                   icon: `wifi`,
                   title: t(`shell.notificationSources.limitedConnectionToSandbox`),
                   detail: t(`shell.notificationSources.liveAgentOutputMay`),
-                  hint:
-                      `Nothing but your own machine can be reached right now, so the browser is talking to the sandbox over plain HTTP on ` +
-                      `127.0.0.1. That is HTTP/1.1, which a browser allows only six of at a time across every window of this app, and each ` +
-                      `streaming agent holds one. Everything still works; some of it waits its turn. The faster addresses are re-checked ` +
-                      `every minute, and this goes away on its own once one of them answers.`,
+                  // Plain HTTP on 127.0.0.1 is HTTP/1.1, which a browser caps at six connections across every window, one per streaming agent.
+                  hint: t(`shell.notificationSources.transportHint`),
               }
             : undefined,
     );

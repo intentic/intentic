@@ -69,7 +69,7 @@ const share = async (): Promise<void> => {
             <p class="text-xs text-muted">{{ t(`chat.chatShareDialog.anyoneLinkReadConversation`) }}</p>
             <div class="flex items-center gap-2 rounded-lg border border-line bg-canvas px-3 py-2">
                 <Icon name="globe" class="shrink-0 text-subtle" />
-                <span class="min-w-0 flex-1 truncate font-mono text-xs text-muted" :title="result.url">{{
+                <span class="min-w-0 flex-1 truncate font-mono text-xs text-muted" v-tooltip.bottom.overflow="result.url">{{
                     result.url ?? t(`chat.chatShareDialog.noPublicAddress`)
                 }}</span>
                 <a
@@ -79,7 +79,7 @@ const share = async (): Promise<void> => {
                     rel="noopener"
                     class="flex h-6 w-6 shrink-0 items-center justify-center rounded text-subtle hover:bg-overlay hover:text-content"
                     :aria-label="t(`chat.chatShareDialog.openSharedConversationIn`)"
-                    v-tooltip.bottom="t(`ui.action.openInNewTab`)"
+                    v-tooltip.bottom="t(`ui.action.newTab`)"
                 >
                     <Icon name="external-link" class="text-2xs" />
                 </a>

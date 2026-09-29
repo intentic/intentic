@@ -1,5 +1,7 @@
+import type { Tip } from "@intentic/ui";
+import { t } from "@intentic/ui/i18n";
 import { computed, nextTick, type Ref, watch } from "vue";
-import { withShortcut } from "../../../../shell/commands/useCommands";
+import { commandShortcut } from "../../../../shell/commands/useCommands";
 
 // Which pane the keyboard is in, and where the caret goes: working in a pane raises it as the focused one, only the
 // focused pane's close button teaches the shortcut, and the caret lands in the composer when the shell asks for it (a
@@ -17,9 +19,6 @@ export interface PaneFocusHost {
     // Sizes the box to what it holds before the caret lands in it.
     readonly grow: () => void;
 }
-
-// Ends the column, not the conversation: the chat stays in the rail.
-const CLOSE_PANE = `Close this pane: the chat stays open`;
 
 export const usePaneFocus = (pane: PaneFocusHost) => {
     // The ask names no conversation, and the tab it opened took the focus, so only the focused pane answers it.
@@ -57,7 +56,14 @@ export const usePaneFocus = (pane: PaneFocusHost) => {
                 pane.raise();
             }
         },
-        // Only the focused pane's button teaches `chat.closePane`, since the shortcut acts on the focused pane.
-        closeHint: computed(() => (pane.focused() ? withShortcut(CLOSE_PANE, `chat.closePane`) : CLOSE_PANE)),
+        // Only the focused pane's button teaches `chat.closePane`, since the shortcut acts on the focused pane. Ends the
+        // column, not the conversation: the chat stays in the rail.
+        closeHint: computed(
+            (): Tip => ({
+                title: t(`chat.chatPane.closePane`),
+                keys: pane.focused() ? commandShortcut(`chat.closePane`) : undefined,
+                note: t(`chat.chatPane.chatStaysOpen`),
+            }),
+        ),
     };
 };

@@ -172,7 +172,7 @@ onBeforeUnmount(disarm);
                 :class="ui.iconButton(`h-5 w-5`)"
                 :disabled="rename.busy"
                 :aria-label="t(`ui.action.save`)"
-                v-tooltip.top="t(`ui.inlineRename.saveEnter`)"
+                v-tooltip.top="{ title: t(`ui.action.save`), keys: t(`ui.keys.enter`) }"
                 @mousedown.prevent
                 @click.stop="rename.commit()"
             >

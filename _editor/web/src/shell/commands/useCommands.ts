@@ -1,4 +1,5 @@
 import type { Disposable } from "@intentic/extension-api";
+import type { Tip } from "@intentic/ui";
 import { evaluateWhen, parseWhen, type WhenExpression } from "@intentic/base/when";
 import { shallowRef } from "vue";
 import { commandContext } from "./contextKeys";
@@ -94,4 +95,10 @@ export const commandShortcut = (command: string): string | undefined => {
 export const withShortcut = (text: string, command: string): string => {
     const shortcut = commandShortcut(command);
     return shortcut === undefined ? text : `${text} (${shortcut})`;
+};
+
+// The tooltip twin of withShortcut: the label as a pill with the shortcut drawn as a key cap, or the bare label.
+export const tipWithShortcut = (title: string, command: string): string | Tip => {
+    const keys = commandShortcut(command);
+    return keys === undefined ? title : { title, keys };
 };

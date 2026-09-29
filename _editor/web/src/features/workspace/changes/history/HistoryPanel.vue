@@ -158,7 +158,7 @@ const confirmRestore = (id: string): void => {
                             severity="secondary"
                             :disabled="busy"
                             @click="confirmRestoreId = snapshot.id"
-                            v-tooltip.right="words.restoreHint"
+                            v-tooltip.right="{ title: t(`workspace.historyPanel.filesOnly`), note: t(`workspace.historyPanel.currentSavedFirst`) }"
                         >
                             <Icon name="history" class="mr-1 text-2xs" />{{ words.restore }}
                         </Button>

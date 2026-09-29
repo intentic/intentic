@@ -534,7 +534,7 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                                         }"
                                         :disabled="pickedWorkflow !== undefined"
                                         @click="personaOpen = !personaOpen"
-                                        v-tooltip.top="t(`chat.chatPane.chatActsOnlyAccounts`, { personaName })"
+                                        v-tooltip.top="{ title: t(`chat.chatPane.persona`), note: t(`chat.chatPane.itsAccountsOnly`) }"
                                         :aria-expanded="personaOpen"
                                         :aria-label="t(`chat.chatPane.acts`, { personaName })"
                                     >
@@ -579,8 +579,8 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                                         @click="voiceAgent = false"
                                         v-tooltip.top="
                                             editing !== undefined
-                                                ? t(`chat.chatPane.finishCancelEditFirst`)
-                                                : t(`chat.chatPane.writingAgentSendPlaces`)
+                                                ? { title: t(`chat.chatPane.editing`), note: t(`chat.chatPane.finishOrCancel`) }
+                                                : { title: t(`chat.composerMore.writeAgent`), note: t(`chat.chatPane.noReplyPressExit`) }
                                         "
                                         :aria-pressed="true"
                                         :aria-label="t(`chat.chatPane.writingAgent`)"
@@ -596,7 +596,7 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                                         class="composer-ghost h-8 w-8 shrink-0 max-md:h-11 max-md:w-11"
                                         :disabled="!reachable || !connected"
                                         @click="filePicker?.click()"
-                                        v-tooltip.top="t(`chat.chatPane.attachFilesDevice`)"
+                                        v-tooltip.top="t(`chat.chatPane.attachFiles`)"
                                         :aria-label="t(`chat.chatPane.attachFiles`)"
                                     >
                                         <Icon name="paperclip" class="text-xs max-md:text-base" />

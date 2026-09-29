@@ -72,7 +72,9 @@ const commit = (value: string): void => {
         v-else
         type="button"
         :class="ui.textAction()"
-        v-tooltip.top="at === undefined ? t(`scheduleControl.goesAheadSoonExecutor`) : formatTimestamp(at)"
+        v-tooltip.top="
+            at === undefined ? { title: t(`scheduleControl.goesAtOnce`), note: t(`scheduleControl.clickToSchedule`) } : formatTimestamp(at)
+        "
         @click="editing = true"
     >
         <Icon name="clock" />

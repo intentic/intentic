@@ -7,6 +7,7 @@ import ReviewStat from "./ReviewStat.vue";
 import { useLayout } from "../shell/window/useLayout";
 import type { LineStat } from "@intentic/code-read";
 import { IconStub } from "@intentic/ui/testing";
+import { type TooltipValue, tipText } from "@intentic/ui";
 
 const { showComments, toggleShowComments } = useLayout();
 
@@ -24,9 +25,10 @@ const render = (props: Props): HTMLElement => {
     // Icon and tooltip are global (installUi); icon is stubbed here, tooltip keeps its text (what's tested).
     app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {
-        mounted: (el: HTMLElement, binding: { value?: string }) => {
-            if (binding.value !== undefined) {
-                el.dataset[`tip`] = binding.value;
+        mounted: (el: HTMLElement, binding: { value?: TooltipValue }) => {
+            const said = tipText(binding.value);
+            if (said !== undefined) {
+                el.dataset[`tip`] = said;
             }
         },
     });

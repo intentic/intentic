@@ -1,6 +1,7 @@
 // What the next Send press means: one decision made once, read by the placeholder, tooltip, refusal
 // line and submit() so they can't disagree. Pure and value-typed, no refs, no conversation, no
 // daemon, so precedence is testable without mounting a chat.
+import type { TooltipValue } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 
 // The intents, in the order they claim the press.
@@ -107,24 +108,26 @@ const PLACEHOLDER: Record<SendIntent, (words: ComposerWords) => string> = {
     queue: () => t(`chat.composerIntent.placeholderQueue`),
 };
 
-const SEND_HINT: Record<SendIntent, (words: ComposerWords) => string> = {
-    place: (words) => t(`chat.composerIntent.hintPlace`, { provider: words.provider }),
-    // Names the cost, singular where only the edited prompt itself goes.
+// The Send button's hover: a label, or a small card where the press has a fact or a consequence worth a glance.
+const SEND_HINT: Record<SendIntent, (words: ComposerWords) => TooltipValue> = {
+    place: (words) => ({ title: t(`chat.composerIntent.hintPlace`, { provider: words.provider }), note: t(`chat.composerIntent.noReply`) }),
+    // Names the cost, a count only where more than the edited prompt itself goes.
     edit: (words) =>
-        words.editDropped === 1
+        words.editDropped <= 1
             ? t(`chat.composerIntent.hintEditOne`)
-            : t(`chat.composerIntent.hintEditMany`, { count: words.editDropped - 1 }, words.editDropped - 1),
-    plan: () => t(`chat.composerIntent.hintPlan`),
+            : { title: t(`chat.composerIntent.hintEditOne`), rows: [{ label: t(`chat.composerIntent.alsoReplaced`), value: words.editDropped - 1 }] },
+    plan: () => ({ title: t(`chat.composerIntent.hintPlan`), note: t(`chat.composerIntent.hintPlanNote`) }),
     // Promises the one thing the daemon guarantees: it tries now, and books the reopen only if that is refused.
-    scheduled: (words) =>
-        words.replacesWaiting === true
-            ? t(`chat.composerIntent.hintScheduledReplaces`, { when: words.reopens ?? `` })
-            : t(`chat.composerIntent.hintScheduled`, { when: words.reopens ?? `` }),
+    scheduled: (words) => ({
+        title: t(`chat.composerIntent.hintScheduled`),
+        rows: [{ label: t(`chat.composerIntent.sendsAt`), value: words.reopens ?? `` }],
+        note: words.replacesWaiting === true ? t(`chat.composerIntent.hintScheduledReplaces`) : t(`chat.composerIntent.triesNowFirst`),
+    }),
     idle: () => t(`chat.composerIntent.hintIdle`),
     // Says whether Send reaches the running turn or waits, so identical buttons don't mean different things.
-    parked: () => t(`chat.composerIntent.hintParked`),
+    parked: () => ({ title: t(`chat.composerIntent.queue`), note: t(`chat.composerIntent.hintParked`) }),
     steer: () => t(`chat.composerIntent.hintSteer`),
-    queue: () => t(`chat.composerIntent.hintQueue`),
+    queue: () => ({ title: t(`chat.composerIntent.queue`), note: t(`chat.composerIntent.hintQueue`) }),
 };
 
 /**
@@ -144,11 +147,12 @@ export const unconnectedHint = (): string => t(`chat.composerIntent.unconnectedH
 
 export const placeholderFor = (intent: SendIntent, words: ComposerWords): string => PLACEHOLDER[intent](words);
 
-export const sendHintFor = (intent: SendIntent, words: ComposerWords): string => SEND_HINT[intent](words);
+export const sendHintFor = (intent: SendIntent, words: ComposerWords): TooltipValue => SEND_HINT[intent](words);
 
-// Why Send is refusing, in the user's words; undefined when the press will land. Anything refused
-// must name itself, since nothing else on screen shows a cause.
-export const sendRefusal = (situation: ComposerSituation): string | undefined => {
+// What stops Send, one name per rule; worded twice below, as the status line's sentence and the button's short label.
+type Refusal = `runningPlace` | `planPending` | `attachedVoice` | `runningEdit` | `uploading` | `uploadFailed`;
+
+const refusalOf = (situation: ComposerSituation): Refusal | undefined => {
     if (!situation.staged) {
         // Nothing staged is not a refusal, an empty composer explains itself.
         return undefined;
@@ -156,27 +160,58 @@ export const sendRefusal = (situation: ComposerSituation): string | undefined =>
     // The agent's voice refuses more than your own, stating the daemon's rule before a failed round-trip.
     if (situation.voiceAgent) {
         if (situation.streaming) {
-            return t(`chat.composerIntent.refusalRunningPlace`);
+            return `runningPlace`;
         }
         if (situation.pendingPlan) {
-            return t(`chat.composerIntent.refusalPlanPending`);
+            return `planPending`;
         }
         if (situation.attached) {
-            return t(`chat.composerIntent.refusalAttachedVoice`);
+            return `attachedVoice`;
         }
     }
     // A rewind is refused while a turn holds the conversation; said here rather than by a silently greyed
     // button.
     if (situation.editing && situation.streaming) {
-        return t(`chat.composerIntent.refusalRunningEdit`);
+        return `runningEdit`;
     }
     if (situation.uploading) {
-        return t(`chat.composerIntent.refusalUploading`);
+        return `uploading`;
     }
     if (situation.uploadFailed) {
-        return t(`chat.composerIntent.refusalUploadFailed`);
+        return `uploadFailed`;
     }
     return undefined;
+};
+
+const REFUSAL_LINE = {
+    runningPlace: () => t(`chat.composerIntent.refusalRunningPlace`),
+    planPending: () => t(`chat.composerIntent.refusalPlanPending`),
+    attachedVoice: () => t(`chat.composerIntent.refusalAttachedVoice`),
+    runningEdit: () => t(`chat.composerIntent.refusalRunningEdit`),
+    uploading: () => t(`chat.composerIntent.refusalUploading`),
+    uploadFailed: () => t(`chat.composerIntent.refusalUploadFailed`),
+} satisfies Record<Refusal, () => string>;
+
+const REFUSAL_TITLE = {
+    runningPlace: () => t(`chat.composerIntent.refusedRunning`),
+    planPending: () => t(`chat.composerIntent.refusedPlan`),
+    attachedVoice: () => t(`chat.composerIntent.refusedAttached`),
+    runningEdit: () => t(`chat.composerIntent.refusedRunning`),
+    uploading: () => t(`chat.composerIntent.refusedUploading`),
+    uploadFailed: () => t(`chat.composerIntent.refusedUploadFailed`),
+} satisfies Record<Refusal, () => string>;
+
+// Why Send is refusing, in the user's words; undefined when the press will land. Anything refused
+// must name itself, since nothing else on screen shows a cause.
+export const sendRefusal = (situation: ComposerSituation): string | undefined => {
+    const refusal = refusalOf(situation);
+    return refusal === undefined ? undefined : REFUSAL_LINE[refusal]();
+};
+
+// The same refusal as the greyed button's hover, a word or two: the sentence is the status line's.
+export const sendRefusalTitle = (situation: ComposerSituation): string | undefined => {
+    const refusal = refusalOf(situation);
+    return refusal === undefined ? undefined : REFUSAL_TITLE[refusal]();
 };
 
 // The last turn stopped, but staged words/files, a pending plan, or a queued message mean saying so

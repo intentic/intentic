@@ -165,7 +165,7 @@ const queuedExact = computed(() => formatDateTime(props.message.queuedAt));
                 type="button"
                 class="flex h-6 cursor-pointer items-center justify-center rounded-md text-subtle hover:bg-overlay hover:text-content"
                 :class="compact ? `w-6` : `w-full`"
-                v-tooltip.right="t(`chat.chatQueue.rewordHint`)"
+                v-tooltip.right="t(`chat.chatQueue.reword`)"
                 :aria-label="t(`chat.chatQueue.rewordLabel`)"
                 @click="rewording = message.text"
             >
@@ -175,7 +175,7 @@ const queuedExact = computed(() => formatDateTime(props.message.queuedAt));
                 type="button"
                 class="flex h-6 cursor-pointer items-center justify-center rounded-md text-subtle hover:bg-overlay hover:text-content"
                 :class="compact ? `w-6` : `w-full`"
-                v-tooltip.right="t(`chat.chatQueue.removeHint`)"
+                v-tooltip.right="t(`chat.chatQueue.takeBack`)"
                 :aria-label="t(`chat.chatQueue.removeLabel`)"
                 @click="unqueue(message)"
             >

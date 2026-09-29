@@ -1,5 +1,5 @@
 import type { Persona } from "@intentic/sandbox-contract";
-import { lensPersonaId, lensRefuses, reachOf, reachSentence } from "./personaReach";
+import { lensPersonaId, lensRefuses, reachOf, reachTip } from "./personaReach";
 
 /* The lens is arithmetic on paths, and every one of these is a way it could be wrong on a real workspace: a fence that greys out the road to its own folder. */
 
@@ -13,9 +13,9 @@ const card = (workspace?: Persona[`workspace`], powers?: Persona[`powers`]): Per
 it(`refuses nothing for a card with no fence`, () => {
     const reach = reachOf(card());
     expect(reach.refuses(`anything/at/all`)).toBe(false);
-    const open = reachSentence(`test`, reach);
-    expect(open).toContain(`test`);
-    expect(open).not.toBe(reachSentence(`test`, reachOf(card({ folders: [`docs`] }))));
+    const open = reachTip(`test`, reach);
+    expect(open.rows).toContainEqual({ label: `Persona`, value: `test` });
+    expect(open).not.toEqual(reachTip(`test`, reachOf(card({ folders: [`docs`] }))));
 });
 
 it(`refuses everything outside the folders it names`, () => {
@@ -47,19 +47,20 @@ it(`refuses everything for a card with no file access`, () => {
         card({ folders: [`docs`] }, { files: `none`, shell: true, code: true, web: true, browser: true, delegate: true, sandbox: true }),
     );
     expect(reach.refuses(`docs`)).toBe(true);
-    const blocked = reachSentence(`test`, reach);
-    expect(blocked).toContain(`test`);
-    expect(blocked).not.toBe(reachSentence(`test`, reachOf(card({ folders: [`docs`] }))));
+    const blocked = reachTip(`test`, reach);
+    expect(blocked.rows).toContainEqual({ label: `Persona`, value: `test` });
+    expect(blocked.tone).toBe(`warn`);
+    expect(blocked).not.toEqual(reachTip(`test`, reachOf(card({ folders: [`docs`] }))));
 });
 
-it(`names the folders it is fenced to, in a sentence`, () => {
+it(`names the folders it is fenced to, as the card's figures`, () => {
     const name = `Docs bot`;
     const folders = [`docs`, `apps/web`] as const;
-    const sentence = reachSentence(name, reachOf(card({ folders: [...folders] })));
-    expect(sentence).toContain(name);
-    for (const folder of folders) {
-        expect(sentence).toContain(folder);
-    }
+    const tip = reachTip(name, reachOf(card({ folders: [...folders] })));
+    expect(tip.rows).toEqual([
+        { label: `Persona`, value: name },
+        { label: `Folders`, value: folders.join(`, `) },
+    ]);
 });
 
 it(`dims through the lens only while a persona is read as, and only what its fence refuses`, () => {

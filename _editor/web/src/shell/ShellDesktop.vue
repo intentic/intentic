@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { Disposable, ViewBadge } from "@intentic/extension-api";
 import { STARTER_APP, STARTER_REPO } from "@intentic/sandbox-contract";
-import { AnchoredOverlay, browserOwnsClick, ui, ContextMenu, type IconName } from "@intentic/ui";
+import { AnchoredOverlay, browserOwnsClick, ui, ContextMenu, type IconName, type Tip, type TipTone, type TooltipValue } from "@intentic/ui";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { RouterView, useRoute, useRouter } from "vue-router";
@@ -81,8 +81,20 @@ interface SectionTile extends RailTile {
 // One label per tile — name, badge tooltip, what's running, then note (what is owed, then what is moving,
 // then standing facts). A badge has no tooltip of its own: nesting one inside the tile's would open two
 // overlapping boxes on hover, and the turning mark can't carry one either, being 10px of glyph.
-const tileLabel = (tile: SectionTile): string =>
-    [tile.label, tile.badge?.tooltip, tile.badge?.running, tile.note?.text].filter((part) => part !== undefined).join(` · `);
+const tileParts = (tile: SectionTile): string[] =>
+    [tile.badge?.tooltip, tile.badge?.running, tile.note?.text].flatMap((part) => (part === undefined || part === `` ? [] : [part]));
+const tileLabel = (tile: SectionTile): string => [tile.label, ...tileParts(tile)].join(` · `);
+// The hover: the name alone, or the name as a card's headline over what the tile is carrying. A warning or danger badge
+// lends the headline its dot, since that tone marks a standing state rather than a count.
+const badgeTone = (tone: ViewBadge[`tone`]): TipTone | undefined => (tone === `warning` ? `warn` : tone === `danger` ? `danger` : undefined);
+const tileTip = (tile: SectionTile, extra?: string): TooltipValue => {
+    const parts = [...tileParts(tile), ...(extra === undefined ? [] : [extra])];
+    if (parts.length === 0) {
+        return tile.label;
+    }
+    const tone = badgeTone(tile.badge?.tone);
+    return { title: tile.label, tone, note: parts.join(` · `) };
+};
 
 // Desktop chrome of the post-login shell: a square-tile rail, the shared chat panel, and a workspace
 // outlet, laid out as a three-column grid (chat width via the --chat-width var, set by its drag handle).
@@ -111,18 +123,26 @@ const { maker } = useAudience();
 // Shown only while a tunnel is connected; an always-present badge would say nothing.
 const { links: vpnLinks } = useLiveLinks(`vpn`);
 const connectedVpns = computed(() => vpnLinks.value.filter((link) => link.state === `connected`));
-const vpnLabel = computed(() =>
-    connectedVpns.value.length === 1
-        ? `VPN connected: ${connectedVpns.value[0]?.id}`
-        : `${connectedVpns.value.length} VPNs connected: ${connectedVpns.value.map((link) => link.id).join(`, `)}`,
+const vpnNames = computed(() => connectedVpns.value.map((link) => link.id).join(`, `));
+const vpnLabel = computed(() => `${t(`shell.shellDesktop.vpnConnected`)}: ${vpnNames.value}`);
+const vpnTip = computed(
+    (): Tip => ({
+        title: t(`shell.shellDesktop.vpnConnected`),
+        tone: `ok`,
+        rows: [{ label: t(`shell.shellDesktop.tunnels`, {}, connectedVpns.value.length), value: vpnNames.value }],
+    }),
 );
 
 // Same idea as the VPN badge: visible everywhere, not only on the Ports tab.
 const { forwarded: forwardedPorts } = usePorts();
-const forwardedLabel = computed(() =>
-    forwardedPorts.value.length === 1
-        ? `Port ${forwardedPorts.value[0]?.port} is publicly reachable`
-        : `${forwardedPorts.value.length} ports are publicly reachable: ${forwardedPorts.value.map((entry) => entry.port).join(`, `)}`,
+const forwardedList = computed(() => forwardedPorts.value.map((entry) => entry.port).join(`, `));
+const forwardedLabel = computed(() => `${t(`shell.shellDesktop.publiclyReachable`)}: ${forwardedList.value}`);
+const forwardedTip = computed(
+    (): Tip => ({
+        title: t(`shell.shellDesktop.publiclyReachable`),
+        tone: `warn`,
+        rows: [{ label: t(`shell.shellDesktop.ports`, {}, forwardedPorts.value.length), value: forwardedList.value }],
+    }),
 );
 // One port needs no number — the tile itself is the news. Two or more do, through the same chip as every
 // other tile rather than a hand-rolled span, so the cap, the tone and the arrival are decided in one place.
@@ -253,7 +273,7 @@ const needsTile = computed<SectionTile | undefined>(() =>
               to: `/needs`,
               label: t(`needs.inbox.title`),
               icon: `exclamation-circle`,
-              badge: { count: openNeeds.value.length, tone: `warning` as const, tooltip: t(`needs.inbox.waiting`, { count: openNeeds.value.length }, openNeeds.value.length) },
+              badge: { count: openNeeds.value.length, tone: `warning` as const, tooltip: t(`needs.inbox.waiting`, { count: openNeeds.value.length }) },
           },
 );
 // Same SectionTile shape as the nav tiles, so badges render through one path instead of per hand-rolled link.
@@ -299,12 +319,12 @@ const moreTiles = computed<readonly SectionTile[]>(() =>
     tiles.value.filter((tile) => !onRailTiles.value.includes(tile)).toSorted((left, right) => left.label.localeCompare(right.label)),
 );
 
-// tileLabel, plus one clause when a tile is on the rail only by the visit: says so once, while it can still
+// tileTip, plus one clause when a tile is on the rail only by the visit: says so once, while it can still
 // be pinned. Not used by the runtime cluster below — those tiles can't be pinned at all.
-const railTileLabel = (tile: SectionTile): string => {
-    const visiting = onRailOnlyByVisit(tile, { pinned: pins.isPinned(tile.to), active: isNavActive(tile.to) });
-    return visiting ? `${tileLabel(tile)} · here while you are · right-click to keep` : tileLabel(tile);
-};
+const visitingNote = (tile: SectionTile): string | undefined =>
+    onRailOnlyByVisit(tile, { pinned: pins.isPinned(tile.to), active: isNavActive(tile.to) }) ? t(`shell.shellDesktop.rightClickKeep`) : undefined;
+const railTileLabel = (tile: SectionTile): string => [tileLabel(tile), visitingNote(tile)].filter((part) => part !== undefined).join(` · `);
+const railTileTip = (tile: SectionTile): TooltipValue => tileTip(tile, visitingNote(tile));
 
 // Only the permanent tiles and this reader's pins — the tiles that will still be there tomorrow.
 const stableTiles = computed<readonly SectionTile[]>(() =>
@@ -442,6 +462,12 @@ const moreLabel = computed(() =>
         ? t(`shell.shellDesktop.moreSections`)
         : t(`shell.shellDesktop.moreSectionsOffRail`, { count: moreTiles.value.length }, moreTiles.value.length),
 );
+const moreTip = computed(
+    (): Tip => ({
+        title: t(`shell.shellDesktop.moreSections`),
+        rows: moreTiles.value.length === 0 ? [] : [{ label: t(`shell.shellDesktop.offRail`), value: moreTiles.value.length }],
+    }),
+);
 const dismissMore = (event: MouseEvent): void => {
     if (!browserOwnsClick(event)) {
         moreOpen.value = false;
@@ -483,9 +509,14 @@ const { canShip, isGuest } = useRole();
 const terminalActivity = useTerminalActivity();
 const terminalLabel = computed(() => {
     const chord = commandShortcut(`terminal.toggle`);
-    const what = terminalActivity.summary.value === undefined ? `Terminal` : `Terminal, ${terminalActivity.summary.value} running`;
+    const what = [t(`shared.terminal`), terminalActivity.summary.value].filter((part) => part !== undefined).join(`, `);
     return chord === undefined ? what : `${what} (${chord})`;
 });
+const terminalTip = computed((): Tip => ({
+    title: t(`shared.terminal`),
+    keys: commandShortcut(`terminal.toggle`),
+    rows: [{ label: t(`shared.running`), value: terminalActivity.summary.value ?? `` }],
+}));
 // Live sessions, through the shared chip like the ports tile above; `info` is the resting tone, set here
 // rather than left to default so the two runtime badges state their tone side by side.
 const terminalBadge = computed<ViewBadge | undefined>(() =>
@@ -535,7 +566,7 @@ useKeybindings();
                             class="icon-rail-tile relative flex items-center justify-center rounded-lg text-muted transition-colors hover:bg-overlay hover:text-content"
                             :class="{ 'bg-primary-600/15 text-link': isNavActive(tile.to) }"
                             :aria-label="railTileLabel(tile)"
-                            v-tooltip.right="railTileLabel(tile)"
+                            v-tooltip.right="railTileTip(tile)"
                             @contextmenu="onTileContextMenu(tile, $event)"
                         >
                             <RailIcon
@@ -577,7 +608,7 @@ useKeybindings();
                 aria-haspopup="menu"
                 :aria-expanded="moreOpen"
                 :aria-label="moreLabel"
-                v-tooltip.right="moreOpen ? undefined : moreLabel"
+                v-tooltip.right="moreOpen ? undefined : moreTip"
                 @click="moreOpen = !moreOpen"
             >
                 <RailIcon section="more" class="icon-rail-glyph" />
@@ -613,7 +644,7 @@ useKeybindings();
                                 `opacity-0 pointer-coarse:opacity-100 group-focus-within:opacity-100 group-hover:opacity-100`,
                             ]"
                             :aria-label="t(`shell.shellDesktop.keepOnRail`, { label: tile.label })"
-                            v-tooltip.top="t(`shell.shellDesktop.keepOnRail2`)"
+                            v-tooltip.top="t(`shell.shellDesktop.pin`)"
                             @click="keepOnRail(tile)"
                         >
                             <Icon name="pin" class="text-xs" />
@@ -630,7 +661,7 @@ useKeybindings();
                 to="/capabilities/vpn"
                 class="icon-rail-tile flex items-center justify-center rounded-lg text-success transition-colors hover:bg-overlay"
                 :aria-label="vpnLabel"
-                v-tooltip.right="vpnLabel"
+                v-tooltip.right="vpnTip"
             >
                 <RailIcon section="vpn" class="icon-rail-glyph" />
             </RouterLink>
@@ -641,7 +672,7 @@ useKeybindings();
                 to="/sandbox/ports"
                 class="icon-rail-tile relative flex items-center justify-center rounded-lg text-warning transition-colors hover:bg-overlay"
                 :aria-label="forwardedLabel"
-                v-tooltip.right="forwardedLabel"
+                v-tooltip.right="forwardedTip"
             >
                 <RailIcon section="ports" class="icon-rail-glyph" />
                 <ViewBadgeChip :badge="portsBadge" class="icon-rail-mark absolute right-0.5 top-0.5" />
@@ -655,7 +686,7 @@ useKeybindings();
                 class="icon-rail-tile relative flex items-center justify-center rounded-lg text-muted transition-colors hover:bg-overlay hover:text-content"
                 :class="{ 'bg-primary-600/15 text-link': isNavActive(tile.to) }"
                 :aria-label="tileLabel(tile)"
-                v-tooltip.right="tileLabel(tile)"
+                v-tooltip.right="tileTip(tile)"
             >
                 <RailIcon :section="tile.id" :fallback="tile.icon" :label="tile.label" :monogram="tile.monogram" class="icon-rail-glyph" />
                 <!-- No tooltip on the badge, for the same reason as the navigation tiles above. -->
@@ -678,7 +709,7 @@ useKeybindings();
                 :tabindex="reachable ? undefined : -1"
                 :aria-disabled="!reachable"
                 :aria-label="terminalLabel"
-                v-tooltip.right="terminalLabel"
+                v-tooltip.right="terminalTip"
                 @click="terminal.toggle()"
             >
                 <RailIcon section="terminal" class="icon-rail-glyph" />

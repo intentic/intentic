@@ -220,6 +220,6 @@ const seekFrame = (event: Event): void => {
         >
         <!-- Drawn whenever the home is showing results, blank for a file in the open folder, so every tile in a search is
              the same height. -->
-        <span v-if="where !== undefined" class="w-full truncate text-2xs text-subtle" :title="where">{{ where }}</span>
+        <span v-if="where !== undefined" class="w-full truncate text-2xs text-subtle" v-tooltip.bottom.overflow="where">{{ where }}</span>
     </div>
 </template>

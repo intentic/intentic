@@ -121,7 +121,7 @@ const shown = (text: string, title: string): string => {
             class="ui-chip cursor-pointer"
             :class="open && `ui-chip-on`"
             :aria-label="t(`chat.chatSystemPrompt.chip`)"
-            v-tooltip.bottom="t(`chat.chatSystemPrompt.hint`)"
+            v-tooltip.bottom="{ title: t(`chat.chatSystemPrompt.instructions`), note: t(`chat.chatSystemPrompt.sentBeforeYours`) }"
             @click="open = true"
         >
             <Icon name="align-left" class="text-2xs" />

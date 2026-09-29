@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import type { SandboxMetrics } from "@intentic/sandbox-contract";
-import { Meter, ui } from "@intentic/ui";
-import { formatBytes } from "@intentic/ui/format";
+import { Meter, type Tip, ui } from "@intentic/ui";
+import { formatBytes, formatPercent } from "@intentic/ui/format";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
 import { agentDisplayTitle } from "../fleet/agentStatus";
 import { useAgents } from "../fleet/useAgents";
 import { openById } from "../fleet/useAgents-actions";
+import { HEAVY_SESSION_SHARE } from "./liveMetrics";
 import { useSandboxReadout } from "./sandboxFigures";
 
 // The panel the board's metrics segment opens above its status bar: every figure the bar leaves out, grouped by
@@ -15,7 +16,8 @@ import { useSandboxReadout } from "./sandboxFigures";
 // side-by-side kinds reads as a puzzle rather than a list. Last, which conversations hold it, heaviest first: where the
 // memory went, in one look rather than a scan across every card, and each row opens its conversation, so the one eating
 // the box is a press from being stopped. Every figure explains itself on hover, since "load" or "pressure" is a number
-// only a reader who already knows it can read bare. Its heading is the status bar panel's header (BoardStatusBar.vue).
+// only a reader who already knows it can read bare; a figure past its limit wears the warning dot there too. Its heading
+// is the status bar panel's header (BoardStatusBar.vue).
 
 const t = useT();
 
@@ -24,6 +26,20 @@ const props = defineProps<{
 }>();
 
 const readout = useSandboxReadout(() => props.metrics);
+const warned = (hint: Tip, warn: boolean): Tip => (warn ? { ...hint, tone: `warn` } : hint);
+
+// The two lists' headings, each read on hover as what its bars measure.
+const rolesTip = computed((): Tip => ({ title: t(`agents.liveMetrics.rolesLabel`), note: t(`agents.liveMetrics.rolesNote`) }));
+const sessionsTip = computed(
+    (): Tip => ({
+        title: t(`agents.liveMetrics.sessionsLabel`),
+        rows: [
+            { label: t(`agents.liveMetrics.cpuLabel`), value: t(`agents.liveMetrics.cpuPerCore`) },
+            { label: t(`agents.liveMetrics.tinted`), value: t(`agents.liveMetrics.tintAt`, { percent: formatPercent(HEAVY_SESSION_SHARE * 100) }) },
+        ],
+        note: t(`agents.liveMetrics.pressToOpen`),
+    }),
+);
 
 // Folded until asked for, and for as long as the panel stays open.
 const smallOpen = ref(false);
@@ -49,7 +65,7 @@ const open = (id: string): void => {
     <div class="flex flex-wrap items-start gap-x-8 gap-y-3 pt-1">
         <!-- The figures that run out, each a meter: its fill says how close, its track the rest of the room. -->
         <div role="group" data-section="gauges" class="flex w-44 shrink-0 flex-col gap-2.5">
-            <div v-for="gauge in readout.gauges" :key="gauge.key" v-tooltip.left="gauge.hint" data-figure class="flex cursor-help flex-col gap-1">
+            <div v-for="gauge in readout.gauges" :key="gauge.key" v-tooltip.left="warned(gauge.hint, gauge.warn)" data-figure class="flex cursor-help flex-col gap-1">
                 <div class="flex items-baseline gap-2 text-2xs">
                     <span class="shrink-0 text-muted">{{ gauge.label }}</span>
                     <span class="ml-auto truncate tabular-nums" :class="gauge.warn ? `text-warning` : `text-content`">{{ gauge.detail }}</span>
@@ -64,7 +80,7 @@ const open = (id: string): void => {
             class="grid w-72 shrink-0 grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1.5 text-2xs"
         >
             <template v-for="figure in readout.figures" :key="figure.key">
-                <dt v-tooltip.left="figure.hint" class="cursor-help text-muted">{{ figure.label }}</dt>
+                <dt v-tooltip.left="warned(figure.hint, figure.warn)" class="cursor-help text-muted">{{ figure.label }}</dt>
                 <dd
                     class="truncate text-right tabular-nums"
                     :class="figure.warn ? `text-warning` : `text-content`"
@@ -77,7 +93,7 @@ const open = (id: string): void => {
 
         <!-- One kind a row, so the eye runs down names and sizes alike; the small kinds fold behind a line that sums them. -->
         <div v-if="readout.roles.length > 0" role="group" data-section="roles" class="flex w-72 shrink-0 flex-col gap-1.5">
-            <h4 v-tooltip.left="t(`agents.liveMetrics.rolesHint`)" :class="ui.sectionLabelSm(`cursor-help self-start`)">
+            <h4 v-tooltip.left="rolesTip" :class="ui.sectionLabelSm(`cursor-help self-start`)">
                 {{ t(`agents.liveMetrics.rolesLabel`) }}
             </h4>
             <div
@@ -114,7 +130,7 @@ const open = (id: string): void => {
         <!-- One conversation a row, its memory against the heaviest's and its CPU beside it; tinted when it holds a
              quarter of the box. Its title opens it; its whole reading is on hover. -->
         <div v-if="readout.sessions.length > 0" role="group" data-section="sessions" class="flex w-80 shrink-0 flex-col gap-1.5">
-            <h4 v-tooltip.left="t(`agents.liveMetrics.sessionsHint`)" :class="ui.sectionLabelSm(`cursor-help self-start`)">
+            <h4 v-tooltip.left="sessionsTip" :class="ui.sectionLabelSm(`cursor-help self-start`)">
                 {{ t(`agents.liveMetrics.sessionsLabel`) }}
             </h4>
             <div
@@ -127,7 +143,7 @@ const open = (id: string): void => {
                 <button
                     type="button"
                     :class="ui.textAction(`my-0 min-h-0 min-w-0 max-w-full text-2xs`)"
-                    v-tooltip.top="session.line"
+                    v-tooltip.top="session.tip"
                     @click="open(session.key)"
                 >
                     <span class="truncate">{{ titleOf(session.key) }}</span>

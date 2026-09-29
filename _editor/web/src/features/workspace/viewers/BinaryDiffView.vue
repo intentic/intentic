@@ -58,9 +58,9 @@ const view = ref<ImageViewState>({ fit: true });
 type CompareMode = "sides" | "swipe" | "onion";
 const compareMode = ref<CompareMode>(`sides`);
 const COMPARE_OPTIONS = computed((): { label: string; value: CompareMode; title: string }[] => [
-    { label: t(`workspace.binaryDiffView.twoUp`), value: `sides`, title: t(`workspace.binaryDiffView.bothPicturesBesideEachOther`) },
-    { label: t(`workspace.binaryDiffView.swipe`), value: `swipe`, title: t(`workspace.binaryDiffView.afterWipedOverBefore`) },
-    { label: t(`workspace.binaryDiffView.onionSkin`), value: `onion`, title: t(`workspace.binaryDiffView.afterFadedOverBefore`) },
+    { label: t(`workspace.binaryDiffView.twoUp`), value: `sides`, title: t(`workspace.binaryDiffView.sideBySide`) },
+    { label: t(`workspace.binaryDiffView.swipe`), value: `swipe`, title: t(`workspace.binaryDiffView.dragDivider`) },
+    { label: t(`workspace.binaryDiffView.onionSkin`), value: `onion`, title: t(`workspace.binaryDiffView.fadedOverlay`) },
 ]);
 const overlayable = computed(() => renderable.value && loaded.value.before.url !== undefined && loaded.value.after.url !== undefined);
 const overlay = computed(() => overlayable.value && compareMode.value !== `sides`);
@@ -253,7 +253,7 @@ const panes = computed(() =>
                     <span
                         v-if="pane.key === 'after' && delta !== undefined"
                         class="text-2xs tabular-nums text-subtle"
-                        v-tooltip.bottom="t(`workspace.binaryDiffView.againstBeforeSide`, { delta })"
+                        v-tooltip.bottom="t(`workspace.binaryDiffView.vsBefore`)"
                     >
                         {{ delta }}
                     </span>
@@ -263,7 +263,7 @@ const panes = computed(() =>
                         type="button"
                         :class="ui.iconButton(`h-5 w-5 rounded`)"
                         @click="download(pane.side, pane.label.toLowerCase())"
-                        v-tooltip.bottom="t(`workspace.binaryDiffView.downloadVersion`, { toLowerCase: pane.label.toLowerCase() })"
+                        v-tooltip.bottom="t(`ui.action.download`)"
                         :aria-label="t(`workspace.binaryDiffView.downloadVersion2`, { toLowerCase: pane.label.toLowerCase(), filename })"
                     >
                         <Icon name="download" class="text-2xs" />

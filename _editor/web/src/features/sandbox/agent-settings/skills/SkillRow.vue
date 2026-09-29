@@ -97,7 +97,7 @@ watch(
                         <p class="min-w-0 flex-1 text-2xs" :class="skill.description === `` ? `italic text-subtle` : `text-muted`">
                             {{ skill.description === `` ? t(`sandbox.skillRow.noDescriptionAgentRarely`) : skill.description }}
                         </p>
-                        <CopyButton :text="body" :label="t(`ui.action.copy`)" v-tooltip.top="t(`sandbox.skillRow.fileExactlyAuthorWrote`)" />
+                        <CopyButton :text="body" :label="t(`ui.action.copy`)" v-tooltip.top="t(`sandbox.skillRow.rawFile`)" />
                     </div>
                     <!-- Read-only rendering, no Read/Source toggle: the markup is already in the DOM, hidden until a caret enters it. -->
                     <MarkdownDocument

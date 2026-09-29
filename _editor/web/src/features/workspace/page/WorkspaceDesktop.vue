@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { WorkspaceTreeEntry } from "@intentic/api-contract";
-import { Button, clipboardOf, ui, ConfirmDialog, ContextMenu, type IconName, ResizeSeam, SegmentedControl, useNarrow } from "@intentic/ui";
+import { Button, clipboardOf, ui, ConfirmDialog, ContextMenu, type IconName, ResizeSeam, SegmentedControl, type Tip, useNarrow } from "@intentic/ui";
 import type { Disposable } from "@intentic/extension-api";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, nextTick, onBeforeUnmount, onMounted, provide, ref, watch } from "vue";
@@ -16,7 +16,7 @@ import { usePanels } from "../../extensions/usePanels";
 import { personaStartDirs } from "../../sandbox/personas/personaRules";
 import { usePersonas } from "../../sandbox/personas/usePersonas";
 import { useRepoChecks } from "../../sandbox/environment/useRepoChecks";
-import { lensPersonaId, reachOf, reachSentence } from "../directory-ui/personaReach";
+import { lensPersonaId, reachOf, reachTip } from "../directory-ui/personaReach";
 import { workspaceAgent, workspaceDir } from "../health/workspaceScope";
 import { detectActivations } from "../../../core-views/registry";
 import { useEditBuffers } from "../files/useEditBuffers";
@@ -426,8 +426,8 @@ const filtersActive = computed(() =>
 // The lens's folder list rides a tooltip on the already-lit funnel, not a separate stripe (whose folder names
 // wrapped to two lines).
 const lensCard = computed(() => personas.value.find((persona) => persona.id === lensPersonaId.value));
-const lensLine = computed(() =>
-    lensCard.value === undefined ? undefined : reachSentence(lensCard.value.label ?? lensCard.value.id, reachOf(lensCard.value)),
+const lensTip = computed(() =>
+    lensCard.value === undefined ? undefined : reachTip(lensCard.value.label ?? lensCard.value.id, reachOf(lensCard.value)),
 );
 
 // This view's root, where a clipboard write targets the visible window, not the opener's (see clipboardOf).
@@ -836,20 +836,35 @@ const onPick = (event: Event): void => {
     input.value = ``;
 };
 
-// Tooltips teach their command's key via commandShortcut, so a remap re-renders the hint.
-const tooltipWithChord = (label: string, command: string): string => {
-    const chord = commandShortcut(command);
-    return chord === undefined ? label : `${label} (${chord})`;
-};
+// Tooltips teach their command's key via commandShortcut, so a remap re-renders the key cap.
 // States why as well as what: the reader didn't close this panel and shouldn't have to guess what happened to it.
-const explorerTooltip = computed(() =>
-    tooltipWithChord(
-        autoHidden.value ? `Show explorer · hidden to make room for the split` : sidebarOpen.value ? `Hide explorer` : `Show explorer`,
-        `workspace.toggleSidebar`,
-    ),
+const explorerTooltip = computed(
+    (): Tip => ({
+        title: sidebarOpen.value && !autoHidden.value ? t(`workspace.workspaceDesktop.hideExplorer`) : t(`workspace.workspaceDesktop.showExplorer`),
+        keys: commandShortcut(`workspace.toggleSidebar`),
+        note: autoHidden.value ? t(`workspace.workspaceDesktop.hiddenForSplit`) : undefined,
+    }),
 );
-const rootHealthTooltip = computed(() => tooltipWithChord(`Codebase health of the workspace root`, `workspace.codebaseHealth`));
-const homeTooltip = computed(() => tooltipWithChord(`Show home · your tabs stay open`, `workspace.showHome`));
+const rootHealthTooltip = computed((): Tip => ({ title: t(`workspace.workspaceDesktop.codebaseHealth`), keys: commandShortcut(`workspace.codebaseHealth`) }));
+const homeTooltip = computed(
+    (): Tip => ({
+        title: t(`workspace.workspaceDesktop.showHome`),
+        keys: commandShortcut(`workspace.showHome`),
+        note: t(`workspace.workspaceDesktop.tabsStayOpen`),
+    }),
+);
+// The include field's grammar as three samples and what each matches, rather than a sentence about commas.
+const includeTip = computed(
+    (): Tip => ({
+        title: t(`workspace.words.filesToInclude`),
+        rows: [
+            { label: `package.json`, value: t(`workspace.workspaceDesktop.anywhere`) },
+            { label: `./src`, value: t(`workspace.workspaceDesktop.fromRoot`) },
+            { label: `!dist`, value: t(`workspace.workspaceDesktop.excluded`) },
+        ],
+        note: t(`workspace.workspaceDesktop.commaSeparated`),
+    }),
+);
 </script>
 
 <template>
@@ -889,7 +904,7 @@ const homeTooltip = computed(() => tooltipWithChord(`Show home · your tabs stay
                         type="button"
                         :class="ui.iconButton(layout.sidebarPanel.value === 'history' ? 'bg-overlay text-content' : '')"
                         @click="layout.setSidebarPanel('history')"
-                        v-tooltip.bottom="words.restorePointsHint"
+                        v-tooltip.bottom="{ title: words.restorePoints, note: words.restorePointsHint }"
                         :aria-pressed="layout.sidebarPanel.value === 'history'"
                         :aria-label="words.restorePoints"
                     >
@@ -904,7 +919,7 @@ const homeTooltip = computed(() => tooltipWithChord(`Show home · your tabs stay
                             v-tooltip.bottom="
                                 changes.landing.value === undefined
                                     ? t(`ui.action.refresh`)
-                                    : t(`workspace.workspaceDesktop.treeBeingWritten`, { landing: changes.landing.value })
+                                    : t(`workspace.workspaceDesktop.landingNow`, { landing: changes.landing.value })
                             "
                             :aria-label="t(`workspace.workspaceDesktop.refreshChanges`)"
                             :disabled="changes.actionBusy.value || changes.fetching.value || changes.landing.value !== undefined"
@@ -962,7 +977,7 @@ const homeTooltip = computed(() => tooltipWithChord(`Show home · your tabs stay
                                 v-if="filter"
                                 type="button"
                                 class="flex items-center rounded text-2xs text-subtle transition-colors hover:text-content"
-                                v-tooltip.bottom="t(`workspace.workspaceDesktop.clearEsc`)"
+                                v-tooltip.bottom="{ title: t(`ui.action.clear`), keys: t(`ui.keys.esc`) }"
                                 :aria-label="t(`ui.action.clearFilter`)"
                                 @click="clearFilter"
                             >
@@ -983,7 +998,7 @@ const homeTooltip = computed(() => tooltipWithChord(`Show home · your tabs stay
                             :placeholder="t(`workspace.words.filesToIncludeE`)"
                             class="ui-field-box ui-field-sm w-full min-w-0 pr-2 pl-7"
                             :aria-label="t(`workspace.words.filesToInclude`)"
-                            v-tooltip.bottom="t(`workspace.workspaceDesktop.filesToIncludeComma`)"
+                            v-tooltip.bottom="includeTip"
                             @keydown.esc="search.include.value = ``"
                         />
                     </div>
@@ -992,9 +1007,9 @@ const homeTooltip = computed(() => tooltipWithChord(`Show home · your tabs stay
                             v-model="searchScope"
                             size="xs"
                             :options="[
-                                { label: `Name`, value: `name`, title: `Filter by file name` },
-                                { label: `Text`, value: `text`, title: `Search file contents for this exact text` },
-                                { label: `Smart`, value: `smart`, title: `Search by meaning, ranked across the indexed workspace` },
+                                { label: t(`shared.name`), value: `name`, title: t(`workspace.workspaceDesktop.scopeNameHint`) },
+                                { label: t(`workspace.words.text`), value: `text`, title: t(`workspace.workspaceDesktop.scopeTextHint`) },
+                                { label: t(`workspace.workspaceDesktop.smart`), value: `smart`, title: t(`workspace.workspaceDesktop.scopeSmartHint`) },
                             ]"
                         />
                         <span class="flex-1"></span>
@@ -1005,7 +1020,7 @@ const homeTooltip = computed(() => tooltipWithChord(`Show home · your tabs stay
                             :class="filtersActive ? 'bg-primary-600/15 text-link' : 'text-muted hover:text-content'"
                             aria-haspopup="menu"
                             :aria-label="t(`workspace.words.filterWhatExplorerLists`)"
-                            v-tooltip.bottom="lensLine ?? t(`workspace.words.filter`)"
+                            v-tooltip.bottom="lensTip ?? t(`workspace.words.filter`)"
                             @click="filterMenu?.show($event)"
                         >
                             <Icon name="filter" class="text-xs" />
@@ -1034,7 +1049,7 @@ const homeTooltip = computed(() => tooltipWithChord(`Show home · your tabs stay
                             type="button"
                             :class="ui.iconButton(`h-auto w-auto shrink-0 rounded-md px-1.5 py-0.5 hover:bg-transparent`)"
                             :disabled="filter.trim() !== '' || expanded.size === 0"
-                            v-tooltip.bottom="t(`workspace.workspaceDesktop.collapseAllFolders`)"
+                            v-tooltip.bottom="t(`workspace.workspaceDesktop.collapseAll`)"
                             :aria-label="t(`workspace.workspaceDesktop.collapseAllFolders`)"
                             @click="collapseAll"
                         >
@@ -1095,7 +1110,7 @@ const homeTooltip = computed(() => tooltipWithChord(`Show home · your tabs stay
                 :min="toScreenPx(MIN_SIDEBAR_WIDTH)"
                 :max="toScreenPx(MAX_SIDEBAR_WIDTH)"
                 :reset="toScreenPx(defaultSidebarWidth())"
-                :title="t(`ui.resizeSeam.dragToResize`)"
+                :title="t(`ui.resizeSeam.doubleClickResets`)"
             />
 
             <!-- Dismisses the drawer by clicking the file it covers, the only affordance the toggle doesn't already provide. -->

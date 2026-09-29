@@ -166,7 +166,7 @@ watch(
                 class="shrink-0"
                 :class="following ? `text-primary-500` : ``"
                 @click="toggleFollow"
-                v-tooltip.bottom="t(`workspace.bigTextView.jumpToEndAppend`)"
+                v-tooltip.bottom="t(`workspace.bigTextView.liveTail`)"
             >
                 <Icon :name="following ? `wave-pulse` : `chevron-down`" class="text-[0.7rem]" /> {{ t(`workspace.bigTextView.follow`) }}
             </Button>
@@ -178,7 +178,7 @@ watch(
                 :text="true"
                 class="shrink-0"
                 @click="emit(`download`)"
-                v-tooltip.bottom="t(`workspace.bigTextView.downloadWholeFile`)"
+                v-tooltip.bottom="t(`workspace.words.wholeFile`)"
             >
                 <Icon name="download" class="text-[0.7rem]" /> {{ t(`ui.action.download`) }}
             </Button>

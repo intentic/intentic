@@ -35,7 +35,12 @@ const saveGuidance = (text: string): void => patch({ autoModelGuidance: text.tri
 // Written guidance is silent state: it steers every chat that opens on Auto and no model list on this page shows it.
 // The chip says the job's state, not the button's name — the two sit an inch apart and must not read as one word twice.
 const guidanceBadge = computed(() =>
-    guidanceSet.value ? { label: t(`sandbox.agentModels.guided`), hint: t(`sandbox.agentModels.autoReadsThisAlongside`) } : undefined,
+    guidanceSet.value
+        ? {
+              label: t(`sandbox.agentModels.guided`),
+              hint: { title: t(`sandbox.agentModels.guidanceSet`), note: t(`sandbox.agentModels.autoReadsIt`) },
+          }
+        : undefined,
 );
 const guidanceOpen = ref(false);
 

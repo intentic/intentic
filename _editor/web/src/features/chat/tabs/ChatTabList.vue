@@ -327,7 +327,11 @@ defineExpose({ beginRename: actions.beginRename });
                         :text="true"
                         class="shrink-0"
                         :aria-label="clearLabel(lane)"
-                        v-tooltip.bottom="t(`chat.chatTabList.closeAll`, { size: clearing[lane.key].size, keeps: lane.keeps })"
+                        v-tooltip.bottom="{
+                            title: t(`chat.chatTabList.closeAll`),
+                            rows: [{ label: t(`chat.chatTabList.chats`), value: clearing[lane.key].size }],
+                            note: lane.keeps,
+                        }"
                         @click="emit('close', clearing[lane.key])"
                     >
                         {{ t(`ui.action.clear`) }}

@@ -106,7 +106,7 @@ const brief = (entry: EnvironmentRecurring): string =>
             <button
                 type="button"
                 :aria-pressed="revealed"
-                v-tooltip.top="revealed ? t(`sandbox.runtimeInstalls.hideWhatDismissed`) : t(`sandbox.runtimeInstalls.showWhatDismissed`)"
+                v-tooltip.top="revealed ? t(`sandbox.runtimeInstalls.hideDismissed`) : t(`sandbox.runtimeInstalls.showDismissed`)"
                 :class="ui.linkButton(`gap-1 text-2xs font-medium text-subtle hover:text-content`)"
                 @click="revealed = !revealed"
             >

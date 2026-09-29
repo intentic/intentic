@@ -52,7 +52,7 @@ const applyRepair = (path: string, action: ManifestRepairAction): Promise<void> 
                     <button
                         type="button"
                         class="cursor-pointer rounded-sm text-left font-mono text-xs hover:text-link hover:underline"
-                        :title="notice.path"
+                        v-tooltip.top="notice.path"
                         @click="void openWorkspaceRef(notice.path)"
                     >
                         {{ notice.file }}
@@ -75,7 +75,6 @@ const applyRepair = (path: string, action: ManifestRepairAction): Promise<void> 
                                 severity="secondary"
                                 :label="action.label"
                                 :aria-label="action.spoken"
-                                :title="action.spoken"
                                 :disabled="busy"
                                 @click="void applyRepair(notice.path, action)"
                             />

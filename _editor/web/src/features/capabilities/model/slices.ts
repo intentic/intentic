@@ -40,8 +40,6 @@ const scopeOf = (key: string, label: string, icon: IconName, subset: readonly { 
     connected: subset.filter((tile) => tile.connected > 0).length,
 });
 
-const countOf = (total: number, one: string, many: string): string => `${total} ${total === 1 ? one : many}`;
-
 export interface RailScopes {
     readonly all: CapabilityScope;
     // All, then a cross-cutting row only once it holds something, not as a promise of an empty page.
@@ -58,14 +56,14 @@ export const railScopes = (tiles: readonly CatalogTile[]): RailScopes => {
     const connections = tiles.reduce((total, tile) => total + tile.connected, 0);
     const pinned = [all];
     if (connected.length > 0) {
-        // Counts connections so its number matches the list it opens; `meta` spells that out for the tooltip.
+        // Counts connections so its number matches the list it opens; `tiles` keeps the capability count for the tooltip.
         pinned.push({
             key: CONNECTED,
             label: t(`capabilities.capabilities.connected2`),
             icon: `check-circle`,
             total: connections,
             connected: connections,
-            meta: `${countOf(connections, `connection`, `connections`)} across ${countOf(connected.length, `capability`, `capabilities`)}`,
+            tiles: connected.length,
         });
     }
     if (recommended.length > 0) {

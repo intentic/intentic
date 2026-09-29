@@ -203,13 +203,13 @@ const commandSummary = (program: string): string => {
                     </template>
 
                     <template #title>
-                        <span class="block truncate font-mono text-xs text-content" :title="entry.program">
+                        <span class="block truncate font-mono text-xs text-content" v-tooltip.top="entry.program">
                             {{ commandSummary(entry.program) }}
                         </span>
                     </template>
 
                     <template #description>
-                        <span class="block truncate text-2xs text-muted" :title="entry.sentence">
+                        <span class="block truncate text-2xs text-muted" v-tooltip.top.overflow="entry.sentence">
                             {{ entry.sentence }}
                         </span>
                     </template>
@@ -218,13 +218,13 @@ const commandSummary = (program: string): string => {
                         <span
                             v-if="entry.machine"
                             class="hidden items-center gap-1 font-mono text-2xs text-subtle @xl:inline-flex"
-                            :title="t(`sandbox.agentSafetyLog.ranOn`, { machine: entry.machine })"
+                            v-tooltip.top="t(`sandbox.agentSafetyLog.ranOn`)"
                         >
                             <Icon name="desktop" class="text-3xs" />
                             {{ entry.machine }}
                         </span>
                         <StatusBadge :variant="statusOf(entry).variant" :label="statusOf(entry).label" size="xs" :dot="statusOf(entry).dot" />
-                        <span class="shrink-0 text-2xs text-subtle" :title="formatDateTime(entry.at)">
+                        <span class="shrink-0 text-2xs text-subtle" v-tooltip.top="formatDateTime(entry.at)">
                             {{ timeAgo(entry.at) }}
                         </span>
                     </template>

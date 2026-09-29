@@ -297,7 +297,7 @@ const starters = computed(() => boardStarters(workspaceRepos.value.length, works
                             <button
                                 type="button"
                                 :aria-label="t(`agents.agentsView.backToFinishedAgents`)"
-                                v-tooltip.bottom="t(`agents.agentsView.backToFinished`)"
+                                v-tooltip.bottom="t(`agents.agentsView.leaveArchive`)"
                                 :class="ui.iconButton(`h-4 w-4 rounded`)"
                                 @click="toggleArchive"
                             >
@@ -323,7 +323,7 @@ const starters = computed(() => boardStarters(workspaceRepos.value.length, works
                                     v-if="archiveSize > 0"
                                     type="button"
                                     :aria-label="t(`agents.agentsView.openArchive`, { archiveSize })"
-                                    v-tooltip.bottom="t(`agents.agentsView.takenOffBoardBranches`)"
+                                    v-tooltip.bottom="{ title: t(`shared.archived`), rows: [{ label: t(`shared.agents`), value: archiveSize }], note: t(`agents.words.allKept`) }"
                                     class="ui-chip shrink-0 gap-1"
                                     :class="pulsing ? `ui-chip-on ring-1 ring-primary-500/50` : ``"
                                     @click="toggleArchive"
@@ -338,7 +338,7 @@ const starters = computed(() => boardStarters(workspaceRepos.value.length, works
                                     :text="true"
                                     class="ui-button-thumb shrink-0"
                                     :aria-label="t(`agents.agentsView.archiveEveryFinishedAgent`)"
-                                    v-tooltip.bottom="t(`agents.agentsView.archiveAllUndo`, { clearable })"
+                                    v-tooltip.bottom="{ title: t(`agents.agentsView.archiveAll`), rows: [{ label: t(`shared.agents`), value: clearable }], note: t(`agents.words.undoable`) }"
                                     @click="archive()"
                                 >
                                     {{ t(`ui.action.clear`) }}
@@ -353,7 +353,7 @@ const starters = computed(() => boardStarters(workspaceRepos.value.length, works
                                 class="shrink-0"
                                 :aria-label="t(`agents.agentsView.deleteAllArchivedAgents`, { count: archived.length })"
                                 :disabled="purging"
-                                v-tooltip.bottom="t(`agents.agentsView.deleteAllPermanentlyBranches`, { count: archived.length })"
+                                v-tooltip.bottom="{ title: t(`agents.agentsView.deleteAll`), rows: [{ label: t(`shared.agents`), value: archived.length }], note: t(`agents.words.cantUndo`) }"
                                 @click="pendingPurge = true"
                             >
                                 <Icon :name="purging ? 'spinner' : 'trash'" :spin="purging" class="text-2xs" />{{ t(`agents.agentsView.deleteAll`) }}

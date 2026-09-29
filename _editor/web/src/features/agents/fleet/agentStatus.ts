@@ -1,4 +1,4 @@
-import type { IconName } from "@intentic/ui";
+import type { IconName, Tip } from "@intentic/ui";
 import { briefDuration } from "@intentic/base/format";
 import { formatWeekdayTime } from "@intentic/ui/format";
 import {
@@ -467,27 +467,27 @@ export const attentionCards = (
 // all agents.
 export const landedAway = (agent: {
     readonly landedPresence?: { readonly landed: number; readonly present: number };
-}): { text: string; hint?: string; title: string; icon: IconName } | undefined => {
+}): { text: string; hint?: string; tip: Tip; icon: IconName } | undefined => {
     const presence = agent.landedPresence;
     if (presence === undefined) {
         return undefined;
     }
     // The hint is a clause, not a paragraph: read as the tail of `text` on one line, carrying only the fact "removed"
-    // doesn't say, the branch still has it.
+    // doesn't say, the branch still has it. The hover's card counts the files: how many are still in the workspace.
+    const inWorkspace = { label: t(`agents.agentStatus.inWorkspace`), value: `${presence.present}/${presence.landed}` };
     // The common shape: the whole of it, one discard, no arithmetic to read.
     if (presence.present === 0) {
         return {
             text: t(`agents.agentStatus.removed`),
             hint: t(`agents.agentStatus.onBranch`),
-            title: t(`agents.agentStatus.removedWorkspaceStillOn`),
+            tip: { title: t(`agents.agentStatus.removed`), rows: [inWorkspace], note: t(`agents.agentStatus.stillOnBranch`) },
             icon: `link-broken`,
         };
     }
-    // A partial discard: the fraction is enough to decide whether enough survived; the full sentence is in `title` for
-    // hover.
+    // A partial discard: the fraction is enough to decide whether enough survived.
     return {
         text: `${presence.present}/${presence.landed}`,
-        title: t(`agents.agentStatus.filesStillInWorkspace`, { present: presence.present, landed: presence.landed }),
+        tip: { title: t(`agents.agentStatus.partlyRemoved`), rows: [inWorkspace], note: t(`agents.agentStatus.restOnBranch`) },
         icon: `arrows-h`,
     };
 };
@@ -646,24 +646,26 @@ export const standingChip = (agent: AgentStanding & { readonly unread: boolean; 
 const CALLS_NAMED = 3;
 
 // The corner a card wears for the children calling the reader through it (callsOwner): the one child's own word, or how
-// many call, tinted as an ask (a spent allowance's muted tint when that is all they stopped on); its hover names them.
+// many call, tinted as an ask (a spent allowance's muted tint when that is all they stopped on); its hover names them,
+// one row each: what stopped it, and which child it is.
 // The card's own reason outranks it, since that is the ask the card's own presses answer (AgentCard), and it outranks
 // the card's unread mark, as any reason does.
-export const familyChip = (
-    calls: readonly (AgentStanding & { readonly title?: string })[],
-): (StandingChip & { readonly hint: string }) | undefined => {
+export type FamilyChip = StandingChip & { readonly hint: Tip };
+export const familyChip = (calls: readonly (AgentStanding & { readonly title?: string })[]): FamilyChip | undefined => {
     const first = calls[0];
     if (first === undefined) {
         return undefined;
     }
     const why = (child: AgentStanding): string => attentionReason(child) ?? t(`shared.needs`);
-    const named = calls.slice(0, CALLS_NAMED).map((child) => `${agentDisplayTitle(child)} (${why(child)})`);
     const rest = calls.length - CALLS_NAMED;
-    const list = rest > 0 ? [...named, t(`agents.childRows.callsMore`, { count: rest })] : named;
     return {
         label: calls.length === 1 ? why(first) : t(`agents.childRows.needYou`, { count: calls.length }, calls.length),
         tone: calls.every(limited) ? LIMIT_TONE : REASON_TONE,
-        hint: t(`agents.childRows.callsHint`, { list: list.join(`, `) }),
+        hint: {
+            title: t(`agents.words.childAgents`),
+            rows: calls.slice(0, CALLS_NAMED).map((child) => ({ label: why(child), value: agentDisplayTitle(child) })),
+            note: rest > 0 ? t(`agents.childRows.callsMore`, { count: rest }) : undefined,
+        },
     };
 };
 
@@ -816,13 +818,13 @@ export const soonestWatch = (agent: AgentStanding): AgentWatch | undefined =>
 // has one grammar for "what is this doing and for how long". The phrase is the agent's own note, not the word
 // "Watching", which tells the user nothing actionable; several watches collapse to a count since truncated notes
 // in a narrow lane aren't readable. The clock counts to the deadline, the next moment this card definitely moves.
-// The hint is one flowing line because the tooltip renders via `textContent` in a clamped box
-// (ui/styles/tooltip.css) where a newline just becomes a space, and it ends by naming what pressing the card costs
-// (nothing but the wait), since a tooltip that explains a mechanism with no stated exit reads as un-endable.
+// The hint is a card: one watch's pacing and deadline as two rows, several as one row each (its note, its pacing), and
+// the one line that matters about the end of the wait, that it wakes the conversation. The way out is the Stop press
+// beside the readout, which says so itself.
 export const watchLine = (
     agent: AgentStanding,
     now: number,
-): { readonly text: string; readonly countdown: string; readonly hint: string } | undefined => {
+): { readonly text: string; readonly countdown: string; readonly hint: Tip } | undefined => {
     const watches = agent.watches;
     const soonest = soonestWatch(agent);
     if (watches === undefined || soonest === undefined) {
@@ -831,12 +833,32 @@ export const watchLine = (
     // `formatElapsed` measures the second argument from the first, so `now → deadline` gives the time left, in the
     // same vocabulary as a running turn's elapsed readout.
     const countdown = formatElapsed(now, soonest.deadlineAt);
-    const detail = watches
-        .map((watch) => `${watch.note} (checked every ${briefDuration(watch.intervalSeconds)}, gives up in ${formatElapsed(now, watch.deadlineAt)})`)
-        .join(`; `);
+    const hint: Tip =
+        watches.length === 1
+            ? {
+                  title: t(`agents.childRows.watching`),
+                  tone: `info`,
+                  rows: [
+                      { label: t(`agents.agentStatus.checksEvery`), value: briefDuration(soonest.intervalSeconds) },
+                      { label: t(`agents.agentStatus.givesUpIn`), value: countdown },
+                  ],
+                  note: t(`agents.agentStatus.wakesThisChat`),
+              }
+            : {
+                  title: t(`agents.childRows.watching`),
+                  tone: `info`,
+                  rows: watches.map((watch) => ({
+                      label: watch.note,
+                      value: t(`agents.agentStatus.watchPace`, {
+                          interval: briefDuration(watch.intervalSeconds),
+                          left: formatElapsed(now, watch.deadlineAt),
+                      }),
+                  })),
+                  note: t(`agents.agentStatus.firstWakesChat`),
+              };
     return {
         text: watches.length === 1 ? soonest.note : `Watching ${watches.length} conditions`,
         countdown,
-        hint: t(`agents.agentStatus.watchingFirstThoseTo`, { detail }),
+        hint,
     };
 };

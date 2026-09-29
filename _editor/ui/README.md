@@ -17,6 +17,10 @@ flowchart LR
   [extension-ui](../../_shared/extension-ui) hands extensions a curated slice. `installUi` is the one install call:
   vue-i18n, the PrimeVue preset with its CSS layer order (Tailwind utilities last), the global `Icon`, and the
   `v-tooltip`, `v-longpress`, `v-action` and `v-middleclick` directives.
+- **Hover labels.** `v-tooltip` takes a string of a word or two, or a `Tip` (`src/lib/tooltip.ts`): a compact card
+  of a short title, an optional status dot and key cap, label/figure rows and one short note. A sentence belongs in
+  neither. The `tooltip-words` check holds every label it can resolve to that length, and `tipText` gives a card's
+  words as one line for an accessible name.
 - **Styling.** `src/styles/index.css` is the one stylesheet import. `theme.ts` points PrimeVue's `--p-*` tokens at
   the CSS variables behind the Tailwind utilities, so light and dark switch at runtime on `[data-mode="dark"]`.
   Class recipes live in `ui` (`src/lib/ui.ts`) and merge through `tailwind-merge`, so the caller's classes win.

@@ -64,7 +64,7 @@ const when = (at: number): string => {
                     <div class="flex items-center gap-3">
                         <Icon name="comments" class="shrink-0 text-subtle" />
                         <div class="min-w-0 flex-1">
-                            <p class="truncate text-xs font-medium text-content" :title="share.title">{{ share.title }}</p>
+                            <p class="truncate text-xs font-medium text-content" v-tooltip.top.overflow="share.title">{{ share.title }}</p>
                             <!-- Order matters: how current, how much, how deep. -->
                             <p class="truncate text-2xs text-subtle">
                                 {{
@@ -90,7 +90,7 @@ const when = (at: number): string => {
                             rel="noopener"
                             class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted hover:bg-overlay hover:text-content"
                             :aria-label="t(`sharedConversations.openInNewTab`, { title: share.title })"
-                            v-tooltip.bottom="t(`sharedConversations.openInNewTab2`)"
+                            v-tooltip.bottom="t(`common.newTab`)"
                         >
                             <Icon name="external-link" />
                         </a>
@@ -101,7 +101,7 @@ const when = (at: number): string => {
                             size="small"
                             severity="secondary"
                             :disabled="busy !== undefined"
-                            v-tooltip.bottom="t(`sharedConversations.publishEverythingSaidSince`)"
+                            v-tooltip.bottom="{ title: t(`sharedConversations.publishLatest`), note: t(`sharedConversations.linkStaysSame`) }"
                             @click="act(share.id, update.mutateAsync)"
                         >
                             <template #icon><Icon name="refresh" /></template>
@@ -116,7 +116,9 @@ const when = (at: number): string => {
                             <template #icon><Icon name="trash" /></template>
                         </Button>
                     </div>
-                    <span v-if="share.url" class="truncate font-mono text-2xs text-subtle" :title="share.url">{{ share.url }}</span>
+                    <span v-if="share.url" class="truncate font-mono text-2xs text-subtle" v-tooltip.bottom.overflow="share.url">{{
+                        share.url
+                    }}</span>
                     <!-- No tunnel means the page exists but nothing can reach it; worth flagging instead of looking fine. -->
                     <span v-else class="text-2xs text-danger">{{ t(`sharedConversations.sandboxNoPublicAddress`) }}</span>
                 </div>

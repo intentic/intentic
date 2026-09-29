@@ -117,7 +117,7 @@ const cancelNaming = (): void => {
                             <div class="flex items-center gap-2">
                                 <span
                                     class="min-w-0 truncate text-sm font-semibold text-content transition-colors group-hover/tile:text-link"
-                                    :title="tile.id"
+                                    v-tooltip.top="tile.id"
                                     >{{ tile.name }}</span
                                 >
                                 <span

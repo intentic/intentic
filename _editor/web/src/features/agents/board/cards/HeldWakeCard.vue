@@ -78,7 +78,7 @@ const autoRunLabel = computed(() => {
                 :text="true"
                 class="ui-button-thumb shrink-0"
                 :aria-label="t(`agents.heldWakeCard.rejectHeldWake`)"
-                v-tooltip.top="t(`agents.heldWakeCard.dropWakeNeverRuns`)"
+                v-tooltip.top="{ title: t(`agents.heldWakeCard.dropWake`), note: t(`agents.heldWakeCard.automationUnchanged`) }"
                 @click.stop="emit(`reject`)"
             >
                 {{ t(`agents.heldWakeCard.reject`) }}
@@ -87,7 +87,7 @@ const autoRunLabel = computed(() => {
                 size="small"
                 class="ui-button-thumb shrink-0"
                 :aria-label="t(`agents.heldWakeCard.approveHeldWake`)"
-                v-tooltip.top="t(`agents.heldWakeCard.runNowExactlyWhat`)"
+                v-tooltip.top="{ title: t(`agents.heldWakeCard.runNow`), note: t(`agents.heldWakeCard.landsOnBoard`) }"
                 @click.stop="emit(`approve`)"
             >
                 {{ t(`ui.action.approve`) }}

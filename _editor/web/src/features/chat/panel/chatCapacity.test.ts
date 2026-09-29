@@ -254,7 +254,7 @@ describe(`what cannot serve a turn, whatever its pools say`, () => {
         providerAccounts.value = { claude: [claude({ id: `a`, label: `expired`, usage: usage(3), needsReauth: true })] };
         const capacity = chatCapacity([], NOW);
         expect(capacity.providers).toEqual([]);
-        expect(capacity.blocked).toEqual([{ fix: `reconnect`, reason: `needs connecting again`, reasons: [`sign-in expired`], count: 1, labels: [`expired (sign-in expired)`] }]);
+        expect(capacity.blocked).toEqual([{ fix: `reconnect`, reason: `needs connecting again`, reasons: [`sign-in expired`], count: 1, labels: [`expired (sign-in expired)`], names: [`expired`] }]);
         expect(capacity.out[0]?.reason).toBe(`needs connecting again`);
     });
 
@@ -273,14 +273,14 @@ describe(`what cannot serve a turn, whatever its pools say`, () => {
         expect(entry?.rows.map((row) => row.label)).toEqual([`own@example.com`]);
         expect([entry?.ready, entry?.total, entry?.blocked]).toEqual([1, 1, 1]);
         expect(capacity.blocked).toEqual([
-            { fix: `admin`, reason: `no seat`, reasons: [`Your organization has disabled Claude Code`], count: 1, labels: [`team@example.com (Your organization has disabled Claude Code)`] },
+            { fix: `admin`, reason: `no seat`, reasons: [`Your organization has disabled Claude Code`], count: 1, labels: [`team@example.com (Your organization has disabled Claude Code)`], names: [`team@example.com`] },
         ]);
     });
 
     // A revoked credential is the one a person can fix from here, so it names the account first.
     it(`names an expired sign-in before a lost seat on the same account`, () => {
         providerAccounts.value = { claude: [claude({ id: `a`, label: `both`, needsReauth: true, seatRefusal: `disabled` })] };
-        expect(chatCapacity([], NOW).blocked).toEqual([{ fix: `reconnect`, reason: `needs connecting again`, reasons: [`sign-in expired`], count: 1, labels: [`both (sign-in expired)`] }]);
+        expect(chatCapacity([], NOW).blocked).toEqual([{ fix: `reconnect`, reason: `needs connecting again`, reasons: [`sign-in expired`], count: 1, labels: [`both (sign-in expired)`], names: [`both`] }]);
     });
 
     // What a 33-account Google fleet did to a reader: two accounts with untouched allowances were connected, no
@@ -295,7 +295,7 @@ describe(`what cannot serve a turn, whatever its pools say`, () => {
         const capacity = chatCapacity([], NOW);
         const [entry] = capacity.providers;
         expect([entry?.ready, entry?.total, entry?.blocked]).toEqual([1, 2, 1]);
-        expect(capacity.blocked).toEqual([{ fix: `reconnect`, reason: `needs connecting again`, reasons: [NO_PROJECT], count: 1, labels: [`new@gmail.com (${NO_PROJECT})`] }]);
+        expect(capacity.blocked).toEqual([{ fix: `reconnect`, reason: `needs connecting again`, reasons: [NO_PROJECT], count: 1, labels: [`new@gmail.com (${NO_PROJECT})`], names: [`new@gmail.com`] }]);
     });
 
     // "Cooling down" promises a wait that fixes it; nothing about a missing project is waiting for anything.
@@ -326,7 +326,7 @@ describe(`how old the rail says its readings are`, () => {
         expect(chatCapacity([], NOW).measuredAt).toBe(NOW - 120_000);
         // And the expired sign-in is still accounted for, in the words of what it is missing.
         expect(chatCapacity([], NOW).blocked).toEqual([
-            { fix: `reconnect`, reason: `needs connecting again`, reasons: [`sign-in expired`], count: 1, labels: [`expired@example.com (sign-in expired)`] },
+            { fix: `reconnect`, reason: `needs connecting again`, reasons: [`sign-in expired`], count: 1, labels: [`expired@example.com (sign-in expired)`], names: [`expired@example.com`] },
         ]);
     });
 

@@ -1,4 +1,5 @@
 import type { RepoChanges } from "@intentic/api-contract";
+import { t } from "@intentic/ui/i18n";
 
 // Remote-state layer under the Changes panel, rail tile, sidebar tab, and mobile Review tab. Exists because the
 // review count excludes unpushed work, so "nothing to review" isn't "nothing to do", especially when agents
@@ -45,12 +46,13 @@ export const outgoingWork = (repos: readonly RepoChanges[]): OutgoingWork | unde
 // unpublished-and-ahead branch is sent by the same push as any other, so it wears the arrow.
 export const outgoingMark = ({ commits }: OutgoingWork): "arrow-up-right" | "cloud-upload" => (commits === 0 ? `cloud-upload` : `arrow-up-right`);
 
-// The one sentence every surface says about outgoing work; a glyph alone can only say something is waiting,
-// and the amount decides whether the user acts now or later.
+// The few words every surface says about outgoing work, a hover's or a tile's; a glyph alone can only say something is
+// waiting, and the amount decides whether the user acts now or later.
 export const outgoingSummary = ({ commits, repos }: OutgoingWork): string => {
     if (commits === 0) {
-        return `${repos === 1 ? `A branch has` : `${repos} branches have`} never been pushed`;
+        return t(`workspace.outgoingWork.unpushedBranch`, { count: repos }, repos);
     }
     // Described by its commits alone when both unpublished and ahead: the fan-out publishes on the way through.
-    return `${commits} ${commits === 1 ? `commit` : `commits`}${repos === 1 ? `` : ` across ${repos} repos`} waiting to push`;
+    const summary = t(`workspace.outgoingWork.toPush`, { count: commits }, commits);
+    return repos === 1 ? summary : t(`workspace.outgoingWork.acrossRepos`, { summary, count: repos });
 };

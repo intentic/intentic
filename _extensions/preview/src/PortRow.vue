@@ -48,7 +48,7 @@ const details = computed<string[][]>(() => [
         </template>
 
         <template #title>
-            <span class="block truncate" :title="entry.command">{{ entry.title }}</span>
+            <span class="block truncate" v-tooltip.top="entry.command">{{ entry.title }}</span>
         </template>
 
         <!-- What it is for, and the terminal it lives in when there is one. -->
@@ -59,7 +59,7 @@ const details = computed<string[][]>(() => [
                     v-if="entry.session"
                     type="button"
                     :class="ui.textAction(`touch-target my-0 min-h-0 shrink-0 gap-1 text-2xs`)"
-                    v-tooltip.bottom="t(`portRow.openTerminalRunningIn`, { session: entry.session })"
+                    v-tooltip.bottom="t(`portRow.openTerminal`)"
                     @click="openTerminal"
                 >
                     <Icon name="desktop" class="shrink-0" />
@@ -81,7 +81,7 @@ const details = computed<string[][]>(() => [
                 rel="noopener"
                 :class="ui.iconButton(`h-8 w-8`)"
                 :aria-label="t(`portRow.openPortPreviewIn`, { port: entry.port })"
-                v-tooltip.bottom="t(`portRow.openInNewTab`)"
+                v-tooltip.bottom="t(`common.newTab`)"
             >
                 <Icon name="external-link" />
             </a>
@@ -101,7 +101,15 @@ const details = computed<string[][]>(() => [
             >
                 <template #icon><Icon name="play" /></template>
             </Button>
-            <span v-else class="shrink-0 text-2xs text-subtle" v-tooltip.bottom="t(`portRow.boundToLoopbackAlias`)">
+            <span
+                v-else
+                class="shrink-0 text-2xs text-subtle"
+                v-tooltip.bottom="{
+                    title: t(`portRow.loopbackAlias`),
+                    rows: [{ label: t(`portRow.address`), value: `${entry.host}:${entry.port}` }],
+                    note: t(`portRow.proxyCantReach`),
+                }"
+            >
                 {{ t(`portRow.notForwardable`) }}
             </span>
         </template>

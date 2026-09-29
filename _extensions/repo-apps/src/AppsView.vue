@@ -305,7 +305,6 @@ onMounted(async () => {
                                     :label="t(`appsView.runTests`)"
                                     size="small"
                                     severity="secondary"
-                                    v-tooltip.top="t(`appsView.runVitestApp`)"
                                     @click="runTests(`${app.app}__test`, testsOf(app.app))"
                                 >
                                     <template #icon><Icon name="bolt" /></template>

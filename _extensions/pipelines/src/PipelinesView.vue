@@ -275,9 +275,15 @@ const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined, resume
                                 v-for="item in recurring"
                                 :key="`${item.repo}:${item.branch}:${item.job}`"
                                 class="inline-flex items-center gap-1.5 rounded-md border border-danger/20 bg-canvas px-2 py-1 text-xs"
-                                v-tooltip.top="
-                                    t(`pipelinesView.failedLastRunsOn`, { job: item.job, runs: item.runs, repo: item.repo, branch: item.branch })
-                                "
+                                v-tooltip.top="{
+                                    title: t(`pipelinesView.keepsFailing`),
+                                    tone: `danger`,
+                                    rows: [
+                                        { label: t(`tip.repo`), value: item.repo },
+                                        { label: t(`tip.branch`), value: item.branch },
+                                        { label: t(`tip.failedRuns`), value: item.runs },
+                                    ],
+                                }"
                             >
                                 <span class="font-medium text-danger">{{ item.job }}</span>
                                 <span class="text-2xs text-subtle">{{ t(`pipelinesView.runs`, { runs: item.runs }) }}</span>
@@ -295,12 +301,7 @@ const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined, resume
                                     target="_blank"
                                     rel="noopener"
                                     class="touch-target flex items-center gap-1.5 text-subtle hover:text-link"
-                                    v-tooltip.top="
-                                        t(`pipelinesView.openProjectOn`, {
-                                            project: standing.repo.project,
-                                            host: standing.repo.host === `github` ? `GitHub` : `GitLab`,
-                                        })
-                                    "
+                                    v-tooltip.top="t(`pipelinesView.openRepo`)"
                                 >
                                     <Icon :name="standing.repo.host" />
                                     <span class="truncate font-mono text-2xs">{{ standing.repo.project }}</span>

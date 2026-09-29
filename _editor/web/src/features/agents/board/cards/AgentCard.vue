@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, ProgressRing, ResponsiveOverlay, SandboxLogo, SegmentRing, ui, useDevice } from "@intentic/ui";
+import { Button, ProgressRing, ResponsiveOverlay, SandboxLogo, SegmentRing, type Tip, type TooltipValue, ui, useDevice } from "@intentic/ui";
 import { createInlineRename } from "@intentic/ui/inline-rename";
 import { errorMessage } from "@intentic/ui/async";
 import { computed, ref, useTemplateRef } from "vue";
@@ -26,6 +26,8 @@ import {
     agentStatusMeta,
     attentionReason,
     conflictIsYours,
+    contextPct,
+    type FamilyChip,
     type FleetLane,
     formatCost,
     landedAway,
@@ -38,7 +40,6 @@ import {
     tileRim,
     turnInFlight,
     turnWorking,
-    unreadHint,
     unregistered,
 } from "../../fleet/agentStatus";
 import CardSeal from "./CardSeal.vue";
@@ -62,6 +63,7 @@ import { canArchive, type FleetAgent } from "../../fleet/useAgents-fleet";
 import { relativeTime } from "../../../chat/models/catalog";
 import { modelLabelFor } from "../../../chat/accounts/providerCatalog";
 import { useT } from "@intentic/ui/i18n";
+import { formatChord, isApplePlatform } from "../../../../shell/commands/keybindings";
 
 // One fleet agent: identity tile + title + status chip, a model/session line, and a closing summary line (stats,
 // drill-in, and either the running elapsed or the settled date).
@@ -95,7 +97,7 @@ const props = defineProps<{
     // through it, or still working under it after it finished. The card wears that lane's weight and tint.
     placed?: FleetLane;
     // What the children calling the reader through this card say in its corner (agentStatus.familyChip).
-    call?: StandingChip & { readonly hint: string };
+    call?: FamilyChip;
 }>();
 const emit = defineEmits<{
     // The click that opened it, if any; a modified click asks for a pane instead of focus.
@@ -138,7 +140,7 @@ const box = computed(() =>
 // The corner's word and tint, from the projection the rails read too (agentStatus.standingChip): why it needs you,
 // else why the agents it started do (their mark rides along, so their ask never reads as this card's own), else that it
 // worked since you last looked, else nothing and the resting glyph keeps the corner.
-const chip = computed<(StandingChip & { readonly hint?: string; readonly family?: true }) | undefined>(() =>
+const chip = computed<(StandingChip & { readonly hint?: Tip; readonly family?: true }) | undefined>(() =>
     props.call !== undefined && attentionReason(props.agent) === undefined ? { ...props.call, family: true } : standingChip(props.agent),
 );
 // Shared with agentStatus.activityLine so the rail and board never narrate the same turn differently.
@@ -160,13 +162,23 @@ const closable = computed(() => unregistered(props.agent.status));
 // What closing actually destroys differs: a `starting` turn keeps running daemon-side (only this window's view of it
 // closes).
 // A draft holding unsent text is the one case where closing does lose something, so the hint has to name it.
-const closeHint = computed(() =>
-    props.agent.status === `starting`
-        ? `Close: the turn keeps running, and its own card appears once the sandbox has filed it`
-        : props.agent.unsent
-          ? `Close: this never started, and the unsent message goes with it`
-          : `Close, this never started, so there is no branch or transcript to keep`,
+const closeHint = computed(
+    (): Tip => ({
+        title: t(`ui.action.close`),
+        note:
+            props.agent.status === `starting`
+                ? t(`agents.agentCard.closeKeepsRunning`)
+                : props.agent.unsent
+                  ? t(`agents.agentCard.closeDropsUnsent`)
+                  : t(`agents.agentCard.closeNothingKept`),
+    }),
 );
+// Archive and restore say how many children ride along, when any do; archive also that nothing is lost by it.
+const familyRows = computed(() => (takesFamily.value ? [{ label: t(`agents.words.childAgents`), value: props.family ?? 0 }] : []));
+const archiveHint = computed((): Tip => ({ title: t(`agents.agentCard.archive`), rows: familyRows.value, note: t(`agents.words.allKept`) }));
+const restoreHint = computed((): TooltipValue => (takesFamily.value ? { title: t(`ui.action.restore`), rows: familyRows.value } : t(`ui.action.restore`)));
+// The filter's own key for opening the card its id names, drawn as the key cap the tip wears.
+const enterKey = formatChord(`enter`, isApplePlatform());
 // Drill-in label, undefined for a draft (nothing to review); desktop only, since a mobile tap navigates there.
 const review = computed(() => (mobile.value ? undefined : reviewAction(props.agent)));
 
@@ -280,10 +292,22 @@ const stats = computed(
 const rim = computed(() => tileRim(props.agent, { quiet: receipt.value }));
 // One hover for a tile carrying the category as well, since two nested tooltips would raise two boxes over the same
 // 28 pixels. Either half can be missing: a title the category reading declines still has a rim, and a fresh agent has
-// a category and nothing measured yet.
-const tileHint = computed(() => {
-    const parts = [category.value?.type, rim.value?.hint].filter((part): part is string => part !== undefined);
-    return parts.length === 0 ? undefined : parts.join(` · `);
+// a category and nothing measured yet. Both of the rim's readings are rows, whichever one it draws, since the rim can
+// only draw one; a reading not taken leaves its row empty and the card drops it.
+const tileHint = computed((): TooltipValue => {
+    const type = category.value?.type;
+    if (rim.value === undefined) {
+        return type;
+    }
+    const list = props.agent.checklist;
+    const percent = contextPct(props.agent.contextTokens, props.agent.contextWindow);
+    return {
+        title: type ?? t(`agents.agentCard.progress`),
+        rows: [
+            { label: t(`agents.agentCard.steps`), value: list === undefined ? `` : `${Math.min(list.done, list.total)}/${list.total}` },
+            { label: t(`agents.agentCard.context`), value: percent === undefined ? `` : `${percent}%` },
+        ],
+    };
 });
 // Only a card with a daemon registry entry may claim "Completed": client-only standings have no such account of a turn.
 // A history-reopened chat sits in this lane too but says nothing here, since its own chip already states what it is.
@@ -372,9 +396,14 @@ const needle = computed(() => (props.matchCase === true ? (props.query ?? ``) : 
 const titleRuns = computed(() => markSegments(displayTitle.value, needle.value, props.matchCase === true));
 // The identifier the filter matched, its matched part marked; ids have no case, so neither does the mark.
 const idRuns = computed(() => (props.idMatch === undefined ? [] : markSegments(props.idMatch.text, props.idMatch.mark)));
-// "New" already says unopened; "Updated" hides when you last looked, so only that one earns a hover hint. The
-// sentence is the rails' own (agentStatus.unreadHint); only the clock is this card's.
-const chipHint = computed(() => chip.value?.hint ?? (chip.value?.seenAt === undefined ? undefined : unreadHint(relativeTime(chip.value.seenAt))));
+// "New" already says unopened; "Updated" hides when you last looked, so only that one earns a hover hint: when.
+const chipHint = computed(
+    (): Tip | undefined =>
+        chip.value?.hint ??
+        (chip.value?.seenAt === undefined
+            ? undefined
+            : { title: t(`agents.agentCard.newActivity`), rows: [{ label: t(`agents.agentCard.lastOpened`), value: relativeTime(chip.value.seenAt) }] }),
+);
 
 const edit = createInlineRename(
     () => props.agent.title,
@@ -514,7 +543,7 @@ const grab = (event: PointerEvent): void => {
                     v-if="peek"
                     type="button"
                     :aria-label="t(`chat.words.keepChatOpen`)"
-                    v-tooltip.top="t(`chat.words.keepOpenOtherwiseChat`)"
+                    v-tooltip.top="{ title: t(`ui.action.keepOpen`), note: t(`agents.agentCard.closesWhenAnotherOpens`) }"
                     :class="[HOVER_ACTION, mobile ? 'opacity-60' : 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100']"
                     @click.stop="emit(`keep`)"
                 >
@@ -535,13 +564,7 @@ const grab = (event: PointerEvent): void => {
                     v-if="archivable"
                     type="button"
                     :aria-label="t(`agents.agentCard.archiveAgent`)"
-                    v-tooltip.top="
-                        takesFamily
-                            ? t(`agents.agentCard.archiveWithChildren`, { count: family }, family ?? 0)
-                            : agent.branch === undefined
-                              ? t(`agents.agentCard.archiveConversationKept`)
-                              : t(`agents.agentCard.archiveBranchDiffConversation`)
-                    "
+                    v-tooltip.top="archiveHint"
                     :disabled="busy"
                     :class="[HOVER_ACTION, mobile ? 'opacity-60' : 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100']"
                     @click.stop="emit(`archive`)"
@@ -563,9 +586,7 @@ const grab = (event: PointerEvent): void => {
                     v-if="agent.archivedAt !== undefined"
                     type="button"
                     :aria-label="t(`agents.agentCard.restoreAgent`)"
-                    v-tooltip.top="
-                        takesFamily ? t(`agents.agentCard.restoreWithChildren`, { count: family }, family ?? 0) : t(`agents.agentCard.putAgentBackOn`)
-                    "
+                    v-tooltip.top="restoreHint"
                     :disabled="busy"
                     :class="[HOVER_ACTION, mobile ? 'opacity-60' : 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100']"
                     @click.stop="emit(`restore`)"
@@ -636,7 +657,7 @@ const grab = (event: PointerEvent): void => {
                 </span>
                 <span
                     v-if="idMatch.exact"
-                    v-tooltip.top="t(`agents.agentCard.exactIdHint`)"
+                    v-tooltip.top="{ title: t(`ui.action.open`), keys: enterKey }"
                     class="ui-status-pill shrink-0 bg-primary-600/20 py-px font-semibold text-link"
                     >{{ t(`agents.agentCard.exactId`) }}</span
                 >
@@ -675,7 +696,7 @@ const grab = (event: PointerEvent): void => {
                 <span
                     v-if="box !== undefined"
                     class="flex min-w-0 shrink-0 items-center gap-1 truncate rounded bg-content/10 px-2.5 py-1 text-muted"
-                    v-tooltip.top="t(`agents.agentCard.inNotInSandbox`, { name: box.name })"
+                    v-tooltip.top="{ title: t(`agents.words.otherSandbox`), rows: [{ label: t(`agents.words.sandbox`), value: box.name }] }"
                 >
                     <SandboxLogo :size="12" :image="box.image ?? null" :name="box.name" />
                     <span class="truncate">{{ box.name }}</span>
@@ -690,7 +711,7 @@ const grab = (event: PointerEvent): void => {
                 <span
                     v-if="agent.runner !== undefined && !maker"
                     class="flex shrink-0 items-center gap-1 truncate"
-                    :title="t(`agents.agentCard.runsOn`, { runner: agent.runner })"
+                    v-tooltip.top="{ title: t(`agents.agentCard.runner`), rows: [{ label: t(`agents.agentCard.machine`), value: agent.runner }] }"
                 >
                     <Icon name="desktop" class="text-2xs" />
                     {{ agent.runner }}
@@ -733,7 +754,7 @@ const grab = (event: PointerEvent): void => {
 
             <!-- One row (fact left, press right), not a stack: this is a fact the card owes the reader regardless of action, unlike the decision blocks above. -->
             <div v-if="away !== undefined" class="flex min-w-0 flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
-                <span v-tooltip.top="away.title" class="inline-flex shrink-0 items-start gap-1.5 text-2xs leading-snug text-warning">
+                <span v-tooltip.top="away.tip" class="inline-flex shrink-0 items-start gap-1.5 text-2xs leading-snug text-warning">
                     <Icon :name="away.icon" class="mt-0.5 shrink-0 text-2xs" /><span class="min-w-0"
                         >{{ away.text
                         }}<template v-if="away.hint !== undefined">
@@ -825,7 +846,7 @@ const grab = (event: PointerEvent): void => {
                         type="button"
                         :class="ui.linkButton('inline-flex shrink-0 gap-1 font-medium')"
                         :disabled="resending || busy"
-                        v-tooltip.top="t(`agents.agentCard.sendTurnAgainSame`)"
+                        v-tooltip.top="{ title: t(`agents.agentCard.sameTurn`), note: t(`agents.agentCard.notNewMessage`) }"
                         @click.stop="sendAgain"
                     >
                         {{ resending ? t(`ui.status.sending`) : t(`agents.words.sendAgain`) }}<Icon name="arrow-right" class="text-2xs" />

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { ModelRoleBlock, ModelRoleSpec } from "@intentic/sandbox-contract";
-import { Row, StatusBadge } from "@intentic/ui";
+import { Row, StatusBadge, type Tip } from "@intentic/ui";
 import { computed } from "vue";
 import AddModelButton from "./AddModelButton.vue";
 import type { PinnedList } from "./modelPinList";
@@ -40,24 +40,24 @@ const jobs = computed<string>(() => roles.map((role) => role.label).join(`, `));
 
 // Three states; "jobs differ" outranks the others, since "off" would misstate jobs that do hold models of their own.
 // Empty-state wordings mirror <ModelRoleRow>'s, said for the whole block.
-const chip = computed<{ readonly label: string; readonly hint: string } | undefined>(() => {
+const chip = computed<{ readonly label: string; readonly hint: Tip } | undefined>(() => {
     if (!loaded) {
         return undefined;
     }
     if (differs) {
         return {
             label: t(`sandbox.modelGroupRow.jobsDiffer`),
-            hint: t(`sandbox.modelGroupRow.jobsDoNotAll`),
+            hint: { title: t(`sandbox.modelGroupRow.overlapOnly`), note: t(`sandbox.modelGroupRow.editsSetEveryJob`) },
         };
     }
     if (pinned.value) {
         return undefined;
     }
     return block.id === `helper`
-        ? { label: t(`sandbox.modelGroupRow.off`), hint: t(`sandbox.modelGroupRow.notSetNoneJobs`) }
+        ? { label: t(`sandbox.modelGroupRow.off`), hint: { title: t(`sandbox.words.notSet`), note: t(`sandbox.words.addModelToEnable`) } }
         : {
               label: t(`sandbox.words.chatDefault`),
-              hint: t(`sandbox.modelGroupRow.nothingPinnedRunOn`),
+              hint: { title: t(`sandbox.words.followsChat`), note: t(`sandbox.words.addModelToPin`) },
           };
 });
 </script>

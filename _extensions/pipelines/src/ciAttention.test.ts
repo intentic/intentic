@@ -1,5 +1,12 @@
 import type { PipelineRun } from "@intentic/sandbox-contract";
+import { extensionIdOf } from "@intentic/extension-manifest";
+import { registerExtensionMessages } from "@intentic/extension-ui/i18n";
 import { attentionBadge, inFlightNote } from "./ciAttention";
+import { messages } from "./i18n";
+import { manifest } from "./manifest";
+
+// The broken branch's words are the extension's own catalog, which the host mounts before anything reads it.
+await registerExtensionMessages(extensionIdOf(manifest), messages);
 
 // The rail's other sentence: not "is this branch failing" (ciStreaks) but "is CI doing anything right now". It must count
 // the way the board's own tally counts, or the tile and the header it opens would disagree about the same runs.
@@ -49,7 +56,7 @@ describe(`attentionBadge`, () => {
         expect(attentionBadge([run(2, "failed")])).toEqual({
             count: 1,
             tone: "danger",
-            tooltip: "intentic main is failing: 1 failed run on sha2",
+            tooltip: "intentic main · 1 failed · sha2",
         });
     });
 
@@ -57,7 +64,7 @@ describe(`attentionBadge`, () => {
         expect(attentionBadge([run(1, "failed"), run(2, "running")])).toEqual({
             count: 1,
             tone: "danger",
-            tooltip: "intentic main is failing: 1 failed run on sha1",
+            tooltip: "intentic main · 1 failed · sha1",
             running: "1 running",
         });
         expect(attentionBadge([run(1, "running")])).toEqual({ running: "1 running" });

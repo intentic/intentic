@@ -62,7 +62,7 @@ const bars = computed(() => wave.value?.bars ?? Array.from({ length: WAVE_BARS }
 const BAR_FLOOR = 8;
 
 // What went wrong, in the order the reader can act on: bytes that never arrived before bytes that arrived unplayable.
-const fault = computed(() => error ?? (undecodable.value ? `This sound can't be played in the browser.` : undefined));
+const fault = computed(() => error ?? (undecodable.value ? t(`chat.chatAudioChip.cantPlay`) : undefined));
 
 // Still coming, as opposed to arrived-and-flat: the even row means both, and only one of them is worth breathing.
 const awaiting = computed(() => wave.value === undefined && fault.value === undefined);

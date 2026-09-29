@@ -10,7 +10,9 @@
         "approvalSlice": "Genehmigungsscheibe",
         "approvalSlices": "Genehmigungsscheiben",
         "show": "Zeigen",
-        "slices": "Scheiben"
+        "slices": "Scheiben",
+        "total": "Gesamt",
+        "waiting": "Wartend"
     },
     "approvalsView": {
         "approvals": "Genehmigungen",
@@ -21,7 +23,7 @@
         "automation": "Automation {automationId}",
         "automations": "Automationen",
         "automationsHeld": "Für Sie zurückgehaltene Automationen",
-        "backToReviewNothing": "Zurück zur Durchsicht: es passiert nichts",
+        "backToReview": "Zurück zur Durchsicht",
         "cancel": "Abbrechen",
         "couldntApproveHooks": "Diese Hooks ließen sich nicht genehmigen.",
         "couldntDismissHooks": "Diese Hooks ließen sich nicht ausgeschaltet lassen.",
@@ -29,11 +31,12 @@
         "couldntReadHeldAutomations": "Die zurückgehaltenen Automationen ließen sich nicht lesen.",
         "couldntReadHooks": "Die Hooks, die auf Genehmigung warten, ließen sich nicht lesen.",
         "couldntReadWontRun": "ließ sich nicht lesen und wird nicht laufen:",
+        "deletesFile": "Löscht die Datei",
         "done": "Fertig",
         "doneEditing": "Bearbeiten beenden",
         "eachGoesAheadOn": "Jede geht an ihrem eigenen Datum los, oder nach einem kurzen Countdown, wenn sie keines hat.",
         "edit": "{item} bearbeiten",
-        "editPost": "Den Beitrag bearbeiten",
+        "editPost": "Beitrag bearbeiten",
         "failed": "Fehlgeschlagen",
         "file": "Datei",
         "fileDeletedAgentWould": "Die Datei ist gelöscht. Ihr Agent müsste sie erneut vorschlagen.",
@@ -48,31 +51,30 @@
         "keptOff": "bleibt aus",
         "letThemRun": "Laufen lassen",
         "needsReview": "Braucht Ihre Durchsicht",
+        "nothingUndone": "Nichts wird zurückgenommen",
         "nothingWaitingPostsAgent": "Nichts wartet. Beiträge, die Ihr Agent veröffentlichen will, alles andere, was er nicht ungefragt tun soll, und Automationen, die erst fragen sollen, landen alle hier zur Genehmigung.",
         "open": "Öffnen",
         "postStaysUpOn": "Der Beitrag bleibt auf {rejecting} stehen: nur dieser Eintrag darüber wird gelöscht.",
         "proposed": "vorgeschlagen {createdAt}",
         "putBackInReview": "{item} zurück in die Durchsicht legen",
-        "putBackInReview2": "Zurück in die Durchsicht legen",
         "readingApprovalsQueue": "Die Genehmigungs-Warteschlange wird gelesen…",
         "reject": "{item} ablehnen",
         "reject2": "Ablehnen",
         "reject3": "Das ablehnen?",
-        "rejectDeletes": "Ablehnen: löscht es",
         "remove": "Entfernen",
         "removeList": "{item} aus der Liste entfernen",
-        "removeListWhatDone": "Aus dieser Liste entfernen: was getan wurde, bleibt getan",
         "removeRecord": "Diesen Eintrag entfernen?",
         "retry": "Wiederholen",
         "scheduled": "Geplant",
         "startNow": "Jetzt starten",
         "stop": "Stoppen",
         "stopPutBackIn": "{item} stoppen und zurück in die Durchsicht legen",
-        "whatDoneStaysDone": "Was getan wurde, bleibt getan: nur dieser Eintrag darüber wird gelöscht."
+        "whatDoneStaysDone": "Was getan wurde, bleibt getan: nur dieser Eintrag darüber wird gelöscht.",
+        "wontGoAhead": "Geht nicht los"
     },
     "extension": {
         "approvals": "Genehmigungen",
-        "waitingOn": "{count} warten auf Sie"
+        "waitingOn": "{count} warten"
     },
     "hookSetBody": {
         "filesPinned": "Die Genehmigung gilt auch für diese Dateien, Byte für Byte:",
@@ -87,8 +89,9 @@
         "postTitle": "Beitragstitel"
     },
     "scheduleControl": {
+        "clickToSchedule": "Klicken zum Planen",
         "goAheadAt": "{label} losschicken am",
-        "goesAheadSoonExecutor": "Geht los, sobald der Executor es aufgreift, klicken für ein Datum",
+        "goesAtOnce": "Geht sofort los",
         "noDate": "Kein Datum"
     }
 }

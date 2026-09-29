@@ -20,7 +20,8 @@ const mayAnswer = computed(() => {
     const me = presentedEmail.value?.toLowerCase();
     return me === undefined || props.subject.approvers.some((approver) => approver.toLowerCase() === me);
 });
-const onlyThem = computed(() => t(`needs.release.onlyThem`, { approvers: props.subject.approvers.join(`, `) }));
+// The names are on the line above, so the hover only says why the buttons are off.
+const onlyThem = computed(() => t(`needs.release.approversOnly`));
 const { busy, notice, run } = useAsyncAction();
 const release = async (): Promise<void> => {
     await run(async () => {

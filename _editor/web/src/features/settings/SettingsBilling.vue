@@ -515,7 +515,11 @@ const HOSTED_SETUP = { name: `setup`, query: { machine: `hosted` } } as const;
                             text
                             :disabled="rung.standing >= rung.held"
                             :loading="slotsWorking"
-                            v-tooltip.top="rung.standing < rung.held ? undefined : t(`settings.settingsBilling.removeHostedSandboxFirst`)"
+                            v-tooltip.top="
+                                rung.standing < rung.held
+                                    ? undefined
+                                    : { title: t(`settings.settingsBilling.slotsInUse`), note: t(`settings.settingsBilling.removeSandboxFirst`) }
+                            "
                             @click="changeSlots(rung.id, rung.held - 1)"
                         />
                     </div>

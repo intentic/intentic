@@ -1,5 +1,6 @@
 import { sandboxRef } from "@intentic/extension-api";
 import type { RepoTarget } from "@intentic/api-contract";
+import type { TooltipValue } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { useVocabulary } from "../../../../core-views/vocabulary";
@@ -85,16 +86,17 @@ export function useSaveActions() {
         scannable.value.filter((repo) => syncable(repo) && (ahead(repo) > 0 || behind(repo) > 0 || unpublished(repo))),
     );
     const backupCommits = computed(() => backupRepos.value.reduce((total, repo) => total + ahead(repo), 0));
-    /** What the backup press is for, said in the tooltip that stands in for the label an icon hasn't got. */
-    const backupLine = computed<string | undefined>(() => {
+    /** What the backup press is for, on the hover that stands in for the label an icon hasn't got: how much is waiting. */
+    const backupTip = computed<TooltipValue>(() => {
         if (pushFlow.running.value) {
             return t(`workspace.savePanel.backingUp`);
         }
-        return backupRepos.value.length === 0
-            ? undefined
-            : backupCommits.value === 0
-              ? t(`workspace.savePanel.notBackedUpYet`)
-              : t(`workspace.savePanel.versionsNotBackedUp`, { count: backupCommits.value }, backupCommits.value);
+        if (backupRepos.value.length === 0) {
+            return undefined;
+        }
+        return backupCommits.value === 0
+            ? { title: words.value.push, note: t(`workspace.savePanel.notBackedUpYet`) }
+            : { title: words.value.push, rows: [{ label: t(`workspace.savePanel.notBackedUp`), value: backupCommits.value }] };
     });
     // Through askSync, like every other door to a push: a second one would leave a hook's refusal unasked.
     const doBackUp = (): void =>
@@ -114,7 +116,7 @@ export function useSaveActions() {
         discardAsk,
         runDiscard,
         backupRepos,
-        backupLine,
+        backupTip,
         backingUp: pushFlow.running,
         doBackUp,
     };

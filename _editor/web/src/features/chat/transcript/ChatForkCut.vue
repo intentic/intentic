@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ContextMenu, useDevice } from "@intentic/ui";
+import { ContextMenu, type TooltipValue, useDevice } from "@intentic/ui";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, ref } from "vue";
 import { useQueryClient } from "@tanstack/vue-query";
@@ -215,10 +215,14 @@ const items = computed<MenuItem[]>(() => {
     return rows;
 });
 
-const tip = computed(() =>
+// The forks already taken from here as a figure on the card; the menu the press opens names them.
+const tip = computed((): TooltipValue =>
     forks.value.length === 0
-        ? `Fork the conversation here`
-        : `${forks.value.length} fork${forks.value.length === 1 ? `` : `s`} from here, click to open`,
+        ? t(`chat.chatForkCut.forkHere`)
+        : { title: t(`chat.chatForkCut.forkHere`), rows: [{ label: t(`chat.chatForkCut.forks`), value: forks.value.length }] },
+);
+const label = computed(() =>
+    forks.value.length === 0 ? t(`chat.chatForkCut.forkHere`) : t(`chat.chatForkCut.forkHereCount`, { count: forks.value.length }),
 );
 
 const open = (event: Event): void => {
@@ -239,7 +243,7 @@ const open = (event: Event): void => {
                 forks.length > 0 ? `` : mobile ? `opacity-40` : `opacity-0 focus-visible:opacity-100 group-hover/turn:opacity-100`,
             ]"
             v-tooltip.left="tip"
-            :aria-label="tip"
+            :aria-label="label"
             @click.stop="open"
         >
             <Icon :name="rewinding ? `spinner` : `fork`" :spin="rewinding" class="text-2xs" />

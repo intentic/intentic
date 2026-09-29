@@ -4,13 +4,14 @@
         "public": "Publiczne"
     },
     "portRow": {
-        "boundToLoopbackAlias": "Przypięte do aliasu loopback, do którego proxy podglądu nie dosięgnie.",
+        "address": "Adres",
         "forwarded": "przekierowany",
+        "loopbackAlias": "Alias loopback",
         "notForwardable": "nie da się przekierować",
-        "openInNewTab": "Otwórz w nowej karcie",
         "openPortPreviewIn": "Otwórz podgląd portu {port} w nowej karcie",
-        "openTerminalRunningIn": "Otwórz {session}: terminal, w którym to działa",
+        "openTerminal": "Otwórz terminal",
         "preview": "Podgląd",
+        "proxyCantReach": "Proxy tam nie sięga",
         "stop": "Zatrzymaj"
     },
     "portsView": {
@@ -28,7 +29,6 @@
         "notServed": "Niepodawane: {blocked}",
         "nothingPublished": "Nic nie jest opublikowane.",
         "openInNewTab": "Otwórz {path} w nowej karcie",
-        "openInNewTab2": "Otwórz w nowej karcie",
         "public2": "{servedCount} publicznych",
         "published": "Opublikowane",
         "readingPublishedFiles": "Odczytywanie Twoich opublikowanych plików…",
@@ -39,7 +39,6 @@
     "sharePreview": {
         "anyoneLinkOpen": "Każdy, kto ma ten link, może to otworzyć",
         "copyLink": "Kopiuj link",
-        "openInNewTab": "Otwórz w nowej karcie",
         "openPreviewInNew": "Otwórz podgląd w nowej karcie",
         "shareLivePreview": "Udostępnij ten podgląd na żywo"
     },
@@ -47,16 +46,19 @@
         "chatsYouvePublished": "Czaty, które opublikowałeś",
         "copyLink": "Kopiuj link",
         "eachReadOnlyPage": "Każdy z nich to strona tylko do odczytu, którą otworzy każdy, kto ma link: bez logowania. Pokazuje rozmowę taką, jaka była w chwili udostępnienia, więc wszystko powiedziane później zostaje prywatne, dopóki nie naciśniesz",
+        "linkStaysSame": "Ten sam link",
         "messagesOnly": "tylko wiadomości",
         "openInNewTab": "Otwórz {title} w nowej karcie",
-        "openInNewTab2": "Otwórz w nowej karcie",
         "public": "{count} publicznych",
-        "publishEverythingSaidSince": "Opublikuj wszystko, co powiedziano od czasu udostępnienia",
+        "publishLatest": "Opublikuj nowe",
         "sandboxNoPublicAddress": "Ten sandbox nie ma publicznego adresu, więc do tej strony nie da się dotrzeć.",
         "sharedConversations": "Udostępnione rozmowy",
         "stopSharing": "Przestań udostępniać",
         "summary": "udostępniono {when} · {count} wiadomość · {detail} | udostępniono {when} · {count} wiadomości · {detail} | udostępniono {when} · {count} wiadomości · {detail}",
         "update": "Zaktualizuj",
         "withAgentWork": "z pracą agenta"
+    },
+    "common": {
+        "newTab": "Nowa karta"
     }
 }

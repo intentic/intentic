@@ -1,5 +1,6 @@
 import { MEMORY_FILE } from "@intentic/constants";
 import { PUBLIC_DIR, REFERENCE_DIR } from "@intentic/workspace-ignore/constants";
+import type { Tip } from "@intentic/ui";
 import type { Vocabulary } from "../../../core-views/vocabulary";
 import { t } from "@intentic/ui/i18n";
 
@@ -12,7 +13,7 @@ export interface SpecialChip {
     readonly label: string;
     // "warning" is for a role that can surprise; what lands in that folder leaves the sandbox.
     readonly tone: "subtle" | "warning";
-    readonly tooltip: string;
+    readonly tooltip: Tip;
 }
 
 // Root-relative paths, forward-slashed, as the tree rows carry them.
@@ -23,17 +24,25 @@ const RULES: readonly { readonly matches: (path: string) => boolean; readonly ch
         chip: (words) => ({
             label: words.referenceChip,
             tone: `subtle`,
-            tooltip: t(`workspace.specialPaths.materialToConsultNever`),
+            tooltip: { title: t(`workspace.specialPaths.referenceOnly`), note: t(`workspace.specialPaths.noSearchSetupSync`) },
         }),
     },
     {
         matches: (path) => path === PUBLIC_DIR,
-        chip: (words) => ({ label: words.publicChip, tone: `warning`, tooltip: words.publicTooltip }),
+        chip: (words) => ({
+            label: words.publicChip,
+            tone: `warning`,
+            tooltip: { title: words.publicTooltip, tone: `warn`, note: t(`workspace.specialPaths.noSignIn`) },
+        }),
     },
     {
         // At any depth: a folder's own memory file is read by a conversation that starts in it, on top of the root's.
         matches: (path) => path.split(`/`).at(-1) === MEMORY_FILE,
-        chip: (words) => ({ label: words.memoryChip, tone: `subtle`, tooltip: words.memoryTooltip }),
+        chip: (words) => ({
+            label: words.memoryChip,
+            tone: `subtle`,
+            tooltip: { title: t(`workspace.specialPaths.standingInstructions`), note: words.memoryTooltip },
+        }),
     },
 ];
 

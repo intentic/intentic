@@ -52,7 +52,7 @@ const said = computed(() => slots[`default`] !== undefined);
                     :class="mark.failed ? `border-danger/40 text-danger` : opened === mark.key && `ui-chip-on`"
                     :aria-expanded="opened === mark.key"
                     :aria-label="mark.label"
-                    v-tooltip.left="mark.label"
+                    v-tooltip.left="mark.tip ?? mark.label"
                     @click="toggle(mark.key)"
                 >
                     <!-- Spins only while live: material still filling up is the one thing here worth animating. -->

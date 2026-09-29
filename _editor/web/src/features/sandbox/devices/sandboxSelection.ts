@@ -1,4 +1,4 @@
-import type { DeviceSandboxGroup } from "@intentic/ui";
+import type { DeviceSandboxGroup, Tip } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 import { computed, type ComputedRef, ref, type Ref } from "vue";
 import { type BatchAction, batchable, batchActions, type MachineRow } from "./deviceRows";
@@ -20,7 +20,7 @@ export interface SandboxSelection {
     readonly allPicked: ComputedRef<boolean>;
     readonly actions: ComputedRef<readonly BatchAction[]>;
     /** Why a row's box is dead, read from the rule rather than discovered by clicking it; undefined when it isn't. */
-    readonly unpickable: (group: DeviceSandboxGroup) => string | undefined;
+    readonly unpickable: (group: DeviceSandboxGroup) => Tip | undefined;
     readonly pick: (group: DeviceSandboxGroup, on: boolean) => void;
     readonly pickAll: (on: boolean) => void;
     readonly run: (action: BatchAction) => void;
@@ -37,11 +37,13 @@ export function useSandboxSelection(machine: () => MachineRow, ownSlug: () => st
     // Filtered through what is pickable NOW, so a tick on a row that has since left names nothing.
     const chosen = computed(() => pickable.value.filter((group) => picked.value.has(group.sandboxId)));
 
-    const unpickable = (group: DeviceSandboxGroup): string | undefined => {
+    const unpickable = (group: DeviceSandboxGroup): Tip | undefined => {
         if (pickableIds.value.has(group.sandboxId)) {
             return undefined;
         }
-        return ops.selfGroup(group) ? t(`sandbox.devicePage.cantPickSelf`) : t(`sandbox.devicePage.nothingToPick`);
+        return ops.selfGroup(group)
+            ? { title: t(`sandbox.devicePage.cantBatch`), note: t(`sandbox.devicePage.useItsMenu`) }
+            : { title: t(`sandbox.devicePage.nothingHere`), note: t(`sandbox.devicePage.noContainerOrFolder`) };
     };
 
     const pick = (group: DeviceSandboxGroup, on: boolean): void => {

@@ -1,7 +1,22 @@
 <script setup lang="ts">
 import type { GitChange, GitDiffSide, LandedMessage, LandedMessageDraft, RepoChanges, RepoTarget } from "@intentic/api-contract";
 import { isScratch } from "@intentic/sandbox-contract";
-import { Button, ChangeStatusMark, clipboardOf, ContextMenu, growTextarea, ui, Modal, timeAgo, useDevice, type IconName, vAction } from "@intentic/ui";
+import {
+    Button,
+    ChangeStatusMark,
+    clipboardOf,
+    ContextMenu,
+    growTextarea,
+    ui,
+    Modal,
+    timeAgo,
+    useDevice,
+    type IconName,
+    type Tip,
+    type TipRow,
+    type TooltipValue,
+    vAction,
+} from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { useWorkspaceTabs } from "../tabs/useWorkspaceTabs";
 import { plural } from "@intentic/base/format";
@@ -51,6 +66,7 @@ import type { MenuItem } from "primevue/menuitem";
 import { changeRowMenuItems } from "./changeRowMenu";
 import { useHome } from "../home/useHome";
 import { useNotifications } from "../../../shell/notifications/notifications";
+import { formatChord, isApplePlatform } from "../../../shell/commands/keybindings";
 
 // VSCode's SCM pattern over the real repos: uncommitted work grouped by repo, then by git's staged/unstaged
 // sides (a path can be on both with different content). Staging IS the selection — no checkboxes; git already
@@ -532,6 +548,40 @@ const commitLabel = computed(() =>
             : `Commit everything from ${filterLabel.value ?? `this filter`}`,
 );
 
+// The commit button's hover: what the press will record, and the chord that presses it from the box. Nothing while it
+// runs, since the readout beside it already names the repos being committed.
+const COMMIT_KEYS = formatChord(`Mod+Enter`, isApplePlatform());
+const conflictedCount = computed(() => scannable.value.reduce((total, repo) => total + repo.conflicted.length, 0));
+const commitTip = computed((): Tip | undefined => {
+    const keys = mobile.value ? undefined : COMMIT_KEYS;
+    if (commitRunning.value) {
+        return undefined;
+    }
+    if (blockedByConflicts.value) {
+        return {
+            title: t(`workspace.reviewPanel.conflicts`),
+            tone: `danger`,
+            rows: [{ label: t(`shared.files`), value: conflictedCount.value }],
+            note: t(`workspace.reviewPanel.stageToResolve`),
+        };
+    }
+    if (commitAll.value) {
+        return { title: t(`workspace.reviewPanel.stageAllFirst`), keys, rows: [{ label: t(`shared.changes`), value: changes.count.value }] };
+    }
+    if (commitFiles.value > 0) {
+        return {
+            title: t(`workspace.reviewPanel.filteredCommit`),
+            keys,
+            rows: [
+                { label: t(`workspace.reviewPanel.from`), value: filterLabel.value ?? `` },
+                { label: t(`shared.files`), value: commitCountable.value ? commitFiles.value : `` },
+            ],
+            note: t(`workspace.reviewPanel.nothingElseGoesIn`),
+        };
+    }
+    return { title: t(`workspace.reviewPanel.commit`), keys, note: stagedRepos.value.length > 1 ? t(`workspace.reviewPanel.onePerRepo`) : undefined };
+});
+
 // Sessions this commit would record, and which are still running — scoped exactly like the button. A
 // warning, not a gate: staging part of an unfinished agent's work is ordinary, and `reset --soft` undoes it.
 const commitOrigins = computed(() =>
@@ -632,7 +682,7 @@ const changesOn = (repo: RepoChanges, side: GitDiffSide): readonly GitChange[] =
 // What the inward/outward index move is called, per side: a conflict says "resolve", not "stage" — `git add`
 // on an unmerged path settles a merge, it doesn't put a change in the index.
 const INDEX_VERB: Record<GitDiffSide, { readonly one: string; readonly all: string; readonly icon: "plus" | "minus" | "check" }> = {
-    conflicted: { one: `Mark resolved`, all: `Mark all resolved`, icon: `check` },
+    conflicted: { one: `Mark resolved`, all: `Resolve all`, icon: `check` },
     unstaged: { one: `Stage`, all: `Stage all`, icon: `plus` },
     staged: { one: `Unstage`, all: `Unstage all`, icon: `minus` },
 };
@@ -648,6 +698,17 @@ const sideVerbHint = (repo: RepoChanges, side: GitDiffSide): string => {
         ? `${INDEX_VERB[side].all}, every file ${whose}`
         : `${INDEX_VERB[side].all}, ${plural(changesOn(repo, side).length, `file`)} ${whose}`;
 };
+// The same verb on hover: the bare verb unfiltered, or a card naming whose files it moves and how many.
+const sideVerbTip = (repo: RepoChanges, side: GitDiffSide): TooltipValue =>
+    filterLabel.value === undefined
+        ? INDEX_VERB[side].all
+        : {
+              title: INDEX_VERB[side].all,
+              rows: [
+                  { label: t(`workspace.reviewPanel.from`), value: filterLabel.value },
+                  { label: t(`shared.files`), value: truncatedOn(repo, side) > 0 ? `` : changesOn(repo, side).length },
+              ],
+          };
 
 // Row action: moves the acting rows across the index, in the direction their side implies.
 const stageRow = (row: Row): Promise<void> => changes.stageGroups(byRepo(actingRows(row, true)), movesIntoIndex(row.side));
@@ -819,7 +880,7 @@ const syncVerb = computed<"push" | "pull" | "sync" | "publish" | undefined>(() =
     return `push`;
 });
 // Icons match the row pills (↑ push, ↓ pull), so the bar and the rows read as one language.
-// The button's hint (`syncHint`) adds what the label can't: which repos, and the replay caveat when pulling.
+// The button's hover (`syncTip`) adds what the label can't: which repos, and the replay caveat when pulling.
 const SYNC_VERB = computed<
     Record<
         "push" | "pull" | "sync" | "publish",
@@ -851,7 +912,8 @@ const stageLine = computed<string | undefined>(() => {
     return sent === undefined ? undefined : `Pushed ${sent.what}`;
 });
 
-// The one fact the line has no room for: what is going out. Undefined once nothing is in flight.
+// The one fact the line has no room for: what is going out, spelled out on a phone, which has no hover. Undefined once
+// nothing is in flight.
 const stageHint = computed<string | undefined>(() =>
     pushFlow.running.value ? `Sending ${pushFlow.pending.value?.what ?? `your commits`} to the remote` : undefined,
 );
@@ -862,12 +924,23 @@ const heldLine = computed<string | undefined>(() => {
     return held === undefined ? undefined : `${held.question.title} · ${timeAgo(held.at, { now: now.value })}`;
 });
 
+// The same fact as a card, where there is a pointer to raise it.
+const stageTip = computed((): Tip | undefined =>
+    pushFlow.running.value
+        ? { title: t(`ui.status.sending`), rows: [{ label: t(`workspace.reviewPanel.toRemote`), value: pushFlow.pending.value?.what ?? `` }] }
+        : undefined,
+);
+
 // What the press shows, and what the button beside it does instead.
-const heldHint = computed<string | undefined>(() => {
+const heldTip = computed((): Tip | undefined => {
     const held = pushFlow.held.value;
     return held === undefined
         ? undefined
-        : `Show what happened: ${held.question.command ?? held.question.title}. ${syncMeta.value?.label ?? `Push`} tries it again, hook and all`;
+        : {
+              title: t(`workspace.reviewPanel.whatHappened`),
+              rows: [{ label: t(`workspace.reviewPanel.command`), value: held.question.command ?? `` }],
+              note: t(`workspace.reviewPanel.retriesWithHooks`, { verb: syncMeta.value?.label ?? words.value.push }),
+          };
 });
 
 // The offer and the run are one control in three states, not stacked rows — the control that was clicked is the
@@ -883,17 +956,39 @@ const showCounts = computed(() => outgoing.value === `offer` || (outgoing.value 
 const syncSeverity = computed<"secondary" | undefined>(() => (changes.count.value > 0 ? `secondary` : undefined));
 // Names which repos, since the summary beside the button only counts. The replay caveat rides here too
 // — the one thing about this verb a user can be surprised by, now that the per-row pull pill is gone.
-const syncHint = computed(() => {
-    const named = `${syncMeta.value?.label ?? `Sync`} ${syncRepos.value.map((repo) => repo.repo).join(`, `)}`;
-    return behindTotal.value > 0 ? `${named}. Unpushed commits are replayed onto upstream, never merged; a conflict changes nothing` : named;
+const syncTip = computed((): Tip => ({
+    title: syncMeta.value?.label ?? words.value.sync,
+    rows: [
+        {
+            label: t(`workspace.reviewPanel.repoLabel`, {}, syncRepos.value.length),
+            value: syncRepos.value.map((repo) => repo.repo).join(`, `),
+        },
+    ],
+    note: behindTotal.value > 0 ? t(`workspace.reviewPanel.rebasesNeverMerges`) : undefined,
+}));
+// Where a pill's commits sit: the one repo by name, or how many.
+const whereRow = (counted: readonly { readonly repo: string }[]): TipRow => ({
+    label: t(`workspace.reviewPanel.repoLabel`, {}, counted.length),
+    value: counted.length === 1 ? counted[0]!.repo : counted.length,
 });
-// What each pill counts, in words; the glyph and number alone don't say which way or where.
-const countWhere = (counted: readonly { readonly repo: string }[]): string =>
-    counted.length === 1 ? ` in ${counted[0]!.repo}` : counted.length > 1 ? ` across ${plural(counted.length, `repo`)}` : ``;
-const aheadHint = computed(() => `${plural(aheadTotal.value, `commit`)} not pushed yet${countWhere(syncRepos.value.filter((repo) => ahead(repo) > 0))}`);
-const behindHint = computed(() => `${plural(behindTotal.value, `commit`)} to pull${countWhere(syncRepos.value.filter((repo) => behind(repo) > 0))}`);
+// What each pill counts; the glyph and number alone don't say which way or where.
+const aheadTip = computed((): Tip => ({
+    title: t(`workspace.reviewPanel.notPushed`),
+    rows: [{ label: t(`workspace.reviewPanel.commitsLabel`), value: aheadTotal.value }, whereRow(syncRepos.value.filter((repo) => ahead(repo) > 0))],
+}));
+const behindTip = computed((): Tip => ({
+    title: t(`workspace.reviewPanel.toPull`),
+    rows: [
+        { label: t(`workspace.reviewPanel.commitsLabel`), value: behindTotal.value },
+        whereRow(syncRepos.value.filter((repo) => behind(repo) > 0)),
+    ],
+}));
 // Every repo with a remote — the honest scope for a verb whose whole job is proving a stale zero wrong.
 const fetchable = computed(() => scannable.value.filter((repo) => syncable(repo)).map((repo) => repo.repo));
+const fetchTip = computed((): Tip => ({
+    title: t(`workspace.reviewPanel.fetch`),
+    rows: [{ label: t(`workspace.reviewPanel.repoLabel`, {}, fetchable.value.length), value: fetchable.value.length }],
+}));
 
 // Deliberately no rules of its own: the view header above already draws the one line this column gets. Blocks
 // are told apart by their own padding; a control with its own edge (the field, the button) carries what a rule would
@@ -982,7 +1077,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
             ></textarea>
             <!-- Draft reports remain visible while a message is writing or failing. -->
             <div v-if="filterDraftRows.length > 0" class="flex flex-col gap-px rounded-md bg-overlay/60 px-1.5 py-1">
-                <div v-for="row in filterDraftRows" :key="row.key" class="flex min-w-0 items-center gap-1.5 leading-snug" v-tooltip.right="row.title">
+                <div v-for="row in filterDraftRows" :key="row.key" class="flex min-w-0 items-center gap-1.5 leading-snug" v-tooltip.right="row.tip">
                     <!-- Every glyph is one em square, so the column self-aligns with no width set on it. -->
                     <Icon
                         :name="STEP_MARKS[row.status].icon"
@@ -1044,17 +1139,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                     class="ui-button-thumb shrink-0 whitespace-nowrap"
                     :disabled="!commitReady"
                     @click="doCommit"
-                    v-tooltip.right="
-                        commitRunning
-                            ? t(`workspace.reviewPanel.recordingNow`, { repos: committingNow.join(`, `) })
-                            : blockedByConflicts
-                              ? t(`workspace.reviewPanel.pathUnmergedStageEach`)
-                              : commitAll
-                                ? t(`workspace.reviewPanel.stagesEveryChangeCommits`)
-                                : commitFiles > 0
-                                  ? t(`workspace.reviewPanel.stagesFilesFrom`, { count: commitFiles, filter: filterLabel }, commitFiles)
-                                  : t(`workspace.reviewPanel.oneCommitPerRepo`)
-                    "
+                    v-tooltip.right="commitTip"
                 >
                     <Icon :name="commitRunning ? `spinner` : `check`" :spin="commitRunning" />{{
                         commitRunning ? t(`workspace.reviewPanel.committing`) : commitLabel
@@ -1129,7 +1214,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
             v-if="outgoing !== undefined"
             class="flex shrink-0 items-center"
             :class="outgoing === `held` ? `gap-3 px-3 py-3` : `gap-1.5 px-2 py-1.5`"
-            v-tooltip.right="outgoing === `flow` && !mobile ? stageHint : undefined"
+            v-tooltip.right="outgoing === `flow` && !mobile ? stageTip : undefined"
         >
             <template v-if="outgoing === `flow`">
                 <Icon
@@ -1161,7 +1246,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                     type="button"
                     :class="ui.textAction(`m-0 min-w-0 flex-1 gap-2.5 rounded-md p-1 hover:bg-overlay`)"
                     :aria-label="heldLine"
-                    v-tooltip.right="heldHint"
+                    v-tooltip.right="heldTip"
                     @click="pushFlow.reopen"
                 >
                     <span class="flex size-7 shrink-0 items-center justify-center rounded-md bg-warning/10 text-warning" aria-hidden="true">
@@ -1186,7 +1271,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                     <!-- The hint hangs off the pills it explains, not the row, which stretches to the button's edge. -->
                     <span
                         v-if="behindTotal > 0"
-                        v-tooltip.bottom="behindHint"
+                        v-tooltip.bottom="behindTip"
                         class="ui-status-pill inline-flex shrink-0 items-center gap-0.5 bg-overlay text-2xs font-medium tabular-nums text-content"
                     >
                         <Icon name="arrow-down-left" class="text-2xs text-link" aria-hidden="true" />
@@ -1194,7 +1279,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                     </span>
                     <span
                         v-if="aheadTotal > 0"
-                        v-tooltip.bottom="aheadHint"
+                        v-tooltip.bottom="aheadTip"
                         class="ui-status-pill inline-flex shrink-0 items-center gap-0.5 bg-overlay text-2xs font-medium tabular-nums text-content"
                     >
                         <Icon name="arrow-up-right" class="text-2xs text-link" aria-hidden="true" />
@@ -1213,7 +1298,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                     :class="[ICON_BUTTON, 'max-md:h-8 max-md:w-8']"
                     :disabled="changes.actionBusy.value"
                     @click="changes.fetchRepos(fetchable)"
-                    v-tooltip.top="t(`workspace.reviewPanel.fetchRefreshWhatEvery`)"
+                    v-tooltip.top="fetchTip"
                     :aria-label="t(`workspace.reviewPanel.fetchEveryRepo`)"
                 >
                     <Icon name="sync" class="text-2xs" />
@@ -1225,7 +1310,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                     :severity="syncSeverity"
                     class="shrink-0 whitespace-nowrap"
                     :disabled="changes.actionBusy.value"
-                    v-tooltip.bottom="syncHint"
+                    v-tooltip.bottom="syncTip"
                     @click="doSync"
                 >
                     <Icon :name="syncMeta.icon" />{{ syncMeta.label }}
@@ -1288,7 +1373,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                 class="ui-chip shrink-0 gap-1 transition-opacity"
                 :class="originFilter !== undefined && originFilter !== YOURS ? 'opacity-40' : ''"
                 @click="toggleOrigin(YOURS)"
-                v-tooltip.right="t(`workspace.reviewPanel.ownEditsTerminalMain`)"
+                v-tooltip.right="{ title: t(`workspace.savePanel.ownEdits`), note: t(`workspace.reviewPanel.alsoTerminalChats`) }"
             >
                 {{ t(`workspace.reviewPanel.you`) }} <span class="opacity-70">{{ legend.yours }}</span>
                 <Icon v-if="originFilter === YOURS" name="times" class="shrink-0 text-[0.6rem] opacity-70" />
@@ -1377,7 +1462,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                         :class="[ICON_BUTTON, 'text-muted max-md:h-8 max-md:w-8']"
                         :disabled="changes.actionBusy.value"
                         v-action="() => stageSide(group, soleSide(group)!.side)"
-                        v-tooltip.right="sideVerbHint(group, soleSide(group)!.side)"
+                        v-tooltip.right="sideVerbTip(group, soleSide(group)!.side)"
                         :aria-label="t(`workspace.reviewPanel.in2`, { side: sideVerbHint(group, soleSide(group)!.side), repo: group.repo })"
                     >
                         <Icon :name="INDEX_VERB[soleSide(group)!.side].icon" class="text-2xs" />
@@ -1387,7 +1472,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                         :class="[ICON_BUTTON, ROW_ACTION, 'max-md:h-8 max-md:w-8']"
                         :disabled="changes.actionBusy.value"
                         @click="askDiscardRepo(group)"
-                        v-tooltip.top="t(`workspace.reviewPanel.discardAllChangesIn`)"
+                        v-tooltip.top="t(`workspace.reviewPanel.discardAll`)"
                         :aria-label="t(`workspace.reviewPanel.discardAllChangesIn`)"
                     >
                         <Icon name="trash" class="text-2xs" />
@@ -1427,7 +1512,10 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                         class="shrink-0"
                         :disabled="changes.actionBusy.value"
                         @click="changes.abortOperation(group.repo)"
-                        v-tooltip.top="t(`workspace.reviewPanel.restorePointSavedFirst`)"
+                        v-tooltip.top="{
+                            title: t(`workspace.reviewPanel.abortOperation`, { operation: group.operation }),
+                            note: t(`workspace.reviewPanel.restorePointFirst`),
+                        }"
                     >
                         {{ t(`workspace.reviewPanel.abort`) }}
                     </Button>
@@ -1470,7 +1558,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                                 :class="[ICON_BUTTON, 'max-md:h-8 max-md:w-8']"
                                 :disabled="changes.actionBusy.value"
                                 v-action="() => stageSide(group, section.side)"
-                                v-tooltip.right="sideVerbHint(group, section.side)"
+                                v-tooltip.right="sideVerbTip(group, section.side)"
                                 :aria-label="t(`workspace.reviewPanel.in2`, { side: sideVerbHint(group, section.side), repo: group.repo })"
                             >
                                 <Icon :name="INDEX_VERB[section.side].icon" class="text-2xs" />

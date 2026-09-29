@@ -274,12 +274,11 @@ onMounted(progress.recover);
                 <h2 class="text-base font-semibold text-content">{{ t(`views.infraDeclare.whatWant`) }}</h2>
                 <InfoHint :label="t(`views.infraDeclare.whatWant`)">
                     <span class="block text-sm font-medium text-content">{{ t(`views.infraDeclare.whatWant`) }}</span>
-                    <span class="mt-1 block text-xs text-muted">
-                        {{ t(`views.infraDeclare.whatRunsOnServer`) }} <b>{{ t(`views.infraDeclare.apps`) }}</b>
-                        {{ t(`views.infraDeclare.monorepos`) }} <b>{{ t(`views.infraDeclare.selfHostedServices`) }}</b>
-                        {{ t(`views.infraDeclare.likeOutlineSignozPick`) }} <b>{{ t(`ui.action.add`) }}</b
-                        >{{ t(`views.infraDeclare.anythingNeedsServerCloudflare`) }}
+                    <span class="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-xs">
+                        <span class="text-muted">{{ t(`views.infraDeclare.apps2`) }}</span><span class="text-content">{{ t(`views.infraDeclare.fromMonorepos`) }}</span>
+                        <span class="text-muted">{{ t(`views.infraDeclare.services`) }}</span><span class="text-content">{{ t(`views.infraDeclare.servicesLike`) }}</span>
                     </span>
+                    <span class="mt-2 block text-xs text-muted">{{ t(`views.infraDeclare.askedWhenNeeded`) }}</span>
                 </InfoHint>
                 <StatusBadge v-if="convergence" :variant="convergence.variant" :label="convergence.label" size="xs" dot />
                 <RouterLink v-if="liveStatusRoute" :to="liveStatusRoute" class="text-2xs text-link hover:underline">{{

@@ -1,5 +1,7 @@
 import { sandboxRef } from "@intentic/extension-api";
 import type { Persona } from "@intentic/sandbox-contract";
+import type { Tip } from "@intentic/ui";
+import { t } from "@intentic/ui/i18n";
 
 // "Viewing as" lens: shows what a persona's folder fence actually resolves to, not just the raw text on its card.
 // A lens, not a permission — it dims, never blocks, the real user. Doesn't model the sandbox write-only rule
@@ -47,14 +49,18 @@ export const lensRefuses = (personas: readonly Persona[], path: string): boolean
     return persona !== undefined && reachOf(persona).refuses(path);
 };
 
-// One sentence rather than a field dump; opens with "Viewing as <name>", the fact a reader forgetting why the
-// tree looks odd needs first.
-export const reachSentence = (name: string, reach: PersonaReach): string => {
+// The lens as a card: "Viewing as" first, the fact a reader forgetting why the tree looks odd needs, then who and where.
+export const reachTip = (name: string, reach: PersonaReach): Tip => {
+    const persona = { label: t(`workspace.words.persona`), value: name };
     if (reach.readsNothing) {
-        return `Viewing as ${name}: it has no file access at all, so every path here is refused to its file tools.`;
+        return { title: t(`workspace.workspaceDesktop.viewing`), tone: `warn`, rows: [persona], note: t(`workspace.personaReach.noFileAccess`) };
     }
     if (reach.folders.length === 0) {
-        return `Viewing as ${name}: it works anywhere in the workspace, so nothing here is fenced off.`;
+        return { title: t(`workspace.workspaceDesktop.viewing`), rows: [persona, { label: t(`shared.folders`), value: t(`workspace.personaReach.everywhere`) }] };
     }
-    return `Viewing as ${name}: it works in ${reach.folders.join(`, `)}. Dimmed folders are refused to its file tools; you can still open them.`;
+    return {
+        title: t(`workspace.workspaceDesktop.viewing`),
+        rows: [persona, { label: t(`shared.folders`), value: reach.folders.join(`, `) }],
+        note: t(`workspace.personaReach.dimmedRefused`),
+    };
 };

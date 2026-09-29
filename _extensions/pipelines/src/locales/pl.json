@@ -1,12 +1,15 @@
 {
     "extension": {
-        "pipelines": "Pipeline'y"
+        "branchesFailing": "Gałęzie z błędem: {count}",
+        "pipelines": "Pipeline'y",
+        "streakOnCommit": "{repo} {branch} · {runs} nieudane · {sha}",
+        "streakOverCommits": "{repo} {branch} · {commits} commity · {runs} nieudane"
     },
     "mainFailure": {
         "continueFix": "Kontynuuj naprawę",
+        "continueGivesTurns": "Kontynuuj oddaje tury",
         "failingJobs": "Padające zadania",
         "fixAgent": "Agent naprawczy działa",
-        "fixAgentHint": "Każda porażka na {branch} trafia do tego jednego agenta, dopóki przebieg nie przejdzie.",
         "fixWithAgent": "Napraw agentem",
         "handBackGone": "Agenta nie ma",
         "handBackInterrupted": "Tura przerwana",
@@ -16,44 +19,56 @@
         "handBackTurnFailed": "Tura nieudana",
         "handBackTurns": "Brak tur",
         "handedBack": "Oddane",
-        "handedBackHint": "Agent naprawczy oddał to Tobie. Kontynuuj, żeby oddać mu tury, albo otwórz go, żeby zobaczyć, co próbował.",
         "moreJobs": "+{count} więcej",
         "needsYou": "Czeka na Ciebie",
+        "noAgentSent": "Nie wysłano agenta",
         "openFixer": "Otwórz agenta",
         "repairsOff": "Auto-naprawa wyłączona",
-        "repairsOffHint": "Naprawy są wyłączone, więc nie wysłano żadnego agenta.",
         "since": "od {when}",
+        "takesEveryFailure": "Dostaje każdy błąd",
         "title": "{branch} nie przechodzi",
-        "unassigned": "Jeszcze bez agenta naprawczego"
+        "unassigned": "Jeszcze bez agenta naprawczego",
+        "untilARunPasses": "Aż przebieg przejdzie"
     },
     "pipelineDagGraph": {
         "expand": "Rozwiń",
-        "failingRunsInRow": "Pada na {name} kilka przebiegów z rzędu",
         "fit": "Dopasuj",
-        "openJobGraphFull": "Otwórz graf zadań na pełnym ekranie",
-        "openJobLog": "Otwórz {name} w serwisie",
-        "zoomOutUntilWhole": "Oddalaj, aż cały przebieg zmieści się w kadrze"
-    },
-    "pipelineGraph": {
-        "failingRunsInRow": "Pada na {name} kilka przebiegów z rzędu",
-        "openJobLog": "Otwórz {name} w serwisie"
+        "fitAll": "Dopasuj całość",
+        "fullScreen": "Pełny ekran"
     },
     "pipelineRunRow": {
         "agentAlreadyWorkingOn": "Agent już pracuje na {branch}, uruchomiony z przebiegu #{runId} — otwórz go",
         "agentOnBranch": "Agent na gałęzi",
         "cancel": "Anuluj",
+        "checkJobRan": "Sprawdź, czy zadanie ruszyło",
         "continue": "Kontynuuj",
         "failedJobs": "Nieudane zadania",
+        "failureIsHistory": "Błąd to przeszłość",
         "fixAgent": "Napraw agentem",
-        "fixInWorkspaceRun": "Poprawka jest w Twojej przestrzeni roboczej: uruchom pipeline jeszcze raz, żeby to udowodnić",
+        "fixInWorkspace": "Poprawka jest w workspace",
+        "fixThatRun": "Napraw raczej tamten",
+        "fixUnderway": "Poprawka w toku",
+        "freshAttempt": "Nowa próba",
         "jobGraph": "{headline}: graf zadań",
         "loadingJobs": "Wczytywanie zadań",
+        "newerFailure": "Nowszy błąd",
         "noJobDetailsAvailable": "Brak szczegółów zadań dla tego przebiegu.",
-        "passedAgainIn": "{branch} znowu przeszła w tym przebiegu: otwórz go, żeby sprawdzić, czy zadanie, które tu padło, w ogóle się wykonało",
+        "opensPickerFirst": "Najpierw otwiera wybór",
+        "openThatOneFirst": "Najpierw otwórz tamten",
+        "passedAgain": "Znów przeszło",
+        "passedSince": "Od tego czasu OK",
+        "proveTheFix": "Sprawdź poprawkę",
         "reRun": "Uruchom ponownie",
-        "setAttemptAsideStart": "Odłóż tę próbę i zacznij nową — najpierw otwiera wybór",
         "startOver": "Zacznij od nowa",
-        "supersededBy": "zastąpiony przez"
+        "supersededBy": "zastąpiony przez",
+        "stanceNote": {
+            "ended": "Kontynuuj lub zacznij od nowa",
+            "landed": "Uruchom ponownie, by sprawdzić",
+            "needs-you": "Otwórz, by odpowiedzieć",
+            "ready": "Przejrzyj i wdróż",
+            "waiting": "Limit wyczerpany",
+            "working": "Otwórz, by śledzić"
+        }
     },
     "pipelinesSkeleton": {
         "loadingPipelines": "Wczytywanie pipeline'ów"
@@ -64,17 +79,35 @@
     "pipelinesView": {
         "allRepositories": "Wszystkie repozytoria",
         "connectedRepos": "dowolnego z {count} podłączonych repozytoriów",
-        "failedLastRunsOn": "{job} padło w ostatnich {runs} przebiegach na {repo} {branch}",
         "failingRepeatedly": "Pada wielokrotnie",
+        "keepsFailing": "Ciągle pada",
         "noRunsYet": "Na {where} nie uruchomiono jeszcze żadnego pipeline'u. Przebiegi wylądują tutaj, gdy tylko jakiś ruszy.",
         "noRunsYet2": "Jeszcze brak przebiegów",
         "noRunsYetRepo": "Jeszcze brak przebiegów dla tego repozytorium.",
         "noWorkspaceRepoMaps": "Żadne repozytorium przestrzeni roboczej nie odpowiada podłączonemu kontu GitHub/GitLab: sklonuj repozytorium ze swojego podłączonego hosta albo podłącz odpowiednią możliwość na stronie +.",
         "openPipelines": "Otwórz pipeline'y: {project}",
-        "openProjectOn": "Otwórz {project} na {host}",
+        "openRepo": "Otwórz repo",
         "pipelines": "Pipeline'y",
         "repository": "Repozytorium",
         "runs": "{runs} przebiegów",
         "thisRepo": "to repozytorium"
+    },
+    "tip": {
+        "attempt": "Próba",
+        "branch": "Gałąź",
+        "cost": "Koszt",
+        "error": "Błąd",
+        "failedRuns": "Nieudane",
+        "failingStreak": "Seria błędów",
+        "files": "Pliki",
+        "fromRun": "Z przebiegu",
+        "job": "Zadanie",
+        "model": "Model",
+        "openLog": "Otwórz log",
+        "repo": "Repo",
+        "run": "Przebieg",
+        "runs": "Przebiegi",
+        "started": "Start",
+        "updated": "Zmiana"
     }
 }

@@ -64,7 +64,7 @@ const size = (bytes: number): string => {
             <!-- Shown even with nothing published: makes the empty state actionable and gives something to copy. -->
             <div v-if="url" class="mb-3 flex items-center gap-2 rounded-lg border border-line bg-card px-4 py-2">
                 <Icon name="globe" class="shrink-0 text-subtle" />
-                <span class="min-w-0 flex-1 truncate font-mono text-xs text-muted" :title="url">{{ url }}</span>
+                <span class="min-w-0 flex-1 truncate font-mono text-xs text-muted" v-tooltip.bottom.overflow="url">{{ url }}</span>
                 <CopyButton :text="url" :label="t(`publicView.copyAddress`)" />
             </div>
             <div v-else class="mb-3 rounded-lg border border-line bg-card px-4 py-3 text-xs text-muted">
@@ -103,7 +103,7 @@ const size = (bytes: number): string => {
                     <div v-for="file in files" :key="file.path" class="flex items-center gap-3 px-4 py-2">
                         <Icon :name="file.blocked ? `times` : `file`" :class="file.blocked ? `shrink-0 text-danger` : `shrink-0 text-subtle`" />
                         <div class="min-w-0 flex-1">
-                            <p class="truncate font-mono text-xs text-content" :title="file.path">{{ file.path }}</p>
+                            <p class="truncate font-mono text-xs text-content" v-tooltip.top.overflow="file.path">{{ file.path }}</p>
                             <!-- A blocked file sits in the folder looking published; this line is the only thing that says otherwise. -->
                             <p v-if="file.blocked" class="truncate text-2xs text-danger">
                                 {{ t(`publicView.notServed`, { blocked: file.blocked }) }}
@@ -118,7 +118,7 @@ const size = (bytes: number): string => {
                             rel="noopener"
                             class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted hover:bg-overlay hover:text-content"
                             :aria-label="t(`publicView.openInNewTab`, { path: file.path })"
-                            v-tooltip.bottom="t(`publicView.openInNewTab2`)"
+                            v-tooltip.bottom="t(`common.newTab`)"
                         >
                             <Icon name="external-link" />
                         </a>

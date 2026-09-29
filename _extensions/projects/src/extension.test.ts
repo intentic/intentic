@@ -49,6 +49,6 @@ describe(`the projects extension`, () => {
         const view = views.find((candidate) => candidate.id === `projects`);
         expect(view?.detect([], [])[0]).toMatchObject({ title: `Projects · shop`, monogram: `sh` });
         // A tooltip only: the monogram already says a scope is on, so the corner carries no second mark.
-        expect(view?.badge?.({ key: `projects`, title: `Projects` })).toEqual({ tooltip: `looking at shop only` });
+        expect(view?.badge?.({ key: `projects`, title: `Projects` })).toEqual({ tooltip: `shop only` });
     });
 });

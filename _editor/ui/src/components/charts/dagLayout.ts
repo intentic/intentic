@@ -1,4 +1,5 @@
 import { graphlib, layout } from "@dagrejs/dagre";
+import type { TooltipValue } from "../../lib/tooltip.js";
 
 // DagGraph's data model and dagre layout step. Nodes carry an opaque `data` payload for the #node slot; edges reference
 // node ids. Layout uses dagre's layered algorithm (LR by default), which also breaks cycles.
@@ -8,7 +9,7 @@ export interface DagNode<T = unknown> {
     // Opaque payload handed to the #node slot.
     readonly data: T;
     // Tooltip content for the node's card; DagGraph owns the card wrapper, so callers can't attach a directive.
-    readonly tooltip?: string;
+    readonly tooltip?: TooltipValue;
     // Closure highlighting: fade this node without removing it from the layout.
     readonly dimmed?: boolean;
     // Per-node size override for dagre, not the default nodeWidth/nodeHeight; e.g. a card sized by its rows.

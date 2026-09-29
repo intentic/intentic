@@ -57,7 +57,7 @@ const ROW_CLASS = `grid grid-cols-[1.25rem_minmax(0,1fr)_8rem_3.5rem_4rem] items
             <button
                 type="button"
                 class="flex shrink-0 items-center rounded-md px-1 py-0.5 text-muted transition-colors hover:text-content"
-                v-tooltip.bottom="t(`workspace.codebaseHealth.recomputeCurrentIndex`)"
+                v-tooltip.bottom="t(`workspace.codebaseHealth.recompute`)"
                 :aria-label="t(`workspace.codebaseHealth.refreshCodebaseHealth`)"
                 @click="refresh()"
             >

@@ -31,7 +31,7 @@ export const agentsBadge = computed<ViewBadge | undefined>(() => {
     }
     const elsewhere = readingAcross.value ? acrossAttention.value : 0;
     const owed = `${total} need${total === 1 ? `s` : ``} you`;
-    return { count: total, tooltip: elsewhere > 0 ? `${owed}, ${elsewhere} in other sandboxes` : owed };
+    return { count: total, tooltip: elsewhere > 0 ? `${owed}, ${elsewhere} elsewhere` : owed };
 });
 
 // Keeps other sandboxes live in fleetAcross while the scope is wide, releasing the moment it narrows or the caller

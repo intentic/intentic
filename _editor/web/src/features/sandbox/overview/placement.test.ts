@@ -40,6 +40,17 @@ describe(`sandboxPlacement`, () => {
     it(`labels a named device with its own name rather than a category`, () => {
         expect(sandboxPlacement({ hosted: null, owner: true, device: `radarsu-rog` }).label).toBe(`radarsu-rog`);
     });
+
+    // The hover card's one figure is the name that refines the place; a place with nothing to add carries none.
+    it(`puts the region, device or host on its hover card, and nothing where there is none`, () => {
+        const figures = (evidence: Parameters<typeof sandboxPlacement>[0]) => sandboxPlacement(evidence).tip.rows?.map((row) => row.value);
+        expect(figures({ hosted: { region: `fra` }, owner: true })).toEqual([`fra`]);
+        expect(figures({ hosted: { region: `` }, owner: true })).toBeUndefined();
+        expect(figures({ hosted: null, owner: true, device: `omen` })).toEqual([`omen`]);
+        expect(figures({ hosted: null, owner: true, daemonUrl: `https://sunny-otter.intentic.dev` })).toEqual([`sunny-otter.intentic.dev`]);
+        expect(figures({ hosted: null, owner: true })).toBeUndefined();
+        expect(figures({ hosted: null, owner: false })).toBeUndefined();
+    });
 });
 
 describe(`slugFromDaemonUrl`, () => {

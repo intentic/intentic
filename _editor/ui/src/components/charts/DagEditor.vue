@@ -216,8 +216,8 @@ const fit = (): void => void flow.value?.fitView(FIT);
             <!-- `rounded-sm`, not `rounded-md`: this theme sets --radius-sm to 0.375rem and --radius-md to 0.5rem. -->
             <button
                 type="button"
-                v-tooltip.top="t(`ui.dagEditor.fitWholeGraph`)"
-                :aria-label="t(`ui.dagEditor.fitWholeGraph`)"
+                v-tooltip.top="t(`ui.dagEditor.fitGraph`)"
+                :aria-label="t(`ui.dagEditor.fitGraph`)"
                 class="flex h-6 w-6 cursor-pointer items-center justify-center rounded-sm border border-line bg-canvas text-[0.625rem] text-subtle hover:border-line-strong hover:text-content"
                 @click="fit()"
             >

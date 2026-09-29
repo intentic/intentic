@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ui } from "@intentic/ui";
+import { type Tip, type TipRow, ui } from "@intentic/ui";
 import { computed, onMounted, ref } from "vue";
 import { type CapacityBlocked, type CapacityLane, type CapacityProvider, type CapacityRow, type CapacityUnread, chatCapacity, heldReadings } from "./chatCapacity";
 import { accountsLoaded } from "../accounts/providerAccounts";
@@ -116,6 +116,35 @@ const staleNote = computed((): { readonly count: number; readonly detail: string
 
 const plural = (count: number): string => `${count} ${count === 1 ? `account` : `accounts`}`;
 
+// Who a row of the hover card means: the names while there are few enough to read, else how many.
+const whoOf = (labels: readonly string[], count: number): string | number => (labels.length === count && count <= 2 ? labels.join(`, `) : count);
+
+// The hover's card: how many readings are stuck and why, and how old they are; the sentence stays the screen reader's.
+const staleTip = computed((): Tip | undefined => {
+    if (staleNote.value === undefined) {
+        return undefined;
+    }
+    const held = heldReadings(heldAccounts.value);
+    const unread = capacity.value.unread;
+    const refused = unread.reduce((sum, entry) => sum + entry.count, 0);
+    const lastReads = unread.flatMap((entry) => (entry.lastReadAt === undefined ? [] : [entry.lastReadAt]));
+    const rows: TipRow[] = [
+        ...(held === undefined
+            ? []
+            : [
+                  { label: t(`chat.chatCapacityRail.rateLimited`), value: whoOf(held.labels, held.count) },
+                  { label: t(`chat.chatCapacityRail.retry`), value: formatReset(held.resumesAt) },
+              ]),
+        ...(refused === 0
+            ? []
+            : [
+                  { label: t(`chat.chatCapacityRail.refused`), value: whoOf(unread.flatMap((entry) => entry.labels), refused) },
+                  { label: t(`chat.chatCapacityRail.lastRead`), value: lastReads.length === 0 ? `` : formatAge(Math.min(...lastReads)) },
+              ]),
+    ];
+    return { title: t(`chat.chatCapacityRail.notReRead`), tone: `warn`, rows };
+});
+
 // Everything the one-line blocked row leaves out: which accounts, what each provider said, and who can fix it.
 const blockedDetail = (entry: CapacityBlocked): string =>
     [
@@ -130,6 +159,21 @@ const blockedDetail = (entry: CapacityBlocked): string =>
     ]
         .filter((part) => part !== undefined)
         .join(` · `);
+
+// The same as a hover card: the fix as its headline, where it is made, and which accounts.
+const blockedTip = (entry: CapacityBlocked): Tip => {
+    const note = entry.fix === `reconnect` || entry.fix === `verify` ? t(`chat.chatCapacityRail.onAgentTab`) : undefined;
+    const title =
+        entry.fix === `reconnect`
+            ? t(`ui.action.reconnect`)
+            : entry.fix === `verify`
+              ? t(`chat.chatCapacityRail.fixVerify`)
+              : entry.fix === `admin`
+                ? t(`chat.chatCapacityRail.fixAdmin`)
+                : t(`chat.chatCapacityRail.fixWait`);
+    const names = entry.names.length <= 3 ? entry.names.join(`, `) : entry.count;
+    return { title, tone: `warn`, rows: [{ label: t(`chat.chatCapacityRail.accounts`), value: names }], note };
+};
 </script>
 
 <template>
@@ -144,7 +188,7 @@ const blockedDetail = (entry: CapacityBlocked): string =>
                 t(`chat.chatCapacityRail.allowanceLeft`)
             }}</span>
             <!-- Readings the age leaves out: a quiet mark by the number it qualifies, the reasons on hover. -->
-            <span v-if="staleNote !== undefined" v-tooltip.left="staleNote.detail" class="flex shrink-0 items-center gap-0.5 text-2xs text-warning">
+            <span v-if="staleNote !== undefined" v-tooltip.left="staleTip" class="flex shrink-0 items-center gap-0.5 text-2xs text-warning">
                 <Icon name="exclamation-circle" class="text-[0.6rem]" />
                 <span class="tabular-nums" aria-hidden="true">{{ staleNote.count }}</span>
                 <span class="sr-only">{{ staleNote.detail }}</span>
@@ -275,7 +319,7 @@ const blockedDetail = (entry: CapacityBlocked): string =>
                     </div>
                     <!-- Counted, not listed, one line per condition, shaped like the rows above it. Which accounts, the provider's
                          own words and the fix ride the hover: this rail says what can't run, the Agent tab is where it's fixed. -->
-                    <div v-for="entry in capacity.blocked" :key="entry.fix" v-tooltip.left="blockedDetail(entry)">
+                    <div v-for="entry in capacity.blocked" :key="entry.fix" v-tooltip.left="blockedTip(entry)">
                         <div class="flex items-baseline gap-2" aria-hidden="true">
                             <span class="min-w-0 flex-1 truncate text-2xs text-muted">{{ t(`chat.chatCapacityRail.cantServe`, { count: entry.count }) }}</span>
                             <span class="shrink-0 text-2xs text-warning">{{ entry.reason }}</span>

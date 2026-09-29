@@ -28,7 +28,8 @@ const skewOf = (agent: DeviceStatus[`sync`][`agent`]): { running: string | undef
 const settled = (): AgentNote => ({
     text: t(`desktop.deviceAgent.servingInstalledBuild`),
     icon: `check-circle`,
-    hint: t(`desktop.deviceAgent.whetherNewerAgentPublished`),
+    // Whether something newer is out is the workspace's to say: it reaches the release registry, this window doesn't.
+    hint: { title: t(`desktop.deviceAgent.latestUnknown`), note: t(`desktop.deviceAgent.workspaceChecksUpdates`) },
 });
 
 /** Undefined when this device has no agent — an ordinary state here, not a failure. */

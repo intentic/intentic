@@ -62,6 +62,18 @@ const held = (overrides: Partial<QueuedMessage> = {}): QueuedMessage => ({
     ...overrides,
 });
 
+// The reason's hover for MEMORY_TEXT: the sandbox's figures, as a card, not its sentence.
+const READING_TIP = {
+    title: `Memory low`,
+    tone: `warn`,
+    rows: [
+        { label: `In RAM`, value: `12.4 GiB` },
+        { label: `Swapped`, value: `3.6 GiB` },
+        { label: `Limit`, value: `18.0 GiB` },
+        { label: `Reserved`, value: `1.0 GiB` },
+    ],
+};
+
 // Every hover label a mount asks for, by the element it hangs on: what a reader gets without pressing anything.
 const tips = new WeakMap<Element, unknown>();
 const tooltip: Directive = {
@@ -137,15 +149,13 @@ describe(`a message the sandbox held for low memory`, () => {
     });
 
     // The numbers and the stakes are still there, a hover away, on the words each belongs to.
-    it(`keeps the sandbox's reading on the reason and the stakes on the press`, async () => {
+    it(`keeps the sandbox's figures on the reason and the stakes on the press`, async () => {
         const element = mount(chatHolding({ items: [held()], paused: `refused` }));
         await nextTick();
 
         const reason = [...element.querySelectorAll(`[role="status"] span`)].find((span) => span.textContent?.trim() === `Sandbox memory is low`)!;
-        expect(tips.get(reason)).toBe(`Sandbox memory is low: 12.4 GiB resident + 3.6 GiB swapped, against 18.0 GiB, and 1.0 GiB held for work that just started.`);
-        expect(tips.get(pressNamed(element, `Send anyway`)[0]!)).toBe(
-            `Starts it now: the agents already running may slow down, and if memory runs out, the system kills processes to free it`,
-        );
+        expect(tips.get(reason)).toEqual(READING_TIP);
+        expect(tips.get(pressNamed(element, `Send anyway`)[0]!)).toEqual({ title: `Starts now`, tone: `warn`, note: `Risk: slowdown, killed processes` });
     });
 
     it(`offers the raise beside the send only on a hold that named its ceiling`, async () => {
@@ -195,7 +205,7 @@ describe(`a message the sandbox held for low memory`, () => {
 
         expect(statusLine(element)).toBe(`Not sent · Sandbox memory is low`);
         const reason = [...element.querySelectorAll(`[role="status"] span`)].find((span) => span.textContent?.trim() === `Sandbox memory is low`)!;
-        expect(tips.get(reason)).toBe(`Sandbox memory is low: 12.4 GiB resident + 3.6 GiB swapped, against 18.0 GiB, and 1.0 GiB held for work that just started.`);
+        expect(tips.get(reason)).toEqual(READING_TIP);
         expect(buttons(element).some((button) => button.textContent?.includes(`Raise memory`) === true)).toBe(false);
         pressNamed(element, `Send anyway`)[0]!.click();
         expect(resume).toHaveBeenCalledTimes(1);

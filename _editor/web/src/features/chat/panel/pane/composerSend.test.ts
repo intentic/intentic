@@ -226,7 +226,7 @@ describe(`what intercepts a press`, () => {
 
         expect(say).not.toHaveBeenCalled();
         expect(chat.draft.value).toBe(`hello`);
-        expect(send.sendHint.value).toBe(t(`chat.chatPane.sandboxBusyKeepTyping`));
+        expect(send.sendHint.value).toEqual({ title: t(`chat.chatPane.sandboxBusy`), tone: `warn`, note: t(`chat.chatPane.keepTyping`) });
     });
 
     it(`continues a stopped turn when nothing is typed, recalling only what it sent`, async () => {
@@ -250,13 +250,13 @@ describe(`what the composer says`, () => {
         const { chat, host, send } = composerOf();
         runningTurn(chat.turn);
         expect(send.stopLabel.value).toBe(`Stop generating`);
-        expect(send.stopHint.value).toBe(`Stop generating (Esc)`);
+        expect(send.stopHint.value).toEqual({ title: `Stop`, keys: `Esc` });
         host.mobile.value = true;
-        expect(send.stopHint.value).toBe(`Stop generating`);
+        expect(send.stopHint.value).toBe(`Stop`);
 
         chat.transcript.adopt([{ id: 1, role: `assistant`, text: ``, permission: { requestId: `p1`, toolName: `Bash`, status: `pending` } }]);
         expect(send.stopLabel.value).toBe(`Stop the turn`);
-        expect(send.stopHint.value).toBe(`Stop the turn, discards the request above`);
+        expect(send.stopHint.value).toEqual({ title: `Stop turn`, note: `Discards request above` });
     });
 
     it(`keeps Send in the slot mid-turn only while the box holds something`, () => {

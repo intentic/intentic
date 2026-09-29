@@ -217,7 +217,7 @@ const add = async (): Promise<void> => {
                     }}</span>
                     <span v-if="lastHere(runner.id)" class="truncate text-2xs text-subtle">{{ lastHere(runner.id) }}</span>
                     <!-- Detail rides the tooltip so the row stays one glance. -->
-                    <span v-if="driftSummary(runner)" class="truncate text-2xs text-warning" :title="driftDetail(runner)">
+                    <span v-if="driftSummary(runner)" class="truncate text-2xs text-warning" v-tooltip.top.lines="driftDetail(runner)">
                         {{ driftSummary(runner) }}
                     </span>
                 </span>

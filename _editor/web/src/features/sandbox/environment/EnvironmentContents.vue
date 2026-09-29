@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { EnvironmentItem } from "@intentic/api-contract";
-import { BrandMark, Code, DisclosureRow, Notice, RowGroup, RowNote, SkeletonRows, ui } from "@intentic/ui";
+import { BrandMark, Code, DisclosureRow, Notice, RowGroup, RowNote, SkeletonRows, type Tip, ui } from "@intentic/ui";
 import { computed, ref } from "vue";
 import type { ContentsGroup } from "./useEnvironmentContents";
 import { useSandboxOutline } from "../overview/useSandboxOutline";
@@ -58,7 +58,10 @@ const toolLabel = (item: EnvironmentItem, tool: EnvironmentItem[`tools`][number]
     item.tools.length === 1 && tool.name.toLowerCase() === item.name.toLowerCase() ? `` : tool.name;
 
 // Where a version number came from, attached to the number itself rather than a preamble.
-const provenance = (tool: EnvironmentItem[`tools`][number]): string => `Read by running ${tool.name} in this sandbox, just now`;
+const provenance = (tool: EnvironmentItem[`tools`][number]): Tip => ({
+    title: t(`sandbox.environmentContents.liveVersion`),
+    rows: [{ label: t(`sandbox.environmentContents.readFrom`), value: tool.name }],
+});
 
 // No badge for `active`: it's the normal case, and marking it would drown the two states that matter.
 const STATES = computed(

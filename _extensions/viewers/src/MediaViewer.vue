@@ -272,21 +272,37 @@ interface Transport {
     readonly icon: IconName;
     /** Screen-reader name; the tooltip carries the keyboard shortcut instead. */
     readonly label: string;
-    readonly hint: string;
+    /** A word or two, and the shortcut as a key cap (v-tooltip's `Tip`) when there is one. */
+    readonly hint: string | { readonly title: string; readonly keys: string };
     readonly active?: boolean;
     readonly press: () => unknown;
 }
+
+// The shortcuts the key handler below answers, as the key caps the tooltips draw.
+const KEYS = { play: `K`, back: `J`, forward: `L`, mute: `M`, pip: `P`, fullscreen: `F`, speed: `, .` } as const;
 
 const leadControls = computed((): readonly Transport[] => [
     {
         key: `play`,
         icon: playing.value ? `pause` : `play`,
         label: playing.value ? t(`mediaViewer.pause`) : t(`mediaViewer.play`),
-        hint: playing.value ? t(`mediaViewer.pauseK`) : t(`mediaViewer.playK`),
+        hint: { title: playing.value ? t(`mediaViewer.pause`) : t(`mediaViewer.play`), keys: KEYS.play },
         press: togglePlay,
     },
-    { key: `back`, icon: `backward`, label: t(`mediaViewer.back10Seconds`), hint: t(`mediaViewer.back10sJ`), press: () => skip(-10) },
-    { key: `forward`, icon: `forward`, label: t(`mediaViewer.forward10Seconds`), hint: t(`mediaViewer.forward10sL`), press: () => skip(10) },
+    {
+        key: `back`,
+        icon: `backward`,
+        label: t(`mediaViewer.back10Seconds`),
+        hint: { title: t(`mediaViewer.back10s`), keys: KEYS.back },
+        press: () => skip(-10),
+    },
+    {
+        key: `forward`,
+        icon: `forward`,
+        label: t(`mediaViewer.forward10Seconds`),
+        hint: { title: t(`mediaViewer.forward10s`), keys: KEYS.forward },
+        press: () => skip(10),
+    },
 ]);
 
 // Picture-in-picture and full screen are video-only; loop and download apply to both.
@@ -298,7 +314,7 @@ const endControls = computed((): readonly Transport[] => [
                   key: `pip`,
                   icon: `picture-in-picture` as IconName,
                   label: t(`mediaViewer.pictureInPicture`),
-                  hint: t(`mediaViewer.pictureInPictureP`),
+                  hint: { title: t(`mediaViewer.pictureInPicture`), keys: KEYS.pip },
                   active: pictureInPicture.value,
                   press: togglePictureInPicture,
               },
@@ -311,7 +327,7 @@ const endControls = computed((): readonly Transport[] => [
                   key: `fullscreen`,
                   icon: (fullscreen.value ? `compress` : `expand`) as IconName,
                   label: fullscreen.value ? t(`mediaViewer.exitFullScreen`) : t(`mediaViewer.fullScreen`),
-                  hint: t(`mediaViewer.fullScreenF`),
+                  hint: { title: fullscreen.value ? t(`mediaViewer.exitFullScreen`) : t(`mediaViewer.fullScreen`), keys: KEYS.fullscreen },
                   press: toggleFullscreen,
               },
           ]
@@ -510,7 +526,7 @@ watch(
                         type="button"
                         class="media-btn"
                         :aria-label="muted ? t(`mediaViewer.unmute`) : t(`mediaViewer.mute`)"
-                        v-tooltip.top="t(`mediaViewer.muteM`)"
+                        v-tooltip.top="{ title: muted ? t(`mediaViewer.unmute`) : t(`mediaViewer.mute`), keys: KEYS.mute }"
                         @click="toggleMute"
                     >
                         <Icon :name="muted || volume === 0 ? `volume-off` : `volume-up`" />
@@ -539,7 +555,7 @@ watch(
                         type="button"
                         class="media-btn w-auto px-1.5 text-2xs tabular-nums"
                         :aria-label="t(`mediaViewer.playbackSpeed`)"
-                        v-tooltip.top="t(`mediaViewer.playbackSpeed2`)"
+                        v-tooltip.top="{ title: t(`mediaViewer.playbackSpeed`), keys: KEYS.speed }"
                         @click="speedOpen = !speedOpen"
                     >
                         {{ rate }}×

@@ -4,13 +4,14 @@
         "public": "Public"
     },
     "portRow": {
-        "boundToLoopbackAlias": "Bound to a loopback alias the preview proxy cannot reach.",
+        "address": "Address",
         "forwarded": "forwarded",
+        "loopbackAlias": "Loopback alias",
         "notForwardable": "not forwardable",
-        "openInNewTab": "Open in new tab",
         "openPortPreviewIn": "Open the port {port} preview in a new tab",
-        "openTerminalRunningIn": "Open {session}: the terminal this is running in",
+        "openTerminal": "Open terminal",
         "preview": "Preview",
+        "proxyCantReach": "Proxy can't reach it",
         "stop": "Stop"
     },
     "portsView": {
@@ -28,7 +29,6 @@
         "notServed": "Not served: {blocked}",
         "nothingPublished": "Nothing is published.",
         "openInNewTab": "Open {path} in a new tab",
-        "openInNewTab2": "Open in new tab",
         "public2": "{servedCount} public",
         "published": "Published",
         "readingPublishedFiles": "Reading your published files…",
@@ -39,7 +39,6 @@
     "sharePreview": {
         "anyoneLinkOpen": "Anyone with this link can open it",
         "copyLink": "Copy link",
-        "openInNewTab": "Open in new tab",
         "openPreviewInNew": "Open the preview in a new tab",
         "shareLivePreview": "Share this live preview"
     },
@@ -47,16 +46,19 @@
         "chatsYouvePublished": "Chats you've published",
         "copyLink": "Copy link",
         "eachReadOnlyPage": "Each of these is a read-only page anyone with the link can open: no sign-in. It shows the conversation as it was when you shared it, so anything said since stays private until you press",
+        "linkStaysSame": "Same link",
         "messagesOnly": "messages only",
         "openInNewTab": "Open {title} in a new tab",
-        "openInNewTab2": "Open in new tab",
         "public": "{count} public",
-        "publishEverythingSaidSince": "Publish everything said since you shared it",
+        "publishLatest": "Publish latest",
         "sandboxNoPublicAddress": "This sandbox has no public address, so this page can't be reached.",
         "sharedConversations": "Shared conversations",
         "stopSharing": "Stop sharing",
         "summary": "shared {when} · {count} message · {detail} | shared {when} · {count} messages · {detail}",
         "update": "Update",
         "withAgentWork": "with the agent's work"
+    },
+    "common": {
+        "newTab": "New tab"
     }
 }

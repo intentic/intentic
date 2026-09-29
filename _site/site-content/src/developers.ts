@@ -121,12 +121,12 @@ export function developersHref(id: string): string {
 }
 
 // Six steps in order, each named for the page it links to (Publish, not "List"; Maintain, not "Update"). Discover and
-// Install point out of this book into /docs; the cycle repeats from Maintain.
+// Install point out of this book into /docs; the cycle repeats from Maintain. `what` is a chip's hover: a few words.
 export const extensionLifecycle: readonly { step: string; href: string; what: string; audience: "author" | "user" }[] = [
-    { step: "Build", href: developersHref("build"), what: "A directory with a manifest, in your own repo.", audience: "author" },
-    { step: "Publish", href: developersHref("publish"), what: "One topic, and a pull request opens itself.", audience: "author" },
-    { step: "Verify", href: developersHref("verify"), what: "The pointer is checked; the code may be read.", audience: "author" },
-    { step: "Discover", href: "/extensions/", what: "The gallery, and browse from inside the app.", audience: "user" },
-    { step: "Install", href: "/docs/extensions/", what: "One commit, approved by its owner.", audience: "user" },
-    { step: "Maintain", href: developersHref("maintain"), what: "A new sha, and the cycle runs again.", audience: "author" },
+    { step: "Build", href: developersHref("build"), what: "Manifest in your repo", audience: "author" },
+    { step: "Publish", href: developersHref("publish"), what: "One topic, auto PR", audience: "author" },
+    { step: "Verify", href: developersHref("verify"), what: "Pointer checked", audience: "author" },
+    { step: "Discover", href: "/extensions/", what: "Gallery, in-app browse", audience: "user" },
+    { step: "Install", href: "/docs/extensions/", what: "One approved commit", audience: "user" },
+    { step: "Maintain", href: developersHref("maintain"), what: "New sha, new cycle", audience: "author" },
 ];

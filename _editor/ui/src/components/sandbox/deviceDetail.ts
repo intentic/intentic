@@ -1,6 +1,7 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { t } from "../../i18n/index.js";
 import { formatUntil } from "../../lib/timeWindow.js";
+import type { Tip, TooltipValue } from "../../lib/tooltip.js";
 
 // Derivations behind DeviceDetail.vue: what one device is doing for a sandbox, arranged the way it's read.
 // The report arrives as two flat lists tagged by sandbox id; folded here into one block per sandbox so
@@ -459,13 +460,27 @@ export interface GroupChip {
     readonly icon: `ports` | `eye-slash` | `folder` | `pause` | `exclamation-triangle`;
     /** What sits beside the glyph: a count, or a word as short as "off". Empty draws the glyph alone. */
     readonly text: string;
-    /** The whole sentence, for assistive tech, and for the hover unless `hint` says more. */
+    /** The whole sentence, for assistive tech, and for the hover unless `hint` says it shorter. */
     readonly label: string;
-    // What only the hover says: a synced folder's path. Kept out of `label`, which is the accessible name and so part
-    // of the closed line's text — and a path on a folded line is exactly what folding is for hiding.
-    readonly hint?: string;
+    // The hover, as a tip card: the port numbers, a synced folder's path. Kept out of `label`, which is the accessible
+    // name and so part of the closed line's text — and a path on a folded line is exactly what folding is for hiding.
+    readonly hint?: TooltipValue;
     readonly tone: `quiet` | `warning`;
 }
+
+// One port outcome on hover: what it is, and the numbers it holds.
+const portsTip = (group: DeviceSandboxGroup, state: DevicePortRow[`state`], title: string): Tip => ({
+    title,
+    rows: [
+        {
+            label: t(`ui.deviceDetail.ports`),
+            value: group.ports
+                .filter((port) => port.state === state)
+                .map((port) => port.port)
+                .join(`, `),
+        },
+    ],
+});
 
 const portChips = (group: DeviceSandboxGroup): GroupChip[] => {
     if (mirroringOff(group.folder)) {
@@ -475,15 +490,36 @@ const portChips = (group: DeviceSandboxGroup): GroupChip[] => {
     const reached = countOf(group, `mirrored`);
     if (reached > 0) {
         const numbers = group.ports.filter((port) => port.state === `mirrored`).map((port) => port.port);
-        chips.push({ key: `ports`, icon: `ports`, text: String(reached), label: `${plural(reached, `port`, `ports`)} on localhost: ${numbers.join(`, `)}`, tone: `quiet` });
+        chips.push({
+            key: `ports`,
+            icon: `ports`,
+            text: String(reached),
+            label: `${plural(reached, `port`, `ports`)} on localhost: ${numbers.join(`, `)}`,
+            hint: portsTip(group, `mirrored`, t(`ui.deviceDetail.onLocalhost`)),
+            tone: `quiet`,
+        });
     }
     const busy = countOf(group, `busy`);
     if (busy > 0) {
-        chips.push({ key: `busy`, icon: `ports`, text: `${busy} busy`, label: `${plural(busy, `port`, `ports`)} busy here`, tone: `quiet` });
+        chips.push({
+            key: `busy`,
+            icon: `ports`,
+            text: `${busy} busy`,
+            label: `${plural(busy, `port`, `ports`)} busy here`,
+            hint: portsTip(group, `busy`, t(`ui.deviceDetail.busyHere`)),
+            tone: `quiet`,
+        });
     }
     const alone = countOf(group, `ignored`);
     if (alone > 0) {
-        chips.push({ key: `alone`, icon: `eye-slash`, text: String(alone), label: `${plural(alone, `port`, `ports`)} left alone`, tone: `quiet` });
+        chips.push({
+            key: `alone`,
+            icon: `eye-slash`,
+            text: String(alone),
+            label: `${plural(alone, `port`, `ports`)} left alone`,
+            hint: portsTip(group, `ignored`, t(`ui.deviceDetail.leftAlone`)),
+            tone: `quiet`,
+        });
     }
     return chips;
 };
@@ -496,7 +532,7 @@ const folderChips = (group: DeviceSandboxGroup): GroupChip[] => {
         return [];
     }
     if (folder.paused === true) {
-        return [{ key: `folder`, icon: `pause`, text: ``, label: `file syncing paused`, tone: `quiet` }];
+        return [{ key: `folder`, icon: `pause`, text: ``, label: `file syncing paused`, hint: t(`ui.deviceDetail.syncPaused`), tone: `quiet` }];
     }
     return [
         {
@@ -504,7 +540,7 @@ const folderChips = (group: DeviceSandboxGroup): GroupChip[] => {
             icon: `folder`,
             text: ``,
             label: `files sync here`,
-            ...(folder.localDir === undefined ? {} : { hint: `files sync to ${folder.localDir}` }),
+            hint: { title: t(`ui.deviceDetail.filesSync`), rows: [{ label: t(`ui.deviceDetail.folder`), value: folder.localDir ?? `` }] },
             tone: `quiet`,
         },
     ];

@@ -194,6 +194,8 @@ const startAs = (entry: Entry): void => {
 };
 const newChatLabel = (entry: Entry): string =>
     entry.persona === undefined ? t(`chat.words.newAgent`) : t(`chat.chatPersonaRail.newChatAs`, { label: entry.label });
+// Its hover: the row or header beside it already names the persona, so two words say the rest.
+const newChatTip = (entry: Entry): string => (entry.persona === undefined ? t(`chat.words.newAgent`) : t(`chat.words.newChat`));
 
 // A persona's own menu: what can be done to all of its chats at once. Sweeps skip pinned chats (tabsOfPersona).
 const groupMenu = ref<{ show: (event: Event) => void } | undefined>();
@@ -327,7 +329,7 @@ const onTabKey = (event: KeyboardEvent): void => {
                     <span
                         v-if="entry.needsYou > 0"
                         aria-hidden="true"
-                        v-tooltip.top="t(`chat.chatPersonaRail.needsYou`, { count: entry.needsYou }, entry.needsYou)"
+                        v-tooltip.top="t(`agents.agentStatus.needsYou`)"
                         class="ui-status-pill flex shrink-0 items-center gap-1 bg-warning/15 text-2xs font-semibold text-warning"
                     >
                         <Icon name="exclamation-circle" class="text-2xs" />{{ entry.needsYou }}
@@ -353,7 +355,7 @@ const onTabKey = (event: KeyboardEvent): void => {
                     <span
                         role="button"
                         :aria-label="newChatLabel(entry)"
-                        v-tooltip.top="newChatLabel(entry)"
+                        v-tooltip.top="newChatTip(entry)"
                         class="-my-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted opacity-0 transition hover:bg-overlay hover:text-content focus-visible:opacity-100 group-hover:opacity-100"
                         @click.stop="startAs(entry)"
                     >
@@ -385,7 +387,7 @@ const onTabKey = (event: KeyboardEvent): void => {
                         type="button"
                         :class="ui.iconButton()"
                         :aria-label="newChatLabel(selected)"
-                        v-tooltip.bottom="newChatLabel(selected)"
+                        v-tooltip.bottom="newChatTip(selected)"
                         @click="startAs(selected)"
                     >
                         <Icon name="plus" class="text-2xs" />
@@ -394,7 +396,7 @@ const onTabKey = (event: KeyboardEvent): void => {
                         type="button"
                         :class="ui.iconButton()"
                         :aria-label="t(`chat.chatPersonaRail.more`, { label: selected.label })"
-                        v-tooltip.bottom="t(`chat.chatPersonaRail.more`, { label: selected.label })"
+                        v-tooltip.bottom="t(`chat.chatPersonaRail.moreShort`)"
                         @click="openGroupMenu(selected, $event)"
                     >
                         <Icon name="ellipsis" class="text-2xs" />

@@ -143,7 +143,7 @@ const filename = computed(() => path.slice(path.lastIndexOf(`/`) + 1));
             <!-- Provenance first: this is not the file, it is the text made from it, and what that text cannot carry. -->
             <div class="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b border-line px-3 py-1.5 text-2xs text-muted">
                 <Icon name="robot" class="shrink-0 text-[0.7rem]" />
-                <span class="shrink-0" v-tooltip.bottom="t(`workspace.derivedDiffView.notFileItselfBothVersions`)">
+                <span class="shrink-0" v-tooltip.bottom="{ title: t(`workspace.words.renderedText`), note: t(`workspace.words.whatAgentsRead`) }">
                     {{ t(`workspace.derivedDiffView.textOfBothVersions`) }}
                 </span>
                 <span v-if="deriver" class="shrink-0 text-subtle">{{ deriver }}</span>
@@ -156,7 +156,7 @@ const filename = computed(() => path.slice(path.lastIndexOf(`/`) + 1));
                     :text="true"
                     class="shrink-0"
                     @click="emit(`sides`)"
-                    v-tooltip.bottom="t(`workspace.diffToolbar.bothVersionsDrawnWhole`)"
+                    v-tooltip.bottom="t(`workspace.diffToolbar.wholeVersions`)"
                 >
                     <Icon name="split-columns" class="text-[0.7rem]" /> {{ t(`workspace.diffToolbar.beforeAfter`) }}
                 </Button>

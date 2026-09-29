@@ -1,6 +1,7 @@
 import "@intentic/testing/dom";
 import { setTerminalMeta, TERMINAL_COLORS } from "../terminalMeta";
 import type { TerminalTab } from "../useTerminal";
+import type { TooltipValue } from "@intentic/ui";
 import { clearedLabel, cycled, segmentColor, iconFor, labelFor, tooltipFor, stripIndex } from "./stripSegments";
 
 // Pins what a pill says: the reader's overrides over the tab's facts over the strip position, the kind's glyph by
@@ -36,16 +37,16 @@ describe(`a pill`, () => {
         expect([iconFor(`web-1`, tab({ kind: `agent` })), segmentColor(`web-1`)]).toEqual([`star`, TERMINAL_COLORS.cyan]);
     });
 
-    it.each<[string, TerminalTab | undefined, string | undefined]>([
+    it.each<[string, TerminalTab | undefined, TooltipValue]>([
         [`nothing for a pill with no tab`, undefined, undefined],
-        [`a read-only log view for a process`, tab({ kind: `process`, command: `tail -f` }), `Background process: read-only logs`],
-        [`the running command first`, tab({ kind: `agent`, command: `pnpm test` }), `Running pnpm test`],
-        [`an AI terminal, finished or not`, tab({ kind: `agent`, running: false }), `AI terminal, finished`],
+        [`a read-only log view for a process`, tab({ kind: `process`, command: `tail -f` }), { title: `Background process`, note: `Read-only logs` }],
+        [`the running command first`, tab({ kind: `agent`, command: `pnpm test` }), { title: `Running`, tone: `ok`, rows: [{ label: `Command`, value: `pnpm test` }] }],
+        [`an AI terminal, finished or not`, tab({ kind: `agent`, running: false }), { title: `AI terminal`, note: `Finished` }],
         [`a job terminal`, tab({ kind: `job` }), `Job terminal`],
-        [`a finished shell`, tab({ running: false }), `finished`],
+        [`a finished shell`, tab({ running: false }), `Finished`],
         [`nothing for a live shell at its prompt`, tab(), undefined],
     ])(`tells %s`, (_, of, tooltip) => {
-        expect(tooltipFor(of)).toBe(tooltip);
+        expect(tooltipFor(of)).toEqual(tooltip);
     });
 });
 

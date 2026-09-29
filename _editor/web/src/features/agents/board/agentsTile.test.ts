@@ -85,7 +85,7 @@ describe("what the badge counts", () => {
         attention.value = 2;
         acrossAttention.value = 3;
         readingAcross.value = true;
-        expect(agentsBadge.value?.tooltip).toBe(`5 need you, 3 in other sandboxes`);
+        expect(agentsBadge.value?.tooltip).toBe(`5 need you, 3 elsewhere`);
     });
 
     it("does not mention elsewhere when there is nothing there", () => {

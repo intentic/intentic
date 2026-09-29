@@ -4,7 +4,7 @@ import { listedDevice } from "../../../testing/listedDevice";
 import type { Device } from "@intentic/sandbox-contract";
 import type { RouteLocationRaw } from "vue-router";
 import PrimeVue from "primevue/config";
-import { groupNeedsAttention, groupSummary, menuVerbs, primaryVerb, sandboxGroups } from "@intentic/ui";
+import { groupNeedsAttention, groupSummary, menuVerbs, primaryVerb, sandboxGroups, tipText, type TooltipValue } from "@intentic/ui";
 import { waitFor, advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { type App, createApp, defineComponent, h, nextTick, reactive, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
@@ -200,7 +200,8 @@ const mount = (rows: Device[], at: Record<string, string> = {}): HTMLElement => 
     app.component(`Icon`, IconStub);
     // Records what each tooltip holds instead of dropping it: this page keeps the long form of a sentence on
     // hover (a shell and home directory, why a machine is silent), so what is NOT on screen is testable too.
-    const tip = (node: HTMLElement, binding: { value: unknown }): void => node.setAttribute(`data-n`, String(binding.value ?? ``));
+    // A tip card is recorded as its words in reading order, headline first, the way a screen reader gets it.
+    const tip = (node: HTMLElement, binding: { value: TooltipValue }): void => node.setAttribute(`data-n`, tipText(binding.value) ?? ``);
     app.directive(`tooltip`, { mounted: tip, updated: tip });
     // The confirmation dialogs are PrimeVue Dialogs and read the plugin's config while rendering.
     app.use(PrimeVue);
@@ -286,7 +287,7 @@ it(`says what a device is when it has no report to show`, () => {
     // the name's tooltip rather than a fact line every visit has to scan past.
     expect(text).not.toContain(`PowerShell 7`);
     // The build number the title strips off joins them there, rather than being lost with the line it rode.
-    expect(hovers(el)).toContain(`Windows 11 Pro (build 10.0.26100) · PowerShell 7 · C:\\Users\\ada`);
+    expect(hovers(el)).toContain(`OS Windows 11 Pro (build 10.0.26100), Shell PowerShell 7, Home C:\\Users\\ada`);
     // The OS doesn't answer the gap: this machine's agent still describes nothing.
     expect(text).toContain(`never described this machine`);
 });
@@ -311,7 +312,7 @@ it(`drops a lone machine's door id when its name already is it`, () => {
     ]);
     expect(headline(el)).toBe(`rogArch Linuxx64`);
     // Dropping the line must not drop the hover it carried: the shell is still one reach away.
-    expect(hovers(el)).toContain(`/bin/zsh · /home/ada`);
+    expect(hovers(el)).toContain(`Shell /bin/zsh, Home /home/ada`);
     // A door id that is NOT the name is the one thing two environments never share, so it stays.
     const other = mount([{ key: `rog`, label: `rog`, hostId: `rog::wsl:Arch`, online: true, platform: `linux` }]);
     expect(headline(other)).toContain(`rog::wsl:Arch`);
@@ -329,7 +330,7 @@ it(`hands an offline machine a fresh pairing command without leaving its page`, 
     // from is one hover away. Said four times over, one asleep laptop used to read as four separate problems.
     expect(text).toContain(`A machine that wakes dials back in by itself.`);
     expect(text).not.toContain(`Asleep or offline.`);
-    expect(hovers(el)).toContain(`Asleep, off the network, or its agent isn't running.`);
+    expect(hovers(el)).toContain(`Not answering, Asleep, offline or stopped`);
     // The cheaper of the two ways back, for a machine that is awake with only its agent down.
     expect(text).toContain(`intentic-machine run`);
 
@@ -687,7 +688,7 @@ it(`explains why a sync-only device has no sandbox buttons, and offers the fix`,
     const text = el.textContent ?? ``;
     // The errand on the page, the reason it exists on hover.
     expect(text).toContain(`Connect it as a device to start, update and remove its sandboxes from here.`);
-    expect(hovers(el)).toContain(`Desktop sync carries folders and ports, never containers`);
+    expect(hovers(el)).toContain(`Sync only, No containers via sync`);
     expect(labels(el)).toContain(`Connect this device`);
     expect(labels(el)).not.toContain(`Restart`);
 });
@@ -758,8 +759,8 @@ it(`states each sandbox's state as a glyph with its word on hover`, () => {
     expect(found).toContain(`¶ running ¶`);
     expect(found).toContain(`¶ stopped ¶`);
     // The facts ride as glyphs with a count, their sentence on hover.
-    expect(found).toContain(`2 ports on localhost: 8788, 33177`);
-    expect(found).toContain(`files sync to /home/radarsu/intentic/radarsu-web-platform-bce57bb9fe3b`);
+    expect(found).toContain(`On localhost, Ports 8788, 33177`);
+    expect(found).toContain(`Files sync, Folder /home/radarsu/intentic/radarsu-web-platform-bce57bb9fe3b`);
 });
 
 it(`folds a sandbox to a line that still says what is under it`, () => {
@@ -1019,7 +1020,7 @@ it(`offers the verbs on a connected device whose agent needs nothing, and says n
     expect(labels(el)).toContain(`Update agent`);
     expect(labels(el)).toContain(`Restart agent`);
     expect(text).not.toContain(`Newest agent this sandbox knows of.`);
-    expect(hovers(el)).toContain(`Brings this whole computer to the newest agent`);
+    expect(hovers(el)).toContain(`Updates every side, Folders, ports untouched`);
 });
 
 // The agent is the row's own meta now — a build and a state badge beside the environment it runs on — rather
@@ -1500,7 +1501,7 @@ it(`gives a sandbox this machine only syncs a verb of its own`, async () => {
     await openRowMenu(el, `not running here`);
     expect(menuRows()).toEqual([`Remove`]);
     // Its glyph says why, on hover: the container is not on this machine.
-    expect(hovers(el)).toContain(`Not running on this device`);
+    expect(hovers(el)).toContain(`Not running here, Files or ports only`);
 });
 
 // A container removed on its own leaves an enrollment pointing at nothing, which is exactly the row this page was
@@ -1586,7 +1587,7 @@ it(`keeps the sandbox you are using out of a batch, and says why its box is dead
     const el = mount([three]);
     // The box over the list first, then one per row: the row in use is dead, and says why.
     expect(boxes(el).map((box) => box.disabled)).toEqual([false, true, false, false]);
-    expect(hovers(el)).toContain(`can't go in a batch`);
+    expect(hovers(el)).toContain(`Can't batch, Use its ⋯ menu`);
     // Ticking every row ticks every row that can go, and none that can't.
     boxes(el)[0]?.click();
     await nextTick();

@@ -78,23 +78,13 @@ const connect = async (): Promise<void> => {
             <div class="flex items-center gap-2.5">
                 <h3 class="text-sm font-semibold text-content">{{ t(`views.words.connectCloudflare`) }}</h3>
                 <InfoHint class="ml-auto" :label="t(`views.words.whyCloudflareApiToken`)">
-                    <p class="mb-1 text-sm font-semibold text-content">{{ t(`views.words.whyToken`) }}</p>
-                    <p class="mb-3 text-2xs leading-relaxed text-muted">
-                        {{ t(`views.cloudflareConnect.servicePutOnDomain`) }}
-                    </p>
-                    <ul class="flex flex-col gap-2 text-2xs text-muted">
-                        <li class="flex items-start gap-2">
-                            <Icon name="bolt" class="mt-0.5 text-link" />
-                            <span>{{ t(`views.cloudflareConnect.createsTunnelDnsRoute`) }}</span>
-                        </li>
-                        <li class="flex items-start gap-2">
-                            <Icon name="lock" class="mt-0.5 text-success" />
-                            <span
-                                ><span class="text-content">{{ t(`views.cloudflareConnect.storedOnlyInSandbox`) }}</span
-                                >{{ t(`views.cloudflareConnect.usedOnceHereTo`) }}</span
-                            >
-                        </li>
-                    </ul>
+                    <span class="block text-sm font-semibold text-content">{{ t(`views.words.whyToken`) }}</span>
+                    <span class="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-xs">
+                        <span class="text-muted">{{ t(`views.words.creates`) }}</span><span class="text-content">{{ t(`views.cloudflareConnect.tunnelDns`) }}</span>
+                        <span class="text-muted">{{ t(`views.words.stored`) }}</span><span class="text-content">{{ t(`views.cloudflareConnect.sandboxOnly`) }}</span>
+                        <span class="text-muted">{{ t(`views.words.used`) }}</span><span class="text-content">{{ t(`views.words.onceListZones`) }}</span>
+                    </span>
+                    <span class="mt-2 block text-xs text-muted">{{ t(`views.words.noOpenPorts`) }}</span>
                 </InfoHint>
             </div>
             <CloudflareTokenField

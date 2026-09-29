@@ -6,6 +6,8 @@ import { computed } from "vue";
 import { ui } from "../../lib/ui.js";
 import Icon from "../primitives/Icon.vue";
 import type { IconName } from "../../icons/iconSets.js";
+import { isTip } from "../../lib/tipText.js";
+import type { TooltipValue } from "../../lib/tooltip.js";
 
 // `primary` lives only in the non-link half: a link is never the call to action, so this is a type error.
 const { href, hint, label, quiet } = defineProps<
@@ -15,7 +17,7 @@ const { href, hint, label, quiet } = defineProps<
         // On a link, the destination's own mark (GitHub's mark for GitHub, etc.), not a generic arrow.
         icon: IconName;
         // What the label has no room for. Absent is the common case: a self-explaining action earns no tooltip.
-        hint?: string;
+        hint?: TooltipValue;
         disabled?: boolean;
     } & (
         | {
@@ -31,12 +33,16 @@ const { href, hint, label, quiet } = defineProps<
 >();
 
 const iconOnly = computed(() => quiet === true || href !== undefined);
-// With no visible label the tooltip carries both halves, because it is the only place either one is said.
-const tooltip = computed(() => {
+// With no visible label the tooltip carries both halves, because it is the only place either one is said: the label
+// heads a card and a string hint closes it. A tip hint already has its own headline, so it stands as it is.
+const tooltip = computed((): TooltipValue => {
     if (!iconOnly.value) {
         return hint;
     }
-    return hint === undefined ? label : `${label}, ${hint}`;
+    if (isTip(hint)) {
+        return hint;
+    }
+    return hint === undefined || hint === false || hint === null || hint === `` ? label : { title: label, note: hint };
 });
 </script>
 

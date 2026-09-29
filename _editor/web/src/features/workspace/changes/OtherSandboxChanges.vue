@@ -139,7 +139,11 @@ const detail = (row: LedgerRow): string => {
                     class="shrink-0"
                     :disabled="pushingRow !== undefined"
                     :label="pushingRow === ledgerKey(row) ? t(`ui.status.sending`) : sendVerb(row)"
-                    v-tooltip.top="t(`workspace.otherSandboxChanges.straightHereOwnPre`, { row: sendVerb(row) })"
+                    v-tooltip.top="{
+                        title: sendVerb(row),
+                        rows: [{ label: t(`shared.sandboxHub`), value: row.sandboxName }],
+                        note: t(`workspace.otherSandboxChanges.checksRunThere`),
+                    }"
                     @click="pushRow(row)"
                 />
                 <!-- Unsupported actions remain on the owning machine. -->
@@ -147,7 +151,7 @@ const detail = (row: LedgerRow): string => {
                     type="button"
                     class="shrink-0 rounded-md p-1 text-subtle transition-colors hover:bg-overlay hover:text-content"
                     :aria-label="t(`workspace.otherSandboxChanges.open`, { sandboxName: row.sandboxName })"
-                    v-tooltip.top="t(`workspace.otherSandboxChanges.switchWindowTo`, { sandboxName: row.sandboxName })"
+                    v-tooltip.top="t(`workspace.otherSandboxChanges.open`, { sandboxName: row.sandboxName })"
                     @click="openWorkspaceIn(row.sandboxId)"
                 >
                     <Icon name="arrow-right" class="text-2xs" />

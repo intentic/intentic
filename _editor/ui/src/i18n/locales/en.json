@@ -29,10 +29,10 @@
         "keepOpen": "Keep Open",
         "leave": "Leave",
         "moreActions": "More actions",
+        "newTab": "New tab",
         "next": "Next",
         "no": "No",
         "open": "Open",
-        "openInNewTab": "Open in new tab",
         "paste": "Paste",
         "publish": "Publish",
         "reconnect": "Reconnect",
@@ -62,7 +62,15 @@
         "viewLogs": "View logs"
     },
     "agentRunButton": {
-        "configureStartRun": "Configure and start this run — {spend}"
+        "clickToChange": "Click to change",
+        "clickToConfigure": "Click to configure",
+        "configureStartRun": "Configure and start this run — {spend}",
+        "effort": "Effort",
+        "fast": "Fast",
+        "model": "Model",
+        "sandboxDefault": "Sandbox default",
+        "speed": "Speed",
+        "thisRunOnly": "This run only"
     },
     "code": {
         "showAll": "Show all"
@@ -86,17 +94,16 @@
     "confirmDialog": {
         "more": "…and {count} more"
     },
-    "dagEditor": {
-        "fitWholeGraph": "Fit the whole graph"
-    },
     "deviceAgent": {
-        "agentAliveStoppedMaking": "Its agent is alive but has stopped making rounds, so this sandbox's picture of its folders and ports is as old as the last one.",
         "commands": "Commands",
+        "device": "Device",
         "folders": "Folders",
-        "processKeepsBuildStarted": "The running agent keeps the build it started with until it restarts, so replacing the file on disk changes nothing on its own.",
+        "installedBuild": "Installed build",
+        "nothingDownloaded": "Nothing downloaded",
+        "oneProcess": "One process",
         "ports": "Ports",
         "restartAgent": "Restart agent",
-        "stopsStartsDevicesAgent": "Stops and starts this device's agent process. Nothing is downloaded — the build already installed there is the one that comes up."
+        "roundsStopped": "Rounds stopped"
     },
     "deviceAgentGroup": {
         "agent": "Agent",
@@ -105,25 +112,33 @@
     },
     "deviceDetail": {
         "backup": "backup: {folder}",
+        "busyHere": "Busy here",
         "conflicts": "{count} conflict | {count} conflicts",
         "container": "Container",
         "copyId": "Copy ID",
         "copyPath": "Copy path",
         "deviceIsntSyncingFolder": "This device isn't syncing a folder or holding any ports for this sandbox.",
+        "filesOrPortsOnly": "Files or ports only",
+        "filesSync": "Files sync",
         "folder": "Folder",
         "id": "ID",
-        "imageOf": "Image: {image}",
+        "image": "Image",
+        "interruptedTitle": "Interrupted update",
+        "leftAlone": "Left alone",
         "localhost": "localhost:",
         "more": "… and {more} more",
         "noFolderDeviceOnly": "no folder: this device only mirrors ports",
         "noFolderSynced": "no folder synced",
         "notRunningHere": "not running here",
-        "notRunningHereHint": "Not running on this device: only its files or ports are here.",
+        "notRunningHereTitle": "Not running here",
         "offDeviceIsntPutting": "Off: this device isn't putting this sandbox's ports on its own localhost. File syncing is unaffected.",
+        "onLocalhost": "On localhost",
         "ports": "Ports",
         "running": "running",
         "show": "show it",
+        "startPutsItBack": "Start puts it back",
         "stopped": "stopped",
+        "syncPaused": "Sync paused",
         "working": "working…",
         "version": "Version",
         "interruptedUpdate": "interrupted update — Start puts it back",
@@ -131,19 +146,21 @@
         "previousReadyUntil": "previous version ready until {when}"
     },
     "imageView": {
-        "actualSize1": "Actual size (1)",
-        "ctrlScrollToZoom": "Ctrl + scroll to zoom · drag to pan · double-click to fit",
+        "actualSize": "Actual size",
+        "ctrlScroll": "Ctrl+scroll",
+        "doubleClick": "Double-click",
+        "drag": "Drag",
         "fit": "Fit",
-        "fitToPane0": "Fit to the pane (0)",
+        "fitToPane": "Fit to pane",
+        "gestures": "Gestures",
         "imagePreviewCtrlScroll": "Image preview: Ctrl and scroll to zoom, drag to pan",
-        "zoomIn": "Zoom in (+)",
+        "pan": "Pan",
+        "zoom": "Zoom",
         "zoomIn2": "Zoom in",
-        "zoomOut": "Zoom out (−)",
         "zoomOut2": "Zoom out"
     },
     "inlineRename": {
         "couldntSaveName": "Couldn't save that name.",
-        "saveEnter": "Save · Enter",
         "unnamed": "Unnamed"
     },
     "layoutRepoRail": {
@@ -156,7 +173,7 @@
         "document": "Document"
     },
     "noteEditor": {
-        "copyRawNote": "Copy the raw note",
+        "copyMarkdown": "Copy markdown",
         "editNote": "Edit this note",
         "it": "{verb} it",
         "keep": "Keep it",
@@ -173,7 +190,11 @@
         "options": "{count} options"
     },
     "projectChip": {
-        "hidden": "· {hidden} hidden"
+        "clickShowsAll": "Click to show all",
+        "hidden": "· {hidden} hidden",
+        "hiddenLabel": "Hidden",
+        "project": "Project",
+        "projectFilter": "Project filter"
     },
     "repoRail": {
         "allRepositories": "All repositories",
@@ -223,7 +244,6 @@
     },
     "searchBar": {
         "aa": "Aa",
-        "clearEsc": "Clear (Esc)",
         "matchCase": "Match case"
     },
     "stepSection": {
@@ -239,7 +259,7 @@
         "windowsPowershell": "Windows (PowerShell)"
     },
     "resizeSeam": {
-        "dragToResize": "Drag to resize · double-click to reset"
+        "doubleClickResets": "Double-click resets"
     },
     "status": {
         "starting": "Starting…",
@@ -247,5 +267,12 @@
         "working": "Working…",
         "reading": "Reading…",
         "sending": "Sending…"
+    },
+    "keys": {
+        "enter": "Enter",
+        "esc": "Esc"
+    },
+    "dagEditor": {
+        "fitGraph": "Fit graph"
     }
 }

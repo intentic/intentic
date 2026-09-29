@@ -1,9 +1,9 @@
 {
     "mainFailure": {
         "continueFix": "Continuer la correction",
+        "continueGivesTurns": "Continuer rend les tours",
         "failingJobs": "Tâches en échec",
         "fixAgent": "Agent de correction dessus",
-        "fixAgentHint": "Chaque échec sur {branch} va à ce seul agent jusqu'à ce qu'une exécution passe.",
         "fixWithAgent": "Réparer avec un agent",
         "handBackGone": "Agent disparu",
         "handBackInterrupted": "Tour interrompu",
@@ -13,44 +13,56 @@
         "handBackTurnFailed": "Tour en échec",
         "handBackTurns": "Plus de tours",
         "handedBack": "Rendu",
-        "handedBackHint": "L'agent de correction a rendu la main. Continuez pour lui rendre ses tours, ou ouvrez-le pour voir ce qu'il a tenté.",
         "moreJobs": "+{count} de plus",
         "needsYou": "Vous attend",
+        "noAgentSent": "Aucun agent envoyé",
         "openFixer": "Ouvrir l'agent",
         "repairsOff": "Correction auto désactivée",
-        "repairsOffHint": "Les réparations sont désactivées, donc aucun agent n'a été envoyé.",
         "since": "depuis {when}",
+        "takesEveryFailure": "Reçoit chaque échec",
         "title": "{branch} échoue",
-        "unassigned": "Pas encore d'agent de correction"
+        "unassigned": "Pas encore d'agent de correction",
+        "untilARunPasses": "Jusqu'à un succès"
     },
     "pipelineDagGraph": {
         "expand": "Déplier",
-        "failingRunsInRow": "En échec sur {name} plusieurs exécutions d'affilée",
         "fit": "Ajuster",
-        "openJobGraphFull": "Ouvrir le graphe des tâches en plein écran",
-        "openJobLog": "Ouvrir {name} sur la forge",
-        "zoomOutUntilWhole": "Dézoomer jusqu'à ce que toute l'exécution tienne à l'écran"
-    },
-    "pipelineGraph": {
-        "failingRunsInRow": "En échec sur {name} plusieurs exécutions d'affilée",
-        "openJobLog": "Ouvrir {name} sur la forge"
+        "fitAll": "Tout ajuster",
+        "fullScreen": "Plein écran"
     },
     "pipelineRunRow": {
         "agentAlreadyWorkingOn": "Un agent travaille déjà sur {branch}, lancé depuis l'exécution #{runId} — ouvrez-le",
         "agentOnBranch": "Agent sur la branche",
         "cancel": "Annuler",
+        "checkJobRan": "Vérifiez que le job a tourné",
         "continue": "Continuer",
         "failedJobs": "Tâches en échec",
+        "failureIsHistory": "Échec du passé",
         "fixAgent": "Réparer avec un agent",
-        "fixInWorkspaceRun": "Le correctif est dans votre espace de travail : relancez la pipeline pour le prouver",
+        "fixInWorkspace": "Correctif dans le workspace",
+        "fixThatRun": "Corrigez plutôt celui-là",
+        "fixUnderway": "Correctif en cours",
+        "freshAttempt": "Nouvelle tentative",
         "jobGraph": "{headline} : graphe des tâches",
         "loadingJobs": "Chargement des tâches",
+        "newerFailure": "Échec plus récent",
         "noJobDetailsAvailable": "Aucun détail de tâche disponible pour cette exécution.",
-        "passedAgainIn": "{branch} est repassée dans cette exécution : ouvrez-la pour vérifier que la tâche en échec ici a seulement tourné",
+        "opensPickerFirst": "Ouvre d'abord le sélecteur",
+        "openThatOneFirst": "Ouvrez celui-là d'abord",
+        "passedAgain": "Repassé",
+        "passedSince": "Passé depuis",
+        "proveTheFix": "Prouver le correctif",
         "reRun": "Relancer",
-        "setAttemptAsideStart": "Mettre cette tentative de côté et en lancer une nouvelle — ouvre d'abord le sélecteur",
         "startOver": "Tout reprendre",
-        "supersededBy": "remplacée par"
+        "supersededBy": "remplacée par",
+        "stanceNote": {
+            "ended": "Continuer ou recommencer",
+            "landed": "Relancez pour le prouver",
+            "needs-you": "Ouvrir pour répondre",
+            "ready": "Relire, puis intégrer",
+            "waiting": "Quota épuisé",
+            "working": "Ouvrir pour suivre"
+        }
     },
     "pipelinesSkeleton": {
         "loadingPipelines": "Chargement des pipelines"
@@ -61,16 +73,39 @@
     "pipelinesView": {
         "allRepositories": "Tous les dépôts",
         "connectedRepos": "l'un des {count} dépôts connectés",
-        "failedLastRunsOn": "{job} a échoué lors des {runs} dernières exécutions sur {repo} {branch}",
         "failingRepeatedly": "Échoue à répétition",
+        "keepsFailing": "Échoue encore",
         "noRunsYet": "Aucune pipeline n'a encore tourné sur {where}. Les exécutions atterrissent ici dès qu'il y en a une.",
         "noRunsYet2": "Pas encore d'exécutions",
         "noRunsYetRepo": "Pas encore d'exécutions pour ce dépôt.",
         "noWorkspaceRepoMaps": "Aucun dépôt de l'espace de travail ne correspond à un compte GitHub/GitLab connecté : clonez un dépôt depuis votre hébergeur connecté, ou connectez la capacité correspondante sur la page +.",
         "openPipelines": "Ouvrir les pipelines de {project}",
-        "openProjectOn": "Ouvrir {project} sur {host}",
+        "openRepo": "Ouvrir le dépôt",
         "repository": "Dépôt",
         "runs": "{runs} exécutions",
         "thisRepo": "ce dépôt"
+    },
+    "tip": {
+        "attempt": "Tentative",
+        "branch": "Branche",
+        "cost": "Coût",
+        "error": "Erreur",
+        "failedRuns": "Échecs",
+        "failingStreak": "Série d'échecs",
+        "files": "Fichiers",
+        "fromRun": "Depuis l'exécution",
+        "job": "Job",
+        "model": "Modèle",
+        "openLog": "Ouvrir le log",
+        "repo": "Dépôt",
+        "run": "Exécution",
+        "runs": "Exécutions",
+        "started": "Démarré",
+        "updated": "Mis à jour"
+    },
+    "extension": {
+        "branchesFailing": "{count} branches en échec",
+        "streakOnCommit": "{repo} {branch} · {runs} en échec · {sha}",
+        "streakOverCommits": "{repo} {branch} · {commits} commits · {runs} en échec"
     }
 }

@@ -1,4 +1,5 @@
-import type { IconName } from "@intentic/ui";
+import type { IconName, Tip } from "@intentic/ui";
+import { t } from "@intentic/ui/i18n";
 import { errorMessage } from "@intentic/ui/async";
 import { type LoopDesign, loopFromDesign, type Workflow } from "@intentic/sandbox-contract";
 import { computed, type ComputedRef, type Ref, ref } from "vue";
@@ -26,17 +27,25 @@ export type RunThroughState = `running` | `workflow` | `loop` | `idle`;
 interface BadgeWords {
     /** The armed design's name, empty only in states that don't say one. */
     readonly name: string;
-    /** Which round a running loop is on. */
-    readonly iteration: number;
 }
 
 const ICON: Record<RunThroughState, IconName> = { running: `repeat`, workflow: `sitemap`, loop: `repeat`, idle: `fork` };
 
-const HINT: Record<RunThroughState, (words: BadgeWords) => string> = {
-    running: (words) => `Stop looping, iteration ${words.iteration} finishes first. Use Stop to cut it short.`,
-    workflow: (words) => `Send runs "${words.name}" with this message as its request`,
-    loop: (words) => `Send runs "${words.name}", this message is the goal, repeated until it is met`,
-    idle: () => `Repeat this message until a goal is met, or run it through a workflow`,
+// The badge's hover card: what the press does, the armed design by name, and the one consequence worth knowing first.
+// The running badge already shows its round count, so its card does not repeat it.
+const HINT: Record<RunThroughState, (words: BadgeWords) => Tip> = {
+    running: () => ({ title: t(`chat.runThrough.stopLooping`), note: t(`chat.runThrough.roundFinishesFirst`) }),
+    workflow: (words) => ({
+        title: t(`chat.runThrough.workflow`),
+        rows: [{ label: t(`shared.name`), value: words.name }],
+        note: t(`chat.runThrough.messageIsRequest`),
+    }),
+    loop: (words) => ({
+        title: t(`chat.runThrough.loop`),
+        rows: [{ label: t(`shared.name`), value: words.name }],
+        note: t(`chat.runThrough.repeatsUntilMet`),
+    }),
+    idle: () => ({ title: t(`chat.runThrough.runThrough`), note: t(`chat.runThrough.loopOrWorkflow`) }),
 };
 
 const LABEL: Record<RunThroughState, (words: BadgeWords) => string> = {
@@ -53,7 +62,7 @@ export interface RunThrough {
     readonly icon: ComputedRef<IconName>;
     /** The armed design's name, or nothing when the badge is bare. */
     readonly name: ComputedRef<string | undefined>;
-    readonly hint: ComputedRef<string>;
+    readonly hint: ComputedRef<Tip>;
     readonly label: ComputedRef<string>;
     readonly workflow: ComputedRef<Workflow | undefined>;
     readonly loop: ComputedRef<LoopDesign | undefined>;
@@ -112,7 +121,7 @@ export const useRunThrough = (
         return loop.value === undefined ? `idle` : `loop`;
     });
     const name = computed(() => workflow.value?.name ?? loop.value?.name);
-    const words = computed<BadgeWords>(() => ({ name: name.value ?? ``, iteration: activeLoop.value?.iteration ?? 0 }));
+    const words = computed<BadgeWords>(() => ({ name: name.value ?? `` }));
 
     // Sends the draft as the run's request; cleared on success, kept on failure so the message isn't lost. The started
     // run takes the screen (openRunInChat), same as the board's card.

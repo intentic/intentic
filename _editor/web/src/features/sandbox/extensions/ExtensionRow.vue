@@ -188,7 +188,11 @@ const tone = computed(() => TONE[entry.state.variant] ?? `text-muted`);
                 <StatusBadge v-if="entry.state.badge" :variant="entry.state.variant" :label="entry.state.label" size="xs" />
                 <span v-else-if="entry.state.label !== undefined" class="text-2xs text-subtle">{{ entry.state.label }}</span>
                 <!-- Fixed, not hidden: a vanished control reads as a bug. -->
-                <span v-if="entry.extension.essential" :title="t(`sandbox.extensionRow.alwaysOnOnlyWindow`)" class="cursor-not-allowed">
+                <span
+                    v-if="entry.extension.essential"
+                    v-tooltip.top="{ title: t(`sandbox.extensionRow.alwaysOnTitle`), note: t(`sandbox.extensionRow.showsBackgroundWork`) }"
+                    class="cursor-not-allowed"
+                >
                     <ToggleSwitch
                         class="ui-switch-sm pointer-events-none"
                         :model-value="true"
@@ -245,9 +249,12 @@ const tone = computed(() => TONE[entry.state.variant] ?? `text-muted`);
                             :class="route.unused ? `border border-dashed border-line text-subtle` : `border border-line bg-canvas text-muted`"
                             v-tooltip.top="
                                 route.calls > 0
-                                    ? t(`sandbox.extensionRow.calledTimes`, { toLocaleString: route.calls.toLocaleString() })
+                                    ? {
+                                          title: t(`sandbox.extensionRow.used`),
+                                          rows: [{ label: t(`sandbox.extensionRow.calls`), value: route.calls.toLocaleString() }],
+                                      }
                                     : route.unused
-                                      ? t(`sandbox.extensionRow.neverCalledSinceFirst`)
+                                      ? t(`sandbox.extensionRow.neverCalled`)
                                       : undefined
                             "
                             >{{ route.route }}</code

@@ -2,6 +2,7 @@
 import { DagEditor } from "@intentic/extension-ui";
 import type { Workflow } from "@intentic/sandbox-contract";
 import { computed } from "vue";
+import { t } from "./i18n.js";
 import WorkflowNodeCard from "./WorkflowNodeCard.vue";
 import { workflowDag } from "./workflowDag";
 
@@ -31,7 +32,7 @@ const NODE_HEIGHT = 56;
         :edges="dag.edges"
         :node-width="NODE_WIDTH"
         :node-height="NODE_HEIGHT"
-        add-label="Add a step after this one"
+        :add-label="t(`workflowDesigner.addStep`)"
         @connect="(from, to) => emit(`connect`, from, to)"
         @select-edge="(from, to) => emit(`selectEdge`, from, to)"
         @add="(from) => emit(`add`, from)"

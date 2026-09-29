@@ -1,6 +1,7 @@
 import type { WorkspaceHotspot, WorkspaceKeyModule } from "@intentic/api-contract";
 import { composeAsk, REFACTOR_INVARIANTS } from "@intentic/sandbox-contract/chores";
 import type { ChurnWindow } from "./codebaseHealth";
+import type { Tip } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 
 // Which refactor a row's own figures call for, and what to say to the agent. Comparisons are leader-relative
@@ -17,8 +18,8 @@ export type RefactorKind = "decompose" | "simplify" | "split" | "stabilize" | "t
 
 export interface RefactorAsk {
     readonly kind: RefactorKind;
-    // The tooltip: what the turn will be asked to do, since the button itself is only a glyph.
-    readonly hint: string;
+    // The hover card: what the turn will be asked to do, since the button itself is only a glyph.
+    readonly hint: Tip;
     // The turn, sent as an ordinary user message, so it lands in the transcript to read and argue with.
     readonly prompt: string;
     // True after a season untouched; not a refusal, since the payoff is in files edited again, so this steps back.
@@ -49,47 +50,48 @@ const WINDOW_PHRASE: Record<ChurnWindow, string> = {
 // Long enough that months stop being the unit a reader thinks in.
 const dormantFor = (ms: number): string => {
     const months = Math.max(Math.round(ms / (30 * DAY_MS)), 1);
-    return months >= 24 ? `${Math.round(months / 12)} years` : `${months} months`;
+    const years = Math.round(months / 12);
+    return months >= 24 ? t(`workspace.refactorAsk.years`, { count: years }, years) : t(`workspace.refactorAsk.months`, { count: months }, months);
 };
 
 // What each archetype asks for. Kept terse: the reader is a model about to act.
 //
-// - hint: speaks to the user, from a tooltip.
+// - hint: speaks to the user, as the headline of a hover card.
 // - goal: what shape to move toward, never a design, since the agent reads the file first.
 // - done: falsifiable; the agent can check it itself via `iq` in its own worktree.
 const archetype = (): Record<RefactorKind, { hint: string; diagnosis: string; goal: string; done: string }> => ({
     decompose: {
-        hint: t(`workspace.refactorAsk.splitAlongChangeSeams`),
+        hint: t(`workspace.refactorAsk.decompose`),
         diagnosis: `It changes constantly and branches heavily, so every edit here is slow and easy to get wrong.`,
         goal: `Split it along its change seams, what gets edited together stays together, moving the branch-dense logic into single-purpose units with names of their own.`,
         done: `Done when \`iq hotspots --in <path>\` reports materially fewer branch points and the project's checks pass.`,
     },
     simplify: {
-        hint: t(`workspace.refactorAsk.flattenBranchingWhereStands`),
+        hint: t(`workspace.refactorAsk.simplify`),
         diagnosis: `Its branching is far out of proportion to how often it changes: the logic is tangled, not the file crowded.`,
         goal: `Flatten it where it stands: edge cases as early returns, compound conditions behind named predicates, long chains as lookups. Extract a unit only if a cohesive one falls out.`,
         done: `Done when \`iq hotspots --in <path>\` reports materially fewer branch points and the project's checks pass.`,
     },
     split: {
-        hint: t(`workspace.refactorAsk.splitByResponsibilityChanges`),
+        hint: t(`workspace.refactorAsk.split`),
         diagnosis: `The churn is out of proportion to the branching: this file is not tangled, it is crowded, unrelated work keeps landing in one place.`,
         goal: `Split it by responsibility so those changes stop colliding: one subject per file, each named for what it is FOR.`,
         done: `Done when every new file's subject takes one line to state and the project's checks pass.`,
     },
     stabilize: {
-        hint: t(`workspace.refactorAsk.separateStableContractChurn`),
+        hint: t(`workspace.refactorAsk.stabilize`),
         diagnosis: `It churns like a hotspot and the rest of the repository imports it, so every edit here ripples outward.`,
         goal: `Separate the contract from the churn: a narrow, stable surface for importers to depend on, with the volatile implementation private behind it.`,
         done: `Done when the exported surface is smaller than what it hides, every importer reaches the true source, and the project's checks pass.`,
     },
     tests: {
-        hint: t(`workspace.refactorAsk.splitBySubjectHoist`),
+        hint: t(`workspace.refactorAsk.tests`),
         diagnosis: `It is a test file, so these figures are the cost of working in it rather than risk to the product.`,
         goal: `Split it by subject, one behaviour per file, and hoist repeated setup into shared fixtures. Do not change what is asserted; if an assertion looks wrong, say so instead of fixing it.`,
         done: `Done when the same tests pass, the same number of them run, and no assertion changed.`,
     },
     narrow: {
-        hint: t(`workspace.refactorAsk.narrowSurfaceIntoModules`),
+        hint: t(`workspace.refactorAsk.narrow`),
         diagnosis: `Everything imports it because it holds everything, so unrelated changes queue behind each other here.`,
         goal: `Split it into modules by what each export is ABOUT, and repoint importers at the module that now owns what they use.`,
         done: `Done when what remains at that path exports only what belongs together, \`iq outline\` it to check, and the project's checks pass.`,
@@ -144,9 +146,12 @@ export const hotspotAsk = (hotspot: WorkspaceHotspot, context: HotspotContext): 
     const dormant = idle > DORMANT_MS;
     return {
         kind,
-        hint: dormant
-            ? `Nothing has touched this in ${dormantFor(idle)}, a tangled file nobody edits costs nobody anything. Start an agent anyway: ${archetype()[kind].hint.toLowerCase()}.`
-            : `Start an agent on it: ${archetype()[kind].hint.toLowerCase()}.`,
+        // A file nobody edits costs nobody anything, so a dormant one says for how long, and the glyph steps back.
+        hint: {
+            title: archetype()[kind].hint,
+            rows: [{ label: t(`workspace.refactorAsk.untouched`), value: dormant ? dormantFor(idle) : `` }],
+            note: t(`workspace.refactorAsk.startsAgent`),
+        },
         prompt: compose(hotspot.path, hotspotWhy(hotspot, context.rank, context.window), kind),
         dormant,
     };
@@ -167,7 +172,7 @@ export const moduleAsk = (module: WorkspaceKeyModule, context: ModuleContext): R
     const why = `#${context.rank} key module by PageRank: ${count(module.exports)} exports against a median of ${count(context.medianExports)} across that ranking.`;
     return {
         kind: `narrow`,
-        hint: t(`workspace.refactorAsk.startAgentOn`, { toLowerCase: archetype().narrow.hint.toLowerCase() }),
+        hint: { title: archetype().narrow.hint, note: t(`workspace.refactorAsk.startsAgent`) },
         prompt: compose(module.path, why, `narrow`),
         // Churn isn't part of the import-graph ranking, so there's no age to step back from here.
         dormant: false,

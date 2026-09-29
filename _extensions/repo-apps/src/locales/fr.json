@@ -20,7 +20,6 @@
         "run": "Lancer",
         "runAll": "Tout lancer",
         "runTests": "Lancer les tests",
-        "runVitestApp": "Lancer les tests de cette application",
         "start": "Démarrer",
         "startAll": "Tout démarrer",
         "stop": "Arrêter",

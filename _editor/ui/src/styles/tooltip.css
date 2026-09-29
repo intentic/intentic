@@ -1,4 +1,4 @@
-/* The hover label raised by `v-tooltip` (composables/tooltip.ts). */
+/* The hover label raised by `v-tooltip` (lib/tooltip.ts), and the tip card it draws for a `Tip`. */
 @layer components {
     .ui-tooltip {
         position: fixed;
@@ -24,6 +24,90 @@
         -webkit-line-clamp: var(--ui-tooltip-max-lines);
         overflow: hidden;
     }
+
+/* THE TIP CARD: a headline, its facts as label/figure rows, one closing line. The label's own fill, rim and arrow, so
+   every hover box reads as one family; only the layout differs. Facts are figures, so they are tabular and flush right. */
+    .ui-tooltip-card {
+        --ui-tip-muted: color-mix(in oklab, var(--ui-tooltip-content) 64%, var(--ui-tooltip-fill));
+        --ui-tip-rule: color-mix(in oklab, var(--ui-tooltip-border) 70%, var(--ui-tooltip-fill));
+        max-width: var(--ui-tip-max-width);
+    }
+
+    .ui-tooltip-card .ui-tooltip-body {
+        display: grid;
+        gap: calc(var(--spacing) * 1.5);
+        min-width: 7rem;
+        padding: calc(var(--spacing) * 1.5) calc(var(--spacing) * 2.5);
+        overflow: visible;
+        -webkit-line-clamp: none;
+    }
+
+    .ui-tip-head {
+        display: flex;
+        align-items: center;
+        gap: calc(var(--spacing) * 1.5);
+    }
+
+    .ui-tip-title {
+        flex: 1 1 auto;
+        min-width: 0;
+        font-weight: 600;
+    }
+
+    .ui-tip-dot {
+        flex: none;
+        width: 0.375rem;
+        height: 0.375rem;
+        border-radius: 9999px;
+        background: var(--ui-tip-muted);
+    }
+
+    .ui-tip-keys {
+        flex: none;
+        margin-left: calc(var(--spacing) * 2);
+        padding: 0 calc(var(--spacing) * 1);
+        border: 1px solid var(--ui-tip-rule);
+        border-radius: var(--radius-xs);
+        font-family: var(--font-mono);
+        font-feature-settings: var(--font-mono--font-feature-settings);
+        font-size: var(--text-2xs);
+        line-height: var(--text-2xs--line-height);
+        color: var(--ui-tip-muted);
+    }
+
+    .ui-tip-rows {
+        display: grid;
+        grid-template-columns: minmax(0, auto) minmax(0, auto);
+        column-gap: calc(var(--spacing) * 4);
+        row-gap: calc(var(--spacing) * 0.5);
+        margin: 0;
+        padding-top: calc(var(--spacing) * 1.5);
+        border-top: 1px solid var(--ui-tip-rule);
+    }
+
+    .ui-tip-rows dt {
+        color: var(--ui-tip-muted);
+    }
+
+    .ui-tip-rows dd {
+        margin: 0;
+        text-align: right;
+        font-weight: 500;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .ui-tip-note {
+        color: var(--ui-tip-muted);
+    }
+
+    .ui-tip-dot[data-tone="info"] { background: var(--color-info); }
+    .ui-tip-dot[data-tone="ok"] { background: var(--color-success); }
+    .ui-tip-dot[data-tone="warn"] { background: var(--color-warning); }
+    .ui-tip-dot[data-tone="danger"] { background: var(--color-danger); }
+    .ui-tip-rows dd[data-tone="info"] { color: var(--color-info); }
+    .ui-tip-rows dd[data-tone="ok"] { color: var(--color-success); }
+    .ui-tip-rows dd[data-tone="warn"] { color: var(--color-warning); }
+    .ui-tip-rows dd[data-tone="danger"] { color: var(--color-danger); }
 
 /* Two stacked triangles, rotated by which edge they hang off: the wider one behind is the body's 1px rim carried across the arrow. */
     .ui-tooltip::after {

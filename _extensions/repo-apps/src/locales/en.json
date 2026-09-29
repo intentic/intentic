@@ -21,7 +21,6 @@
         "run": "Run",
         "runAll": "Run all",
         "runTests": "Run tests",
-        "runVitestApp": "Run the tests of this app",
         "start": "Start",
         "startAll": "Start all",
         "stop": "Stop",

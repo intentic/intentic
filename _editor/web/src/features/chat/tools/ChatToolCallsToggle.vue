@@ -17,7 +17,7 @@ const { showToolCalls } = useToolCalls();
         class="touch-target relative inline-flex cursor-pointer items-center transition-colors hover:text-content"
         :aria-pressed="showToolCalls"
         :aria-label="showToolCalls ? t(`chat.chatToolCallsToggle.hideToolCalls`) : t(`chat.words.showToolCalls`)"
-        v-tooltip.top="showToolCalls ? t(`chat.chatToolCallsToggle.hideToolCalls`) : t(`chat.words.showToolCalls`)"
+        v-tooltip.top="showToolCalls ? t(`chat.chatToolCallsToggle.hideTools`) : t(`chat.chatToolCallsToggle.showTools`)"
         @click="showToolCalls = !showToolCalls"
     >
         <Icon name="hammer" class="rotate-[35deg] text-xs" />

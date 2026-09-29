@@ -385,26 +385,33 @@ describe("watchLine", () => {
         expect(line?.countdown).toBe(`5m 0s`);
     });
 
-    // The hint carries what the line can't: that the end of the wait is the agent working again, not a notification,
-    // which is what decides whether a user leaves it armed.
+    // The hint carries what the line can't: every note in full with its pacing, and that the end of the wait is the
+    // agent working again, not a notification, which is what decides whether a user leaves it armed.
     it("spells the pacing, every note in full, and what happens when it ends", () => {
         const first = watch();
         const second = watch({ id: `watch-2`, note: `deploy` });
-        const line = watchLine({ status: `idle`, attention: none, watches: [first, second] }, NOW);
-        expect(line?.hint).toContain(first.note);
-        expect(line?.hint).toContain(second.note);
-        expect(line?.hint).toContain(`60s`);
+        const hint = watchLine({ status: `idle`, attention: none, watches: [first, second] }, NOW)?.hint;
+        expect(hint?.rows?.map((row) => row.label)).toEqual([first.note, second.note]);
+        expect(hint?.rows?.[0]?.value).toContain(`60s`);
+        expect(hint?.note).toBe(`First one wakes it`);
     });
 
-    // And that it can be ended: a box that explains a mechanism with no exit teaches users the arrangement is theirs to
-    // wait out.
-    it("names the way out, and what taking it costs", () => {
-        expect(watchLine({ status: `idle`, attention: none, watches: [watch()] }, NOW)?.hint).toContain(`Stop watching`);
+    // One watch: its note is the line itself, so the card is just the pacing and the deadline.
+    it("gives one watch its pacing and deadline as two rows, and says it wakes the chat", () => {
+        expect(watchLine({ status: `idle`, attention: none, watches: [watch()] }, NOW)?.hint).toEqual({
+            title: `Watching`,
+            tone: `info`,
+            rows: [
+                { label: `Checks every`, value: `60s` },
+                { label: `Gives up in`, value: `42m 0s` },
+            ],
+            note: `Wakes this chat`,
+        });
     });
 
     // Pacing in the fewest characters that stay true: a half-hourly check reads as minutes, not seconds.
     it("says a slow cadence in minutes", () => {
-        expect(watchLine({ status: `idle`, attention: none, watches: [watch({ intervalSeconds: 1800 })] }, NOW)?.hint).toContain(`checked every 30m`);
+        expect(watchLine({ status: `idle`, attention: none, watches: [watch({ intervalSeconds: 1800 })] }, NOW)?.hint.rows?.[0]?.value).toBe(`30m`);
     });
 });
 

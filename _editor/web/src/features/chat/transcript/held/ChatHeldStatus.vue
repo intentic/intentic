@@ -3,12 +3,14 @@ import { Icon } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import type { HoldReason } from "./heldQueue";
+import { memoryTip } from "./memoryTip";
 
 /* The one line under a message that did not go out: that it did not, why in a few words, and the way on (the slot). */
 
 const props = defineProps<{
     reason: HoldReason;
-    // What the sandbox measured, a hover away rather than three lines of the transcript.
+    // What the sandbox measured (its first sentence), drawn as a hover card of figures rather than three lines of the
+    // transcript.
     detail?: string | undefined;
     // Why on the left and the way on at the right, across a card of its own (the quick bar), rather than hung off the
     // right edge under a prompt.
@@ -16,6 +18,8 @@ const props = defineProps<{
 }>();
 
 const t = useT();
+
+const figures = computed(() => memoryTip(props.detail));
 
 // One key per reason, spelled out so every word here is one the catalog check can find.
 const why = computed(() => {
@@ -39,12 +43,7 @@ const why = computed(() => {
                 <Icon name="pause" class="shrink-0 text-2xs" />{{ t(`chat.chatHeld.notSent`) }}
             </span>
             <span aria-hidden="true">·</span>
-            <span
-                class="min-w-0"
-                :class="detail !== undefined && `cursor-help`"
-                v-tooltip.top="detail"
-                >{{ why }}</span
-            >
+            <span class="min-w-0" :class="figures !== undefined && `cursor-help`" v-tooltip.top="figures">{{ why }}</span>
         </span>
         <slot />
     </div>

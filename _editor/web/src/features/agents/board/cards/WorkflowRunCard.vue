@@ -83,14 +83,14 @@ const TONE: Record<WorkflowRun["state"], string> = {
             <!-- Waiting runs use the agent card's attention chip. -->
             <span
                 v-if="needsYou"
-                v-tooltip.top="t(`agents.workflowRunCard.stepWaitingOnOpen`)"
+                v-tooltip.top="{ title: t(`agents.workflowRunCard.stepWaiting`), note: t(`agents.workflowRunCard.openToAnswer`) }"
                 class="ui-status-pill shrink-0 bg-warning/15 text-2xs font-semibold text-warning"
                 >{{ t(`agents.workflowRunCard.needs`) }}</span
             >
             <button
                 type="button"
                 :aria-label="t(`agents.workflowRunCard.openRunsGraph`)"
-                v-tooltip.top="t(`agents.workflowRunCard.openGraphEveryStep`)"
+                v-tooltip.top="t(`agents.workflowRunCard.openGraph`)"
                 class="shrink-0 rounded p-1 text-subtle opacity-0 transition-opacity hover:text-content focus-visible:opacity-100 group-hover:opacity-100"
                 @click.stop="emit(`graph`)"
             >
@@ -101,7 +101,7 @@ const TONE: Record<WorkflowRun["state"], string> = {
                 v-if="run.state !== `running` && run.archivedAt === undefined"
                 type="button"
                 :aria-label="t(`agents.workflowRunCard.archiveRun`)"
-                v-tooltip.top="t(`agents.workflowRunCard.archiveTakesRunSessions`)"
+                v-tooltip.top="{ title: t(`agents.workflowRunCard.archive`), note: t(`agents.words.allKept`) }"
                 :disabled="stopping"
                 class="shrink-0 rounded p-1 text-subtle opacity-0 transition-opacity hover:bg-content/10 hover:text-content focus-visible:opacity-100 group-hover:opacity-100"
                 @click.stop="emit(`archive`)"
@@ -113,7 +113,7 @@ const TONE: Record<WorkflowRun["state"], string> = {
                 v-if="run.archivedAt !== undefined"
                 type="button"
                 :aria-label="t(`agents.workflowRunCard.restoreRun`)"
-                v-tooltip.top="t(`agents.workflowRunCard.putRunSessionsBack`)"
+                v-tooltip.top="t(`agents.workflowRunCard.restore`)"
                 :disabled="stopping"
                 class="shrink-0 rounded p-1 text-subtle opacity-0 transition-opacity hover:bg-content/10 hover:text-content focus-visible:opacity-100 group-hover:opacity-100"
                 @click.stop="emit(`restore`)"
@@ -125,7 +125,11 @@ const TONE: Record<WorkflowRun["state"], string> = {
                 v-if="run.state === `running`"
                 type="button"
                 :aria-label="t(`agents.workflowRunCard.stopWorkflowRun`)"
-                v-tooltip.top="t(`agents.workflowRunCard.stopRunStepsCut`)"
+                v-tooltip.top="{
+                    title: t(`agents.workflowRunCard.stop`),
+                    rows: [{ label: t(`agents.workflowRunCard.liveSessions`), value: live.length }],
+                    note: t(`agents.workflowRunCard.stepsCutOff`),
+                }"
                 :disabled="stopping"
                 :class="ui.iconButton(`h-auto w-auto shrink-0 rounded p-1 text-subtle hover:bg-danger/10 hover:text-danger`)"
                 @click.stop="emit(`stop`)"

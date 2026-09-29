@@ -27,7 +27,7 @@ const seamWidth = computed<number>({
             :min="toScreenPx(MIN_RAIL_WIDTH)"
             :max="toScreenPx(MAX_RAIL_WIDTH)"
             :reset="toScreenPx(DEFAULT_RAIL_WIDTH)"
-            :title="t(`ui.resizeSeam.dragToResize`)"
+            :title="t(`ui.resizeSeam.doubleClickResets`)"
         />
     </aside>
 </template>

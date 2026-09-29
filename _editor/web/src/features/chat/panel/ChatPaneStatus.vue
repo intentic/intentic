@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { SPENT_UTILIZATION } from "@intentic/sandbox-contract";
-import { formatTokens, Icon, ProgressRing, ResponsiveOverlay, useDevice } from "@intentic/ui";
+import type { KeepWarmEnd } from "@intentic/sandbox-contract";
+import { formatTokens, Icon, ProgressRing, ResponsiveOverlay, type Tip, useDevice } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { formatClock } from "@intentic/ui/format";
 import { computed, ref } from "vue";
 import { RouterLink } from "vue-router";
 import KeepWarmPanel from "../../agents/fleet/prompt-cache/KeepWarmPanel.vue";
 import { contextPct, formatElapsed, turnInFlight } from "../../agents/fleet/agentStatus";
-import { cacheAlive, cacheCooling, endedLine, keptWarm } from "../../agents/fleet/prompt-cache/promptCache";
+import { cacheAlive, cacheCooling, keptWarm } from "../../agents/fleet/prompt-cache/promptCache";
 import { useAgents } from "../../agents/fleet/useAgents";
 import { formatRemaining, formatReset, planHeadroom, usageStatusFor } from "../session/usageStatus";
 import { usePaneView } from "./useChat-view";
@@ -52,12 +53,16 @@ const contextRing = computed(() => {
     if (usage === undefined || pct === undefined) {
         return undefined;
     }
-    return {
-        value: pct,
-        label: `${pct}%`,
-        warn: pct >= 80,
-        tooltip: t(`chat.chatPaneStatus.context`, { tokens: formatTokens(usage.tokens), contextWindow: formatTokens(usage.contextWindow), pct }),
+    const warn = pct >= 80;
+    const tooltip: Tip = {
+        title: t(`chat.chatPaneStatus.context`),
+        tone: warn ? `warn` : undefined,
+        rows: [
+            { label: t(`chat.chatPaneStatus.contextUsed`), value: formatTokens(usage.tokens) },
+            { label: t(`chat.chatPaneStatus.contextWindow`), value: formatTokens(usage.contextWindow) },
+        ],
     };
+    return { value: pct, label: `${pct}%`, warn, tooltip };
 });
 
 // The chat's own cache clock, between turns only: a running turn's requests refresh the cache faster than this could say.
@@ -65,7 +70,20 @@ const { agentById } = useAgents();
 const card = computed(() => agentById(conversation.value.conversationId));
 const settled = computed(() => card.value !== undefined && !turnInFlight(card.value));
 const now = useNow(() => settled.value && (card.value?.promptCache !== undefined || card.value?.keepWarm !== undefined));
-const cacheChip = computed(() => {
+// Why a hold stopped early, as the cold chip's headline; the full line, with the daemon's specifics, is in the panel a press opens.
+const coldWhy = (reason: Exclude<KeepWarmEnd, `elapsed`>): string => {
+    switch (reason) {
+        case `allowance`:
+            return t(`chat.chatPaneStatus.coldAllowance`);
+        case `changed`:
+            return t(`chat.chatPaneStatus.coldChanged`);
+        case `cold`:
+            return t(`chat.chatPaneStatus.coldCold`);
+        case `failed`:
+            return t(`chat.chatPaneStatus.coldFailed`);
+    }
+};
+const cacheChip = computed((): { icon: `sun` | `moon` | `bolt`; text: string; hint: Tip; tone: string } | undefined => {
     const agent = card.value;
     if (agent === undefined || !settled.value) {
         return undefined;
@@ -73,11 +91,21 @@ const cacheChip = computed(() => {
     const kept = keptWarm(agent);
     if (kept !== undefined) {
         const time = formatClock(kept.until);
-        return { icon: `sun` as const, text: t(`chat.chatPaneStatus.cacheKept`, { time }), hint: t(`agents.keepWarm.keptTitle`, { time }), tone: `text-link` };
+        return {
+            icon: `sun`,
+            text: t(`chat.chatPaneStatus.cacheKept`, { time }),
+            hint: { title: t(`chat.chatPaneStatus.keptWarm`), rows: [{ label: t(`chat.chatPaneStatus.until`), value: time }] },
+            tone: `text-link`,
+        };
     }
     const ended = agent.keepWarm?.ended;
     if (ended !== undefined && ended.reason !== `elapsed`) {
-        return { icon: `moon` as const, text: t(`chat.chatPaneStatus.cacheCold`), hint: endedLine(ended), tone: `text-warning` };
+        return {
+            icon: `moon`,
+            text: t(`chat.chatPaneStatus.cacheCold`),
+            hint: { title: coldWhy(ended.reason), tone: `warn`, rows: [{ label: t(`chat.chatPaneStatus.stoppedAt`), value: formatClock(ended.at) }] },
+            tone: `text-warning`,
+        };
     }
     const cache = agent.promptCache;
     if (cache === undefined || !cacheAlive(agent, now.value)) {
@@ -85,9 +113,13 @@ const cacheChip = computed(() => {
     }
     const countdown = formatElapsed(now.value, cache.at + cache.ttlMs);
     return {
-        icon: `bolt` as const,
+        icon: `bolt`,
         text: t(`chat.chatPaneStatus.cacheCountdown`, { countdown }),
-        hint: t(`chat.chatPaneStatus.cacheTooltip`, { countdown }),
+        hint: {
+            title: t(`chat.chatPaneStatus.promptCache`),
+            rows: [{ label: t(`chat.chatPaneStatus.warmFor`), value: countdown }],
+            note: t(`chat.chatPaneStatus.clickToExtend`),
+        },
         tone: cacheCooling(agent, now.value)?.near === true ? `text-link` : ``,
     };
 });

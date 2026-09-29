@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { AnchoredOverlay, Button, ContextMenu, isOverlayTarget, SearchBar } from "@intentic/ui";
+import { AnchoredOverlay, Button, ContextMenu, isOverlayTarget, SearchBar, type Tip } from "@intentic/ui";
 import { createInlineRename } from "@intentic/ui/inline-rename";
 import type { Disposable } from "@intentic/extension-api";
 import type { MenuItem } from "primevue/menuitem";
@@ -55,10 +55,13 @@ const {
 const { agentById, rename, archive, fleet, open: openAgent } = useAgents();
 const { floats } = useChatFloating();
 const router = useRouter();
-// Tooltip and accessible name in one string; hidden where the panel already floats.
-const floatHint = computed(() => withShortcut(t(`chat.words.moveChatIntoNewWindow`), `chat.toggleFloating`));
-// Moves the chat's home to the rail (a tile); return paths live on the tile itself and this bar's own menu.
-const railHint = computed(() => withShortcut(t(`chat.chatTabs.dockChatToRailHint`), `chat.toggleHome`));
+// The hover card and the accessible name, each with the shortcut; hidden where the panel already floats.
+const shortcutTip = (title: string, command: string): Tip => ({ title, keys: commandShortcut(command) });
+const floatHint = computed(() => shortcutTip(t(`chat.chatTabs.newWindow`), `chat.toggleFloating`));
+const floatLabel = computed(() => withShortcut(t(`chat.words.moveChatIntoNewWindow`), `chat.toggleFloating`));
+// Moves the chat's home to the rail (a tile), taking the full window; return paths live on the tile itself and this bar's own menu.
+const railHint = computed((): Tip => ({ ...shortcutTip(t(`chat.chatTabs.dockToRail`), `chat.toggleHome`), note: t(`chat.chatTabs.fullWindow`) }));
+const railLabel = computed(() => withShortcut(t(`chat.words.dockChatToRail`), `chat.toggleHome`));
 
 // On a wide surface the bar stands up as a left rail with the list always open, trading width the chat has for
 // the height it's short of. Docked (~22rem) is too narrow for a permanent rail, so the list lives in a sheet.
@@ -519,7 +522,7 @@ const openHistory = (event: Event): void => {
                 type="button"
                 class="composer-ghost h-7 w-7 shrink-0"
                 @click="keepChat(active.conversationId)"
-                v-tooltip.bottom="t(`chat.words.keepOpenOtherwiseChat`)"
+                v-tooltip.bottom="{ title: t(`chat.words.keepOpen`), note: t(`chat.words.nextChatReplaces`) }"
                 :aria-label="t(`chat.words.keepChatOpen`)"
             >
                 <Icon name="pin" class="text-sm" />
@@ -547,7 +550,7 @@ const openHistory = (event: Event): void => {
                 class="composer-ghost h-7 w-7 shrink-0"
                 @click="toggleChatHome(router)"
                 v-tooltip.bottom="railHint"
-                :aria-label="railHint"
+                :aria-label="railLabel"
             >
                 <!-- A rail docked at the left edge, not `expand`, whose glyph would promise a maximise this press doesn't do. -->
                 <Icon name="layout-left" class="text-sm" />
@@ -557,7 +560,7 @@ const openHistory = (event: Event): void => {
                 class="composer-ghost h-7 w-7 shrink-0"
                 @click="toggleChatFloating()"
                 v-tooltip.bottom="floatHint"
-                :aria-label="floatHint"
+                :aria-label="floatLabel"
             >
                 <Icon name="external-link" class="text-sm" />
             </button>

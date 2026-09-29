@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { Avatar } from "@intentic/ui";
+import { Avatar, type Tip } from "@intentic/ui";
+import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { identityHue } from "../../lib/identityHue";
 import { type PresenceMember, presenceActivity } from "./usePresence";
@@ -25,14 +26,18 @@ const {
     label?: string;
 }>();
 
+const t = useT();
+
 const MAX_AVATARS = 3;
 const shown = computed(() => members.slice(0, MAX_AVATARS));
 const overflow = computed(() => members.length - shown.value.length);
 
 const nameOf = (member: PresenceMember): string => member.name ?? member.email;
 // Per-avatar, so a stack of three still answers "who is that one", not just "who is here".
-const tooltipFor = (member: PresenceMember): string =>
-    label === undefined ? `${nameOf(member)}, ${presenceActivity(member)}${member.idle ? ` · away` : ``}` : `${nameOf(member)}, ${label}`;
+const tooltipFor = (member: PresenceMember): Tip =>
+    label === undefined
+        ? { title: nameOf(member), tone: member.idle ? undefined : `ok`, note: `${presenceActivity(member)}${member.idle ? t(`shell.mobileMenu.away`) : ``}` }
+        : { title: nameOf(member), note: label };
 const overflowNames = computed(() => members.slice(MAX_AVATARS).map(nameOf).join(`, `));
 </script>
 

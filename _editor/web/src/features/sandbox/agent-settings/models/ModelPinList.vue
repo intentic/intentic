@@ -59,7 +59,7 @@ const emit = defineEmits<{ promote: [number]; remove: [number]; edit: [number, H
             <span
                 v-else-if="noteThinking && entry.choice && namesThinking(entry.choice.model)"
                 class="shrink-0 text-2xs text-subtle"
-                v-tooltip.top="t(`sandbox.modelPinList.modelReasonsBeforeAnswers`)"
+                v-tooltip.top="{ title: t(`sandbox.modelPinList.reasonsFirst`), note: t(`sandbox.modelPinList.slowerSharper`) }"
             >
                 {{ t(`sandbox.modelPinList.thinks`) }}
             </span>
@@ -68,7 +68,7 @@ const emit = defineEmits<{ promote: [number]; remove: [number]; edit: [number, H
                 :class="ui.iconButton(`h-auto w-auto shrink-0 rounded p-1 text-subtle`)"
                 :disabled="entry.index === 0"
                 @click="emit(`promote`, entry.index)"
-                v-tooltip.top="t(`sandbox.modelPinList.tryOneEarlier`)"
+                v-tooltip.top="t(`sandbox.modelPinList.moveUp`)"
                 :aria-label="t(`sandbox.modelPinList.moveEarlier`, { label: entry.label })"
             >
                 <Icon name="chevron-up" class="text-2xs" />
@@ -77,7 +77,7 @@ const emit = defineEmits<{ promote: [number]; remove: [number]; edit: [number, H
                 type="button"
                 class="shrink-0 rounded p-1 text-subtle transition-colors hover:bg-overlay hover:text-danger"
                 @click="emit(`remove`, entry.index)"
-                v-tooltip.top="t(`sandbox.modelPinList.removeOrder`)"
+                v-tooltip.top="t(`ui.action.remove`)"
                 :aria-label="t(`sandbox.modelPinList.remove`, { label: entry.label })"
             >
                 <Icon name="times" class="text-2xs" />

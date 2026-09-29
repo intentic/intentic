@@ -49,7 +49,7 @@ const lone = computed(() => (manySided(machine) ? undefined : machine.environmen
                 <span class="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1">
                     <span class="min-w-0 truncate font-semibold">{{ machine.label }}</span>
                     <!-- The OS beside the name: what tells two identically-labelled machines apart at a glance. -->
-                    <span v-if="lone && osLabel(lone)" class="shrink-0 truncate text-xs font-normal text-muted" :title="osTitle(lone)">
+                    <span v-if="lone && osLabel(lone)" class="shrink-0 truncate text-xs font-normal text-muted" v-tooltip.top="osTitle(lone)">
                         {{ osLabel(lone) }}
                     </span>
                 </span>

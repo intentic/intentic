@@ -437,7 +437,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                                     type="button"
                                     :class="ui.iconButton(`h-8 w-8 hover:bg-danger/10 hover:text-danger`)"
                                     :aria-label="t(`approvalsView.reject`, { item: headline(item) })"
-                                    v-tooltip.top="t(`approvalsView.rejectDeletes`)"
+                                    v-tooltip.top="{ title: t(`approvalsView.reject2`), note: t(`approvalsView.deletesFile`) }"
                                     @click="rejecting = item"
                                 >
                                     <Icon name="trash" />
@@ -524,7 +524,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                                     type="button"
                                     :class="ui.iconButton(`h-8 w-8 hover:bg-danger/10 hover:text-danger`)"
                                     :aria-label="t(`approvalsView.reject`, { item: headline(item) })"
-                                    v-tooltip.top="t(`approvalsView.rejectDeletes`)"
+                                    v-tooltip.top="{ title: t(`approvalsView.reject2`), note: t(`approvalsView.deletesFile`) }"
                                     @click="rejecting = item"
                                 >
                                     <Icon name="trash" />
@@ -683,7 +683,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                                     severity="secondary"
                                     :disabled="save.isPending.value"
                                     :aria-label="t(`approvalsView.stopPutBackIn`, { item: headline(item) })"
-                                    v-tooltip.top="t(`approvalsView.backToReviewNothing`)"
+                                    v-tooltip.top="{ title: t(`approvalsView.backToReview`), note: t(`approvalsView.wontGoAhead`) }"
                                     @click="holdBack(item)"
                                 >
                                     <template #icon><Icon name="undo" /></template>
@@ -715,7 +715,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                                     type="button"
                                     :class="ui.iconButton()"
                                     :aria-label="t(`approvalsView.putBackInReview`, { item: headline(item) })"
-                                    v-tooltip.top="t(`approvalsView.putBackInReview2`)"
+                                    v-tooltip.top="{ title: t(`approvalsView.backToReview`), note: t(`approvalsView.wontGoAhead`) }"
                                     v-action="() => holdBack(item)"
                                 >
                                     <Icon name="undo" />
@@ -725,7 +725,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                                     type="button"
                                     :class="ui.iconButton(`hover:bg-danger/10 hover:text-danger`)"
                                     :aria-label="t(`approvalsView.reject`, { item: headline(item) })"
-                                    v-tooltip.top="t(`approvalsView.rejectDeletes`)"
+                                    v-tooltip.top="{ title: t(`approvalsView.reject2`), note: t(`approvalsView.deletesFile`) }"
                                     @click="rejecting = item"
                                 >
                                     <Icon name="trash" />
@@ -770,7 +770,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                                     type="button"
                                     :class="ui.iconButton()"
                                     :aria-label="t(`approvalsView.removeList`, { item: headline(item) })"
-                                    v-tooltip.top="t(`approvalsView.removeListWhatDone`)"
+                                    v-tooltip.top="{ title: t(`approvalsView.remove`), note: t(`approvalsView.nothingUndone`) }"
                                     @click="rejecting = item"
                                 >
                                     <Icon name="times" />

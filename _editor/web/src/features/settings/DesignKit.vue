@@ -571,6 +571,41 @@ const pickedTier = ref(`collaborator`);
             </section>
 
             <section class="flex flex-col gap-4">
+                <h2 :class="ui.sectionLabel()">Hover labels</h2>
+                <p class="text-xs text-muted">A string is a word or two. Anything more is a Tip: a short title, figures as rows, one short note.</p>
+                <div class="flex flex-wrap items-center gap-3">
+                    <Button data-kit-tip="label" size="small" severity="secondary" v-tooltip.top="`Archive`">Label</Button>
+                    <Button data-kit-tip="keys" size="small" severity="secondary" v-tooltip.top="{ title: `Previous`, keys: `Shift+Enter` }">Key cap</Button>
+                    <Button
+                        data-kit-tip="figures"
+                        size="small"
+                        severity="secondary"
+                        v-tooltip.top="{
+                            title: `Memory low`,
+                            tone: `warn`,
+                            rows: [
+                                { label: `In RAM`, value: `7.4 GiB` },
+                                { label: `Swapped`, value: `4.1 GiB` },
+                                { label: `Limit`, value: `18.0 GiB` },
+                                { label: `Reserved`, value: `6.0 GiB` },
+                            ],
+                        }"
+                        >Figures</Button
+                    >
+                    <Button
+                        data-kit-tip="note"
+                        size="small"
+                        severity="secondary"
+                        v-tooltip.bottom="{ title: `Delete all`, rows: [{ label: `Agents`, value: 12 }, { label: `Branches`, value: 12, tone: `danger` }], note: `Can't be undone` }"
+                        >Rows and note</Button
+                    >
+                    <Button data-kit-tip="brief" size="small" severity="secondary" v-tooltip.bottom="{ title: `Starts now`, tone: `warn`, note: `Risk: slowdown, killed processes` }"
+                        >Title and note</Button
+                    >
+                </div>
+            </section>
+
+            <section class="flex flex-col gap-4">
                 <h2 :class="ui.sectionLabel()">Figures</h2>
                 <p class="text-xs text-muted">
                     Four shapes that look alike in a list of names and are not: a tally line, a stat strip, a bar chart, and a verdict.

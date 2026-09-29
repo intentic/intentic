@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { WorkspaceFileWindow, WorkspaceTreeEntry } from "@intentic/api-contract";
-import { Button, CopyButton, ui, useDevice } from "@intentic/ui";
+import { Button, CopyButton, type Tip, ui, useDevice } from "@intentic/ui";
 import { errorMessage, useLatest } from "@intentic/ui/async";
 import { computed, onBeforeUnmount, ref, shallowRef, watch, type Component } from "vue";
 import { sandboxBlob } from "../../sandbox/client/sandboxClient";
@@ -13,6 +13,8 @@ import { readFileWindow } from "../files/fileWindow";
 import { mediaUrl } from "../files/mediaUrl";
 import { useEditBuffers } from "../files/useEditBuffers";
 import { useLayout } from "../../../shell/window/useLayout";
+import { formatChord, isApplePlatform } from "../../../shell/commands/keybindings";
+import { useVocabulary } from "../../../core-views/vocabulary";
 import { useMonaco } from "../files/useMonaco";
 import { changeEpochOf } from "../changes/live/useWorkspaceLive";
 import { useWorkspaceTree } from "../explorer/useWorkspaceTree";
@@ -355,15 +357,30 @@ const scopedReadOnly = computed(
     () => !mobile.value && editableKind.value && (!canEditFiles.value || workspaceAgent.value !== undefined || inArchive.value),
 );
 const scopeTitle = useScopeTitle();
-const readOnlyReason = computed(() => {
+const words = useVocabulary();
+const readOnlyReason = computed((): Tip => {
     if (!canEditFiles.value) {
-        return `Your access to this sandbox is read-only: changing files needs writer access.`;
+        return { title: t(`workspace.fileViewer.noWriteAccess`) };
     }
     if (inArchive.value) {
-        return `Inside an archive: extract it to get a copy you can change.`;
+        return { title: t(`workspace.fileViewer.insideArchive`), note: t(`workspace.fileViewer.extractToEdit`) };
     }
-    return `Showing ${scopeTitle.value}'s copy of the workspace: its work hasn't landed yet, so these files can't be edited here.`;
+    return {
+        title: t(`workspace.words.privateCopy`),
+        rows: [{ label: words.value.Agent, value: scopeTitle.value }],
+        note: t(`workspace.words.cantEditHere`),
+    };
 });
+// The file came from the shared tree because the agent's own copy has none.
+const sharedTip = computed(
+    (): Tip => ({
+        title: t(`workspace.fileViewer.sharedVersion`),
+        rows: [{ label: words.value.Agent, value: scopeTitle.value }],
+        note: t(`workspace.fileViewer.notInItsCopy`),
+    }),
+);
+// Monaco's own save chord, drawn the platform's way.
+const saveKeys = formatChord(`Mod+S`, isApplePlatform());
 const markdownHere = computed(() => open.value.kind === `markdown`);
 // Text files are continuously editable on desktop whenever permissions allow.
 const editingThis = computed(() => !mobile.value && canEdit.value && !markdownHere.value);
@@ -411,7 +428,7 @@ const onEditorSave = (value: string): void =>
                 :class="hideFileComments ? `ui-chip-on` : ``"
                 :aria-pressed="hideFileComments"
                 @click="toggleHideFileComments()"
-                v-tooltip.bottom="hideFileComments ? t(`workspace.fileViewer.commentsHiddenClickTo`) : t(`workspace.fileViewer.hideCommentsReadCode`)"
+                v-tooltip.bottom="hideFileComments ? t(`workspace.fileViewer.showComments`) : t(`workspace.fileViewer.hideComments`)"
             >
                 <Icon :name="hideFileComments ? 'eye-slash' : 'eye'" class="text-2xs" />
                 <span class="max-md:hidden">{{ t(`workspace.words.comments`) }}</span>
@@ -424,7 +441,11 @@ const onEditorSave = (value: string): void =>
                 :class="textWanted ? `ui-chip-on` : ``"
                 :aria-pressed="textWanted"
                 @click="textWanted = !textWanted"
-                v-tooltip.bottom="textWanted ? t(`workspace.fileViewer.backToFileItself`) : t(`workspace.fileViewer.readFileTextWay`)"
+                v-tooltip.bottom="
+                    textWanted
+                        ? t(`workspace.fileViewer.showFile`)
+                        : { title: t(`workspace.fileViewer.readAsText`), note: t(`workspace.words.whatAgentsRead`) }
+                "
             >
                 <Icon :name="textWanted ? 'file' : 'align-left'" class="text-2xs" />
                 <span class="max-md:hidden">{{ t(`workspace.words.text`) }}</span>
@@ -433,7 +454,7 @@ const onEditorSave = (value: string): void =>
             <span
                 v-if="workspaceAgent !== undefined && fromShared"
                 class="inline-flex shrink-0 items-center gap-1 rounded-md bg-overlay px-1.5 py-0.5 text-2xs text-muted"
-                v-tooltip.bottom="t(`workspace.fileViewer.agentNoCopyFile`)"
+                v-tooltip.bottom="sharedTip"
             >
                 <Icon name="folder" class="text-[0.65rem]" /> {{ t(`workspace.words.sharedFolder`) }}
             </span>
@@ -453,7 +474,7 @@ const onEditorSave = (value: string): void =>
                 :class="ui.iconButton('relative text-muted hover:text-content')"
                 :disabled="!dirtyThis"
                 @click="saveNow()"
-                v-tooltip.bottom="dirtyThis ? t(`workspace.fileViewer.saveChangesCtrlS`) : t(`workspace.fileViewer.savedCtrlS`)"
+                v-tooltip.bottom="{ title: dirtyThis ? t(`workspace.fileViewer.saveChanges`) : t(`workspace.fileViewer.saved`), keys: saveKeys }"
                 :aria-label="t(`workspace.fileViewer.saveFile`)"
             >
                 <Icon name="save" class="text-xs" />
@@ -474,7 +495,7 @@ const onEditorSave = (value: string): void =>
                 :text="editorSeed"
                 :label="t(`ui.action.copy`)"
                 class="bg-card/90 shadow-sm backdrop-blur"
-                v-tooltip.bottom="t(`workspace.fileViewer.copyFileContent`)"
+                v-tooltip.bottom="t(`workspace.words.wholeFile`)"
                 :aria-label="t(`workspace.fileViewer.copyFileContent`)"
             />
         </div>

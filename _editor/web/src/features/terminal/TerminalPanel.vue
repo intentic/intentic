@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { Button, ContextMenu, Icon, Modal, ResizeSeam, ui, useDevice } from "@intentic/ui";
+import { Button, ContextMenu, Icon, Modal, ResizeSeam, type Tip, ui, useDevice } from "@intentic/ui";
 import type { Disposable } from "@intentic/extension-api";
 import { useT } from "@intentic/ui/i18n";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { TERMINAL } from "../../shell/commands/categories";
-import { registerCommand, withShortcut } from "../../shell/commands/useCommands";
+import { commandShortcut, registerCommand, tipWithShortcut, withShortcut } from "../../shell/commands/useCommands";
+import { formatChord, isApplePlatform } from "../../shell/commands/keybindings";
 import { postTurnControl } from "../chat/run/turnStream";
 import { useSandbox } from "../sandbox/client/useSandbox";
 import BackgroundProcesses from "./BackgroundProcesses.vue";
@@ -52,14 +53,19 @@ const activeShell = computed(() => order.value.find((tab) => tab.name === active
 const floating = useTerminalFloating();
 // The bar becomes a left rail while the panel has a window of its own.
 const vertical = computed(() => floating.here.value);
-const floatHint = computed(() => withShortcut(floating.floats.value ? `Dock panel back` : `Move panel into new window`, `terminal.toggleFloating`));
+const floatWords = computed(() => (floating.floats.value ? t(`terminal.terminalPanel.dockBack`) : t(`terminal.terminalPanel.newWindow`)));
+const floatHint = computed(() => withShortcut(floatWords.value, `terminal.toggleFloating`));
+const floatTip = computed(() => tipWithShortcut(floatWords.value, `terminal.toggleFloating`));
 // Dismissal, not a kill: sessions outlive every view; docked it hides the panel, floating it closes the window.
-const closeHint = computed(() =>
-    withShortcut(
-        floating.here.value ? `Close the window, the terminals keep running` : `Hide the panel, the terminals keep running`,
-        `terminal.toggle`,
-    ),
-);
+const closeWords = computed(() => (floating.here.value ? t(`terminal.terminalPanel.closeWindow`) : t(`terminal.terminalPanel.hidePanel`)));
+const closeHint = computed(() => withShortcut(closeWords.value, `terminal.toggle`));
+const closeTip = computed((): Tip => ({
+    title: closeWords.value,
+    keys: commandShortcut(`terminal.toggle`),
+    note: t(`terminal.terminalPanel.terminalsKeepRunning`),
+}));
+// The find bar's keys, spelled the way this platform spells them.
+const findKeys = { previous: formatChord(`Shift+Enter`, isApplePlatform()), next: formatChord(`Enter`, isApplePlatform()) };
 
 // Sessions can finish with no client action; watching the shared list catches what imperative relists miss. A dropped
 // refresh is the strip's own to retry, and nothing here awaits it.
@@ -203,7 +209,7 @@ watch(
             :min="MIN_HEIGHT"
             :max="maxHeight"
             :reset="DEFAULT_HEIGHT"
-            :title="t(`ui.resizeSeam.dragToResize`)"
+            :title="t(`ui.resizeSeam.doubleClickResets`)"
         />
         <TerminalStrip :tabs="tabs" :floating="floating" :vertical="vertical">
             <WorkTerminals />
@@ -229,10 +235,10 @@ watch(
                 <Icon name="refresh" class="text-xs" />
             </button>
             <!-- Keep the pop-out action beside close because both change the window. -->
-            <button type="button" :class="ui.iconButton()" @click="floating.toggle()" v-tooltip.top="floatHint" :aria-label="floatHint">
+            <button type="button" :class="ui.iconButton()" @click="floating.toggle()" v-tooltip.top="floatTip" :aria-label="floatHint">
                 <Icon :name="floating.floats.value ? 'arrow-down-left' : 'external-link'" class="text-xs" />
             </button>
-            <button type="button" :class="ui.iconButton()" @click="emit(`close`)" v-tooltip.top="closeHint" :aria-label="closeHint">
+            <button type="button" :class="ui.iconButton()" @click="emit(`close`)" v-tooltip.top="closeTip" :aria-label="closeHint">
                 <Icon :name="floating.here.value ? 'times' : 'chevron-down'" class="text-xs" />
             </button>
         </TerminalStrip>
@@ -293,7 +299,7 @@ watch(
                     type="button"
                     :class="ui.iconButton()"
                     :aria-label="t(`terminal.terminalPanel.previousMatch`)"
-                    v-tooltip.top="t(`terminal.terminalPanel.previousMatchShiftEnter`)"
+                    v-tooltip.top="{ title: t(`terminal.terminalPanel.previousMatch`), keys: findKeys.previous }"
                     @click="findPrevious"
                 >
                     <Icon name="chevron-up" />
@@ -302,7 +308,7 @@ watch(
                     type="button"
                     :class="ui.iconButton()"
                     :aria-label="t(`terminal.terminalPanel.nextMatch`)"
-                    v-tooltip.top="t(`terminal.terminalPanel.nextMatchEnter`)"
+                    v-tooltip.top="{ title: t(`terminal.terminalPanel.nextMatch`), keys: findKeys.next }"
                     @click="findNext"
                 >
                     <Icon name="chevron-down" />
@@ -311,7 +317,7 @@ watch(
                     type="button"
                     :class="ui.iconButton()"
                     :aria-label="t(`terminal.terminalPanel.closeFind`)"
-                    v-tooltip.top="t(`terminal.terminalPanel.closeEsc`)"
+                    v-tooltip.top="{ title: t(`ui.action.close`), keys: t(`ui.keys.esc`) }"
                     @click="closeFind"
                 >
                     <Icon name="times" />

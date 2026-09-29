@@ -1,5 +1,5 @@
 import { type AgentProvider, providerLabel } from "@intentic/sandbox-contract";
-import type { IconName } from "@intentic/ui";
+import type { IconName, Tip } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 import {
     activityLine,
@@ -24,7 +24,7 @@ export interface ChildLook {
     readonly title: string;
     // The title's hover, for the one row whose press does not open its own chat: an in-process subagent has none, and
     // its work is in its parent's, on the card of the call that started it.
-    readonly titleHint: string | undefined;
+    readonly titleHint: Tip | undefined;
     // Its standing, in the card's own glyphs (agentStatusMeta, subagentStatusMeta); settled rows in the ledger's ink.
     readonly glyph: { readonly icon: IconName; readonly spin?: boolean; readonly label: string; readonly class: string };
     // The glyph's hover: why it failed where it says so, else the standing's word.
@@ -54,7 +54,7 @@ export const childLook = (child: TrayChild, provider: AgentProvider): ChildLook 
         const tag = child.agentType ?? t(`shared.subagent`);
         return {
             title,
-            titleHint: t(`agents.childRows.inProcessHint`),
+            titleHint: { title: t(`agents.childRows.inProcess`), note: t(`agents.childRows.opensInThisChat`) },
             glyph: live ? meta : { ...meta, class: `text-subtle` },
             hint: child.error ?? meta.label,
             ask: undefined,

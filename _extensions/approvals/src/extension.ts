@@ -35,7 +35,7 @@ export const approvalsAttention = sandboxPoll<ViewBadge | undefined>({
             ? undefined
             : {
                   count,
-                  // Phrased to follow the tile's name in the rail: "Approvals · 3 waiting on you".
+                  // Phrased to follow the tile's name in the rail: "Approvals · 3 waiting".
                   tooltip: t(`extension.waitingOn`, { count }),
                   // `danger` only when something's actually wrong; a mere proposal is the resting `info` tone.
                   tone: broken > 0 || hooks?.ledgerUnreadable === true ? `danger` : `info`,

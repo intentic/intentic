@@ -92,7 +92,7 @@ const viewOptions = computed(() => [
         ...(updatable.value > 0
             ? {
                   mark: `arrow-circle-up` as const,
-                  markTitle: `${updatable.value} installed ${updatable.value === 1 ? `extension has` : `extensions have`} a newer listed commit`,
+                  markTitle: { title: t(`sandbox.sandboxExtensions.newerCommits`), rows: [{ label: t(`sandbox.sandboxExtensions.updatable`), value: updatable.value }] },
               }
             : {}),
     },
@@ -227,7 +227,7 @@ const created = async (extension: { id: string; dir: string; wish: string }): Pr
                     type="button"
                     :class="ui.iconButton(`h-8 w-8`)"
                     :disabled="isFetching"
-                    v-tooltip.top="t(`sandbox.sandboxExtensions.reReadRegistry`)"
+                    v-tooltip.top="t(`sandbox.sandboxExtensions.refreshRegistry`)"
                     @click="refetch"
                 >
                     <Icon name="refresh" :spin="isFetching" />

@@ -678,7 +678,12 @@ onBeforeUnmount(() => {
                                             <!-- The scan's finding rides its own badge; the tooltip carries the claim and the evidence so it stays checkable. -->
                                             <span
                                                 v-if="tile.recommendation"
-                                                v-tooltip.top="`${tile.recommendation.reason}: ${tile.recommendation.evidence}`"
+                                                v-tooltip.top="{
+                                                    title: t(`capabilities.capabilities.recommendedTitle`),
+                                                    tone: `info`,
+                                                    rows: [{ label: t(`capabilities.capabilities.evidence`), value: tile.recommendation.evidence }],
+                                                    note: tile.recommendation.reason,
+                                                }"
                                                 class="shrink-0 text-2xs text-info"
                                                 :aria-label="t(`capabilities.capabilities.recommended2`, { reason: tile.recommendation.reason })"
                                             >

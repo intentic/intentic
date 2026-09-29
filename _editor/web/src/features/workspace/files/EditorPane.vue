@@ -108,7 +108,7 @@ const diffOutline = useLoadingReveal(
                 type="button"
                 :class="ui.iconButton(`mx-1 h-7 w-7 shrink-0 self-center`)"
                 @click="collapseSplit()"
-                v-tooltip.bottom="t(`workspace.editorPane.closeSplitTabsMove`)"
+                v-tooltip.bottom="{ title: t(`workspace.workspaceDesktop.closeSplit`), note: t(`workspace.editorPane.tabsRejoin`) }"
                 :aria-label="t(`workspace.editorPane.closeSplit`)"
             >
                 <Icon name="split-columns" class="text-xs" />

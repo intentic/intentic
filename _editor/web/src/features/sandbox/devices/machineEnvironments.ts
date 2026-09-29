@@ -1,4 +1,6 @@
 import { deviceDistro, userDistrosOf } from "@intentic/sandbox-contract";
+import type { Tip } from "@intentic/ui";
+import { t } from "@intentic/ui/i18n";
 import type { RouteLocationRaw } from "vue-router";
 import { deviceDoors, osLabel, osTitle } from "./deviceFacts";
 import type { DeviceRow, MachineRow } from "./deviceRows";
@@ -19,13 +21,20 @@ export const environmentAddressed = (row: DeviceRow): boolean => row.device.host
 
 // What the row used to print beside the name, kept for the reader who wants it: the OS in full where it says more
 // than the title does, what shell to type in, where home is, and how this sandbox reaches the environment at all.
-export const environmentDetail = (row: DeviceRow): string | undefined => {
-    const parts = [
-        osTitle(row.device),
-        ...(row.device.facts === undefined ? [] : [row.device.facts.shell, row.device.facts.home]),
-        ...deviceDoors(row.device).map((door) => door.name),
-    ].filter((part) => part !== undefined && part !== ``);
-    return parts.length === 0 ? undefined : parts.join(` · `);
+// A card of figures, not a joined line: each fact gets its own label, and one the device never stated drops out.
+export const environmentDetail = (row: DeviceRow): Tip | undefined => {
+    const rows = [
+        { label: t(`sandbox.words.os`), value: osTitle(row.device) ?? `` },
+        { label: t(`sandbox.words.shell`), value: row.device.facts?.shell ?? `` },
+        { label: t(`sandbox.words.home`), value: row.device.facts?.home ?? `` },
+        {
+            label: t(`sandbox.words.access`),
+            value: deviceDoors(row.device)
+                .map((door) => door.name)
+                .join(`, `),
+        },
+    ].filter((fact) => fact.value !== ``);
+    return rows.length === 0 ? undefined : { title: environmentTitle(row), rows };
 };
 
 // A distro the Windows side lists that this sandbox holds NO door into: the ones it does hold are the rows above,

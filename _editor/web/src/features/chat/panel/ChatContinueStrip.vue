@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { TurnBreakPolicy } from "@intentic/sandbox-contract";
-import { Button, formatTokens, Icon, type IconName, ResponsiveOverlay, SegmentedControl, useDevice } from "@intentic/ui";
+import { Button, formatTokens, Icon, type IconName, ResponsiveOverlay, SegmentedControl, type Tip, type TooltipValue, useDevice } from "@intentic/ui";
 import { errorMessage, useNow } from "@intentic/ui/async";
 import { computed, ref, watch } from "vue";
 import { useAgents } from "../../agents/fleet/useAgents";
@@ -50,22 +50,39 @@ const status = computed(() => (pickUp.value === undefined ? `` : pickUpStatus(pi
 // shown is the provider's own guess and is routinely early; pressing before it costs one refused request.
 // Press cost, shown to un-hide it: a held turn that ran re-reads its whole context cold; one refused at the door
 // opens a fresh session with a short hand-off (both measured by the daemon at failure, PickUp.held).
-const pressCostLine = computed(() => {
-    const cost = pressCost(pickUp.value?.held);
-    if (cost === undefined) {
-        return ``;
-    }
-    return cost.kind === `reread`
-        ? t(`chat.chatContinueStrip.rereadsCold`, { tokens: formatTokens(cost.tokens) })
-        : t(`chat.chatContinueStrip.opensFreshSession`, { tokens: formatTokens(cost.tokens) });
-});
-const continueHint = computed(() => {
-    const keyHint = !mobile.value && props.ready ? t(`chat.chatContinueStrip.enterKey`) : ``;
+const continueHint = computed((): TooltipValue => {
+    const keys = !mobile.value && props.ready ? t(`ui.keys.enter`) : undefined;
     if (pickUp.value?.held !== undefined) {
-        return t(`chat.chatContinueStrip.sendTurnAgainExactly`, { pressCostLine: pressCostLine.value, keyHint });
+        const cost = pressCost(pickUp.value.held);
+        return {
+            title: t(`chat.chatContinueStrip.resendUnchanged`),
+            keys,
+            rows:
+                cost === undefined
+                    ? []
+                    : [
+                          {
+                              label: cost.kind === `reread` ? t(`chat.chatContinueStrip.rereads`) : t(`chat.chatContinueStrip.handoff`),
+                              value: t(`chat.chatContinueStrip.aboutTokens`, { tokens: formatTokens(cost.tokens) }),
+                          },
+                      ],
+            note: t(`chat.chatContinueStrip.mayBeatReset`),
+        };
     }
-    return props.ready ? t(`chat.chatContinueStrip.pickUpWithoutRetyping`, { keyHint }) : t(`chat.chatContinueStrip.waitingNothingGetsThrough`);
+    if (!props.ready) {
+        return t(`chat.chatContinueStrip.awaitingReset`);
+    }
+    return { title: t(`chat.chatContinueStrip.pickUp`), keys };
 });
+
+// What the reset press spends: a once-a-week grant, said before it is gone.
+const resetTip = computed(
+    (): Tip => ({
+        title: t(`chat.chatContinueStrip.resetTitle`),
+        rows: [{ label: t(`chat.chatContinueStrip.resetSpends`), value: t(`chat.chatContinueStrip.oneWeeklyReset`) }],
+        note: t(`chat.chatContinueStrip.weeklyUntouched`),
+    }),
+);
 
 // The way on that skips waiting entirely: read off the reason since this needs only another pool with room.
 // limitFallback.ts judges which account may be offered, and the same reading names the `move` answer below. A sandbox too
@@ -82,7 +99,10 @@ const outdated = computed(() => ending.value === `limit` && accountsOutdated.val
 // (this agent's override, else the sandbox-wide policy), so the card, the settings row and this control cannot
 // disagree about what is armed.
 const answers = computed(() => (ending.value === undefined ? [] : breakAnswers(ending.value, fallback.value === undefined ? undefined : fallbackLabel(fallback.value))));
-const answerOptions = computed(() => answers.value.map((answer) => ({ label: answer.label, value: answer.value, icon: answer.icon, title: answer.note })));
+// Each pill's hover: its own name and the one consequence that tells it from the others.
+const answerOptions = computed(() =>
+    answers.value.map((answer) => ({ label: answer.label, value: answer.value, icon: answer.icon, title: { title: answer.label, note: answer.brief } })),
+);
 
 // Held while a write is in flight, so the pill moves under the finger rather than after the round trip; cleared either
 // way, so a refused write snaps back to what the daemon actually holds.
@@ -250,7 +270,7 @@ const waysRows = computed((): readonly { key: string; icon: IconName; title: str
                     severity="secondary"
                     :text="true"
                     :disabled="!reachable || resetting"
-                    v-tooltip.top="t(`chat.chatContinueStrip.reopenAccountsSessionLimit`)"
+                    v-tooltip.top="resetTip"
                     @click="useLimitReset"
                 >
                     <Icon name="refresh" class="mr-1 text-2xs" />{{
@@ -269,7 +289,7 @@ const waysRows = computed((): readonly { key: string; icon: IconName; title: str
                     :disabled="!reachable"
                     :aria-label="t(`chat.chatContinueStrip.otherWaysOn`)"
                     :aria-expanded="waysOpen"
-                    v-tooltip.top="t(`chat.chatContinueStrip.otherWaysOn`)"
+                    v-tooltip.top="t(`chat.chatContinueStrip.otherAccounts`)"
                     @click="waysOpen = !waysOpen"
                 >
                     <Icon name="chevron-down" class="text-2xs" />

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { type AccountFix, providerLabel } from "@intentic/sandbox-contract";
-import { RowGroup, RowNote, SearchBar, ui } from "@intentic/ui";
+import { RowGroup, RowNote, SearchBar, type Tip, ui } from "@intentic/ui";
 import { computed, onMounted, ref } from "vue";
 import ProviderLogo from "../../chat/accounts/ProviderLogo.vue";
 import { accountsLoaded, providerAccounts, translatorAccounts } from "../../chat/accounts/providerAccounts";
@@ -17,6 +17,7 @@ import {
     nestPools,
     type PlanLimitBand,
     PLAN_LIMIT_BANDS,
+    type PlanLimitAttention,
     type PlanLimitGroup,
     planLimitBandLabel,
     planLimitBandTint,
@@ -115,6 +116,15 @@ const barTooltip = (row: PlanLimitRow): string =>
         : `${row.label} · ${row.binding?.label ?? ``} ${formatRemaining(row.percent, row.stale)}${row.binding?.resetsAt === undefined ? `` : ` · resets ${formatReset(row.binding.resetsAt)}`}`;
 
 // attention
+
+// One held-back name's hover: who it signs in as, and the provider's own reason for holding it, verbatim.
+const attentionTip = (row: PlanLimitAttention[`rows`][number]): Tip => ({
+    title: row.label,
+    rows: [
+        { label: t(`sandbox.planLimitsPanel.account`), value: row.identity ?? `` },
+        { label: t(`sandbox.planLimitsPanel.reason`), value: row.state.reason },
+    ],
+});
 
 // Caps a fleet-wide expiry (real: a slept laptop, a mass revoke) from reverting this to a long column. Per condition,
 // so thirty expired sign-ins can't push the two accounts missing something else off the panel.
@@ -298,7 +308,10 @@ const roster = computed(() => {
                                         <div
                                             v-tooltip.top="
                                                 capped && parent !== undefined
-                                                    ? t(`sandbox.planLimitsPanel.unusableUntilReopens`, { pool: parent.label })
+                                                    ? {
+                                                          title: t(`sandbox.planLimitsPanel.unusable`),
+                                                          rows: [{ label: t(`sandbox.planLimitsPanel.waitsOn`), value: parent.label }],
+                                                      }
                                                     : undefined
                                             "
                                             class="order-last min-w-0 flex-1 basis-full overflow-hidden rounded-full @xl:order-none @xl:basis-0"
@@ -385,7 +398,7 @@ const roster = computed(() => {
                         <span
                             v-for="row in group.rows"
                             :key="row.id"
-                            v-tooltip.top="[row.identity, row.state.reason].filter(Boolean).join(` · `)"
+                            v-tooltip.top="attentionTip(row)"
                             class="flex min-w-0 items-center gap-1.5 text-2xs"
                         >
                             <ProviderLogo :provider="row.provider" class="shrink-0 text-muted" />

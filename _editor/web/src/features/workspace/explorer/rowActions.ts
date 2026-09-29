@@ -1,4 +1,4 @@
-import type { IconName } from "@intentic/ui";
+import type { IconName, Tip } from "@intentic/ui";
 import { documentsAt } from "../../../core-views/documentRegistry";
 import { t } from "@intentic/ui/i18n";
 
@@ -10,8 +10,10 @@ export interface RowAction {
     // Stable per row, the v-for key, and what a test names.
     readonly id: string;
     readonly icon: IconName;
-    // Names the action ("Open management panel", not "Management panel").
+    // Names the action in a word or two; the row's menu reads it as the item's label.
     readonly tooltip: string;
+    // The hover card, where the label alone leaves out a state worth knowing; the label is the hover otherwise.
+    readonly tip?: Tip;
     // True when the icon itself is evidence (e.g. a page exists); actions you can do to a repo stay hover-only.
     readonly standing: boolean;
     readonly run: () => void;
@@ -58,7 +60,7 @@ export const rowActionsFor = (dir: string, sources: RowActionSources): readonly 
         actions.push({
             id: `personas`,
             icon: `user`,
-            tooltip: personaCount === 1 ? `Change who works here: 1 persona` : `Change who works here, ${personaCount} personas`,
+            tooltip: t(`workspace.rowActions.personas`, { count: personaCount }, personaCount),
             standing: true,
             run: (): void => sources.openPersonas(dir),
         });
@@ -70,10 +72,11 @@ export const rowActionsFor = (dir: string, sources: RowActionSources): readonly 
             id: `checks`,
             icon: `shield`,
             tooltip: checks.changed
-                ? `Its checks changed since you switched them on, so they are not running`
+                ? t(`workspace.rowActions.checksPaused`)
                 : checks.adopted
-                  ? `Checks this repository runs on its own code`
-                  : `This repository declares checks, not switched on`,
+                  ? t(`workspace.rowActions.checksOn`)
+                  : t(`workspace.rowActions.checksOff`),
+            tip: checks.changed ? { title: t(`workspace.rowActions.checksPaused`), tone: `warn`, note: t(`workspace.rowActions.changedSinceOn`) } : undefined,
             standing: true,
             run: (): void => sources.openChecks(dir),
         });
@@ -89,7 +92,7 @@ const manageAction = (dir: string, sources: RowActionSources): RowAction[] =>
               {
                   id: `directory`,
                   icon: `cog`,
-                  tooltip: t(`workspace.rowActions.openManagementPanel`),
+                  tooltip: t(`workspace.rowActions.manage`),
                   standing: false,
                   run: (): void => sources.openDirectory(dir),
               },

@@ -188,7 +188,8 @@ describe(`draftReport`, () => {
         const rows = draftReport({ startedAt: 0, steps: [] }, NOW);
         expect(rows).toHaveLength(1);
         expect(rows[0]?.status).toBe(`reading`);
-        expect(rows[0]?.detail).toBe(rows[0]?.title);
+        // The row's own line says it all, so it raises no hover.
+        expect(rows[0]?.tip).toBeUndefined();
     });
 
     test(`tells the whole walk: the skip with its remembered reason, the refusal in its own words, the answer`, () => {
@@ -215,7 +216,7 @@ describe(`draftReport`, () => {
         expect(rows[2]?.status).toBe(`answered`);
     });
 
-    test(`each row keeps its unabridged sentence for the tooltip`, () => {
+    test(`each row's hover names the full model id and what the step took`, () => {
         const rows = draftReport(
             {
                 startedAt: 0,
@@ -236,11 +237,10 @@ describe(`draftReport`, () => {
             NOW,
         );
         const [skipped, refused] = rows;
-        expect(skipped?.title).toContain(`gemini-3-flash`);
-        expect(skipped?.title).toContain(`usage limit reached`);
-        expect(refused?.title).toContain(`claude-haiku-4-5-20251001`);
-        expect(refused?.title).toContain(`Claude usage limit reached — the allowance is exhausted. Try again once it resets.`);
-        expect(skipped?.title).not.toBe(refused?.title);
+        // A skip spent no time, so its card is the model id alone; the refusal's headline is on the row itself.
+        expect(skipped?.tip).toEqual({ title: `gemini-3-flash`, rows: [{ label: `Refused`, value: `` }] });
+        expect(refused?.tip).toEqual({ title: `claude-haiku-4-5-20251001`, rows: [{ label: `Refused`, value: `6s` }] });
+        expect(refused?.detail).toBe(`Claude usage limit reached`);
     });
 
     test(`names the model as the rest of the app does, and drops the boilerplate from the refusal`, () => {
@@ -296,7 +296,7 @@ describe(`draftReport`, () => {
         expect(rows).toHaveLength(1);
         expect(rows[0]?.status).toBe(`failed`);
         expect(rows[0]?.detail).toContain(reason);
-        expect(rows[0]?.title).toBe(rows[0]?.detail);
+        expect(rows[0]?.tip).toBe(reason);
     });
 
     test(`a failure the steps already explain adds nothing under them`, () => {

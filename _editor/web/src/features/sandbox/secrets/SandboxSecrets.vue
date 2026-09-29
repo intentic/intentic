@@ -265,7 +265,10 @@ const pushToCi = async (): Promise<void> => {
                                     type="button"
                                     :class="ui.textAction(`text-2xs text-link`)"
                                     :disabled="generating"
-                                    :title="t(`sandbox.sandboxSecrets.generateHint`)"
+                                    v-tooltip.top="{
+                                        title: t(`sandbox.sandboxSecrets.neverShown`),
+                                        note: t(`sandbox.sandboxSecrets.sessionOrSigningKeys`),
+                                    }"
                                     @click="generateOne"
                                 >
                                     {{ t(`sandbox.sandboxSecrets.generateRandom`) }}

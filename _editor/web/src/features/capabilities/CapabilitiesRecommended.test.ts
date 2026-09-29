@@ -115,7 +115,10 @@ const mount = (): HTMLElement => {
     );
     // Real tooltip directive shows a popover on hover; this stub parks the text on the element so tests can read it
     // without a pointer.
-    app.directive(`tooltip`, { mounted: (node: HTMLElement, binding) => (node.dataset[`tooltip`] = String(binding.value)) });
+    app.directive(`tooltip`, {
+        // A card is parked whole, as JSON: the assertions read it by substring.
+        mounted: (node: HTMLElement, binding) => (node.dataset[`tooltip`] = JSON.stringify(binding.value)),
+    });
     app.mount(el);
     return el;
 };

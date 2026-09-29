@@ -8,6 +8,7 @@ import {
     explorerTreatment,
     type IconName,
     iconForEntry,
+    type Tip,
     useExplorerStyle,
     vAction,
 } from "@intentic/ui";
@@ -15,6 +16,7 @@ import { useT } from "@intentic/ui/i18n";
 import { mapPool } from "@intentic/base/async";
 import { computed, nextTick, ref, watch } from "vue";
 import { useVocabulary } from "../../../core-views/vocabulary";
+import { commandShortcut } from "../../../shell/commands/useCommands";
 import PresenceAvatars from "../../../shell/presence/PresenceAvatars.vue";
 import { viewersOfPath } from "../../../shell/presence/usePresence";
 import { useLayout } from "../../../shell/window/useLayout";
@@ -105,6 +107,8 @@ const { byPath, childrenOf, visibleRows, orderedPaths, technicalCount, targetDir
     });
 // Tree container; tabindex -1 so clicking empty space still parks focus here, letting clipboard events fire.
 const treeEl = ref<HTMLElement>();
+// The "N more" marker's way to the rest: the search, with its key where one is bound.
+const searchTip = computed((): Tip => ({ title: t(`workspace.workspaceTree.search`), keys: commandShortcut(`workspace.goToAnything`) }));
 // A row's own affordances, or none when the parent supplied no source (the mobile listing, a test).
 const actionsFor = (path: string): readonly RowAction[] => rowActions?.(path) ?? [];
 const { rules, selecting, inline, edits, deleting, transfer, menu: entryMenu } = createFileVerbs({
@@ -312,7 +316,7 @@ defineExpose({ focusTree });
                         v-if="'more' in row"
                         class="absolute inset-x-0 flex items-center gap-1.5 pr-2 text-2xs italic text-subtle select-none"
                         :style="{ top: `${top}px`, height: `${rowHeight}px`, paddingLeft: `${0.5 + row.depth * 0.75}rem` }"
-                        v-tooltip.top="t(`workspace.workspaceTree.searchCtrlP`)"
+                        v-tooltip.top="searchTip"
                     >
                         <span class="w-[0.7rem] shrink-0"></span>
                         <span class="min-w-0 flex-1 truncate">{{
@@ -363,7 +367,7 @@ defineExpose({ focusTree });
                             <span
                                 class="flex shrink-0 items-center justify-center"
                                 :class="treat(row).slotClass"
-                                v-tooltip.right="isLockedWorkspacePath(row.entry.path) ? t(`workspace.words.keptPrivateBySandbox`) : undefined"
+                                v-tooltip.right="isLockedWorkspacePath(row.entry.path) ? t(`workspace.workspaceTree.keptPrivate`) : undefined"
                             >
                                 <Icon :name="treat(row).icon" :class="[treat(row).sizeClass, treat(row).colorClass]" />
                             </span>
@@ -430,7 +434,10 @@ defineExpose({ focusTree });
                             <span
                                 v-else-if="!row.isExpanded && insideOf(row.entry.path) > 0"
                                 class="shrink-0 text-2xs tabular-nums text-subtle"
-                                v-tooltip.right="t(`workspace.homeCover.insideTitle`, { count: insideOf(row.entry.path), name: cover }, insideOf(row.entry.path))"
+                                v-tooltip.right="{
+                                    title: t(`workspace.homeCover.insideTitle`, { name: cover }),
+                                    rows: [{ label: t(`shared.folders`), value: insideOf(row.entry.path) }],
+                                }"
                                 >{{ t(`workspace.homeCover.inside`, { count: insideOf(row.entry.path) }) }}</span
                             >
                             <!-- A dir fetching its children lazily on expand (ignored, or below the walk's budget). -->
@@ -463,7 +470,7 @@ defineExpose({ focusTree });
                                 aria-hidden="true"
                                 class="shrink-0 cursor-pointer text-2xs text-subtle transition-opacity hover:text-content group-hover:pointer-events-auto group-hover:opacity-100 group-focus:pointer-events-auto group-focus:opacity-100"
                                 :class="restingClass(action, row.entry.path)"
-                                v-tooltip.right="action.tooltip"
+                                v-tooltip.right="action.tip ?? action.tooltip"
                                 @click.stop="runAction(row.entry, action)"
                             />
                             <!-- Other members with this file open right now: live co-presence on the row. -->
@@ -529,7 +536,7 @@ defineExpose({ focusTree });
                 v-if="technicalCount > 0 && filter.trim() === '' && cover === undefined"
                 type="button"
                 class="flex w-full items-center gap-1.5 px-2 py-1 text-left text-2xs italic text-subtle transition-colors hover:text-content"
-                v-tooltip.top="t(`workspace.workspaceTree.lockfilesConfigurationDotFiles`)"
+                v-tooltip.top="{ title: t(`workspace.workspaceTree.showFiles`), note: t(`workspace.workspaceTree.technicalKinds`) }"
                 @click="layout.toggleHideTechnical()"
             >
                 <span class="w-[0.7rem] shrink-0"></span>
@@ -560,7 +567,7 @@ defineExpose({ focusTree });
                     <button
                         type="button"
                         class="shrink-0 cursor-pointer py-0.5 text-2xs text-subtle underline-offset-2 hover:text-content hover:underline"
-                        v-tooltip.top="t(`workspace.workspaceTree.keepFolderStopsCounting`)"
+                        v-tooltip.top="{ title: t(`workspace.entryMenu.keepFolder`), note: t(`workspace.workspaceTree.stopsCountingEmpty`) }"
                         @click="keepFolder(branch.path)"
                     >
                         {{ t(`workspace.workspaceTree.keep`) }}

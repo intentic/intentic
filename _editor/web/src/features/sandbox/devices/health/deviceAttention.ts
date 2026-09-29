@@ -1,5 +1,5 @@
 import type { Device, DeviceAgentOp } from "@intentic/sandbox-contract";
-import type { IconName } from "@intentic/ui";
+import type { IconName, Tip } from "@intentic/ui";
 import type { NoticeTone } from "@intentic/ui/notice";
 import { timeAgo } from "@intentic/ui/format";
 import { deviceQuiet, deviceReconnecting, type ManageBlock } from "../deviceFacts";
@@ -27,7 +27,7 @@ export interface DeviceCardFix {
 export interface DeviceConnectFix {
     readonly kind: `connect`;
     readonly label: string;
-    readonly hint: string;
+    readonly hint: Tip;
 }
 
 // One of the agent's own verbs, run over the socket that machine is already holding: a button here, rather than a
@@ -36,7 +36,7 @@ export interface DeviceConnectFix {
 export interface DeviceAgentFix {
     readonly kind: `agent`;
     readonly label: string;
-    readonly hint: string;
+    readonly hint: Tip;
     readonly op: DeviceAgentOp;
 }
 
@@ -50,8 +50,8 @@ export interface DeviceConcern {
     readonly icon: IconName;
     /** The errand alone: the state word is the badge's, and repeating it here is how this strip grew to four lines. */
     readonly text: string;
-    /** Why, for a reader who wants it; never something they must read to act. */
-    readonly hint?: string;
+    /** Why, for a reader who wants it, as a tip card; never something they must read to act. */
+    readonly hint?: Tip;
     /** A command to type on that device, where the fix is one rather than a click; kept unwrapped. */
     readonly command?: string;
     readonly fix?: DeviceFix;
@@ -69,12 +69,14 @@ const GAP_TEXT: Record<NonNullable<Device[`gap`]>, string> = {
     unreported: `Its agent has never described this machine. Update it.`,
 };
 
-// The clause each sentence above was cut down from, on hover: what nobody has to read to act.
-const GAP_HINT: Record<NonNullable<Device[`gap`]>, string> = {
-    offline: `Asleep, off the network, or its agent isn't running. Reconnect mints a fresh pairing command, for a machine whose agent is gone rather than merely stopped.`,
-    "scope-off": `Without it the machine won't describe itself: no folders, no mirrored ports, and no word on whether its agent is alive. Its containers are listed regardless — those answer to a different switch.`,
-    unreported: `An agent from before machine reports never will. Update agent replaces it over the connection; a machine that only syncs gets the new one by re-running its install.`,
-};
+// What each sentence above leaves out, on hover: what nobody has to read to act. A function, so the words are the
+// reader's locale at the moment they are drawn rather than whichever one was loaded when this module was.
+const gapHint = (gap: NonNullable<Device[`gap`]>): Tip =>
+    ({
+        offline: { title: t(`sandbox.deviceAttention.notAnswering`), note: t(`sandbox.deviceAttention.asleepOfflineStopped`) },
+        "scope-off": { title: t(`sandbox.deviceAttention.noSelfReport`), note: t(`sandbox.deviceAttention.containersStillListed`) },
+        unreported: { title: t(`sandbox.deviceAttention.agentTooOld`), note: t(`sandbox.deviceAttention.syncOnlyReinstall`) },
+    })[gap];
 
 // An asleep laptop is a state, not a fault; the other three are something the reader can close.
 const GAP_TONE: Record<NonNullable<Device[`gap`]>, NoticeTone> = {
@@ -99,11 +101,12 @@ const BLOCK_TEXT: Record<ManageBlock[`kind`], string> = {
     "sandboxes-off": `Turn on "Manage sandboxes on this device" in this device's capability card to use the buttons below.`,
 };
 
-const BLOCK_HINT: Record<ManageBlock[`kind`], string> = {
-    connect: `Desktop sync carries folders and ports, never containers. Connecting it as a device gives the same buttons the desktop app's own window has.`,
-    offline: `Asleep, off the network, or its agent isn't running. Every button here travels over the device's own outbound connection, which a machine can have down while its files sync flawlessly.`,
-    "sandboxes-off": `Every button under the sandbox list is refused until it is on.`,
-};
+const blockHint = (kind: ManageBlock[`kind`]): Tip =>
+    ({
+        connect: { title: t(`sandbox.deviceAttention.syncOnly`), note: t(`sandbox.deviceAttention.noContainersViaSync`) },
+        offline: { title: t(`sandbox.deviceAttention.notAnswering`), note: t(`sandbox.deviceAttention.buttonsNeedLink`) },
+        "sandboxes-off": { title: t(`sandbox.deviceAttention.buttonsRefused`), note: t(`sandbox.deviceAttention.untilSwitchedOn`) },
+    })[kind];
 
 // Same vocabulary as the gaps above: a machine to connect, a machine asleep, a switch that is off.
 const BLOCK_ICON: Record<ManageBlock[`kind`], IconName> = {
@@ -133,7 +136,7 @@ const BLOCK_ACTION: Partial<Record<ManageBlock[`kind`], string>> = {
 const reconnect = (): DeviceConnectFix => ({
     kind: `connect`,
     label: t(`ui.action.reconnect`),
-    hint: t(`sandbox.deviceAttention.handsFreshOneTime`),
+    hint: { title: t(`sandbox.deviceAttention.freshCommand`), note: t(`sandbox.deviceAttention.reenrollsAgent`) },
 });
 
 // `connect` opens the card that adds a device; two more open the existing connection's own form; `offline` has no
@@ -169,7 +172,7 @@ const gapConcern = (device: Device, reconnectable: boolean): DeviceConcern | und
         tone: GAP_TONE[device.gap],
         icon: GAP_ICON[device.gap],
         text: GAP_TEXT[device.gap],
-        hint: GAP_HINT[device.gap],
+        hint: gapHint(device.gap),
         ...(command === undefined ? {} : { command }),
         ...(device.gap === `offline` && reconnectable ? { fix: reconnect() } : {}),
     };
@@ -185,7 +188,7 @@ const blockConcern = (block: ManageBlock, reconnectable: boolean): DeviceConcern
         tone: `info`,
         icon: BLOCK_ICON[block.kind],
         text: BLOCK_TEXT[block.kind],
-        hint: BLOCK_HINT[block.kind],
+        hint: blockHint(block.kind),
         ...(command === undefined ? {} : { command }),
         ...(fix === undefined ? {} : { fix }),
     };
@@ -196,7 +199,7 @@ const blockConcern = (block: ManageBlock, reconnectable: boolean): DeviceConcern
 const forgetUnreachable = (): DeviceAgentFix => ({
     kind: `agent`,
     label: `Forget them`,
-    hint: `Drops only the links that have answered nothing for long enough to be gone, and restarts its agent against what is left. Every link that is answering — including the one this page is talking over — is left exactly as it is.`,
+    hint: { title: t(`sandbox.deviceAttention.deadLinksOnly`), note: t(`sandbox.deviceAttention.restartsAgent`) },
     op: `forget-unreachable`,
 });
 
@@ -221,7 +224,7 @@ const linksConcern = (device: Device, readAt: number): DeviceConcern | undefined
         // `days`, unlike every other age on this page: these outages are measured in weeks, and the default's absolute
         // date mid-sentence answers "when did it break" where the reader is asking "how long have I been dialling it".
         text: `${count} stopped answering${since === undefined ? `` : `, the oldest ${timeAgo(since, { now: readAt, days: true })}`}.`,
-        hint: `A sandbox that was deleted, or recreated at a new address, leaves its side of the link on this machine. The agent keeps dialling it — slowly, forever — and nothing will ever answer.`,
+        hint: { title: t(`sandbox.deviceAttention.staleLinks`), note: t(`sandbox.deviceAttention.deletedOrMoved`) },
         fix: forgetUnreachable(),
     };
 };
@@ -268,7 +271,7 @@ export const deviceAttention = (
             icon: `clock`,
             // `deviceQuiet` is false without a report, so the timestamp is there whenever this line is.
             text: `Last heard from ${timeAgo(device.report?.capturedAt ?? readAt, { now: readAt })}.`,
-            hint: `Everything below is what the machine looked like then, not now.`,
+            hint: { title: t(`sandbox.deviceAttention.snapshot`), note: t(`sandbox.deviceAttention.mayBeOutdated`) },
         });
     }
     // After the machine's own state, before the door: this is about what it is holding, which only means anything once

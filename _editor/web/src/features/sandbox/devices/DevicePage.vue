@@ -394,7 +394,7 @@ const selection = useSandboxSelection(() => machine, () => ownSlug, ops);
                             variant="info"
                             size="xs"
                             :label="t(`sandbox.devicePage.thisSandbox`)"
-                            v-tooltip.top="t(`sandbox.words.oneYoureUsing`)"
+                            v-tooltip.top="t(`sandbox.words.youreHere`)"
                             class="-my-0.5 shrink-0"
                         />
                     </template>
@@ -443,7 +443,7 @@ const selection = useSandboxSelection(() => machine, () => ownSlug, ops);
                             :label="t(`sandbox.devicePage.clearBuildOutput`)"
                             :loading="ops.syncRunning(ops.rowKey(group), `sync-clean`)"
                             :disabled="ops.working.value"
-                            v-tooltip.top="t(`sandbox.devicePage.deleteBuildOutputDevice`)"
+                            v-tooltip.top="{ title: t(`sandbox.devicePage.unblockDeletions`), note: t(`sandbox.devicePage.syncedFilesUntouched`) }"
                             @click="void ops.runSync(ownerOf(group)!, ops.rowKey(group), group.sandboxId, `sync-clean`)"
                         >
                             <template #icon><Icon name="eraser" /></template>
@@ -473,8 +473,8 @@ const selection = useSandboxSelection(() => machine, () => ownSlug, ops);
                             :disabled="ops.working.value"
                             v-tooltip.top="
                                 group.folder?.paused === true
-                                    ? t(`sandbox.devicePage.startMovingFilesBetween`)
-                                    : t(`sandbox.devicePage.stopMovingFilesEither`)
+                                    ? undefined
+                                    : { title: t(`sandbox.words.filesOnly`), note: t(`sandbox.words.portsStayMirrored`) }
                             "
                             @click="
                                 void ops.runSync(
@@ -496,7 +496,7 @@ const selection = useSandboxSelection(() => machine, () => ownSlug, ops);
                             :label="t(`sandbox.words.unpair`)"
                             :loading="ops.syncRunning(ops.rowKey(group), `sync-unpair`)"
                             :disabled="ops.working.value"
-                            v-tooltip.top="t(`sandbox.devicePage.stopDeviceSyncingSandbox`)"
+                            v-tooltip.top="{ title: t(`sandbox.devicePage.stopSync`), note: t(`sandbox.devicePage.localFolderKept`) }"
                             @click="ops.confirmingUnpair.value = { environment: ownerOf(group)!, group }"
                         >
                             <template #icon><Icon name="link-broken" /></template>
@@ -521,8 +521,8 @@ const selection = useSandboxSelection(() => machine, () => ownSlug, ops);
                             :disabled="ops.working.value"
                             v-tooltip.top="
                                 port.state === `ignored`
-                                    ? t(`sandbox.devicePage.putPortBackOnLocalhost`)
-                                    : t(`sandbox.devicePage.leavePortOffLocalhost`)
+                                    ? { title: t(`sandbox.devicePage.backOnLocalhost`), note: t(`sandbox.devicePage.ifPortFree`) }
+                                    : { title: t(`sandbox.words.offLocalhost`), note: t(`sandbox.devicePage.otherPortsStayMirrored`) }
                             "
                             @click="
                                 void ops.runSync(
@@ -546,7 +546,9 @@ const selection = useSandboxSelection(() => machine, () => ownSlug, ops);
                             :loading="ops.syncRunning(ops.rowKey(group), `mirror-off`)"
                             :disabled="ops.working.value"
                             v-tooltip.top="
-                                mirroringOff(group.folder) ? t(`sandbox.devicePage.putSandboxsPortsBack`) : t(`sandbox.devicePage.takeSandboxsPortsOff`)
+                                mirroringOff(group.folder)
+                                    ? t(`sandbox.words.ontoLocalhost`)
+                                    : { title: t(`sandbox.words.offLocalhost`), note: t(`sandbox.words.filesKeepSyncing`) }
                             "
                             @click="
                                 void ops.runSync(

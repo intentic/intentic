@@ -158,7 +158,12 @@ const ROW_ACTION = `opacity-0 transition-opacity focus-visible:opacity-100 group
         <!-- The one press, above the list it covers. It shrink-wraps its label: this is the only button on the panel,
              so nothing needs the column's full width to be found, and a bar that wide reads as a banner. -->
         <div v-if="pending > 0" class="flex shrink-0 flex-col items-start gap-1 px-2 pb-2 pt-2">
-            <Button size="small" :disabled="!saveReady" @click="doSave" v-tooltip.right="t(`workspace.savePanel.recordsEverythingBelowOne`)">
+            <Button
+                size="small"
+                :disabled="!saveReady"
+                @click="doSave"
+                v-tooltip.right="{ title: t(`workspace.savePanel.oneVersion`), note: t(`workspace.savePanel.canGoBack`) }"
+            >
                 <Icon :name="savingNow ? `spinner` : `save`" :spin="savingNow" class="mr-1 text-2xs" />{{
                     savingNow
                         ? t(`workspace.savePanel.saving`)
@@ -232,7 +237,7 @@ const ROW_ACTION = `opacity-0 transition-opacity focus-visible:opacity-100 group
                         class="flex min-w-0 flex-1 items-start gap-2 text-left max-md:min-h-11"
                         @click="openDiff(file, 'preview')"
                         @dblclick="openDiff(file, 'keep')"
-                        v-tooltip.right="t(`workspace.savePanel.openToSeeWhat`, { word: STATUS_WORD[file.status] })"
+                        v-tooltip.right="t(`workspace.savePanel.seeChanges`)"
                     >
                         <Icon :name="STATUS_MARK[file.status].icon" class="mt-px shrink-0 text-2xs" :class="STATUS_MARK[file.status].tone" />
                         <!-- Name first and whole where it fits, the folder under it: a maker recognises "Offer.docx",
@@ -251,7 +256,7 @@ const ROW_ACTION = `opacity-0 transition-opacity focus-visible:opacity-100 group
                         :class="ui.iconButton(ROW_ACTION, `hover:bg-danger/10 hover:text-danger`)"
                         :disabled="changes.actionBusy.value"
                         @click="actions.ask(file)"
-                        v-tooltip.left="t(`workspace.savePanel.changesToFile`, { discard: words.discard })"
+                        v-tooltip.left="t(`workspace.savePanel.changes`, { discard: words.discard })"
                         :aria-label="`${words.discard} ${file.label}`"
                     >
                         <Icon name="undo" class="text-2xs" />

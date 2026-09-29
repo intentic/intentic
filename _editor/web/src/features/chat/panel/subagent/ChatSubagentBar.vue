@@ -43,7 +43,7 @@ const spawned = computed(() => !inProcess(props.child));
             <button
                 type="button"
                 class="ui-row-select flex min-w-0 max-w-[45%] shrink items-center gap-1.5 rounded-md px-1.5 py-1 text-muted hover:text-content"
-                v-tooltip.top="t(`chat.chatSubagentBar.backTo`, { title: props.parentTitle })"
+                v-tooltip.top="{ title: t(`chat.chatSubagentBar.back`), rows: [{ label: t(`chat.chatSubagentBar.parent`), value: props.parentTitle }] }"
                 :aria-label="t(`chat.chatSubagentBar.backTo`, { title: props.parentTitle })"
                 @click="emit(`back`)"
             >

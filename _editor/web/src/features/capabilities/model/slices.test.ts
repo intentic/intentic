@@ -70,7 +70,7 @@ describe(`the rail`, () => {
         expect(scopes.all).toEqual({ key: ALL, label: `All capabilities`, icon: `bolt`, total: 4, connected: 1 });
         expect(scopes.pinned).toEqual([
             scopes.all,
-            { key: CONNECTED, label: `Connected`, icon: `check-circle`, total: 2, connected: 2, meta: `2 connections across 1 capability` },
+            { key: CONNECTED, label: `Connected`, icon: `check-circle`, total: 2, connected: 2, tiles: 1 },
             { key: RECOMMENDED, label: `Recommended`, icon: `sparkles`, total: 1, connected: 0 },
         ]);
     });

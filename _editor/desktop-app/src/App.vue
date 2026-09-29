@@ -18,6 +18,7 @@ import {
     SandboxVerbs,
     sandboxVerbPrompt,
     type SandboxVerbPrompt,
+    type Tip,
     ui,
     VERB_LABEL,
     vAction,
@@ -632,10 +633,8 @@ const dismissSetup = async (): Promise<void> => {
     await workspaceOpen();
 };
 
-/* The dismiss label makes clear that leaving this screen does not stop a live setup run. */
-const dismissLabel = computed(() =>
-    running.value ? `Back to your workspace. The install keeps running, and your workspace shows its progress.` : `Back to your workspace`,
-);
+/* The way back says where it goes, and that leaving this screen does not stop a live setup run. */
+const dismissTip = computed((): Tip => ({ title: t(`desktop.app.openWorkspace`), note: running.value ? t(`desktop.app.installKeepsRunning`) : `` }));
 
 /* The workspace page receives setup progress after every change. */
 const reportState = computed<SetupReport[`state`]>(() => {
@@ -1122,8 +1121,8 @@ onUnmounted(() => {
                     <button
                         type="button"
                         :class="ui.iconButton(`-my-0.5 h-7 w-7`)"
-                        :aria-label="dismissLabel"
-                        v-tooltip.left="dismissLabel"
+                        :aria-label="t(`desktop.app.backToWorkspace`)"
+                        v-tooltip.left="dismissTip"
                         @click="dismissSetup"
                     >
                         <Icon name="times" />
@@ -1246,7 +1245,7 @@ onUnmounted(() => {
                             type="button"
                             :class="ui.iconButton(`h-7 w-7`)"
                             :aria-label="t(`desktop.app.backToWorkspace`)"
-                            v-tooltip.left="t(`desktop.app.backToWorkspace`)"
+                            v-tooltip.left="t(`desktop.app.openWorkspace`)"
                             @click="openWorkspace()"
                         >
                             <Icon name="times" />

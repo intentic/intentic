@@ -12,6 +12,7 @@ import {
     type SendIntent,
     sendIntentOf,
     sendRefusal,
+    sendRefusalTitle,
 } from "./composerIntent";
 
 // A settled chat with an account, an empty box and nothing armed: every test states the part it is about.
@@ -67,14 +68,14 @@ it(`schedules only a send that would start a turn on a spent account`, () => {
 it(`says when a scheduled send goes, and that it replaces a turn already waiting`, () => {
     const words = { ...WORDS, reopens: `Sun 08:20` };
     expect(placeholderFor(`scheduled`, words)).toContain(`Sun 08:20`);
-    expect(sendHintFor(`scheduled`, words)).toContain(`Sun 08:20`);
-    expect(sendHintFor(`scheduled`, { ...words, replacesWaiting: true })).not.toBe(sendHintFor(`scheduled`, words));
+    expect(JSON.stringify(sendHintFor(`scheduled`, words))).toContain(`Sun 08:20`);
+    expect(sendHintFor(`scheduled`, { ...words, replacesWaiting: true })).not.toEqual(sendHintFor(`scheduled`, words));
 });
 
 it(`gives every intent its own sentence in both slots`, () => {
     const intents: readonly SendIntent[] = [`place`, `edit`, `plan`, `scheduled`, `idle`, `parked`, `steer`, `queue`];
     const placeholders = intents.map((intent) => placeholderFor(intent, WORDS));
-    const hints = intents.map((intent) => sendHintFor(intent, WORDS));
+    const hints = intents.map((intent) => JSON.stringify(sendHintFor(intent, WORDS)));
 
     // No intent can be added without words for it, and no two share a sentence.
     expect(new Set(placeholders).size).toBe(intents.length);
@@ -82,9 +83,8 @@ it(`gives every intent its own sentence in both slots`, () => {
 });
 
 it(`counts what an edit costs, and says it in the singular where only one message goes`, () => {
-    expect(sendHintFor(`edit`, WORDS)).toContain(`Replace`);
-    expect(sendHintFor(`edit`, { ...WORDS, editDropped: 4 })).toContain(`3`);
-    expect(sendHintFor(`edit`, { ...WORDS, editDropped: 4 })).toContain(`below`);
+    expect(sendHintFor(`edit`, WORDS)).toBe(`Replace message`);
+    expect(sendHintFor(`edit`, { ...WORDS, editDropped: 4 })).toEqual({ title: `Replace message`, rows: [{ label: `Also replaced`, value: 3 }] });
 });
 
 it(`asks nobody by name on the trial: the product's own channel has no vendor`, () => {
@@ -101,6 +101,9 @@ it(`refuses only what the daemon would, and only with something staged`, () => {
     // A rewind can't be spent while a turn holds the conversation; the edit stays armed and this names why.
     expect(sendRefusal(chat({ staged: true, editing: true, streaming: true }))).toContain(`once the turn ends`);
     expect(sendRefusal(chat({ staged: true, editing: true }))).toBeUndefined();
+    // The greyed button names the same rule in a word or two; the sentence is the status line's.
+    expect(sendRefusalTitle(chat({ staged: true, uploadFailed: true }))).toBe(`Upload failed`);
+    expect(sendRefusalTitle(chat({ staged: true, editing: true }))).toBeUndefined();
 });
 
 it(`refuses more of the agent's voice than of your own`, () => {

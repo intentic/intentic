@@ -23,7 +23,7 @@ const {
     panel: AgentPanel<Op>;
     /** The group's own label; a surface drawing several machines names which one this is. */
     label?: string;
-    /** The machine this agent runs on, for the sentence the duty strip replaced. */
+    /** The machine this agent runs on, named on the duty strip's hover. */
     subject: string;
     /** True while any op on this surface holds its one-at-a-time lock, whichever control started it. */
     busy?: boolean;
@@ -56,7 +56,7 @@ const emit = defineEmits<{ run: [op: Op] }>();
             :wide-control="true"
             :title="panel.version === undefined ? t(`ui.deviceAgentGroup.agent`) : t(`ui.deviceAgentGroup.agent2`, { version: panel.version })"
         >
-            <!-- What the process carries, as three glyphs: the sentence it replaced is on hover. -->
+            <!-- What the process carries, as three glyphs: the one process and its machine are on hover. -->
             <template #description>
                 <span v-tooltip.top="agentCarries(subject)" class="flex w-fit flex-wrap items-center gap-x-3 gap-y-0.5">
                     <span v-for="duty in agentDuties()" :key="duty.label" class="inline-flex items-center gap-1">

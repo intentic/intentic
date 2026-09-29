@@ -33,7 +33,11 @@ const discardAll = computed(() => `${words.value.discard} ${t(`workspace.savePan
         :class="ui.iconButton(box, `hover:bg-danger/10 hover:text-danger`)"
         :disabled="changes.actionBusy.value || savingNow"
         @click="actions.ask('all')"
-        v-tooltip.bottom="`${discardAll} · ${t(`workspace.savePanel.putsEveryFileBack`)}`"
+        v-tooltip.bottom="{
+            title: discardAll,
+            rows: [{ label: t(`shared.changes`), value: changes.count.value }],
+            note: t(`workspace.savePanel.backToLastVersion`),
+        }"
         :aria-label="discardAll"
     >
         <Icon name="undo" :class="glyph" />
@@ -44,7 +48,7 @@ const discardAll = computed(() => `${words.value.discard} ${t(`workspace.savePan
         :class="ui.iconButton(box)"
         :disabled="actions.backingUp.value || changes.actionBusy.value"
         @click="actions.doBackUp()"
-        v-tooltip.bottom="`${actions.backupLine.value} · ${t(`workspace.savePanel.sendsSavedVersionsTo`, { repo: words.repo })}`"
+        v-tooltip.bottom="actions.backupTip.value"
         :aria-label="words.push"
     >
         <Icon :name="actions.backingUp.value ? `spinner` : `cloud-upload`" :spin="actions.backingUp.value" :class="glyph" />

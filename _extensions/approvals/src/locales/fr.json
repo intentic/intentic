@@ -10,7 +10,9 @@
         "approvalSlice": "Tranche d'approbation",
         "approvalSlices": "Tranches d'approbation",
         "show": "Afficher",
-        "slices": "Tranches"
+        "slices": "Tranches",
+        "total": "Total",
+        "waiting": "En attente"
     },
     "approvalsView": {
         "approvals": "Approbations",
@@ -21,7 +23,7 @@
         "automation": "automatisation {automationId}",
         "automations": "Automatisations",
         "automationsHeld": "Automatisations retenues pour vous",
-        "backToReviewNothing": "Retour à la revue : il ne se passe rien",
+        "backToReview": "Retour en revue",
         "cancel": "Annuler",
         "couldntApproveHooks": "Impossible d'approuver ces hooks.",
         "couldntDismissHooks": "Impossible de laisser ces hooks désactivés.",
@@ -29,6 +31,7 @@
         "couldntReadHeldAutomations": "Impossible de lire les automatisations retenues.",
         "couldntReadHooks": "Impossible de lire les hooks en attente d'approbation.",
         "couldntReadWontRun": "n'a pas pu être lu et ne sera pas exécuté :",
+        "deletesFile": "Supprime le fichier",
         "done": "Terminé",
         "doneEditing": "Fin de l'édition",
         "eachGoesAheadOn": "Chacune part à sa propre date, ou après un court compte à rebours si elle n'en a pas.",
@@ -48,31 +51,30 @@
         "keptOff": "laissés désactivés",
         "letThemRun": "Les laisser s'exécuter",
         "needsReview": "Demande votre revue",
+        "nothingUndone": "Rien n'est annulé",
         "nothingWaitingPostsAgent": "Rien en attente. Les publications que votre agent veut publier, tout ce qu'il ne doit pas faire sans demander, et les automatisations réglées pour demander d'abord atterrissent toutes ici pour votre approbation.",
         "open": "Ouvrir",
         "postStaysUpOn": "La publication reste en ligne sur {rejecting} : seule cette trace en est supprimée.",
         "proposed": "proposée {createdAt}",
         "putBackInReview": "Remettre {item} en revue",
-        "putBackInReview2": "Remettre en revue",
         "readingApprovalsQueue": "Lecture de la file d'approbations…",
         "reject": "Rejeter {item}",
         "reject2": "Rejeter",
         "reject3": "Rejeter ceci ?",
-        "rejectDeletes": "Rejeter : cela le supprime",
         "remove": "Retirer",
         "removeList": "Retirer {item} de la liste",
-        "removeListWhatDone": "Retirer de cette liste : ce qui a été fait reste fait",
         "removeRecord": "Retirer cette trace ?",
         "retry": "Réessayer",
         "scheduled": "Planifiée",
         "startNow": "Démarrer maintenant",
         "stop": "Arrêter",
         "stopPutBackIn": "Arrêter {item} et le remettre en revue",
-        "whatDoneStaysDone": "Ce qui a été fait reste fait : seule cette trace en est supprimée."
+        "whatDoneStaysDone": "Ce qui a été fait reste fait : seule cette trace en est supprimée.",
+        "wontGoAhead": "Ne part pas"
     },
     "extension": {
         "approvals": "Approbations",
-        "waitingOn": "{count} vous attendent"
+        "waitingOn": "{count} en attente"
     },
     "hookSetBody": {
         "filesPinned": "L'approbation couvre aussi ces fichiers, octet pour octet :",
@@ -87,8 +89,9 @@
         "postTitle": "Titre de la publication"
     },
     "scheduleControl": {
+        "clickToSchedule": "Cliquer pour planifier",
         "goAheadAt": "Lancer {label} le",
-        "goesAheadSoonExecutor": "Part dès que l'exécuteur la prend, cliquez pour choisir une date",
+        "goesAtOnce": "Part aussitôt",
         "noDate": "Pas de date"
     }
 }

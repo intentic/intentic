@@ -197,7 +197,7 @@ const emptyMessage = computed(() => {
             <!-- Provenance first: what made this text, how much of an agent's context it costs, and how old it is. -->
             <div class="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b border-line px-3 py-1.5 text-2xs text-muted">
                 <Icon name="robot" class="shrink-0 text-[0.7rem]" />
-                <span class="shrink-0" v-tooltip.bottom="t(`workspace.derivedTextView.notFileItselfText`)">
+                <span class="shrink-0" v-tooltip.bottom="{ title: t(`workspace.words.renderedText`), note: t(`workspace.words.whatAgentsRead`) }">
                     {{ t(`workspace.derivedTextView.derivedText`) }}
                 </span>
                 <span class="shrink-0 text-subtle">{{ shadow.deriver }}</span>
@@ -220,7 +220,7 @@ const emptyMessage = computed(() => {
                     class="shrink-0"
                     :disabled="deriving"
                     @click="derive(path)"
-                    v-tooltip.bottom="t(`workspace.derivedTextView.readFileAgainRewrite`)"
+                    v-tooltip.bottom="t(`workspace.derivedTextView.rereadFile`)"
                 >
                     <Icon :name="deriving ? `spinner` : `refresh`" :spin="deriving" class="text-[0.7rem]" />
                     {{ t(`workspace.derivedTextView.deriveAgain`) }}

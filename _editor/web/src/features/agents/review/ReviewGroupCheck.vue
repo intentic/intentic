@@ -34,11 +34,13 @@ const emit = defineEmits<{ toggle: [] }>();
             )
         "
         @click="emit('toggle')"
-        v-tooltip.right="
-            viewed === total
-                ? t(`agents.reviewGroupCheck.unmarkAllIn`, { total, name })
-                : t(`agents.reviewGroupCheck.markAllInReviewed`, { total, name })
-        "
+        v-tooltip.right="{
+            title: viewed === total ? t(`agents.reviewGroupCheck.unmarkAll`) : t(`agents.reviewGroupCheck.markAll`),
+            rows: [
+                { label: t(`shared.files`), value: total },
+                { label: t(`agents.reviewGroupCheck.group`), value: name },
+            ],
+        }"
         :aria-label="
             viewed === total
                 ? t(`agents.reviewGroupCheck.unmarkAllFilesIn`, { total, name })

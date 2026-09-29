@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { Tip } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { computed } from "vue";
 import { relativeTime } from "../features/chat/models/catalog";
@@ -23,21 +24,22 @@ const AGE_STEP_MS = 15_000;
 const now = useNow(() => props.at !== undefined);
 const aged = computed(() => Math.floor(now.value / AGE_STEP_MS) * AGE_STEP_MS);
 
-// Reports what the card doesn't show; drops missing parts, falls back to naming the state when both are gone.
-const hint = computed<string>(() => {
-    const age = props.at === undefined ? undefined : relativeTime(props.at, aged.value);
-    if (props.preview !== undefined) {
-        return age === undefined ? `Not sent: ${props.preview}` : `Not sent, ${age}: ${props.preview}`;
-    }
-    return age === undefined ? `You have an unsent message here` : `Not sent, ${age}`;
-});
+// Reports what the card doesn't show: how long it has sat, and its opening words; a missing part drops out.
+const age = computed(() => (props.at === undefined ? undefined : relativeTime(props.at, aged.value)));
+const hint = computed<Tip>(() => ({
+    title: t(`common.unsentMark.notSent`),
+    rows: [{ label: t(`common.unsentMark.written`), value: age.value ?? `` }],
+    note: props.preview,
+}));
+// The same parts in one line, since a tooltip itself isn't announced.
+const spoken = computed(() => [t(`common.unsentMark.notSent`), age.value, props.preview].filter((part) => part !== undefined).join(`, `));
 </script>
 
 <template>
     <!-- `w-fit` keeps it a chip in both frames: a column would stretch a flex child into a banner, a row would not. -->
     <span
         v-tooltip.bottom="hint"
-        :aria-label="hint"
+        :aria-label="spoken"
         class="ui-status-pill flex w-fit shrink-0 items-center gap-1 bg-primary-600/15 text-2xs font-semibold text-link"
     >
         <Icon name="send" class="shrink-0 text-2xs" />

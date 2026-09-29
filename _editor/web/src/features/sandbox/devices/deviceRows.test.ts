@@ -558,9 +558,9 @@ test(`leads with whether the machine answers, then how old the reading is`, () =
     expect(concerns.map((concern) => concern.key)).toEqual([`gap`, `stale`]);
     expect(concerns[0]?.text).toBe(`Its agent has never described this machine. Update it.`);
     // The errand is on the page; why it matters is one hover away, so the strip stays one line per want.
-    expect(concerns[0]?.hint).toContain(`re-running its install`);
+    expect(concerns[0]?.hint).toEqual({ title: `Agent too old`, note: `Sync-only: re-run install` });
     expect(concerns[1]?.text).toContain(`Last heard from`);
-    expect(concerns[1]?.hint).toContain(`what the machine looked like then`);
+    expect(concerns[1]?.hint).toEqual({ title: `Snapshot`, note: `Below may be outdated` });
 });
 
 // The agent is an object with a home of its own now (deviceAgent.ts), so nothing about its state, its build
@@ -595,7 +595,7 @@ test(`offers a machine that stopped answering a fresh pairing, since nothing els
     // The errand alone: `offline` is the badge's word, and this strip repeating it is what made one silence
     // read as four separate problems.
     expect(gap?.text).toBe(`A machine that wakes dials back in by itself.`);
-    expect(gap?.hint).toContain(`Asleep, off the network, or its agent isn't running.`);
+    expect(gap?.hint).toEqual({ title: `Not answering`, note: `Asleep, offline or stopped` });
     // The cheaper of the two, for a machine that is awake with only its loop down.
     expect(gap?.command).toBe(`intentic-machine run`);
     expect(gap?.fix).toMatchObject({ kind: `connect`, label: `Reconnect` });

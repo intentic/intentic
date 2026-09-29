@@ -1,4 +1,5 @@
 import type { EditorContext } from "@intentic/sandbox-contract";
+import type { TooltipValue } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { computed, nextTick, type Ref } from "vue";
@@ -12,6 +13,7 @@ import {
     sendHintFor,
     sendIntentOf,
     sendRefusal,
+    sendRefusalTitle,
     unconnectedHint,
     unconnectedPlaceholder,
     viewerPlaceholder,
@@ -258,23 +260,25 @@ export const useComposerSend = (host: SendHost) => {
             // Nothing to send with: the box still takes the task, without naming a vendor nobody chose.
             return connected.value ? placeholderFor(intent.value, words.value) : unconnectedPlaceholder();
         }),
-        sendHint: computed(() => {
+        sendHint: computed((): TooltipValue => {
             if (!host.reachable.value) {
-                return t(`chat.chatPane.sandboxBusyKeepTyping`);
+                return { title: t(`chat.chatPane.sandboxBusy`), tone: `warn`, note: t(`chat.chatPane.keepTyping`) };
             }
             // What the press does with nothing connected: opens the model list, keeping the draft.
             if (!connected.value) {
                 return unconnectedHint();
             }
-            return refusal.value ?? sendHintFor(intent.value, words.value);
+            // A refusal's sentence is the status line's; the greyed button names it.
+            const refused = sendRefusalTitle(situation.value);
+            return refused === undefined ? sendHintFor(intent.value, words.value) : { title: refused, tone: `warn` };
         }),
         // Offered for every live turn, a parked one included, naming what goes with it there.
         stopLabel: computed(() => (awaitingDecision.value ? `Stop the turn` : `Stop generating`)),
-        stopHint: computed(() => {
+        stopHint: computed((): TooltipValue => {
             if (awaitingDecision.value) {
-                return `Stop the turn, discards the request above`;
+                return { title: t(`chat.composerIntent.stopTurn`), note: t(`chat.composerIntent.discardsRequest`) };
             }
-            return host.mobile.value ? `Stop generating` : `Stop generating (Esc)`;
+            return host.mobile.value ? t(`ui.action.stop`) : { title: t(`ui.action.stop`), keys: t(`ui.keys.esc`) };
         }),
         submit,
     };

@@ -43,7 +43,7 @@ const rotate = async (): Promise<void> => {
                 severity="secondary"
                 :text="true"
                 :disabled="rotateGateToken.isPending.value"
-                v-tooltip.top="t(`gateAccess.mintNewTokenCurrent`)"
+                v-tooltip.top="{ title: t(`gateAccess.newToken`), note: t(`gateAccess.oldUrlStops`) }"
                 @click="confirmingRotate = true"
             />
         </div>

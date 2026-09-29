@@ -1,7 +1,13 @@
 import type { Directive, DirectiveBinding } from "vue";
 import { placeAnchored, type Side } from "./anchorPlacement.js";
+import { isTip } from "./tipText.js";
 
-/* `v-tooltip.top="'Archive'"`, the app's own hover label, replacing PrimeVue's directive. */
+/* `v-tooltip.top="'Archive'"`, the app's own hover label, replacing PrimeVue's directive.
+
+   TWO SHAPES, ONE DIRECTIVE. A string is a label, and a label is a word or two: "Archive", "New tab". Anything that
+   needs more is a `Tip`, drawn as a compact card: a short headline, its facts as label/figure rows, an optional
+   key cap and one short closing line. A sentence in a hover box is read by nobody, so there is no third shape for
+   one: `v-tooltip="{ title: 'Memory low', rows: [{ label: 'Resident', value: '7.4 GiB' }] }"`. */
 
 const GAP = 6; // px between the anchor and the box: leaves room for the arrow
 const EDGE = 8; // px of viewport kept clear on every side
@@ -9,8 +15,41 @@ const ARROW = 4; // px: half the arrow's width, mirrored by the border-width in 
 
 type Modifier = Side | "overflow" | "lines";
 
+/** Colours a tip's headline dot or one of its figures. */
+export type TipTone = "info" | "ok" | "warn" | "danger";
+
+/** One fact on a tip card: a word or two, and the figure or name it comes to. */
+export interface TipRow {
+    readonly label: string;
+    readonly value: string | number;
+    readonly tone?: TipTone | undefined;
+}
+
+/** A hover card, for what a one- or two-word label cannot say. Every part stays short: it is glanced at, not read.
+ *  An absent part may be passed as `undefined`, so a card is one literal rather than a chain of conditional spreads. */
+export interface Tip {
+    /** The headline, a word or two: "Memory low", "Delete all". */
+    readonly title: string;
+    /** A shortcut, drawn as a key cap beside the headline: "Shift+Enter". */
+    readonly keys?: string | undefined;
+    /** A dot before the headline, for a state rather than an action. */
+    readonly tone?: TipTone | undefined;
+    /** The facts, one per row. Numbers and names, not clauses. */
+    readonly rows?: readonly TipRow[] | undefined;
+    /** One closing line of a few words: "Can't be undone". */
+    readonly note?: string | undefined;
+}
+
+/** What `v-tooltip` takes: a short label, a tip card, or nothing (no box). */
+export type TooltipValue = string | Tip | false | null | undefined;
+
+// What an anchor's box says, read once from the binding: a label's words, or a tip's parts.
+type Said = { readonly kind: `label`; readonly text: string } | { readonly kind: `tip`; readonly tip: Tip };
+
 interface TooltipState {
-    label: string | undefined;
+    said: Said | undefined;
+    // What the box would say, as one string, so a re-render that rebuilds an equal `Tip` literal is not a change.
+    key: string;
     side: Side;
     // `.overflow`: the anchor's text is the label, so it only earns a box while that text is actually cut off.
     overflowOnly: boolean;
@@ -23,15 +62,67 @@ interface TooltipState {
     onFocus: () => void;
 }
 
+// Nothing to say is no box: a blank label, a tip with no headline, or no value at all.
+const saidOf = (value: TooltipValue): Said | undefined => {
+    if (!isTip(value)) {
+        return value === false || value === null || value === undefined || value.trim() === `` ? undefined : { kind: `label`, text: value };
+    }
+    return value.title.trim() === `` ? undefined : { kind: `tip`, tip: value };
+};
+
 const states = new WeakMap<HTMLElement, TooltipState>();
 
-const read = (binding: DirectiveBinding<string | undefined, Modifier>): Pick<TooltipState, "label" | "side" | "overflowOnly" | "lines"> => ({
-    label: typeof binding.value === `string` && binding.value.trim() !== `` ? binding.value : undefined,
-    side:
-        binding.modifiers.bottom === true ? `bottom` : binding.modifiers.left === true ? `left` : binding.modifiers.right === true ? `right` : `top`,
-    overflowOnly: binding.modifiers.overflow === true,
-    lines: binding.modifiers.lines === true,
-});
+const read = (binding: DirectiveBinding<TooltipValue, Modifier>): Pick<TooltipState, "said" | "key" | "side" | "overflowOnly" | "lines"> => {
+    const said = saidOf(binding.value);
+    return {
+        said,
+        key: said === undefined ? `` : said.kind === `label` ? said.text : JSON.stringify(said.tip),
+        side:
+            binding.modifiers.bottom === true ? `bottom` : binding.modifiers.left === true ? `left` : binding.modifiers.right === true ? `right` : `top`,
+        overflowOnly: binding.modifiers.overflow === true,
+        lines: binding.modifiers.lines === true,
+    };
+};
+
+// A tip's parts as elements, every word a text node so a label can never inject markup.
+const part = (doc: Document, tag: string, className: string, text?: string): HTMLElement => {
+    const el = doc.createElement(tag);
+    el.className = className;
+    if (text !== undefined) {
+        el.textContent = text;
+    }
+    return el;
+};
+
+const drawTip = (doc: Document, body: HTMLElement, tip: Tip): void => {
+    const head = part(doc, `div`, `ui-tip-head`);
+    if (tip.tone !== undefined) {
+        const dot = part(doc, `span`, `ui-tip-dot`);
+        dot.dataset[`tone`] = tip.tone;
+        head.appendChild(dot);
+    }
+    head.appendChild(part(doc, `span`, `ui-tip-title`, tip.title));
+    if (tip.keys !== undefined && tip.keys.trim() !== ``) {
+        head.appendChild(part(doc, `kbd`, `ui-tip-keys`, tip.keys));
+    }
+    body.appendChild(head);
+    const rows = (tip.rows ?? []).filter((row) => row.label.trim() !== `` && String(row.value).trim() !== ``);
+    if (rows.length > 0) {
+        const list = part(doc, `dl`, `ui-tip-rows`);
+        for (const row of rows) {
+            list.appendChild(part(doc, `dt`, ``, row.label));
+            const value = part(doc, `dd`, ``, String(row.value));
+            if (row.tone !== undefined) {
+                value.dataset[`tone`] = row.tone;
+            }
+            list.appendChild(value);
+        }
+        body.appendChild(list);
+    }
+    if (tip.note !== undefined && tip.note.trim() !== ``) {
+        body.appendChild(part(doc, `div`, `ui-tip-note`, tip.note));
+    }
+};
 
 // Rounding hides sub-pixel differences that would otherwise read as "clipped" on every zoom level.
 const isClipped = (el: HTMLElement): boolean =>
@@ -59,14 +150,15 @@ const place = (box: HTMLElement, anchor: DOMRect, wanted: Side, view: Window): S
     return placed.side;
 };
 
-export const vTooltip: Directive<HTMLElement, string | undefined, Modifier> = {
+export const vTooltip: Directive<HTMLElement, TooltipValue, Modifier> = {
     mounted(el, binding) {
         const state: TooltipState = {
             ...read(binding),
             box: undefined,
             show: () => {
                 state.hide();
-                if (state.label === undefined || (state.overflowOnly && !isClipped(el))) {
+                const said = state.said;
+                if (said === undefined || (said.kind === `label` && state.overflowOnly && !isClipped(el))) {
                     return;
                 }
                 // Uses the anchor's own document/window, whether it's on the page or a popped-out panel.
@@ -81,9 +173,14 @@ export const vTooltip: Directive<HTMLElement, string | undefined, Modifier> = {
                 box.style.visibility = `hidden`; // measured before it is placed; revealed once it is
                 const body = doc.createElement(`div`);
                 body.className = `ui-tooltip-body`;
-                body.textContent = state.label; // a text node, so a label can never inject markup
-                if (state.lines) {
-                    body.style.whiteSpace = `pre-line`;
+                if (said.kind === `label`) {
+                    body.textContent = said.text; // a text node, so a label can never inject markup
+                    if (state.lines) {
+                        body.style.whiteSpace = `pre-line`;
+                    }
+                } else {
+                    box.classList.add(`ui-tooltip-card`);
+                    drawTip(doc, body, said.tip);
                 }
                 box.appendChild(body);
                 doc.body.appendChild(box);
@@ -134,9 +231,9 @@ export const vTooltip: Directive<HTMLElement, string | undefined, Modifier> = {
         const next = read(binding);
         // `updated` fires on every re-render of the owning component, not just when the label changes, and a
         // chat mid-stream re-renders constantly. Rebuild the box only when it would actually say something
-        // different, or a tooltip held open over a streaming panel would restart its fade on every frame.
-        const changed =
-            next.label !== state.label || next.side !== state.side || next.overflowOnly !== state.overflowOnly || next.lines !== state.lines;
+        // different, or a tooltip held open over a streaming panel would restart its fade on every frame. A `Tip` is
+        // compared by what it says, since a template builds a fresh object literal on every render.
+        const changed = next.key !== state.key || next.side !== state.side || next.overflowOnly !== state.overflowOnly || next.lines !== state.lines;
         Object.assign(state, next);
         if (changed && state.box !== undefined) {
             state.show();
@@ -157,3 +254,11 @@ export const vTooltip: Directive<HTMLElement, string | undefined, Modifier> = {
         states.delete(el);
     },
 };
+
+// Every template's `v-tooltip` is type-checked against what the directive takes, so a sentence-shaped object or a
+// misspelt `Tip` field is a build error rather than an empty box.
+declare module "vue" {
+    interface GlobalDirectives {
+        vTooltip: typeof vTooltip;
+    }
+}

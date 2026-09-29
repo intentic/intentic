@@ -2,6 +2,8 @@
 import { computed } from "vue";
 import Icon from "../primitives/Icon.vue";
 import { useT } from "../../i18n/index.js";
+import { tipText } from "../../lib/tipText.js";
+import type { Tip } from "../../lib/tooltip.js";
 
 // The open project as a chip, and the way out of it: one control for every surface the project scope narrows (the
 // file tree, the agents board, an extension's rows), so the shell says "web · 3 hidden" the same way everywhere.
@@ -18,9 +20,15 @@ const {
 } = defineProps<{ project?: string | undefined; hidden?: number; noun?: string; compact?: boolean }>();
 const emit = defineEmits<{ clear: [] }>();
 
-const hint = computed(() =>
-    project === undefined ? `` : `Showing ${noun} on ${project} only${hidden > 0 ? `, ${hidden} elsewhere` : ``}. Click to show every project's.`,
-);
+// Which project narrows this surface, how much of it that hides, and that a click lifts it.
+const hint = computed((): Tip => ({
+    title: t(`ui.projectChip.projectFilter`),
+    rows: [
+        { label: t(`ui.projectChip.project`), value: project ?? `` },
+        { label: t(`ui.projectChip.hiddenLabel`), value: hidden > 0 ? `${hidden} ${noun}` : `` },
+    ],
+    note: t(`ui.projectChip.clickShowsAll`),
+}));
 </script>
 
 <template>
@@ -28,7 +36,7 @@ const hint = computed(() =>
         v-if="project !== undefined"
         type="button"
         class="ui-chip ui-chip-on h-6 shrink-0 px-1.5"
-        :aria-label="hint"
+        :aria-label="tipText(hint)"
         v-tooltip.bottom="hint"
         @click="emit(`clear`)"
     >

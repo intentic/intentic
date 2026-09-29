@@ -198,9 +198,18 @@ describe(`the index and the row facts`, () => {
     });
 
     it(`names a link's target, and a broken or outside one as such`, () => {
-        expect(linkTooltip({ to: `../skills/github` })).toBe(`Link to ../skills/github`);
-        expect(linkTooltip({ to: `../skills/gone`, state: `broken` })).toBe(`Link to ../skills/gone: there is nothing there`);
-        expect(linkTooltip({ to: `/etc`, state: `outside` })).toBe(`Link to /etc: outside the workspace, so the sandbox won't open it`);
+        expect(linkTooltip({ to: `../skills/github` })).toEqual({ title: `Link`, rows: [{ label: `Target`, value: `../skills/github` }] });
+        expect(linkTooltip({ to: `../skills/gone`, state: `broken` })).toEqual({
+            title: `Broken link`,
+            tone: `warn`,
+            rows: [{ label: `Target`, value: `../skills/gone` }],
+        });
+        expect(linkTooltip({ to: `/etc`, state: `outside` })).toEqual({
+            title: `Outside workspace`,
+            tone: `warn`,
+            rows: [{ label: `Target`, value: `/etc` }],
+            note: `Sandbox won't open it`,
+        });
         expect([
             deadLink({ ...file(`a`), link: { to: `b` } }),
             deadLink({ ...file(`a`), link: { to: `b`, state: `broken` } }),
@@ -233,9 +242,9 @@ describe(`the index and the row facts`, () => {
         ).toEqual([
             `Uploading…`,
             `Writing…`,
-            `Uploaded — waiting for the workspace listing`,
-            `Written — waiting for the workspace listing`,
-            `Upload failed; the file isn't in the workspace`,
+            { title: `Uploaded`, note: `Awaiting listing` },
+            { title: `Written`, note: `Awaiting listing` },
+            { title: `Upload failed`, tone: `danger`, note: `Not in workspace` },
             undefined,
         ]);
     });

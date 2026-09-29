@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Avatar, Button, ui, Modal, Notice, ResponsiveOverlay, SegmentedControl, useDevice, useLoadingReveal } from "@intentic/ui";
+import { Avatar, Button, ui, Modal, Notice, ResponsiveOverlay, SegmentedControl, type Tip, useDevice, useLoadingReveal } from "@intentic/ui";
 import { createInlineRename } from "@intentic/ui/inline-rename";
 import { computed, onUnmounted, ref, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
@@ -212,13 +212,14 @@ const canLand = computed(() => !changes.actionBusy.value && changes.pending.valu
 // A live turn that isn't writing: parked on a question, permission, or a Stop unwind; land is ordinary.
 const parked = computed(() => streaming.value && !writing.value);
 // What the Land button promises, across the three states it can be pressed in.
-const landHint = computed(() =>
-    writing.value
-        ? `The agent is still writing: you'll be asked to confirm`
-        : parked.value
-          ? `Applies what the agent has written so far`
-          : `Applies ${changes.pending.value.length} change(s) to your workspace`,
-);
+const landHint = computed((): Tip => {
+    const rows = [{ label: t(`shared.changes`), value: changes.pending.value.length }];
+    return writing.value
+        ? { title: t(`agents.agentDetail.stillWriting`), tone: `warn`, rows, note: t(`agents.agentDetail.asksToConfirm`) }
+        : { title: parked.value ? t(`agents.agentDetail.writtenSoFar`) : t(`agents.agentDetail.toWorkspace`), rows };
+});
+// The collaborator's press: who it waits on, and where the ask goes.
+const requestLandHint = computed((): Tip => ({ title: t(`agents.agentDetail.needsMaintainer`), note: t(`agents.agentDetail.asksOnTheirBoard`) }));
 // The only land that can carry half-finished work gets a modal, not a quiet press: the user needs to see why it's
 // recoverable (uncommitted, rest lands later) before confirming. A parked or resting press just lands.
 const pendingForceLand = ref(false);
@@ -406,7 +407,7 @@ const confirmHandOver = async (): Promise<void> => {
             <span
                 v-if="remoteName !== undefined"
                 class="ui-status-pill inline-flex shrink-0 items-center gap-1 bg-overlay text-2xs text-muted"
-                v-tooltip.bottom="t(`agents.agentDetail.agentInNotIn`, { remoteName })"
+                v-tooltip.bottom="{ title: t(`agents.words.otherSandbox`), rows: [{ label: t(`agents.words.sandbox`), value: remoteName }] }"
             >
                 <Icon name="server" class="text-2xs" />
                 <span class="max-w-[10rem] truncate">{{ remoteName }}</span>
@@ -477,7 +478,7 @@ const confirmHandOver = async (): Promise<void> => {
                     class="shrink-0 whitespace-nowrap"
                     :disabled="requestingLand"
                     @click="requestLand"
-                    v-tooltip.bottom="words.requestLandHint"
+                    v-tooltip.bottom="requestLandHint"
                 >
                     <Icon :name="requestingLand ? 'spinner' : 'send'" :spin="requestingLand" />{{ words.requestLand }}
                 </Button>
@@ -501,7 +502,7 @@ const confirmHandOver = async (): Promise<void> => {
                 severity="secondary"
                 class="shrink-0 whitespace-nowrap"
                 @click="crossToAgent"
-                v-tooltip.bottom="t(`agents.agentDetail.switchesWindowToWhere`, { remoteName })"
+                v-tooltip.bottom="t(`agents.agentDetail.switchesWindow`)"
             >
                 <Icon name="arrow-right" />{{ t(`agents.words.openIn`) }} {{ remoteName }}
             </Button>

@@ -1,4 +1,6 @@
 import type { WorkspaceLink, WorkspaceTreeEntry } from "@intentic/api-contract";
+import type { Tip } from "@intentic/ui";
+import { t } from "@intentic/ui/i18n";
 import { parentDir } from "@intentic/ui/path";
 import { opensAsFolder } from "../../files/archiveEntries";
 import type { Provisional } from "../../files/provisionalEntries";
@@ -159,26 +161,31 @@ export const flattenRows = (source: RowSource): (Row | MoreRow)[] => {
 // A link that goes nowhere or leaves the workspace: dimmed like an ignored row, and never expandable.
 export const deadLink = (entry: WorkspaceTreeEntry): boolean => entry.link?.state !== undefined;
 
-// Hover text for a link row: the link's own target text as reported, not the resolved path. Broken and
+// Hover card for a link row: the link's own target text as reported, not the resolved path. Broken and
 // outside-workspace states are named explicitly, since a silent no-op click would look like a bug.
-export const linkTooltip = (link: WorkspaceLink): string =>
-    link.state === `broken`
-        ? `Link to ${link.to}: there is nothing there`
+export const linkTooltip = (link: WorkspaceLink): Tip => {
+    const rows = [{ label: t(`workspace.treeRows.target`), value: link.to }];
+    return link.state === `broken`
+        ? { title: t(`workspace.treeRows.brokenLink`), tone: `warn`, rows }
         : link.state === `outside`
-          ? `Link to ${link.to}: outside the workspace, so the sandbox won't open it`
-          : `Link to ${link.to}`;
+          ? { title: t(`workspace.treeRows.outsideWorkspace`), tone: `warn`, rows, note: t(`workspace.treeRows.wontOpen`) }
+          : { title: t(`workspace.words.symlink`), rows };
+};
 
 // A folder takes a drop itself; a file stands in for its parent, as with New File and paste.
 export const dropDirOf = (row: Row): string => (row.entry.type === `dir` ? row.entry.path : parentDir(row.entry.path));
 
-// A provisional row's hover text: what is still happening to it, or that the upload behind it failed.
-export const provisionalTooltip = (row: Provisional | undefined): string | undefined => {
+// A provisional row's hover: what is still happening to it, or that the upload behind it failed.
+export const provisionalTooltip = (row: Provisional | undefined): Tip | string | undefined => {
     if (row === undefined) {
         return undefined;
     }
     if (row.state === `failed`) {
-        return `Upload failed; the file isn't in the workspace`;
+        return { title: t(`workspace.treeRows.uploadFailed`), tone: `danger`, note: t(`workspace.treeRows.notInWorkspace`) };
     }
-    const verb = row.kind === `upload` ? `Uploaded` : `Written`;
-    return row.state === `landing` ? `${verb} — waiting for the workspace listing` : row.kind === `upload` ? `Uploading…` : `Writing…`;
+    if (row.state === `landing`) {
+        const verb = row.kind === `upload` ? t(`workspace.treeRows.uploaded`) : t(`workspace.treeRows.written`);
+        return { title: verb, note: t(`workspace.treeRows.awaitingListing`) };
+    }
+    return row.kind === `upload` ? t(`workspace.treeRows.uploading`) : t(`workspace.treeRows.writing`);
 };

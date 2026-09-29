@@ -7,7 +7,7 @@ import { BrandMark, Button, type NoticeModel, RowGroup, RowNote, ui } from "@int
 import { noticeFrom } from "@intentic/ui/async";
 import { computed, ref } from "vue";
 import { browseMarketplace } from "./useCapabilities";
-import { checksOk, checksProblem } from "../../sandbox/extensions/discoverListing";
+import { checksOk, checksProblem, checksTip } from "../../sandbox/extensions/discoverListing";
 import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
@@ -109,7 +109,7 @@ const pick = (entry: RegistryEntry): void => {
                             v-if="entry.trust === 'verified'"
                             name="shield"
                             class="shrink-0 text-success"
-                            :title="t(`capabilities.pluginRegistryBrowse.verified`)"
+                            v-tooltip.top="t(`capabilities.pluginRegistryBrowse.verified`)"
                         />
                         <span class="font-medium text-content">{{ entry.name }}</span>
                         <span v-if="entry.version" class="text-2xs text-subtle">{{ entry.version }}</span>
@@ -118,13 +118,17 @@ const pick = (entry: RegistryEntry): void => {
                             v-if="checksOk(entry)"
                             name="check"
                             class="shrink-0 text-success"
-                            v-tooltip.top="t(`capabilities.pluginRegistryBrowse.loadsReCheckedAt`)"
+                            v-tooltip.top="{
+                                title: t(`capabilities.pluginRegistryBrowse.nightlyScan`),
+                                tone: `ok`,
+                                rows: [{ label: t(`capabilities.pluginRegistryBrowse.commit`), value: entry.checks?.sha.slice(0, 7) ?? `` }],
+                            }"
                         />
                         <Icon
                             v-else-if="checksProblem(entry)"
                             name="exclamation-triangle"
                             class="shrink-0 text-warning"
-                            v-tooltip.top="checksProblem(entry)"
+                            v-tooltip.top="checksTip(entry)"
                         />
                         <span v-if="entry.stars !== undefined" class="inline-flex shrink-0 items-center gap-0.5 text-2xs text-subtle">
                             <Icon name="star" />{{ entry.stars }}

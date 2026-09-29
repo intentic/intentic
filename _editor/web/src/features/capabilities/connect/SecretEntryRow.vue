@@ -226,7 +226,9 @@ const ACTION = ui.iconButton(`text-subtle disabled:opacity-40 disabled:hover:bg-
                     <button
                         v-if="row.entry.status !== `missing`"
                         v-tooltip.top="
-                            revealedValue !== undefined ? t(`capabilities.secretEntryRow.hide`) : t(`capabilities.secretEntryRow.revealOwnerOnly`)
+                            revealedValue !== undefined
+                                ? t(`capabilities.secretEntryRow.hide`)
+                                : { title: t(`capabilities.secretEntryRow.reveal`), note: t(`capabilities.secretEntryRow.ownerOnly`) }
                         "
                         type="button"
                         :class="ACTION"
@@ -321,7 +323,9 @@ const ACTION = ui.iconButton(`text-subtle disabled:opacity-40 disabled:hover:bg-
                         v-if="isOwner"
                         :model-value="gateOn"
                         v-tooltip.top="
-                            gateOn ? t(`capabilities.secretEntryRow.letAgentUseWithout`) : t(`capabilities.secretEntryRow.requireNamedPersonTo`)
+                            gateOn
+                                ? { title: t(`capabilities.secretEntryRow.dropApproval`), note: t(`capabilities.secretEntryRow.agentUsesFreely`) }
+                                : { title: t(`capabilities.secretEntryRow.requireApproval`), note: t(`capabilities.secretEntryRow.namedPersonReleases`) }
                         "
                         :aria-label="t(`capabilities.secretEntryRow.needsApproval`)"
                         @update:model-value="toggleGate"

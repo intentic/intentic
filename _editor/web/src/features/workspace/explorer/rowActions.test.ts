@@ -52,7 +52,7 @@ describe(`rowActionsFor`, () => {
         const source = sources({ manageableDirs: new Set([`intentic`]) });
         const actions = rowActionsFor(`intentic`, source);
         expect(actions.map((action) => action.id)).toEqual([`directory`]);
-        expect(actions[0]?.tooltip).toBe(`Open management panel`);
+        expect(actions[0]?.tooltip).toBe(`Manage`);
         actions[0]?.run();
         expect(source.openDirectory).toHaveBeenCalledWith(`intentic`);
     });
@@ -76,9 +76,10 @@ describe(`rowActionsFor`, () => {
     // switch is that a declaration nobody agreed to does nothing.
     it(`says whether declared checks are waiting or have changed under an adoption`, () => {
         const waiting = rowActionsFor(`shop`, sources({ checkDirs: new Map([[`shop`, { adopted: false, changed: false }]]) }));
-        expect(waiting[0]?.tooltip).toBe(`This repository declares checks, not switched on`);
+        expect(waiting[0]?.tooltip).toBe(`Checks off`);
         const changed = rowActionsFor(`shop`, sources({ checkDirs: new Map([[`shop`, { adopted: false, changed: true }]]) }));
-        expect(changed[0]?.tooltip).toBe(`Its checks changed since you switched them on, so they are not running`);
+        expect(changed[0]?.tooltip).toBe(`Checks paused`);
+        expect(changed[0]?.tip).toEqual({ title: `Checks paused`, tone: `warn`, note: `Changed since switched on` });
     });
 
     // Document leads the row, matching the rail's ordering, not appended after existing affordances.

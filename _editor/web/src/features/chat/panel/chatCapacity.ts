@@ -95,8 +95,10 @@ export interface CapacityBlocked {
     // What the providers said, each once: printed beside the fix when there is just one, else on hover.
     readonly reasons: readonly string[];
     readonly count: number;
-    // Each account's label with its own reason, for the hover the counted line is too narrow to print.
+    // Each account's label with its own reason, for the screen reader the counted line is too narrow to serve.
     readonly labels: readonly string[];
+    // The same accounts by label alone, for the hover card.
+    readonly names: readonly string[];
 }
 
 /** Readings that stopped moving for one reason: what a re-read could not reach, in the provider's words. */
@@ -301,6 +303,7 @@ export const chatCapacity = (held: readonly PlanLimitsHeld[] = [], now: number =
             reasons: entry.reasons,
             count: entry.rows.length,
             labels: entry.rows.map((row) => `${row.label} (${row.state.reason})`),
+            names: entry.rows.map((row) => row.label),
         })),
         measuredAt: oldestMovableReading(dated),
         unread: unreadGroups(dated).map((entry) => ({

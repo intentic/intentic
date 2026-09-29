@@ -18,7 +18,8 @@ const { settings, patch } = useSandboxSettings();
 
 // Built in a computed, not a table at import: `t` reads the active language when it is CALLED
 // (docs/architecture/languages.md).
-const rowsFor = (ending: TurnBreak) => computed(() => breakAnswers(ending).map((answer) => ({ label: answer.label, value: answer.value, title: answer.note })));
+const rowsFor = (ending: TurnBreak) =>
+    computed(() => breakAnswers(ending).map((answer) => ({ label: answer.label, value: answer.value, title: { title: answer.label, note: answer.brief } })));
 const limitRows = rowsFor(`limit`);
 const outageRows = rowsFor(`outage`);
 const stoppedRows = rowsFor(`stopped`);

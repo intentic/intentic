@@ -98,9 +98,11 @@ onUnmounted(() => inventoryWatch.dispose());
                 <h3 class="font-semibold text-content">{{ t(`views.connectHost.connectServer`) }}</h3>
                 <InfoHint :label="t(`views.connectHost.howConnectingMachineWorks`)">
                     <span class="block text-sm font-medium text-content">{{ t(`views.connectHost.connectMachine`) }}</span>
-                    <span class="mt-1 block text-xs text-muted">
-                        {{ t(`views.connectHost.runCommandOnAny`) }}
+                    <span class="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-xs">
+                        <span class="text-muted">{{ t(`views.connectHost.runOn`) }}</span><span class="text-content">{{ t(`views.connectHost.anyHost`) }}</span>
+                        <span class="text-muted">{{ t(`views.words.creates`) }}</span><span class="text-content">{{ t(`views.connectHost.userKeyTunnel`) }}</span>
                     </span>
+                    <span class="mt-2 block text-xs text-muted">{{ t(`views.connectHost.repeatPerMachine`) }}</span>
                 </InfoHint>
             </div>
             <p class="mt-0.5 text-xs text-muted">

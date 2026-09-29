@@ -15,8 +15,8 @@ export const isMemoryHold = (message: ChatMessage): boolean =>
     message.role === `notice` && (message.noticeAction === `sendAnyway` || message.noticeAction === `sandboxMemory`);
 
 /**
- * What a low-memory row says was short, as the sandbox measured it: its first sentence. The stakes after it are the
- * press's own hover (`sendAnywayHint`), and a hover label is only a few lines long.
+ * What a low-memory row says was short, as the sandbox measured it: its first sentence, which memoryTip reads the
+ * figures out of. The stakes after it are the press's own hover (sendAnywayTip).
  */
 export const memoryReading = (text: string): string => {
     const end = text.search(/\.\s/);

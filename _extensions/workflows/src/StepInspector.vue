@@ -213,7 +213,7 @@ const advancedSummary = computed(() => {
                 <ProseField v-model="title" variant="heading" :placeholder="TITLE_HINT" class="min-w-0 flex-1" />
                 <button
                     type="button"
-                    v-tooltip.top="t(`stepInspector.deleteStep`)"
+                    v-tooltip.top="t(`stepInspector.deleteStep2`)"
                     :class="ui.iconButton(`mt-1 text-danger`)"
                     :aria-label="t(`stepInspector.deleteStep2`)"
                     @click="emit(`remove`)"
@@ -348,7 +348,7 @@ const advancedSummary = computed(() => {
                         <button
                             v-if="step.agent !== undefined"
                             type="button"
-                            v-tooltip.top="t(`stepInspector.unpinRunStepOn`)"
+                            v-tooltip.top="{ title: t(`stepInspector.unpin`), note: t(`stepInspector.backToYourDefault`) }"
                             :class="ui.iconButton()"
                             :aria-label="t(`stepInspector.unpinModel`)"
                             @click="unpin"

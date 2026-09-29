@@ -57,12 +57,12 @@ const facts = computed(() =>
                 v-if="episode.sessionId"
                 type="button"
                 class="block w-fit max-w-full cursor-pointer truncate text-left hover:text-link hover:underline"
-                :title="episode.label"
+                v-tooltip.top.overflow="episode.label"
                 @click="api.chat.openSession(episode.sessionId)"
             >
                 {{ episode.label }}
             </button>
-            <span v-else class="block min-w-0 truncate" :title="episode.label">{{ episode.label }}</span>
+            <span v-else class="block min-w-0 truncate" v-tooltip.top.overflow="episode.label">{{ episode.label }}</span>
         </template>
 
         <!-- Facts and preview share one line in the row metadata. -->
@@ -80,7 +80,7 @@ const facts = computed(() =>
             <StatusBadge v-if="episode.failed" variant="danger" :label="t(`episodeRow.failed`)" size="xs" dot />
             <span v-if="duration">{{ duration }}</span>
             <span v-if="cost">{{ cost }}</span>
-            <span :title="formatTimestamp(episode.at)">{{ timeAgo(episode.at) }}</span>
+            <span v-tooltip.top="formatTimestamp(episode.at)">{{ timeAgo(episode.at) }}</span>
         </template>
 
         <!-- The daemon's own rows, oldest first, unedited. -->

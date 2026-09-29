@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { browserOwnsClick, SearchBar, useDevice, useListNavigation } from "@intentic/ui";
+import { browserOwnsClick, SearchBar, type Tip, useDevice, useListNavigation } from "@intentic/ui";
 import { computed, nextTick, onMounted, onUnmounted, ref } from "vue";
 import { RouterLink } from "vue-router";
 import { type AgentProvider, capabilitiesOf, PROVIDERS } from "@intentic/sandbox-contract";
@@ -274,14 +274,30 @@ const railLead = (lane: PickerLane): AgentProvider => lane.providers[0]!;
 const railReady = (lane: PickerLane): boolean => lane.providers.some(providerReady);
 const railActive = (lane: PickerLane): boolean => lane.providers.includes(provider);
 
-// The rail tooltip carries what the icon can't: whether this lane can run, and at what price.
-const railTooltip = (lane: PickerLane): string => {
+// The rail tooltip carries what the icon can't: whether this lane can run, and at what price. A card of facts for the
+// pointer (a row drops out when it has nothing to say); the screen reader's name keeps the runtime's own sentence.
+const railTip = (lane: PickerLane): Tip => {
+    const lead = railLead(lane);
+    const reauth = providerNeedsReauth(lead);
+    const runtimeDown = providerRuntimeIssue(lead) !== undefined;
+    return {
+        title: lane.label,
+        tone: runtimeDown || reauth ? `warn` : undefined,
+        rows: [
+            { label: t(`chat.modelPicker.access`), value: accessBadge(lead) ?? `` },
+            { label: t(`shared.account`), value: reauth ? t(`chat.words.reconnectNeeded`) : ``, tone: `warn` },
+            { label: t(`chat.modelPicker.runtime`), value: runtimeDown ? t(`chat.modelPicker.unavailable`) : ``, tone: `danger` },
+        ],
+        note: railActive(lane) ? t(`shared.active`) : undefined,
+    };
+};
+const railLabel = (lane: PickerLane): string => {
     const lead = railLead(lane);
     return [
         lane.label,
-        ...(railActive(lane) ? [`active`] : []),
+        ...(railActive(lane) ? [t(`shared.active`)] : []),
         ...(accessBadge(lead) !== undefined ? [accessBadge(lead)!] : []),
-        ...(providerNeedsReauth(lead) ? [`needs reconnect`] : []),
+        ...(providerNeedsReauth(lead) ? [t(`chat.words.reconnectNeeded`)] : []),
         ...(providerRuntimeIssue(lead) !== undefined ? [providerRuntimeIssue(lead)!] : []),
     ].join(` · `);
 };
@@ -363,8 +379,8 @@ onMounted(() => {
                     :aria-checked="rail === lane.key"
                     class="ui-row-select ui-row-select-horizontal relative flex h-8 w-8 shrink-0 items-center justify-center rounded-lg max-md:h-11 max-md:w-11"
                     :class="{ 'ui-row-select-on': rail === lane.key }"
-                    v-tooltip.bottom="railTooltip(lane)"
-                    :aria-label="railTooltip(lane)"
+                    v-tooltip.bottom="railTip(lane)"
+                    :aria-label="railLabel(lane)"
                     @click="railTo(lane.key)"
                 >
                     <ProviderLogo
@@ -408,7 +424,7 @@ onMounted(() => {
                                 v-if="providerNeedsReauth(section.provider)"
                                 name="exclamation-triangle"
                                 class="text-2xs text-warning"
-                                v-tooltip.top="t(`chat.words.accountNeedsToReconnected`)"
+                                v-tooltip.top="t(`chat.words.reconnectNeeded`)"
                             />
                             <template v-if="section.badge !== undefined">
                                 <span

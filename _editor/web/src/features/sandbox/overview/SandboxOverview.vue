@@ -190,7 +190,7 @@ const removeLogo = async (): Promise<void> => {
                             isOwner ? (logo ? t(`sandbox.sandboxOverview.changeRemoveLogo`) : t(`sandbox.sandboxOverview.addLogo`)) : undefined
                         "
                         v-tooltip.bottom="
-                            isOwner ? (logo ? t(`sandbox.sandboxOverview.changeRemoveLogo`) : t(`sandbox.sandboxOverview.addLogo`)) : undefined
+                            isOwner ? (logo ? t(`sandbox.sandboxOverview.logoChange`) : t(`sandbox.sandboxOverview.logoAdd`)) : undefined
                         "
                         :class="ui.iconButton(`group h-12 w-12 overflow-hidden`)"
                         @click="pressLogo"
@@ -251,12 +251,12 @@ const removeLogo = async (): Promise<void> => {
                             />
                             <!-- The rail's corner mark, in words. The glyph up there is a glance; this is the page a
                                  reader opens to find out what it meant, so it spells the machine out and the tooltip
-                                 carries the whole sentence. Not a StatusBadge: that one lowercases, and this says a
-                                 brand and a hostname. -->
+                                 carries the name that refines it (a region, a host), where there is one. Not a
+                                 StatusBadge: that one lowercases, and this says a brand and a hostname. -->
                             <span
                                 v-if="placement"
                                 class="ui-status-pill inline-flex shrink-0 items-center gap-1 bg-content/5 text-2xs font-medium text-muted"
-                                v-tooltip.top="placement.detail"
+                                v-tooltip.top="placement.tip.rows === undefined ? undefined : placement.tip"
                             >
                                 <Icon :name="placement.icon" class="text-2xs text-subtle" />{{ placement.label }}
                             </span>

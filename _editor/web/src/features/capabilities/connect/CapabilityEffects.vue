@@ -1,7 +1,7 @@
 <!-- The itemized "what adding this does to your sandbox" disclosure: the structured counterpart of the catalog's prose hints. -->
 <script setup lang="ts">
 import type { CapabilityEffect } from "@intentic/capability-catalog";
-import type { IconName } from "@intentic/ui";
+import type { IconName, TooltipValue } from "@intentic/ui";
 import { computed } from "vue";
 import { useT } from "@intentic/ui/i18n";
 
@@ -13,14 +13,21 @@ interface EffectRow {
     readonly icon: IconName;
     readonly label: string;
     readonly warn?: boolean;
+    // The compact glyph's hover, for the kinds a grid tile badges (effects.ts BADGED_EFFECTS); the sentence is the panel's.
+    readonly tip?: TooltipValue;
 }
 
 // The two privilege rows, out of the switch: each is its own decision (privileged vs net-admin, writable vs not) and
 // the switch is one case per kind, not per decision.
 const describeRuntime = (level: `net-admin` | `privileged`): EffectRow =>
     level === `privileged`
-        ? { icon: `shield`, label: t(`capabilities.capabilityEffects.runsSandboxContainerPrivileged`), warn: true }
-        : { icon: `shield`, label: t(`capabilities.capabilityEffects.requiresNetworkAdminContainer`) };
+        ? {
+              icon: `shield`,
+              label: t(`capabilities.capabilityEffects.runsSandboxContainerPrivileged`),
+              warn: true,
+              tip: { title: t(`capabilities.capabilityEffects.privileged`), tone: `warn`, note: t(`capabilities.capabilityEffects.forItsDocker`) },
+          }
+        : { icon: `shield`, label: t(`capabilities.capabilityEffects.requiresNetworkAdminContainer`), tip: t(`capabilities.capabilityEffects.networkAdmin`) };
 
 // Writable is the warned half: a read-only mount can cost the server nothing, a writable one can.
 const describeMount = (target: string, writable: boolean): EffectRow => {
@@ -56,7 +63,11 @@ const DESCRIBE: Describers = {
         icon: `download`,
         label: effect.url === undefined ? `Clones a git repository into your sandbox` : `Clones ${effect.url} into your sandbox`,
     }),
-    image: () => ({ icon: `box`, label: t(`capabilities.capabilityEffects.extendsSandboxImageOne`) }),
+    image: () => ({
+        icon: `box`,
+        label: t(`capabilities.capabilityEffects.extendsSandboxImageOne`),
+        tip: { title: t(`capabilities.capabilityEffects.imageChange`), note: t(`capabilities.capabilityEffects.oneRebuild`) },
+    }),
     runtime: (effect) => describeRuntime(effect.level),
     gpu: () => ({ icon: `bolt`, label: t(`capabilities.capabilityEffects.claimsEveryNvidiaGpu`), warn: true }),
     mount: (effect) => describeMount(effect.target, effect.writable),
@@ -74,6 +85,7 @@ const DESCRIBE: Describers = {
         icon: `exclamation-triangle`,
         label: t(`capabilities.capabilityEffects.runsCodeInsideApp`),
         warn: true,
+        tip: { title: t(`capabilities.capabilityEffects.runsInApp`), tone: `warn`, note: t(`capabilities.capabilityEffects.trustedOnly`) },
     }),
     // Names the passkey as well as the profile, since a stored security key is a bigger thing to hold than a session
     // cookie; both are removed together.
@@ -128,7 +140,7 @@ const rows = computed<readonly EffectRow[]>(() => effects.map(describe));
 <template>
     <!-- `shrink-0`: fixed-width glyphs must not be squashed to buy the truncating name a few more pixels. -->
     <div v-if="compact && rows.length > 0" class="flex shrink-0 items-center gap-1.5 text-2xs text-subtle">
-        <span v-for="(row, index) in rows" :key="index" v-tooltip.top="row.label" :class="row.warn ? 'text-warning' : ''">
+        <span v-for="(row, index) in rows" :key="index" v-tooltip.top="row.tip ?? row.label" :class="row.warn ? 'text-warning' : ''">
             <Icon :name="row.icon" />
         </span>
     </div>

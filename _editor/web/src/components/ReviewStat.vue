@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { DiffStat } from "@intentic/ui";
+import { DiffStat, type Tip } from "@intentic/ui";
 import { computed } from "vue";
 import { useLayout } from "../shell/window/useLayout";
 import type { LineStat } from "@intentic/code-read";
@@ -34,11 +34,14 @@ const commentsOnly = computed(
 // Git's reading, formatted the way the badge formats numbers, for the hover text.
 const full = computed(() => [additions ? `+${additions}` : ``, deletions ? `−${deletions}` : ``].filter(Boolean).join(` `));
 // Only when the two readings differ; otherwise the hover would repeat the number below it.
-const hint = computed<string | undefined>(() => {
+const hint = computed<Tip | undefined>(() => {
     if (!stripped.value || code === undefined || (code.additions === (additions ?? 0) && code.deletions === (deletions ?? 0))) {
         return undefined;
     }
-    return commentsOnly.value ? `Only comments changed, ${full.value} of them` : `Code only · ${full.value} counting comments`;
+    return {
+        title: commentsOnly.value ? t(`common.reviewStat.commentsOnly`) : t(`common.reviewStat.codeOnly`),
+        rows: [{ label: t(`common.reviewStat.withComments`), value: full.value }],
+    };
 });
 
 // Rail: this file's added lines against the list's largest addition (see changeWeight.ts for the compressive

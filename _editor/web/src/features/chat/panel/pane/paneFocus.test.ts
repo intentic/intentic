@@ -7,7 +7,7 @@ import { usePaneFocus } from "./paneFocus";
 // the focused one names the close shortcut, and the caret goes into the focused pane's composer when the shell asks for
 // it or the chat connects, and never on a phone or into a pane the reader is not in.
 
-const CLOSE = `Close this pane: the chat stays open`;
+const CLOSE = { title: `Close pane`, note: `Chat stays open` };
 
 const paneOf = (over: { focused?: boolean; connected?: boolean; mobile?: boolean } = {}) => {
     const input = document.createElement(`textarea`);
@@ -50,10 +50,10 @@ describe(`the pane the keyboard is in`, () => {
             handler: () => {},
         });
         const { state, focus } = paneOf({ focused: true });
-        expect(focus.closeHint.value).toBe(`${CLOSE} (${commandShortcut(`chat.closePane`)})`);
+        expect(focus.closeHint.value).toEqual({ ...CLOSE, keys: commandShortcut(`chat.closePane`) });
 
         state.focused.value = false;
-        expect(focus.closeHint.value).toBe(CLOSE);
+        expect(focus.closeHint.value).toEqual(CLOSE);
         closing.dispose();
     });
 });

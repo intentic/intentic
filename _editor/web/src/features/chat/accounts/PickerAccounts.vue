@@ -173,7 +173,7 @@ const pickAccount = (id: string): void => {
                 type="button"
                 :class="ui.textAction(`gap-1 text-2xs text-subtle`)"
                 :disabled="measuring"
-                v-tooltip.top="t(`chat.pickerAccounts.reMeasureEveryAccounts`)"
+                v-tooltip.top="{ title: t(`chat.pickerAccounts.remeasureLimits`), note: t(`chat.pickerAccounts.everyAccount`) }"
                 :aria-label="remeasureLabel"
                 @click="remeasure"
             >
@@ -234,7 +234,7 @@ const pickAccount = (id: string): void => {
                         <span
                             v-if="autoPickedId === a.id"
                             class="shrink-0 text-2xs text-subtle"
-                            v-tooltip.top="t(`chat.pickerAccounts.autoPicked`)"
+                            v-tooltip.top="{ title: t(`chat.pickerAccounts.autoPicked`), note: t(`chat.pickerAccounts.byAllowanceLeft`) }"
                             >{{ t(`chat.words.autoLabel`) }}</span
                         >
                     </span>
@@ -255,7 +255,7 @@ const pickAccount = (id: string): void => {
                     name="exclamation-triangle"
                     class="shrink-0 text-2xs text-warning"
                     :class="{ 'ml-auto': !a.headroom }"
-                    v-tooltip.top="a.detail ?? t(`chat.words.accountNeedsToReconnected`)"
+                    v-tooltip.top="a.detail ?? t(`chat.words.reconnectNeeded`)"
                 />
             </button>
             <!-- Says so inside the list, where the rows would be; otherwise it reads as a list that lost its accounts. -->

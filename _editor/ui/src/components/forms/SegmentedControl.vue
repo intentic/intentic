@@ -4,6 +4,8 @@ import type { IconName } from "../../icons/iconSets.js";
 import { useDevice } from "../../composables/useDevice.js";
 import { ui } from "../../lib/ui.js";
 import { countBadgePlate, countBadgeText } from "../feedback/countBadge.js";
+import { tipText } from "../../lib/tipText.js";
+import type { TooltipValue } from "../../lib/tooltip.js";
 
 const {
     options,
@@ -25,11 +27,11 @@ const {
         value: T;
         icon?: IconName;
         hue?: number;
-        title?: string;
+        title?: TooltipValue;
         badge?: number;
         mark?: IconName;
         markSpin?: boolean;
-        markTitle?: string;
+        markTitle?: TooltipValue;
     }[];
     // sm: viewer toggles; xs: cramped rows (e.g. the workspace filter bar).
     size?: `sm` | `xs`;
@@ -52,9 +54,9 @@ const { coarse } = useDevice();
 
 // Accessible name folds the hover hint in, since a phone never sees the tooltip; always prefixed with the visible
 // label, absent when there's no hint.
-const nameOf = (option: { label: string; title?: string; markTitle?: string; mark?: unknown }): string | undefined => {
-    const hint = (option.mark === undefined ? option.title : (option.markTitle ?? option.title))?.trim();
-    return hint === undefined || hint === `` ? undefined : `${option.label} · ${hint}`;
+const nameOf = (option: { label: string; title?: TooltipValue; markTitle?: TooltipValue; mark?: unknown }): string | undefined => {
+    const hint = tipText(option.mark === undefined ? option.title : (option.markTitle ?? option.title));
+    return hint === undefined ? undefined : `${option.label} · ${hint}`;
 };
 
 // Square-ish at one digit and a lozenge past that, like the rail's; `tabular-nums` so a ticking count doesn't

@@ -1,6 +1,7 @@
 import { extensionIdOf } from "@intentic/extension-manifest";
 import { isShaPinned, type RegistryEntry } from "@intentic/registry";
 import type { ExtensionSummary } from "@intentic/sandbox-contract";
+import type { Tip } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 
 // What a registry row becomes once this sandbox is checked against it: installable, installed, an update, blocked,
@@ -41,6 +42,24 @@ export const checksProblem = (entry: RegistryEntry): string | undefined => {
 };
 
 export const checksOk = (entry: RegistryEntry): boolean => entry.checks !== undefined && checksProblem(entry) === undefined;
+
+// The scan's verdict at the pinned commit as a hover card: the short commit, and whichever check failed, in the scan's
+// own words (the registry's text, verbatim, since a verdict with no stated reason is an opinion). Absent when it passed.
+export const checksTip = (entry: RegistryEntry): Tip | undefined => {
+    const checks = entry.checks;
+    if (checks === undefined || checksProblem(entry) === undefined) {
+        return undefined;
+    }
+    const failed =
+        checks.manifest === `ok`
+            ? { label: t(`sandbox.discoverListing.bundle`), value: checks.bundle }
+            : { label: t(`sandbox.discoverListing.manifest`), value: checks.manifest };
+    return {
+        title: t(`sandbox.discoverListing.scanFailed`),
+        tone: `warn`,
+        rows: [{ label: t(`sandbox.words.commit`), value: checks.sha.slice(0, 7) }, failed],
+    };
+};
 
 // Blocked wins even over already-installed, since a reader who installed before a block needs to know most.
 // Pointer validity is checked next, and only then does what's installed here decide the rest.

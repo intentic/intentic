@@ -10,7 +10,9 @@
         "approvalSlice": "Wycinek zatwierdzeń",
         "approvalSlices": "Wycinki zatwierdzeń",
         "show": "Pokaż",
-        "slices": "Wycinki"
+        "slices": "Wycinki",
+        "total": "Razem",
+        "waiting": "Czeka"
     },
     "approvalsView": {
         "approvals": "Zatwierdzenia",
@@ -21,7 +23,7 @@
         "automation": "automatyzacja {automationId}",
         "automations": "Automatyzacje",
         "automationsHeld": "Automatyzacje wstrzymane dla Ciebie",
-        "backToReviewNothing": "Wróć do przeglądu: nic się nie dzieje",
+        "backToReview": "Wróć do przeglądu",
         "cancel": "Anuluj",
         "couldntApproveHooks": "Nie udało się zatwierdzić tych hooków.",
         "couldntDismissHooks": "Nie udało się pozostawić tych hooków wyłączonych.",
@@ -29,6 +31,7 @@
         "couldntReadHeldAutomations": "Nie udało się odczytać wstrzymanych automatyzacji.",
         "couldntReadHooks": "Nie udało się odczytać hooków czekających na zatwierdzenie.",
         "couldntReadWontRun": "nie dało się odczytać i nie zostanie uruchomione:",
+        "deletesFile": "Usuwa plik",
         "done": "Gotowe",
         "doneEditing": "Zakończ edycję",
         "eachGoesAheadOn": "Każda rusza w swoim własnym terminie albo po krótkim odliczaniu, jeśli terminu nie ma.",
@@ -49,31 +52,30 @@
         "keptOff": "pozostawione wyłączone",
         "letThemRun": "Pozwól im działać",
         "needsReview": "Wymaga Twojego przeglądu",
+        "nothingUndone": "Nic nie jest cofane",
         "nothingWaitingPostsAgent": "Nic nie czeka. Wpisy, które Twój agent chce opublikować, wszystko inne, czego nie powinien robić bez pytania, i automatyzacje ustawione na „najpierw zapytaj” — wszystko ląduje tutaj do zatwierdzenia.",
         "open": "Otwórz",
         "postStaysUpOn": "Wpis zostaje na {rejecting}: usuwany jest tylko ten jego ślad.",
         "proposed": "zaproponowano {createdAt}",
         "putBackInReview": "Odłóż {item} z powrotem do przeglądu",
-        "putBackInReview2": "Odłóż z powrotem do przeglądu",
         "readingApprovalsQueue": "Odczytywanie kolejki zatwierdzeń…",
         "reject": "Odrzuć {item}",
         "reject2": "Odrzuć",
         "reject3": "Odrzucić to?",
-        "rejectDeletes": "Odrzuć: usuwa to",
         "remove": "Usuń",
         "removeList": "Usuń {item} z listy",
-        "removeListWhatDone": "Usuń z tej listy: co zrobione, zostaje zrobione",
         "removeRecord": "Usunąć ten ślad?",
         "retry": "Ponów",
         "scheduled": "Zaplanowane",
         "startNow": "Zacznij teraz",
         "stop": "Zatrzymaj",
         "stopPutBackIn": "Zatrzymaj {item} i odłóż z powrotem do przeglądu",
-        "whatDoneStaysDone": "Co zrobione, zostaje zrobione: usuwany jest tylko ten ślad."
+        "whatDoneStaysDone": "Co zrobione, zostaje zrobione: usuwany jest tylko ten ślad.",
+        "wontGoAhead": "Nie ruszy"
     },
     "extension": {
         "approvals": "Zatwierdzenia",
-        "waitingOn": "{count} czeka na Ciebie"
+        "waitingOn": "{count} czeka"
     },
     "hookSetBody": {
         "filesPinned": "Zatwierdzenie obejmuje też te pliki, bajt po bajcie:",
@@ -88,8 +90,9 @@
         "postTitle": "Tytuł wpisu"
     },
     "scheduleControl": {
+        "clickToSchedule": "Kliknij, by zaplanować",
         "goAheadAt": "Ruszaj z {label} o",
-        "goesAheadSoonExecutor": "Rusza, gdy tylko wykonawca to podejmie, kliknij, żeby wybrać datę",
+        "goesAtOnce": "Rusza od razu",
         "noDate": "Bez daty"
     }
 }

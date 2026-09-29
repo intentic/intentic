@@ -133,6 +133,7 @@
 /* Tooltip box (see tooltip.css). */
     --ui-tooltip-max-width: 17rem;
     --ui-tooltip-max-lines: 5;
+    --ui-tip-max-width: 16rem;
 }
 
 /* Compact text size is the default scale. */

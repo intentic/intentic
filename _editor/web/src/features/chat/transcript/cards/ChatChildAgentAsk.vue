@@ -83,7 +83,7 @@ const choose = async (): Promise<void> => {
             :class="{ 'ui-chip-on': staged !== undefined }"
             :disabled="disabled"
             :aria-label="t(`chat.chatChildAgentAsk.change`, { run: line })"
-            v-tooltip.top="t(`chat.chatChildAgentAsk.changeHint`)"
+            v-tooltip.top="{ title: t(`chat.chatChildAgentAsk.changeRun`), note: t(`chat.chatChildAgentAsk.modelAccountEffort`) }"
             @click="choose"
         >
             <ProviderLogo :provider="run.provider" class="shrink-0 text-link" />

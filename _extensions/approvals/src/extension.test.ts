@@ -135,7 +135,7 @@ describe(`the Approvals tile`, () => {
         expect(registered?.id).toBe(`approvals`);
         // One proposal, one waiting wake and one hook set count; the done post, the delayed hold and the hook set kept
         // off don't. Waits for the badge's content, not just its existence, since a first poll could catch an empty value.
-        await waitFor(() => expect(registered?.badge?.(tile)).toMatchObject({ count: 3, tooltip: `3 waiting on you`, tone: `info` }));
+        await waitFor(() => expect(registered?.badge?.(tile)).toMatchObject({ count: 3, tooltip: `3 waiting`, tone: `info` }));
         // The queries the badge itself already filled, so the page opens on data, not a spinner.
         expect(registered?.warm?.().map((query) => query.queryKey)).toEqual([
             [`sandbox`, `box`, `approvals`],

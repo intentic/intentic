@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { ModelRoleSpec } from "@intentic/sandbox-contract";
-import { type IconName, Row, StatusBadge, useDevice } from "@intentic/ui";
+import { type IconName, Row, StatusBadge, type Tip, useDevice } from "@intentic/ui";
 import { isIconName } from "@intentic/ui/icons";
 import Checkbox from "primevue/checkbox";
 import { computed } from "vue";
@@ -26,7 +26,7 @@ const { role, icon, list, selected, disabled, loaded, badge } = defineProps<{
     // Whether settings have landed; the chip claims what this job will do, so it can't draw before that's true.
     loaded: boolean;
     /** A job carrying state its model list cannot show; drawn beside the row's own chip, never instead of it. */
-    badge?: { readonly label: string; readonly hint: string };
+    badge?: { readonly label: string; readonly hint: Tip };
 }>();
 
 const emit = defineEmits<{ select: [boolean]; open: [number | undefined, HTMLElement] }>();
@@ -53,15 +53,15 @@ const boxClass = computed<string>(() =>
 
 // Empty means something different per job kind: a one-shot doesn't run at all, a whole session opens on the chat's own
 // model. Both are normal, so the chip stays neutral, not a warning.
-const chip = computed<{ readonly label: string; readonly hint: string } | undefined>(() => {
+const chip = computed<{ readonly label: string; readonly hint: Tip } | undefined>(() => {
     if (!loaded || pinned.value) {
         return undefined;
     }
     return role.kind === `helper`
-        ? { label: t(`sandbox.modelRoleRow.off`), hint: t(`sandbox.modelRoleRow.notSetJobDoes`) }
+        ? { label: t(`sandbox.modelRoleRow.off`), hint: { title: t(`sandbox.words.notSet`), note: t(`sandbox.words.addModelToEnable`) } }
         : {
               label: t(`sandbox.words.chatDefault`),
-              hint: t(`sandbox.modelRoleRow.nothingPinnedRunsOn`),
+              hint: { title: t(`sandbox.words.followsChat`), note: t(`sandbox.words.addModelToPin`) },
           };
 });
 </script>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { Button, useDevice } from "@intentic/ui";
+import { providerLabel } from "@intentic/sandbox-contract";
+import { Button, type Tip, useDevice } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
@@ -39,11 +40,29 @@ const limitBackAt = computed(() => limitCountdown(props.agent, now.value));
 // A booked resend sits in Attention beside cards waiting on a press, so the corner is what tells the two apart: this
 // one goes again by itself at that hour, the other only comes back within reach.
 const limitBooked = computed(() => limitScheduled(props.agent));
+// Its hover from the facts the card holds (whose limit, when it reopens) rather than the provider's refusal sentence;
+// a booked resend says it goes by itself then, so nothing needs pressing.
+const limitTip = computed((): Tip => ({
+    title: limitBooked.value ? t(`agents.agentCard.resendBooked`) : t(`agents.agentStatus.usageLimit`),
+    tone: limitBooked.value ? `info` : `warn`,
+    rows: [
+        { label: t(`agents.words.provider`), value: providerLabel(props.agent.provider) },
+        { label: limitBooked.value ? t(`agents.agentCard.resendsAt`) : t(`agents.agentCard.reopens`), value: limitBackAt.value ?? `` },
+    ],
+    note: limitBooked.value ? t(`agents.agentCard.noPressNeeded`) : undefined,
+}));
 // Shares that same corner, and yields it: a reset clock and a watch are each a firmer promise about the card than a
 // cache that only makes answering cheaper, so this speaks when the corner is otherwise free.
 const cooling = computed(() => (watch.value !== undefined || limitBackAt.value !== undefined ? undefined : cacheCooling(props.agent, now.value)));
 // A hold outranks the cooling clock in that corner: it is the answer to the question the cooling chip asks.
 const warm = computed(() => (watch.value !== undefined || limitBackAt.value !== undefined || props.working ? undefined : warmMark(props.agent)));
+// Either cache mark's hover, closed by what pressing it does, since the press is this corner's own.
+const warmTip = computed((): Tip | undefined =>
+    warm.value === undefined ? undefined : { ...warm.value.hint, note: t(`agents.promptCache.clickToChange`) },
+);
+const coolingTip = computed((): Tip | undefined =>
+    cooling.value === undefined ? undefined : { ...cooling.value.hint, note: t(`agents.promptCache.clickToKeepWarm`) },
+);
 </script>
 
 <template>
@@ -52,11 +71,7 @@ const warm = computed(() => (watch.value !== undefined || limitBackAt.value !== 
         >{{ t(`agents.agentCard.archived`, { archivedAt: relativeTime(agent.archivedAt) }) }}
     </span>
     <!-- Takes the date's slot: "back at X" tells the reader something to plan around, unlike "last active". -->
-    <span
-        v-else-if="limitBackAt !== undefined"
-        class="inline-flex shrink-0 items-center gap-1"
-        v-tooltip.top="limitBooked ? t(`agents.agentCard.resendsHint`) : (agent.failure ?? t(`agents.agentCard.providerRefusedTurnUsage`))"
-    >
+    <span v-else-if="limitBackAt !== undefined" class="inline-flex shrink-0 items-center gap-1" v-tooltip.top="limitTip">
         <Icon name="clock" class="shrink-0 text-2xs" />
         <span class="tabular-nums">{{ limitBooked ? t(`agents.agentCard.resends`, { limitBackAt }) : t(`agents.agentCard.back`, { limitBackAt }) }}</span>
     </span>
@@ -66,7 +81,7 @@ const warm = computed(() => (watch.value !== undefined || limitBackAt.value !== 
         type="button"
         class="inline-flex shrink-0 items-center gap-1 hover:underline"
         :class="warm.cold ? 'text-warning' : 'text-link'"
-        v-tooltip.top="warm.hint"
+        v-tooltip.top="warmTip"
         @click.stop="emit(`warm`, $event)"
     >
         <Icon :name="warm.icon" class="shrink-0 text-2xs" />
@@ -78,7 +93,7 @@ const warm = computed(() => (watch.value !== undefined || limitBackAt.value !== 
         type="button"
         class="inline-flex shrink-0 items-center gap-1 hover:underline"
         :class="cooling.near ? 'font-medium text-link' : 'text-muted'"
-        v-tooltip.top="t(`agents.promptCache.coolingHint`, { hint: cooling.hint })"
+        v-tooltip.top="coolingTip"
         @click.stop="emit(`warm`, $event)"
     >
         <Icon name="bolt" class="shrink-0 text-2xs" />
@@ -101,7 +116,7 @@ const warm = computed(() => (watch.value !== undefined || limitBackAt.value !== 
             :text="true"
             class="shrink-0"
             :aria-label="t(`agents.words.stopWatching`)"
-            v-tooltip.top="t(`agents.agentCard.stopWatchingConversationStays`)"
+            v-tooltip.top="{ title: t(`agents.words.stopWatching`), note: t(`agents.agentCard.chatWontWake`) }"
             :disabled="busy"
             :class="mobile ? 'opacity-60' : 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100'"
             @click.stop="emit(`unwatch`)"

@@ -28,8 +28,10 @@ export const sandboxPolicy = (ending: TurnBreak, settings: PolicyHolder | undefi
 export interface BreakAnswer {
     readonly value: TurnBreakPolicy;
     readonly label: string;
-    /** What choosing it means, in one sentence; the control's tooltip and the settings row's description. */
+    /** What choosing it means, in one sentence: where it is read as text, a menu line or a row's description. */
     readonly note: string;
+    /** The one consequence that tells it from the others, in a few words: the note of the control's hover card. */
+    readonly brief: string;
     readonly icon: IconName;
 }
 
@@ -38,14 +40,15 @@ export interface BreakAnswer {
 const answerOf = (ending: TurnBreak, policy: TurnBreakPolicy, account: string | undefined): BreakAnswer => {
     switch (policy) {
         case `wait`:
-            return { value: policy, label: t(`chat.turnBreak.wait`), note: t(`chat.turnBreak.waitNote`), icon: `pause` };
+            return { value: policy, label: t(`chat.turnBreak.wait`), note: t(`chat.turnBreak.waitNote`), brief: t(`chat.turnBreak.waitBrief`), icon: `pause` };
         case `resend`:
-            return { value: policy, label: t(`chat.turnBreak.resend`), note: t(`chat.turnBreak.resendNote`), icon: `clock` };
+            return { value: policy, label: t(`chat.turnBreak.resend`), note: t(`chat.turnBreak.resendNote`), brief: t(`chat.turnBreak.resendBrief`), icon: `clock` };
         case `move`:
             return {
                 value: policy,
                 label: t(`chat.turnBreak.move`, { account: account ?? t(`chat.turnBreak.anotherAccount`) }),
                 note: t(`chat.turnBreak.moveNote`),
+                brief: t(`chat.turnBreak.moveBrief`),
                 icon: `user`,
             };
         default:
@@ -53,6 +56,7 @@ const answerOf = (ending: TurnBreak, policy: TurnBreakPolicy, account: string | 
                 value: policy,
                 label: t(`chat.turnBreak.retry`),
                 note: ending === `outage` ? t(`chat.turnBreak.retryOutageNote`) : t(`chat.turnBreak.retryStoppedNote`),
+                brief: ending === `outage` ? t(`chat.turnBreak.retryOutageBrief`) : t(`chat.turnBreak.retryStoppedBrief`),
                 icon: `repeat`,
             };
     }

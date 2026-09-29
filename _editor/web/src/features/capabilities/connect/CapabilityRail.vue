@@ -1,6 +1,6 @@
 <!-- Category navigation for the capabilities catalog, bounded by category count rather than how many capabilities exist. -->
 <script lang="ts">
-import type { IconName } from "@intentic/ui";
+import type { IconName, Tip } from "@intentic/ui";
 
 export interface CapabilityScope {
     /** `` is the spelling of "no filter": the URL simply omits the parameter. */
@@ -11,8 +11,8 @@ export interface CapabilityScope {
     readonly total: number;
     /** How many of them already have a connection. */
     readonly connected: number;
-    /** Spells the number out for a slice whose total isn't a tile count (e.g. Connected counts connections). */
-    readonly meta?: string;
+    /** For a slice whose total isn't a tile count (Connected counts connections): how many tiles those span. */
+    readonly tiles?: number;
 }
 </script>
 
@@ -38,8 +38,22 @@ useRailMemory(`capabilities.category`, selected, () => [...pinned, ...categories
 const groups = computed<NavGroup<CapabilityScope>[]>(() => [{ key: `categories`, items: [...categories] }]);
 
 const tone = (scope: CapabilityScope): string => (scope.connected > 0 ? `text-success` : ``);
-const meta = (scope: CapabilityScope): string =>
-    scope.meta ?? (scope.connected === 0 ? `${scope.total} capabilities` : `${scope.total} capabilities · ${scope.connected} connected`);
+const meta = (scope: CapabilityScope): Tip =>
+    scope.tiles === undefined
+        ? {
+              title: scope.label,
+              rows: [
+                  { label: t(`capabilities.capabilityRail.capabilities`), value: scope.total },
+                  { label: t(`capabilities.capabilityRail.connected`), value: scope.connected === 0 ? `` : scope.connected },
+              ],
+          }
+        : {
+              title: scope.label,
+              rows: [
+                  { label: t(`capabilities.capabilityRail.connections`), value: scope.total },
+                  { label: t(`capabilities.capabilityRail.capabilities`), value: scope.tiles },
+              ],
+          };
 
 // Asked of the split above, not of the screen: the grid beside this rail is only as wide as the workspace pane.
 const compact = useCompact();

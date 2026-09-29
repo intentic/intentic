@@ -217,7 +217,7 @@ const checkout = computed(() => {
                 <div class="flex flex-col gap-3">
                     <div class="flex items-center gap-2 rounded-md border border-line bg-canvas px-2.5 py-2 font-mono text-xs">
                         <Icon name="folder-open" class="shrink-0 text-subtle" />
-                        <span class="flex min-w-0" :title="root">
+                        <span class="flex min-w-0" v-tooltip.top="root">
                             <span class="truncate text-subtle">{{ checkout.parent }}</span>
                             <span class="shrink-0 text-content">{{ checkout.name }}</span>
                         </span>

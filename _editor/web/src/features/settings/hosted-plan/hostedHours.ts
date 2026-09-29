@@ -1,6 +1,6 @@
 import type { HostedHoursMeter, HostedPlanMachine, HostedPlanState } from "@intentic/api-contract";
 import { HOSTED_TIERS } from "@intentic/constants";
-import type { StatusVariant } from "@intentic/ui";
+import type { StatusVariant, Tip } from "@intentic/ui";
 // Through `@intentic/ui/format`, not the barrel: this module is plain TypeScript, tested without a DOM, and the
 // barrel drags in the component graph — a chart component reaching for `window.matchMedia` at import time takes the
 // whole suite down before a single assertion runs. Same reason `markdown` and `series` have their own subpaths.
@@ -143,37 +143,49 @@ export const lowHoursNotice = (state: HostedPlanState | undefined, sandboxId: st
 export interface PlanBadge {
     readonly label: string;
     readonly variant: StatusVariant;
-    // Hover sentence behind the label; Billing gives the full story.
-    readonly detail: string;
+    // Hover card behind the label: the plan and its one date; Billing gives the full story.
+    readonly detail: Tip;
 }
+
+const HOSTED = (): string => t(`settings.settingsBilling.hostedPlan`);
 
 // A subscriber's chip: the comp, the cancellation, the trial, or the plain plan and the date it renews.
 const subscriberBadge = (state: HostedPlanState): PlanBadge => {
     if (state.comped) {
-        return { label: t(`settings.hostedHours.complimentary`), variant: `info`, detail: t(`settings.hostedHours.hostedPlanOnHouse`) };
+        return {
+            label: t(`settings.hostedHours.complimentary`),
+            variant: `info`,
+            detail: { title: HOSTED(), note: t(`settings.hostedHours.tipNoCard`) },
+        };
     }
     if (state.renewsAt === undefined) {
-        return { label: t(`settings.hostedHours.hosted`), variant: `primary`, detail: t(`settings.hostedHours.onHostedPlan`) };
+        return { label: t(`settings.hostedHours.hosted`), variant: `primary`, detail: { title: HOSTED() } };
     }
+    const day = formatDayShort(state.renewsAt);
     // Stripe keeps status active until period end; without this a cancelled subscriber would read as renewing.
     if (state.cancelAtPeriodEnd) {
         return {
             label: t(`settings.hostedHours.ending`),
             variant: `warning`,
-            detail: t(`settings.hostedHours.hostedPlanEndsAfter`, { renewsAt: formatDayShort(state.renewsAt) }),
+            detail: {
+                title: HOSTED(),
+                tone: `warn`,
+                rows: [{ label: t(`settings.hostedHours.tipEnds`), value: day }],
+                note: t(`settings.hostedHours.tipThenFree`),
+            },
         };
     }
     if (state.status === `trialing`) {
         return {
             label: t(`settings.hostedHours.trial`),
             variant: `info`,
-            detail: t(`settings.hostedHours.hostedPlanTrialEnds`, { renewsAt: formatDayShort(state.renewsAt) }),
+            detail: { title: t(`settings.hostedHours.tipTrial`), rows: [{ label: t(`settings.hostedHours.tipEnds`), value: day }] },
         };
     }
     return {
         label: t(`settings.hostedHours.hosted`),
         variant: `primary`,
-        detail: t(`settings.hostedHours.hostedPlanRenews`, { renewsAt: formatDayShort(state.renewsAt) }),
+        detail: { title: HOSTED(), rows: [{ label: t(`settings.hostedHours.tipRenews`), value: day }] },
     };
 };
 
@@ -186,10 +198,14 @@ export const planBadge = (state: HostedPlanState | undefined): PlanBadge | undef
     }
     // A lapsed subscriber lands here, not in subscriberBadge, since `onPlan` is false while Stripe retries payment.
     if (state.status !== undefined && RECOVERABLE.has(state.status)) {
-        return { label: t(`settings.hostedHours.paymentFailed`), variant: `danger`, detail: t(`settings.hostedHours.cardDeclinedHostedPlan`) };
+        return {
+            label: t(`settings.hostedHours.paymentFailed`),
+            variant: `danger`,
+            detail: { title: t(`settings.hostedHours.tipCardDeclined`), tone: `danger`, note: t(`settings.hostedHours.tipEndsUnlessFixed`) },
+        };
     }
     // Free plan gets a chip too, since a chip has no trouble stating "not on the plan" even with no hour ceiling.
-    return { label: t(`settings.hostedHours.free`), variant: `neutral`, detail: t(`settings.hostedHours.freePlanAccountNot`) };
+    return { label: t(`settings.hostedHours.free`), variant: `neutral`, detail: { title: t(`settings.settingsBilling.freePlan`) } };
 };
 
 // Statuses where Stripe is retrying a live subscription, not a sale: `past_due`, `unpaid`, `incomplete`.

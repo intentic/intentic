@@ -9,6 +9,7 @@ import {
     iconForEntry,
     ResizeSeam,
     SegmentedControl,
+    type Tip,
     useDevice,
     useExplorerStyle,
     useLoadingReveal,
@@ -48,6 +49,7 @@ import ReviewGroupCheck from "./ReviewGroupCheck.vue";
 import { groupCountLabel, groupPassOn, rowAfterGroup, viewedIn } from "./reviewGroupPass";
 import { basename } from "@intentic/ui/path";
 import { useT } from "@intentic/ui/i18n";
+import { formatChord, isApplePlatform } from "../../../shell/commands/keybindings";
 
 // One agent's work as a review: file list on the left, that file's diff on the right, the shape every code review
 // has. Replaces the old panel's mistakes:
@@ -61,6 +63,23 @@ import { useT } from "@intentic/ui/i18n";
 // heading's rows and advances past them.
 
 const t = useT();
+
+// The review pass's hovers: its one-key peers as key caps (the keydown handler below reads the same keys).
+const mac = isApplePlatform();
+const reviewedTip = (keys?: string): Tip => ({
+    title: t(`agents.agentReviewPanel.reviewed`),
+    tone: `ok`,
+    keys,
+    note: t(`agents.agentReviewPanel.clickToUnmark`),
+});
+const markTip = computed((): Tip => ({
+    title: t(`agents.agentReviewPanel.markReviewed`),
+    keys: formatChord(`v`, mac),
+    rows: [{ label: t(`agents.agentReviewPanel.wholeGroup`), value: formatChord(`Shift+v`, mac) }],
+    note: t(`agents.agentReviewPanel.thenNextFile`),
+}));
+const previousTip = computed((): Tip => ({ title: t(`agents.agentReviewPanel.previousFile`), keys: formatChord(`k`, mac) }));
+const nextTip = computed((): Tip => ({ title: t(`agents.agentReviewPanel.nextFile`), keys: formatChord(`j`, mac) }));
 
 const { agentId, at, changes } = defineProps<{
     agentId: string;
@@ -671,7 +690,7 @@ const seamWidth = computed<number>({
                 :class="graphs.get(commit.repo) === undefined ? 'cursor-default' : 'hover:bg-overlay'"
                 :disabled="graphs.get(commit.repo) === undefined"
                 @click="openGitHistory(commit.repo)"
-                v-tooltip.bottom="graphs.get(commit.repo) === undefined ? undefined : t(`agents.agentReviewPanel.openRepositorysGitHistory`)"
+                v-tooltip.bottom="graphs.get(commit.repo) === undefined ? undefined : t(`agents.agentReviewPanel.gitHistory`)"
             >
                 <span class="shrink-0 rounded bg-overlay px-1 py-px font-mono text-2xs text-muted">{{ commit.short }}</span>
                 <span class="min-w-0 flex-1 truncate text-2xs text-content" v-tooltip.bottom.overflow="commit.subject">{{ commit.subject }}</span>
@@ -848,13 +867,13 @@ const seamWidth = computed<number>({
                                             <span
                                                 v-else-if="file.carriedBy !== undefined && manyCommits"
                                                 class="shrink-0 rounded bg-overlay px-1 py-px font-mono text-2xs text-subtle"
-                                                v-tooltip.right="t(`agents.agentReviewPanel.committedFileIn`, { short: file.carriedBy.short })"
+                                                v-tooltip.right="t(`agents.agentReviewPanel.yourCommit`)"
                                                 >{{ file.carriedBy.short }}</span
                                             >
                                             <span
                                                 v-else-if="mixedLanding && file.carriedBy === undefined && !file.change.landed"
                                                 class="h-1.5 w-1.5 shrink-0 rounded-full bg-warning"
-                                                v-tooltip.right="t(`agents.agentReviewPanel.notYetLandedIn`)"
+                                                v-tooltip.right="t(`agents.agentReviewPanel.unlanded`)"
                                             ></span>
                                             <!-- `of` turns the badge into a rail: weight against the heaviest file on screen, scanned rather than read digit by digit. -->
                                             <ReviewStat
@@ -875,11 +894,7 @@ const seamWidth = computed<number>({
                                                 )
                                             "
                                             @click="toggleViewed(file)"
-                                            v-tooltip.right="
-                                                isViewed(file)
-                                                    ? t(`agents.agentReviewPanel.reviewedClickToUnmark`)
-                                                    : t(`agents.agentReviewPanel.markReviewed`)
-                                            "
+                                            v-tooltip.right="isViewed(file) ? reviewedTip() : t(`agents.agentReviewPanel.markReviewed`)"
                                             :aria-label="t(`agents.agentReviewPanel.markReviewed2`, { label: file.label })"
                                         >
                                             <Icon :name="isViewed(file) ? 'check-square' : 'check'" class="text-2xs" />
@@ -899,7 +914,7 @@ const seamWidth = computed<number>({
                 :min="toScreenPx(MIN_REVIEW_LIST_WIDTH)"
                 :max="toScreenPx(MAX_REVIEW_LIST_WIDTH)"
                 :reset="toScreenPx(defaultReviewListWidth())"
-                :title="t(`ui.resizeSeam.dragToResize`)"
+                :title="t(`ui.resizeSeam.doubleClickResets`)"
             />
 
             <section v-if="!mobile || selected !== undefined" class="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -938,14 +953,14 @@ const seamWidth = computed<number>({
                             <span
                                 v-else-if="selected.carriedBy !== undefined"
                                 class="inline-flex shrink-0 items-center gap-1 ui-status-pill bg-success/15 font-mono text-2xs font-medium text-success"
-                                v-tooltip.bottom="t(`agents.agentReviewPanel.committedFileHereDiff`)"
+                                v-tooltip.bottom="{ title: t(`agents.agentReviewPanel.yourCommit`), note: t(`agents.agentReviewPanel.agentsDiff`) }"
                             >
                                 <Icon name="check" class="text-2xs" />{{ selected.carriedBy.short }}
                             </span>
                             <span
                                 v-else-if="mixedLanding && !selected.change.landed"
                                 class="shrink-0 ui-status-pill bg-warning/15 text-2xs font-medium text-warning"
-                                v-tooltip.bottom="t(`agents.agentReviewPanel.stillWaitingLandNow`)"
+                                v-tooltip.bottom="t(`agents.agentReviewPanel.awaitingLand`)"
                             >
                                 {{ t(`agents.agentReviewPanel.notLanded`) }}
                             </span>
@@ -956,11 +971,7 @@ const seamWidth = computed<number>({
                                 type="button"
                                 :class="[ICON_BUTTON, isViewed(selected) ? 'text-success' : '']"
                                 @click="toggleViewed(selected)"
-                                v-tooltip.bottom="
-                                    isViewed(selected)
-                                        ? t(`agents.agentReviewPanel.reviewedClickToUnmark2`)
-                                        : t(`agents.agentReviewPanel.markReviewedGoTo`)
-                                "
+                                v-tooltip.bottom="isViewed(selected) ? reviewedTip(markTip.keys) : markTip"
                                 :aria-label="t(`agents.agentReviewPanel.markReviewed2`, { label: selected.label })"
                             >
                                 <Icon :name="isViewed(selected) ? 'check-square' : 'check'" class="text-2xs" />
@@ -971,7 +982,7 @@ const seamWidth = computed<number>({
                                     type="button"
                                     :class="ICON_BUTTON"
                                     @click="move(-1)"
-                                    v-tooltip.bottom="t(`agents.agentReviewPanel.previousFileK`)"
+                                    v-tooltip.bottom="previousTip"
                                     :aria-label="t(`agents.agentReviewPanel.previousFile`)"
                                 >
                                     <Icon name="chevron-up" class="text-2xs" />
@@ -980,7 +991,7 @@ const seamWidth = computed<number>({
                                     type="button"
                                     :class="ICON_BUTTON"
                                     @click="move(1)"
-                                    v-tooltip.bottom="t(`agents.agentReviewPanel.nextFileJ`)"
+                                    v-tooltip.bottom="nextTip"
                                     :aria-label="t(`agents.agentReviewPanel.nextFile`)"
                                 >
                                     <Icon name="chevron-down" class="text-2xs" />

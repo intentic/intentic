@@ -34,7 +34,7 @@ export type DeviceAgentPanel = AgentPanel<DeviceAgentOp>;
 const upgrade = (): AgentAction<DeviceAgentOp> => ({
     op: `upgrade`,
     label: t(`sandbox.deviceAgent.updateAgent`),
-    hint: t(`sandbox.deviceAgent.fetchesNewestAgentOnto`),
+    hint: { title: t(`sandbox.deviceAgent.updatesEverySide`), note: t(`sandbox.deviceAgent.foldersPortsUntouched`) },
 });
 
 // Update leads: it is the errand people come to this group for, and it restarts the loop on its way past,
@@ -58,7 +58,7 @@ const reachable = (device: Device): boolean =>
 const syncOnly = (): AgentNote => ({
     text: `Enrolled for syncing only.`,
     icon: `lock`,
-    hint: t(`sandbox.deviceAgent.updatingAgentRunsCommand`),
+    hint: { title: t(`sandbox.deviceAgent.notADevice`), note: t(`sandbox.deviceAgent.connectToUpdate`) },
 });
 
 // The one case with no errand in it, and the only line on screen while it holds: the concerns strip stands down
@@ -66,7 +66,7 @@ const syncOnly = (): AgentNote => ({
 const reconnecting = (): AgentNote => ({
     text: `Reconnecting — its buttons come back with it.`,
     icon: `sync`,
-    hint: t(`sandbox.deviceAgent.socketDroppedMomentAgo`),
+    hint: { title: t(`sandbox.deviceAgent.socketDropped`), note: t(`sandbox.deviceAgent.redialsByItself`) },
 });
 
 // Only what the concerns strip does NOT already say. Every gap has a sentence there, and a machine holding no
@@ -105,7 +105,7 @@ const publishedNote = (row: DeviceRow, latest: string): AgentNote => {
     return {
         text: held === undefined ? `Agent ${latest} has been published.` : `Agent ${latest} has been published; this device has ${held}.`,
         tone: `info`,
-        hint: t(`sandbox.deviceAgent.updateAgentFetchesInstalls`),
+        hint: { title: t(`sandbox.deviceAgent.updateAgent`), note: t(`sandbox.deviceAgent.fetchInstallRestart`) },
     };
 };
 
@@ -191,7 +191,7 @@ const splitNote = (held: readonly HeldVersion[]): AgentNote | undefined =>
                   sides: held.map(({ row, version }) => `${environmentTitle(row)} ${version}`).join(`, `),
               }),
               tone: `warning`,
-              hint: t(`sandbox.deviceAgent.oneVersionPerMachine`),
+              hint: { title: t(`sandbox.deviceAgent.shouldMatch`), note: t(`sandbox.deviceAgent.updateAlignsAll`) },
           };
 
 // Names what the machine holds only when that is one version; a split already listed each side's above it.
@@ -211,7 +211,7 @@ const machinePublishedNote = (
                 ? t(`sandbox.deviceAgent.publishedMachineHas`, { latest, held: only })
                 : t(`sandbox.deviceAgent.publishedForMachine`, { latest }),
         tone: `info`,
-        hint: t(`sandbox.deviceAgent.updateAgentFetchesInstalls`),
+        hint: { title: t(`sandbox.deviceAgent.updateAgent`), note: t(`sandbox.deviceAgent.fetchInstallRestart`) },
     };
 };
 

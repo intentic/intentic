@@ -837,7 +837,7 @@ const setProvider = (provider: string): void => {
                                 <!-- Keep the first-row spacer so its chip aligns with later rows. -->
                                 <button
                                     type="button"
-                                    v-tooltip.top="t(`automationFields.tryOneEarlier`)"
+                                    v-tooltip.top="t(`automationFields.moveUp`)"
                                     :class="ui.iconButton(index === 0 ? `invisible` : ``)"
                                     :disabled="index === 0"
                                     :aria-hidden="index === 0"

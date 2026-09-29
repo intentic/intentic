@@ -10,7 +10,9 @@
         "approvalSlice": "Porción de aprobación",
         "approvalSlices": "Porciones de aprobación",
         "show": "Mostrar",
-        "slices": "Porciones"
+        "slices": "Porciones",
+        "total": "Total",
+        "waiting": "En espera"
     },
     "approvalsView": {
         "approvals": "Aprobaciones",
@@ -21,7 +23,7 @@
         "automation": "automatización {automationId}",
         "automations": "Automatizaciones",
         "automationsHeld": "Automatizaciones retenidas para ti",
-        "backToReviewNothing": "Volver a la revisión: no pasa nada",
+        "backToReview": "Volver a revisión",
         "cancel": "Cancelar",
         "couldntApproveHooks": "No se pudieron aprobar esos hooks.",
         "couldntDismissHooks": "No se pudieron dejar apagados esos hooks.",
@@ -29,11 +31,12 @@
         "couldntReadHeldAutomations": "No se pudieron leer las automatizaciones retenidas.",
         "couldntReadHooks": "No se pudieron leer los hooks que esperan aprobación.",
         "couldntReadWontRun": "no se pudo leer y no se ejecutará:",
+        "deletesFile": "Borra el archivo",
         "done": "Hecho",
         "doneEditing": "Terminar de editar",
         "eachGoesAheadOn": "Cada una sigue adelante en su propia fecha, o tras una cuenta atrás corta si no tiene ninguna.",
         "edit": "Editar {item}",
-        "editPost": "Editar la publicación",
+        "editPost": "Editar publicación",
         "failed": "Falló",
         "file": "archivo",
         "fileDeletedAgentWould": "El archivo está eliminado. Tu agente tendría que proponerlo otra vez.",
@@ -48,31 +51,30 @@
         "keptOff": "apagados a propósito",
         "letThemRun": "Dejar que se ejecuten",
         "needsReview": "Necesita tu revisión",
+        "nothingUndone": "Nada se deshace",
         "nothingWaitingPostsAgent": "Nada esperando. Las publicaciones que tu agente quiere publicar, cualquier otra cosa que no deba hacer sin pedirlo, y las automatizaciones puestas a preguntar primero, todas aterrizan aquí para que las apruebes.",
         "open": "Abrir",
         "postStaysUpOn": "La publicación sigue en pie en {rejecting}: solo se elimina este registro de ella.",
         "proposed": "propuesta {createdAt}",
         "putBackInReview": "Devolver {item} a revisión",
-        "putBackInReview2": "Devolver a revisión",
         "readingApprovalsQueue": "Leyendo la cola de aprobaciones…",
         "reject": "Rechazar {item}",
         "reject2": "Rechazar",
         "reject3": "¿Rechazar esto?",
-        "rejectDeletes": "Rechazar: lo elimina",
         "remove": "Quitar",
         "removeList": "Quitar {item} de la lista",
-        "removeListWhatDone": "Quitar de esta lista: lo hecho sigue hecho",
         "removeRecord": "¿Quitar este registro?",
         "retry": "Reintentar",
         "scheduled": "Programada",
         "startNow": "Empezar ahora",
         "stop": "Detener",
         "stopPutBackIn": "Detener {item} y devolverlo a revisión",
-        "whatDoneStaysDone": "Lo hecho sigue hecho: solo se elimina este registro de ello."
+        "whatDoneStaysDone": "Lo hecho sigue hecho: solo se elimina este registro de ello.",
+        "wontGoAhead": "No se ejecuta"
     },
     "extension": {
         "approvals": "Aprobaciones",
-        "waitingOn": "{count} esperándote"
+        "waitingOn": "{count} en espera"
     },
     "hookSetBody": {
         "filesPinned": "La aprobación también cubre estos archivos, byte a byte:",
@@ -87,8 +89,9 @@
         "postTitle": "Título de la publicación"
     },
     "scheduleControl": {
+        "clickToSchedule": "Clic para programar",
         "goAheadAt": "Seguir adelante con {label} el",
-        "goesAheadSoonExecutor": "Sigue adelante en cuanto el ejecutor lo recoja, haz clic para elegir una fecha",
+        "goesAtOnce": "Sale enseguida",
         "noDate": "Sin fecha"
     }
 }

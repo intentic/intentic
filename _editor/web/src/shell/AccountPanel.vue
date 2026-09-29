@@ -24,7 +24,7 @@ const { planBadge } = useHostedPlan();
 // Settings has no rail tile; this control lights up like one, matching on the route and any sub-path.
 const onSettings = computed(() => route.path === `/settings` || route.path.startsWith(`/settings/`));
 
-const accountHint = `Account`;
+const accountHint = computed(() => t(`shell.words.account`));
 
 // AnchoredOverlay, not PrimeVue's Popover: shares the one overlay that measures against its anchor's window.
 const trigger = ref<HTMLButtonElement | null>(null);

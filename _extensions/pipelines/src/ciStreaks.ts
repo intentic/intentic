@@ -1,4 +1,5 @@
 import { isPipelineInFlight, type PipelineRun } from "@intentic/sandbox-contract";
+import { t } from "./i18n.js";
 
 // Whether a branch is failing right now, judged on its last commit rather than its last run: near-simultaneous
 // workflows mean a passing one can hide a failed one. A state, not a one-time edge: it clears only when a later commit passes, never
@@ -143,14 +144,13 @@ export const supersededBy = (runs: readonly PipelineRun[]): ReadonlyMap<Pipeline
 };
 
 // Names the branch while there's only one breakage; 'main is broken' is actionable, '1' is not. Single-commit says the
-// sha; more than one says how deep, which is what changes the response.
+// sha; more than one says how deep, which is what changes the response. Figures, not a sentence: the host reads it
+// after the view's name.
 export const streakTooltip = (streaks: readonly FailureStreak[]): string => {
     const [only] = streaks;
     if (streaks.length === 1 && only !== undefined) {
-        const failedRuns = `${only.runs} failed run${only.runs === 1 ? `` : `s`}`;
-        return only.commits === 1
-            ? `${only.repo} ${only.branch} is failing: ${failedRuns} on ${only.sha.slice(0, 7)}`
-            : `${only.repo} ${only.branch} is failing: ${only.commits} commits in a row, ${failedRuns}`;
+        const facts = { repo: only.repo, branch: only.branch, runs: only.runs, commits: only.commits, sha: only.sha.slice(0, 7) };
+        return only.commits === 1 ? t(`extension.streakOnCommit`, facts) : t(`extension.streakOverCommits`, facts);
     }
-    return `${streaks.length} branches are failing`;
+    return t(`extension.branchesFailing`, { count: streaks.length });
 };

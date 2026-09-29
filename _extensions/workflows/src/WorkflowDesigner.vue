@@ -189,7 +189,19 @@ const commit = async (): Promise<void> => {
                     <button
                         type="button"
                         v-tooltip.top="
-                            pickedStep.needs.length === 1 ? t(`workflowDesigner.newSessionKnowsOnly`) : t(`workflowDesigner.onlyStepExactlyOne`)
+                            pickedStep.needs.length === 1
+                                ? {
+                                      title: t(`workflowDesigner.handoff`),
+                                      rows: [
+                                          { label: t(`workflowDesigner.newAgent`), value: t(`workflowDesigner.declaredOnly`) },
+                                          { label: t(`workflowDesigner.sameAgent`), value: t(`workflowDesigner.threadAndTree`) },
+                                      ],
+                                  }
+                                : {
+                                      title: t(`workflowDesigner.newAgentOnly`),
+                                      rows: [{ label: t(`workflowDesigner.inputs`), value: pickedStep.needs.length }],
+                                      note: t(`workflowDesigner.sameAgentNeedsOne`),
+                                  }
                         "
                         class="ui-chip"
                         :class="pickedStep.handoff === `continue` ? `ui-chip-on` : ``"

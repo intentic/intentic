@@ -1,4 +1,5 @@
-import type { IconName } from "@intentic/ui";
+import type { IconName, TooltipValue } from "@intentic/ui";
+import { t } from "@intentic/ui/i18n";
 import { KINDS, TERMINAL_COLORS, terminalMeta } from "../terminalMeta";
 import type { TerminalTab } from "../useTerminal";
 
@@ -28,23 +29,25 @@ export const cycled = (groups: readonly (readonly string[])[], active: string | 
 export const clearedLabel = (tab: TerminalTab | undefined, position: number | undefined): string => tab?.label ?? `Terminal ${position ?? ``}`;
 
 // What a pill says of a session with nothing running right now, by kind.
-const idleTooltip = (tab: TerminalTab): string | undefined => {
+const idleTooltip = (tab: TerminalTab): TooltipValue => {
     if (tab.kind === `agent`) {
-        return tab.running ? `AI terminal` : `AI terminal, finished`;
+        return tab.running ? t(`terminal.stripSegments.aiTerminal`) : { title: t(`terminal.stripSegments.aiTerminal`), note: t(`terminal.stripSegments.finished`) };
     }
     if (tab.kind === `job`) {
-        return `Job terminal`;
+        return t(`terminal.stripSegments.jobTerminal`);
     }
-    return tab.running ? undefined : `finished`;
+    return tab.running ? undefined : t(`terminal.stripSegments.finished`);
 };
 
 // What is running leads: on a crowded strip the command is the only thing naming the terminal about to be closed.
-export const tooltipFor = (tab: TerminalTab | undefined): string | undefined => {
+export const tooltipFor = (tab: TerminalTab | undefined): TooltipValue => {
     if (tab === undefined) {
         return undefined;
     }
     if (KINDS[tab.kind].logs) {
-        return `Background process: read-only logs`;
+        return { title: t(`terminal.stripSegments.background`), note: t(`terminal.stripSegments.readOnlyLogs`) };
     }
-    return tab.command === undefined ? idleTooltip(tab) : `Running ${tab.command}`;
+    return tab.command === undefined
+        ? idleTooltip(tab)
+        : { title: t(`shared.running`), tone: `ok`, rows: [{ label: t(`terminal.stripSegments.command`), value: tab.command }] };
 };

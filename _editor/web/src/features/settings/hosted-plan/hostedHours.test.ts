@@ -37,7 +37,7 @@ const RENEWS_AT = `2026-10-01T00:00:00.000Z`;
 const subscriber = (over: Partial<HostedPlanState> = {}): HostedPlanState => state({ onPlan: true, status: `active`, renewsAt: RENEWS_AT, ...over });
 
 // The free plan's chip; the same answer for spent hours, unspent hours, no ceiling, and no machine at all.
-const FREE = { label: `free`, variant: `neutral`, detail: `Free plan. This account is not on the hosted plan.` } as const;
+const FREE = { label: `free`, variant: `neutral`, detail: { title: `Free plan` } } as const;
 
 describe(`minutes as words`, () => {
     it(`speaks minutes under an hour, whole hours plain, and a decimal otherwise`, () => {
@@ -102,12 +102,12 @@ describe(`the account menu's plan chip`, () => {
         expect(planBadge(subscriber())).toEqual({
             label: `hosted`,
             variant: `primary`,
-            detail: `Hosted plan, renews ${formatDayShort(RENEWS_AT)}.`,
+            detail: { title: `Hosted plan`, rows: [{ label: `Renews`, value: formatDayShort(RENEWS_AT) }] },
         });
         expect(planBadge(subscriber({ cancelAtPeriodEnd: true }))).toEqual({
             label: `ending`,
             variant: `warning`,
-            detail: `Hosted plan ends ${formatDayShort(RENEWS_AT)}. After that, the free plan.`,
+            detail: { title: `Hosted plan`, tone: `warn`, rows: [{ label: `Ends`, value: formatDayShort(RENEWS_AT) }], note: `Then the free plan` },
         });
     });
 
@@ -115,14 +115,14 @@ describe(`the account menu's plan chip`, () => {
         expect(planBadge(subscriber({ status: `trialing` }))).toEqual({
             label: `trial`,
             variant: `info`,
-            detail: `Hosted plan trial, ends ${formatDayShort(RENEWS_AT)}.`,
+            detail: { title: `Hosted trial`, rows: [{ label: `Ends`, value: formatDayShort(RENEWS_AT) }] },
         });
         expect(planBadge(state({ onPlan: true, comped: true }))).toEqual({
             label: `complimentary`,
             variant: `info`,
-            detail: `Hosted plan, on the house. No card, no renewal.`,
+            detail: { title: `Hosted plan`, note: `No card, no renewal` },
         });
-        expect(planBadge(state({ onPlan: true }))).toEqual({ label: `hosted`, variant: `primary`, detail: `On the hosted plan.` });
+        expect(planBadge(state({ onPlan: true }))).toEqual({ label: `hosted`, variant: `primary`, detail: { title: `Hosted plan` } });
     });
 
     it(`takes the danger tone for a failing card, ahead of the free plan`, () => {
@@ -130,12 +130,12 @@ describe(`the account menu's plan chip`, () => {
             expect(planBadge(state({ status, renewsAt: `2026-09-01T00:00:00.000Z`, hosted: hosted(0) }))).toEqual({
                 label: `payment failed`,
                 variant: `danger`,
-                detail: `Your card was declined. The hosted plan ends unless it is fixed.`,
+                detail: { title: `Card declined`, tone: `danger`, note: `Plan ends unless fixed` },
             });
         }
     });
 
-    it(`gives every state its own sentence to hover`, () => {
+    it(`gives every state its own card to hover`, () => {
         const every = [
             state({ hosted: hosted(0) }),
             state({ status: `past_due` }),
@@ -144,8 +144,7 @@ describe(`the account menu's plan chip`, () => {
             subscriber(),
             subscriber({ cancelAtPeriodEnd: true }),
         ];
-        const details = every.map((one) => planBadge(one)?.detail);
-        expect(details.filter((detail) => detail?.endsWith(`.`))).toHaveLength(every.length);
+        const details = every.map((one) => JSON.stringify(planBadge(one)?.detail));
         expect(new Set(details).size).toBe(every.length);
     });
 });

@@ -15,7 +15,14 @@ const t = useT();
 const props = defineProps<{ notes: readonly TurnNote[] }>();
 
 const marks = computed((): readonly ChatAsideMark[] => [
-    { key: `notes`, icon: `paperclip`, label: t(`chat.chatNotes.sentMessage`), count: props.notes.length, findable: true },
+    {
+        key: `notes`,
+        icon: `paperclip`,
+        label: t(`chat.chatNotes.sentMessage`),
+        tip: t(`chat.chatNotes.addedContext`),
+        count: props.notes.length,
+        findable: true,
+    },
 ]);
 
 // One note open at a time: the list is what the mark is for, and two open notes bury it.

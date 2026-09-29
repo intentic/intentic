@@ -41,7 +41,7 @@ describe(`<UnsentMark>`, () => {
     it(`names the message and how long it has been standing`, () => {
         jest.spyOn(Date, `now`).mockReturnValue(1_000_000);
         try {
-            expect(hintOf({ preview: `fix the login redirect`, at: 1_000_000 - 12 * 60_000 })).toBe(`Not sent, 12m: fix the login redirect`);
+            expect(hintOf({ preview: `fix the login redirect`, at: 1_000_000 - 12 * 60_000 })).toBe(`Not sent, 12m, fix the login redirect`);
         } finally {
             mocked(Date.now).mockRestore();
         }
@@ -55,10 +55,10 @@ describe(`<UnsentMark>`, () => {
         jest.setSystemTime(600_000);
         try {
             const host = render({ preview: `fix the login redirect`, at: 580_000 });
-            expect(host.querySelector(`span`)!.getAttribute(`aria-label`)).toBe(`Not sent, just now: fix the login redirect`);
+            expect(host.querySelector(`span`)!.getAttribute(`aria-label`)).toBe(`Not sent, just now, fix the login redirect`);
             jest.advanceTimersByTime(45_000);
             await nextTick();
-            expect(host.querySelector(`span`)!.getAttribute(`aria-label`)).toBe(`Not sent, 1m: fix the login redirect`);
+            expect(host.querySelector(`span`)!.getAttribute(`aria-label`)).toBe(`Not sent, 1m, fix the login redirect`);
         } finally {
             app?.unmount();
             app = undefined;
@@ -76,10 +76,9 @@ describe(`<UnsentMark>`, () => {
         }
     });
 
-    // With neither the words nor the age (e.g. a snapshot with no stamp), the hint names the state plainly rather
-    // than repeating the chip's own 'Unsent' label.
+    // With neither the words nor the age (e.g. a snapshot with no stamp), the hint names the state plainly.
     it(`falls back to naming the state when it has neither the words nor the age`, () => {
-        expect(hintOf({})).toBe(`You have an unsent message here`);
+        expect(hintOf({})).toBe(`Not sent`);
     });
 
     // Opens downward: the mark sits under the session title in every frame, and an upward hover would cover it

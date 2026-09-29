@@ -11,10 +11,10 @@ import { t } from "@intentic/ui/i18n";
 export type ChurnWindow = "all" | "90d" | "30d" | "7d";
 // Mutable by design; <SegmentedControl> takes its options array as-is.
 export const churnWindows = (): { label: string; value: ChurnWindow; title: string }[] => [
-    { label: t(`workspace.healthCodebaseHealth.all`), value: `all`, title: t(`workspace.healthCodebaseHealth.everyCommitInRepositorys`) },
-    { label: `90d`, value: `90d`, title: t(`workspace.healthCodebaseHealth.commitsLast90Days`) },
-    { label: `30d`, value: `30d`, title: t(`workspace.healthCodebaseHealth.commitsLast30Days`) },
-    { label: `7d`, value: `7d`, title: t(`workspace.healthCodebaseHealth.commitsLast7Days`) },
+    { label: t(`workspace.healthCodebaseHealth.all`), value: `all`, title: t(`workspace.healthCodebaseHealth.allHistory`) },
+    { label: `90d`, value: `90d`, title: t(`workspace.healthCodebaseHealth.days90`) },
+    { label: `30d`, value: `30d`, title: t(`workspace.healthCodebaseHealth.days30`) },
+    { label: `7d`, value: `7d`, title: t(`workspace.healthCodebaseHealth.days7`) },
 ];
 
 // Splits a path at its last separator, so a row can dim the directory while the filename (the part that

@@ -130,7 +130,7 @@ const STATUS_TEXT = { success: `text-success`, warning: `text-warning`, default:
                                 v-for="glob in line.paths"
                                 :key="glob"
                                 class="max-w-48 truncate rounded border border-line-subtle bg-overlay px-1.5 font-mono text-content"
-                                :title="glob"
+                                v-tooltip.top.overflow="glob"
                                 >{{ glob }}</span
                             >
                         </span>

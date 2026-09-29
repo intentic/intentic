@@ -1,5 +1,6 @@
 import { clearableOnDevice, type DeviceConflict, HOST_NATIVE_ENVIRONMENT } from "@intentic/sandbox-contract";
 import { composeAsk } from "@intentic/sandbox-contract/chores";
+import type { Tip } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 
 // Builds the turn prompt for resolving a stuck file-sync conflict: per-file judgement a switch cannot make,
@@ -45,7 +46,7 @@ const CONFLICT_INVARIANTS =
 
 export interface ConflictAsk {
     /** The button's tooltip: what the turn will do, before spending one. */
-    readonly hint: string;
+    readonly hint: Tip;
     /** The turn, sent as an ordinary first message so it's steerable in the transcript. */
     readonly prompt: string;
 }
@@ -103,7 +104,12 @@ export const conflictAsk = ({ machine, card, environment, localDir, conflicts, c
                       : []),
               ].join(`\n`);
     return {
-        hint: t(`sandbox.conflictAsk.startAgentOnReads`),
+        hint: {
+            title: t(`sandbox.conflictAsk.startsAgent`),
+            // The ones this turn is for: the build output a button clears is not its business.
+            rows: [{ label: t(`sandbox.conflictAsk.conflicts`), value: conflicts - (conflictedPaths.length - disputed.length) }],
+            note: t(`sandbox.conflictAsk.readsBothCopies`),
+        },
         prompt: composeAsk({
             subject: `Resolve the ${conflicts === 1 ? `file-sync conflict` : `${conflicts} file-sync conflicts`} between this sandbox and "${machine}", the owner's own computer.`,
             why:

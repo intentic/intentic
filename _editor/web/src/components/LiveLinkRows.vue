@@ -248,7 +248,7 @@ const items = computed<MenuItem[]>(() => {
             </template>
             <template #description>
                 <!-- `block truncate`: an inline span can't ellipsise, so three routes would wrap under the row's button instead. -->
-                <span v-if="row.facts" class="block truncate font-mono" :title="row.facts">{{ row.facts }}</span>
+                <span v-if="row.facts" class="block truncate font-mono" v-tooltip.top.overflow="row.facts">{{ row.facts }}</span>
                 <!-- Wraps rather than truncates: the tail here is the way out of the state, not text an ellipsis should hide. -->
                 <span v-if="row.note === 'rebuild'" class="block text-warning">
                     {{ t(`common.vpnConnections.needsSandboxRebuildTo`) }}

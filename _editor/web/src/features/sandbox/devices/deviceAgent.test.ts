@@ -129,7 +129,7 @@ test(`says a stopped process is why nothing reaches this device, and still offer
 test(`distinguishes a process that has stopped making rounds from one that has stopped`, () => {
     const stalled = { agent: { running: true, lastTickAt: NOW - 61_000, build: `1.2.0`, installed: `1.2.0` } };
     expect(said({}, stalled, `1.2.0`)).toBe(`Agent stalled — what is below may be out of date.`);
-    expect(hints({}, stalled, `1.2.0`)).toContain(`stopped making rounds`);
+    expect(hints({}, stalled, `1.2.0`)).toContain(`Rounds stopped`);
     expect(panelOf({}, stalled, `1.2.0`)?.state).toEqual({ word: `stalled`, variant: `warning` });
 });
 
@@ -137,7 +137,8 @@ test(`distinguishes a process that has stopped making rounds from one that has s
 test(`asks about the process, not a download, when only the running build is behind the installed one`, () => {
     const skewed = { agent: { running: true, lastTickAt: NOW, build: `1.1.0`, installed: `1.2.0` } };
     expect(said({}, skewed, `1.2.0`)).toBe(`Serving 1.1.0, 1.2.0 installed — a restart picks it up.`);
-    expect(hints({}, skewed, `1.2.0`)).toContain(`keeps the build it started with until it restarts`);
+    // The line already names both builds and the remedy, so it carries no hover of its own.
+    expect(panelOf({}, skewed, `1.2.0`)?.notes[0]?.hint).toBeUndefined();
 });
 
 // Two different errands, both true: the file on disk was replaced and never picked up, and something newer
@@ -156,7 +157,7 @@ test(`drops the verbs and names the missing door on a sync-only enrollment`, () 
     const syncOnly = { hostId: undefined, online: undefined };
     expect(verbs(syncOnly)).toEqual([]);
     expect(panelOf(syncOnly)?.blocked?.text).toBe(`Enrolled for syncing only.`);
-    expect(panelOf(syncOnly)?.blocked?.hint).toContain(`connected as a device`);
+    expect(panelOf(syncOnly)?.blocked?.hint).toEqual({ title: `Not a device`, note: `Connect it to update` });
     // The version is still worth stating: it is the fact somebody walked to the machine to check.
     expect(panelOf(syncOnly)?.version).toBe(`1.2.0`);
 });

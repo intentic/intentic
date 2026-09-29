@@ -1,4 +1,4 @@
-import type { IconName } from "@intentic/ui";
+import type { IconName, TooltipValue } from "@intentic/ui";
 import type { Component } from "vue";
 import { computed, ref, shallowReactive } from "vue";
 import { t } from "@intentic/ui/i18n";
@@ -21,7 +21,7 @@ export interface NotificationAction {
     readonly run: () => void | Promise<void>;
     readonly severity?: "primary" | "secondary" | "warn";
     /** A tooltip, where the label alone cannot say what the press costs or which shortcut also does it. */
-    readonly hint?: string;
+    readonly hint?: TooltipValue;
 }
 
 export interface NotificationInput {
@@ -101,7 +101,9 @@ export const useNotifications = () => {
         report({
             tone: `done`,
             title: message,
-            ...(undo === undefined ? {} : { actions: [{ label: t(`ui.action.undo`), run: undo, hint: undoHint }] }),
+            ...(undo === undefined
+                ? {}
+                : { actions: [{ label: t(`ui.action.undo`), run: undo, hint: undoHint === undefined ? undefined : { title: t(`ui.action.undo`), keys: undoHint } }] }),
         });
     };
 

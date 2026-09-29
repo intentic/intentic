@@ -78,7 +78,11 @@ onMounted(() => {
                     size="small"
                     severity="secondary"
                     :label="face.sandbox === true ? t(`local.localFiles.openSandbox`) : t(`local.localFiles.withAgent`)"
-                    v-tooltip.top="face.sandbox === true ? t(`local.localFiles.openSandboxHint`) : t(`local.localFiles.withAgentHint`)"
+                    v-tooltip.top="
+                        face.sandbox === true
+                            ? { title: t(`local.localFiles.syncedSandbox`), note: t(`local.localFiles.startsIfStopped`) }
+                            : { title: t(`local.localFiles.newSandbox`), note: t(`local.localFiles.keepsFolderSynced`) }
+                    "
                     @click="askLocalApp(`sandbox`)"
                 />
             </div>

@@ -40,7 +40,7 @@ const to = computed<RouteLocationNamedRaw>(() => {
         :to="to"
         class="flex min-w-0 max-w-full items-center gap-1.5 self-start text-2xs text-muted transition-colors hover:text-content"
         :aria-label="t(`agents.parentMark.startedBy`, { title })"
-        v-tooltip.top="t(`agents.parentMark.startedBy`, { title })"
+        v-tooltip.top="t(`agents.parentMark.openParent`)"
         @click.stop
     >
         <Icon name="subagents" class="shrink-0 text-2xs" />

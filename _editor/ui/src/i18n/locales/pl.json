@@ -29,10 +29,10 @@
         "keepOpen": "Trzymaj otwarte",
         "leave": "Opuść",
         "moreActions": "Więcej akcji",
+        "newTab": "Nowa karta",
         "next": "Dalej",
         "no": "Nie",
         "open": "Otwórz",
-        "openInNewTab": "Otwórz w nowej karcie",
         "paste": "Wklej",
         "publish": "Opublikuj",
         "reconnect": "Połącz ponownie",
@@ -62,7 +62,15 @@
         "viewLogs": "Zobacz dzienniki"
     },
     "agentRunButton": {
-        "configureStartRun": "Skonfiguruj i uruchom ten przebieg — {spend}"
+        "clickToChange": "Kliknij, by zmienić",
+        "clickToConfigure": "Kliknij, by ustawić",
+        "configureStartRun": "Skonfiguruj i uruchom ten przebieg — {spend}",
+        "effort": "Wysiłek",
+        "fast": "Szybki",
+        "model": "Model",
+        "sandboxDefault": "Domyślny sandboxa",
+        "speed": "Szybkość",
+        "thisRunOnly": "Tylko ten przebieg"
     },
     "code": {
         "showAll": "Pokaż wszystko"
@@ -86,51 +94,61 @@
     "confirmDialog": {
         "more": "…i {count} więcej"
     },
-    "dagEditor": {
-        "fitWholeGraph": "Dopasuj cały graf"
-    },
     "deviceAgent": {
-        "agentAliveStoppedMaking": "Jego agent żyje, ale przestał robić obchody, więc obraz folderów i portów, jaki ma ten sandbox, jest tak stary jak ostatni obchód.",
         "commands": "Polecenia",
+        "device": "Urządzenie",
         "folders": "Foldery",
+        "installedBuild": "Zainstalowany build",
+        "nothingDownloaded": "Bez pobierania",
+        "oneProcess": "Jeden proces",
         "ports": "Porty",
-        "processKeepsBuildStarted": "Pętla trzyma build, z którym wystartowała, aż do restartu — podmiana pliku na dysku sama z siebie niczego nie zmienia.",
         "restartAgent": "Uruchom agenta ponownie",
-        "stopsStartsDevicesAgent": "Zatrzymuje i uruchamia pętlę agenta na tym urządzeniu. Nic nie jest pobierane — podnosi się build, który już tam jest zainstalowany."
+        "roundsStopped": "Obiegi wstrzymane"
     },
     "deviceAgentGroup": {
         "agentOnThisDevice": "Agent na tym urządzeniu"
     },
     "deviceDetail": {
         "backup": "kopia zapasowa: {folder}",
+        "busyHere": "Zajęte tutaj",
         "conflicts": "{count} konflikt | {count} konflikty | {count} konfliktów",
         "container": "Kontener",
         "copyPath": "Kopiuj ścieżkę",
         "deviceIsntSyncingFolder": "To urządzenie nie synchronizuje żadnego folderu ani nie trzyma portów dla tego sandboxa.",
-        "imageOf": "Obraz: {image}",
+        "filesOrPortsOnly": "Tylko pliki lub porty",
+        "filesSync": "Pliki synchronizowane",
+        "image": "Obraz",
+        "interruptedTitle": "Przerwana aktualizacja",
+        "leftAlone": "Pominięte",
         "more": "… i {more} więcej",
         "noFolderDeviceOnly": "brak folderu: to urządzenie odbija tylko porty",
         "noFolderSynced": "brak synchronizowanego folderu",
         "notRunningHere": "nie działa tutaj",
+        "notRunningHereTitle": "Nie działa tutaj",
         "offDeviceIsntPutting": "Wyłączone: to urządzenie nie wystawia portów tego sandboxa na własnym localhoście. Synchronizacja plików działa bez zmian.",
+        "onLocalhost": "Na localhost",
         "ports": "Porty",
         "show": "pokaż go",
-        "stopped": "zatrzymany"
+        "startPutsItBack": "Start przywraca",
+        "stopped": "zatrzymany",
+        "syncPaused": "Synchronizacja wstrzymana"
     },
     "imageView": {
-        "actualSize1": "Rozmiar rzeczywisty (1)",
-        "ctrlScrollToZoom": "Ctrl + kółko przybliża · przeciąganie przesuwa · dwuklik dopasowuje",
+        "actualSize": "Rozmiar rzeczywisty",
+        "ctrlScroll": "Ctrl+kółko",
+        "doubleClick": "Dwuklik",
+        "drag": "Przeciągnij",
         "fit": "Dopasuj",
-        "fitToPane0": "Dopasuj do panelu (0)",
+        "fitToPane": "Dopasuj do panelu",
+        "gestures": "Gesty",
         "imagePreviewCtrlScroll": "Podgląd obrazu: Ctrl i kółko przybliżają, przeciąganie przesuwa",
-        "zoomIn": "Przybliż (+)",
+        "pan": "Przesuń",
+        "zoom": "Powiększenie",
         "zoomIn2": "Przybliż",
-        "zoomOut": "Oddal (−)",
         "zoomOut2": "Oddal"
     },
     "inlineRename": {
         "couldntSaveName": "Nie udało się zapisać tej nazwy.",
-        "saveEnter": "Zapisz · Enter",
         "unnamed": "Bez nazwy"
     },
     "layoutRepoRail": {
@@ -143,7 +161,7 @@
         "document": "Dokument"
     },
     "noteEditor": {
-        "copyRawNote": "Kopiuj surową notatkę",
+        "copyMarkdown": "Kopiuj markdown",
         "editNote": "Edytuj tę notatkę",
         "it": "{verb}",
         "keep": "Zostaw ją",
@@ -160,7 +178,11 @@
         "options": "{count} opcji"
     },
     "projectChip": {
-        "hidden": "· {hidden} ukrytych"
+        "clickShowsAll": "Kliknij, by pokazać wszystko",
+        "hidden": "· {hidden} ukrytych",
+        "hiddenLabel": "Ukryte",
+        "project": "Projekt",
+        "projectFilter": "Filtr projektu"
     },
     "repoRail": {
         "allRepositories": "Wszystkie repozytoria",
@@ -203,7 +225,6 @@
         "sandboxRestartsOntoNewest": "Sandbox restartuje na najnowszym obrazie i przez ten czas jest niedostępny — sekundy, jeśli aktualizacja jest już pobrana, kilka minut, jeśli nie. Jego pliki zostają."
     },
     "searchBar": {
-        "clearEsc": "Wyczyść (Esc)",
         "matchCase": "Uwzględniaj wielkość liter"
     },
     "stepSection": {
@@ -213,7 +234,7 @@
         "all": "Wszystko"
     },
     "resizeSeam": {
-        "dragToResize": "Przeciągnij, aby zmienić rozmiar · dwuklik przywraca"
+        "doubleClickResets": "Dwuklik przywraca"
     },
     "status": {
         "starting": "Uruchamianie…",
@@ -221,5 +242,12 @@
         "working": "Pracuje…",
         "reading": "Odczytywanie…",
         "sending": "Wysyłanie…"
+    },
+    "keys": {
+        "enter": "Enter",
+        "esc": "Esc"
+    },
+    "dagEditor": {
+        "fitGraph": "Dopasuj graf"
     }
 }

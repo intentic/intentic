@@ -79,7 +79,7 @@ describe(`ext-git-history`, () => {
     it(`offers its document on the workspace root and nowhere else`, () => {
         const provider = capture([facts(`intentic`)]).documents[0]!;
 
-        expect(provider.detect(``)).toEqual({ icon: `sitemap`, tooltip: `Open git history`, title: `History` });
+        expect(provider.detect(``)).toEqual({ icon: `sitemap`, tooltip: `Git history`, title: `History` });
         expect(provider.detect(`intentic`)).toBeUndefined();
         expect(provider.detect(`intentic/_editor/web`)).toBeUndefined();
     });

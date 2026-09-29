@@ -71,12 +71,13 @@ const press = (element: HTMLElement, label: string): void => {
     button.click();
 };
 
-it(`offers declining this one call beside the No that stops the turn, each saying so before the press`, () => {
+it(`offers declining this one call beside the No that stops the turn, which says so before the press`, () => {
     expect(buttons(mount()).map((button) => ({ label: button.textContent?.trim(), tip: button.dataset[`tip`] }))).toEqual([
         { label: `Allow once`, tip: undefined },
         { label: `Don't ask again for Bash`, tip: undefined },
-        { label: `Skip this, keep going`, tip: `Declines only this call: the agent carries on without it` },
-        { label: `No`, tip: `Also stops the turn` },
+        // Its label already says the turn goes on.
+        { label: `Skip this, keep going`, tip: undefined },
+        { label: `No`, tip: `Stops turn` },
     ]);
 });
 

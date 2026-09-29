@@ -19,14 +19,14 @@ const toggle = (event: Event): void => popover.value?.toggle(event);
         <div class="flex w-72 flex-col gap-2 p-1">
             <p class="text-sm font-medium text-content">{{ t(`sharePreview.shareLivePreview`) }}</p>
             <div class="flex items-center gap-2 rounded-md border border-line bg-canvas px-2 py-1.5">
-                <span class="min-w-0 flex-1 truncate font-mono text-xs text-muted" :title="url">{{ url }}</span>
+                <span class="min-w-0 flex-1 truncate font-mono text-xs text-muted" v-tooltip.bottom.overflow="url">{{ url }}</span>
                 <a
                     :href="url"
                     target="_blank"
                     rel="noopener"
                     class="flex h-6 w-6 shrink-0 items-center justify-center rounded text-subtle hover:bg-overlay hover:text-content"
                     :aria-label="t(`sharePreview.openPreviewInNew`)"
-                    v-tooltip.bottom="t(`sharePreview.openInNewTab`)"
+                    v-tooltip.bottom="t(`common.newTab`)"
                 >
                     <Icon name="external-link" class="text-2xs" />
                 </a>

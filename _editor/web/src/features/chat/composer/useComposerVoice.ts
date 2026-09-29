@@ -1,3 +1,5 @@
+import type { TooltipValue } from "@intentic/ui";
+import { t } from "@intentic/ui/i18n";
 import { computed, type ComputedRef, nextTick, onBeforeUnmount, type Ref, ref } from "vue";
 import { useVoiceInput, type VoiceError, type VoiceState } from "./useVoiceInput";
 
@@ -16,7 +18,7 @@ export interface ComposerVoice {
     /** Either of the two, what Escape claims, and what typing ends. */
     readonly live: ComputedRef<boolean>;
     /** The mic button's tooltip. */
-    readonly buttonHint: ComputedRef<string>;
+    readonly buttonHint: ComputedRef<TooltipValue>;
     /** The composer's one hint slot while voice is doing something, or nothing when it isn't. */
     readonly slotHint: ComputedRef<string | undefined>;
     /** The capture's failure, in the user's words. */
@@ -28,10 +30,11 @@ export interface ComposerVoice {
 // The glance window between words appearing and the message going: a countdown, not a confirmation.
 const VOICE_SEND_DELAY_MS = 1200;
 
-const BUTTON_HINT: Record<VoiceState, string> = {
-    preparing: `Preparing voice…`,
-    listening: `Stop voice mode`,
-    idle: `Talk hands-free, pause to send, tap again to stop`,
+// Functions, not strings: `t` reads the active language from a ref, so a table built at import would freeze one in.
+const BUTTON_HINT: Record<VoiceState, () => TooltipValue> = {
+    preparing: () => t(`chat.composerVoice.preparing`),
+    listening: () => t(`chat.composerVoice.stopVoice`),
+    idle: () => ({ title: t(`chat.chatPane.talkHandsFree`), note: t(`chat.composerVoice.pauseSends`) }),
 };
 
 // Shared with the turn's own shortcuts, so an idle mic yields it back.
@@ -101,7 +104,7 @@ export const useComposerVoice = (composer: {
         on,
         armed,
         live: computed(() => on.value || armed.value),
-        buttonHint: computed(() => BUTTON_HINT[state.value]),
+        buttonHint: computed(() => BUTTON_HINT[state.value]()),
         // Armed-send first (narrowest window), then transcription, then the two working states.
         slotHint: computed(() => {
             if (armed.value) {

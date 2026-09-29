@@ -67,7 +67,7 @@ const refusedLine = computed(() => {
                 tone="primary"
                 icon="check"
                 :disabled="settling || !mayRelease"
-                v-tooltip="mayRelease ? undefined : t(`chat.chatMessageView.onlyCanRelease`, { approvers: card.offer.approvers.join(`, `) })"
+                v-tooltip="mayRelease ? undefined : t(`chat.chatMessageView.approversOnly`)"
                 @click="reply({ kind: 'credential_offer', approve: true })"
                 >{{ t(`chat.chatMessageView.release`) }}</ChatDecisionButton
             >
@@ -76,7 +76,7 @@ const refusedLine = computed(() => {
                 tone="secondary"
                 icon="times"
                 :disabled="settling || !mayRelease"
-                v-tooltip="mayRelease ? undefined : t(`chat.chatMessageView.onlyCanAnswer`, { approvers: card.offer.approvers.join(`, `) })"
+                v-tooltip="mayRelease ? undefined : t(`chat.chatMessageView.approversOnly`)"
                 @click="reply({ kind: 'credential_offer', approve: false })"
                 >{{ t(`ui.action.skip`) }}</ChatDecisionButton
             >

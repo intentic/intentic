@@ -19,7 +19,6 @@
         "run": "Ausführen",
         "runAll": "Alle ausführen",
         "runTests": "Tests ausführen",
-        "runVitestApp": "Tests dieser App ausführen",
         "start": "Starten",
         "startAll": "Alle starten",
         "stop": "Stoppen",

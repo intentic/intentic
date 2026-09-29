@@ -32,8 +32,18 @@ describe(`shortAccount`, () => {
 describe(`accountBadge`, () => {
     const accounts = [account({ id: `a`, label: `Work`, email: `bob@acme.com`, organization: `Acme` }), account({ id: `b`, label: `Personal` })];
 
-    it(`names the account the session recorded, and hangs the whole identity on the hover`, () => {
-        expect(accountBadge(accounts, `a`)).toEqual({ label: `Work`, hint: `Runs on Work (bob@acme.com · Acme)` });
+    it(`names the account the session recorded, and hangs the whole identity on the hover, one fact a row`, () => {
+        expect(accountBadge(accounts, `a`)).toEqual({
+            label: `Work`,
+            hint: {
+                title: `Account`,
+                rows: [
+                    { label: `Name`, value: `Work` },
+                    { label: `Email`, value: `bob@acme.com` },
+                    { label: `Organization`, value: `Acme` },
+                ],
+            },
+        });
     });
 
     // No stored account served this conversation (a container env token, a translator subscription), so the card says
@@ -56,6 +66,7 @@ describe(`accountBadge`, () => {
     // twice.
     it(`says an identity that only repeats the name once`, () => {
         const named = [account({ id: `c`, label: `bob@acme.com`, email: `bob@acme.com` })];
-        expect(accountBadge(named, `c`)?.hint).toBe(`Runs on bob@acme.com`);
+        // The tip card drops a row with an empty value, so the address is said once, as the name.
+        expect(accountBadge(named, `c`)?.hint.rows?.map((row) => row.value)).toEqual([`bob@acme.com`, ``, ``]);
     });
 });

@@ -1,12 +1,13 @@
 {
     "portRow": {
-        "boundToLoopbackAlias": "Lié à un alias de loopback que le proxy d'aperçu ne peut pas joindre.",
+        "address": "Adresse",
         "forwarded": "transféré",
+        "loopbackAlias": "Alias loopback",
         "notForwardable": "non transférable",
-        "openInNewTab": "Ouvrir dans un nouvel onglet",
         "openPortPreviewIn": "Ouvrir l'aperçu du port {port} dans un nouvel onglet",
-        "openTerminalRunningIn": "Ouvrir {session} : le terminal dans lequel cela tourne",
+        "openTerminal": "Ouvrir le terminal",
         "preview": "Aperçu",
+        "proxyCantReach": "Hors de portée du proxy",
         "stop": "Arrêter"
     },
     "portsView": {
@@ -24,7 +25,6 @@
         "notServed": "Non servi : {blocked}",
         "nothingPublished": "Rien n'est publié.",
         "openInNewTab": "Ouvrir {path} dans un nouvel onglet",
-        "openInNewTab2": "Ouvrir dans un nouvel onglet",
         "public2": "{servedCount} publics",
         "published": "Publié",
         "readingPublishedFiles": "Lecture de vos fichiers publiés…",
@@ -35,7 +35,6 @@
     "sharePreview": {
         "anyoneLinkOpen": "Quiconque a ce lien peut l'ouvrir",
         "copyLink": "Copier le lien",
-        "openInNewTab": "Ouvrir dans un nouvel onglet",
         "openPreviewInNew": "Ouvrir l'aperçu dans un nouvel onglet",
         "shareLivePreview": "Partager cet aperçu en direct"
     },
@@ -43,16 +42,19 @@
         "chatsYouvePublished": "Chats que vous avez publiés",
         "copyLink": "Copier le lien",
         "eachReadOnlyPage": "Chacun d'eux est une page en lecture seule que quiconque a le lien peut ouvrir : sans connexion. Elle montre la conversation telle qu'elle était au moment du partage : tout ce qui a été dit depuis reste privé jusqu'à ce que vous appuyiez sur",
+        "linkStaysSame": "Même lien",
         "messagesOnly": "messages seuls",
         "openInNewTab": "Ouvrir {title} dans un nouvel onglet",
-        "openInNewTab2": "Ouvrir dans un nouvel onglet",
         "public": "{count} publiques",
-        "publishEverythingSaidSince": "Publier tout ce qui a été dit depuis le partage",
+        "publishLatest": "Publier la suite",
         "sandboxNoPublicAddress": "Ce sandbox n'a pas d'adresse publique : cette page ne peut donc pas être atteinte.",
         "sharedConversations": "Conversations partagées",
         "stopSharing": "Cesser de partager",
         "summary": "partagée {when} · {count} message · {detail} | partagée {when} · {count} messages · {detail}",
         "update": "Mettre à jour",
         "withAgentWork": "avec le travail de l'agent"
+    },
+    "common": {
+        "newTab": "Nouvel onglet"
     }
 }

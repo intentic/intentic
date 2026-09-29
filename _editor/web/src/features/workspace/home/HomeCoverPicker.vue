@@ -1,6 +1,6 @@
 <!-- The cover control: a button offering a file name to read in every folder, or, once one is chosen, a chip naming it (on the home), or the same button lit (in the explorer's toolbar). -->
 <script setup lang="ts">
-import { type IconName, iconForEntry, ResponsiveOverlay, ui, useListNavigation } from "@intentic/ui";
+import { type IconName, iconForEntry, ResponsiveOverlay, type Tip, ui, useListNavigation } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, nextTick, ref, watch } from "vue";
 import { useLayout } from "../../../shell/window/useLayout";
@@ -64,8 +64,13 @@ const { activeIndex, activeRow, move, setRowEl } = useListNavigation(rows, keyOf
 const iconOf = (row: Row): IconName => (row.kind === `all` ? `th-large` : iconForEntry(row.name, `file`));
 const labelOf = (row: Row): string => (row.kind === `all` ? t(`workspace.homeCover.allFiles`) : row.name);
 
-// What the trigger says it does, on its tooltip and to a screen reader alike.
+// What the trigger says it does to a screen reader; its hover says the same as a card.
 const label = computed(() => (cover === undefined ? t(`workspace.homeCover.choose`) : t(`workspace.homeCover.showing`, { name: cover })));
+const tip = computed((): Tip =>
+    cover === undefined
+        ? { title: t(`workspace.homeCover.showAFile`), note: t(`workspace.homeCover.fromEveryFolder`) }
+        : { title: t(`workspace.homeCover.inEveryFolder`), rows: [{ label: t(`workspace.homeCover.file`), value: cover }] },
+);
 // The toolbar's switches' own look (the funnel beside it), so a lit book reads as a filter that is on.
 const compactClass = computed(() => [
     `flex shrink-0 items-center rounded-md px-1.5 py-0.5 transition-colors`,
@@ -130,13 +135,13 @@ const onFieldKey = (event: KeyboardEvent): void => {
             :aria-expanded="open"
             :aria-pressed="compact ? cover !== undefined : undefined"
             :aria-label="label"
-            v-tooltip.bottom="label"
+            v-tooltip.bottom="tip"
             @click="toggle"
         >
             <Icon name="book" :class="compact ? `text-xs` : ``" />
         </button>
         <!-- The chosen name, lit, as the one state the home is in that its tiles would not explain; × goes back to them. -->
-        <span v-else class="ui-chip ui-chip-on h-6 cursor-default gap-0 p-0" v-tooltip.bottom="t(`workspace.homeCover.showing`, { name: cover })">
+        <span v-else class="ui-chip ui-chip-on h-6 cursor-default gap-0 p-0" v-tooltip.bottom="tip">
             <!-- The anchor is this button, not the chip: a chooser closed without a choice hands the keyboard back to it. -->
             <button
                 ref="anchor"

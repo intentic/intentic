@@ -1,6 +1,6 @@
 {
     "extension": {
-        "lookingAtOnly": "mirando solo {project}",
+        "lookingAtOnly": "solo {project}",
         "projects": "Proyectos",
         "projects2": "Proyectos · {project}"
     },

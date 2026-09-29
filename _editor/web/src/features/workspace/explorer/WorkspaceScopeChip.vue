@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ContextMenu, Icon } from "@intentic/ui";
+import { ContextMenu, Icon, type Tip } from "@intentic/ui";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, ref } from "vue";
+import { useVocabulary } from "../../../core-views/vocabulary";
 import { useMenuLink } from "../../../shell/menuLink";
 import { useAgents } from "../../agents/fleet/useAgents";
 import { useScopeTitle } from "../health/scopeTitle";
@@ -28,10 +29,18 @@ const switchable = computed(() => fleet.value.filter((agent) => agent.branch !==
 // True when an archived agent has lost its checkout (branch kept, checkout gone).
 const broken = computed(() => error.value !== undefined);
 
-const hint = computed(() =>
-    broken.value
-        ? `${title.value}'s working copy can't be read. Click to go back to the shared workspace.`
-        : `Showing ${title.value}'s copy of the workspace: its work hasn't landed yet, so these files are read-only. Click to switch.`,
+const words = useVocabulary();
+// Whose copy, and what a press does: the name is the fact, the rest one short line.
+const tip = computed(
+    (): Tip => ({
+        title: broken.value ? t(`workspace.workspaceScopeChip.copyUnreadable`) : t(`workspace.words.privateCopy`),
+        tone: broken.value ? `warn` : undefined,
+        rows: [{ label: words.value.Agent, value: title.value }],
+        note: broken.value ? t(`workspace.workspaceScopeChip.clickForShared`) : t(`workspace.workspaceScopeChip.readOnlyClickToSwitch`),
+    }),
+);
+const ariaLabel = computed(() =>
+    broken.value ? t(`workspace.workspaceScopeChip.brokenAria`, { name: title.value }) : t(`workspace.workspaceScopeChip.copyAria`, { name: title.value }),
 );
 
 const items = computed<MenuItem[]>(() => [
@@ -65,8 +74,8 @@ const items = computed<MenuItem[]>(() => [
             class="ui-chip h-6 shrink-0 px-1.5"
             :class="broken ? `bg-warning/15 text-warning hover:bg-warning/25` : `ui-chip-on`"
             aria-haspopup="menu"
-            :aria-label="hint"
-            v-tooltip.bottom="hint"
+            :aria-label="ariaLabel"
+            v-tooltip.bottom="tip"
             @click="menu?.show($event)"
         >
             <Icon :name="broken ? `exclamation-triangle` : `robot`" class="shrink-0 text-[0.7rem]" />

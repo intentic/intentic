@@ -29,9 +29,9 @@
         "keepOpen": "Mantener abierto",
         "leave": "Salir",
         "moreActions": "Más acciones",
+        "newTab": "Nueva pestaña",
         "next": "Siguiente",
         "open": "Abrir",
-        "openInNewTab": "Abrir en una pestaña nueva",
         "paste": "Pegar",
         "publish": "Publicar",
         "reconnect": "Volver a conectar",
@@ -61,7 +61,15 @@
         "viewLogs": "Ver los registros"
     },
     "agentRunButton": {
-        "configureStartRun": "Configura e inicia esta ejecución — {spend}"
+        "clickToChange": "Clic para cambiar",
+        "clickToConfigure": "Clic para configurar",
+        "configureStartRun": "Configura e inicia esta ejecución — {spend}",
+        "effort": "Esfuerzo",
+        "fast": "Rápido",
+        "model": "Modelo",
+        "sandboxDefault": "Predeterminado",
+        "speed": "Velocidad",
+        "thisRunOnly": "Solo esta ejecución"
     },
     "code": {
         "showAll": "Mostrar todo"
@@ -84,17 +92,16 @@
     "confirmDialog": {
         "more": "…y {count} más"
     },
-    "dagEditor": {
-        "fitWholeGraph": "Encajar el grafo entero"
-    },
     "deviceAgent": {
-        "agentAliveStoppedMaking": "Su agente está vivo pero ha dejado de hacer rondas, así que la imagen que este sandbox tiene de sus carpetas y puertos es tan vieja como la última ronda.",
         "commands": "Comandos",
+        "device": "Dispositivo",
         "folders": "Carpetas",
+        "installedBuild": "Build instalado",
+        "nothingDownloaded": "Sin descargas",
+        "oneProcess": "Un proceso",
         "ports": "Puertos",
-        "processKeepsBuildStarted": "Un bucle conserva la compilación con la que arrancó hasta que se reinicia, así que reemplazar el archivo en disco no cambia nada por sí solo.",
         "restartAgent": "Reiniciar el agente",
-        "stopsStartsDevicesAgent": "Detiene e inicia el bucle del agente de este dispositivo. No se descarga nada: arranca la compilación que ya está instalada allí."
+        "roundsStopped": "Rondas detenidas"
     },
     "deviceAgentGroup": {
         "agent": "Agente",
@@ -103,35 +110,46 @@
     },
     "deviceDetail": {
         "backup": "copia de seguridad: {folder}",
+        "busyHere": "Ocupados aquí",
         "conflicts": "{count} conflicto | {count} conflictos",
         "container": "Contenedor",
         "copyPath": "Copiar la ruta",
         "deviceIsntSyncingFolder": "Este dispositivo no sincroniza ninguna carpeta ni retiene puertos para este sandbox.",
+        "filesOrPortsOnly": "Solo archivos o puertos",
+        "filesSync": "Archivos sincronizados",
         "folder": "Carpeta",
-        "imageOf": "Imagen: {image}",
+        "image": "Imagen",
+        "interruptedTitle": "Actualización interrumpida",
+        "leftAlone": "Sin tocar",
         "more": "… y {more} más",
         "noFolderDeviceOnly": "sin carpeta: este dispositivo solo replica puertos",
         "noFolderSynced": "sin carpeta sincronizada",
         "notRunningHere": "no se ejecuta aquí",
+        "notRunningHereTitle": "No se ejecuta aquí",
         "offDeviceIsntPutting": "Desactivado: este dispositivo no pone los puertos de este sandbox en su propio localhost. La sincronización de archivos no se ve afectada.",
+        "onLocalhost": "En localhost",
         "ports": "Puertos",
         "show": "verlo",
-        "stopped": "detenido"
+        "startPutsItBack": "Iniciar lo restaura",
+        "stopped": "detenido",
+        "syncPaused": "Sincronía en pausa"
     },
     "imageView": {
-        "actualSize1": "Tamaño real (1)",
-        "ctrlScrollToZoom": "Ctrl + rueda para ampliar · arrastra para desplazar · doble clic para encajar",
+        "actualSize": "Tamaño real",
+        "ctrlScroll": "Ctrl+rueda",
+        "doubleClick": "Doble clic",
+        "drag": "Arrastrar",
         "fit": "Encajar",
-        "fitToPane0": "Encajar en el panel (0)",
+        "fitToPane": "Encajar en panel",
+        "gestures": "Gestos",
         "imagePreviewCtrlScroll": "Vista previa de la imagen: Ctrl y rueda para ampliar, arrastra para desplazar",
-        "zoomIn": "Ampliar (+)",
+        "pan": "Desplazar",
+        "zoom": "Zoom",
         "zoomIn2": "Ampliar",
-        "zoomOut": "Reducir (−)",
         "zoomOut2": "Reducir"
     },
     "inlineRename": {
         "couldntSaveName": "No se pudo guardar ese nombre.",
-        "saveEnter": "Guardar · Intro",
         "unnamed": "Sin nombre"
     },
     "layoutRepoRail": {
@@ -144,7 +162,7 @@
         "document": "Documento"
     },
     "noteEditor": {
-        "copyRawNote": "Copiar la nota en crudo",
+        "copyMarkdown": "Copiar markdown",
         "editNote": "Editar esta nota",
         "it": "{verb}",
         "keep": "Conservarla",
@@ -161,7 +179,11 @@
         "options": "{count} opciones"
     },
     "projectChip": {
-        "hidden": "· {hidden} ocultos"
+        "clickShowsAll": "Clic para ver todo",
+        "hidden": "· {hidden} ocultos",
+        "hiddenLabel": "Ocultos",
+        "project": "Proyecto",
+        "projectFilter": "Filtro de proyecto"
     },
     "repoRail": {
         "allRepositories": "Todos los repositorios",
@@ -204,7 +226,6 @@
         "sandboxRestartsOntoNewest": "El sandbox se reinicia sobre la imagen más reciente y no está disponible mientras eso ocurre: segundos si la actualización ya está descargada, unos minutos si no. Sus archivos se conservan."
     },
     "searchBar": {
-        "clearEsc": "Vaciar (Esc)",
         "matchCase": "Distinguir mayúsculas"
     },
     "stepSection": {
@@ -214,7 +235,7 @@
         "all": "Todo"
     },
     "resizeSeam": {
-        "dragToResize": "Arrastra para cambiar el tamaño · doble clic para restablecer"
+        "doubleClickResets": "Doble clic restablece"
     },
     "status": {
         "starting": "Iniciando…",
@@ -222,5 +243,12 @@
         "working": "Trabajando…",
         "reading": "Leyendo…",
         "sending": "Enviando…"
+    },
+    "keys": {
+        "enter": "Intro",
+        "esc": "Esc"
+    },
+    "dagEditor": {
+        "fitGraph": "Encajar grafo"
     }
 }

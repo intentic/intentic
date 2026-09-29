@@ -107,11 +107,11 @@ const toggleAccessReveal = async (key: string): Promise<void> => {
                 <template #info>
                     <InfoHint :label="t(`views.words.liveStatus`)">
                         <span class="block text-sm font-medium text-content">{{ t(`views.words.liveStatus`) }}</span>
-                        <span class="mt-1 block text-xs text-muted">
-                            <b>{{ t(`views.words.planned`) }}</b> {{ t(`views.liveStatusView.whatConfigurationResolvesTo`) }}
-                            <b>{{ t(`views.words.runningNow`) }}</b> {{ t(`views.liveStatusView.whatsReallyOnServer`) }} <b>{{ t(`shared.upToDate`) }}</b
-                            >.
+                        <span class="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-xs">
+                            <span class="text-muted">{{ t(`views.words.planned`) }}</span><span class="text-content">{{ t(`views.liveStatusView.yourConfig`) }}</span>
+                            <span class="text-muted">{{ t(`views.words.runningNow`) }}</span><span class="text-content">{{ t(`views.liveStatusView.yourServer`) }}</span>
                         </span>
+                        <span class="mt-2 block text-xs text-muted">{{ t(`views.liveStatusView.matchUpToDate`) }}</span>
                     </InfoHint>
                     <StatusBadge v-if="convergence" :variant="convergence.variant" :label="convergence.label" dot />
                 </template>

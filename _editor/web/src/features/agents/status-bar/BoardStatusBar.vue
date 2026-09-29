@@ -55,7 +55,7 @@ const close = (): void => {
                 :min="PANEL_MIN_HEIGHT"
                 :max="panelMaxHeight"
                 :reset="PANEL_DEFAULT_HEIGHT"
-                :title="t(`ui.resizeSeam.dragToResize`)"
+                :title="t(`ui.resizeSeam.doubleClickResets`)"
             />
             <section :id="panelId" data-panel="metrics" :aria-labelledby="headingId" class="flex min-w-0 flex-1 flex-col" @keydown.esc.stop="close">
                 <header class="flex h-8 shrink-0 items-center gap-2 pr-1.5 pl-3">
@@ -65,7 +65,7 @@ const close = (): void => {
                         type="button"
                         :class="ui.iconButton(`ml-auto hover:bg-content/10`)"
                         :aria-label="t(`agents.statusBar.close`, { title: t(`agents.liveMetrics.sandboxLabel`) })"
-                        v-tooltip.top="t(`agents.statusBar.close`, { title: t(`agents.liveMetrics.sandboxLabel`) })"
+                        v-tooltip.top="t(`ui.action.close`)"
                         @click="close"
                     >
                         <Icon name="times" class="text-2xs" />

@@ -1,4 +1,5 @@
 import type { OauthAccount } from "@intentic/sandbox-contract";
+import type { Tip } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 
 // Which connected account a session's turns run on, as the card spells it (sessionChip.ts's companion); its own module
@@ -25,10 +26,10 @@ export const shortAccount = (label: string, among: readonly string[]): string =>
     return shown.length <= BUDGET ? shown : `${shown.slice(0, BUDGET - 1)}…`;
 };
 
-/** What the card draws for the account: the clipped name, and the whole of it for the hover. */
+/** What the card draws for the account: the clipped name, and the whole of it for the hover, one fact a row. */
 export interface AccountBadge {
     readonly label: string;
-    readonly hint: string;
+    readonly hint: Tip;
 }
 
 /**
@@ -42,14 +43,21 @@ export const accountBadge = (accounts: readonly OauthAccount[], ran: string | un
     if (entry === undefined) {
         return undefined;
     }
-    // Identity sits beside the name, not inside it, like the account rows: a label must still say whose it is.
-    const identity = [entry.email, entry.organization].filter((part) => part !== undefined && part !== entry.label).join(` · `);
-    const whole = identity === `` ? entry.label : `${entry.label} (${identity})`;
+    // Identity sits beside the name, not inside it, like the account rows: a label must still say whose it is. A row
+    // repeating the name says nothing, so it is left empty and the card drops it.
+    const beside = (part: string | undefined): string => (part === undefined || part === entry.label ? `` : part);
     return {
         label: shortAccount(
             entry.label,
             accounts.map((account) => account.label),
         ),
-        hint: t(`agents.accountChip.runsOn`, { whole }),
+        hint: {
+            title: t(`shared.account`),
+            rows: [
+                { label: t(`shared.name`), value: entry.label },
+                { label: t(`agents.words.email`), value: beside(entry.email) },
+                { label: t(`agents.accountChip.org`), value: beside(entry.organization) },
+            ],
+        },
     };
 };

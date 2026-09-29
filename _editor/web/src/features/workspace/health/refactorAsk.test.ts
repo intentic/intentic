@@ -76,7 +76,7 @@ describe(`hotspotAsk`, () => {
     it(`steps back from a file nobody has touched in a season, without refusing it`, () => {
         const ask = hotspotAsk(hotspot({ latestMs: NOW - 400 * DAY_MS }), context());
         expect(ask.dormant).toBe(true);
-        expect(ask.hint).toContain(`13 months`);
+        expect(ask.hint.rows).toEqual([{ label: `Untouched`, value: `13 months` }]);
         // Still offered, and the prompt is the same one: the git log is evidence, not a veto.
         expect(ask.prompt).toBe(hotspotAsk(hotspot(), context()).prompt);
     });

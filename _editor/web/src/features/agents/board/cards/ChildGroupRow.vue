@@ -64,7 +64,11 @@ const back = computed(() => {
         type="button"
         class="ui-row-select flex min-h-7 w-full min-w-0 items-center gap-2 rounded-md px-2 text-left text-2xs text-subtle max-md:min-h-10"
         :aria-expanded="group.open"
-        v-tooltip.top="t(`agents.childRows.groupHint`, { title: parent })"
+        v-tooltip.top="{
+            title: t(`agents.childRows.parentNotified`),
+            rows: [{ label: t(`agents.childRows.parent`), value: parent }],
+            note: t(`agents.childRows.yoursIfStops`),
+        }"
         @click="emit(`toggle`)"
     >
         <Icon :name="group.open ? `chevron-down` : `chevron-right`" class="shrink-0 text-xs" />

@@ -128,6 +128,15 @@ export const CHECKS = [
         about: "no English typed into a template that vue-i18n renders: the words live in a catalog",
     },
     {
+        id: "tooltip-words",
+        file: "tooltip-words.mjs",
+        needs: "node_modules",
+        gate: "tidy",
+        scoped: true,
+        ratchet: true,
+        about: "a hover label is a word or two; anything longer is a `Tip` card of a short title, figures and one short note",
+    },
+    {
         id: "i18n-keys",
         file: "i18n-keys.mjs",
         needs: "node_modules",

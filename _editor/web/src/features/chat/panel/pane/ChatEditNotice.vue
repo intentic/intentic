@@ -43,14 +43,21 @@ const keepBoth = (): void => {
             <template v-else>{{ t(`chat.chatPane.replacedSend`) }}</template>
         </span>
         <!-- The keep-answer action precedes Cancel so the answer is read first. -->
-        <Button size="small" severity="secondary" :text="true" class="shrink-0" v-tooltip.top="t(`chat.chatPane.openNewChatHere`)" @click="keepBoth">
+        <Button
+            size="small"
+            severity="secondary"
+            :text="true"
+            class="shrink-0"
+            v-tooltip.top="{ title: t(`chat.chatPane.forkWithDraft`), note: t(`chat.chatPane.thisChatUnchanged`) }"
+            @click="keepBoth"
+        >
             {{ t(`chat.chatPane.keepBothInstead`) }}
         </Button>
         <Button
             size="small"
             :text="true"
             class="shrink-0"
-            v-tooltip.top="t(`chat.chatPane.leaveEverythingNothingChanged`)"
+            v-tooltip.top="{ title: t(`chat.chatPane.cancelEdit`), note: t(`chat.chatPane.nothingChangedYet`) }"
             @click="conversation.transcript.cancelEdit()"
         >
             {{ t(`ui.action.cancel`) }}

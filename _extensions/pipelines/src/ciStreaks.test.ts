@@ -1,6 +1,13 @@
 import type { PipelineRun } from "@intentic/sandbox-contract";
+import { extensionIdOf } from "@intentic/extension-manifest";
+import { registerExtensionMessages } from "@intentic/extension-ui/i18n";
 import { arrivesOpen, failureStreaks, openFailures, inFlightOnHead, streakTooltip, supersededBy } from "./ciStreaks";
 import { type JobFailureRun, recurringFailures } from "./failureHistory";
+import { messages } from "./i18n";
+import { manifest } from "./manifest";
+
+// The tooltip's words are the extension's own catalog, which the host mounts before anything reads it.
+await registerExtensionMessages(extensionIdOf(manifest), messages);
 
 // Pins failureStreaks and friends: is this branch failing right now. `sha` defaults to one per run; the same sha on several
 // runs models one push firing several workflows.

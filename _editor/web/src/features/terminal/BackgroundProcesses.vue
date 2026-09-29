@@ -54,7 +54,7 @@ const openLogs = (row: BackgroundProcessRow): void => {
                     type="button"
                     :class="ui.iconButton(`hover:bg-content/10`)"
                     @click="openLogs(row)"
-                    v-tooltip.top="t(`terminal.backgroundProcesses.viewLogsReadOnly`)"
+                    v-tooltip.top="{ title: t(`ui.action.viewLogs`), note: t(`terminal.backgroundProcesses.readOnly`) }"
                     :aria-label="t(`ui.action.viewLogs`)"
                 >
                     <Icon name="align-left" class="text-2xs" />

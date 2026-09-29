@@ -1,4 +1,6 @@
 import { type AgentProvider, isTrialProvider, type PermissionMode } from "@intentic/sandbox-contract";
+import type { Tip } from "@intentic/ui";
+import { t } from "@intentic/ui/i18n";
 import { computed, type Ref, ref, watch } from "vue";
 import { boxNameOf, scopeOffered } from "../../../agents/fleet/fleetScope";
 import { useAgents } from "../../../agents/fleet/useAgents";
@@ -151,7 +153,9 @@ export const useComposerControls = (host: ControlsHost) => {
         inRow,
         moreRows,
         // What's behind the overflow button, said on the button: the one thing it owes a reader before the press.
-        moreHint: computed(() => moreRows.value.map((row) => row.label).join(` · `)),
+        moreHint: computed(
+            (): Tip => ({ title: t(`chat.chatPane.moreComposerSettings`), rows: moreRows.value.map((row) => ({ label: row.label, value: row.value })) }),
+        ),
         modeAnchor: anchorOf(`mode`, host.pills.mode),
         personaAnchor: anchorOf(`persona`, host.pills.persona),
         runThroughAnchor: anchorOf(`runThrough`, host.pills.runThrough),

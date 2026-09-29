@@ -724,26 +724,13 @@ onUnmounted(() => row.discardDraft(committed.value));
                                         {{ t(`setup.setup.useIntenticsDomain`) }}
                                     </button>
                                     <InfoHint :label="t(`views.words.whyCloudflareApiToken`)">
-                                        <p class="mb-1 text-sm font-medium text-content">{{ t(`views.words.whyToken`) }}</p>
-                                        <p class="mb-3 text-xs leading-relaxed text-muted">
-                                            {{ t(`setup.setup.intenticReachesSandboxOver`) }}
-                                        </p>
-                                        <ul class="flex flex-col gap-2 text-xs text-muted">
-                                            <li class="flex items-start gap-2">
-                                                <Icon name="bolt" class="mt-0.5 text-link" />
-                                                <span
-                                                    >{{ t(`setup.setup.letsInstallCommand`) }}
-                                                    <span class="text-content">{{ t(`setup.setup.createTunnel`) }}</span></span
-                                                >
-                                            </li>
-                                            <li class="flex items-start gap-2">
-                                                <Icon name="lock" class="mt-0.5 text-success" />
-                                                <span
-                                                    ><span class="text-content">{{ t(`setup.setup.neverStoredByIntentic`) }}</span
-                                                    >{{ t(`setup.setup.usedOnceToList`) }}</span
-                                                >
-                                            </li>
-                                        </ul>
+                                        <span class="block text-sm font-medium text-content">{{ t(`views.words.whyToken`) }}</span>
+                                        <span class="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-xs">
+                                            <span class="text-muted">{{ t(`views.words.creates`) }}</span><span class="text-content">{{ t(`setup.setup.theTunnel`) }}</span>
+                                            <span class="text-muted">{{ t(`views.words.stored`) }}</span><span class="text-content">{{ t(`setup.setup.neverByIntentic`) }}</span>
+                                            <span class="text-muted">{{ t(`views.words.used`) }}</span><span class="text-content">{{ t(`views.words.onceListZones`) }}</span>
+                                        </span>
+                                        <span class="mt-2 block text-xs text-muted">{{ t(`views.words.noOpenPorts`) }}</span>
                                     </InfoHint>
                                 </div>
                                 <CloudflareTokenField

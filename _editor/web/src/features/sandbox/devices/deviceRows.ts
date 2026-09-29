@@ -9,7 +9,7 @@ import {
     type Machine,
     machinesOf,
 } from "@intentic/sandbox-contract";
-import type { IconName, StatusVariant } from "@intentic/ui";
+import type { IconName, StatusVariant, Tip } from "@intentic/ui";
 import {
     type DeviceFolderRow,
     type DeviceSandboxGroup,
@@ -482,7 +482,8 @@ const switchable = (row: DeviceRow, half: DeviceHalf): boolean =>
 export interface HalfAction {
     readonly command: DeviceSyncSwitch;
     readonly label: string;
-    readonly hint: string;
+    /** Absent where the label already says it all. */
+    readonly hint?: Tip | string;
     /** What the button leads with, so a pause reads as a pause before its word does. */
     readonly icon: IconName;
 }
@@ -503,13 +504,12 @@ export interface DeviceSwitch {
 const pause = (): HalfAction => ({
     command: `sync-pause`,
     label: t(`sandbox.deviceRows.pauseAll`),
-    hint: t(`sandbox.deviceRows.stopMovingFilesEither`),
+    hint: { title: t(`sandbox.words.filesOnly`), note: t(`sandbox.words.portsStayMirrored`) },
     icon: `pause`,
 });
 const resume = (): HalfAction => ({
     command: `sync-resume`,
     label: t(`sandbox.deviceRows.resumeAll`),
-    hint: t(`sandbox.deviceRows.startMovingFilesAgain`),
     icon: `play`,
 });
 // "Turn … off", never "Stop all": on a list whose rows carry a container's own Stop, a bare Stop reads as stopping
@@ -517,13 +517,13 @@ const resume = (): HalfAction => ({
 const mirrorOff = (): HalfAction => ({
     command: `mirror-off`,
     label: t(`sandbox.deviceRows.turnAllOff`),
-    hint: t(`sandbox.deviceRows.takeEveryPairedSandboxs`),
+    hint: { title: t(`sandbox.words.offLocalhost`), note: t(`sandbox.words.filesKeepSyncing`) },
     icon: `eye-slash`,
 });
 const mirrorOn = (): HalfAction => ({
     command: `mirror-on`,
     label: t(`sandbox.deviceRows.turnAllOn`),
-    hint: t(`sandbox.deviceRows.putEveryPairedSandboxs`),
+    hint: t(`sandbox.words.ontoLocalhost`),
     icon: `eye`,
 });
 

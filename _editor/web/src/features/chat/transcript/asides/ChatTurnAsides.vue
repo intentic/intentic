@@ -37,6 +37,7 @@ const marks = computed<readonly ChatAsideMark[]>(() => [
                   key: `tools`,
                   icon: run.value.icon,
                   label: `Show ${run.value.count} ${run.value.count === 1 ? `step` : `steps`}`,
+                  tip: t(`chat.chatTurnAsides.showSteps`),
                   count: run.value.count,
                   busy: run.value.running && props.live,
                   failed: run.value.failed,

@@ -67,10 +67,13 @@ describe("cacheCooling", () => {
     // sentence with a hole in it.
     it("names the context it would re-send, and reads without it", () => {
         const cooling = cacheCooling(agent({ promptCache: { at: NOW - 55 * MINUTE, ttlMs: HOUR } }), NOW);
-        expect(cooling?.hint).toContain(`184k tokens`);
-        expect(cooling?.hint).toContain(`goes cold in 5m 0s`);
+        expect(cooling?.hint.rows).toEqual([
+            { label: `Cold in`, value: `5m 0s` },
+            { label: `Cached`, value: `184k tokens` },
+        ]);
+        // An unmeasured context leaves its row empty, which the tip card drops rather than drawing a hole.
         const unmeasured = cacheCooling(agent({ contextTokens: undefined, promptCache: { at: NOW - 55 * MINUTE, ttlMs: HOUR } }), NOW);
-        expect(unmeasured?.hint).toContain(`everything it has already read`);
+        expect(unmeasured?.hint.rows?.[1]?.value).toBe(``);
     });
 });
 
@@ -132,13 +135,16 @@ describe("warmMark", () => {
     it("says until when a running hold keeps the cache", () => {
         const mark = warmMark(agent({ keepWarm: { since: NOW, until: NOW + 4 * HOUR, refreshes: 2, readTokens: 250_000 } }));
         expect(mark?.icon).toBe(`sun`);
-        expect(mark?.hint).toContain(`250k tokens`);
+        expect(mark?.hint.rows).toContainEqual({ label: `Last read`, value: `250k tokens` });
     });
 
     it("says why a hold stopped early, and nothing for one that ran its course", () => {
         const stopped = warmMark(agent({ keepWarm: { since: NOW, until: NOW + HOUR, refreshes: 1, ended: { at: NOW, reason: `allowance`, detail: `88%` } } }));
         expect(stopped?.cold).toBe(true);
-        expect(stopped?.hint).toContain(`88%`);
+        expect(stopped?.hint.rows).toEqual([
+            { label: `Why`, value: `Account limit` },
+            { label: `Detail`, value: `88%` },
+        ]);
         expect(warmMark(agent({ keepWarm: { since: NOW, until: NOW + HOUR, refreshes: 1, ended: { at: NOW, reason: `elapsed` } } }))).toBeUndefined();
     });
 });

@@ -1,4 +1,5 @@
 import { PROCESS_ROLES, type SandboxMetrics } from "@intentic/sandbox-contract";
+import type { Tip } from "@intentic/ui";
 import { formatBytes, formatFixed, formatPercent } from "@intentic/ui/format";
 import { type TypedT, useT } from "@intentic/ui/i18n";
 import { computed, type ComputedRef } from "vue";
@@ -18,7 +19,8 @@ export interface Gauge {
     readonly detail: string;
     // How full, 0 to 1; undefined on a first reading, which has no CPU yet.
     readonly fraction: number | undefined;
-    readonly hint: string;
+    // What the figure measures, on hover: its name and the one caveat that changes how it reads.
+    readonly hint: Tip;
     readonly warn: boolean;
 }
 
@@ -26,7 +28,7 @@ export interface Figure {
     readonly key: string;
     readonly label: string;
     readonly value: string;
-    readonly hint: string;
+    readonly hint: Tip;
     readonly warn: boolean;
 }
 
@@ -49,8 +51,8 @@ export interface SessionRow {
     // Share of the heaviest conversation, so the longest bar is always full and the rest read against it.
     readonly share: number;
     readonly heavy: boolean;
-    // The whole reading in words, for a hover: "37% CPU · 412 MB · 12 processes".
-    readonly line: string;
+    // The whole reading, for a hover: CPU, memory and how many processes, one row each.
+    readonly tip: Tip;
 }
 
 export interface SandboxReadout {
@@ -106,17 +108,20 @@ const SESSIONS_SHOWN = 5;
 export const splitSessions = <Row>(rows: readonly Row[]): [Row[], Row[]] =>
     rows.length - SESSIONS_SHOWN < 2 ? [[...rows], []] : [rows.slice(0, SESSIONS_SHOWN), rows.slice(SESSIONS_SHOWN)];
 
-// One conversation's reading in words, as its card's hover and the panel's row say it: CPU where there is a reading of
-// it, where 100% is one full core, then memory, then how many processes. In the words of the caller's own `t`.
-export const sessionLine = (
+// One conversation's reading as a card, as its card's hover and the panel's row show it: CPU where there is a reading of
+// it (a first reading has none, and its row is dropped), then memory, then how many processes. In the words of the
+// caller's own `t`.
+export const sessionTip = (
     t: TypedT,
     session: { readonly cpuPercent?: number | undefined; readonly rssBytes: number; readonly processes: number },
-): string =>
-    [
-        ...(session.cpuPercent === undefined ? [] : [t(`agents.liveMetrics.cpu`, { percent: formatPercent(session.cpuPercent) })]),
-        formatBytes(session.rssBytes),
-        t(`agents.liveMetrics.processes`, { count: session.processes }, session.processes),
-    ].join(` · `);
+): Tip => ({
+    title: t(`agents.liveMetrics.sessionUsage`),
+    rows: [
+        { label: t(`agents.liveMetrics.cpuLabel`), value: session.cpuPercent === undefined ? `` : formatPercent(session.cpuPercent) },
+        { label: t(`agents.liveMetrics.memoryLabel`), value: formatBytes(session.rssBytes) },
+        { label: t(`agents.liveMetrics.processesLabel`), value: session.processes },
+    ],
+});
 
 // Warned exactly when the daemon would hold a person's turn: the same figures and the same thresholds, read off one
 // reading. A reading without `memoryRoom` (a daemon older than it) warns of nothing: no threshold is guessed here.
@@ -142,7 +147,7 @@ export function useSandboxReadout(metrics: () => SandboxMetrics): ComputedRef<Sa
                     ? t(`agents.liveMetrics.coresValue`, { cores }, sandbox.cores)
                     : t(`agents.liveMetrics.cpuValue`, { percent: formatPercent(sandbox.cpuPercent), cores }, sandbox.cores),
             fraction: sandbox.cpuPercent === undefined ? undefined : clamp(sandbox.cpuPercent / 100),
-            hint: t(`agents.liveMetrics.cpuHint`),
+            hint: { title: t(`agents.liveMetrics.cpuLabel`), note: t(`agents.liveMetrics.cpuNote`) },
             warn: (sandbox.cpuPercent ?? 0) >= NEAR_LIMIT * 100,
         };
         const memory: Gauge = {
@@ -151,7 +156,7 @@ export function useSandboxReadout(metrics: () => SandboxMetrics): ComputedRef<Sa
             value: usedOf(sandbox.memoryBytes, sandbox.memoryLimitBytes),
             detail: `${formatBytes(sandbox.memoryBytes)} / ${formatBytes(sandbox.memoryLimitBytes)}`,
             fraction: sandbox.memoryLimitBytes > 0 ? clamp(sandbox.memoryBytes / sandbox.memoryLimitBytes) : undefined,
-            hint: t(`agents.liveMetrics.memoryHint`),
+            hint: { title: t(`agents.liveMetrics.memoryLabel`), note: t(`agents.liveMetrics.memoryNote`) },
             warn: memoryShort(sandbox),
         };
         if (sandbox.diskBytes === undefined || sandbox.diskTotalBytes === undefined) {
@@ -163,14 +168,14 @@ export function useSandboxReadout(metrics: () => SandboxMetrics): ComputedRef<Sa
             value: usedOf(sandbox.diskBytes, sandbox.diskTotalBytes),
             detail: `${formatBytes(sandbox.diskBytes)} / ${formatBytes(sandbox.diskTotalBytes)}`,
             fraction: sandbox.diskTotalBytes > 0 ? clamp(sandbox.diskBytes / sandbox.diskTotalBytes) : undefined,
-            hint: t(`agents.liveMetrics.diskHint`),
+            hint: { title: t(`agents.liveMetrics.diskLabel`), note: t(`agents.liveMetrics.diskNote`) },
             warn: sandbox.diskBytes >= NEAR_LIMIT * sandbox.diskTotalBytes,
         };
         return [cpu, memory, disk];
     };
 
     // Load as cores' worth of work against the cores there are, and which way it is heading: three bare averages mean
-    // nothing to a reader who does not already know how many cores stand behind them. The averages stay in the hint.
+    // nothing to a reader who does not already know how many cores stand behind them. The averages are the hint's rows.
     const loadOf = ({ loadAverage, machineCores }: SandboxMetrics[`sandbox`]): Figure => {
         const [one, five, fifteen] = loadAverage;
         const load = formatFixed(one, 1);
@@ -182,11 +187,15 @@ export function useSandboxReadout(metrics: () => SandboxMetrics): ComputedRef<Sa
             key: `load`,
             label: t(`agents.liveMetrics.loadLabel`),
             value: `${busy} · ${t(`agents.liveMetrics.loadTrend.${loadTrend(loadAverage)}`)}`,
-            hint: `${t(`agents.liveMetrics.loadHint`)} ${t(`agents.liveMetrics.loadAverages`, {
-                one: formatFixed(one, 2),
-                five: formatFixed(five, 2),
-                fifteen: formatFixed(fifteen, 2),
-            })}`,
+            hint: {
+                title: t(`agents.liveMetrics.loadLabel`),
+                rows: [
+                    { label: t(`agents.liveMetrics.minutes`, { count: 1 }), value: formatFixed(one, 2) },
+                    { label: t(`agents.liveMetrics.minutes`, { count: 5 }), value: formatFixed(five, 2) },
+                    { label: t(`agents.liveMetrics.minutes`, { count: 15 }), value: formatFixed(fifteen, 2) },
+                ],
+                note: t(`agents.liveMetrics.loadNote`),
+            },
             warn: false,
         };
     };
@@ -202,7 +211,7 @@ export function useSandboxReadout(metrics: () => SandboxMetrics): ComputedRef<Sa
                           key: `swap`,
                           label: t(`agents.liveMetrics.swapLabel`),
                           value: formatBytes(sandbox.swapBytes),
-                          hint: t(`agents.liveMetrics.swapHint`),
+                          hint: { title: t(`agents.liveMetrics.swapLabel`), note: t(`agents.liveMetrics.swapNote`) },
                           warn: false,
                       },
                   ]),
@@ -211,7 +220,7 @@ export function useSandboxReadout(metrics: () => SandboxMetrics): ComputedRef<Sa
                 key: `processes`,
                 label: t(`agents.liveMetrics.processesLabel`),
                 value: formatFixed(sandbox.processes, 0),
-                hint: t(`agents.liveMetrics.processesHint`),
+                hint: { title: t(`agents.liveMetrics.processesLabel`), note: t(`agents.liveMetrics.processesNote`) },
                 warn: false,
             },
             // Below the threshold nothing is waiting, and three zeros are noise even in the panel.
@@ -226,7 +235,7 @@ export function useSandboxReadout(metrics: () => SandboxMetrics): ComputedRef<Sa
                               memory: formatPercent(pressure.memory),
                               io: formatPercent(pressure.io),
                           }),
-                          hint: t(`agents.liveMetrics.pressureHint`),
+                          hint: { title: t(`agents.liveMetrics.pressureLabel`), note: t(`agents.liveMetrics.pressureNote`) },
                           warn: worst >= PRESSURE_STALLING,
                       },
                   ]),
@@ -240,7 +249,18 @@ export function useSandboxReadout(metrics: () => SandboxMetrics): ComputedRef<Sa
                         ? []
                         : [t(`agents.liveMetrics.loop`, { percent: formatPercent(daemon.eventLoopPercent) })]),
                 ].join(` · `),
-                hint: t(`agents.liveMetrics.daemonHint`),
+                hint: {
+                    title: t(`agents.liveMetrics.daemonLabel`),
+                    rows: [
+                        { label: t(`agents.liveMetrics.memoryLabel`), value: formatBytes(daemon.rssBytes) },
+                        { label: t(`agents.liveMetrics.cpuLabel`), value: daemon.cpuPercent === undefined ? `` : formatPercent(daemon.cpuPercent) },
+                        {
+                            label: t(`agents.liveMetrics.eventLoop`),
+                            value: daemon.eventLoopPercent === undefined ? `` : formatPercent(daemon.eventLoopPercent),
+                        },
+                    ],
+                    note: t(`agents.liveMetrics.daemonNote`),
+                },
                 warn: (daemon.eventLoopPercent ?? 0) >= NEAR_LIMIT * 100,
             },
         ];
@@ -268,7 +288,7 @@ export function useSandboxReadout(metrics: () => SandboxMetrics): ComputedRef<Sa
             bytes: session.rssBytes,
             share: heaviest === 0 ? 0 : session.rssBytes / heaviest,
             heavy: sessionHeavy(session.rssBytes, sandbox),
-            line: sessionLine(t, session),
+            tip: sessionTip(t, session),
         }));
     };
 

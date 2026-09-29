@@ -23,7 +23,7 @@ const emit = defineEmits<{ connect: []; disconnect: [] }>();
         <template #description>
             <!-- One line that gives way in a deliberate order. -->
             <span class="flex min-w-0 items-baseline gap-1">
-                <span v-if="device.detail" class="min-w-0 truncate font-mono text-subtle" :title="device.detail">{{ device.detail }}</span>
+                <span v-if="device.detail" class="min-w-0 truncate font-mono text-subtle" v-tooltip.top.overflow="device.detail">{{ device.detail }}</span>
                 <span v-if="device.detail" class="shrink-0 text-subtle">·</span>
                 <span class="shrink-0 text-warning">{{ device.note }}</span>
             </span>

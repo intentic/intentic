@@ -144,7 +144,7 @@ const compare = (event: Event): Promise<void> =>
                     <CopyButton
                         :text="workspace?.remote ?? ``"
                         :aria-label="t(`sandbox.moveOutPanel.copyCloneUrl`)"
-                        v-tooltip.top="t(`sandbox.moveOutPanel.copyCloneUrl`)"
+                        v-tooltip.top="t(`sandbox.moveOutPanel.copyUrl`)"
                     />
                 </template>
             </Row>
@@ -247,7 +247,7 @@ const compare = (event: Event): Promise<void> =>
                         type="button"
                         :class="ui.iconButton(`hover:text-danger`)"
                         :aria-label="t(`sandbox.moveOutPanel.deleteExport`)"
-                        v-tooltip.top="t(`sandbox.moveOutPanel.deleteExport2`)"
+                        v-tooltip.top="t(`ui.action.delete`)"
                         @click="remove(entry.name)"
                     >
                         <Icon name="trash" class="text-sm" />

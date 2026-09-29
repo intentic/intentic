@@ -25,7 +25,7 @@ export const activate = (api: IntenticApi, context: ExtensionContext): void => {
     context.subscriptions.push(
         api.documents.register({
             id: `git-history`,
-            detect: (path) => (path === `` ? { icon: `sitemap`, tooltip: t(`extension.openGitHistory`), title: t(`extension.history`) } : undefined),
+            detect: (path) => (path === `` ? { icon: `sitemap`, tooltip: t(`extension.gitHistory`), title: t(`extension.history`) } : undefined),
             view: async () => (await import(`./GitHistoryTab.vue`)).default,
         }),
     );

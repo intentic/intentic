@@ -200,7 +200,14 @@ const hasSpend = computed(() => current.value.length > 0);
             <!-- These days are UTC days, at both ends: the daemon stamps every row in UTC so that last month's totals
                  cannot change when somebody moves a setting. Said out loud only to a reader whose own midnight is a
                  different moment, for whom "today" here is not the today they mean. -->
-            <span v-if="dayBoundaryDiffers" class="text-2xs text-subtle" :title="t(`sandbox.sandboxUsage.daysRunMidnight`)">
+            <span
+                v-if="dayBoundaryDiffers"
+                class="text-2xs text-subtle"
+                v-tooltip.top="{
+                    title: t(`sandbox.sandboxUsage.midnightUtc`),
+                    rows: [{ label: t(`sandbox.sandboxUsage.yourZone`), value: localZone() }],
+                }"
+            >
                 {{ t(`sandbox.sandboxUsage.utcDays`) }}
             </span>
             <span class="h-4 w-px bg-line" />
@@ -348,7 +355,8 @@ const hasSpend = computed(() => current.value.length > 0);
                             tone="success"
                         >
                             <template #hint>
-                                {{ t(`sandbox.sandboxUsage.everyCommandCarriesOwn`) }}
+                                <span class="block font-medium">{{ t(`sandbox.sandboxUsage.realizedNotEstimated`) }}</span>
+                                <span class="block text-muted">{{ t(`sandbox.sandboxUsage.eachStageVsInput`) }}</span>
                             </template>
 
                             <SavingsStackBar v-if="composition !== undefined && composition.rawTokens > 0" :composition="composition" />

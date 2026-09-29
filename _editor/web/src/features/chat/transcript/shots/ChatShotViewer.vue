@@ -148,8 +148,8 @@ watch(at, async () => {
                     type="button"
                     :class="ui.iconButton()"
                     :aria-pressed="actual"
-                    :aria-label="actual ? t(`chat.chatShotViewer.fitToWindow`) : t(`chat.chatShotViewer.actualSize`)"
-                    v-tooltip.bottom="actual ? t(`chat.chatShotViewer.fitToWindow`) : t(`chat.chatShotViewer.actualSize`)"
+                    :aria-label="actual ? t(`chat.chatShotViewer.fit`) : t(`chat.chatShotViewer.actualSize`)"
+                    v-tooltip.bottom="actual ? t(`chat.chatShotViewer.fit`) : t(`chat.chatShotViewer.actualSize`)"
                     @click="actual = !actual"
                 >
                     <Icon :name="actual ? `compress` : `expand`" class="text-xs" />
@@ -168,8 +168,8 @@ watch(at, async () => {
                     v-if="surface.openFile"
                     type="button"
                     :class="ui.iconButton()"
-                    :aria-label="t(`chat.words.openInWorkspaceShort`)"
-                    v-tooltip.bottom="t(`chat.words.openInWorkspaceShort`)"
+                    :aria-label="t(`chat.words.openFile`)"
+                    v-tooltip.bottom="t(`chat.words.openFile`)"
                     @click="openInWorkspace"
                 >
                     <Icon name="external-link" class="text-xs" />

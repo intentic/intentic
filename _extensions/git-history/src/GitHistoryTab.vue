@@ -549,12 +549,14 @@ const runPending = async (): Promise<void> => {
                 class="shrink-0"
                 :disabled="undo.busy.value"
                 @click="runUndo"
-                v-tooltip.bottom="
-                    t(`gitHistoryTab.undoMoves`, {
-                        what: undo.action.value?.description ?? ``,
-                        branch: undo.action.value?.branch ?? t(`gitHistoryTab.theBranch`),
-                    })
-                "
+                v-tooltip.bottom="{
+                    title: t(`gitHistoryTab.rewindBranch`),
+                    rows: [
+                        { label: t(`gitHistoryTab.action`), value: undo.action.value?.description ?? `` },
+                        { label: t(`gitHistoryTab.branch`), value: undo.action.value?.branch ?? `` },
+                    ],
+                    note: t(`gitHistoryTab.restorePointSaved`),
+                }"
             >
                 <Icon name="undo" class="mr-0.5 text-3xs" />{{ undo.label.value }}
             </Button>
@@ -580,7 +582,10 @@ const runPending = async (): Promise<void> => {
                 class="shrink-0"
                 :disabled="operation.busy.value"
                 @click="operation.abort()"
-                v-tooltip.bottom="t(`gitHistoryTab.restorePointSavedFirst`)"
+                v-tooltip.bottom="{
+                    title: t(`gitHistoryTab.abortOperation`, { operation: operation.operation.value }),
+                    note: t(`gitHistoryTab.restorePointSaved`),
+                }"
             >
                 {{ t(`gitHistoryTab.abort`) }}
             </Button>
@@ -653,7 +658,7 @@ const runPending = async (): Promise<void> => {
                     <span
                         v-if="stashBySha.get(commit.sha)"
                         class="shrink-0 rounded bg-info/15 px-1 font-mono text-3xs text-info"
-                        v-tooltip.top="t(`gitHistoryTab.workSetAsideWithout`)"
+                        v-tooltip.top="t(`gitHistoryTab.stashedWork`)"
                         >{{ stashBySha.get(commit.sha)!.ref }}</span
                     >
                     <span v-if="commit.head" class="shrink-0 rounded bg-primary-600/20 px-1 text-3xs font-semibold text-link">{{
@@ -665,7 +670,7 @@ const runPending = async (): Promise<void> => {
                         :key="ref"
                         class="shrink-0 cursor-context-menu rounded px-1 text-3xs"
                         :class="refBadge(ref).tag ? 'bg-warning/15 text-warning' : 'bg-overlay text-muted'"
-                        v-tooltip.top="t(`gitHistoryTab.rightClickActions`, { label: refBadge(ref).label })"
+                        v-tooltip.top="{ title: t(`gitHistoryTab.actions`), keys: t(`gitHistoryTab.rightClick`) }"
                         @contextmenu.prevent.stop="openRefMenu($event, ref, commit)"
                         >{{ refBadge(ref).label }}</span
                     >
@@ -686,24 +691,24 @@ const runPending = async (): Promise<void> => {
                             v-for="verb in [
                                 {
                                     label: 'Pop',
-                                    title: 'Put this work back and remove the stash',
+                                    tip: { title: t(`gitHistoryTab.restoreWork`), note: t(`gitHistoryTab.removesStash`) },
                                     run: () => stashes.apply(stashBySha.get(commit.sha)!.ref, true),
                                 },
                                 {
                                     label: 'Apply',
-                                    title: 'Put this work back and keep the stash',
+                                    tip: { title: t(`gitHistoryTab.restoreWork`), note: t(`gitHistoryTab.keepsStash`) },
                                     run: () => stashes.apply(stashBySha.get(commit.sha)!.ref, false),
                                 },
                                 {
                                     label: 'Drop',
-                                    title: 'Discard this stash, a restore point is saved first',
+                                    tip: { title: t(`gitHistoryTab.discardStash`), note: t(`gitHistoryTab.restorePointSaved`) },
                                     run: () => stashes.drop(stashBySha.get(commit.sha)!.ref),
                                 },
                             ]"
                             :key="verb.label"
                             class="shrink-0 cursor-pointer rounded px-1 text-2xs text-subtle transition-colors hover:bg-overlay hover:text-content"
                             :class="{ 'pointer-events-none opacity-40': stashes.busy.value }"
-                            v-tooltip.top="verb.title"
+                            v-tooltip.top="verb.tip"
                             @click.stop="verb.run()"
                             >{{ verb.label }}</span
                         >
@@ -726,7 +731,7 @@ const runPending = async (): Promise<void> => {
                                 type="button"
                                 class="text-subtle hover:text-content"
                                 @click="copy(commit.sha)"
-                                v-tooltip.top="t(`gitHistoryTab.copyFullSha`)"
+                                v-tooltip.top="t(`gitHistoryTab.copySha`)"
                             >
                                 <Icon name="copy" class="text-3xs" />
                             </button>
@@ -773,7 +778,7 @@ const runPending = async (): Promise<void> => {
                                             'ui-row-select-on': showing?.sha === commit.sha && showing?.path === row.file.path,
                                         }"
                                         :style="{ paddingLeft: `${0.25 + row.depth * 0.85}rem` }"
-                                        v-tooltip.top="t(`gitHistoryTab.clickToPeekDouble`)"
+                                        v-tooltip.top="{ title: t(`gitHistoryTab.keepTab`), keys: t(`gitHistoryTab.doubleClick`) }"
                                         @click="openFileDiff(commit, row.file)"
                                         @dblclick="openFileDiff(commit, row.file, 'keep')"
                                     >
@@ -824,9 +829,9 @@ const runPending = async (): Promise<void> => {
                         v-model="resetMode"
                         size="xs"
                         :options="[
-                            { label: 'Soft', value: 'soft', title: 'Keep the worktree and the index' },
-                            { label: 'Mixed', value: 'mixed', title: 'Keep the worktree, reset the index' },
-                            { label: 'Hard', value: 'hard', title: 'Discard worktree changes' },
+                            { label: 'Soft', value: 'soft', title: t(`gitHistoryTab.keepStaged`) },
+                            { label: 'Mixed', value: 'mixed', title: t(`gitHistoryTab.keepUnstaged`) },
+                            { label: 'Hard', value: 'hard', title: t(`gitHistoryTab.discardChanges`) },
                         ]"
                     />
                     <p class="text-2xs text-subtle">

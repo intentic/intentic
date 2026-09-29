@@ -9,6 +9,7 @@ import type { RowAction } from "./rowActions";
 import type { OpenMode } from "../tabs/workspaceTabs";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick, ref } from "vue";
+import type { TooltipValue } from "@intentic/ui";
 import { IconStub } from "@intentic/ui/testing";
 import { ACTIVE_KEY, activeSandboxId } from "../../sandbox/overview/activeSandbox";
 import { useEntryDrag } from "./transfer/useEntryDrag";
@@ -124,13 +125,19 @@ const TEST_TREE: WorkspaceTreeEntry[] = [
 
 let app: App | undefined;
 
-// Tooltip recorded, not stubbed: on a link row it's the whole affordance the test needs to read.
+// Tooltip recorded, not stubbed: on a link row it's the whole affordance the test needs to read. A label and a tip card
+// alike are recorded as JSON, and read back whole with `tipOf`.
 const recordTooltip = {
-    mounted(el: HTMLElement, binding: { value?: unknown }): void {
+    mounted(el: HTMLElement, binding: { value?: TooltipValue }): void {
         if (binding.value !== undefined) {
-            el.setAttribute(`data-tooltip`, String(binding.value));
+            el.setAttribute(`data-tooltip`, JSON.stringify(binding.value));
         }
     },
+};
+const tipOf = (el: Element | null | undefined): TooltipValue => {
+    const said = el?.getAttribute(`data-tooltip`);
+    // SAFETY: `recordTooltip` above is the only writer of the attribute, and it writes a TooltipValue's own JSON.
+    return said === null || said === undefined ? undefined : (JSON.parse(said) as TooltipValue);
 };
 
 // Rebuilds the module-level open-folder set from storage, as a page load or sandbox switch would.
@@ -616,7 +623,7 @@ describe(`symlink rows`, () => {
         const el = await mount({ tree: LINK_TREE });
 
         expect(markerOf(el, `github`)?.getAttribute(`data-icon`)).toBe(`link`);
-        expect(markerOf(el, `github`)?.getAttribute(`data-tooltip`)).toBe(`Link to ../../.agents/skills/github`);
+        expect(tipOf(markerOf(el, `github`))).toEqual({ title: `Link`, rows: [{ label: `Target`, value: `../../.agents/skills/github` }] });
         // Otherwise a working link behaves like an ordinary row: it expands and lists its contents.
         expect(rows(el)).toContain(`SKILL.md`);
         expect(markerOf(el, `README.md`)).toBeUndefined();
@@ -627,8 +634,13 @@ describe(`symlink rows`, () => {
         const el = await mount({ tree: LINK_TREE });
 
         expect(markerOf(el, `gone`)?.getAttribute(`data-icon`)).toBe(`link-broken`);
-        expect(markerOf(el, `gone`)?.getAttribute(`data-tooltip`)).toBe(`Link to ../../.agents/skills/gone: there is nothing there`);
-        expect(markerOf(el, `away`)?.getAttribute(`data-tooltip`)).toBe(`Link to /etc: outside the workspace, so the sandbox won't open it`);
+        expect(tipOf(markerOf(el, `gone`))).toEqual({ title: `Broken link`, tone: `warn`, rows: [{ label: `Target`, value: `../../.agents/skills/gone` }] });
+        expect(tipOf(markerOf(el, `away`))).toEqual({
+            title: `Outside workspace`,
+            tone: `warn`,
+            rows: [{ label: `Target`, value: `/etc` }],
+            note: `Sandbox won't open it`,
+        });
     });
 
     it(`offers no chevron on a link with nothing reachable behind it`, async () => {
@@ -980,9 +992,7 @@ describe(`rows with a special role`, () => {
         const el = await mount({ tree: SPECIAL_TREE });
 
         const memory = [...el.querySelectorAll(`[role="treeitem"]`)].find((row) => row.textContent?.trim() === `AGENTS.mdmemory`);
-        expect(memory?.querySelector(`span.ui-status-pill`)?.getAttribute(`data-tooltip`)).toContain(
-            `every turn that starts in this folder or deeper`,
-        );
+        expect(tipOf(memory?.querySelector(`span.ui-status-pill`))).toEqual({ title: `Standing instructions`, note: `Every turn from here` });
     });
 });
 
@@ -1126,9 +1136,9 @@ describe(`the gestures the template hands on`, () => {
         noteArriving(`src/notes.md`, { kind: `upload`, size: 12 });
 
         const el = await mount({ tree: TREE });
-        expect([rowNamed(el, `notes.md`).getAttribute(`data-tooltip`), rowNamed(el, `main.ts`).getAttribute(`data-tooltip`)]).toEqual([
+        expect([tipOf(rowNamed(el, `notes.md`)), tipOf(rowNamed(el, `main.ts`))]).toEqual([
             `Uploading…`,
-            null,
+            undefined,
         ]);
     });
 

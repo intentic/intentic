@@ -6,7 +6,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { focusInput } from "@intentic/ui/inline-rename";
 import { clickIntent, useMultiSelect } from "../../../lib/multiSelect";
 import { TERMINAL } from "../../../shell/commands/categories";
-import { commandShortcut, registerCommand, withShortcut } from "../../../shell/commands/useCommands";
+import { commandShortcut, registerCommand, tipWithShortcut } from "../../../shell/commands/useCommands";
 import { KINDS, setTerminalMeta, TERMINAL_COLORS, TERMINAL_ICONS, type TerminalColor, terminalMeta } from "../terminalMeta";
 import type { useTerminalFloating } from "../terminalFloating";
 import { inactiveTerminals } from "../terminalSweep";
@@ -416,7 +416,7 @@ onBeforeUnmount(() => {
                 class="flex h-6 shrink-0 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content"
                 :class="vertical ? 'w-full' : 'w-6'"
                 @click="newTab()"
-                v-tooltip.top="withShortcut(t(`terminal.terminalPanel.newTerminal`), 'terminal.new')"
+                v-tooltip.top="tipWithShortcut(t(`terminal.terminalPanel.newTerminal`), 'terminal.new')"
                 :aria-label="t(`terminal.terminalPanel.newTerminal`)"
             >
                 <Icon name="plus" class="text-2xs" />

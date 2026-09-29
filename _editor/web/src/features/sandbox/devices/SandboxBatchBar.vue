@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, Icon, type IconName, VERB_LABEL } from "@intentic/ui";
+import { Button, Icon, type IconName, type Tip, VERB_LABEL } from "@intentic/ui";
 import Checkbox from "primevue/checkbox";
 import { computed } from "vue";
 import type { BatchAction, BatchVerb } from "./deviceRows";
@@ -22,8 +22,16 @@ const ICON: Record<BatchVerb, IconName> = { start: `play`, stop: `stop`, restart
 // "two of these are running", and "Stop 3" over three would only repeat the number beside the box.
 const partial = (action: BatchAction): boolean => action.groups.length !== selection.chosen.value.length;
 const label = (action: BatchAction): string => (partial(action) ? `${VERB_LABEL[action.verb]} ${action.groups.length}` : VERB_LABEL[action.verb]);
-const hint = (action: BatchAction): string | undefined =>
-    partial(action) ? t(`sandbox.devicePage.batchPartial`, { count: action.groups.length, total: selection.chosen.value.length }) : undefined;
+const hint = (action: BatchAction): Tip | undefined =>
+    partial(action)
+        ? {
+              title: t(`sandbox.devicePage.partialRun`),
+              rows: [
+                  { label: t(`sandbox.devicePage.actsOn`), value: action.groups.length },
+                  { label: t(`sandbox.devicePage.leftAsIs`), value: selection.chosen.value.length - action.groups.length },
+              ],
+          }
+        : undefined;
 
 // Where a run over the list has got: the row it is on, counted from one.
 const WORKING: Record<BatchVerb, (at: number, total: number) => string> = {

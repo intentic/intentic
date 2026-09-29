@@ -106,7 +106,7 @@ const enable = (environment: DeviceRow, mode: "sync" | "mirror"): void => {
                     :label="t(`sandbox.sandboxSyncToggles.syncFilesHere`)"
                     :loading="ops.syncRunning(key, `sync-install`)"
                     :disabled="ops.working.value || folderFor(environment).trim() === ``"
-                    v-tooltip.top="t(`sandbox.sandboxSyncToggles.startMovingSandboxsFiles`)"
+                    v-tooltip.top="{ title: t(`sandbox.sandboxSyncToggles.filesAndPorts`), note: t(`sandbox.sandboxSyncToggles.portsOntoLocalhost`) }"
                     @click="enable(environment, `sync`)"
                 >
                     <template #icon><Icon name="folder" /></template>
@@ -121,7 +121,7 @@ const enable = (environment: DeviceRow, mode: "sync" | "mirror"): void => {
                 :label="t(`sandbox.sandboxSyncToggles.mirrorPortsOnly`)"
                 :loading="ops.syncRunning(key, `sync-install`)"
                 :disabled="ops.working.value"
-                v-tooltip.top="t(`sandbox.sandboxSyncToggles.putSandboxsPortsOn`)"
+                v-tooltip.top="{ title: t(`sandbox.words.ontoLocalhost`), note: t(`sandbox.sandboxSyncToggles.noFilesTouched`) }"
                 @click="enable(choices[0] ?? machine.environments[0]!, `mirror`)"
             >
                 <template #icon><Icon name="ports" /></template>

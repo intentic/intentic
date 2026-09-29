@@ -79,7 +79,7 @@ const stageTooltip = (stage: PipelineStage, index: number): string => {
                                 rel="noopener"
                                 class="min-w-0 flex-1 truncate text-xs hover:underline"
                                 :class="job.status === `failed` ? `font-medium text-danger` : `text-content hover:text-link`"
-                                v-tooltip.top="t(`pipelineGraph.openJobLog`, { name: job.name })"
+                                v-tooltip.top="{ title: t(`tip.openLog`), rows: [{ label: t(`tip.job`), value: job.name }] }"
                             >
                                 {{ job.name }}
                             </a>
@@ -93,7 +93,11 @@ const stageTooltip = (stage: PipelineStage, index: number): string => {
                             <span
                                 v-if="recurring.get(job.name)"
                                 class="shrink-0 rounded bg-danger/10 px-1 text-2xs font-semibold text-danger"
-                                v-tooltip.top="t(`pipelineGraph.failingRunsInRow`, { name: recurring.get(job.name) })"
+                                v-tooltip.top="{
+                                    title: t(`tip.failingStreak`),
+                                    tone: `danger`,
+                                    rows: [{ label: t(`tip.runs`), value: recurring.get(job.name) ?? `` }],
+                                }"
                                 >×{{ recurring.get(job.name) }}</span
                             >
                             <span v-if="formatDuration(job.durationSeconds)" class="shrink-0 text-2xs text-subtle">

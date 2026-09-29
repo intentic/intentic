@@ -77,7 +77,7 @@ const ROW = `mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1`;
                     type="button"
                     class="break-all text-left font-mono text-2xs text-muted underline decoration-dotted underline-offset-2 transition-colors hover:text-content"
                     @click="emit('select', blocker)"
-                    v-tooltip.bottom="t(`agents.agentConflictReport.showFileInReview`)"
+                    v-tooltip.bottom="t(`agents.agentConflictReport.showFile`)"
                 >
                     {{ blockerLabel(blocker) }}
                 </button>
@@ -125,7 +125,7 @@ const ROW = `mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1`;
                     :class="INLINE"
                     :disabled="busy || streaming"
                     @click="emit('resolve')"
-                    v-tooltip.bottom="streaming ? t(`agents.words.waitAgentTurnTo`) : undefined"
+                    v-tooltip.bottom="streaming ? t(`agents.words.turnRunning`) : undefined"
                 >
                     <Icon name="sparkles" />{{ words.resolveConflict }}
                 </Button>
@@ -154,7 +154,7 @@ const ROW = `mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1`;
                     :class="INLINE"
                     :disabled="busy || writing"
                     @click="emit('merge')"
-                    v-tooltip.bottom="writing ? t(`agents.agentConflictReport.waitUntilAgentStops`) : undefined"
+                    v-tooltip.bottom="writing ? t(`agents.agentConflictReport.agentWriting`) : undefined"
                 >
                     <Icon name="check" />{{ t(`agents.agentConflictReport.landConflictMarkers`) }}
                 </Button>

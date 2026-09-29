@@ -184,7 +184,7 @@ const coreChips = corePrimitives.map((p, i) => ({ ...p, x: CORE.x + 70 + i * 90,
                                     {entry.description && <p class="text-sm leading-relaxed text-muted">{entry.description}</p>}
                                     <div class="mt-auto flex flex-wrap items-center gap-x-3 gap-y-1 pt-1 text-2xs">
                                         {loadsOk(entry) && (
-                                            <span class="text-success" title="Re-checked at the pinned commit by the registry's nightly scan">
+                                            <span class="text-success" title="Nightly scan">
                                                 ✓ loads
                                             </span>
                                         )}

@@ -327,7 +327,7 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
                                 type="button"
                                 class="cursor-pointer"
                                 :aria-label="t(`workflowsView.ciWiring`, { name: workflow.name })"
-                                v-tooltip.top="t(`workflowsView.pipelineRunWebhookUrl`)"
+                                v-tooltip.top="{ title: t(`workflowsView.ciWiringTitle`), note: t(`workflowsView.webhookAndStep`) }"
                                 @click="showGate(workflow, $event)"
                             >
                                 <StatusBadge variant="primary" size="xs">
@@ -341,7 +341,7 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
                             <Button
                                 :label="t(`workflowsView.run`)"
                                 size="small"
-                                v-tooltip.top="t(`workflowsView.opensSessionDesignPicked`)"
+                                v-tooltip.top="{ title: t(`workflowsView.opensSession`), note: t(`workflowsView.runsOnceYouSend`) }"
                                 @click="runNow(workflow)"
                             >
                                 <template #icon><Icon name="play" /></template>
@@ -398,7 +398,7 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
                             :label="t(`workflowsView.use`)"
                             size="small"
                             severity="secondary"
-                            v-tooltip.top="t(`workflowsView.opensChatLoopPicked`)"
+                            v-tooltip.top="{ title: t(`workflowsView.opensChat`), note: t(`workflowsView.runsOnceYouSend`) }"
                             @click="loopNow(design)"
                         >
                             <template #icon><Icon name="play" /></template>

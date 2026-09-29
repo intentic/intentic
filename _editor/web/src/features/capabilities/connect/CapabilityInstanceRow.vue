@@ -110,7 +110,7 @@ const items = computed<MenuItem[]>(() => {
             <!-- What tells this connection apart, given its own line and the full width rather than a capped trailing cluster. -->
             <template v-if="facts || needsRebuild" #description>
                 <!-- `block`: an inline span can't ellipsise, so a long value would run under the row's button; the full value is one hover away. -->
-                <span v-if="facts" class="block truncate font-mono" :title="facts">{{ facts }}</span>
+                <span v-if="facts" class="block truncate font-mono" v-tooltip.top.overflow="facts">{{ facts }}</span>
                 <!-- Wraps where the address truncates: the tail is the way out of the state it describes, so it must stay visible. -->
                 <RouterLink v-if="needsRebuild" to="/sandbox/environment" class="block text-warning hover:underline">
                     {{

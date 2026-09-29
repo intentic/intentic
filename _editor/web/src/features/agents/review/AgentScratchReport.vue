@@ -59,7 +59,7 @@ const labelOf = (repo: string, path: string): string => (repo === `root` ? path 
                     class="whitespace-nowrap"
                     :disabled="busy || streaming"
                     @click="emit('include', group.repo, [entry.path])"
-                    v-tooltip.bottom="t(`agents.agentScratchReport.includeHint`)"
+                    v-tooltip.bottom="{ title: t(`agents.agentScratchReport.include`), note: t(`agents.agentScratchReport.ridesNextLand`) }"
                 >
                     {{ t(`agents.agentScratchReport.include`) }}
                 </Button>

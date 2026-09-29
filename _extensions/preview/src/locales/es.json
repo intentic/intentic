@@ -4,13 +4,14 @@
         "public": "Público"
     },
     "portRow": {
-        "boundToLoopbackAlias": "Vinculado a un alias de loopback al que el proxy de vista previa no puede llegar.",
+        "address": "Dirección",
         "forwarded": "reenviado",
+        "loopbackAlias": "Alias de loopback",
         "notForwardable": "no reenviable",
-        "openInNewTab": "Abrir en una pestaña nueva",
         "openPortPreviewIn": "Abrir la vista previa del puerto {port} en una pestaña nueva",
-        "openTerminalRunningIn": "Abrir {session}: el terminal en el que se está ejecutando",
+        "openTerminal": "Abrir terminal",
         "preview": "Vista previa",
+        "proxyCantReach": "El proxy no llega",
         "stop": "Detener"
     },
     "portsView": {
@@ -28,7 +29,6 @@
         "notServed": "No servido: {blocked}",
         "nothingPublished": "No hay nada publicado.",
         "openInNewTab": "Abrir {path} en una pestaña nueva",
-        "openInNewTab2": "Abrir en una pestaña nueva",
         "public2": "{servedCount} públicos",
         "published": "Publicado",
         "readingPublishedFiles": "Leyendo tus archivos publicados…",
@@ -39,7 +39,6 @@
     "sharePreview": {
         "anyoneLinkOpen": "Cualquiera con este enlace puede abrirlo",
         "copyLink": "Copiar el enlace",
-        "openInNewTab": "Abrir en una pestaña nueva",
         "openPreviewInNew": "Abrir la vista previa en una pestaña nueva",
         "shareLivePreview": "Compartir esta vista previa en vivo"
     },
@@ -47,16 +46,19 @@
         "chatsYouvePublished": "Chats que has publicado",
         "copyLink": "Copiar el enlace",
         "eachReadOnlyPage": "Cada uno de estos es una página de solo lectura que puede abrir cualquiera con el enlace: sin iniciar sesión. Muestra la conversación tal y como estaba cuando la compartiste, así que todo lo dicho desde entonces sigue siendo privado hasta que pulses",
+        "linkStaysSame": "Mismo enlace",
         "messagesOnly": "solo mensajes",
         "openInNewTab": "Abrir {title} en una pestaña nueva",
-        "openInNewTab2": "Abrir en una pestaña nueva",
         "public": "{count} públicas",
-        "publishEverythingSaidSince": "Publicar todo lo dicho desde que la compartiste",
+        "publishLatest": "Publicar lo nuevo",
         "sandboxNoPublicAddress": "Este sandbox no tiene dirección pública, así que no se puede llegar a esta página.",
         "sharedConversations": "Conversaciones compartidas",
         "stopSharing": "Dejar de compartir",
         "summary": "compartida {when} · {count} mensaje · {detail} | compartida {when} · {count} mensajes · {detail}",
         "update": "Actualizar",
         "withAgentWork": "con el trabajo del agente"
+    },
+    "common": {
+        "newTab": "Nueva pestaña"
     }
 }

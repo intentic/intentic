@@ -92,7 +92,9 @@ const since = computed(() =>
             <div class="flex min-w-0 flex-auto items-center gap-2">
                 <Icon name="exclamation-circle" class="shrink-0 text-sm text-danger" />
                 <span class="truncate text-sm font-semibold text-content">{{ t(`mainFailure.title`, { branch: failure.branch }) }}</span>
-                <span class="shrink-0 text-2xs text-subtle" :title="formatTimestamp(failure.since)">{{ t(`mainFailure.since`, { when: since }) }}</span>
+                <span class="shrink-0 text-2xs text-subtle" v-tooltip.top="formatTimestamp(failure.since)">{{
+                    t(`mainFailure.since`, { when: since })
+                }}</span>
             </div>
 
             <!-- Who has it, and the one press, where the run rows below keep theirs. -->
@@ -104,7 +106,14 @@ const since = computed(() =>
                     data-fixer
                     class="ui-chip shrink-0 rounded px-2 py-1 text-xs font-medium"
                     :class="look === undefined ? [`text-info`, `border-info/30 hover:bg-info/10`] : [look.ink, look.chip]"
-                    v-tooltip.top="t(`mainFailure.fixAgentHint`, { branch: failure.branch })"
+                    v-tooltip.top="{
+                        title: t(`mainFailure.takesEveryFailure`),
+                        rows: [
+                            { label: t(`tip.branch`), value: failure.branch },
+                            { label: t(`tip.model`), value: view.fixer?.model ?? `` },
+                        ],
+                        note: t(`mainFailure.untilARunPasses`),
+                    }"
                 >
                     <Icon :name="look?.icon ?? `robot`" :spin="look?.spin ?? false" class="text-2xs" />
                     {{ view.stance?.label ?? t(`mainFailure.fixAgent`) }}
@@ -113,7 +122,11 @@ const since = computed(() =>
 
                 <!-- Handed back: two words on why, the way into what it tried, and the press that gives it its turns back. -->
                 <template v-else-if="view.state === `waits`">
-                    <span data-waits class="inline-flex items-center gap-1.5 text-xs" v-tooltip.top="t(`mainFailure.handedBackHint`)">
+                    <span
+                        data-waits
+                        class="inline-flex items-center gap-1.5 text-xs"
+                        v-tooltip.top="{ title: t(`mainFailure.handedBack`), tone: `warn`, note: t(`mainFailure.continueGivesTurns`) }"
+                    >
                         <Icon name="exclamation-triangle" class="text-2xs text-warning" />
                         <span class="font-medium text-warning">{{ t(`mainFailure.needsYou`) }}</span>
                         <span class="text-muted">· {{ handBack }}</span>
@@ -123,7 +136,12 @@ const since = computed(() =>
                     }}</a>
                 </template>
 
-                <span v-else-if="view.state === `reported`" data-waits class="inline-flex items-center gap-1.5 text-xs" v-tooltip.top="t(`mainFailure.repairsOffHint`)">
+                <span
+                    v-else-if="view.state === `reported`"
+                    data-waits
+                    class="inline-flex items-center gap-1.5 text-xs"
+                    v-tooltip.top="{ title: t(`mainFailure.noAgentSent`), tone: `warn` }"
+                >
                     <Icon name="exclamation-triangle" class="text-2xs text-warning" />
                     <span class="font-medium text-warning">{{ t(`mainFailure.needsYou`) }}</span>
                     <span class="text-muted">· {{ t(`mainFailure.repairsOff`) }}</span>
@@ -151,7 +169,7 @@ const since = computed(() =>
                 :key="job"
                 class="inline-flex max-w-64 items-center rounded border border-line bg-canvas px-1.5 py-px font-mono text-2xs text-muted"
             >
-                <span class="truncate" :title="job">{{ job }}</span>
+                <span class="truncate" v-tooltip.top.overflow="job">{{ job }}</span>
             </li>
             <li v-if="jobs.folded.length > 0" class="px-1 text-2xs text-subtle" v-tooltip.top="jobs.folded.join(`, `)">
                 {{ t(`mainFailure.moreJobs`, { count: jobs.folded.length }) }}

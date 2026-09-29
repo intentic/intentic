@@ -1,12 +1,15 @@
 {
     "extension": {
-        "pipelines": "Pipelines"
+        "branchesFailing": "{count} branches failing",
+        "pipelines": "Pipelines",
+        "streakOnCommit": "{repo} {branch} · {runs} failed · {sha}",
+        "streakOverCommits": "{repo} {branch} · {commits} commits · {runs} failed"
     },
     "mainFailure": {
         "continueFix": "Continue fix",
+        "continueGivesTurns": "Continue gives turns back",
         "failingJobs": "Failing jobs",
         "fixAgent": "Fix agent on it",
-        "fixAgentHint": "Every failure on {branch} goes to this one agent until a run passes.",
         "fixWithAgent": "Fix with agent",
         "handBackGone": "Agent gone",
         "handBackInterrupted": "Turn cut off",
@@ -16,44 +19,56 @@
         "handBackTurnFailed": "Turn failed",
         "handBackTurns": "Out of turns",
         "handedBack": "Handed back",
-        "handedBackHint": "The fix agent handed this back. Continue to give it its turns back, or open it to see what it tried.",
         "moreJobs": "+{count} more",
         "needsYou": "Needs you",
+        "noAgentSent": "No agent sent",
         "openFixer": "Open agent",
         "repairsOff": "Auto-fix off",
-        "repairsOffHint": "Repairs are switched off, so no agent was sent.",
         "since": "since {when}",
+        "takesEveryFailure": "Takes every failure",
         "title": "{branch} is failing",
-        "unassigned": "No fix agent yet"
+        "unassigned": "No fix agent yet",
+        "untilARunPasses": "Until a run passes"
     },
     "pipelineDagGraph": {
         "expand": "Expand",
-        "failingRunsInRow": "Failing for {name} runs in a row",
         "fit": "Fit",
-        "openJobGraphFull": "Open the job graph full screen",
-        "openJobLog": "Open {name} on the forge",
-        "zoomOutUntilWhole": "Zoom out until the whole run is in frame"
-    },
-    "pipelineGraph": {
-        "failingRunsInRow": "Failing for {name} runs in a row",
-        "openJobLog": "Open {name} on the forge"
+        "fitAll": "Fit all",
+        "fullScreen": "Full screen"
     },
     "pipelineRunRow": {
         "agentAlreadyWorkingOn": "An agent is already working on {branch}, started from run #{runId} — open it",
         "agentOnBranch": "Agent on branch",
         "cancel": "Cancel",
+        "checkJobRan": "Check the job ran",
         "continue": "Continue",
         "failedJobs": "Failed jobs",
+        "failureIsHistory": "Failure is history",
         "fixAgent": "Fix with agent",
-        "fixInWorkspaceRun": "The fix is in your workspace: run the pipeline again to prove it",
+        "fixInWorkspace": "Fix is in workspace",
+        "fixThatRun": "Fix that run instead",
+        "fixUnderway": "Fix underway",
+        "freshAttempt": "Fresh attempt",
         "jobGraph": "{headline}: job graph",
         "loadingJobs": "Loading jobs",
+        "newerFailure": "Newer failure",
         "noJobDetailsAvailable": "No job details available for this run.",
-        "passedAgainIn": "{branch} passed again in this run: open it to check the job that failed here even ran",
+        "opensPickerFirst": "Opens the picker first",
+        "openThatOneFirst": "Open that one first",
+        "passedAgain": "Passed again",
+        "passedSince": "Passed since",
+        "proveTheFix": "Prove the fix",
         "reRun": "Re-run",
-        "setAttemptAsideStart": "Set this attempt aside and start a fresh one — opens the picker first",
         "startOver": "Start over",
-        "supersededBy": "superseded by"
+        "supersededBy": "superseded by",
+        "stanceNote": {
+            "ended": "Continue or start over",
+            "landed": "Re-run to prove it",
+            "needs-you": "Open to answer",
+            "ready": "Review, then land",
+            "waiting": "Allowance spent",
+            "working": "Open to watch"
+        }
     },
     "pipelinesSkeleton": {
         "loadingPipelines": "Loading pipelines"
@@ -64,17 +79,35 @@
     "pipelinesView": {
         "allRepositories": "All repositories",
         "connectedRepos": "any of the {count} connected repos",
-        "failedLastRunsOn": "{job} has failed the last {runs} runs on {repo} {branch}",
         "failingRepeatedly": "Failing repeatedly",
+        "keepsFailing": "Keeps failing",
         "noRunsYet": "No pipeline has run yet on {where}. Runs land here as soon as one does.",
         "noRunsYet2": "No runs yet",
         "noRunsYetRepo": "No runs yet for this repo.",
         "noWorkspaceRepoMaps": "No workspace repo maps to a connected GitHub/GitLab account: clone a repo from your connected host, or connect the matching capability on the + page.",
         "openPipelines": "Open {project} pipelines",
-        "openProjectOn": "Open {project} on {host}",
+        "openRepo": "Open repo",
         "pipelines": "Pipelines",
         "repository": "Repository",
         "runs": "{runs} runs",
         "thisRepo": "this repo"
+    },
+    "tip": {
+        "attempt": "Attempt",
+        "branch": "Branch",
+        "cost": "Cost",
+        "error": "Error",
+        "failedRuns": "Failed runs",
+        "failingStreak": "Failing streak",
+        "files": "Files",
+        "fromRun": "From run",
+        "job": "Job",
+        "model": "Model",
+        "openLog": "Open log",
+        "repo": "Repo",
+        "run": "Run",
+        "runs": "Runs",
+        "started": "Started",
+        "updated": "Updated"
     }
 }

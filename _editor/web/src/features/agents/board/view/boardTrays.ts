@@ -1,7 +1,7 @@
 import type { SubagentSession } from "@intentic/sandbox-contract";
 import { computed, type Ref, shallowRef } from "vue";
 import type { SubagentRoster } from "../../fleet/subagentRoster";
-import { familyChip, type StandingChip } from "../../fleet/agentStatus";
+import { type FamilyChip, familyChip } from "../../fleet/agentStatus";
 import { canArchive, type FleetAgent, withKeptWords } from "../../fleet/useAgents-fleet";
 import { insideRun } from "../../fleet/useWorkflowRuns";
 import {
@@ -67,7 +67,7 @@ export const useBoardTrays = (host: TraysHost) => {
     // What a card says for the children calling the reader through it, one chip per calling list: the fold keeps a list
     // while its members stand still (steadyFold), so the chip, and the card memoised on it, stay put with it.
     const callChips = computed(() => {
-        const chips = new Map<string, StandingChip & { readonly hint: string }>();
+        const chips = new Map<string, FamilyChip>();
         for (const [key, calls] of scope.boardCalls.value) {
             const chip = familyChip(calls);
             if (chip !== undefined) {
@@ -76,8 +76,7 @@ export const useBoardTrays = (host: TraysHost) => {
         }
         return chips;
     });
-    const callOf = (card: FleetAgent): (StandingChip & { readonly hint: string }) | undefined =>
-        card.archivedAt === undefined ? callChips.value.get(cardKey(card)) : undefined;
+    const callOf = (card: FleetAgent): FamilyChip | undefined => (card.archivedAt === undefined ? callChips.value.get(cardKey(card)) : undefined);
     // What a card's runtime ran in-process, which the roster holds for this sandbox's cards alone: another box's card has
     // its own daemon's roster, which this board does not read.
     const subagentsOf = (card: FleetAgent): readonly SubagentSession[] =>

@@ -71,7 +71,7 @@ const toggleThinking = (index: number): void => {
             <header class="flex flex-col gap-1 border-b border-line pb-4">
                 <h1 class="text-lg font-semibold text-content">{{ payload.title }}</h1>
                 <p class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-2xs text-subtle">
-                    <span :title="formatDateTime(payload.sharedAt)">{{ subtitle }}</span>
+                    <span v-tooltip.bottom="formatDateTime(payload.sharedAt)">{{ subtitle }}</span>
                     <!-- Says plainly when work is left out, or a messages-only share reads as an agent that did nothing. -->
                     <span aria-hidden="true">·</span>
                     <span>{{ payload.detail === "messages" ? t(`share.shareApp.messagesOnly`) : t(`share.shareApp.agentsWork`) }}</span>

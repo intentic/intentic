@@ -118,7 +118,7 @@ const clear = (): void => {
                 v-if="clearable && query !== ``"
                 type="button"
                 class="touch-target flex items-center rounded text-2xs text-subtle transition-colors hover:text-content"
-                v-tooltip.bottom="t(`ui.searchBar.clearEsc`)"
+                v-tooltip.bottom="{ title: t(`ui.action.clear`), keys: t(`ui.keys.esc`) }"
                 :aria-label="t(`ui.action.clearFilter`)"
                 @click="clear"
             >

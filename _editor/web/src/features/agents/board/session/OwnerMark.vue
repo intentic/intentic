@@ -20,7 +20,13 @@ const TOKEN = `inline-flex min-w-0 shrink items-center gap-1`;
         v-if="mark.kind === `person`"
         :class="TOKEN"
         :aria-label="t(`agents.ownerMark.ownedBy`, { name: mark.look.name })"
-        v-tooltip.top="t(`agents.ownerMark.ownedBy`, { name: mark.look.name })"
+        v-tooltip.top="{
+            title: t(`agents.ownerMark.owner`),
+            rows: [
+                { label: t(`shared.name`), value: mark.look.name },
+                { label: t(`agents.words.email`), value: mark.look.email === mark.look.name ? `` : mark.look.email },
+            ],
+        }"
     >
         <span class="truncate">{{ mark.look.short }}</span>
     </span>
@@ -28,7 +34,7 @@ const TOKEN = `inline-flex min-w-0 shrink items-center gap-1`;
         v-else
         :class="TOKEN"
         :aria-label="t(`agents.ownerMark.startedByControlToken`, { tokenLabel: mark.label })"
-        v-tooltip.top="t(`agents.ownerMark.startedByProgramHolding`, { tokenLabel: mark.label })"
+        v-tooltip.top="{ title: t(`agents.ownerMark.unclaimed`), rows: [{ label: t(`agents.ownerMark.controlToken`), value: mark.label }] }"
     >
         <Icon name="key" class="shrink-0 text-2xs" />
         <span class="truncate">{{ mark.label }}</span>

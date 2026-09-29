@@ -94,7 +94,7 @@ const save = async (message: QueuedMessage): Promise<void> => {
                 v-if="message.voice === `person` && rewording?.id !== message.id"
                 type="button"
                 class="composer-ghost h-5 w-5 shrink-0"
-                v-tooltip.top="t(`chat.chatQueue.rewordHint`)"
+                v-tooltip.top="t(`chat.chatQueue.reword`)"
                 :aria-label="t(`chat.chatQueue.rewordLabel`)"
                 @click="rewording = { id: message.id, text: message.text }"
             >
@@ -103,7 +103,7 @@ const save = async (message: QueuedMessage): Promise<void> => {
             <button
                 type="button"
                 class="composer-ghost h-5 w-5 shrink-0"
-                v-tooltip.top="t(`chat.chatQueue.removeHint`)"
+                v-tooltip.top="t(`chat.chatQueue.takeBack`)"
                 :aria-label="t(`chat.chatQueue.removeLabel`)"
                 @click="unqueue(message)"
             >

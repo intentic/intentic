@@ -7,6 +7,7 @@ import type { IconName } from "../../icons/iconSets.js";
 import type { StatusVariant } from "../feedback/statusBadge.js";
 import type { NoticeTone } from "../feedback/notice.js";
 import { t } from "../../i18n/index.js";
+import type { Tip, TooltipValue } from "../../lib/tooltip.js";
 
 // The agent, in the three states a reader can act on. `stalled` is decided by the caller (see
 // `agentStalled` in the sandbox contract), so browser and terminal can't disagree about one machine.
@@ -24,7 +25,7 @@ export interface DeviceAgentState {
 export interface AgentAction<Op extends string = string> {
     readonly op: Op;
     readonly label: string;
-    readonly hint: string;
+    readonly hint: TooltipValue;
 }
 
 export interface AgentNote {
@@ -33,8 +34,8 @@ export interface AgentNote {
     readonly tone?: NoticeTone;
     /** The glyph for an untoned remark; a toned one wears its notice's own. */
     readonly icon?: IconName;
-    /** The sentence the line was cut down from, on hover: detail nobody has to read to act. */
-    readonly hint?: string;
+    /** What the line leaves out, on hover: a word or two, or a tip card of figures. Absent when the line says it all. */
+    readonly hint?: TooltipValue;
 }
 
 // What this one process carries, as the row's description: three glyphs, not a sentence about them.
@@ -44,8 +45,11 @@ export const agentDuties = (): readonly { readonly icon: IconName; readonly labe
     { icon: `terminal`, label: t(`ui.deviceAgent.commands`) },
 ];
 
-/** The sentence the duty strip replaced, kept on hover where a reader can still reach for it. */
-export const agentCarries = (machine: string): string => `Everything this sandbox does on ${machine} goes through this one process.`;
+/** What the duty strip adds up to, on hover: all three go through the one process on that machine. */
+export const agentCarries = (machine: string): Tip => ({
+    title: t(`ui.deviceAgent.oneProcess`),
+    rows: [{ label: t(`ui.deviceAgent.device`), value: machine }],
+});
 
 export interface AgentPanel<Op extends string = string> {
     /** The build the process serves, or the best-known version; absent when no door has named one. */
@@ -70,7 +74,7 @@ export const agentLines = (panel: AgentPanel): readonly AgentNote[] => [...panel
 export const restartAgent = (): AgentAction<`restart`> => ({
     op: `restart`,
     label: t(`ui.deviceAgent.restartAgent`),
-    hint: t(`ui.deviceAgent.stopsStartsDevicesAgent`),
+    hint: { title: t(`ui.deviceAgent.installedBuild`), note: t(`ui.deviceAgent.nothingDownloaded`) },
 });
 
 /** The badge's word for an agent that has reported; a caller states a device it hasn't heard from itself. */
@@ -93,7 +97,7 @@ export const agentStateNote = (agent: DeviceAgentState | undefined): AgentNote |
         ? {
               text: `Agent stalled — what is below may be out of date.`,
               tone: `warning`,
-              hint: t(`ui.deviceAgent.agentAliveStoppedMaking`),
+              hint: t(`ui.deviceAgent.roundsStopped`),
           }
         : undefined;
 };
@@ -109,5 +113,4 @@ export const agentSkewNote = (skew: DeviceAgentState[`staleBuild`]): AgentNote |
                       ? `Serving a build older than the ${skew.installed} installed — a restart picks it up.`
                       : `Serving ${skew.running}, ${skew.installed} installed — a restart picks it up.`,
               tone: `warning`,
-              hint: t(`ui.deviceAgent.processKeepsBuildStarted`),
           };

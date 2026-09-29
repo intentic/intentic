@@ -166,7 +166,6 @@ const cleanedNotice = computed<NoticeModel | undefined>(() => {
                         type="button"
                         class="flex min-w-0 cursor-pointer items-center gap-1.5 text-left"
                         :aria-expanded="open.has(row.category.id)"
-                        v-tooltip.top="row.text.reason"
                         @click="toggle(row.category.id)"
                     >
                         <Icon :name="open.has(row.category.id) ? `chevron-down` : `chevron-right`" class="shrink-0 text-2xs text-subtle" />
@@ -186,7 +185,7 @@ const cleanedNotice = computed<NoticeModel | undefined>(() => {
                         >
                             <template #icon><Icon name="eraser" /></template>
                         </Button>
-                        <span v-else-if="row.offer.kind === `waiting`" class="text-2xs text-subtle" v-tooltip.top="t(`sandbox.sandboxStorageCard.waitingHint`)">
+                        <span v-else-if="row.offer.kind === `waiting`" class="text-2xs text-subtle" v-tooltip.top="{ title: t(`sandbox.sandboxStorageCard.tooRecent`), note: t(`sandbox.sandboxStorageCard.changedTodayOrInUse`) }">
                             {{ t(`sandbox.sandboxStorageCard.waiting`) }}
                         </span>
                     </div>
@@ -195,7 +194,7 @@ const cleanedNotice = computed<NoticeModel | undefined>(() => {
                         <p class="text-2xs leading-relaxed text-muted">{{ row.text.reason }}</p>
                         <ul v-if="row.category.items.length > 0" class="flex flex-col gap-0.5">
                             <li v-for="item in row.category.items" :key="item.path" class="flex min-w-0 items-center gap-3 text-2xs">
-                                <span class="min-w-0 flex-1 truncate font-mono text-muted" :title="item.path">{{ item.path }}</span>
+                                <span class="min-w-0 flex-1 truncate font-mono text-muted" v-tooltip.top.overflow="item.path">{{ item.path }}</span>
                                 <span class="shrink-0 tabular-nums text-subtle">{{ formatBytes(item.bytes) }}</span>
                             </li>
                         </ul>
@@ -220,7 +219,7 @@ const cleanedNotice = computed<NoticeModel | undefined>(() => {
                 <li
                     v-if="uncounted"
                     class="col-span-4 grid min-h-9 grid-cols-subgrid items-center border-t border-line-subtle py-1 text-2xs text-subtle"
-                    v-tooltip.top="t(`sandbox.sandboxStorageCard.uncountedHint`)"
+                    v-tooltip.top="{ title: t(`sandbox.sandboxStorageCard.otherUsage`), note: t(`sandbox.sandboxStorageCard.systemProgramsFilesystem`) }"
                 >
                     <span class="col-span-2 truncate pl-4">{{ t(`sandbox.sandboxStorageCard.uncounted`) }}</span>
                     <span class="text-right tabular-nums">{{ formatBytes(uncounted) }}</span>

@@ -29,10 +29,10 @@
         "keepOpen": "Offen halten",
         "leave": "Verlassen",
         "moreActions": "Weitere Aktionen",
+        "newTab": "Neuer Tab",
         "next": "Weiter",
         "no": "Nein",
         "open": "Öffnen",
-        "openInNewTab": "In neuem Tab öffnen",
         "paste": "Einfügen",
         "publish": "Veröffentlichen",
         "reconnect": "Neu verbinden",
@@ -62,7 +62,15 @@
         "viewLogs": "Protokolle ansehen"
     },
     "agentRunButton": {
-        "configureStartRun": "Diesen Lauf einrichten und starten — {spend}"
+        "clickToChange": "Klicken zum Ändern",
+        "clickToConfigure": "Klicken zum Einrichten",
+        "configureStartRun": "Diesen Lauf einrichten und starten — {spend}",
+        "effort": "Aufwand",
+        "fast": "Schnell",
+        "model": "Modell",
+        "sandboxDefault": "Sandbox-Standard",
+        "speed": "Tempo",
+        "thisRunOnly": "Nur dieser Lauf"
     },
     "code": {
         "showAll": "Alle anzeigen"
@@ -85,50 +93,60 @@
     "confirmDialog": {
         "more": "…und {count} weitere"
     },
-    "dagEditor": {
-        "fitWholeGraph": "Den ganzen Graphen einpassen"
-    },
     "deviceAgent": {
-        "agentAliveStoppedMaking": "Sein Agent lebt, dreht aber keine Runden mehr — das Bild, das diese Sandbox von seinen Ordnern und Ports hat, ist so alt wie die letzte Runde.",
         "commands": "Befehle",
+        "device": "Gerät",
         "folders": "Ordner",
-        "processKeepsBuildStarted": "Eine Schleife behält den Build, mit dem sie gestartet ist, bis sie neu startet — die Datei auf der Platte zu ersetzen ändert für sich genommen nichts.",
+        "installedBuild": "Installierter Build",
+        "nothingDownloaded": "Kein Download",
+        "oneProcess": "Ein Prozess",
         "restartAgent": "Agent neu starten",
-        "stopsStartsDevicesAgent": "Stoppt und startet die Agent-Schleife dieses Geräts. Es wird nichts heruntergeladen — es kommt der Build hoch, der dort schon installiert ist."
+        "roundsStopped": "Runden gestoppt"
     },
     "deviceAgentGroup": {
         "agentOnThisDevice": "Agent auf diesem Gerät"
     },
     "deviceDetail": {
         "backup": "Sicherung: {folder}",
+        "busyHere": "Hier belegt",
         "conflicts": "{count} Konflikt | {count} Konflikte",
         "container": "Container",
         "copyPath": "Pfad kopieren",
         "deviceIsntSyncingFolder": "Dieses Gerät synchronisiert keinen Ordner und hält keine Ports für diese Sandbox.",
+        "filesOrPortsOnly": "Nur Dateien oder Ports",
+        "filesSync": "Dateien synchron",
         "folder": "Ordner",
-        "imageOf": "Image: {image}",
+        "image": "Image",
+        "interruptedTitle": "Update unterbrochen",
+        "leftAlone": "Nicht angetastet",
         "more": "… und {more} weitere",
         "noFolderDeviceOnly": "kein Ordner: dieses Gerät spiegelt nur Ports",
         "noFolderSynced": "kein Ordner synchronisiert",
         "notRunningHere": "läuft hier nicht",
+        "notRunningHereTitle": "Läuft nicht hier",
         "offDeviceIsntPutting": "Aus: Dieses Gerät legt die Ports dieser Sandbox nicht auf seinem eigenen localhost ab. Die Dateisynchronisierung bleibt davon unberührt.",
+        "onLocalhost": "Auf localhost",
         "show": "anzeigen",
-        "stopped": "gestoppt"
+        "startPutsItBack": "Start stellt es wieder her",
+        "stopped": "gestoppt",
+        "syncPaused": "Sync pausiert"
     },
     "imageView": {
-        "actualSize1": "Originalgröße (1)",
-        "ctrlScrollToZoom": "Strg + Scrollen zum Zoomen · Ziehen zum Verschieben · Doppelklick zum Einpassen",
+        "actualSize": "Originalgröße",
+        "ctrlScroll": "Strg+Scrollen",
+        "doubleClick": "Doppelklick",
+        "drag": "Ziehen",
         "fit": "Einpassen",
-        "fitToPane0": "In den Bereich einpassen (0)",
+        "fitToPane": "In Bereich einpassen",
+        "gestures": "Gesten",
         "imagePreviewCtrlScroll": "Bildvorschau: Strg und Scrollen zum Zoomen, Ziehen zum Verschieben",
-        "zoomIn": "Vergrößern (+)",
+        "pan": "Verschieben",
+        "zoom": "Zoomen",
         "zoomIn2": "Vergrößern",
-        "zoomOut": "Verkleinern (−)",
         "zoomOut2": "Verkleinern"
     },
     "inlineRename": {
         "couldntSaveName": "Dieser Name ließ sich nicht speichern.",
-        "saveEnter": "Speichern · Enter",
         "unnamed": "Ohne Namen"
     },
     "layoutRepoRail": {
@@ -141,7 +159,7 @@
         "document": "Dokument"
     },
     "noteEditor": {
-        "copyRawNote": "Rohtext der Notiz kopieren",
+        "copyMarkdown": "Markdown kopieren",
         "editNote": "Diese Notiz bearbeiten",
         "it": "{verb}",
         "keep": "Behalten",
@@ -158,7 +176,11 @@
         "options": "{count} Optionen"
     },
     "projectChip": {
-        "hidden": "· {hidden} ausgeblendet"
+        "clickShowsAll": "Klicken zeigt alle",
+        "hidden": "· {hidden} ausgeblendet",
+        "hiddenLabel": "Ausgeblendet",
+        "project": "Projekt",
+        "projectFilter": "Projektfilter"
     },
     "repoRail": {
         "allRepositories": "Alle Repositorys"
@@ -199,7 +221,6 @@
         "sandboxRestartsOntoNewest": "Die Sandbox startet auf dem neuesten Image neu und ist währenddessen nicht verfügbar — Sekunden, wenn das Update schon heruntergeladen ist, sonst ein paar Minuten. Ihre Dateien bleiben erhalten."
     },
     "searchBar": {
-        "clearEsc": "Leeren (Esc)",
         "matchCase": "Groß-/Kleinschreibung beachten"
     },
     "stepSection": {
@@ -209,7 +230,7 @@
         "all": "Alle"
     },
     "resizeSeam": {
-        "dragToResize": "Ziehen zum Ändern der Größe · Doppelklick zum Zurücksetzen"
+        "doubleClickResets": "Doppelklick setzt zurück"
     },
     "status": {
         "starting": "Startet…",
@@ -217,5 +238,12 @@
         "working": "Arbeitet…",
         "reading": "Wird gelesen…",
         "sending": "Wird gesendet…"
+    },
+    "keys": {
+        "enter": "Eingabe",
+        "esc": "Esc"
+    },
+    "dagEditor": {
+        "fitGraph": "Graph einpassen"
     }
 }

@@ -134,7 +134,7 @@ const quick = computed(() => QUICK_EMOJI.filter((emoji) => !chips.value.some((ch
                 type="button"
                 class="ui-chip px-2 opacity-70 hover:opacity-100"
                 :aria-label="t(`agents.agentReactions.markWith`, { emoji })"
-                v-tooltip.top="t(`agents.agentReactions.markWith`, { emoji })"
+                v-tooltip.top="t(`agents.agentReactions.react`)"
                 :disabled="pending !== undefined"
                 @click.stop="press(emoji, true)"
             >

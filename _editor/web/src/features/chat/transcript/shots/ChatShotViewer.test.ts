@@ -1,5 +1,5 @@
 // The conversation's one viewer: where it opens, how the keys and the filmstrip move it, what its caption says, and
-// that Open in workspace hands the file to the surface. The kit's box is stood in by one that draws its slot while open.
+// that Open file hands the file to the surface. The kit's box is stood in by one that draws its slot while open.
 import "@intentic/testing/dom";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { STATE_DIR } from "@intentic/constants";
@@ -149,9 +149,9 @@ describe(`ChatShotViewer`, () => {
         expect([...strip.querySelectorAll(`button`)].map((thumb) => thumb.getAttribute(`aria-current`))).toEqual([`false`, `false`, `true`]);
     });
 
-    it(`hands Open in workspace to the surface and closes`, async () => {
+    it(`hands Open file to the surface and closes`, async () => {
         const element = mount(SHOTS_OF_CHAT[2]!.key);
-        element.querySelector<HTMLButtonElement>(`button[aria-label="Open in workspace"]`)?.click();
+        element.querySelector<HTMLButtonElement>(`button[aria-label="Open file"]`)?.click();
         await nextTick();
         expect(openFile.mock.calls).toEqual([[`${SHOTS}/dark.png`]]);
         expect(open.value).toBe(false);
@@ -178,7 +178,7 @@ describe(`ChatShotViewer`, () => {
 
         originals.set(SHOTS_OF_CHAT[0]!.path, `blob:original`);
         // The stand-in cache is not reactive, so leaving actual size and coming back is what reads it again.
-        element.querySelector<HTMLButtonElement>(`button[aria-label="Fit to window"]`)?.click();
+        element.querySelector<HTMLButtonElement>(`button[aria-label="Fit"]`)?.click();
         await nextTick();
         element.querySelector<HTMLButtonElement>(`button[aria-label="Actual size"]`)?.click();
         await nextTick();

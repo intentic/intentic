@@ -1,4 +1,4 @@
-import type { IconName } from "@intentic/ui";
+import type { IconName, Tip } from "@intentic/ui";
 import type { SandboxSummary } from "@intentic/api-contract";
 import { t } from "@intentic/ui/i18n";
 
@@ -30,8 +30,11 @@ export interface SandboxPlacement {
     readonly icon: IconName;
     // Two or three words, for a chip beside a name.
     readonly label: string;
-    // The whole sentence, for a tooltip or a hub row. No trailing period: it joins other clauses.
+    // The whole sentence, for an accessible name. No trailing period: it joins other clauses.
     readonly detail: string;
+    // The same answer as a hover card: the kind as its headline, and the one name that refines it (a region, a
+    // device, a host) as a figure. A kind with nothing to add is a headline alone.
+    readonly tip: Tip;
 }
 
 // The hosted record if one arrived, folding null and absent together: both mean "nothing says Intentic runs this".
@@ -70,32 +73,48 @@ const hostOf = (daemonUrl: string | null | undefined): string | undefined => {
     }
 };
 
-const worded = (evidence: PlacementEvidence, kind: SandboxPlacementKind): { label: string; detail: string } => {
+const worded = (evidence: PlacementEvidence, kind: SandboxPlacementKind): { label: string; detail: string; tip: Tip } => {
     switch (kind) {
         case `cloud`: {
             // The region is a datacentre code (`arn`, `fra`); worth naming, and worth leaving out when it is empty
             // rather than printing a sentence that trails off into nothing.
             const region = hostedOf(evidence)?.region ?? ``;
+            const title = t(`sandbox.placement.cloudLabel`);
             return {
-                label: t(`sandbox.placement.cloudLabel`),
+                label: title,
                 detail: region === `` ? t(`sandbox.placement.cloudDetail`) : t(`sandbox.placement.cloudDetailRegion`, { region }),
+                tip: region === `` ? { title } : { title, rows: [{ label: t(`sandbox.placement.region`), value: region }] },
             };
         }
         case `device`:
             // The device's own name when the fleet reports one; otherwise loopback answered, and "this computer" is
             // the stronger sentence anyway — it is the machine the reader is sitting at.
             return evidence.device === undefined
-                ? { label: t(`sandbox.placement.thisComputerLabel`), detail: t(`sandbox.placement.thisComputerDetail`) }
-                : { label: evidence.device, detail: t(`sandbox.placement.deviceDetail`, { device: evidence.device }) };
+                ? {
+                      label: t(`sandbox.placement.thisComputerLabel`),
+                      detail: t(`sandbox.placement.thisComputerDetail`),
+                      tip: { title: t(`sandbox.placement.thisComputerLabel`) },
+                  }
+                : {
+                      label: evidence.device,
+                      detail: t(`sandbox.placement.deviceDetail`, { device: evidence.device }),
+                      tip: { title: t(`sandbox.placement.ownLabel`), rows: [{ label: t(`sandbox.placement.device`), value: evidence.device }] },
+                  };
         case `own`: {
             const host = hostOf(evidence.daemonUrl);
+            const title = t(`sandbox.placement.ownLabel`);
             return {
-                label: t(`sandbox.placement.ownLabel`),
+                label: title,
                 detail: host === undefined ? t(`sandbox.placement.ownDetail`) : t(`sandbox.placement.ownDetailHost`, { host }),
+                tip: host === undefined ? { title } : { title, rows: [{ label: t(`sandbox.placement.host`), value: host }] },
             };
         }
         case `shared`:
-            return { label: t(`sandbox.placement.sharedLabel`), detail: t(`sandbox.placement.sharedDetail`) };
+            return {
+                label: t(`sandbox.placement.sharedLabel`),
+                detail: t(`sandbox.placement.sharedDetail`),
+                tip: { title: t(`sandbox.placement.sharedLabel`) },
+            };
     }
 };
 

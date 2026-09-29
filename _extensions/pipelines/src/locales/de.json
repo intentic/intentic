@@ -1,9 +1,9 @@
 {
     "mainFailure": {
         "continueFix": "Reparatur fortsetzen",
+        "continueGivesTurns": "Fortsetzen gibt Züge zurück",
         "failingJobs": "Fehlschlagende Jobs",
         "fixAgent": "Reparatur-Agent dran",
-        "fixAgentHint": "Jeder Fehlschlag auf {branch} geht an diesen einen Agenten, bis ein Lauf besteht.",
         "fixWithAgent": "Mit Agent reparieren",
         "handBackGone": "Agent weg",
         "handBackInterrupted": "Runde abgebrochen",
@@ -13,44 +13,56 @@
         "handBackTurnFailed": "Runde fehlgeschlagen",
         "handBackTurns": "Keine Runden mehr",
         "handedBack": "Zurückgegeben",
-        "handedBackHint": "Der Reparatur-Agent hat das zurückgegeben. Fahren Sie fort, um ihm seine Runden zurückzugeben, oder öffnen Sie ihn, um zu sehen, was er versucht hat.",
         "moreJobs": "+{count} weitere",
         "needsYou": "Braucht Sie",
+        "noAgentSent": "Kein Agent geschickt",
         "openFixer": "Agent öffnen",
         "repairsOff": "Auto-Reparatur aus",
-        "repairsOffHint": "Reparaturen sind ausgeschaltet, also wurde kein Agent geschickt.",
         "since": "seit {when}",
+        "takesEveryFailure": "Übernimmt jeden Fehler",
         "title": "{branch} schlägt fehl",
-        "unassigned": "Noch kein Reparatur-Agent"
+        "unassigned": "Noch kein Reparatur-Agent",
+        "untilARunPasses": "Bis ein Lauf grün ist"
     },
     "pipelineDagGraph": {
         "expand": "Aufklappen",
-        "failingRunsInRow": "Fällt bei {name} seit mehreren Läufen in Folge durch",
         "fit": "Einpassen",
-        "openJobGraphFull": "Den Job-Graphen im Vollbild öffnen",
-        "openJobLog": "{name} auf der Forge öffnen",
-        "zoomOutUntilWhole": "Herauszoomen, bis der ganze Lauf im Bild ist"
-    },
-    "pipelineGraph": {
-        "failingRunsInRow": "Fällt bei {name} seit mehreren Läufen in Folge durch",
-        "openJobLog": "{name} auf der Forge öffnen"
+        "fitAll": "Alles einpassen",
+        "fullScreen": "Vollbild"
     },
     "pipelineRunRow": {
         "agentAlreadyWorkingOn": "Ein Agent arbeitet bereits an {branch}, gestartet aus Lauf #{runId} — öffnen",
         "agentOnBranch": "Agent auf Branch",
         "cancel": "Abbrechen",
+        "checkJobRan": "Prüfen, ob der Job lief",
         "continue": "Fortfahren",
         "failedJobs": "Fehlgeschlagene Jobs",
+        "failureIsHistory": "Fehler ist erledigt",
         "fixAgent": "Mit Agent reparieren",
-        "fixInWorkspaceRun": "Die Reparatur liegt in Ihrem Workspace: lassen Sie die Pipeline erneut laufen, um es zu beweisen",
+        "fixInWorkspace": "Fix ist im Workspace",
+        "fixThatRun": "Stattdessen den beheben",
+        "fixUnderway": "Fix läuft",
+        "freshAttempt": "Neuer Versuch",
         "jobGraph": "{headline}: Job-Graph",
         "loadingJobs": "Jobs werden geladen",
+        "newerFailure": "Neuerer Fehler",
         "noJobDetailsAvailable": "Für diesen Lauf sind keine Job-Details verfügbar.",
-        "passedAgainIn": "{branch} hat in diesem Lauf wieder bestanden: öffnen Sie ihn, um zu prüfen, ob der hier fehlgeschlagene Job überhaupt gelaufen ist",
+        "opensPickerFirst": "Öffnet erst die Auswahl",
+        "openThatOneFirst": "Erst diesen öffnen",
+        "passedAgain": "Wieder grün",
+        "passedSince": "Seitdem grün",
+        "proveTheFix": "Fix beweisen",
         "reRun": "Erneut laufen lassen",
-        "setAttemptAsideStart": "Diesen Versuch beiseitelegen und einen neuen beginnen — öffnet zuerst die Auswahl",
         "startOver": "Von vorn beginnen",
-        "supersededBy": "überholt von"
+        "supersededBy": "überholt von",
+        "stanceNote": {
+            "ended": "Fortsetzen oder neu",
+            "landed": "Neu starten zum Beweis",
+            "needs-you": "Öffnen zum Antworten",
+            "ready": "Prüfen, dann landen",
+            "waiting": "Kontingent aufgebraucht",
+            "working": "Öffnen zum Zusehen"
+        }
     },
     "pipelinesSkeleton": {
         "loadingPipelines": "Pipelines werden geladen"
@@ -61,15 +73,38 @@
     "pipelinesView": {
         "allRepositories": "Alle Repositorys",
         "connectedRepos": "eines der {count} verbundenen Repos",
-        "failedLastRunsOn": "{job} ist bei den letzten {runs} Läufen auf {repo} {branch} durchgefallen",
         "failingRepeatedly": "Fällt wiederholt durch",
+        "keepsFailing": "Scheitert wiederholt",
         "noRunsYet": "Auf {where} ist noch keine Pipeline gelaufen. Läufe landen hier, sobald eine läuft.",
         "noRunsYet2": "Noch keine Läufe",
         "noRunsYetRepo": "Noch keine Läufe für dieses Repo.",
         "noWorkspaceRepoMaps": "Kein Workspace-Repo passt zu einem verbundenen GitHub-/GitLab-Konto: klonen Sie ein Repo von Ihrem verbundenen Host, oder verbinden Sie die passende Fähigkeit auf der +-Seite.",
         "openPipelines": "{project}-Pipelines öffnen",
-        "openProjectOn": "{project} auf {host} öffnen",
+        "openRepo": "Repo öffnen",
         "runs": "{runs} Läufe",
         "thisRepo": "dieses Repo"
+    },
+    "tip": {
+        "attempt": "Versuch",
+        "branch": "Branch",
+        "cost": "Kosten",
+        "error": "Fehler",
+        "failedRuns": "Fehlläufe",
+        "failingStreak": "Fehlerserie",
+        "files": "Dateien",
+        "fromRun": "Aus Lauf",
+        "job": "Job",
+        "model": "Modell",
+        "openLog": "Log öffnen",
+        "repo": "Repo",
+        "run": "Lauf",
+        "runs": "Läufe",
+        "started": "Gestartet",
+        "updated": "Aktualisiert"
+    },
+    "extension": {
+        "branchesFailing": "{count} Branches rot",
+        "streakOnCommit": "{repo} {branch} · {runs} fehlgeschlagen · {sha}",
+        "streakOverCommits": "{repo} {branch} · {commits} Commits · {runs} fehlgeschlagen"
     }
 }

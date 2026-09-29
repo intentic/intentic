@@ -20,7 +20,6 @@
         "run": "Ejecutar",
         "runAll": "Ejecutar todo",
         "runTests": "Ejecutar las pruebas",
-        "runVitestApp": "Ejecutar las pruebas de esta aplicación",
         "start": "Iniciar",
         "startAll": "Iniciar todo",
         "stop": "Detener",

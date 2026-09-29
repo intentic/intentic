@@ -39,7 +39,6 @@ export interface Vocabulary {
     readonly agentTurn: string;
     readonly restore: string;
     readonly restoreConfirm: string;
-    readonly restoreHint: string;
     readonly push: string;
     readonly publish: string;
     readonly sync: string;
@@ -89,7 +88,6 @@ const developer = (): Vocabulary => ({
     agentTurn: t(`views.vocabulary.agentTurn`),
     restore: t(`ui.action.restore`),
     restoreConfirm: t(`views.vocabulary.rewriteAllFilesTo`),
-    restoreHint: t(`views.vocabulary.filesOnlySecretsBranches`),
     push: t(`views.vocabulary.push`),
     publish: t(`ui.action.publish`),
     sync: t(`views.vocabulary.sync`),
@@ -136,7 +134,6 @@ const maker = (): Vocabulary => ({
     agentTurn: t(`views.vocabulary.assistantsChanges`),
     restore: t(`views.vocabulary.goBackTo`),
     restoreConfirm: t(`views.vocabulary.putEveryFileBack`),
-    restoreHint: t(`views.vocabulary.filesOnlyVersionHow`),
     push: t(`views.vocabulary.backUp`),
     publish: t(`views.vocabulary.backUp`),
     sync: t(`views.vocabulary.backUp`),

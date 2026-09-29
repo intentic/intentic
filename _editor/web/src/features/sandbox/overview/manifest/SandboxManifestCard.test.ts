@@ -34,7 +34,8 @@ const mount = (problems: ManifestProblemReport[`problems`]): HTMLElement => {
     document.body.append(el);
     app = createApp({ render: () => h(SandboxManifestCard) });
     app.component(`Icon`, IconStub);
-    app.directive(`tooltip`, {});
+    // Records what each hover would say, so a test can read the tooltip a name carries.
+    app.directive(`tooltip`, { mounted: (node: HTMLElement, binding: { value?: unknown }) => (node.dataset[`tooltip`] = String(binding.value)) });
     app.mount(el);
     return el;
 };
@@ -87,7 +88,7 @@ it(`opens the file from its name, without opening the row`, () => {
     const name = [...el.querySelectorAll(`button`)].find((candidate) => candidate.textContent?.includes(`settings.json`));
     name?.click();
     expect(opened).toHaveBeenCalledWith(SETTINGS);
-    expect(name?.title).toBe(SETTINGS);
+    expect(name?.dataset[`tooltip`]).toBe(SETTINGS);
 });
 
 it(`keeps the repair behind the chevron, like everything else on the row`, () => {

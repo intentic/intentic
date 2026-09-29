@@ -61,7 +61,7 @@ const confirming = defineModel<boolean>(`confirming`, { default: false });
             <!-- Caller's own controls sit before Copy, shown only while reading; editing replaces everything to their right. -->
             <template v-else>
                 <slot name="actions" />
-                <CopyButton :text="raw" v-tooltip.top="t(`ui.noteEditor.copyRawNote`)" />
+                <CopyButton :text="raw" v-tooltip.top="t(`ui.noteEditor.copyMarkdown`)" />
                 <button
                     type="button"
                     :class="ui.iconButton(`h-7 w-7`)"

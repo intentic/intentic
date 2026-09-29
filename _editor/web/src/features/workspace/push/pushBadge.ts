@@ -8,11 +8,11 @@ import { t } from "@intentic/ui/i18n";
 export const pushBadge = (running: boolean, question: PushQuestion | undefined, held?: StandingVerdict): ViewBadge | undefined => {
     // A decision the user owes; `danger` is spent here since a push they asked for is standing unsent.
     if (question !== undefined) {
-        return { mark: `exclamation-triangle`, tone: `danger`, tooltip: t(`workspace.pushBadge.pushWaitingOn`, { title: question.title }) };
+        return { mark: `exclamation-triangle`, tone: `danger`, tooltip: question.title };
     }
     /* THE SAME DECISION WITH THE CARD CLOSED. Closing it moved the question off the screen; it did not answer it,. */
     if (held !== undefined) {
-        return { mark: `exclamation-triangle`, tone: `warning`, tooltip: `${held.question.title}. Your push is still waiting on you` };
+        return { mark: `exclamation-triangle`, tone: `warning`, tooltip: held.question.title };
     }
     if (running) {
         return { mark: `arrow-up-right`, tooltip: t(`workspace.pushBadge.sendingCommits`) };

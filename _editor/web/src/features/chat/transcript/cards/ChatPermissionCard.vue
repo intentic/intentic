@@ -110,21 +110,17 @@ const allow = (): Promise<void> => {
                 @click="reply({ kind: 'permission', decision: 'always' })"
                 >{{ card.alwaysLabel }}</ChatDecisionButton
             >
-            <!-- A refusal of this one call that lets the turn go on: the agent is told to carry on another way, or without it. -->
-            <ChatDecisionButton
-                tone="secondary"
-                icon="forward"
-                :disabled="settling"
-                v-tooltip.bottom="t(`chat.chatMessageView.skipCallHint`)"
-                @click="reply(SKIP_CALL)"
-                >{{ t(`chat.chatMessageView.skipCall`) }}</ChatDecisionButton
-            >
+            <!-- A refusal of this one call that lets the turn go on: the agent is told to carry on another way, or without it. Its
+                 label says so, so it carries no hover of its own. -->
+            <ChatDecisionButton tone="secondary" icon="forward" :disabled="settling" @click="reply(SKIP_CALL)">{{
+                t(`chat.chatMessageView.skipCall`)
+            }}</ChatDecisionButton>
             <!-- Like the question card's Dismiss: a refusal with no redirect ends the turn. -->
             <ChatDecisionButton
                 tone="secondary"
                 icon="times"
                 :disabled="settling"
-                v-tooltip.bottom="t(`chat.words.alsoStopsTurn`)"
+                v-tooltip.bottom="t(`chat.words.stopsTurn`)"
                 @click="reply({ kind: 'permission', decision: 'deny' })"
                 >{{ t(`ui.action.no`) }}</ChatDecisionButton
             >

@@ -1,6 +1,17 @@
 <script setup lang="ts">
 import { isLockedWorkspacePath } from "@intentic/sandbox-contract";
-import { type IconName, useExplorerStyle, ChangeStatusMark, explorerColorClass, iconForEntry, ui, vMiddleclick } from "@intentic/ui";
+import {
+    type IconName,
+    type Tip,
+    type TooltipValue,
+    useExplorerStyle,
+    ChangeStatusMark,
+    explorerColorClass,
+    iconForEntry,
+    ui,
+    vMiddleclick,
+} from "@intentic/ui";
+import { useT } from "@intentic/ui/i18n";
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useEditBuffers } from "../files/useEditBuffers";
 import type { WorkspaceTab } from "./workspaceTabs";
@@ -21,6 +32,7 @@ const emit = defineEmits<{
     contextmenu: [id: string | undefined, event: Event];
 }>();
 
+const t = useT();
 const { isDirty } = useEditBuffers();
 const { explorerStyle } = useExplorerStyle();
 
@@ -37,20 +49,31 @@ const tabLabel = (tab: WorkspaceTab): string => {
     }
     return tab.kind === `health` ? basename(tab.repo) : basename(tab.path);
 };
-const tabSubject = (tab: WorkspaceTab): string => {
+// A card naming what kind of surface a tab is and what it is of. A file reaches it only as the preview tab: a kept one
+// hovers with its bare path.
+const tabSubject = (tab: WorkspaceTab): Tip => {
     if (tab.kind === `directory`) {
-        return `${tab.dir} (management)`;
+        return { title: t(`workspace.fileTabs.management`), rows: [{ label: t(`workspace.fileTabs.folder`), value: tab.dir }] };
     }
     if (tab.kind === `health`) {
-        return `${tab.repo} · codebase health`;
+        return { title: t(`workspace.fileTabs.health`), rows: [{ label: t(`workspace.fileTabs.repo`), value: tab.repo }] };
     }
     if (tab.kind === `document`) {
-        return `${tab.path} · ${tab.title}`;
+        return { title: tab.title, rows: [{ label: t(`workspace.fileTabs.folder`), value: tab.path }] };
     }
-    return tab.kind === `diff` ? `${tab.label} (diff)` : tab.path;
+    if (tab.kind === `diff`) {
+        return { title: t(`views.vocabulary.diff`), rows: [{ label: t(`workspace.fileTabs.file`), value: tab.label }] };
+    }
+    return { title: t(`shared.preview`), rows: [{ label: t(`workspace.fileTabs.path`), value: tab.path }] };
 };
-// Preview tab's tooltip names the double-click gesture that keeps it; italic alone doesn't say how.
-const tabHint = (tab: WorkspaceTab): string => (tab.id === preview ? `${tabSubject(tab)} · double-click to keep open` : tabSubject(tab));
+// The hover: a kept file tab's whole path, else the card. A preview tab's names the double-click gesture that keeps
+// it, since italic alone doesn't say how.
+const tabHint = (tab: WorkspaceTab): TooltipValue => {
+    if (tab.id !== preview) {
+        return tab.kind === `file` ? tab.path : tabSubject(tab);
+    }
+    return { ...tabSubject(tab), note: t(`workspace.fileTabs.doubleClickToKeep`) };
+};
 
 const onClose = (event: Event, id: string): void => {
     // The × sits inside the tab, so stop the click from also selecting it.

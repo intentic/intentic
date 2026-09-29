@@ -27,6 +27,7 @@ import {
 } from "./deviceDetail.js";
 import StatusBadge from "../feedback/StatusBadge.vue";
 import { useT } from "../../i18n/index.js";
+import type { Tip, TooltipValue } from "../../lib/tooltip.js";
 
 const t = useT();
 
@@ -121,7 +122,10 @@ const draws = (nodes: readonly VNode[]): boolean =>
 const offersSync = (group: DeviceSandboxGroup): boolean => draws(slots.sync?.({ group }) ?? []);
 
 // The image a container runs, for the hover over its line.
-const imageOf = (sandbox: DeviceSandboxRow): string => t(`ui.deviceDetail.imageOf`, { image: sandbox.image });
+const imageOf = (sandbox: DeviceSandboxRow): Tip => ({
+    title: t(`ui.deviceDetail.container`),
+    rows: [{ label: t(`ui.deviceDetail.image`), value: sandbox.image }],
+});
 
 // Ink by outcome, not by whether the port reached localhost: one somebody told this device to leave alone is a
 // quiet fact, and colouring it like a port that wanted localhost and lost would undo the whole distinction.
@@ -156,8 +160,8 @@ watch(
     () => (folded.value = new Set([...folded.value].filter((id) => !open.includes(id)))),
 );
 
-// The status glyph's words: its accessible name, and on hover the sentence behind it. A stopped sandbox an update left
-// set aside says so, since its remedy (Start) is not what "stopped" suggests.
+// The status glyph's words: its accessible name, and on hover a card where the word needs a line more. A stopped
+// sandbox an update left set aside says so, since its remedy (Start) is not what "stopped" suggests.
 const stoppedWord = (group: DeviceSandboxGroup): string =>
     group.sandbox?.parked === true ? t(`ui.deviceDetail.interruptedUpdate`) : t(`ui.deviceDetail.stopped`);
 const statusWord = (group: DeviceSandboxGroup): string =>
@@ -168,8 +172,18 @@ const statusWord = (group: DeviceSandboxGroup): string =>
           : groupStatus(group) === `stopped`
             ? stoppedWord(group)
             : t(`ui.deviceDetail.notRunningHere`);
-const statusHint = (group: DeviceSandboxGroup): string =>
-    groupStatus(group) === `elsewhere` && !busy.includes(group.sandboxId) ? t(`ui.deviceDetail.notRunningHereHint`) : statusWord(group);
+const statusHint = (group: DeviceSandboxGroup): TooltipValue => {
+    if (busy.includes(group.sandboxId)) {
+        return statusWord(group);
+    }
+    if (groupStatus(group) === `elsewhere`) {
+        return { title: t(`ui.deviceDetail.notRunningHereTitle`), note: t(`ui.deviceDetail.filesOrPortsOnly`) };
+    }
+    if (groupStatus(group) === `stopped` && group.sandbox?.parked === true) {
+        return { title: t(`ui.deviceDetail.interruptedTitle`), note: t(`ui.deviceDetail.startPutsItBack`) };
+    }
+    return statusWord(group);
+};
 
 // Read at render: a machine's report is re-read on the page's own poll, and a probation that ended drops off its next one.
 const versionOf = (sandbox: DeviceSandboxRow): string | undefined => versionLine(sandbox, Date.now());
@@ -404,7 +418,7 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                                     <span
                                         :class="[LINE, portInk(port)]"
                                         class="font-mono text-xs"
-                                        :title="port.state === `mirrored` ? undefined : port.command"
+                                        v-tooltip.top="port.state === `mirrored` ? undefined : port.command"
                                         >{{ port.state === `mirrored` ? t(`ui.deviceDetail.localhost`) : `` }}{{ port.port }}</span
                                     >
                                     <span :class="LINE" class="flex-wrap gap-x-2">
@@ -412,7 +426,7 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                                         <span
                                             v-if="port.state === `mirrored`"
                                             class="min-w-0 truncate font-mono text-xs text-subtle"
-                                            :title="port.command"
+                                            v-tooltip.top="port.command"
                                             >{{ shortCommand(port.command) }}</span
                                         >
                                         <span v-else class="min-w-0 text-xs text-muted">

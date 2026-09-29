@@ -279,7 +279,7 @@ const command = computed(() => {
         <!-- Machine is reachable from here, so this is a button wherever you're reading it, even a phone elsewhere. -->
         <template v-if="hostId">
             <Button
-                v-tooltip.top="text && action === DOWNLOAD ? t(`capabilities.hostRecreate.costDownload`) : undefined"
+                v-tooltip.top="text && action === DOWNLOAD ? { title: t(`capabilities.hostRecreate.inBackground`), note: t(`capabilities.hostRecreate.nothingRestarts`) } : undefined"
                 :label="
                     text && action === DOWNLOAD
                         ? t(`capabilities.hostRecreate.downloadOnly`)

@@ -30,7 +30,7 @@ const mountStrip = async (): Promise<void> => {
     app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {
         mounted(el: HTMLElement, binding: { value?: unknown }): void {
-            el.setAttribute(`data-tooltip`, String(binding.value));
+            el.setAttribute(`data-tooltip`, JSON.stringify(binding.value));
         },
     });
     app.mount(root);
@@ -65,11 +65,10 @@ it(`tells the reader how to keep the tab it is about to replace`, async () => {
 
     await mountStrip();
 
-    const peeked = tabFor(`peeked.ts`);
-    const keptTab = tabFor(`kept.ts`);
-    expect(peeked.getAttribute(`data-tooltip`)).not.toBe(keptTab.getAttribute(`data-tooltip`));
-    expect(peeked.getAttribute(`data-tooltip`)).not.toBe(`src/peeked.ts`);
-    expect(keptTab.getAttribute(`data-tooltip`)).toBe(`src/kept.ts`);
+    expect(tabFor(`peeked.ts`).getAttribute(`data-tooltip`)).toBe(
+        JSON.stringify({ title: `Preview`, rows: [{ label: `Path`, value: `src/peeked.ts` }], note: `Double-click to keep` }),
+    );
+    expect(tabFor(`kept.ts`).getAttribute(`data-tooltip`)).toBe(JSON.stringify(`src/kept.ts`));
 });
 
 it(`asks to keep the tab that was double-clicked`, async () => {

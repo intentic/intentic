@@ -271,7 +271,7 @@ const seamWidth = computed<number>({
             :min="toScreenPx(MIN_CHAT_WIDTH)"
             :max="toScreenPx(maxChatWidth())"
             :reset="toScreenPx(defaultChatWidth())"
-            :title="t(`ui.resizeSeam.dragToResize`)"
+            :title="t(`ui.resizeSeam.doubleClickResets`)"
         />
 
         <template v-if="tabs && !bar">
@@ -288,7 +288,7 @@ const seamWidth = computed<number>({
                     severity="secondary"
                     :text="true"
                     class="shrink-0"
-                    v-tooltip.bottom="t(`chat.chatPanel.backToDiagramEvery`)"
+                    v-tooltip.bottom="t(`chat.chatPanel.runDiagram`)"
                     :aria-label="t(`chat.chatPanel.backToRunsDiagram`)"
                     @click="showRun(shownRun.runId, `graph`)"
                 >
@@ -302,7 +302,7 @@ const seamWidth = computed<number>({
                 <button
                     type="button"
                     :class="ui.iconButton(`rounded`)"
-                    v-tooltip.bottom="t(`chat.chatPanel.leaveRunChatsStay`)"
+                    v-tooltip.bottom="{ title: t(`chat.chatPanel.leaveRun`), note: t(`chat.chatPanel.chatsStayOpen`) }"
                     :aria-label="t(`chat.chatPanel.leaveRun`)"
                     @click="closeRun()"
                 >

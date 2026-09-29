@@ -133,7 +133,7 @@ const preview = (job: AgentJob): void => {
         <div v-for="row in rows" :key="row.key" class="flex min-w-0 items-center gap-2 border-t border-line pt-1.5">
             <Icon :name="row.icon" :spin="row.spin" class="shrink-0 text-2xs" :class="row.icon === `spinner` ? `text-link` : `text-subtle`" />
             <div class="flex min-w-0 flex-1 flex-col">
-                <span class="truncate text-content" :title="row.label">{{ row.label }}</span>
+                <span class="truncate text-content" v-tooltip.top.overflow="row.label">{{ row.label }}</span>
                 <span class="text-subtle">{{ row.detail }}</span>
             </div>
             <div class="flex shrink-0 items-center gap-0.5">
@@ -149,7 +149,7 @@ const preview = (job: AgentJob): void => {
                     v-if="row.job !== undefined && surface.watchTerminal !== undefined"
                     type="button"
                     class="flex items-center rounded p-1 transition-colors hover:bg-overlay hover:text-content"
-                    v-tooltip.top="t(`chat.words.watchInTerminal`)"
+                    v-tooltip.top="t(`chat.words.showTerminal`)"
                     :aria-label="t(`chat.words.watchInTerminal`)"
                     @click="surface.watchTerminal(row.job.session)"
                 >
@@ -160,7 +160,10 @@ const preview = (job: AgentJob): void => {
                     type="button"
                     :class="ui.textAction(`text-2xs`)"
                     :disabled="!reachable || pressing === row.key"
-                    v-tooltip.top="row.watch !== undefined ? t(`chat.chatLeftRunning.stopWatchingHint`) : t(`chat.chatLeftRunning.stopHint`)"
+                    v-tooltip.top="{
+                        title: row.watch !== undefined ? t(`chat.chatLeftRunning.disarm`) : t(`chat.chatLeftRunning.endNow`),
+                        note: t(`chat.chatLeftRunning.chatWontWake`),
+                    }"
                     @click="stop(row)"
                 >
                     {{ row.watch !== undefined ? t(`agents.words.stopWatching`) : t(`ui.action.stop`) }}

@@ -118,7 +118,6 @@ const activeAccountReauth = computed(() => {
             :text="true"
             class="shrink-0"
             :disabled="!reachable || busyIds.includes(activeArchived.id)"
-            v-tooltip.top="t(`chat.chatPaneNotices.putAgentBackOn`)"
             @click="restore([activeArchived.id])"
         >
             {{ t(`ui.action.restore`) }}
@@ -152,7 +151,7 @@ const activeAccountReauth = computed(() => {
                 severity="secondary"
                 :text="true"
                 :disabled="!reachable || streaming"
-                v-tooltip.top="t(`chat.chatPaneNotices.askPlatformAgainPick`)"
+                v-tooltip.top="{ title: t(`chat.chatPaneNotices.retryTrial`), note: t(`chat.chatPaneNotices.resumesIfAnswers`) }"
                 @click="retryTrial"
             >
                 {{ t(`ui.action.retry`) }}
@@ -161,7 +160,7 @@ const activeAccountReauth = computed(() => {
                  arrived at sideways. Standing whenever this strip does, not only once spent — somebody halfway through
                  the day's allowance who wants to connect now should not have to run out first. A place, so a link drawn
                  as a button: Ctrl/Cmd-click keeps this conversation. -->
-            <Button :as="RouterLink" to="/connect" size="small" :text="true" v-tooltip.top="t(`chat.chatPaneNotices.connectTooltip`)">
+            <Button :as="RouterLink" to="/connect" size="small" :text="true" v-tooltip.top="{ title: t(`chat.chatPaneNotices.connectTitle`), note: t(`chat.chatPaneNotices.connectWays`) }">
                 {{ t(`chat.words.connectAModel`) }}
             </Button>
         </div>

@@ -16,6 +16,7 @@
         "gettingComputerReadyStarting": "We're getting this computer ready and starting your sandbox. It usually takes a few minutes, and your workspace opens by itself when it's done.",
         "hideLog": "Hide the log",
         "installingSyncAgentStarting": "Installing the sync agent and starting the first sync.",
+        "installKeepsRunning": "Install keeps running",
         "intenticDownloadedInstallsQuit": "Intentic {version} is downloaded. It installs when you quit, or now:",
         "keepFolderInSync": "Keep this folder in sync with {what}?",
         "mirroringPortsFrom": "Mirroring ports from {sandbox} to this device",
@@ -53,8 +54,9 @@
         "sandboxesKeepRunningEither": "Your sandboxes keep running either way: they live in Docker, not in this window."
     },
     "deviceAgent": {
+        "latestUnknown": "Latest unknown",
         "servingInstalledBuild": "Serving the build installed on this device.",
-        "whetherNewerAgentPublished": "Whether a newer agent has been published is a question for your workspace, which can reach the release registry; this window only knows what is on this computer."
+        "workspaceChecksUpdates": "Workspace checks updates"
     },
     "docker": {
         "accountNotAllowed": "This account isn't allowed to use Docker",

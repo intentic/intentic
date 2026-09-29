@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, FilterBar, Row, RowGroup, RowNote, ui } from "@intentic/ui";
+import { Button, FilterBar, Row, RowGroup, RowNote, type Tip, ui } from "@intentic/ui";
 import { computed, onUnmounted, ref } from "vue";
 import { commandLabel, commands } from "../../shell/commands/useCommands";
 import { rankCommands } from "../../shell/commands/commandSearch";
@@ -65,6 +65,16 @@ const chordOwners = computed<Record<string, readonly string[]>>(() => {
     return byChord;
 });
 const conflicting = (chord: string | undefined): boolean => chord !== undefined && (chordOwners.value[chord]?.length ?? 0) > 1;
+// The clash's hover names the other command(s) on the same chord, which is what the reader has to go and change.
+const conflictTip = (row: CommandRow): Tip => {
+    const others = (row.chord === undefined ? [] : (chordOwners.value[row.chord] ?? []))
+        .filter((command) => command !== row.command)
+        .map((command) => {
+            const entry = commands.value.find((candidate) => candidate.command === command);
+            return entry === undefined ? command : commandLabel(entry);
+        });
+    return { title: t(`settings.settingsKeybindings.shortcutClash`), tone: `warn`, rows: [{ label: t(`settings.settingsKeybindings.alsoOn`), value: others.join(`, `) }] };
+};
 
 // Shared so the capture handler and stopRecording can each reference and clear the same listener.
 let capture: ((event: KeyboardEvent) => void) | undefined;
@@ -141,7 +151,7 @@ onUnmounted(stopRecording);
                         <template v-else>
                             <span
                                 v-if="conflicting(row.chord)"
-                                v-tooltip.top="t(`settings.settingsKeybindings.anotherCommandUsesShortcut`)"
+                                v-tooltip.top="conflictTip(row)"
                                 class="text-warning"
                             >
                                 <Icon name="exclamation-triangle" />
@@ -185,7 +195,7 @@ onUnmounted(stopRecording);
                         v-if="row.overridden && recording !== row.command"
                         type="button"
                         :class="ui.iconButton()"
-                        v-tooltip.top="t(`settings.settingsKeybindings.resetToDefault`)"
+                        v-tooltip.top="t(`settings.settingsKeybindings.resetDefault`)"
                         :aria-label="t(`settings.settingsKeybindings.resetToDefault2`, { label: row.label })"
                         @click="resetKeybinding(row.command)"
                     >

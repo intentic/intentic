@@ -323,7 +323,11 @@ watch(
                         :aria-haspopup="sessions.length > 1 ? 'menu' : undefined"
                         :aria-expanded="sessions.length > 1 ? switcherOpen : undefined"
                         :disabled="sessions.length < 2"
-                        v-tooltip.bottom="sessions.length > 1 ? t(`browsers.browsers.switchBrowserOpen`, { count: sessions.length }) : current?.name"
+                        v-tooltip.bottom="
+                            sessions.length > 1
+                                ? { title: t(`browsers.browsers.switchBrowser`), rows: [{ label: t(`browsers.browsers.openCount`), value: sessions.length }] }
+                                : current?.name
+                        "
                         @click="switcherOpen = !switcherOpen"
                     >
                         <span v-if="current" class="size-1.5 shrink-0 rounded-full" :class="dotOf(current)" />
@@ -358,7 +362,7 @@ watch(
                     <span
                         v-if="accountOf(current) && !compact"
                         class="flex shrink-0 items-center gap-1 rounded-md bg-overlay px-1.5 py-0.5 text-3xs text-muted"
-                        v-tooltip.bottom="t(`browsers.browsers.browserSignedInAccount`, { current: accountOf(current) })"
+                        v-tooltip.bottom="{ title: t(`browsers.browsers.signedIn`), rows: [{ label: t(`browsers.browsers.account`), value: accountOf(current) ?? `` }] }"
                     >
                         <Icon name="user" class="text-3xs" />
                         <span class="max-w-24 truncate">{{ accountOf(current) }}</span>
@@ -421,7 +425,9 @@ watch(
                         class="ui-chip shrink-0 px-2 py-1 font-medium"
                         :class="view.driving.value ? `ui-chip-on` : ``"
                         v-tooltip.bottom="
-                            view.driving.value ? t(`browsers.browsers.stopSendingClicksKeystrokes`) : t(`browsers.browsers.sendClicksKeystrokesTo`)
+                            view.driving.value
+                                ? { title: t(`browsers.browsers.handBack`), note: t(`browsers.browsers.stopsYourInput`) }
+                                : { title: t(`browsers.browsers.takeControl`), note: t(`browsers.browsers.sendsYourInput`) }
                         "
                         @click="takeControl"
                     >

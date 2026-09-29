@@ -1,11 +1,11 @@
 <!-- Shared session-card shell for every rail. -->
 <script setup lang="ts">
 import type { AgentProvider, MatchSnippet } from "@intentic/sandbox-contract";
-import { type IconName, ProgressRing, SegmentRing } from "@intentic/ui";
+import { type IconName, ProgressRing, SegmentRing, type Tip } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { computed } from "vue";
 import { type RouteLocationRaw, RouterLink } from "vue-router";
-import { formatElapsed, type StandingChip, type TileRim, unreadHint } from "../features/agents/fleet/agentStatus";
+import { formatElapsed, type StandingChip, type TileRim } from "../features/agents/fleet/agentStatus";
 import { markSegments } from "../features/agents/review/markSegments";
 import { relativeTime } from "../features/chat/models/catalog";
 import IdentityTile from "../features/capabilities/connect/IdentityTile.vue";
@@ -59,7 +59,11 @@ const now = useNow(() => props.live?.since !== undefined);
 
 const titleRuns = computed(() => markSegments(props.title, props.needle ?? ``, props.matchCase === true));
 // Only the "Updated" chip earns a hover: "New" already says unopened, while this hides when you last looked.
-const chipHint = computed(() => (props.chip?.seenAt === undefined ? undefined : unreadHint(relativeTime(props.chip.seenAt))));
+const chipHint = computed((): Tip | undefined =>
+    props.chip?.seenAt === undefined
+        ? undefined
+        : { title: props.chip.label, rows: [{ label: t(`common.railCard.lastOpened`), value: relativeTime(props.chip.seenAt) }] },
+);
 </script>
 
 <template>

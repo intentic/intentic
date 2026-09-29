@@ -11,6 +11,8 @@ import {
     osOptions,
     SandboxLogo,
     SegmentedControl,
+    type Tip,
+    type TipRow,
     useOsPreference,
 } from "@intentic/ui";
 import { sandboxSubdomain } from "@intentic/sandbox-contract";
@@ -72,11 +74,29 @@ const placement = useSandboxPlacement();
 
 // One label for the whole control, badge included, since a tooltip on the badge would nest inside this one.
 const switcherLabel = computed(() => {
-    const name = sandbox.active.value?.name ?? `Sandboxes`;
+    const name = sandbox.active.value?.name ?? t(`sandbox.sandboxSwitcher.sandboxes`);
     const tooltip = attentionBadge.value?.tooltip;
     const status =
         availability.value === `live` || availability.value === `stale` ? undefined : `Sandbox ${availabilityVisual.value.label.toLowerCase()}`;
     return [name, placement.value?.detail, status, restarting.value, tooltip].filter((part) => part !== undefined).join(` · `);
+});
+
+// The same facts as a hover card, one figure each: where it runs, a state other than live, the work replacing it, and
+// how much waits for its owner (or that a staged update does). The joined line above stays the accessible name.
+const switcherTip = computed((): Tip => {
+    const quiet = availability.value === `live` || availability.value === `stale`;
+    const staged = attention.value.length === 0 && attentionNotes.value.some((item) => item.badges === true);
+    const status: TipRow = { label: t(`sandbox.sandboxSwitcher.status`), value: quiet ? `` : availabilityVisual.value.label };
+    return {
+        title: sandbox.active.value?.name ?? t(`sandbox.sandboxSwitcher.sandboxes`),
+        rows: [
+            { label: t(`sandbox.sandboxSwitcher.runsOn`), value: placement.value?.label ?? `` },
+            availabilityVisual.value.variant === `warning` ? { ...status, tone: `warn` } : status,
+            { label: t(`sandbox.sandboxSwitcher.inProgress`), value: restarting.value ?? `` },
+            { label: t(`sandbox.sandboxSwitcher.needsYou`), value: attention.value.length > 0 ? attention.value.length : `` },
+            { label: t(`sandbox.sandboxSwitcher.update`), value: staged ? t(`sandbox.sandboxSwitcher.ready`) : `` },
+        ],
+    };
 });
 
 // A short retry keeps the healthy ink; changing colour is itself the alarm being avoided.
@@ -126,6 +146,14 @@ const answered = (option: SandboxSummary): boolean => attentionFor(option) !== u
 // the row it opens onto are the same sandbox, and a glyph that changed between them would read as two answers.
 const placementFor = (option: SandboxSummary): SandboxPlacement =>
     isActive(option) && placement.value !== undefined ? placement.value : placementOf(option);
+
+// A row's place as its hover card; the active row adds whether its machine answers, since its glyph is inked by that.
+const placementTip = (option: SandboxSummary): Tip => {
+    const tip = placementFor(option).tip;
+    return isActive(option)
+        ? { ...tip, rows: [...(tip.rows ?? []), { label: t(`sandbox.sandboxSwitcher.status`), value: connectionLabel.value }] }
+        : tip;
+};
 
 const pick = (option: SandboxSummary): void => {
     open.value = false;
@@ -291,7 +319,7 @@ const confirmRemove = async (): Promise<void> => {
             class="sandbox-switcher flex items-center justify-center overflow-hidden transition-opacity hover:opacity-80"
             :class="route.path.startsWith('/sandbox') ? 'text-link' : 'text-muted'"
             :aria-label="t(`sandbox.sandboxSwitcher.switchSandbox`, { switcherLabel })"
-            v-tooltip.right="switcherLabel"
+            v-tooltip.right="switcherTip"
             :aria-expanded="open"
             @click="open = !open"
         >
@@ -394,7 +422,7 @@ const confirmRemove = async (): Promise<void> => {
                     :name="placementFor(option).icon"
                     class="shrink-0 text-2xs"
                     :class="isActive(option) ? connectionInkClass : 'text-subtle'"
-                    v-tooltip.top="isActive(option) ? `${placementFor(option).detail} · ${connectionLabel}` : placementFor(option).detail"
+                    v-tooltip.top="placementTip(option)"
                     :aria-label="isActive(option) ? `${placementFor(option).detail} · ${connectionLabel}` : placementFor(option).detail"
                 />
                 <!-- What's waiting in that sandbox; nothing waiting draws nothing, an unanswered box draws a dash. The
@@ -402,13 +430,13 @@ const confirmRemove = async (): Promise<void> => {
                 <span
                     v-if="!isActive(option) && answered(option) && attentionFor(option)! > 0"
                     class="ui-status-pill shrink-0 bg-warning/15 text-2xs font-semibold leading-4 text-warning"
-                    v-tooltip.top="t(`sandbox.sandboxSwitcher.waitingIn`, { option: attentionFor(option), name: option.name })"
+                    v-tooltip.top="t(`sandbox.sandboxSwitcher.needsYou`)"
                     >{{ attentionFor(option) }}</span
                 >
                 <span
                     v-else-if="!isActive(option) && !answered(option)"
                     class="shrink-0 px-1 text-2xs leading-4 text-subtle"
-                    v-tooltip.top="t(`sandbox.sandboxSwitcher.isntAnsweringWhatsWaiting`, { name: option.name })"
+                    v-tooltip.top="{ title: t(`sandbox.sandboxSwitcher.notAnswering`), note: t(`sandbox.sandboxSwitcher.waitingUnknown`) }"
                     :aria-label="t(`sandbox.sandboxSwitcher.notAnswering`)"
                     >&ndash;</span
                 >
@@ -427,13 +455,13 @@ const confirmRemove = async (): Promise<void> => {
                     v-if="option.role === 'owner' && option.hosted?.canRollBack === true"
                     name="undo"
                     @click.stop="askRollBack(option)"
-                    v-tooltip.top="t(`sandbox.sandboxSwitcher.rollBackHosted`)"
+                    v-tooltip.top="{ title: t(`sandbox.sandboxSwitcher.rollBack`), note: t(`sandbox.sandboxSwitcher.undoLastUpdate`) }"
                     class="shrink-0 text-xs opacity-0 transition-opacity hover:text-content group-hover:opacity-60"
                 />
                 <Icon
                     name="trash"
                     @click.stop="askRemove(option)"
-                    v-tooltip.top="option.role === 'owner' ? t(`sandbox.sandboxSwitcher.removeAccount`) : t(`ui.action.leave`)"
+                    v-tooltip.top="option.role === 'owner' ? t(`ui.action.remove`) : t(`ui.action.leave`)"
                     class="shrink-0 text-xs opacity-0 transition-opacity hover:text-danger group-hover:opacity-60"
                 />
             </button>
@@ -471,7 +499,7 @@ const confirmRemove = async (): Promise<void> => {
                     <Icon
                         name="trash"
                         @click.prevent.stop="askRemove(option)"
-                        v-tooltip.top="option.role === 'owner' ? t(`sandbox.sandboxSwitcher.removeAccount`) : t(`ui.action.leave`)"
+                        v-tooltip.top="option.role === 'owner' ? t(`ui.action.remove`) : t(`ui.action.leave`)"
                         class="shrink-0 text-xs opacity-0 transition-opacity hover:text-danger group-hover:opacity-60"
                     />
                 </RouterLink>

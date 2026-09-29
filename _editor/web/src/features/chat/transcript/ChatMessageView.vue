@@ -231,7 +231,11 @@ const defers = computed(() => foldsIntoTurn(props.message));
 // An errand is a prompt the app sent on the user's behalf (errands.ts): named in one quiet line, since a turn nobody
 // typed still has to appear as a turn, with the words it actually sent out on the mark beside it.
 const errand = computed(() => errandOf(props.message));
-const errandMarks = computed(() => (errand.value === undefined ? [] : [{ key: `errand`, icon: errand.value.icon, label: errand.value.label, findable: true }]));
+const errandMarks = computed(() =>
+    errand.value === undefined
+        ? []
+        : [{ key: `errand`, icon: errand.value.icon, label: errand.value.label, tip: t(`chat.chatMessageView.showPrompt`), findable: true }],
+);
 
 // Trailer naming the latest thing keeping this turn going, and how many said the same; shown in-flow so it can't shift
 // the pinned row's height.
@@ -527,7 +531,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 type="button"
                 class="absolute top-0 left-full flex h-7 w-[var(--chat-gutter)] cursor-pointer items-center justify-center rounded-md text-subtle transition-opacity hover:bg-overlay hover:text-content"
                 :class="mobile ? `opacity-40` : `opacity-0 focus-visible:opacity-100 group-hover:opacity-100`"
-                v-tooltip.right="t(`chat.chatMessageView.editMessageReplacesEverything`)"
+                v-tooltip.right="{ title: t(`chat.chatMessageView.editMessageShort`), note: t(`chat.chatMessageView.replacesWhatFollows`) }"
                 :aria-label="t(`chat.words.editMessage`)"
                 @click.stop="startEdit"
             >
@@ -592,7 +596,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
             <p
                 v-if="message.placed"
                 class="flex items-center gap-1 px-1 text-2xs text-subtle"
-                v-tooltip.top="t(`chat.chatMessageView.wroteInAgentsVoice`)"
+                v-tooltip.top="{ title: t(`chat.chatMessageView.agentsVoice`), note: t(`chat.chatMessageView.readAsItsOwn`) }"
             >
                 <Icon name="pencil" class="text-2xs" />{{ t(`chat.chatMessageView.placedBy`) }}
             </p>

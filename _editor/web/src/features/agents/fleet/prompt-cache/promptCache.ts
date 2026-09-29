@@ -1,4 +1,5 @@
 import { type CacheClock, type KeepWarm, keepWarmLeadMs, keepWarmRefreshes } from "@intentic/sandbox-contract";
+import type { Tip } from "@intentic/ui";
 import { formatClock, formatTokens } from "@intentic/ui/format";
 import { type AgentStanding, formatElapsed, laneOf, turnInFlight } from "../agentStatus";
 import { t } from "@intentic/ui/i18n";
@@ -21,7 +22,7 @@ export interface CacheStanding extends AgentStanding {
 export interface CacheCooling {
     readonly text: string;
     readonly countdown: string;
-    readonly hint: string;
+    readonly hint: Tip;
     // Whether the warning's own window is more than half gone. The chip is drawn quietly until this turns true: the
     // whole point is a nudge, and something that arrives loud is an alarm about money nobody has spent yet.
     readonly near: boolean;
@@ -78,7 +79,7 @@ export const refreshMinutes = (ttlMs: number): number => Math.round((ttlMs - kee
 export interface WarmMark {
     readonly icon: `sun` | `moon`;
     readonly text: string;
-    readonly hint: string;
+    readonly hint: Tip;
     // A hold that ended for a reason worth reading; an elapsed one is not drawn at all.
     readonly cold: boolean;
 }
@@ -90,11 +91,21 @@ export const warmMark = (agent: CacheStanding): WarmMark | undefined => {
         return undefined;
     }
     if (hold.ended === undefined) {
-        const read = hold.readTokens === undefined ? `` : t(`agents.promptCache.lastRead`, { tokens: formatTokens(hold.readTokens) });
         return {
             icon: `sun`,
             text: t(`agents.promptCache.warmUntil`, { time: formatClock(hold.until) }),
-            hint: t(`agents.promptCache.keptWarmHint`, { time: formatClock(hold.until), refreshes: hold.refreshes, read }),
+            hint: {
+                title: t(`agents.promptCache.keptWarm`),
+                tone: `ok`,
+                rows: [
+                    { label: t(`agents.promptCache.until`), value: formatClock(hold.until) },
+                    { label: t(`agents.promptCache.refreshes`), value: hold.refreshes },
+                    {
+                        label: t(`agents.promptCache.lastReadLabel`),
+                        value: hold.readTokens === undefined ? `` : t(`agents.promptCache.tokens`, { tokens: formatTokens(hold.readTokens) }),
+                    },
+                ],
+            },
             cold: false,
         };
     }
@@ -104,7 +115,14 @@ export const warmMark = (agent: CacheStanding): WarmMark | undefined => {
     return {
         icon: `moon`,
         text: t(`agents.promptCache.coldSince`, { time: formatClock(hold.ended.at) }),
-        hint: endedLine(hold.ended),
+        hint: {
+            title: t(`agents.promptCache.cacheCold`),
+            tone: `warn`,
+            rows: [
+                { label: t(`agents.promptCache.why`), value: t(`agents.promptCache.endedShort.${hold.ended.reason}`) },
+                { label: t(`agents.promptCache.detail`), value: hold.ended.detail ?? `` },
+            ],
+        },
         cold: true,
     };
 };
@@ -130,13 +148,23 @@ export const cacheCooling = (agent: CacheStanding, now: number): CacheCooling | 
         return undefined;
     }
     const countdown = formatElapsed(now, deadline);
-    // Named in tokens, never dollars: the rate depends on a model price list this app does not carry.
-    const read =
-        agent.contextTokens === undefined ? `everything it has already read` : `the ${formatTokens(agent.contextTokens)} tokens it has already read`;
+    const near = left <= window / 2;
     return {
         text: `Cooling`,
         countdown,
-        near: left <= window / 2,
-        hint: t(`agents.promptCache.promptCacheGoesCold`, { countdown, read }),
+        near,
+        // Named in tokens, never dollars: the rate depends on a model price list this app does not carry. An unmeasured
+        // context leaves its row empty, and the card drops it.
+        hint: {
+            title: t(`agents.promptCache.cooling`),
+            tone: near ? `warn` : `info`,
+            rows: [
+                { label: t(`agents.promptCache.coldIn`), value: countdown },
+                {
+                    label: t(`agents.promptCache.cached`),
+                    value: agent.contextTokens === undefined ? `` : t(`agents.promptCache.tokens`, { tokens: formatTokens(agent.contextTokens) }),
+                },
+            ],
+        },
     };
 };

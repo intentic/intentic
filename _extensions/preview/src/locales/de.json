@@ -3,13 +3,14 @@
         "public": "Öffentlich"
     },
     "portRow": {
-        "boundToLoopbackAlias": "An einen Loopback-Alias gebunden, den der Vorschau-Proxy nicht erreichen kann.",
+        "address": "Adresse",
         "forwarded": "weitergeleitet",
+        "loopbackAlias": "Loopback-Alias",
         "notForwardable": "nicht weiterleitbar",
-        "openInNewTab": "In neuem Tab öffnen",
         "openPortPreviewIn": "Die Vorschau von Port {port} in einem neuen Tab öffnen",
-        "openTerminalRunningIn": "{session} öffnen: das Terminal, in dem das läuft",
+        "openTerminal": "Terminal öffnen",
         "preview": "Vorschau",
+        "proxyCantReach": "Proxy erreicht es nicht",
         "stop": "Stoppen"
     },
     "portsView": {
@@ -27,7 +28,6 @@
         "notServed": "Nicht ausgeliefert: {blocked}",
         "nothingPublished": "Nichts ist veröffentlicht.",
         "openInNewTab": "{path} in einem neuen Tab öffnen",
-        "openInNewTab2": "In neuem Tab öffnen",
         "public2": "{servedCount} öffentlich",
         "published": "Veröffentlicht",
         "readingPublishedFiles": "Ihre veröffentlichten Dateien werden gelesen…",
@@ -38,7 +38,6 @@
     "sharePreview": {
         "anyoneLinkOpen": "Jeder mit diesem Link kann es öffnen",
         "copyLink": "Link kopieren",
-        "openInNewTab": "In neuem Tab öffnen",
         "openPreviewInNew": "Die Vorschau in einem neuen Tab öffnen",
         "shareLivePreview": "Diese Live-Vorschau teilen"
     },
@@ -46,16 +45,19 @@
         "chatsYouvePublished": "Chats, die Sie veröffentlicht haben",
         "copyLink": "Link kopieren",
         "eachReadOnlyPage": "Jede davon ist eine Nur-Lese-Seite, die jeder mit dem Link öffnen kann: ohne Anmeldung. Sie zeigt die Unterhaltung so, wie sie beim Teilen war, alles seither Gesagte bleibt also privat, bis Sie drücken",
+        "linkStaysSame": "Gleicher Link",
         "messagesOnly": "nur Nachrichten",
         "openInNewTab": "{title} in einem neuen Tab öffnen",
-        "openInNewTab2": "In neuem Tab öffnen",
         "public": "{count} öffentlich",
-        "publishEverythingSaidSince": "Alles veröffentlichen, was seit dem Teilen gesagt wurde",
+        "publishLatest": "Neues veröffentlichen",
         "sandboxNoPublicAddress": "Diese Sandbox hat keine öffentliche Adresse, diese Seite ist also nicht erreichbar.",
         "sharedConversations": "Geteilte Unterhaltungen",
         "stopSharing": "Teilen beenden",
         "summary": "geteilt {when} · {count} Nachricht · {detail} | geteilt {when} · {count} Nachrichten · {detail}",
         "update": "Aktualisieren",
         "withAgentWork": "mit der Arbeit des Agenten"
+    },
+    "common": {
+        "newTab": "Neuer Tab"
     }
 }

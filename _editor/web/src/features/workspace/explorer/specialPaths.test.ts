@@ -30,10 +30,16 @@ test("an ordinary file wears nothing", () => {
 });
 
 test("every chip says what the role is, not just that there is one", () => {
-    for (const path of [REFERENCE_DIR, PUBLIC_DIR, MEMORY_FILE]) {
-        expect(specialChip(path, developer)?.tooltip.length).toBeGreaterThan(30);
-        expect(specialChip(path, maker)?.tooltip.length).toBeGreaterThan(30);
-    }
+    expect([REFERENCE_DIR, PUBLIC_DIR, MEMORY_FILE].map((path) => specialChip(path, developer)?.tooltip)).toEqual([
+        { title: `Reference only`, note: `No search, setup, sync` },
+        { title: `Open internet`, tone: `warn`, note: `No sign-in` },
+        { title: `Standing instructions`, note: `Every turn from here` },
+    ]);
+    expect([REFERENCE_DIR, PUBLIC_DIR, MEMORY_FILE].map((path) => specialChip(path, maker)?.tooltip)).toEqual([
+        { title: `Reference only`, note: `No search, setup, sync` },
+        { title: `Anyone with link`, tone: `warn`, note: `No sign-in` },
+        { title: `Standing instructions`, note: `Every chat from here` },
+    ]);
 });
 
 test("the same role wears the audience's own word, with the warning tone kept either way", () => {

@@ -148,18 +148,33 @@ const attemptOnOffer = computed<AgentRunAttempt | undefined>(() => {
     return { summary, continuable: state.retry };
 });
 
+// v-tooltip's card (`Tip` in @intentic/ui), spelled out here: this extension reaches the kit only through extension-ui.
+type TipTone = "info" | "ok" | "warn" | "danger";
+interface Tip {
+    readonly title: string;
+    readonly tone?: TipTone | undefined;
+    readonly rows?: readonly { readonly label: string; readonly value: string | number; readonly tone?: TipTone | undefined }[];
+    readonly note?: string;
+}
+
 // Why the button is quiet: superseded (failure is over), behind a newer open failure (not the run to fix), or a branch
-// agent already exists. The caret, not this text, says what a fix will spend.
-const demoted = computed<string | undefined>(() => {
+// agent already exists. The caret, not this card, says what a fix will spend.
+const demoted = computed((): Tip | undefined => {
+    const branch = { label: t(`tip.branch`), value: props.run.branch };
     if (props.branchFix !== undefined) {
-        return `An agent is already working on ${props.run.branch}, started from run #${props.branchFix.run.runId}: open that one before starting a second.`;
+        return {
+            title: t(`pipelineRunRow.fixUnderway`),
+            tone: `info`,
+            rows: [branch, { label: t(`tip.fromRun`), value: `#${props.branchFix.run.runId}` }],
+            note: t(`pipelineRunRow.openThatOneFirst`),
+        };
     }
     if (props.open) {
         return undefined;
     }
     return props.superseded !== undefined
-        ? `${props.run.branch} has passed since: this failure is history, but you can still start an agent on it`
-        : `Behind a newer failure on ${props.run.branch}, that one is the run to fix`;
+        ? { title: t(`pipelineRunRow.passedSince`), tone: `ok`, rows: [branch], note: t(`pipelineRunRow.failureIsHistory`) }
+        : { title: t(`pipelineRunRow.newerFailure`), rows: [branch], note: t(`pipelineRunRow.fixThatRun`) };
 });
 // Loud only on the branch's open failure, while no agent is already on it and no banner above already offers the press.
 const loud = computed(() => props.open && props.branchFix === undefined && props.ledByBanner !== true);
@@ -214,14 +229,49 @@ const fixFacts = computed<string | undefined>(() => {
 });
 // Age, spend and diff show while a fix is in play; once landed, the label is the whole report.
 const showFixChipMeta = computed(() => fixState.value !== undefined && fixState.value.kind !== `landed`);
-// Hint (fixStance's) followed by the facts behind the chip's numbers, parenthesised: the hint is a sentence, this is a
-// list.
-const fixDetail = computed<string | undefined>(() => {
+// The chip spelled out as a card: its state, the facts behind its numbers, and the one next move. fixStance's own `hint`
+// is a sentence, so the card says its move in a few words instead.
+const stanceTone = (kind: string): TipTone | undefined => {
+    switch (kind) {
+        case `working`:
+        case `ready`:
+            return `info`;
+        case `needs-you`:
+        case `ended`:
+            return `warn`;
+        case `landed`:
+            return `ok`;
+        default:
+            return undefined;
+    }
+};
+const fixDetail = computed((): Tip | undefined => {
     const state = fixState.value;
-    if (state === undefined) {
+    const agent = props.fix;
+    if (state === undefined || agent === undefined) {
         return undefined;
     }
-    return fixFacts.value === undefined ? state.hint : `${state.hint} (${fixFacts.value})`;
+    const facts = state.kind !== `landed`;
+    const files = agent.diff?.files ?? 0;
+    return {
+        title: state.label,
+        tone: stanceTone(state.kind),
+        rows: facts
+            ? [
+                  // Only past the first, as on the chip: "attempt 3" is the story, "attempt 1" noise.
+                  { label: t(`tip.attempt`), value: attemptNumber.value !== undefined && attemptNumber.value > 1 ? attemptNumber.value : `` },
+                  agent.startedAt === undefined
+                      ? { label: t(`tip.updated`), value: timeAgo(agent.updatedAt) }
+                      : { label: t(`tip.started`), value: timeAgo(agent.startedAt) },
+                  { label: t(`tip.model`), value: agent.model ?? `` },
+                  { label: t(`tip.cost`), value: spend.value ?? `` },
+                  { label: t(`tip.files`), value: files === 0 ? `` : files },
+                  // The provider's own failure line, when there is one: often the only record of an unwatched run.
+                  { label: t(`tip.error`), value: agent.failure ?? ``, tone: `danger` },
+              ]
+            : [],
+        note: t(`pipelineRunRow.stanceNote.${state.kind}`),
+    };
 });
 // The chip in words: an `aria-label` replaces what's read, so a screen reader never gets the abbreviations directly.
 const fixAria = computed<string | undefined>(() => {
@@ -232,11 +282,18 @@ const fixAria = computed<string | undefined>(() => {
     return `Fix agent: ${state.label.toLowerCase()}${fixFacts.value === undefined ? `` : `, ${fixFacts.value}`} — open the conversation`;
 });
 
-// One flowing line: the tooltip clamps as text, so a newline is just a space. What happened leads; why the button is
-// quiet follows.
-const startHint = computed<string | undefined>(
-    () => [fixState.value?.retry === true ? fixDetail.value : undefined, demoted.value].filter((part) => part !== undefined).join(` `) || undefined,
-);
+// One card: what happened leads; why the button is quiet follows as one more row, its headline against the branch.
+const startHint = computed((): Tip | undefined => {
+    const fix = fixState.value?.retry === true ? fixDetail.value : undefined;
+    const why = demoted.value;
+    if (fix === undefined || why === undefined) {
+        return fix ?? why;
+    }
+    return {
+        ...fix,
+        rows: [...(fix.rows ?? []), { label: why.title, value: props.run.branch, tone: why.tone }],
+    };
+});
 
 const startFix = (): void => {
     emit(`fix`, props.run, fixModel.overridden.value ? fixModel.model.value : undefined, fixModel.resume.value);
@@ -275,7 +332,7 @@ const openStartOver = (): void => {
                     target="_blank"
                     rel="noopener"
                     class="touch-target min-w-0 truncate text-sm font-medium text-content hover:text-link"
-                    :title="headline"
+                    v-tooltip.top.overflow="headline"
                 >
                     {{ headline }}
                 </a>
@@ -287,7 +344,15 @@ const openStartOver = (): void => {
                     target="_blank"
                     rel="noopener"
                     class="touch-target inline-flex shrink-0 items-center gap-1 rounded border border-line px-2.5 py-1 text-2xs font-medium text-subtle hover:text-link"
-                    v-tooltip.top="t(`pipelineRunRow.passedAgainIn`, { branch: run.branch })"
+                    v-tooltip.top="{
+                        title: t(`pipelineRunRow.passedAgain`),
+                        tone: `ok`,
+                        rows: [
+                            { label: t(`tip.branch`), value: run.branch },
+                            { label: t(`tip.run`), value: `#${superseded.runId}` },
+                        ],
+                        note: t(`pipelineRunRow.checkJobRan`),
+                    }"
                 >
                     <Icon name="check-circle" class="text-2xs text-success" />
                     {{ t(`pipelineRunRow.supersededBy`) }}
@@ -333,7 +398,7 @@ const openStartOver = (): void => {
 
                 <!-- Time + actions -->
                 <div class="flex shrink-0 items-center gap-2">
-                    <span class="text-2xs text-subtle" :title="formatTimestamp(run.createdAt)">
+                    <span class="text-2xs text-subtle" v-tooltip.top="formatTimestamp(run.createdAt)">
                         {{ timeAgo(run.createdAt) }}
                     </span>
                     <div class="flex items-center gap-1">
@@ -381,7 +446,7 @@ const openStartOver = (): void => {
                             icon-pos="right"
                             :loading="busy === actionKey"
                             :disabled="busy !== undefined"
-                            v-tooltip.top="t(`pipelineRunRow.setAttemptAsideStart`)"
+                            v-tooltip.top="{ title: t(`pipelineRunRow.freshAttempt`), note: t(`pipelineRunRow.opensPickerFirst`) }"
                             @click="openStartOver"
                         >
                             <template #icon><Icon name="chevron-down" class="text-2xs" /></template>
@@ -418,7 +483,7 @@ const openStartOver = (): void => {
                             :text="!proven"
                             :loading="busy === actionKey"
                             :disabled="busy !== undefined"
-                            :title="proven ? t(`pipelineRunRow.fixInWorkspaceRun`) : undefined"
+                            v-tooltip.top="proven ? { title: t(`pipelineRunRow.proveTheFix`), note: t(`pipelineRunRow.fixInWorkspace`) } : undefined"
                             @click="emit(`rerun`, run)"
                         />
                     </div>

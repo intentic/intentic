@@ -103,7 +103,7 @@ const act = (event: Event, verb: "close" | "keep"): void => {
                 v-if="props.conversation.peek.value"
                 role="button"
                 :aria-label="t(`chat.words.keepChatOpen`)"
-                v-tooltip.top="t(`chat.words.keepOpenOtherwiseChat`)"
+                v-tooltip.top="{ title: t(`chat.words.keepOpen`), note: t(`chat.words.nextChatReplaces`) }"
                 class="-my-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted opacity-0 transition hover:bg-overlay hover:text-content focus-visible:opacity-100 group-hover:opacity-100"
                 @click="act($event, `keep`)"
             >
@@ -149,11 +149,10 @@ const act = (event: Event, verb: "close" | "keep"): void => {
             <!-- Chats in another sandbox identify that sandbox in metadata. -->
             <span
                 v-if="props.conversation.box.value !== undefined"
-                v-tooltip.top="
-                    t(`chat.chatTabList.runsInQuoted`, {
-                        sandbox: boxNameOf.get(props.conversation.box.value!) ?? t(`chat.chatTabList.anotherSandbox`),
-                    })
-                "
+                v-tooltip.top="{
+                    title: t(`chat.chatTabList.otherSandbox`),
+                    rows: [{ label: t(`chat.chatTabList.sandbox`), value: boxNameOf.get(props.conversation.box.value!) ?? `` }],
+                }"
                 class="flex shrink-0 items-center"
                 :aria-label="
                     t(`chat.chatTabList.runsIn`, {

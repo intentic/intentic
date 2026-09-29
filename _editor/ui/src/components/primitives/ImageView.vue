@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import type { ImageViewState } from "./imageView.js";
+import type { Tip } from "../../lib/tooltip.js";
 import { ui } from "../../lib/ui.js";
 import { useT } from "../../i18n/index.js";
 
@@ -36,6 +37,16 @@ const offset = ref({ x: 0, y: 0 });
 // True while the view is the automatic fit; any deliberate zoom clears it, so a later resize re-fits it.
 const fitted = ref(true);
 const dragging = ref(false);
+
+// The zoom readout's hover: each pointer gesture beside what it does.
+const gestures = computed((): Tip => ({
+    title: t(`ui.imageView.gestures`),
+    rows: [
+        { label: t(`ui.imageView.ctrlScroll`), value: t(`ui.imageView.zoom`) },
+        { label: t(`ui.imageView.drag`), value: t(`ui.imageView.pan`) },
+        { label: t(`ui.imageView.doubleClick`), value: t(`ui.imageView.fit`) },
+    ],
+}));
 
 const fitScale = computed(() => {
     const size = natural.value;
@@ -333,21 +344,19 @@ const showDimensions = computed(() => natural.value !== undefined && box.value.w
                     type="button"
                     :class="ui.iconButton(`h-5 w-5 rounded text-sm leading-none`)"
                     :disabled="nextStop(-1) === undefined"
-                    v-tooltip.top="t(`ui.imageView.zoomOut`)"
+                    v-tooltip.top="{ title: t(`ui.imageView.zoomOut2`), keys: `−` }"
                     :aria-label="t(`ui.imageView.zoomOut2`)"
                     @mousedown.prevent
                     @click="step(-1)"
                 >
                     −
                 </button>
-                <span class="w-10 cursor-help text-center tabular-nums text-content" v-tooltip.top="t(`ui.imageView.ctrlScrollToZoom`)">
-                    {{ percent }}%
-                </span>
+                <span class="w-10 cursor-help text-center tabular-nums text-content" v-tooltip.top="gestures"> {{ percent }}% </span>
                 <button
                     type="button"
                     :class="ui.iconButton(`h-5 w-5 rounded text-sm leading-none`)"
                     :disabled="nextStop(1) === undefined"
-                    v-tooltip.top="t(`ui.imageView.zoomIn`)"
+                    v-tooltip.top="{ title: t(`ui.imageView.zoomIn2`), keys: `+` }"
                     :aria-label="t(`ui.imageView.zoomIn2`)"
                     @mousedown.prevent
                     @click="step(1)"
@@ -359,7 +368,7 @@ const showDimensions = computed(() => natural.value !== undefined && box.value.w
                     type="button"
                     :class="ui.iconButton(`h-5 w-auto rounded px-1.5`)"
                     :disabled="fitted"
-                    v-tooltip.top="t(`ui.imageView.fitToPane0`)"
+                    v-tooltip.top="{ title: t(`ui.imageView.fitToPane`), keys: `0` }"
                     @mousedown.prevent
                     @click="fit()"
                 >
@@ -369,7 +378,7 @@ const showDimensions = computed(() => natural.value !== undefined && box.value.w
                     type="button"
                     :class="ui.iconButton(`h-5 w-auto rounded px-1.5 tabular-nums`)"
                     :disabled="atNatural"
-                    v-tooltip.top="t(`ui.imageView.actualSize1`)"
+                    v-tooltip.top="{ title: t(`ui.imageView.actualSize`), keys: `1` }"
                     @mousedown.prevent
                     @click="zoomCentre(1)"
                 >

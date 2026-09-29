@@ -1,5 +1,6 @@
 import type { GitDiffSide, LandedMessage, LandedMessageDraft, LandedMessageStep, RepoChanges } from "@intentic/api-contract";
 import { landedCommitMessage } from "@intentic/sandbox-contract";
+import type { TooltipValue } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 import { modelLabelFor } from "../../chat/accounts/providerCatalog";
 
@@ -116,8 +117,8 @@ export interface DraftReportRow {
     readonly detail?: string;
     // Time spent; absent for a skip, which spent none.
     readonly elapsed?: string;
-    // The row unabridged, for the tooltip.
-    readonly title: string;
+    // The hover: the full model id and the time a step took, or a failure's whole reason. Absent where the row says it all.
+    readonly tip?: TooltipValue;
 }
 
 const stepRow = (step: LandedMessageStep, index: number, now: number): DraftReportRow => {
@@ -140,23 +141,20 @@ const stepRow = (step: LandedMessageStep, index: number, now: number): DraftRepo
                     ? `skipped, refused a moment ago`
                     : `refused`
                 : headline(step.reason);
-    // Tooltip carries the full model id and the vendor's sentence, unabridged.
-    const said = step.reason === undefined ? `` : `: ${step.reason}`;
-    const title =
+    // The row already shows the model's name, the reason's headline and the time; the card adds the full model id.
+    const phase =
         step.status === `asking`
-            ? `Asking ${step.model}…${elapsed === undefined ? `` : ` ${elapsed}`}`
+            ? t(`workspace.changeOrigins.asking`)
             : step.status === `answered`
-              ? `${step.model} wrote the message${elapsed === undefined ? `` : ` in ${elapsed}`}`
-              : step.status === `refused`
-                ? `${step.model} refused${elapsed === undefined ? `` : ` after ${elapsed}`}${said}`
-                : `Skipped ${step.model}, refused a moment ago${step.reason === undefined ? `` : `: ${step.reason}`}`;
+              ? t(`workspace.changeOrigins.answered`)
+              : t(`workspace.changeOrigins.refused`);
     return {
         key: `${index}-${step.model}`,
         status: step.status,
         model,
         ...(detail === undefined ? {} : { detail }),
         ...(elapsed === undefined ? {} : { elapsed }),
-        title,
+        tip: { title: step.model, rows: [{ label: phase, value: elapsed ?? `` }] },
     };
 };
 
@@ -172,14 +170,13 @@ export const draftReport = (draft: LandedMessageDraft | undefined, now: number):
                 key: `reading`,
                 status: `reading`,
                 detail: t(`workspace.changeOrigins.readingLandedDiff`),
-                title: t(`workspace.changeOrigins.readingLandedDiff`),
             },
         ];
     }
     const rows = draft.steps.map((step, index) => stepRow(step, index, now));
     if (draft.outcome === `failed` && draft.reason !== undefined && !draft.steps.some((step) => step.reason === draft.reason)) {
         const closing = `No message written: ${draft.reason}`;
-        return [...rows, { key: `failed`, status: `failed`, detail: closing, title: closing }];
+        return [...rows, { key: `failed`, status: `failed`, detail: closing, tip: draft.reason }];
     }
     return rows;
 };

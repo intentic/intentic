@@ -2,6 +2,7 @@
 import "@intentic/testing/dom";
 import type { SandboxMetrics } from "@intentic/sandbox-contract";
 import { formatPercent, setFormatLocale } from "@intentic/ui/format";
+import { isTip, type TooltipValue } from "@intentic/ui";
 import { IconStub } from "@intentic/ui/testing";
 import { type App, type Component, computed, createApp, h, nextTick } from "vue";
 
@@ -66,9 +67,10 @@ const mount = (component: Component, props: Record<string, unknown>, provided?: 
     document.body.append(el);
     app = createApp({ render: () => h(component, props) });
     app.component(`Icon`, IconStub);
-    // What a hover would say, kept on the element so a test can read it.
-    const tip = (element: HTMLElement, binding: { readonly value: unknown }): void => {
-        element.dataset[`tip`] = String(binding.value);
+    // What a hover would say, kept on the element so a test can read it: a tip card read top to bottom, the rows it
+    // draws (an empty value is dropped) as "label value".
+    const tip = (element: HTMLElement, binding: { readonly value: TooltipValue }): void => {
+        element.dataset[`tip`] = said(binding.value);
     };
     app.directive(`tooltip`, { mounted: tip, updated: tip });
     if (provided !== undefined) {
@@ -79,6 +81,14 @@ const mount = (component: Component, props: Record<string, unknown>, provided?: 
     }
     app.mount(el);
     return el;
+};
+
+const said = (value: TooltipValue): string => {
+    if (!isTip(value)) {
+        return String(value ?? ``);
+    }
+    const rows = (value.rows ?? []).filter((row) => String(row.value) !== ``).map((row) => `${row.label} ${row.value}`);
+    return [value.title, ...rows, ...(value.note === undefined ? [] : [value.note])].join(` · `);
 };
 
 afterEach(() => {
@@ -110,16 +120,14 @@ describe("a card's figure", () => {
     it("says what the conversation's processes hold and use, with the whole reading on hover", () => {
         const figure = mount(SessionMetrics, { conversationId: `a1` }, reading()).querySelector<HTMLElement>(`[data-session-metrics]`)!;
         expect(figure.textContent?.trim()).toBe(`412 MB · 37%`);
-        expect(figure.dataset[`tip`]).toBe(
-            `37% CPU · 412 MB · 12 processes. What this conversation's processes are using: CPU over the last few seconds, where 100% is one full core, and resident memory.`,
-        );
+        expect(figure.dataset[`tip`]).toBe(`Session usage · CPU 37% · Memory 412 MB · Processes 12 · 100% = 1 core`);
         expect(figure.classList.contains(`text-warning`)).toBe(false);
     });
 
     it("leaves CPU out of a first reading rather than guessing it", () => {
         const figure = mount(SessionMetrics, { conversationId: `fresh` }, reading()).querySelector<HTMLElement>(`[data-session-metrics]`)!;
         expect(figure.textContent?.trim()).toBe(`40 MB`);
-        expect(figure.dataset[`tip`]?.startsWith(`40 MB · 1 process. `)).toBe(true);
+        expect(figure.dataset[`tip`]?.startsWith(`Session usage · Memory 40 MB · Processes 1 · `)).toBe(true);
     });
 
     // A quarter of a 16 GB limit is 4 GB: the boundary itself tints, a byte under it does not.
@@ -251,7 +259,7 @@ describe("the sandbox panel", () => {
         expect(wordsOf(el.querySelector(`[data-section="sessions"] h4`)!)).toBe(`By session`);
         expect(figuresOf(el, `sessions`)).toEqual([`Translate the notes 1.3 GB 179%`, `Wire the checkout 412 MB 37%`, `fresh 40 MB –`]);
         const rows = [...el.querySelectorAll<HTMLElement>(`[data-section="sessions"] [data-figure]`)];
-        expect(rows[0]!.querySelector<HTMLElement>(`button`)!.dataset[`tip`]).toBe(`179% CPU · 1.3 GB · 27 processes`);
+        expect(rows[0]!.querySelector<HTMLElement>(`button`)!.dataset[`tip`]).toBe(`Session usage · CPU 179% · Memory 1.3 GB · Processes 27`);
 
         rows[1]!.querySelector<HTMLButtonElement>(`button`)!.click();
         await nextTick();

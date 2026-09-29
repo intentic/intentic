@@ -184,7 +184,7 @@ const focusedCard = computed(() => dag.value.nodes.find((node) => node.data.jobs
                             draggable="false"
                             class="min-w-0 flex-1 truncate rounded-xs text-2xs font-medium leading-tight underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-link"
                             :class="member.job.status === `failed` ? `text-danger` : `text-content hover:text-link`"
-                            v-tooltip.top="t(`pipelineDagGraph.openJobLog`, { name: member.job.name })"
+                            v-tooltip.top="{ title: t(`tip.openLog`), rows: [{ label: t(`tip.job`), value: member.job.name }] }"
                             @click.stop
                         >
                             {{ member.job.name }}
@@ -199,7 +199,11 @@ const focusedCard = computed(() => dag.value.nodes.find((node) => node.data.jobs
                         <span
                             v-if="recurring.get(member.job.name)"
                             class="shrink-0 rounded bg-danger/10 px-1 text-3xs font-semibold text-danger"
-                            v-tooltip.top="t(`pipelineDagGraph.failingRunsInRow`, { name: recurring.get(member.job.name) })"
+                            v-tooltip.top="{
+                                title: t(`tip.failingStreak`),
+                                tone: `danger`,
+                                rows: [{ label: t(`tip.runs`), value: recurring.get(member.job.name) ?? `` }],
+                            }"
                             >×{{ recurring.get(member.job.name) }}</span
                         >
                         <span v-if="formatDuration(member.job.durationSeconds)" class="shrink-0 text-3xs tabular-nums text-subtle">
@@ -218,7 +222,7 @@ const focusedCard = computed(() => dag.value.nodes.find((node) => node.data.jobs
                             type="button"
                             :class="ui.iconButton(`h-7 w-7`)"
                             :aria-label="t(`pipelineDagGraph.fit`)"
-                            v-tooltip.top="t(`pipelineDagGraph.zoomOutUntilWhole`)"
+                            v-tooltip.top="t(`pipelineDagGraph.fitAll`)"
                             @click="fitAll()"
                         >
                             <Icon name="collapse-all" class="text-sm" />
@@ -228,7 +232,7 @@ const focusedCard = computed(() => dag.value.nodes.find((node) => node.data.jobs
                             type="button"
                             :class="ui.iconButton(`h-7 w-7`)"
                             :aria-label="t(`pipelineDagGraph.expand`)"
-                            v-tooltip.top="t(`pipelineDagGraph.openJobGraphFull`)"
+                            v-tooltip.top="t(`pipelineDagGraph.fullScreen`)"
                             @click="$emit(`expand`)"
                         >
                             <Icon name="expand" class="text-sm" />

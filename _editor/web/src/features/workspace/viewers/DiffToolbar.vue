@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ChangeStatusMark, type IconName, ResponsiveOverlay, SegmentedControl, ui, useDevice } from "@intentic/ui";
+import { ChangeStatusMark, type IconName, ResponsiveOverlay, SegmentedControl, type Tip, ui, useDevice } from "@intentic/ui";
 import { computed, ref, useSlots } from "vue";
 import type { DiffLayout } from "../../../shell/window/useLayout";
 import { useLayout } from "../../../shell/window/useLayout";
@@ -52,8 +52,8 @@ const format = computed(() => formatOf(path).reads);
 const prose = computed(() => format.value === `markdown` || format.value === `plain`);
 const proseOn = computed(() => prose.value && diffProse.value);
 const READING_OPTIONS = computed(() => [
-    { label: t(`workspace.diffToolbar.prose`), value: `prose`, title: t(`workspace.diffToolbar.textWhatAddedUnderlined`) },
-    { label: t(`workspace.words.code`), value: `code`, title: t(`workspace.diffToolbar.filesLinesSideBy`) },
+    { label: t(`workspace.diffToolbar.prose`), value: `prose`, title: t(`workspace.diffToolbar.trackedChanges`) },
+    { label: t(`workspace.words.code`), value: `code`, title: t(`workspace.diffToolbar.rawLines`) },
 ]);
 
 // A binary document (a .docx, a .pdf, a deck) reads either as tracked changes over the text rendered from it or as its
@@ -68,22 +68,22 @@ const documentReading = computed(() => (diffDocument.value === `text` && !redlin
 const DOCUMENT_OPTIONS = computed(() => {
     if (format.value === `table`) {
         return [
-            { label: t(`workspace.diffToolbar.table`), value: `changes`, title: t(`workspace.diffToolbar.rowsAndCellsChangedMarked`) },
-            { label: t(`workspace.words.code`), value: `sides`, title: t(`workspace.diffToolbar.filesLinesSideBy`) },
+            { label: t(`workspace.diffToolbar.table`), value: `changes`, title: t(`workspace.diffToolbar.changedCells`) },
+            { label: t(`workspace.words.code`), value: `sides`, title: t(`workspace.diffToolbar.rawLines`) },
         ];
     }
     if (redline.value) {
         return [
-            { label: t(`workspace.diffToolbar.changes`), value: `changes`, title: t(`workspace.diffToolbar.documentDrawnWordsMarked`) },
-            { label: t(`workspace.words.text`), value: `text`, title: t(`workspace.diffToolbar.textOfBothVersionsAgentReads`) },
-            { label: t(`workspace.diffToolbar.beforeAfter`), value: `sides`, title: t(`workspace.diffToolbar.bothVersionsDrawnWhole`) },
+            { label: t(`workspace.diffToolbar.changes`), value: `changes`, title: t(`workspace.diffToolbar.markedDocument`) },
+            { label: t(`workspace.words.text`), value: `text`, title: t(`workspace.diffToolbar.agentReading`) },
+            { label: t(`workspace.diffToolbar.beforeAfter`), value: `sides`, title: t(`workspace.diffToolbar.wholeVersions`) },
         ];
     }
     return [
-        { label: t(`workspace.diffToolbar.changes`), value: `changes`, title: t(`workspace.diffToolbar.documentTextWhatAdded`) },
+        { label: t(`workspace.diffToolbar.changes`), value: `changes`, title: t(`workspace.diffToolbar.trackedChanges`) },
         rendersAsBytes(path, undefined)
-            ? { label: t(`workspace.diffToolbar.beforeAfter`), value: `sides`, title: t(`workspace.diffToolbar.bothVersionsDrawnWhole`) }
-            : { label: t(`workspace.words.code`), value: `sides`, title: t(`workspace.diffToolbar.filesLinesSideBy`) },
+            ? { label: t(`workspace.diffToolbar.beforeAfter`), value: `sides`, title: t(`workspace.diffToolbar.wholeVersions`) }
+            : { label: t(`workspace.words.code`), value: `sides`, title: t(`workspace.diffToolbar.rawLines`) },
     ];
 });
 
@@ -111,15 +111,22 @@ const reads = computed(() => prose.value || document.value || layoutRow.value ||
 
 // The two things the closed button still has to say: that lines may be missing, and what pressing it is about. The
 // glyph carries the first (comments are hidden by default, so the eye is struck through most of the time); the
-// summary carries the rest, in the same words the rows inside use.
+// card carries the rest, in the same words the rows inside use. A row this file doesn't offer has no value, so it drops.
 const readingGlyph = computed<IconName>(() => (commentsRow.value ? (showComments.value ? `eye` : `eye-slash`) : `sliders-h`));
-const readingSummary = computed(() =>
-    [
-        layoutRow.value ? LAYOUT_OPTIONS.value.find((option) => option.value === diffLayout.value)?.label : undefined,
-        commentsRow.value ? (showComments.value ? t(`workspace.diffToolbar.commentsShown`) : t(`workspace.diffToolbar.commentsHidden`)) : undefined,
-    ]
-        .filter((part) => part !== undefined)
-        .join(` · `),
+const readingTip = computed(
+    (): Tip => ({
+        title: t(`workspace.diffToolbar.diffView`),
+        rows: [
+            {
+                label: t(`workspace.diffToolbar.layout`),
+                value: layoutRow.value ? (LAYOUT_OPTIONS.value.find((option) => option.value === diffLayout.value)?.label ?? ``) : ``,
+            },
+            {
+                label: t(`workspace.words.comments`),
+                value: commentsRow.value ? (showComments.value ? t(`workspace.diffToolbar.shown`) : t(`workspace.diffToolbar.hidden`)) : ``,
+            },
+        ],
+    }),
 );
 
 const readingAnchor = ref<HTMLElement | null>(null);
@@ -160,7 +167,7 @@ const LABEL = `text-2xs text-content max-md:text-sm`;
             :class="ui.iconButton(`w-auto gap-0.5 px-1 max-md:h-9`, readingOpen ? `bg-overlay text-content` : ``)"
             :aria-expanded="readingOpen"
             :aria-label="t(`workspace.diffToolbar.howThisReads`)"
-            v-tooltip.bottom="readingSummary === `` ? t(`workspace.diffToolbar.howThisReads`) : readingSummary"
+            v-tooltip.bottom="readingTip"
             @click="readingOpen = !readingOpen"
         >
             <Icon :name="readingGlyph" class="text-2xs" />

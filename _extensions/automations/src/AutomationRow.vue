@@ -216,15 +216,36 @@ const OTHERS_PHRASE: Record<NonNullable<AutomationSummary[`senders`]>[`others`],
     allow: `everyone else answered as configured`,
 };
 const count = (n: number, noun: string): string => `${n} ${noun}${n === 1 ? `` : `s`}`;
+const namedIn = (senders: NonNullable<AutomationSummary[`senders`]>) => ({
+    people: senders.rules.reduce((sum, rule) => sum + (rule.ids?.length ?? 0), 0),
+    groups: senders.rules.reduce((sum, rule) => sum + (rule.groups?.length ?? 0), 0),
+});
 const answers = computed<string | undefined>(() => {
     const senders = props.automation.senders;
     if (senders === undefined) {
         return undefined;
     }
-    const people = senders.rules.reduce((sum, rule) => sum + (rule.ids?.length ?? 0), 0);
-    const groups = senders.rules.reduce((sum, rule) => sum + (rule.groups?.length ?? 0), 0);
+    const { people, groups } = namedIn(senders);
     const named = [...(people > 0 ? [count(people, `person`).replace(`persons`, `people`)] : []), ...(groups > 0 ? [count(groups, `group`)] : [])];
     return [...(named.length > 0 ? [`${named.join(` and `)} named`] : [`nobody named`]), OTHERS_PHRASE[senders.others]].join(` · `);
+});
+// The same rules as a hover card on the row's glyph: the counts, then what everyone else gets.
+const othersWord = (others: NonNullable<AutomationSummary[`senders`]>[`others`]): string =>
+    others === `ignore` ? t(`automationRow.othersIgnore`) : others === `hold` ? t(`automationRow.othersHold`) : t(`automationRow.othersAllow`);
+const answersTip = computed<{ title: string; rows: { label: string; value: number | string }[] } | undefined>(() => {
+    const senders = props.automation.senders;
+    if (senders === undefined) {
+        return undefined;
+    }
+    const { people, groups } = namedIn(senders);
+    return {
+        title: t(`automationRow.answers`),
+        rows: [
+            { label: t(`automationRow.people`), value: people },
+            { label: t(`automationRow.groups`), value: groups > 0 ? groups : `` },
+            { label: t(`automationRow.others`), value: othersWord(senders.others) },
+        ],
+    };
 });
 const settings = computed<readonly { label: string; value: string }[]>(() => [
     { label: t(`automationRow.runsOn`), value: runsOn.value },
@@ -263,19 +284,24 @@ const VERB = ui.iconButton(`md:opacity-0 md:group-hover/row:opacity-100 md:focus
                 <Icon
                     v-if="automation.guard"
                     name="shield"
-                    v-tooltip.top="t(`automationRow.wakesOnlyOwnCheck`)"
+                    v-tooltip.top="{ title: t(`automationRow.guarded`), note: t(`automationRow.wakesOnFinding`) }"
                     class="shrink-0 text-2xs text-subtle"
                 />
                 <Icon
                     v-if="automation.requireApproval"
                     name="lock"
-                    v-tooltip.top="t(`automationRow.heldApprovalBeforeRuns`)"
+                    v-tooltip.top="t(`automationRow.needsApproval`)"
                     class="shrink-0 text-2xs text-subtle"
                 />
                 <!-- Answers only the people its rules name. -->
-                <Icon v-if="automation.senders" name="users" v-tooltip.top="answers" class="shrink-0 text-2xs text-subtle" />
+                <Icon v-if="answersTip" name="users" v-tooltip.top="answersTip" class="shrink-0 text-2xs text-subtle" />
                 <!-- Done, rather than switched off by somebody. -->
-                <Icon v-if="spent" name="check" v-tooltip.top="t(`automationRow.alreadyFired`)" class="shrink-0 text-2xs text-subtle" />
+                <Icon
+                    v-if="spent"
+                    name="check"
+                    v-tooltip.top="{ title: t(`automationRow.alreadyFired`), note: t(`automationRow.editToRearm`) }"
+                    class="shrink-0 text-2xs text-subtle"
+                />
             </span>
         </template>
 
@@ -312,7 +338,7 @@ const VERB = ui.iconButton(`md:opacity-0 md:group-hover/row:opacity-100 md:focus
                 v-tooltip.top="
                     automation.nextRun !== undefined
                         ? t(`automationRow.next`, { nextRun: formatDateTime(automation.nextRun) })
-                        : t(`automationRow.firesOnTriggerNot`)
+                        : t(`automationRow.noSchedule`)
                 "
             >
                 {{ nextLabel ?? `—` }}
@@ -329,7 +355,7 @@ const VERB = ui.iconButton(`md:opacity-0 md:group-hover/row:opacity-100 md:focus
                     type="button"
                     :class="ui.iconButton()"
                     :aria-label="t(`automationRow.installOnWebsite`, { id: automation.id })"
-                    v-tooltip.top="t(`automationRow.embedCodeInstallStatus`)"
+                    v-tooltip.top="t(`automationRow.embedCode`)"
                     @click="emit(`install`)"
                 >
                     <Icon name="globe" class="text-xs" />
@@ -425,7 +451,7 @@ const VERB = ui.iconButton(`md:opacity-0 md:group-hover/row:opacity-100 md:focus
                                 severity="secondary"
                                 :text="true"
                                 :disabled="rotateToken.isPending.value"
-                                v-tooltip.top="t(`automationRow.mintNewTokenCurrent`)"
+                                v-tooltip.top="{ title: t(`automationRow.newToken`), note: t(`automationRow.oldUrlStops`) }"
                                 @click="confirmingRotate = true"
                             />
                         </div>

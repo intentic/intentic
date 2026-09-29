@@ -331,7 +331,11 @@ const tool = ui.iconButton(`rounded-full text-subtle`);
                         type="button"
                         class="chat-quick-eye relative"
                         :class="[tool, transcriptOpen && `bg-primary-500/15 text-primary-500 hover:bg-primary-500/20 hover:text-primary-500`]"
-                        v-tooltip.top="transcriptKept ? t(`chat.chatQuickBar.hideConversation`) : t(`chat.chatQuickBar.whatWasSaidHover`)"
+                        v-tooltip.top="
+                            transcriptKept
+                                ? t(`chat.chatQuickBar.hideConversation`)
+                                : { title: t(`chat.chatQuickBar.conversation`), note: t(`chat.chatQuickBar.pressToKeepOpen`) }
+                        "
                         :aria-label="t(`chat.chatQuickBar.conversationSoFar`)"
                         :aria-expanded="transcriptOpen"
                         @pointerenter="onEyeEnter"
@@ -349,7 +353,7 @@ const tool = ui.iconButton(`rounded-full text-subtle`);
                         type="button"
                         class="chat-quick-full"
                         :class="tool"
-                        v-tooltip.top="t(`chat.chatQuickBar.openFullChat`)"
+                        v-tooltip.top="t(`chat.chatQuickBar.fullChat`)"
                         :aria-label="t(`chat.chatQuickBar.openFullChat`)"
                         @click="openChat"
                     >

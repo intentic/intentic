@@ -12,6 +12,7 @@ import {
     SegmentedControl,
     StatusBadge,
     type StatusVariant,
+    type Tip,
     ui,
 } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
@@ -83,7 +84,7 @@ const selected = computed<string | undefined>({
 
 const statusVariant = computed<StatusVariant>(() => (target.value?.healthy ? `success` : target.value?.running ? `info` : `neutral`));
 // Everything the sandbox serves has a public link; a typed address isn't claimed as shareable.
-const copyHint = computed(() => (target.value?.kind === `address` ? `Copy the address` : `Copy the public link`));
+const copyHint = computed(() => (target.value?.kind === `address` ? t(`preview.previewPanel.copyAddress`) : t(`ui.action.copyLink`)));
 
 // Toggle, not a permanent field, so the previewed app keeps every pixel below the bar; opened by the link button or the
 // Address row. Starts prefilled with the current URL; Enter commits, Escape cancels.
@@ -279,6 +280,25 @@ const startHint = computed<string | undefined>(() => {
         : `Its dependencies aren't installed yet, so they install first, which can take a few minutes.`;
     return `Runs ${what} in the sandbox. It appears in the terminal ${startSession.value}. ${cost}`;
 });
+// The Start button's hover: what it runs, where its output lands, and whether an install comes first.
+const startTip = computed((): Tip | undefined => {
+    const entry = target.value;
+    if (entry === undefined || !entry.startable || startSession.value === undefined) {
+        return undefined;
+    }
+    return {
+        title: t(`preview.previewPanel.devServer`),
+        rows: [
+            { label: t(`preview.previewPanel.repo`), value: entry.repo ?? `` },
+            { label: t(`preview.previewPanel.app`), value: entry.app ?? `` },
+            { label: t(`shared.terminal`), value: startSession.value },
+            entry.installed
+                ? { label: t(`preview.previewPanel.deps`), value: t(`preview.previewPanel.installed`) }
+                : { label: t(`preview.previewPanel.deps`), value: t(`preview.previewPanel.installFirst`), tone: `warn` },
+        ],
+        note: entry.installed ? t(`preview.previewPanel.upInSeconds`) : t(`preview.previewPanel.takesMinutes`),
+    };
+});
 
 /* The wait duration stays visible while the preview is starting. */
 const waitingSince = ref<number | undefined>(undefined);
@@ -404,7 +424,7 @@ onUnmounted(stopStartingPoll);
                     type="button"
                     :class="ui.iconButton(`h-8 w-8`)"
                     :aria-label="t(`preview.previewPanel.previewAnotherAddress`)"
-                    v-tooltip.bottom="t(`preview.previewPanel.previewAnotherAddress`)"
+                    v-tooltip.bottom="t(`preview.previewPanel.otherAddress`)"
                     @click="openAddress"
                 >
                     <Icon name="link" />
@@ -420,7 +440,7 @@ onUnmounted(stopStartingPoll);
                     :label="t(`ui.action.start`)"
                     size="small"
                     :disabled="busy"
-                    v-tooltip.bottom="startHint"
+                    v-tooltip.bottom="startTip"
                     @click="act(start)"
                 >
                     <template #icon><Icon name="play" /></template>
@@ -484,7 +504,7 @@ onUnmounted(stopStartingPoll);
                         rel="noopener"
                         :class="ui.iconButton(`h-8 w-8`)"
                         :aria-label="t(`preview.previewPanel.openInNewTab`, { label: target.label })"
-                        v-tooltip.bottom="t(`ui.action.openInNewTab`)"
+                        v-tooltip.bottom="t(`preview.previewPanel.newTab`)"
                     >
                         <Icon name="arrow-up-right" />
                     </a>
@@ -496,7 +516,7 @@ onUnmounted(stopStartingPoll);
                 type="button"
                 :class="ui.iconButton(`h-8 w-8`)"
                 :aria-label="floats ? t(`preview.previewPanel.dockPreviewBack`) : t(`preview.previewPanel.movePreviewIntoOwn`)"
-                v-tooltip.bottom="floats ? t(`preview.previewPanel.dockBack`) : t(`preview.previewPanel.moveIntoNewWindow`)"
+                v-tooltip.bottom="floats ? t(`preview.previewPanel.dockBack`) : t(`preview.previewPanel.newWindow`)"
                 @click="togglePreviewFloating()"
             >
                 <Icon :name="floats ? 'sign-in' : 'external-link'" />

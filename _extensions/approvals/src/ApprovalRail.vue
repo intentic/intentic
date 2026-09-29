@@ -39,18 +39,20 @@ const groups = computed<NavGroup<ApprovalScope>[]>(() => [{ key: `scopes`, items
 
 const tone = (scope: ApprovalScope): string => (scope.failed > 0 ? `text-danger` : scope.waiting > 0 ? `text-warning` : ``);
 
-// Tooltip text for the row's number: failed first, then waiting, then the slice's plain size.
-const note = (scope: ApprovalScope): string => {
-    const parts: string[] = [];
-    if (scope.failed > 0) {
-        parts.push(`${scope.failed} failed`);
-    }
-    if (scope.waiting > 0) {
-        parts.push(`${scope.waiting} waiting for your review`);
-    }
-    parts.push(`${scope.total} in all`);
-    return parts.join(` · `);
-};
+// A `v-tooltip` card, typed here since the extension does not depend on the kit that declares `Tip`.
+interface CountTip {
+    readonly title: string;
+    readonly rows: readonly { label: string; value: number | string; tone?: "warn" | "danger" }[];
+}
+// Hover card for the row's number: failed first, then waiting, then the slice's plain size; a zero row is left out.
+const note = (scope: ApprovalScope): CountTip => ({
+    title: scope.label,
+    rows: [
+        { label: t(`approvalsView.failed`), value: scope.failed > 0 ? scope.failed : ``, tone: `danger` },
+        { label: t(`approvalRail.waiting`), value: scope.waiting > 0 ? scope.waiting : ``, tone: `warn` },
+        { label: t(`approvalRail.total`), value: scope.total },
+    ],
+});
 
 const { mobile } = useDevice();
 

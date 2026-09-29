@@ -5,6 +5,7 @@ import Icon from "../primitives/Icon.vue";
 import type { AgentRunPicker } from "../../composables/useAgentRunPick.js";
 import type { IconName } from "../../icons/iconSets.js";
 import { useT } from "../../i18n/index.js";
+import type { Tip, TooltipValue } from "../../lib/tooltip.js";
 
 const t = useT();
 
@@ -34,7 +35,7 @@ const {
     disabled?: boolean;
     // The caller's own reason for the button, shown on the primary half; what the run costs is the caret's
     // own tooltip, so the two never share one.
-    hint?: string | undefined;
+    hint?: TooltipValue;
 }>();
 const emit = defineEmits<{ run: [] }>();
 
@@ -48,15 +49,26 @@ const modelLabel = computed(() => picker.model.value.label);
 /* Model, tier, and rate stay together because they describe the click's cost. */
 const spend = computed(() => {
     const choice = picker.model.value;
-    return [choice.label, ...(choice.effortLabel === undefined ? [] : [choice.effortLabel]), ...(choice.fast === true ? [`Fast`] : [])].join(` · `);
+    return [
+        choice.label,
+        ...(choice.effortLabel === undefined ? [] : [choice.effortLabel]),
+        ...(choice.fast === true ? [t(`ui.agentRunButton.fast`)] : []),
+    ].join(` · `);
 });
 
-/* WHAT THE CARET PROMISES, in the one place a caret can say anything. */
-const caretHint = computed(() =>
-    overridden.value
-        ? `This run only: ${spend.value}. Click to change it, or pick the sandbox default to go back.`
-        : `Opens an isolated agent on ${spend.value}, the sandbox default. Click to configure this run and start it.`,
-);
+/* WHAT THE CARET PROMISES, in the one place a caret can say anything: whose choice the run's model is, and the model. */
+const caretHint = computed((): Tip => {
+    const choice = picker.model.value;
+    return {
+        title: overridden.value ? t(`ui.agentRunButton.thisRunOnly`) : t(`ui.agentRunButton.sandboxDefault`),
+        rows: [
+            { label: t(`ui.agentRunButton.model`), value: choice.label },
+            { label: t(`ui.agentRunButton.effort`), value: choice.effortLabel ?? `` },
+            { label: t(`ui.agentRunButton.speed`), value: choice.fast === true ? t(`ui.agentRunButton.fast`) : `` },
+        ],
+        note: overridden.value ? t(`ui.agentRunButton.clickToChange`) : t(`ui.agentRunButton.clickToConfigure`),
+    };
+});
 
 /* ONE ACT: configure the run, and start it. `choose` answers true when the user pressed the panel's own button. */
 const openPicker = (): void => {

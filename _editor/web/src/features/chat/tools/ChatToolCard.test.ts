@@ -222,7 +222,7 @@ describe(`ChatToolCard`, () => {
                 icons: [`chevron-right`, `users`, `users`],
                 pills: [`background`],
                 facts: [`Edit`, `4 tools`],
-                door: [`/agents/sub-x`, `Open its conversation`],
+                door: [`/agents/sub-x`, `Open chat`],
             });
         });
 
@@ -237,7 +237,7 @@ describe(`ChatToolCard`, () => {
                 startedAt: 1,
                 activityAt: 2,
             };
-            expect(header(spawned, false, surfaceWith(blocked))).toMatchObject({ pills: [`background`, `needs input`], door: [`/agents/sub-x`, `Open its conversation`] });
+            expect(header(spawned, false, surfaceWith(blocked))).toMatchObject({ pills: [`background`, `needs input`], door: [`/agents/sub-x`, `Open chat`] });
         });
 
         // Where the chat can show a subagent, both kinds get the door: an in-process one's transcript, a spawned one's chat,
@@ -246,13 +246,13 @@ describe(`ChatToolCard`, () => {
             const opened: { id: string; kind: string }[] = [];
             const showing: ChatSurface = { ...surfaceWith(), openSubagent: (subagent) => opened.push({ ...subagent }) };
             const inProcessCard = mount(inProcess, true, showing);
-            const door = inProcessCard.querySelector<HTMLButtonElement>(`button[aria-label="Open its transcript"]`);
+            const door = inProcessCard.querySelector<HTMLButtonElement>(`button[aria-label="Open transcript"]`);
             expect(door).not.toBeNull();
             door?.click();
             app?.unmount();
             app = undefined;
             const spawnedCard = mount(spawned, true, showing);
-            const link = spawnedCard.querySelector<HTMLAnchorElement>(`a[aria-label="Open its conversation"]`);
+            const link = spawnedCard.querySelector<HTMLAnchorElement>(`a[aria-label="Open chat"]`);
             expect(link?.getAttribute(`href`)).toBe(`/agents/sub-x`);
             link?.click();
             expect(opened).toEqual([
@@ -263,7 +263,7 @@ describe(`ChatToolCard`, () => {
 
         // Its turn ended and the roster let it go: the record's last word is a snapshot, and its conversation keeps it.
         it(`still leads to a spawned subagent's own conversation once the roster lets it go, claiming nothing in flight`, () => {
-            expect(header(spawned, false, surfaceWith())).toMatchObject({ pills: [], door: [`/agents/sub-x`, `Open its conversation`] });
+            expect(header(spawned, false, surfaceWith())).toMatchObject({ pills: [], door: [`/agents/sub-x`, `Open chat`] });
         });
     });
 
