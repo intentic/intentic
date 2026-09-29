@@ -161,8 +161,6 @@
     },
     "dependencies": {
         "@dagrejs/dagre": "catalog:",
-        "@dicebear/core": "catalog:",
-        "@dicebear/styles": "catalog:",
         "@primeuix/themes": "catalog:",
         "@intentic/code-read": "workspace:*",
         "@shikijs/langs": "catalog:",

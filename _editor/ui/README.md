@@ -54,6 +54,13 @@ flowchart LR
   tells the app's wording from workspace text (`_editor/web/src/app/replayPrivacy.ts`).
 - **Tests and preview.** The kit's suites live in `_editor/web/src/design-system`. The editor's dev server shows
   every component variant at `/kit`.
+- **Assistant faces.** `PersonaFace` uses a persona's id to select a stable illustrated companion, so renaming it
+  keeps its face. `AssistantFace` accepts a `seed`, accessible `label`, pixel `size`, optional `character`, and
+  `animated` (default true). `ASSISTANT_CHARACTERS` holds the names, descriptions and bundled image URLs;
+  `assistantFace(seed)` resolves the identity and motion phase. The transparent WebP artwork in
+  `components/brand/assistants/` depicts soft clay mascots with Khmer lotus crowns and individual props; its
+  `generation.json` records the prompts. Larger faces gently bob and breathe; toolbar faces stay still and
+  `prefers-reduced-motion` stops animation. Browse the characters and actual sizes at `/kit#assistants`.
 
 ## Layout
 

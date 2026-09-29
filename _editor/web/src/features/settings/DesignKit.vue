@@ -59,6 +59,7 @@ import {
 } from "@intentic/ui";
 import Checkbox from "primevue/checkbox";
 import { ref } from "vue";
+import DesignKitAssistants from "./DesignKitAssistants.vue";
 
 const { scheme, set: setScheme } = useTheme();
 const { textSize, setTextSize } = useTextSize();
@@ -279,6 +280,7 @@ const pickedTier = ref(`collaborator`);
         </PageHeader>
 
         <div class="flex flex-col gap-10 pb-16">
+            <DesignKitAssistants />
             <!-- Scales -->
             <section class="flex flex-col gap-4">
                 <h2 :class="ui.sectionLabel()">Type scale</h2>

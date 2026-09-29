@@ -82,11 +82,11 @@ const tiles = computed<Tile[]>(() => [
     ),
 ]);
 // Anyone's tile face: up to three personas' faces huddled into one card-sized box, back pair first, front one last.
-const HUDDLE_FACE = 34;
+const HUDDLE_FACE = 40;
 const huddle = computed(() => personas.value.slice(0, 3).map((persona) => ({ id: persona.id, label: persona.label ?? persona.id })));
 const huddleSpot = (index: number, count: number): Record<string, string> => {
     const spots: readonly (readonly [number, number])[] =
-        count === 1 ? [[11, 11]] : count === 2 ? [[2, 6], [20, 16]] : [[0, 2], [22, 2], [11, 20]];
+        count === 1 ? [[12, 12]] : count === 2 ? [[1, 6], [23, 18]] : [[0, 3], [24, 3], [12, 24]];
     const [left, top] = spots[index]!;
     return { left: `${left}px`, top: `${top}px`, zIndex: `${index}` };
 };
@@ -223,8 +223,8 @@ defineExpose({ selectedTabId: computed(() => `${tabId(selected.value)}-name`) })
                 <!-- What needs you and what works ride on the face as badges, where a glance lands anyway; the chat count is the hover's. -->
                 <span class="relative shrink-0">
                     <PersonaFace v-if="tile.persona !== undefined" :persona="tile.persona" :size="FACE_SIZES.card" />
-                    <!-- Anyone is everyone here: a huddle of the first few faces, drawn in the same clay as the tiles beside it. -->
-                    <span v-else-if="huddle.length > 0" class="relative block h-14 w-14" aria-hidden="true">
+                    <!-- Anyone is everyone here: a huddle of the first few companions beside it. -->
+                    <span v-else-if="huddle.length > 0" class="relative block h-16 w-16" aria-hidden="true">
                         <PersonaFace
                             v-for="(face, index) in huddle"
                             :key="face.id"
@@ -235,7 +235,7 @@ defineExpose({ selectedTabId: computed(() => `${tabId(selected.value)}-name`) })
                         />
                     </span>
                     <!-- No personas yet: the glyph the composer's Acts as menu gives Anyone, on a disc the size of a face. -->
-                    <span v-else class="flex h-14 w-14 items-center justify-center rounded-full bg-primary-600/15">
+                    <span v-else class="flex h-16 w-16 items-center justify-center rounded-full bg-primary-600/15">
                         <Icon name="users" class="text-lg text-link" />
                     </span>
                     <span

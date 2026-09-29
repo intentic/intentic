@@ -207,12 +207,6 @@ catalogs:
     '@dagrejs/dagre':
       specifier: 3.1.1
       version: 3.1.1
-    '@dicebear/core':
-      specifier: 10.7.0
-      version: 10.7.0
-    '@dicebear/styles':
-      specifier: 10.6.0
-      version: 10.6.0
     '@discordjs/voice':
       specifier: 0.19.2
       version: 0.19.2
@@ -1312,12 +1306,6 @@ importers:
       '@dagrejs/dagre':
         specifier: 'catalog:'
         version: 3.1.1
-      '@dicebear/core':
-        specifier: 'catalog:'
-        version: 10.7.0
-      '@dicebear/styles':
-        specifier: 'catalog:'
-        version: 10.6.0
       '@intentic/code-read':
         specifier: workspace:*
         version: link:../../_tools/code-read
@@ -4866,13 +4854,6 @@ packages:
 
   '@dagrejs/graphlib@4.0.5':
     resolution: {integrity: sha512-7xrBTqIts3o+PMUZX97wSc+7TUbW+/rULzGNCTP6yooNVDXbzw4Wutg/H/xOutTB/c/k0YqOAavgPh4/Zk9PFA==}
-
-  '@dicebear/core@10.7.0':
-    resolution: {integrity: sha512-JUOzKOd8RUByJJo8ZL+C7YE/pvEsWewfpbWUmR8OIQZWv/PvUQHnohdevySC3icyyxe6EIU/8B/rQgA42us1QA==}
-    engines: {node: '>=22.0.0'}
-
-  '@dicebear/styles@10.6.0':
-    resolution: {integrity: sha512-KhxbEVI+z8TaenX58+ZhIRFBt7adggu/F+8g6ZYLu43H2/lgLuWA3Kg8vHBrCVWdfTTTt1p2wUhQomIkkypTuQ==}
 
   '@discordjs/builders@1.14.1':
     resolution: {integrity: sha512-gSKkhXLqs96TCzk66VZuHHl8z2bQMJFGwrXC0f33ngK+FLNau4hU1PYny3DNJfNdSH+gVMzE85/d5FQ2BpcNwQ==}
@@ -13811,10 +13792,6 @@ snapshots:
       '@dagrejs/graphlib': 4.0.5
 
   '@dagrejs/graphlib@4.0.5': {}
-
-  '@dicebear/core@10.7.0': {}
-
-  '@dicebear/styles@10.6.0': {}
 
   '@discordjs/builders@1.14.1':
     dependencies:

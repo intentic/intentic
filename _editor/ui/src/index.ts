@@ -190,8 +190,9 @@ export { default as PageAction } from "./components/layout/PageAction.vue";
 export { default as PageHeader } from "./components/layout/PageHeader.vue";
 // Escape hatch for a full-screen view; <PageHeader> consumes it, the mobile shell (in the web app) provides it.
 export { type PageBack, providePageBack, usePageBack } from "./components/layout/pageBack.js";
-// <Avatar>'s counterpart when there's no photo: a cartoon assembled from the name, so a persona reads as the same
-// face on every surface.
+export { default as AssistantFace } from "./components/brand/AssistantFace.vue";
+export { assistantFace, ASSISTANT_CHARACTERS, type AssistantCharacter } from "./components/brand/assistantFaces.js";
+// A persona's stable id chooses its illustrated companion on every surface.
 export { default as PersonaFace } from "./components/brand/PersonaFace.vue";
 export { FACE_SIZES, type PersonaLike } from "./components/brand/personaFace.js";
 // Bordered surface: own header, own interrupting strips, one scrolling body (the min-h-0/overflow-hidden

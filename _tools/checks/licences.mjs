@@ -68,13 +68,6 @@ const REVIEWED = new Map([
             why: "Needs an owner decision: mermaid's colour library names no licence in its manifest, and the license file beside it is MIT; the desktop app ships @intentic/ui, which depends on mermaid.",
         },
     ],
-    [
-        "@dicebear/styles",
-        {
-            licence: "SEE LICENSE IN LICENSE.md",
-            why: 'Needs an owner decision: its LICENSE.md licenses each avatar style separately, several CC BY 4.0 (attribution) and some "free for personal and commercial use", and the code around them MIT (the licence field pointing there arrived in 10.6.0; the terms are the ones 10.4.0 carried); the desktop app ships @intentic/ui, which depends on it.',
-        },
-    ],
 ]);
 
 /* ---- what leaves the repository, read from where each artifact is built ------------------------------------ */
