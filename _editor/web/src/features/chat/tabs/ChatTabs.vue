@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { AnchoredOverlay, Button, ContextMenu, isOverlayTarget, SearchBar, type Tip } from "@intentic/ui";
+import { AnchoredOverlay, Button, ContextMenu, FACE_SIZES, isOverlayTarget, PersonaFace, SearchBar, type Tip } from "@intentic/ui";
 import { createInlineRename } from "@intentic/ui/inline-rename";
 import type { Disposable } from "@intentic/extension-api";
 import type { MenuItem } from "primevue/menuitem";
@@ -21,6 +21,7 @@ import { commandShortcut, type CommandRegistration, registerCommand, withShortcu
 import { viewersOfSession } from "../../../shell/presence/usePresence";
 import PresenceAvatars from "../../../shell/presence/PresenceAvatars.vue";
 import ChatTabList from "./ChatTabList.vue";
+import { railPersona } from "../personas/railPersona";
 import PastChatList from "../panel/PastChatList.vue";
 import { useT } from "@intentic/ui/i18n";
 
@@ -568,7 +569,17 @@ const openHistory = (event: Event): void => {
 
         <!-- Foot of the rail: New agent (the fleet board's own wording) and Past chats, labelled and sized to match, no ellipsis (there's no chooser to promise). -->
         <div v-else class="flex shrink-0 flex-wrap items-center justify-center gap-2 pb-2.5 pt-3">
-            <Button size="small" @click="startAgent()"> <Icon name="plus" />{{ t(`chat.words.newAgent`) }} </Button>
+            <!-- In the Personas cut it starts as the persona picked there, and says so, like that tile's own "+". -->
+            <Button
+                v-if="railPersona !== undefined"
+                size="small"
+                :aria-label="t(`chat.chatPersonaRail.newChatAs`, { label: railPersona.label })"
+                v-tooltip.top="t(`chat.chatPersonaRail.newChatAs`, { label: railPersona.label })"
+                @click="startAgent(undefined, railPersona.id)"
+            >
+                <PersonaFace :persona="railPersona" :size="FACE_SIZES.pill" class="-my-1" />{{ t(`chat.words.newChat`) }}
+            </Button>
+            <Button v-else size="small" @click="startAgent()"> <Icon name="plus" />{{ t(`chat.words.newAgent`) }} </Button>
             <button type="button" class="composer-ghost h-7 gap-1.5 px-2 text-2xs" @click="openHistory">
                 <Icon name="history" class="text-2xs" />
                 <span>{{ t(`chat.chatTabs.pastChats`) }}</span>

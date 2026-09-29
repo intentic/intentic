@@ -4,7 +4,7 @@ import { personaBounds } from "@intentic/sandbox-contract";
 import { Button, ContextMenu, FACE_SIZES, Icon, PersonaFace, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import type { MenuItem } from "primevue/menuitem";
-import { computed, nextTick, ref, useId, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, ref, useId, watch, watchEffect } from "vue";
 import { RouterLink, useRouter } from "vue-router";
 import { startAgent } from "../../agents/fleet/agentActions";
 import { activityIcon, activityLine, agentDisplayTitle, laneOf, standingChip, turnInFlight, unregistered } from "../../agents/fleet/agentStatus";
@@ -17,6 +17,7 @@ import RailCard from "../../../components/RailCard.vue";
 import { relativeTime } from "../models/catalog";
 import { previewOf } from "../panel/useChat-strip";
 import { useChat } from "../run/useChat";
+import { railPersona } from "./railPersona";
 import type { OpenChat } from "../tabs/cardView";
 import ChatRowList from "../tabs/ChatRowList.vue";
 import { laneOrdered } from "../tabs/laneOrder";
@@ -152,6 +153,14 @@ watch([activeId, tabReveal, focusKey], () => {
 });
 // A pick naming a persona since deleted reads as Anyone rather than as nothing.
 const selected = computed(() => entries.value.find((entry) => entry.key === picked.value) ?? anyone.value);
+// Said to the rail's foot, whose New agent press then starts as this persona too (railPersona).
+watchEffect(() => {
+    const persona = selected.value.persona;
+    railPersona.value = persona === undefined ? undefined : { id: persona.id, label: persona.label };
+});
+onBeforeUnmount(() => {
+    railPersona.value = undefined;
+});
 
 // Finished chats past the board's window fold, unless the reader lifted it for that persona; pinned ones and the
 // focused one always show (windowFinished).
@@ -399,36 +408,39 @@ const onTabKey = (event: KeyboardEvent): void => {
         </div>
 
         <!-- The picked persona's chats: the very rows the Agents cut draws, so every close, pin, rename and menu is here too, drawn without the trays of agents each one started, since what this cut asks is who a chat speaks as. Named by the picked tile, which says whose they are. -->
-        <section :id="panelId" role="tabpanel" :aria-labelledby="`${tabId(selected)}-name`" class="flex min-h-0 flex-1 flex-col border-t border-line">
-            <div v-if="finishedOfSelected.size > 0" class="flex shrink-0 justify-end px-2 pt-1.5">
-                <Button
-                    size="small"
-                    severity="secondary"
-                    :text="true"
-                    :aria-label="t(`chat.chatTabList.clearFinished`, { count: finishedOfSelected.size }, finishedOfSelected.size)"
-                    v-tooltip.bottom="{
-                        title: t(`chat.chatPersonaRail.closeFinishedOf`, { label: selected.label }),
-                        rows: [{ label: t(`chat.chatTabList.chats`), value: finishedOfSelected.size }],
-                        note: t(`chat.chatTabList.keepsFinished`),
-                    }"
-                    @click="actions.closeSet(finishedOfSelected)"
-                >
-                    {{ t(`ui.action.clear`) }}
-                </Button>
-            </div>
+        <section :id="panelId" role="tabpanel" :aria-labelledby="`${tabId(selected)}-name`" class="flex min-h-0 flex-1 flex-col">
 
             <div ref="scroller" class="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto p-2">
                 <ChatRowList v-if="listing.chats.length > 0" :entries="listing.chats" :trays="false" />
-                <!-- Not a pager: the count itself is the point, one press away rather than gone. -->
-                <button
-                    v-if="listing.hidden > 0 || listing.lifted"
-                    type="button"
-                    :class="ui.addTile(`gap-1 rounded-lg py-1.5 text-2xs`)"
-                    @click="unfolded = flipped(unfolded, selected.key)"
-                >
-                    <Icon :name="listing.lifted ? 'chevron-up' : 'chevron-down'" class="text-2xs" />
-                    {{ listing.lifted ? t(`ui.action.showFewer`) : t(`ui.action.showEarlier`, { count: listing.hidden }) }}
-                </button>
+                <!-- The list's foot: the fold over older finished chats, and the one sweep for them beside it, so the chats sit straight under the grid and the sweep under what it closes. -->
+                <div v-if="listing.hidden > 0 || listing.lifted || finishedOfSelected.size > 0" class="flex min-w-0 items-center justify-end gap-2">
+                    <!-- Not a pager: the count itself is the point, one press away rather than gone. -->
+                    <button
+                        v-if="listing.hidden > 0 || listing.lifted"
+                        type="button"
+                        :class="ui.addTile(`min-w-0 flex-1 gap-1 rounded-lg py-1.5 text-2xs`)"
+                        @click="unfolded = flipped(unfolded, selected.key)"
+                    >
+                        <Icon :name="listing.lifted ? 'chevron-up' : 'chevron-down'" class="text-2xs" />
+                        {{ listing.lifted ? t(`ui.action.showFewer`) : t(`ui.action.showEarlier`, { count: listing.hidden }) }}
+                    </button>
+                    <Button
+                        v-if="finishedOfSelected.size > 0"
+                        class="shrink-0"
+                        size="small"
+                        severity="secondary"
+                        :text="true"
+                        :aria-label="t(`chat.chatTabList.clearFinished`, { count: finishedOfSelected.size }, finishedOfSelected.size)"
+                        v-tooltip.top="{
+                            title: t(`chat.chatPersonaRail.closeFinishedOf`, { label: selected.label }),
+                            rows: [{ label: t(`chat.chatTabList.chats`), value: finishedOfSelected.size }],
+                            note: t(`chat.chatTabList.keepsFinished`),
+                        }"
+                        @click="actions.closeSet(finishedOfSelected)"
+                    >
+                        {{ t(`ui.action.clear`) }}
+                    </Button>
+                </div>
 
                 <!-- Waiting on the reader, though not open here: never folded, since a question can't be answered unseen. -->
                 <RailCard

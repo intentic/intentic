@@ -18,6 +18,7 @@ import { queryClient } from "../../../lib/queryPersistence";
 import { rpcKey } from "../../../lib/queryKeys";
 import { router } from "../../../router";
 import ChatTabList from "./ChatTabList.vue";
+import { railPersona } from "../personas/railPersona";
 
 (() => {
     globalThis.Element.prototype.scrollIntoView = function scrollIntoView(): void {};
@@ -266,6 +267,19 @@ it(`closes the picked persona's finished chats from the one button above its lis
     expect(open).not.toContain(`done-a`);
     // Nothing left to sweep: the button goes rather than offering a press that closes nothing.
     expect(panel(el).querySelector(`[aria-label^="Close "][aria-label*="finished"]`)).toBeNull();
+});
+
+it(`tells the rail's foot who is picked, so its New agent press starts as them, and nobody once the cut goes`, async () => {
+    const el = await mountList();
+    expect(railPersona.value).toBeUndefined();
+    await pick(el, `Inbox Manager`);
+    expect(railPersona.value).toEqual({ id: `inbox`, label: `Inbox Manager` });
+    await pick(el, `Anyone`);
+    expect(railPersona.value).toBeUndefined();
+    await pick(el, `Work`);
+    app?.unmount();
+    app = undefined;
+    expect(railPersona.value).toBeUndefined();
 });
 
 it(`moves the pick with the arrow keys, Home and End, wrapping at either end`, async () => {
