@@ -2571,7 +2571,9 @@
             "pendingRebuild": "oczekuje na przebudowę",
             "recipe": "Przepis",
             "reject": "Odrzuć",
-            "whatSandboxInstalled": "Co ten sandbox ma zainstalowane"
+            "whatSandboxInstalled": "Co ten sandbox ma zainstalowane",
+            "buildsWithCheckoutRebuild": "Zbuduje się przy następnej przebudowie z checkoutu, w karcie",
+            "sandboxTab": "Sandbox ›"
         },
         "environmentContents": {
             "arrivesAfterRebuild": "pojawi się po przebudowie",

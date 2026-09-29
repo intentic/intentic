@@ -79,20 +79,6 @@ jest.mock(`../../capabilities/connect/hosts/HostRecreate.vue`, () => ({
     }),
 }));
 jest.mock(`./rebuild/HostedRebuild.vue`, () => ({ default: defineComponent({ render: () => h(`div`, { "data-executor": `hosted` }) }) }));
-// Carries `recipePending` out with it: whether the checkout's rebuild knows a recipe is waiting is what makes its
-// confirmation say it applies that recipe too. And `secondary`: whether it is the step the card is asking for.
-jest.mock(`./rebuild/DevRebuild.vue`, () => ({
-    default: defineComponent({
-        props: { recipePending: { type: Boolean, default: false }, secondary: { type: Boolean, default: false } },
-        render(): ReturnType<typeof h> {
-            return h(`div`, {
-                "data-executor": `checkout`,
-                "data-recipe-pending": String(this.recipePending),
-                "data-secondary": String(this.secondary),
-            });
-        },
-    }),
-}));
 
 const { default: EnvironmentCard } = await import("./EnvironmentCard.vue");
 
@@ -103,6 +89,8 @@ const mount = (): HTMLElement => {
     app = createApp({ render: () => h(EnvironmentCard) });
     app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
+    // Renders an anchor so the Sandbox tab link doesn't need a router.
+    app.component(`RouterLink`, defineComponent({ props: { to: { type: String, default: `` } }, setup: (props, { slots }) => () => h(`a`, { href: props.to }, slots.default?.()) }));
     app.mount(el);
     return el;
 };
@@ -141,29 +129,19 @@ it(`hands a pending overlay to the platform's builder on a hosted sandbox`, () =
     expect(el.querySelector(`[data-executor="host"]`)).toBeNull();
 });
 
-// A checkout-built sandbox is the one shape whose recipe is built by rebuilding from source, so that offer is here
-// while a recipe waits — and nowhere else, since every other sandbox has no checkout to rebuild from.
-it(`offers a rebuild from the checkout only on a sandbox whose base was built from one`, () => {
+// A checkout-built sandbox builds its recipe by rebuilding from source, and that button lives on the Sandbox tab
+// only: here the card points there, and nowhere else, since every other sandbox has no checkout to rebuild from.
+it(`points a checkout-built sandbox's waiting recipe to the Sandbox tab instead of offering the rebuild here`, () => {
     pending.value = { content: OVERLAY, hash: `pending` };
     expect(mount().querySelector(`[data-executor="checkout"]`)).toBeNull();
     app?.unmount();
     document.body.innerHTML = ``;
 
     localImage.value = { base: `intentic-sandbox:dev`, root: `/home/ada/intentic` };
-    expect(mount().querySelector(`[data-executor="checkout"]`)).not.toBeNull();
-});
-
-// ONE REBUILD, NOT TWO. The checkout's rebuild applies the approved recipe on the base it builds, so it is a superset
-// of the recipe's own rebuild, and offering both put two buttons that finish one step on the card, with a paragraph
-// each to tell them apart. The checkout's is the one left, drawn as the step, told the recipe is waiting so its
-// confirmation can say it applies that too.
-it(`offers only the checkout's rebuild on a checkout-built sandbox, as the step that applies the waiting recipe`, () => {
-    pending.value = { content: OVERLAY, hash: `pending` };
-    localImage.value = { base: `intentic-sandbox:dev`, root: `/home/ada/intentic` };
     const el = mount();
     expect(el.querySelector(`[data-executor="host"]`)).toBeNull();
-    expect(el.querySelector(`[data-executor="checkout"]`)?.getAttribute(`data-recipe-pending`)).toBe(`true`);
-    expect(el.querySelector(`[data-executor="checkout"]`)?.getAttribute(`data-secondary`)).toBe(`false`);
+    expect(el.querySelector(`[data-executor="checkout"] a`)?.getAttribute(`href`)).toBe(`/sandbox`);
+    expect(el.querySelector(`button`)?.textContent ?? ``).not.toContain(`Rebuild from checkout`);
 });
 
 // Nothing pending: rebuilding from the checkout is only picking up code, which the Sandbox tab's Update card offers.
@@ -201,11 +179,6 @@ it(`asks for the decision before the build, and draws the build a tier down whil
     const rebuild = el.querySelector(`[data-executor="host"]`);
     expect(approve?.compareDocumentPosition(rebuild!)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     expect(rebuild?.getAttribute(`data-text`)).toBe(`true`);
-    app?.unmount();
-    document.body.innerHTML = ``;
-
-    localImage.value = { base: `intentic-sandbox:dev`, root: `/home/ada/intentic` };
-    expect(mount().querySelector(`[data-executor="checkout"]`)?.getAttribute(`data-secondary`)).toBe(`true`);
 });
 
 // One card, two places a decision is pressed: the proposal's at the top, a runtime install's at the foot of its list.

@@ -2562,7 +2562,9 @@
             "pendingRebuild": "reconstruction en attente",
             "recipe": "Recette",
             "reject": "Refuser",
-            "whatSandboxInstalled": "Ce que ce sandbox a installé"
+            "whatSandboxInstalled": "Ce que ce sandbox a installé",
+            "buildsWithCheckoutRebuild": "Construit lors de la prochaine reconstruction depuis le checkout, dans l'onglet",
+            "sandboxTab": "Sandbox ›"
         },
         "environmentContents": {
             "arrivesAfterRebuild": "arrive après la reconstruction",

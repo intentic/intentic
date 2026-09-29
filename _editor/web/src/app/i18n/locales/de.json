@@ -2559,7 +2559,9 @@
             "pendingRebuild": "Neubau ausstehend",
             "recipe": "Rezept",
             "reject": "Ablehnen",
-            "whatSandboxInstalled": "Was diese Sandbox installiert hat"
+            "whatSandboxInstalled": "Was diese Sandbox installiert hat",
+            "buildsWithCheckoutRebuild": "Wird beim nächsten Neubau aus dem Checkout gebaut, im Tab",
+            "sandboxTab": "Sandbox ›"
         },
         "environmentContents": {
             "arrivesAfterRebuild": "kommt nach dem Neubau",

@@ -11,7 +11,6 @@ import { ENVIRONMENT_KEY, useEnvironment } from "./useEnvironment";
 import { useEnvironmentContents } from "./useEnvironmentContents";
 import { useRole } from "../secrets/useRole";
 import { useSandbox } from "../client/useSandbox";
-import DevRebuild from "./rebuild/DevRebuild.vue";
 import HostedRebuild from "./rebuild/HostedRebuild.vue";
 import HostRecreate from "../../capabilities/connect/hosts/HostRecreate.vue";
 import EnvironmentContents from "./EnvironmentContents.vue";
@@ -95,10 +94,8 @@ const approve = (): Promise<void> => decide(`step`, `/environment/approve`, { ha
 const reject = (): Promise<void> => decide(`step`, `/environment/reject`);
 
 // A base compiled from a checkout rebuilds from that checkout, and that rebuild applies the approved recipe as well
-// (ic rebases the overlay onto the image it builds), so on this sandbox it is the card's ONE rebuild. The quicker
-// recipe-only rebuild beside it was the same step offered twice, and the paragraphs it took to tell them apart were
-// most of what the card said. Only while a recipe waits: with nothing pending, rebuilding from the checkout is picking up
-// new code, which is the Sandbox tab's Update card's job, and offering it here too was the same button on two tabs.
+// (ic rebases the overlay onto the image it builds). That rebuild lives on the Sandbox tab only: the same button on two
+// tabs read as two different actions, so while a recipe waits this card points there instead of offering it again.
 const fromCheckout = computed(
     () => pending.value !== undefined && localImage.value !== undefined && slug.value !== undefined && canOperate.value,
 );
@@ -172,16 +169,11 @@ const step = computed(
                 <span class="font-mono">intentic deploy apply</span>
                 {{ t(`sandbox.environmentCard.againstSandboxsHost`) }}
             </p>
-            <!-- Only while a recipe waits: picking up code lives on the Sandbox tab's Update card. A tier down while a
-                 proposal waits, since deciding is the step before it. -->
-            <DevRebuild
-                v-else-if="fromCheckout && localImage && slug"
-                :slug="slug"
-                :base="localImage.base"
-                :root="localImage.root"
-                :recipe-pending="true"
-                :secondary="proposal !== undefined"
-            />
+            <!-- The checkout rebuild itself is on the Sandbox tab; this only points there. -->
+            <p v-else-if="fromCheckout" data-executor="checkout" class="text-2xs text-subtle">
+                {{ t(`sandbox.environmentCard.buildsWithCheckoutRebuild`) }}
+                <RouterLink to="/sandbox" class="font-medium text-link hover:underline">{{ t(`sandbox.environmentCard.sandboxTab`) }}</RouterLink>
+            </p>
             <!-- `bare`: no paragraph under the button, since its confirmation says what the rebuild costs; the class
                  puts back the column `bare` drops, so a running log keeps its gap. -->
             <HostRecreate

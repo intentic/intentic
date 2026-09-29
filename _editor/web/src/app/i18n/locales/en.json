@@ -2966,7 +2966,9 @@
             "pendingRebuild": "pending rebuild",
             "recipe": "Recipe",
             "reject": "Reject",
-            "whatSandboxInstalled": "What this sandbox has installed"
+            "whatSandboxInstalled": "What this sandbox has installed",
+            "buildsWithCheckoutRebuild": "Builds on the next rebuild from checkout, on the",
+            "sandboxTab": "Sandbox tab ›"
         },
         "environmentContents": {
             "arrivesAfterRebuild": "arrives after rebuild",
