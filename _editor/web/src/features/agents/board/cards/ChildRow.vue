@@ -33,8 +33,8 @@ const emit = defineEmits<{ open: [event: MouseEvent]; review: []; menu: [event: 
 const look = computed(() => childLook(props.child, props.provider));
 // Ticks only while it works; a settled row shares the clock without re-ticking.
 const now = useNow(() => look.value.working);
-// The second line, only for a child with something to say on it.
-const facts = computed(() => look.value.tag !== undefined || look.value.run !== undefined);
+// The second line, only for a child whose model is recorded; its kind rides the title row.
+const facts = computed(() => look.value.run !== undefined);
 const titleRuns = computed(() => markSegments(look.value.title, props.matchCase ? props.needle : props.needle.toLowerCase(), props.matchCase));
 // A conversation's own presses; an in-process subagent's row leaves the browser's menu alone, having none of its own.
 const review = (): void => {
@@ -74,6 +74,8 @@ const menu = (event: MouseEvent): void => {
             <span class="min-w-0 flex-1 truncate text-xs" :class="look.quiet ? 'text-muted' : 'text-content'" v-tooltip.top="look.titleHint">
                 <span v-for="(run, at) in titleRuns" :key="at" :class="run.hit ? 'rounded-sm bg-primary-600/30 text-content' : ''">{{ run.text }}</span>
             </span>
+            <!-- Beside the clock, not on a line of its own: the kind is a quiet aside, and gives way before the title. -->
+            <span v-if="look.tag !== undefined" class="max-w-24 shrink truncate text-2xs text-subtle">{{ look.tag }}</span>
             <!-- The card's own pill and tone for an ask, so the reader meets the same word here as on any card that asks. -->
             <span v-if="look.ask !== undefined" class="ui-status-pill shrink-0 bg-warning/15 text-2xs font-semibold text-warning">{{ look.ask }}</span>
             <span v-if="look.working && look.since !== undefined" v-tooltip.top="look.doing" class="shrink-0 text-2xs font-medium tabular-nums text-link">{{
@@ -81,12 +83,9 @@ const menu = (event: MouseEvent): void => {
             }}</span>
             <span v-else-if="look.ask === undefined && look.at > 0" class="shrink-0 text-2xs text-subtle">{{ relativeTime(look.at) }}</span>
         </span>
-        <!-- Under the title, not beside it: a tray row is narrow, and the title keeps the whole first line. Where the
-             line runs short the kind gives way before the model ("general-purpose" is long; which Opus it is matters more). -->
-        <span v-if="facts" class="flex w-full min-w-0 items-center gap-1.5 pl-5 text-2xs text-subtle">
-            <span v-if="look.tag !== undefined" class="min-w-0 truncate" :class="look.run === undefined ? '' : 'max-w-16 shrink-0'">{{ look.tag }}</span>
-            <span v-if="look.tag !== undefined && look.run !== undefined" class="shrink-0" aria-hidden="true">·</span>
-            <RunFacts v-if="look.run !== undefined" :run="look.run" />
+        <!-- Under the title: a tray row is narrow, and the title keeps the first line. -->
+        <span v-if="look.run !== undefined" class="flex w-full min-w-0 items-center gap-1.5 pl-5 text-2xs text-subtle">
+            <RunFacts :run="look.run" />
         </span>
     </button>
 </template>
