@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Button, ui, ContextMenu, Modal, ProjectChip, SearchBar, SegmentedControl, useDevice, useNarrow } from "@intentic/ui";
-import { computed, provide, ref } from "vue";
+import { computed, nextTick, provide, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { composeAgent, startAgent } from "../fleet/agentActions";
 import { usePanels } from "../../extensions/usePanels";
@@ -164,6 +164,21 @@ const NARROW_BOARD_REM = 48;
 const boardEl = ref<HTMLElement | undefined>(undefined);
 const narrow = useNarrow(boardEl, NARROW_BOARD_REM);
 const LANES = computed(laneHeads);
+// Folding Finished shrinks the board under the reader, and from its tail that drops them far below the lane; its header
+// is brought back to the top instead, so the fold lands where the lane starts.
+const toggleFinished = async (): Promise<void> => {
+    const folding = view.value.all;
+    move({ kind: `expand` });
+    if (!folding) {
+        return;
+    }
+    await nextTick();
+    const lane = boardEl.value?.querySelector<HTMLElement>(`[data-lane="finished"]`);
+    const scroller = lane?.closest<HTMLElement>(`.overflow-auto`);
+    if (lane && scroller && lane.getBoundingClientRect().top < scroller.getBoundingClientRect().top) {
+        lane.scrollIntoView({ block: `start` });
+    }
+};
 // Workspace facts the starters turn on, already fetched for the rail elsewhere: the board adds no fetch of its own.
 const { panels: workspaceRepos } = usePanels();
 const workspaceChanges = useChanges();
@@ -277,7 +292,7 @@ const starters = computed(() => boardStarters(workspaceRepos.value.length, works
                     :class="[!dragging && !narrow ? 'min-h-0' : '', laneDropClass(lane.key)]"
                 >
                     <!-- Finished's header doubles as the archive's window, swapping its dot/label and growing a way back; pinned while scrolling stacked. -->
-                    <LaneHeader :label="lane.label" :dot="lane.dot" class="px-1" :class="narrow ? 'sticky top-0 z-10 rounded-t-xl bg-canvas' : ''">
+                    <LaneHeader :label="lane.label" :dot="lane.dot" class="sticky top-0 z-10 rounded-t-xl bg-canvas px-1">
                         <template v-if="lane.key === 'finished' && view.archive" #mark>
                             <button
                                 type="button"
@@ -293,6 +308,16 @@ const starters = computed(() => boardStarters(workspaceRepos.value.length, works
                         </template>
                         <template #actions>
                             <template v-if="lane.key === 'finished' && !view.archive">
+                                <!-- The expanded lane's fold, pinned with the header: the tail row's twin sits a long scroll down. -->
+                                <button
+                                    v-if="view.all && !filtering && hiddenFinished > 0"
+                                    type="button"
+                                    class="ui-chip shrink-0 gap-1"
+                                    :aria-label="t(`ui.action.showFewer`)"
+                                    @click="toggleFinished"
+                                >
+                                    <Icon name="chevron-up" class="text-2xs" />{{ t(`ui.action.showFewer`) }}
+                                </button>
                                 <!-- Archive feedback highlights the destination counter. -->
                                 <button
                                     v-if="archiveSize > 0"
@@ -450,7 +475,7 @@ const starters = computed(() => boardStarters(workspaceRepos.value.length, works
                         v-if="lane.key === 'finished' && !view.archive && !filtering && hiddenFinished > 0"
                         type="button"
                         :class="ui.addTile(`mb-2.5 gap-1.5 rounded-lg py-2 text-2xs`)"
-                        @click="move({ kind: 'expand' })"
+                        @click="toggleFinished"
                     >
                         <Icon :name="view.all ? 'chevron-up' : 'chevron-down'" class="text-2xs" />
                         {{ view.all ? t(`ui.action.showFewer`) : t(`ui.action.showEarlier`, { count: hiddenFinished }) }}
