@@ -349,3 +349,32 @@ it(`drops a held reading once its retry instant has passed`, () => {
 
     expect(el.textContent).not.toContain(`Can't re-read`);
 });
+
+// A re-read used to swap every bar and figure in one frame, so the reader couldn't see which lane moved or by how
+// much. Now the bar drains to its new length, and what was just spent stays behind as a faint trail until it settles.
+it(`moves a lane to a new reading and leaves the spent part as a trail that then drains`, async () => {
+    const gemini = (utilization: number): TranslatorAccounts => ({
+        ...NO_ROUTED,
+        gemini: [
+            { name: `g-1`, label: `one@gmail.com`, usage: { measuredAt: MEASURED_AT, windows: [{ kind: `seven_day`, utilization, gates: `all` }] } },
+        ],
+    });
+    const el = mount([], gemini(40));
+    // First paint is the reading itself: nothing changed, so nothing moves and nothing trails.
+    expect(barWidths(el)).toEqual([`60%`]);
+    expect(el.querySelector(`[data-meter-trail]`)).toBeNull();
+
+    translatorAccounts.value = gemini(70);
+    judgeAccountStores();
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    // Mid-move: the trail holds the old length while the bar is on its way down.
+    expect(el.querySelector<HTMLElement>(`[data-meter-trail]`)?.style.width).toBe(`60%`);
+    const [moving] = barWidths(el).filter((width) => width !== `60%`);
+    expect(Number.parseFloat(moving ?? ``)).toBeGreaterThan(30);
+    expect(Number.parseFloat(moving ?? ``)).toBeLessThan(60);
+
+    await new Promise((resolve) => setTimeout(resolve, 1_600));
+    expect(barWidths(el)).toEqual([`30%`]);
+    expect(el.querySelector(`[data-meter-trail]`)).toBeNull();
+    expect(drawn(el)).toContain(`30%`);
+});

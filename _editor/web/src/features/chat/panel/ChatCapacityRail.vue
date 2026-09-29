@@ -1,9 +1,18 @@
 <script setup lang="ts">
 import { type Tip, type TipRow, ui } from "@intentic/ui";
 import { computed, onMounted, ref } from "vue";
-import { type CapacityBlocked, type CapacityLane, type CapacityProvider, type CapacityRow, type CapacityUnread, chatCapacity, heldReadings } from "./chatCapacity";
+import ChatCapacityLane from "./ChatCapacityLane.vue";
+import {
+    type CapacityBlocked,
+    type CapacityLane,
+    type CapacityProvider,
+    type CapacityRow,
+    type CapacityUnread,
+    chatCapacity,
+    heldReadings,
+} from "./chatCapacity";
 import { accountsLoaded } from "../accounts/providerAccounts";
-import { formatAge, formatRemaining, formatReset, meterFill, meterTint, meterTrack, remainingFigure, usageTone } from "../session/usageStatus";
+import { formatAge, formatRemaining, formatReset } from "../session/usageStatus";
 import { heldAccounts, refreshConnections } from "../accounts/useChat-accounts";
 import ProviderLogo from "../accounts/ProviderLogo.vue";
 import { useT } from "@intentic/ui/i18n";
@@ -22,32 +31,16 @@ const measuredProviders = computed(() => capacity.value.providers.filter((entry)
 
 const unmeasuredProviders = computed(() => capacity.value.providers.filter((entry) => entry.rows.every((row) => row.lanes.length === 0)));
 
-// How long until an allowance refills; undefined when unmeasured or already past. A spent lane keeps it: when it
-// comes back is the one thing left worth saying about it.
-const laneReset = (lane: CapacityLane, now: number = Date.now()): string | undefined => {
-    if (lane.resetsAt === undefined) {
-        return undefined;
-    }
-    const diffMs = lane.resetsAt * 1000 - now;
-    if (diffMs <= 0) {
-        return undefined;
-    }
-    const diffMinutes = Math.ceil(diffMs / 60_000);
-    if (diffMinutes < 60) {
-        return `in ${diffMinutes}m`;
-    }
-    const diffHours = Math.floor(diffMinutes / 60);
-    const remMinutes = diffMinutes % 60;
-    if (diffHours < 24) {
-        return remMinutes > 0 ? `in ${diffHours}h ${remMinutes}m` : `in ${diffHours}h`;
-    }
-    const diffDays = Math.floor(diffMinutes / (24 * 60));
-    const remHours = Math.floor((diffMinutes % (24 * 60)) / 60);
-    if (diffDays < 2 && remHours > 0) {
-        return `in 1d ${remHours}h`;
-    }
-    return `in ${diffDays}d`;
-};
+// Motion for rows a re-read adds or reorders: arrivals fade in and settle, reorders slide (FLIP). A leaving row just
+// goes, since sliding it out would need it lifted from the flow and the rows closing the gap already show the change.
+// Tailwind's motion-reduce variant stills both for a reader who asked for less motion.
+const motion = {
+    moveClass: `transition-transform duration-500 ease-out motion-reduce:transition-none`,
+    enterActiveClass: `transition duration-300 ease-out motion-reduce:transition-none`,
+    enterFromClass: `opacity-0 -translate-y-1`,
+} as const;
+// The readings replacing their skeleton: a short fade, so the column resolves instead of popping.
+const fadeIn = { enterActiveClass: `transition-opacity duration-300 motion-reduce:transition-none`, enterFromClass: `opacity-0` } as const;
 
 // Full row as one sentence (hover + screen reader): every lane in drawn order, reset in parentheses per lane.
 // Provider name omitted — already said by the heading above.
@@ -101,7 +94,9 @@ const staleNote = computed((): { readonly count: number; readonly detail: string
     const lines = [
         ...(held === undefined
             ? []
-            : [`Can't re-read ${held.labels.length === held.count ? held.labels.join(`, `) : plural(held.count)} yet, retry ${formatReset(held.resumesAt)}`]),
+            : [
+                  `Can't re-read ${held.labels.length === held.count ? held.labels.join(`, `) : plural(held.count)} yet, retry ${formatReset(held.resumesAt)}`,
+              ]),
         ...capacity.value.unread.map((entry: CapacityUnread) =>
             [
                 `Can't re-read ${entry.count <= 2 && entry.labels.length === entry.count ? entry.labels.join(`, `) : plural(entry.count)}`,
@@ -138,7 +133,13 @@ const staleTip = computed((): Tip | undefined => {
         ...(refused === 0
             ? []
             : [
-                  { label: t(`chat.chatCapacityRail.refused`), value: whoOf(unread.flatMap((entry) => entry.labels), refused) },
+                  {
+                      label: t(`chat.chatCapacityRail.refused`),
+                      value: whoOf(
+                          unread.flatMap((entry) => entry.labels),
+                          refused,
+                      ),
+                  },
                   { label: t(`chat.chatCapacityRail.lastRead`), value: lastReads.length === 0 ? `` : formatAge(Math.min(...lastReads)) },
               ]),
     ];
@@ -214,83 +215,50 @@ const blockedTip = (entry: CapacityBlocked): Tip => {
             </div>
         </div>
 
-        <template v-else>
+        <Transition v-else appear v-bind="fadeIn">
             <!-- Gap widens with nesting depth (lane < account < provider); it must grow with lane count or multi-bar accounts read as one long ladder. -->
             <div class="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-3 pb-3">
                 <!-- Every provider spent at once is an ordinary end-of-week state, not an error, so it's stated plainly. -->
                 <p v-if="capacity.providers.length === 0" class="text-2xs text-muted">{{ t(`chat.chatCapacityRail.nothingRoomRightNow`) }}</p>
 
                 <!-- One block per provider: the provider is the reader's actual choice here (accounts within it balance automatically). -->
-                <div v-for="entry in measuredProviders" :key="entry.provider" class="flex flex-col gap-2.5">
-                    <div class="flex items-center gap-1.5">
-                        <ProviderLogo :provider="entry.provider" class="shrink-0 text-2xs text-muted" />
-                        <span class="min-w-0 flex-1 truncate text-2xs font-medium text-content">{{ entry.label }}</span>
-                        <!-- Count, never a mean: 30 idle plus one spent isn't "3% used", it's one account you can't use. -->
-                        <span v-if="entry.total > 1" class="shrink-0 text-2xs tabular-nums text-subtle" :aria-label="countDetail(entry)"
-                            >{{ entry.ready }}/{{ entry.total }}</span
-                        >
-                    </div>
-
-                    <!-- One lane per allowance (the 5-hour session and the week run out separately; one tightest-of-two bar couldn't say which). -->
-                    <!-- Drawn row is decoration, the sentence below is the content (same split as UsageMeter): a bar means nothing to a screen reader. -->
-                    <div v-for="row in entry.rows" :key="row.id" class="flex flex-col gap-1">
-                        <div class="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1" aria-hidden="true">
-                            <span v-if="row.label !== undefined" class="col-span-3 min-w-0 truncate text-2xs text-muted">
-                                {{ row.label }}
-                            </span>
-
-                            <template v-for="lane in row.lanes" :key="lane.kind">
-                                <!-- Below the account name, not beside it at the same size: this is the little chart's axis, not another name.
-                                     A lane inside another (the session inside the week) hangs off it on an elbow, one step in per level. -->
-                                <span class="flex min-w-0 items-center text-3xs text-subtle">
-                                    <span
-                                        v-if="lane.depth > 0"
-                                        class="mr-1 ml-0.5 size-1.5 shrink-0 -translate-y-0.5 rounded-bl-2xs border-b border-l border-line-strong"
-                                        :style="{ marginLeft: `${0.125 + (lane.depth - 1) * 0.625}rem` }"
-                                    />
-                                    <span class="max-w-18 truncate">
-                                        {{ lane.short }}<span v-if="lane.scope !== undefined">&nbsp;·&nbsp;{{ lane.scope }}</span>
-                                    </span>
-                                </span>
-                                <!-- Drains as turns spend it: the fill is what is left. A spent pool draws no fill and tints its
-                                     track instead, since an empty neutral track reads as "no reading". A nested lane draws thinner,
-                                     since the lane holding it is the headline; and turns neutral when that one is spent, since its
-                                     room can't be used until the holder reopens (green would claim room that isn't spendable). -->
-                                <span
-                                    class="block overflow-hidden rounded-full"
-                                    :class="[meterTrack(lane.percent), lane.depth > 0 ? `h-0.5` : `h-1`]"
-                                >
-                                    <span
-                                        class="ui-meter-fill block h-full rounded-full"
-                                        :class="lane.capped ? `text-subtle` : usageTone(lane.percent)"
-                                        :style="{ width: `${meterFill(lane.percent)}%`, ...(lane.capped ? {} : meterTint(lane.percent)) }"
-                                    />
-                                </span>
-                                <div class="flex items-baseline justify-end gap-1 whitespace-nowrap text-right">
-                                    <span
-                                        class="text-2xs font-medium tabular-nums"
-                                        :class="lane.capped ? `text-subtle` : usageTone(lane.percent)"
-                                        :style="lane.capped ? {} : meterTint(lane.percent)"
-                                    >
-                                        {{ remainingFigure(lane.percent, row.stale) }}
-                                    </span>
-                                    <!-- A held lane's own reset is moot: it opens when its holder does, dated on the holder's line. -->
-                                    <span v-if="!lane.capped && laneReset(lane)" class="text-3xs text-subtle">·&nbsp;{{ laneReset(lane) }}</span>
-                                </div>
-                            </template>
-
-                            <span v-if="row.lanes.length === 0" class="col-span-3 text-2xs text-subtle">
-                                {{ row.note }}
-                            </span>
+                <!-- A re-read that reorders providers slides them to their new places rather than jumping, so the one that moved is seen moving. -->
+                <TransitionGroup tag="div" class="flex flex-col gap-5" v-bind="motion">
+                    <div v-for="entry in measuredProviders" :key="entry.provider" class="flex flex-col gap-2.5">
+                        <div class="flex items-center gap-1.5">
+                            <ProviderLogo :provider="entry.provider" class="shrink-0 text-2xs text-muted" />
+                            <span class="min-w-0 flex-1 truncate text-2xs font-medium text-content">{{ entry.label }}</span>
+                            <!-- Count, never a mean: 30 idle plus one spent isn't "3% used", it's one account you can't use. -->
+                            <span v-if="entry.total > 1" class="shrink-0 text-2xs tabular-nums text-subtle" :aria-label="countDetail(entry)"
+                                >{{ entry.ready }}/{{ entry.total }}</span
+                            >
                         </div>
-                        <span class="sr-only">{{ rowDetail(row, entry) }}</span>
-                    </div>
 
-                    <!-- Never a silent cap: a partial list still says how many more have room. -->
-                    <span v-if="entry.hidden > 0" class="text-2xs text-subtle">{{
-                        t(`chat.chatCapacityRail.moreRoom`, { hidden: entry.hidden })
-                    }}</span>
-                </div>
+                        <!-- One lane per allowance (the 5-hour session and the week run out separately; one tightest-of-two bar couldn't say which). -->
+                        <!-- Drawn row is decoration, the sentence below is the content (same split as UsageMeter): a bar means nothing to a screen reader. -->
+                        <TransitionGroup tag="div" class="flex flex-col gap-2.5" v-bind="motion">
+                            <div v-for="row in entry.rows" :key="row.id" class="flex flex-col gap-1">
+                                <div class="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1" aria-hidden="true">
+                                    <span v-if="row.label !== undefined" class="col-span-3 min-w-0 truncate text-2xs text-muted">
+                                        {{ row.label }}
+                                    </span>
+
+                                    <ChatCapacityLane v-for="lane in row.lanes" :key="lane.kind" :lane="lane" :row="row" />
+
+                                    <span v-if="row.lanes.length === 0" class="col-span-3 text-2xs text-subtle">
+                                        {{ row.note }}
+                                    </span>
+                                </div>
+                                <span class="sr-only">{{ rowDetail(row, entry) }}</span>
+                            </div>
+                        </TransitionGroup>
+
+                        <!-- Never a silent cap: a partial list still says how many more have room. -->
+                        <span v-if="entry.hidden > 0" class="text-2xs text-subtle">{{
+                            t(`chat.chatCapacityRail.moreRoom`, { hidden: entry.hidden })
+                        }}</span>
+                    </div>
+                </TransitionGroup>
 
                 <!-- Unmeasured providers collapsed to title row and grouped together -->
                 <div v-if="unmeasuredProviders.length > 0" class="flex flex-col gap-1.5">
@@ -321,13 +289,18 @@ const blockedTip = (entry: CapacityBlocked): Tip => {
                          own words and the fix ride the hover: this rail says what can't run, the Agent tab is where it's fixed. -->
                     <div v-for="entry in capacity.blocked" :key="entry.fix" v-tooltip.left="blockedTip(entry)">
                         <div class="flex items-baseline gap-2" aria-hidden="true">
-                            <span class="min-w-0 flex-1 truncate text-2xs text-muted">{{ t(`chat.chatCapacityRail.cantServe`, { count: entry.count }) }}</span>
+                            <span class="min-w-0 flex-1 truncate text-2xs text-muted">{{
+                                t(`chat.chatCapacityRail.cantServe`, { count: entry.count })
+                            }}</span>
                             <span class="shrink-0 text-2xs text-warning">{{ entry.reason }}</span>
                         </div>
-                        <span class="sr-only">{{ t(`chat.chatCapacityRail.cantServe`, { count: entry.count }) }} · {{ entry.reason }} · {{ blockedDetail(entry) }}</span>
+                        <span class="sr-only"
+                            >{{ t(`chat.chatCapacityRail.cantServe`, { count: entry.count }) }} · {{ entry.reason }} ·
+                            {{ blockedDetail(entry) }}</span
+                        >
                     </div>
                 </div>
             </div>
-        </template>
+        </Transition>
     </section>
 </template>
