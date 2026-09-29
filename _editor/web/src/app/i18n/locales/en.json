@@ -4284,10 +4284,19 @@
             "unbound": "Unbound"
         },
         "settingsNotifications": {
+            "browserTab": "Browser tab",
+            "chimeAsks": "When something needs you",
+            "chimeAsksHint": "A question, a permission or a plan to approve, a turn that failed.",
+            "chimeFinished": "When a turn finishes",
+            "chimeFinishedHint": "Turns a person started, not automations or subagents.",
+            "chimesWhen": "Sounds play only while you are in another tab or app, from one tab at a time, on this browser. Switching one on plays it.",
             "notifyDevice": "Notify this device",
             "pushNotifications": "Push notifications",
             "sendTest": "Send a test",
-            "sendTest2": "Send test"
+            "sendTest2": "Send test",
+            "sounds": "Sounds",
+            "tabStatus": "Show agent status on the tab",
+            "tabStatusHint": "The title counts what needs you and marks a turn that finished while you were away. The icon also shows when agents are working."
         },
         "settingsProfile": {
             "changeAvatar": "Change avatar",
@@ -4578,6 +4587,9 @@
     "shell": {
         "accountPanel": {
             "signOut2": "Sign Out"
+        },
+        "browserTab": {
+            "offline": "Offline"
         },
         "hubLayout": {
             "sections": "Sections"

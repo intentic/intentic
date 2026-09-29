@@ -20,6 +20,7 @@ import { signInAt } from "./signIn";
 import { t } from "@intentic/ui/i18n";
 import { localFace } from "../app/environments/local";
 import { receiveHandoff } from "../features/chat/drafts/localHandoff";
+import { setPageTitle } from "../shell/browser-tab/tabTitle";
 
 declare module "vue-router" {
     interface RouteMeta {
@@ -355,7 +356,5 @@ router.onError((error, to) => {
 
 // Sets the tab title to `<Page> / intentic` from the route's `title`, falling back to the bare brand when none is
 // declared. Asked for per navigation, so it is in the reader's language even when they changed it after boot.
-router.afterEach((to) => {
-    const title = to.meta.title?.();
-    document.title = title === undefined ? `intentic` : `${title} / intentic`;
-});
+// The tab's mark (what needs you, what finished) is put in front of it by shell/browser-tab/browserTab.ts.
+router.afterEach((to) => setPageTitle(to.meta.title?.()));

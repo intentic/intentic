@@ -2,6 +2,7 @@ import type { AgentStatus, AgentWatch } from "@intentic/sandbox-contract";
 import {
     type AgentStanding,
     agentStatusMeta,
+    attentionCalls,
     attentionCards,
     attentionReason,
     awaitingUser,
@@ -624,5 +625,22 @@ describe("attentionCards", () => {
     it("counts a child as a card of its own when its parent is not here, or its composer holds words", () => {
         expect(attentionCards([child(`orphan`, `gone`, spent), agent(`else`, { status: `awaiting` }), agent(`done`)])).toBe(2);
         expect(attentionCards([agent(`p`, { status: `running` }), child(`words`, `p`, { ...spent, unsent: true })])).toBe(1);
+    });
+    // The browser tab rings for a new caller, so it reads the callers the count folds away: a second child asking
+    // under a family already in Attention moves no count but is news.
+    it("names every caller with the card it rides, which the count folds to one", () => {
+        const fleet = [
+            agent(`p`, { status: `running` }),
+            child(`a`, `p`, { status: `awaiting`, attention: { ...none, permission: true } }),
+            child(`g`, `a`, { status: `awaiting`, attention: { ...none, capability: true } }),
+            child(`quiet`, `p`, spent),
+            agent(`solo`, { status: `awaiting` }),
+        ];
+        expect(attentionCalls(fleet)).toEqual([
+            { id: `a`, card: `p` },
+            { id: `g`, card: `p` },
+            { id: `solo`, card: `solo` },
+        ]);
+        expect(attentionCards(fleet)).toBe(2);
     });
 });

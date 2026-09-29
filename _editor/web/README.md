@@ -50,6 +50,14 @@ flowchart LR
   chat and terminal) or `ShellMobile.vue` (tab bar, full-screen views). A link naming a sandbox (`/?sandbox=<id>`, the
   desktop app's) opens the shell on it if the account lists it, and the id leaves the address either way
   (`router/sandboxArrival.ts`).
+- **The browser tab.** `shell/browser-tab/` shows the fleet's news to a reader who is looking elsewhere. One mark at
+  a time, the first that holds: `(2)` for what needs you (the Agents tile's own count), `Offline` when the sandbox is
+  not answering, `✓` for a turn someone started that finished while you were away (gone when you come back), and a dot
+  on the icon while a turn runs. The icon carries every mark; the title carries all but the last. Two opt-in sounds
+  (Settings → Notifications), one when something new needs you and one when a turn finishes, ring only while no
+  window of the app has the focus, and from one tab at a time.
+  _2026-09-29: work under way stays out of the title. A browser marks a background tab whose title changed (Chrome
+  dots a pinned one), so a title that changed at every turn's start and end would flag the tab all day._
 - **Extensions.** `src/extension-host/loader.ts` activates what the daemon lists. First-party extensions are compiled
   in (`builtins.ts`); the rest arrive from the daemon as single-file ESM bundles imported from a Blob URL.
   `hostModules.ts` and `public/ext-shims/` hand every bundle the app's own `vue`, vue-query and

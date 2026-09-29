@@ -12,6 +12,7 @@ import { useSandboxLiveness } from "../features/sandbox/overview/useSandboxLiven
 import { offerTimezone } from "../features/sandbox/overview/offerTimezone";
 import { startRestartWatch } from "../features/sandbox/live/restartWatch";
 import PoppablePanels from "./window/PoppablePanels.vue";
+import { startBrowserTab } from "./browser-tab/browserTab";
 
 // The signed-in session's live daemon connection and the panels it feeds, mounted above every route
 // (App.vue) rather than inside the workspace shell, so /setup, an invite link, and the desktop handoff
@@ -58,6 +59,10 @@ startDraftingReceipts();
 // Follows the runs that end in this sandbox being replaced, for the same reason: the restart reaches the reader
 // wherever they are, so what explains it cannot live on the card that started it.
 startRestartWatch();
+
+// The browser tab tells what needs the reader, what finished while they were away and whether work is under way, in
+// its title, its icon and (when they asked for it) a sound. Same lifetime: it is about the session, not a screen.
+startBrowserTab();
 </script>
 
 <template>

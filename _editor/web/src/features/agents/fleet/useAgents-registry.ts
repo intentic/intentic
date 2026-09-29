@@ -29,6 +29,12 @@ export const archiveFailure = sandboxRef<string | undefined>(() => undefined);
 // Daemon's approvals queue as last read; kept separate since the stream never carries holds.
 const heldRead = sandboxShallowRef<AutomationApproval[]>(() => []);
 
+// Whether this sandbox's roster, and its held wakes, have been read at all since it became the active one. An empty
+// `registry` is both "nothing is running" and "nothing heard yet", and a reader that tells news from what was already
+// there (the browser tab's chime) needs the two apart, or every question waiting at load would ring as new.
+export const rosterHeard = sandboxRef(() => false);
+export const heldHeard = sandboxRef(() => false);
+
 // Holds a press here released that a read may still list; each retires on the first read without it (releaseHeld).
 const releasing = sandboxShallowRef<ReadonlySet<string>>(() => new Set());
 
@@ -109,6 +115,7 @@ export const sameEntries = <T>(left: readonly T[], right: readonly T[]): boolean
 // Single writer for the held list, holding it to the rule `registry` keeps: a re-read carrying the same holds
 // leaves the array alone, since identity is the only change signal its readers get.
 const setHeldWakes = (held: AutomationApproval[]): void => {
+    heldHeard.value = true;
     if (releasing.value.size > 0) {
         const listed = new Set(held.map((wake) => wake.id));
         const still = [...releasing.value].filter((id) => listed.has(id));
@@ -138,6 +145,7 @@ const applySnapshot = (agents: AgentSummary[], rev: number): void => {
         }
     }
     latchRegistered(agents);
+    rosterHeard.value = true;
     const next = stabilizeRegistry(withPending(agents));
     if (sameEntries(registry.value, next)) {
         return;

@@ -427,7 +427,14 @@ export const laneOf = (agent: AgentStanding): FleetLane => {
 // badge's count, for this sandbox's fleet and another's alike, so the badge cannot disagree with the lane it names.
 export const attentionCards = (
     agents: readonly (AgentStanding & { readonly id: string; readonly startedBy?: string | undefined; readonly unsent?: boolean | undefined })[],
-): number => {
+): number => new Set(attentionCalls(agents).map((call) => call.card)).size;
+
+// Every agent calling the reader, each with the card it is drawn on: its own, or its family's where it rides one. The
+// count above is the cards; the browser tab's chime wants the callers, so a second child calling under a family already
+// in Attention is news although the lane's count does not move.
+export const attentionCalls = (
+    agents: readonly (AgentStanding & { readonly id: string; readonly startedBy?: string | undefined; readonly unsent?: boolean | undefined })[],
+): readonly { readonly id: string; readonly card: string }[] => {
     type Standing = (typeof agents)[number];
     const byId = new Map(agents.map((agent) => [agent.id, agent] as const));
     const parentIn = (agent: Standing): Standing | undefined => {
@@ -445,18 +452,18 @@ export const attentionCards = (
         }
         return top.id;
     };
-    const cards = new Set<string>();
+    const calls: { readonly id: string; readonly card: string }[] = [];
     for (const agent of agents) {
         const parent = parentIn(agent);
         if (parent === undefined || agent.unsent === true) {
             if (laneOf(agent) === `attention`) {
-                cards.add(agent.id);
+                calls.push({ id: agent.id, card: agent.id });
             }
         } else if (callsOwner(agent, { child: laneOf(agent), parent: laneOf(parent) })) {
-            cards.add(familyOf(agent));
+            calls.push({ id: agent.id, card: familyOf(agent) });
         }
     }
-    return cards.size;
+    return calls;
 };
 
 // What the card says when landed work is no longer in the workspace, in whole or in part. A land arrives as

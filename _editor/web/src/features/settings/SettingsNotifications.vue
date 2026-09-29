@@ -3,6 +3,8 @@ import { Button, Row, RowGroup } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed } from "vue";
 import { usePushNotifications } from "../../push/usePushNotifications";
+import { type Chime, playChime } from "../../shell/browser-tab/chimes";
+import { chimeAsks, chimeFinished, tabStatus } from "../../shell/browser-tab/tabPreferences";
 import { useT } from "@intentic/ui/i18n";
 
 // Whether this sandbox may reach you when you're not looking at it. Per-device: enabling here does not affect other
@@ -25,6 +27,17 @@ const sent = computed(() => {
 });
 
 const toggle = (next: boolean): void => void (next ? enable() : disable());
+
+// The browser tab's own signals (shell/browser-tab/): per browser, no daemon involved. A sound switched on is played at
+// once, so the reader hears what they chose, and the click is what lets this page make sound at all later.
+const chimeSwitch = (preference: typeof chimeAsks, chime: Chime) => (next: boolean): void => {
+    preference.value = next;
+    if (next) {
+        void playChime(chime);
+    }
+};
+const setChimeAsks = chimeSwitch(chimeAsks, `asks`);
+const setChimeFinished = chimeSwitch(chimeFinished, `finished`);
 
 // One line per distinct state; `denied` matters since the page cannot re-prompt after a block.
 const status = computed(() => {
@@ -58,5 +71,38 @@ const status = computed(() => {
 
         <p v-if="error" class="text-xs text-danger">{{ error }}</p>
         <p v-else-if="sent" class="text-xs text-muted">{{ sent }}</p>
+
+        <RowGroup :label="t(`settings.settingsNotifications.browserTab`)">
+            <Row
+                as="label"
+                icon="browsers"
+                :title="t(`settings.settingsNotifications.tabStatus`)"
+                :description="t(`settings.settingsNotifications.tabStatusHint`)"
+            >
+                <template #control><ToggleSwitch v-model="tabStatus" /></template>
+            </Row>
+        </RowGroup>
+
+        <div class="flex flex-col gap-2">
+            <RowGroup :label="t(`settings.settingsNotifications.sounds`)">
+                <Row
+                    as="label"
+                    icon="exclamation-circle"
+                    :title="t(`settings.settingsNotifications.chimeAsks`)"
+                    :description="t(`settings.settingsNotifications.chimeAsksHint`)"
+                >
+                    <template #control><ToggleSwitch :model-value="chimeAsks" @update:model-value="setChimeAsks" /></template>
+                </Row>
+                <Row
+                    as="label"
+                    icon="check-circle"
+                    :title="t(`settings.settingsNotifications.chimeFinished`)"
+                    :description="t(`settings.settingsNotifications.chimeFinishedHint`)"
+                >
+                    <template #control><ToggleSwitch :model-value="chimeFinished" @update:model-value="setChimeFinished" /></template>
+                </Row>
+            </RowGroup>
+            <p class="text-xs text-muted">{{ t(`settings.settingsNotifications.chimesWhen`) }}</p>
+        </div>
     </div>
 </template>

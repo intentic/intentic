@@ -3775,10 +3775,19 @@
             "unbound": "Nicht belegt"
         },
         "settingsNotifications": {
+            "browserTab": "Browser-Tab",
+            "chimeAsks": "Wenn etwas dich braucht",
+            "chimeAsksHint": "Eine Frage, eine Berechtigung oder ein Plan zur Freigabe, ein fehlgeschlagener Durchlauf.",
+            "chimeFinished": "Wenn ein Durchlauf fertig ist",
+            "chimeFinishedHint": "Durchläufe, die ein Mensch gestartet hat, keine Automationen oder Subagenten.",
+            "chimesWhen": "Töne erklingen nur, während du in einem anderen Tab oder einer anderen App bist, aus nur einem Tab, in diesem Browser. Beim Einschalten wird der Ton einmal abgespielt.",
             "notifyDevice": "Dieses Gerät benachrichtigen",
             "pushNotifications": "Push-Benachrichtigungen",
             "sendTest": "Test senden",
-            "sendTest2": "Test senden"
+            "sendTest2": "Test senden",
+            "sounds": "Töne",
+            "tabStatus": "Agentenstatus im Tab anzeigen",
+            "tabStatusHint": "Der Titel zählt, was dich braucht, und markiert einen Durchlauf, der fertig wurde, während du weg warst. Das Symbol zeigt außerdem, wenn Agenten arbeiten."
         },
         "settingsProfile": {
             "changeAvatar": "Avatar ändern",
@@ -4053,6 +4062,9 @@
     "shell": {
         "accountPanel": {
             "signOut2": "Abmelden"
+        },
+        "browserTab": {
+            "offline": "Offline"
         },
         "hubLayout": {
             "sections": "Bereiche"
