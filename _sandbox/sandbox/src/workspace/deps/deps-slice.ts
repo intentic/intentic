@@ -1,7 +1,9 @@
 import { join } from "node:path";
 import type { Logger } from "pino";
 import type { ManagedProcesses } from "../../processes/managed-processes.js";
-import { fileHeavyCommandsStore, heavyCommandsDocument, type HeavyCommandsStore } from "../../system/resources/heavy-commands.js";
+import { shellQuote } from "@intentic/sandbox-run/quote";
+import { fileHeavyCommandsStore, heavyCommandsDocument, heavyEnvPrefix, type HeavyCommandsStore } from "../../system/resources/heavy-commands.js";
+import { QUEUE_RUN_BIN, queueRunEnabled } from "../../terminal/terminal-run.js";
 import type { WorkspacePaths } from "../workspace.js";
 import { createDependencyCoordinator, type DependencyCoordinator, dependencyRequestsDocument } from "./reconcile-deps.js";
 
@@ -29,14 +31,26 @@ export interface DepsSliceDeps {
 export type QueueMembers = "queueHeavy";
 
 // Builds the slice but for the heavy queue.
-export const createDepsSlice = ({ workspace, historyRoot, processes, logger }: DepsSliceDeps): Omit<DepsSlice, QueueMembers> => ({
-    dependencies: createDependencyCoordinator({
-        workspace,
-        processes,
-        logger,
-        requestsPath: join(historyRoot, dependencyRequestsDocument.path),
-    }),
-    heavyCommands: fileHeavyCommandsStore(join(workspace.root, heavyCommandsDocument.path), (reason) =>
+export const createDepsSlice = ({ workspace, historyRoot, processes, logger }: DepsSliceDeps): Omit<DepsSlice, QueueMembers> => {
+    const heavyCommands = fileHeavyCommandsStore(join(workspace.root, heavyCommandsDocument.path), (reason) =>
         logger.warn(`heavy-commands: ${reason}, falling back to the shipped rules`),
-    ),
-});
+    );
+    return {
+        dependencies: createDependencyCoordinator({
+            workspace,
+            processes,
+            logger,
+            requestsPath: join(historyRoot, dependencyRequestsDocument.path),
+            // The daemon's install joins the lane an agent's own install takes (heavy-rules.cjs `dependency-install`),
+            // judged as it starts like any agent program; a table that cannot be read runs it unqueued.
+            lane: async (command) => {
+                try {
+                    return `${heavyEnvPrefix(await heavyCommands.read(), { queueRun: queueRunEnabled() ? QUEUE_RUN_BIN : undefined })}bash -c ${shellQuote(command)}`;
+                } catch {
+                    return command;
+                }
+            },
+        }),
+        heavyCommands,
+    };
+};

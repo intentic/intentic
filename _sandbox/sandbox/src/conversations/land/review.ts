@@ -53,9 +53,18 @@ const repoReviewOf = async (
         if (flagged.length === 0) {
             return { absorbed: present.absorbed.size, scratch };
         }
-        // Reads the worktree's own layout; /workspace/modules walks /work, missing a new package.
-        const modules = await agentRepoModules(deps.agentWorktrees, entry, composed.repo);
-        return { row: { repo: composed.repo, branch: entry.placement.branch, changes: flagged, modules }, absorbed: present.absorbed.size, scratch };
+        const [modules, added] = await Promise.all([
+            // Reads the worktree's own layout; /workspace/modules walks /work, missing a new package.
+            agentRepoModules(deps.agentWorktrees, entry, composed.repo),
+            // Of the rows still its own: a manifest your history already carries is no longer something to approve.
+            review.addedDependencies(flagged),
+        ]);
+        const row: AgentRepoChanges = { repo: composed.repo, branch: entry.placement.branch, changes: flagged, modules };
+        // Absent rather than empty, as the contract says: most work adds nothing.
+        if (added.length > 0) {
+            row.addedDependencies = added;
+        }
+        return { row, absorbed: present.absorbed.size, scratch };
     } catch (error) {
         // One broken worktree (mid-repair, deleted dir) must not 500 the whole review.
         deps.logger.warn({ err: error, repo: composed.repo, id: entry.id }, "agents diff: repo skipped");

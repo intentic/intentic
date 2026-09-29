@@ -94,6 +94,8 @@
             "you": "tú"
         },
         "agentReviewPanel": {
+            "addsDependencies": "Añade {count} dependencia | Añade {count} dependencias",
+            "addsDependenciesHint": "Al integrar el trabajo, pasan a tu proyecto y el sandbox las instala en tu árbol.",
             "agentHasntChangedAny": "Este agente no ha cambiado ningún archivo. Su conversación está en {remoteName}: ábrela allí para pedirle algo, y lo que escriba aparecerá aquí.",
             "agentHasntChangedAny2": "Este agente no ha cambiado ningún archivo. Pídele algo en el chat: su trabajo aparece aquí, archivo a archivo, para revisarlo antes de que se integre.",
             "agentsDiff": "El diff es del agente",
@@ -117,6 +119,7 @@
             "landedWithFiles": "Integrado, con {count} archivo por terminar | Integrado, con {count} archivos por terminar",
             "leftCopiesElsewhere": "Esta conversación dejó {count} copia en una rama propia | Esta conversación dejó {count} copias en ramas propias",
             "leftCopiesElsewhereHint": "Lo que aparece aquí es la rama propia de esta conversación tal como quedó la última vez. Todo lo escrito desde entonces fue a la rama que figura junto a cada repositorio, e Integrar no lo llevará.",
+            "manifestAdds": "añade {names}",
             "markReviewed": "Marcar revisado",
             "markReviewed2": "Marcar {label} como revisado",
             "nextFile": "Archivo siguiente",
@@ -2069,6 +2072,17 @@
             "verdictDecidesAllowedSilently": "El veredicto decide: permitido en silencio, retenido como solicitud, o rechazado.",
             "watch": "Observar",
             "whetherVerdictStopCommand": "Si un veredicto puede detener un comando."
+        },
+        "agentProjectInstalls": {
+            "ask": "Preguntar antes",
+            "askNote": "Los agentes preguntan antes de instalar paquetes. Respondes en el chat, una vez o para toda la conversación.",
+            "automatic": "Automático",
+            "automaticNote": "Los agentes instalan los paquetes que necesita una tarea y siguen trabajando. Una conversación en su propio worktree instala en su propia copia; la revisión lista cada dependencia que añade su trabajo antes de que lo integres.",
+            "never": "Nunca",
+            "neverNote": "Los agentes nunca instalan paquetes por su cuenta. Una dependencia que añaden a un manifiesto se instala cuando integras su trabajo.",
+            "title": "Instalaciones del proyecto",
+            "whenInstalls": "Cuando un agente instala paquetes",
+            "whetherAsked": "Si se te pregunta antes de que se ejecute pnpm add, npm install o uv sync."
         },
         "agentSafetyLog": {
             "all": "Todas",

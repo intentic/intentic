@@ -1,4 +1,6 @@
-import type { AgentSpan, GitChange, ScratchPath, WorkspaceModule } from "@intentic/sandbox-contract";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+import type { AddedDependencies, AgentSpan, GitChange, ScratchPath, WorkspaceModule } from "@intentic/sandbox-contract";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import { changesAgainstBase, changesBetweenRefs, headSha } from "../../git/changes/changes.js";
 import { materializedPaths } from "../../git/changes/changes-porcelain.js";
@@ -7,6 +9,7 @@ import { refAgainstRef, withCodeCounts, worktreeAgainstRef } from "../../git/cha
 import { readModules } from "../../workspace/deps/modules.js";
 import type { IsolatedAgent, RepoRecord } from "../registry/agents-store.js";
 import { isAncestor } from "./agent-refs.js";
+import { addedNames, declaredDependencies, isManifest } from "./manifest-dependencies.js";
 import type { AgentWorktrees } from "../worktrees/worktrees.js";
 
 // Single source for an agent's changed-lines count, shared by the review's live diff and the fleet card's snapshot
@@ -113,6 +116,9 @@ const agentRepoScope = async (
 export interface AgentRepoReview {
     readonly changes: GitChange[];
     readonly scratch: ScratchPath[];
+    // The new dependency names of the manifests among `rows`, read against the same anchor and tree as `changes`.
+    // Asked, not carried: only the review wants it, and only of the rows still its own.
+    readonly addedDependencies: (rows: readonly GitChange[]) => Promise<AddedDependencies[]>;
 }
 
 // Same cumulative rows as the review, each carrying the code-only +/- count from git/code-counts.ts.
@@ -126,9 +132,84 @@ export const agentRepoReview = async (
     const { dir, attached, from, scratch } = await agentRepoScope(worktrees, entry, composed, "cumulative", git);
     const main = worktrees.mainDir(composed.repo);
     if (!attached) {
-        return { changes: await withCodeCounts(main, await changesBetweenRefs(main, from, entry.placement.branch, git), refAgainstRef(from, entry.placement.branch)), scratch };
+        const tip = entry.placement.branch;
+        return {
+            changes: await withCodeCounts(main, await changesBetweenRefs(main, from, tip, git), refAgainstRef(from, tip)),
+            scratch,
+            addedDependencies: (rows) => addedDependenciesOf(main, from, tip, rows, git),
+        };
     }
-    return { changes: await withCodeCounts(dir, await changesAgainstBase(dir, from, scratch, git), worktreeAgainstRef(dir, from)), scratch };
+    return {
+        changes: await withCodeCounts(dir, await changesAgainstBase(dir, from, scratch, git), worktreeAgainstRef(dir, from)),
+        scratch,
+        addedDependencies: (rows) => addedDependenciesOf(dir, from, undefined, rows, git),
+    };
+};
+
+// A row whose manifest may now declare something it did not: a deleted one takes nothing on.
+const ADDING: ReadonlySet<GitChange["status"]> = new Set(["added", "modified", "renamed", "type-changed"]);
+
+// A file's text at a rev-spec (`<sha>:<path>`), undefined where that rev does not hold it.
+const textAt = async (dir: string, spec: string, git: GitRunner): Promise<string | undefined> => {
+    try {
+        return (await git(dir, ["cat-file", "-p", spec])).stdout;
+    } catch {
+        return undefined;
+    }
+};
+
+const textOnDisk = async (path: string): Promise<string | undefined> => {
+    try {
+        return await readFile(path, "utf8");
+    } catch {
+        return undefined;
+    }
+};
+
+const NOTHING_DECLARED: ReadonlyMap<string, string> = new Map();
+
+// Read as the manifest at `path` says it is, even for a rename's earlier self under another name.
+const declaredIn = async (path: string, text: Promise<string | undefined>): Promise<ReadonlyMap<string, string> | undefined> => {
+    const read = await text;
+    return read === undefined ? undefined : declaredDependencies(path, read);
+};
+
+// One manifest's new names; undefined when it gained none, or when either side cannot be read as that manifest.
+const manifestAdditions = async (
+    dir: string,
+    from: string,
+    tip: string | undefined,
+    row: GitChange,
+    git: GitRunner,
+): Promise<AddedDependencies | undefined> => {
+    const [before, after] = await Promise.all([
+        // Only an added file has no earlier self, and that declares nothing; a rename's is under its old name. Any other
+        // row missing at the anchor is left out rather than read as empty, which would list its every dependency as new.
+        row.status === "added" ? NOTHING_DECLARED : declaredIn(row.path, textAt(dir, `${from}:${row.from ?? row.path}`, git)),
+        declaredIn(row.path, tip === undefined ? textOnDisk(join(dir, row.path)) : textAt(dir, `${tip}:${row.path}`, git)),
+    ]);
+    if (before === undefined || after === undefined) {
+        return undefined;
+    }
+    const added = addedNames(before, after);
+    return added.length > 0 ? { path: row.path, added } : undefined;
+};
+
+// Per changed manifest, the dependency names it declares now and did not at `from`: one entry per manifest that gained
+// any, by path. Only the manifests among `rows` are read, two reads each, so the ordinary review costs nothing extra.
+// `tip` is the rev holding the current file, undefined to read the checkout's own file on disk (uncommitted work
+// included, as the rows are).
+export const addedDependenciesOf = async (
+    dir: string,
+    from: string,
+    tip: string | undefined,
+    rows: readonly GitChange[],
+    git: GitRunner = defaultGit,
+): Promise<AddedDependencies[]> => {
+    const manifests = rows.filter((row) => ADDING.has(row.status) && isManifest(row.path));
+    const read = await Promise.all(manifests.map((row) => manifestAdditions(dir, from, tip, row, git)));
+    // Paths are unique within a repo, so no two entries compare equal.
+    return read.filter((entry): entry is AddedDependencies => entry !== undefined).sort((a, b) => (a.path < b.path ? -1 : 1));
 };
 
 // What the main tree currently holds for each path, not a diff between two shas: a land copies content into the main

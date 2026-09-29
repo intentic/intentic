@@ -93,6 +93,8 @@
             "you": "vous"
         },
         "agentReviewPanel": {
+            "addsDependencies": "Ajoute {count} dépendance | Ajoute {count} dépendances",
+            "addsDependenciesHint": "Intégrer le travail les ajoute à votre projet, et le sandbox les installe dans votre arborescence.",
             "agentHasntChangedAny": "Cet agent n'a modifié aucun fichier. Sa conversation est dans {remoteName} : ouvrez-la là-bas pour lui demander quelque chose, et tout ce qu'il écrit apparaît ici.",
             "agentHasntChangedAny2": "Cet agent n'a modifié aucun fichier. Demandez-lui quelque chose dans le chat : son travail apparaît ici, fichier par fichier, à relire avant qu'il ne s'intègre.",
             "agentsDiff": "Le diff est de l'agent",
@@ -115,6 +117,7 @@
             "landedWithFiles": "Intégré, avec {count} fichier à finir | Intégré, avec {count} fichiers à finir",
             "leftCopiesElsewhere": "Cette conversation a laissé {count} copie sur une branche à elle | Cette conversation a laissé {count} copies sur des branches à elles",
             "leftCopiesElsewhereHint": "Ce qui figure ici est la branche propre à cette conversation, telle qu'elle a été laissée. Tout ce qui a été écrit depuis est parti sur la branche indiquée à côté de chaque dépôt, et Intégrer ne l'emportera pas.",
+            "manifestAdds": "ajoute {names}",
             "markReviewed": "Marquer relu",
             "markReviewed2": "Marquer {label} comme relu",
             "nextFile": "Fichier suivant",
@@ -2059,6 +2062,17 @@
             "verdictDecidesAllowedSilently": "Le verdict décide : autorisé en silence, retenu comme demande, ou refusé.",
             "watch": "Observer",
             "whetherVerdictStopCommand": "Si un verdict peut arrêter une commande."
+        },
+        "agentProjectInstalls": {
+            "ask": "Demander d'abord",
+            "askNote": "Les agents demandent avant d'installer des paquets. Vous répondez dans le chat, une fois ou pour toute la conversation.",
+            "automatic": "Automatique",
+            "automaticNote": "Les agents installent les paquets dont une tâche a besoin et continuent de travailler. Une conversation dans son propre worktree installe dans sa propre copie ; la revue liste chaque dépendance que son travail ajoute avant que vous ne l'intégriez.",
+            "never": "Jamais",
+            "neverNote": "Les agents n'installent jamais de paquets eux-mêmes. Une dépendance qu'ils ajoutent à un manifeste est installée quand vous intégrez leur travail.",
+            "title": "Installations du projet",
+            "whenInstalls": "Quand un agent installe des paquets",
+            "whetherAsked": "Si l'on vous demande avant que pnpm add, npm install ou uv sync ne s'exécute."
         },
         "agentSafetyLog": {
             "all": "Toutes",

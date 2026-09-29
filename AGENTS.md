@@ -56,8 +56,8 @@ in the foreground, one at a time. Do not run the whole repository (`pnpm test`, 
 `turbo run` without `--filter`): several conversations share this machine, and one of those runs can take all of its
 memory. CI runs all of it on what the owner pushes.
 
-**After the land**: the dependency reconciler installs when the land moved a manifest or the lockfile
-(`_sandbox/sandbox/src/workspace/deps/reconcile-deps.ts`), and nothing else runs. The owner commits and pushes, and CI
+**After the land**: the dependency reconciler installs when the land moved a manifest or the lockfile, or brought a
+project the main tree never installed (`_sandbox/sandbox/src/workspace/deps/reconcile-deps.ts`), and nothing else runs. The owner commits and pushes, and CI
 checks the commit (`.github/workflows/ci.yml`: its `quick` job type-checks the packages a push changed and runs the
 push check within minutes, and the verify groups build and test the rest). When main's CI fails, one fix agent takes it
 (below). The "Checks after landing" note every conversation gets says so too, and that a failure in code you

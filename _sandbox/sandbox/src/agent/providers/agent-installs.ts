@@ -1,9 +1,12 @@
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
+import { resolve } from "node:path";
 import type { ClassifiedInstall } from "../../environment/runtime-installs.js";
+import { decideProjectInstall, type ProjectInstallGateOptions } from "./project-installs.js";
 
 // Anything installed outside /work dies with the container. Every image-scoped install is classified here and recorded
 // silently to the runtime-install ledger; the drift sweep drafts the overlay step. A browser install is told the
-// browser is already baked; a project dependency mutation is denied outright.
+// browser is already baked. A project dependency install is located (which directory it works on) and handed to
+// project-installs.ts, which decides by where it writes and the owner's setting, not by its being an install.
 
 // A pip install inside a venv is project scope, not image scope.
 const VENV_SCOPED = /(\bsource\s+\S*\/activate\b|\bpython3?\s+-m\s+venv\b|\/venv\/bin\/pip\b|\.venv\/bin\/pip\b)/;
@@ -157,9 +160,6 @@ const tokenize = (command: string): CommandSegment[] => {
 // The words of each invocation, quotes honoured; callers outside this file want words, not a joined string to re-split.
 export const commandWords = (command: string): string[][] => tokenize(command).map((segment) => [...segment.words]);
 
-// The same, joined, for tests here written as patterns over a whole invocation rather than as word arithmetic.
-const commandInvocations = (command: string): string[] => tokenize(command).map((segment) => segment.words.join(" "));
-
 const shellWords = (command: string): string[] => tokenize(command).flatMap((segment) => segment.words);
 
 const executableOf = (words: readonly string[]): string | undefined => words[0]?.split("/").at(-1);
@@ -178,33 +178,39 @@ export const agentCommand = (command: string): string => {
     return session !== -1 && words[session + 1] !== undefined ? (words[session + 1] as string) : command;
 };
 
-const nodeInstall = (command: string): { project: boolean; global: boolean } => {
-    for (const invocation of commandWords(command)) {
-        const words = [...invocation];
-        if (words[0] === "corepack") {
-            words.shift();
+// One invocation's reading: a package manager's verb, and whether it mutates a project's tree or the image's.
+interface ManagerReading {
+    readonly project: boolean;
+    readonly global: boolean;
+}
+
+const NOT_AN_INSTALL: ManagerReading = { project: false, global: false };
+
+const nodeInstallOf = (invocation: readonly string[]): ManagerReading => {
+    const words = [...invocation];
+    if (words[0] === "corepack") {
+        words.shift();
+    }
+    const executable = words.shift()?.split("/").at(-1);
+    if (executable === undefined || !NODE_MANAGERS.has(executable)) {
+        return NOT_AN_INSTALL;
+    }
+    const global = words.some((word) => word === "-g" || word === "--global");
+    for (let index = 0; index < words.length; index += 1) {
+        const word = words[index];
+        if (word === undefined) {
+            break;
         }
-        const executable = words.shift()?.split("/").at(-1);
-        if (executable === undefined || !NODE_MANAGERS.has(executable)) {
+        if (OPTION_WITH_VALUE.has(word)) {
+            index += 1;
             continue;
         }
-        const global = words.some((word) => word === "-g" || word === "--global");
-        for (let index = 0; index < words.length; index += 1) {
-            const word = words[index];
-            if (word === undefined) {
-                break;
-            }
-            if (OPTION_WITH_VALUE.has(word)) {
-                index += 1;
-                continue;
-            }
-            if (word.startsWith("-")) {
-                continue;
-            }
-            return { project: NODE_INSTALL_VERBS.has(word) && !global, global: NODE_INSTALL_VERBS.has(word) && global };
+        if (word.startsWith("-")) {
+            continue;
         }
+        return { project: NODE_INSTALL_VERBS.has(word) && !global, global: NODE_INSTALL_VERBS.has(word) && global };
     }
-    return { project: false, global: false };
+    return NOT_AN_INSTALL;
 };
 
 // Classification: which tools an image-scoped install would put on this container.
@@ -403,16 +409,60 @@ export const classifyImageInstalls = (command: string): ClassifiedInstall[] => {
     return found;
 };
 
-const projectInstallOf = (command: string): boolean => {
+// One project-dependency install a command runs, and where: the directory the shell stands in when it gets there, or
+// the one the manager's own flag names.
+export interface ProjectInstall {
+    readonly dir: string;
+    readonly ecosystem: "node" | "python";
+}
+
+// Flags that point a manager at another project than the one the shell stands in.
+const NODE_DIR_FLAGS = new Set(["--dir", "-C", "--prefix", "--cwd"]);
+const PYTHON_DIR_FLAGS = new Set(["--directory", "--project", "-C"]);
+const PYTHON_MANAGER = /^(?:uv\s+sync|poetry\s+(?:install|add|remove|update|sync)|pipenv\s+(?:install|uninstall|sync|update))\b/;
+const VENV_PIP = /^(?:\S*\/)?pip3?\s+(?:install|uninstall)\b/;
+
+// The value a directory flag carries, spelled either `--dir x` or `--dir=x`.
+const flaggedDir = (words: readonly string[], flags: ReadonlySet<string>): string | undefined => {
+    for (const [index, word] of words.entries()) {
+        if (flags.has(word)) {
+            return words[index + 1];
+        }
+        const joined = [...flags].find((flag) => flag.startsWith("--") && word.startsWith(`${flag}=`));
+        if (joined !== undefined) {
+            return word.slice(joined.length + 1);
+        }
+    }
+    return undefined;
+};
+
+// A `cd` moves the shell for the rest of the line; `~` and `-` are not followed, since neither names a place this can
+// resolve, and the install is then read where the shell stood before.
+const moved = (current: string, target: string | undefined): string =>
+    target === undefined || target === "-" || target.startsWith("~") ? current : resolve(current, target);
+
+// Every project install the command runs, in order. Precision over recall like the image classifier, but in the other
+// direction: a miss here lets an install run unprepared, so every spelling the deny used to catch is still caught.
+export const projectInstallsOf = (command: string, cwd: string): ProjectInstall[] => {
     const effective = agentCommand(command);
     const venv = VENV_SCOPED.test(effective);
-    return (
-        nodeInstall(effective).project ||
-        (venv && commandInvocations(effective).some((part) => /^(?:\S*\/)?pip3?\s+(?:install|uninstall)\b/.test(part))) ||
-        commandInvocations(effective).some((part) =>
-            /^(?:uv\s+sync|poetry\s+(?:install|add|remove|update|sync)|pipenv\s+(?:install|uninstall|sync|update))\b/.test(part),
-        )
-    );
+    const found: ProjectInstall[] = [];
+    let current = cwd;
+    for (const segment of tokenize(effective)) {
+        const words = segment.words;
+        const executable = executableOf(words);
+        if (executable === "cd" || executable === "pushd") {
+            current = moved(current, words[1]);
+            continue;
+        }
+        const joined = words.join(" ");
+        if (nodeInstallOf(words).project) {
+            found.push({ dir: moved(current, flaggedDir(words, NODE_DIR_FLAGS)), ecosystem: "node" });
+        } else if ((venv && VENV_PIP.test(joined)) || PYTHON_MANAGER.test(joined)) {
+            found.push({ dir: moved(current, flaggedDir(words, PYTHON_DIR_FLAGS)), ecosystem: "python" });
+        }
+    }
+    return found;
 };
 
 const BROWSER_ALREADY_BAKED =
@@ -519,11 +569,28 @@ export const toolResultText = (response: unknown): string => {
     return parts.join("\n");
 };
 
-export const installSteeringHooks = (
-    canRequestProjectInstall = true,
-    onImageInstall?: (installs: readonly ClassifiedInstall[], command: string) => void,
-): Partial<Record<HookEvent, HookCallbackMatcher[]>> => {
+export interface InstallSteering {
+    // Everything a project install's verdict reads (project-installs.ts); absent, as for a caller that cannot say where
+    // the turn stands, refuses every one rather than guessing.
+    readonly projectInstalls?: ProjectInstallGateOptions;
+    // Where the shell stands when the hook's own input names no cwd.
+    readonly cwd?: string;
+    readonly onImageInstall?: (installs: readonly ClassifiedInstall[], command: string) => void;
+}
+
+const UNPLACED =
+    "A project install cannot run here: this agent does not know where its turn writes. Add the dependency to the " +
+    "manifest if the task needs it (it installs once the work lands), and say what you could not run.";
+
+const refusal = (reason: string) => ({
+    hookSpecificOutput: { hookEventName: "PreToolUse" as const, permissionDecision: "deny" as const, permissionDecisionReason: reason },
+});
+
+export const installSteeringHooks = (steering: InstallSteering = {}): Partial<Record<HookEvent, HookCallbackMatcher[]>> => {
+    const { onImageInstall } = steering;
     let browserTold = false;
+    // The first allowed install says where it writes and what lasts of it; later ones need not repeat it.
+    let placementTold = false;
     let missingTold = false;
     // Its own latch: being told about a missing tool teaches nothing about quoting.
     let substitutionTold = false;
@@ -580,17 +647,19 @@ export const installSteeringHooks = (
                         if (typeof command !== "string") {
                             return {};
                         }
-                        if (projectInstallOf(command)) {
-                            const route = canRequestProjectInstall
-                                ? "Edit the manifest if the task needs a new dependency, then call `mcp__deps__install`; the daemon queues the real install for after this turn."
-                                : "This persona cannot change the workspace; ask the owner to install it.";
-                            return {
-                                hookSpecificOutput: {
-                                    hookEventName: "PreToolUse",
-                                    permissionDecision: "deny",
-                                    permissionDecisionReason: `A dependency install cannot run inside a turn: its scratch result is discarded and a shared-tree install would race other turns. ${route}`,
-                                },
-                            };
+                        const cwd = input.cwd === "" ? (steering.cwd ?? "/") : input.cwd;
+                        const projectInstalls = projectInstallsOf(command, cwd);
+                        if (projectInstalls.length > 0) {
+                            if (steering.projectInstalls === undefined) {
+                                return refusal(UNPLACED);
+                            }
+                            const verdict = await decideProjectInstall(agentCommand(command), projectInstalls, steering.projectInstalls);
+                            if (!verdict.allow) {
+                                return refusal(verdict.reason);
+                            }
+                            const told = [...(placementTold ? [] : [verdict.note]), ...verdict.unprepared];
+                            placementTold = true;
+                            return told.length === 0 ? {} : { hookSpecificOutput: { hookEventName: "PreToolUse", additionalContext: told.join(" ") } };
                         }
                         const installs = classifyImageInstalls(command);
                         if (installs.length === 0) {

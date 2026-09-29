@@ -93,6 +93,8 @@
             "you": "Sie"
         },
         "agentReviewPanel": {
+            "addsDependencies": "Fügt {count} Abhängigkeit hinzu | Fügt {count} Abhängigkeiten hinzu",
+            "addsDependenciesHint": "Landet die Arbeit, kommen sie in Ihr Projekt, und die Sandbox installiert sie in Ihrem Baum.",
             "agentHasntChangedAny": "Dieser Agent hat keine Dateien geändert. Seine Unterhaltung ist in {remoteName}: öffnen Sie sie dort, um etwas zu erbitten, und was immer er schreibt, taucht hier auf.",
             "agentHasntChangedAny2": "Dieser Agent hat keine Dateien geändert. Bitten Sie ihn im Chat um etwas: seine Arbeit taucht hier auf, Datei für Datei, zur Durchsicht, bevor sie landet.",
             "agentsDiff": "Diff stammt vom Agenten",
@@ -114,6 +116,7 @@
             "landedWithFiles": "Gelandet, {count} Datei noch abzuschließen | Gelandet, {count} Dateien noch abzuschließen",
             "leftCopiesElsewhere": "Diese Unterhaltung hat {count} Kopie auf einem eigenen Branch zurückgelassen | Diese Unterhaltung hat {count} Kopien auf eigenen Branches zurückgelassen",
             "leftCopiesElsewhereHint": "Hier steht der eigene Branch dieser Unterhaltung, so wie er zuletzt verlassen wurde. Alles seither Geschriebene ging stattdessen auf den Branch neben dem jeweiligen Repository, und Übernehmen trägt es nicht mit.",
+            "manifestAdds": "fügt {names} hinzu",
             "markReviewed": "Als geprüft markieren",
             "markReviewed2": "{label} als geprüft markieren",
             "nextFile": "Nächste Datei",
@@ -2060,6 +2063,17 @@
             "verdictDecidesAllowedSilently": "Das Urteil entscheidet: still erlaubt, als Anfrage zurückgehalten, oder verweigert.",
             "watch": "Beobachten",
             "whetherVerdictStopCommand": "Ob ein Urteil einen Befehl stoppen kann."
+        },
+        "agentProjectInstalls": {
+            "ask": "Erst fragen",
+            "askNote": "Agenten fragen, bevor sie Pakete installieren. Sie antworten im Chat, einmal oder für die ganze Unterhaltung.",
+            "automatic": "Automatisch",
+            "automaticNote": "Agenten installieren die Pakete, die eine Aufgabe braucht, und arbeiten weiter. Eine Unterhaltung in ihrem eigenen Worktree installiert in ihre eigene Kopie; die Durchsicht listet jede Abhängigkeit auf, die ihre Arbeit hinzufügt, bevor Sie sie landen.",
+            "never": "Nie",
+            "neverNote": "Agenten installieren nie selbst Pakete. Eine Abhängigkeit, die sie in ein Manifest eintragen, wird installiert, wenn Sie ihre Arbeit landen.",
+            "title": "Projektinstallationen",
+            "whenInstalls": "Wenn ein Agent Pakete installiert",
+            "whetherAsked": "Ob Sie gefragt werden, bevor pnpm add, npm install oder uv sync läuft."
         },
         "agentSafetyLog": {
             "all": "Alle",

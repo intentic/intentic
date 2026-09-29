@@ -357,6 +357,16 @@ describe("foldTurn", () => {
         );
     });
 
+    // The reconciler starts a land's install within seconds, in the install lane; it never waits for turns to end, so
+    // the notice must not say it does.
+    it("says a land's dependency install is on its way, not waiting for other agents", () => {
+        expect(foldOf("go", [{ kind: "landed", landed: true, deps: { missing: 3, started: [], deferred: true } }]).at(-1)).toEqual({
+            role: "notice",
+            text: "Changes landed in your workspace: review them in the Changes panel. 3 dependencies it added or changed are being installed in your tree: the install waits for any other install to finish, appears in Work terminals, and its outcome lands in Activity.",
+            noticeAction: "landHold",
+        });
+    });
+
     // A spawned child's work goes into its parent's checkout, as the parent's in-process subagents' edits do: the row
     // says so, never that it reached the owner's workspace, and says who is to bring in a clash.
     it("says a child's work went into its parent's checkout, or was held off it by a clash", () => {

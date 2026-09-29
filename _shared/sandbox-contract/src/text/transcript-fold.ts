@@ -78,7 +78,8 @@ const empty = (row: TranscriptRow): boolean =>
     !holdsRequest(row);
 
 // Clause appended to the landed notice for a workspace dependency change, or empty when there is none. Reports the
-// install as already started, or queued when other agents are still running; never as a request.
+// install as already started, or as on its way: the daemon starts it within seconds, in the install lane, behind any
+// install already running; never as a request.
 const dependencyLine = (deps: { missing: number; started: string[]; deferred: boolean } | undefined): string => {
     if (deps === undefined || deps.missing === 0) {
         return ``;
@@ -86,7 +87,7 @@ const dependencyLine = (deps: { missing: number; started: string[]; deferred: bo
     // `missing` counts versions the turn bumped as well as names it added, so the sentence names both.
     const what = `${deps.missing} ${deps.missing === 1 ? `dependency` : `dependencies`} it added or changed`;
     return deps.deferred
-        ? ` ${what} ${deps.missing === 1 ? `is` : `are`} queued: installation starts after this turn and any other active agents finish, appears in Work terminals, then its checks and outcome land in Activity.`
+        ? ` ${what} ${deps.missing === 1 ? `is` : `are`} being installed in your tree: the install waits for any other install to finish, appears in Work terminals, and its outcome lands in Activity.`
         : ` Installing ${what}; the project's checks run when that finishes, and the outcome lands in Activity.`;
 };
 

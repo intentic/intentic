@@ -1,13 +1,30 @@
 import type { HookInput } from "@anthropic-ai/claude-agent-sdk";
 import type { ClassifiedInstall } from "../../environment/runtime-installs.js";
 import { syncHookOutput } from "../../testing.js";
-import { classifyImageInstalls, installSteeringHooks } from "./agent-installs.js";
+import { classifyImageInstalls, installSteeringHooks, projectInstallsOf } from "./agent-installs.js";
+import { createInstallGrants, type ProjectInstallGateOptions } from "./project-installs.js";
 
-const fire = async (hooks: ReturnType<typeof installSteeringHooks>, command: string) => {
+// The SDK always names the shell's cwd; an empty one is what reaches the hook's own fallback.
+const fire = async (hooks: ReturnType<typeof installSteeringHooks>, command: string, cwd = "") => {
     const [matcher] = hooks.PreToolUse!;
-    const input = { hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command }, tool_use_id: "t1" } as unknown as HookInput;
+    const input = { hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command }, tool_use_id: "t1", cwd } as unknown as HookInput;
     return matcher!.hooks[0]!(input, "t1", { signal: new AbortController().signal });
 };
+
+// A main-tree turn's gate: nothing to prepare, so these tests read the verdict alone. Placement and asking are covered
+// in project-installs.integration.test.ts.
+const gate = (over: Partial<ProjectInstallGateOptions> = {}): ProjectInstallGateOptions => ({
+    placement: { kind: "shared" },
+    mode: "automatic",
+    canInstall: true,
+    conversationId: "c1",
+    grants: createInstallGrants(),
+    cards: undefined,
+    push: undefined,
+    signal: new AbortController().signal,
+    unattended: false,
+    ...over,
+});
 
 const context = (result: Awaited<ReturnType<typeof fire>>): string | undefined =>
     (syncHookOutput(result).hookSpecificOutput as { additionalContext?: string } | undefined)?.additionalContext;
@@ -91,7 +108,7 @@ test("a command already wrapped by tmux-run still classifies", () => {
 
 test("an image-scoped install is recorded silently, not lectured", async () => {
     const recorded: { installs: readonly ClassifiedInstall[]; command: string }[] = [];
-    const hooks = installSteeringHooks(true, (installs, command) => recorded.push({ installs, command }));
+    const hooks = installSteeringHooks({ onImageInstall: (installs, command) => recorded.push({ installs, command }) });
     const result = await fire(hooks, "apt-get install -y imagemagick");
     expect(context(result)).toBeUndefined();
     expect(recorded).toEqual([{ installs: [{ kind: "apt", tool: "imagemagick" }], command: "apt-get install -y imagemagick" }]);
@@ -99,7 +116,7 @@ test("an image-scoped install is recorded silently, not lectured", async () => {
 
 test("every install is recorded, not just the first", async () => {
     const recorded: string[] = [];
-    const hooks = installSteeringHooks(true, (installs) => recorded.push(...installs.map((install) => install.tool)));
+    const hooks = installSteeringHooks({ onImageInstall: (installs) => recorded.push(...installs.map((install) => install.tool)) });
     await fire(hooks, "apt-get install -y jq");
     await fire(hooks, "pip install pillow");
     expect(recorded).toEqual(["jq", "pillow"]);
@@ -107,7 +124,7 @@ test("every install is recorded, not just the first", async () => {
 
 test("the recorded command is the agent's own, unwrapped from tmux", async () => {
     const recorded: string[] = [];
-    const hooks = installSteeringHooks(true, (_installs, command) => recorded.push(command));
+    const hooks = installSteeringHooks({ onImageInstall: (_installs, command) => recorded.push(command) });
     await fire(hooks, "/usr/local/bin/tmux-run agent-abc 'apt-get install -y ffmpeg' install-ffmpeg");
     expect(recorded).toEqual(["apt-get install -y ffmpeg"]);
 });
@@ -139,29 +156,72 @@ test.each([
     "poetry install",
     "python3 -m venv .venv && .venv/bin/pip install pillow",
     "source .venv/bin/activate && pip install requests",
-])("a project dependency mutation is handed to the coordinator: %s", async (command) => {
-    const result = decision(await fire(installSteeringHooks(), command));
+])("a project dependency mutation is recognised, so the owner's answer reaches it: %s", async (command) => {
+    const result = decision(await fire(installSteeringHooks({ projectInstalls: gate({ mode: "never" }) }), command));
     expect(result?.permissionDecision).toBe("deny");
-    expect(result?.permissionDecisionReason).toContain("mcp__deps__install");
+    expect(result?.permissionDecisionReason).toContain("turned agent installs off");
 });
 
-test("a persona without write and shell authority is denied without being offered a mutation tool", async () => {
-    const result = decision(await fire(installSteeringHooks(false), "pnpm install"));
+test("a project install runs by default, and the turn is told once where it writes", async () => {
+    const hooks = installSteeringHooks({ projectInstalls: gate() });
+    const first = await fire(hooks, "pnpm add zod");
+    expect(decision(first)?.permissionDecision).toBeUndefined();
+    expect(context(first)).toContain("install lane");
+    expect(await fire(hooks, "pnpm add vue")).toEqual({});
+});
+
+test("a caller that cannot say where the turn writes refuses a project install rather than guessing", async () => {
+    const result = decision(await fire(installSteeringHooks(), "pnpm install"));
     expect(result?.permissionDecision).toBe("deny");
+    expect(result?.permissionDecisionReason).toContain("does not know where its turn writes");
+});
+
+test("a persona without write and shell authority is refused and sent to the owner", async () => {
+    const result = decision(await fire(installSteeringHooks({ projectInstalls: gate({ canInstall: false }) }), "pnpm install"));
+    expect(result?.permissionDecision).toBe("deny");
+    expect(result?.permissionDecisionReason).toContain("ask the owner");
     expect(result?.permissionDecisionReason).not.toContain("mcp__deps__install");
 });
 
 test("a global flag after the package name remains image-scoped, not a project mutation", async () => {
     const recorded: (readonly ClassifiedInstall[])[] = [];
-    const hooks = installSteeringHooks(true, (installs) => recorded.push(installs));
+    const hooks = installSteeringHooks({ projectInstalls: gate({ mode: "never" }), onImageInstall: (installs) => recorded.push(installs) });
     const result = await fire(hooks, "npm install typescript --global");
     expect(decision(result)?.permissionDecision).toBeUndefined();
     expect(recorded).toEqual([[{ kind: "npm", tool: "typescript" }]]);
 });
 
-test("a project install carried in the current tmux wrapper is still denied", async () => {
+test("a project install carried in the current tmux wrapper is still recognised", async () => {
     const wrapped = "/usr/local/bin/tmux-run -c 'pnpm install' agent-abc 'nice bash -c pnpm-install' install";
-    expect(decision(await fire(installSteeringHooks(), wrapped))?.permissionDecision).toBe("deny");
+    expect(decision(await fire(installSteeringHooks({ projectInstalls: gate({ mode: "never" }) }), wrapped))?.permissionDecision).toBe("deny");
+});
+
+test("an install after a test on the same line is still found: the first manager verb does not end the search", () => {
+    expect(projectInstallsOf("pnpm test && pnpm install", "/work/app")).toEqual([{ dir: "/work/app", ecosystem: "node" }]);
+});
+
+// Where each install works decides what is prepared for it: the directory the shell stands in when it gets there.
+test.each<[string, string, { dir: string; ecosystem: "node" | "python" }[]]>([
+    ["npm install remotion", "/work/video", [{ dir: "/work/video", ecosystem: "node" }]],
+    ["mkdir -p app && cd app && npm init -y && npm install zod", "/work", [{ dir: "/work/app", ecosystem: "node" }]],
+    ["cd /work/video && pnpm add remotion", "/work", [{ dir: "/work/video", ecosystem: "node" }]],
+    ["pnpm -C web add zod", "/work", [{ dir: "/work/web", ecosystem: "node" }]],
+    ["pnpm --dir=web install", "/work", [{ dir: "/work/web", ecosystem: "node" }]],
+    ["npm --prefix ../site ci", "/work/app", [{ dir: "/work/site", ecosystem: "node" }]],
+    ["yarn --cwd api add left-pad", "/work", [{ dir: "/work/api", ecosystem: "node" }]],
+    ["cd ~ && pnpm install", "/work/app", [{ dir: "/work/app", ecosystem: "node" }]],
+    ["uv sync --directory tools", "/work", [{ dir: "/work/tools", ecosystem: "python" }]],
+    ["cd svc && python3 -m venv .venv && .venv/bin/pip install pillow", "/work", [{ dir: "/work/svc", ecosystem: "python" }]],
+    [
+        "cd a && pnpm install && cd ../b && npm ci",
+        "/work",
+        [
+            { dir: "/work/a", ecosystem: "node" },
+            { dir: "/work/b", ecosystem: "node" },
+        ],
+    ],
+])("an install is located where it runs: %s", (command, cwd, expected) => {
+    expect(projectInstallsOf(command, cwd)).toEqual(expected);
 });
 
 const firePost = async (hooks: ReturnType<typeof installSteeringHooks>, command: string, response: unknown) => {

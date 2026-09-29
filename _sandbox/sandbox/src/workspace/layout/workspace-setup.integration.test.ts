@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ManagedProcesses } from "../../processes/managed-processes.js";
-import { discoverProjects, installPanelKey, type ProjectSetupStatus, SETUP_NOTICE_HEADER, setupNoticeFor, setupStateOf } from "./workspace-setup.js";
+import { discoverProjects, type InstallReach, installPanelKey, type ProjectSetupStatus, SETUP_NOTICE_HEADER, setupNoticeFor, setupStateOf } from "./workspace-setup.js";
 
 const workspace = async (): Promise<string> => mkdtemp(join(tmpdir(), "setup-"));
 
@@ -171,6 +171,18 @@ test("the agent notice names the exact command, so the model doesn't rediscover 
     expect(notice).toContain("ask the owner to install it");
 });
 
+// What the turn is told to do about a never-installed project follows where its own install would write.
+test.each<[InstallReach, string]>([
+    ["own-copy", "it installs into this conversation's own copy of the tree"],
+    ["main-tree", "this turn works in the main tree, so the install serves every conversation"],
+    ["ask-owner", "Do not run it inside this turn; ask the owner to install it"],
+])("a never-installed project reached as %s is told what its install would do", (reach, told) => {
+    const project = status({});
+    const notice = setupNoticeFor([project], reach);
+    expect(notice).toContain(`${project.dir}: has never been set up and needs \`${project.recipe.command}\`. ${reach === "ask-owner" ? "" : "Run it there if the task needs it: "}`);
+    expect(notice).toContain(told);
+});
+
 test("an unsupported project tells the agent NOT to try, and names the missing binary", () => {
     const project = status({ state: "unsupported" });
     const notice = setupNoticeFor([project]);
@@ -184,14 +196,15 @@ test("a fully-installed workspace adds nothing to the turn", () => {
     expect(setupNoticeFor([])).toBeUndefined();
 });
 
-// NEXT turn, not "once idle": the reconciler defers while a turn runs, so idle depends on the agent that's waiting.
-test("a stale project tells the turn why an import fails, and asks it to do nothing about it", () => {
+// The repair is already running: the reconciler starts a stale project's install within seconds, in the install lane,
+// whatever turns are live. Neither "next turn" nor "once idle" is true of it.
+test("a stale project tells the turn why an import fails, and that the repair is already the daemon's", () => {
     const deps = ["left-pad", "zod"] as const;
     const project = status({ state: "stale", unresolved: [{ dir: "", names: [...deps] }] });
     const notice = setupNoticeFor([project]);
     expect(notice).toContain(`${project.dir}: ${deps.length} declared dependencies are not installed (${deps.join(", ")})`);
-    expect(notice).toContain("do not run an install");
-    expect(notice).toContain("NEXT turn");
+    expect(notice).toContain("do not run a repair install yourself: the daemon is already installing it");
+    expect(notice).not.toContain("NEXT turn");
     expect(notice).not.toContain("once it is idle");
     // Never the fresh-import wording: this project has already been set up, unlike a project that has never been
     // installed.

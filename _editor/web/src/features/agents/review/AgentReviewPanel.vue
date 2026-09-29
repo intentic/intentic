@@ -593,6 +593,21 @@ const NOTICE = `flex items-start gap-1.5 rounded-md border border-danger/40 bg-d
 // What a refused land left behind; causes and the action ladder are AgentConflictReport's to own.
 const resolvingPaths = computed(() => (changes.resolving.value ?? []).flatMap((entry) => entry.paths));
 
+// What landing the work takes on: per manifest that gained any, the dependency names it declares now and did not
+// before, labelled the way the rows are. This is where a new dependency is approved, since a conversation installs
+// freely in its own copy.
+const addedDependencies = computed(() =>
+    changes.repos.value.flatMap((group) =>
+        (group.addedDependencies ?? []).map((manifest) => ({
+            key: `${group.repo}\u0000${manifest.path}`,
+            label: group.repo === `root` ? manifest.path : `${group.repo}/${manifest.path}`,
+            added: manifest.added,
+        })),
+    ),
+);
+// Distinct names, so one package two manifests both gained is counted once in the heading.
+const addedDependencyCount = computed(() => new Set(addedDependencies.value.flatMap((manifest) => manifest.added)).size);
+
 // The file list's width is the reviewer's own call (a flat repo vs. a deep monorepo), sized and persisted exactly
 // like the workspace explorer's edge (drag, double-click reset, ResizeSeam). The seam speaks in pointer
 // coordinates while the stored width is in app pixels, so this computed is where the two meet.
@@ -669,6 +684,24 @@ const seamWidth = computed<number>({
             @include="changes.includeScratch"
             @delete="changes.deleteScratch"
         />
+
+        <!-- What landing this work takes on, one line per manifest: the approval moment for a new dependency. Quiet, like
+             the scratch report: nothing is wrong, and there is nothing here at all when no manifest gained a name. -->
+        <div
+            v-if="addedDependencies.length > 0"
+            class="mx-2 mt-2 flex shrink-0 flex-col gap-1 rounded-md border border-border bg-overlay px-2 py-1.5"
+        >
+            <span class="inline-flex items-center gap-1 text-2xs font-medium text-content">
+                <Icon name="box" class="text-2xs text-subtle" />{{
+                    t(`agents.agentReviewPanel.addsDependencies`, { count: addedDependencyCount }, addedDependencyCount)
+                }}
+            </span>
+            <p class="text-2xs text-muted">{{ t(`agents.agentReviewPanel.addsDependenciesHint`) }}</p>
+            <p v-for="manifest in addedDependencies" :key="manifest.key" class="break-words text-2xs text-muted">
+                <span class="break-all font-mono text-content">{{ manifest.label }}</span>
+                {{ t(`agents.agentReviewPanel.manifestAdds`, { names: manifest.added.join(`, `) }) }}
+            </p>
+        </div>
 
         <!-- Where the committed work went, shown only while `history` is the active filter, since it isn't what the reader is doing otherwise. -->
         <div

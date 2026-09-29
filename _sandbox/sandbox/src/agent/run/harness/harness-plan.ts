@@ -133,6 +133,8 @@ const harnessPolicy = (
     // Wired unconditionally, unlike the sniffer's rulebook: triage and the hard rule are facts about the command.
     safetyPolicy,
     judging: settings.commandJudge,
+    // Read by the install hook: whether an agent's own project install runs, asks first, or is refused.
+    projectInstalls: settings.projectInstalls,
     // Whether outside content caused this turn, the same distinction the admission floor draws, read for the taint.
     ...opt("outsideWake", input.outsideWake),
 });

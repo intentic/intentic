@@ -19,7 +19,7 @@ import {
 import { gatedCliEnv, gatedCredentialsNote, gatedSkills } from "../../../secrets/credential-gating.js";
 import { SKILL_CATALOG_NOTE_TITLE } from "../../../store/loaded-skills.js";
 import { resolveWithin } from "../../../workspace/files/workspace-files-paths.js";
-import { setupNoticeFor, setupNoticeTitle } from "../../../workspace/layout/workspace-setup.js";
+import { type InstallReach, setupNoticeFor, setupNoticeTitle } from "../../../workspace/layout/workspace-setup.js";
 import { IQ_SEARCH_INSTRUCTION_TITLE } from "../../prompt/iq-search-instruction.js";
 import { turnPromptPlacement } from "../../prompt/system-prompt.js";
 import { worktreeNote, worktreeReminder } from "../../prompt/turn-preamble.js";
@@ -69,6 +69,11 @@ export interface PlannedNotes {
     readonly fieldNotes: string | undefined;
 }
 
+// Where the turn's own install would write: a namespace gives it its own copy, a cwd-only runtime's dependency
+// folders are links into the main tree, and a persona without the power to change the workspace installs nothing.
+const installReachOf = (isolated: boolean, capabilities: AgentCapabilities, canInstall: boolean): InstallReach =>
+    !canInstall ? "ask-owner" : !isolated ? "main-tree" : capabilities.isolation === "namespace" ? "own-copy" : "ask-owner";
+
 // What the turn is told about its tree and what the workspace holds, in the order it reads them.
 const workspaceNotes = (
     facts: AdmittedTurnFacts,
@@ -76,8 +81,9 @@ const workspaceNotes = (
     capabilities: AgentCapabilities,
     send: TurnPremise["send"],
     isolated: boolean,
+    canInstall: boolean,
 ): TurnNote[] => {
-    const setupNotice = setupNoticeFor(facts.setup);
+    const setupNotice = setupNoticeFor(facts.setup, installReachOf(isolated, capabilities, canInstall));
     return [
         ...(isolated && capabilities.isolation === "cwd"
             ? [context.base.spec.sessionId === undefined ? worktreeNote(context.localCwd, facts.root) : worktreeReminder(facts.root)]
@@ -173,7 +179,7 @@ export const honoured = (
             notes: premise.briefing.keep([
                 // First, when there is one: who the turn acts as belongs ahead of anything about files or tools.
                 ...(placement.userNotes ?? []),
-                ...workspaceNotes(facts, context, capabilities, send, isolated),
+                ...workspaceNotes(facts, context, capabilities, send, isolated, persona.powers.files === "write" && persona.powers.shell),
                 ...turnNotes(facts, premise, planned.spawn, access.withheld),
             ]),
             systemPromptMode: prompt.mode,

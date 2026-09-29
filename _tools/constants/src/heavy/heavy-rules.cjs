@@ -46,6 +46,17 @@ const SHIPPED_HEAVY_COMMANDS = Object.freeze({
         // not even after the wait: a verification that did not run costs one more run later, and two at once cost the
         // sandbox its memory.
         { id: "repo-verify", pattern: "\\b(pnpm|npm|yarn|bun)\\s+(run\\s+)?verify(:\\S+)?\\b", limit: 1, onDeadline: "skip" },
+        // A project-dependency install, in a lane of its own, one at a time: the daemon's own installs take it too
+        // (workspace/deps/reconcile-deps.ts), so an agent installing in the main tree never rewrites node_modules under
+        // another install, and a fleet of isolated conversations installing at once does not pin the sandbox's memory
+        // and disk. Before `vitest` and `typechecker`, which `pnpm add -D vitest` would otherwise fall under. The verb is
+        // the first word that is not a flag or a flag's value (`pnpm --filter web add zod`, `npm --prefix app ci`).
+        {
+            id: "dependency-install",
+            pattern: "^(pnpm|npm|yarn|bun)(\\s+-\\S+(\\s+[^-\\s]\\S*)?)*\\s+(i|install|add|ci|update|up|upgrade|remove|rm|uninstall|prune|dedupe)(?![-.\\w])",
+            pool: "install",
+            limit: 1,
+        },
         // A program's name joined to `.` or `-` is another word (`check-tsc`), not the program.
         { id: "vitest", pattern: "(?<![-.])\\b(vitest|jest)\\b(?![-.])" },
         { id: "typechecker", pattern: "(?<![-.])\\b(tsc|tsgo|vue-tsc)\\b(?![-.])" },

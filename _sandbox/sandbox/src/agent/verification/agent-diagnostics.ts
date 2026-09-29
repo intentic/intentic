@@ -77,15 +77,15 @@ const UNAVAILABLE_NOTE =
     "need this file verified.";
 
 // Said alongside the diagnostics, not instead of them: a tree missing one package still checks everything else
-// correctly. Tells the model not to install, since an isolated turn's install would die with the turn; the daemon
-// reconciles it once the turn ends.
+// correctly. Tells the model the fix is an install, not an edit: the daemon may already be repairing the main tree,
+// and a turn may run the package's install itself.
 const staleNote = (missing: readonly string[]): string =>
     `Note: this package declares ${missing.length} ${missing.length === 1 ? "dependency" : "dependencies"} that ` +
     `${missing.length === 1 ? "is" : "are"} not installed (${missing.slice(0, NAMED_MISSING).join(", ")}${
         missing.length > NAMED_MISSING ? `, and ${missing.length - NAMED_MISSING} more` : ""
     }). Unresolved-import errors naming ${missing.length === 1 ? "it" : "those"} are the install being behind, not ` +
-    "a mistake in this code: do not edit working source to satisfy one, and do not run an install; the daemon " +
-    "installs them once this turn ends, so this package's own checks are available next turn, not this one.";
+    "a mistake in this code: do not edit working source to satisfy one. `mcp__deps__status` says whether the daemon " +
+    "is already repairing it; otherwise run the package's own install and check again.";
 
 // PostToolUse on native Edit/Write and, when a tracker is given, on Bash: files a shell command changed are reviewed
 // exactly like an edit, in the agent's own names. Silent on clean files, unchecked languages and any failure; each

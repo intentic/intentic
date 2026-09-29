@@ -17,6 +17,7 @@ import AgentMemoryImport from "../agent-settings/skills/AgentMemoryImport.vue";
 import AgentModels from "../agent-settings/models/AgentModels.vue";
 import AgentRecovery from "../agent-settings/behaviour/AgentRecovery.vue";
 import AgentRepoChecks from "../agent-settings/behaviour/AgentRepoChecks.vue";
+import AgentProjectInstalls from "../agent-settings/safety/AgentProjectInstalls.vue";
 import AgentSafetyJudge from "../agent-settings/safety/AgentSafetyJudge.vue";
 import AgentSafetyLog from "../agent-settings/safety/AgentSafetyLog.vue";
 import AgentSafetyPolicy from "../agent-settings/safety/AgentSafetyPolicy.vue";
@@ -116,6 +117,8 @@ const settingsBlocked = computed<NoticeModel | undefined>(() => {
         <!-- Whether anything judges, then what it judges against; the decision log sits last so it doesn't bury the controls above it. -->
         <template v-else-if="section === `safety`">
             <AgentSafetyJudge />
+            <!-- Beside the judge: the other answer to whether a person is asked before an agent's command runs. -->
+            <AgentProjectInstalls />
             <!-- Between the switch and the policy: what the judge is scoped to precedes the document it judges against. -->
             <AgentSafetyRules />
             <AgentSafetyPolicy />

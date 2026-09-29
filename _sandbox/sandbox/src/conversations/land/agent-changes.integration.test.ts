@@ -1,8 +1,11 @@
 import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { promisify } from "node:util";
+import type { AddedDependencies } from "@intentic/sandbox-contract";
+import { unstubbed } from "@intentic/testing";
+import type { Services } from "../../composition.js";
 import { discardPaths } from "../../git/changes/changes-index.js";
 import { ensureRootRepo } from "../../git/remote/root-repo.js";
 import { createLogger } from "../../logger.js";
@@ -11,6 +14,7 @@ import { isolatedAgent, noIsolation } from "../../testing.js";
 import { workspacePaths } from "../../workspace/workspace.js";
 import { agentRepoReview, presentInMain } from "./agent-changes.js";
 import { landAgent } from "./land.js";
+import { reviewOf } from "./review.js";
 import { createAgentWorktrees, type AgentWorktrees, type ConversationWorktree } from "../worktrees/worktrees.js";
 
 // Reviews land state against real git: accept moves main's HEAD, discard moves nothing, and the agent branch is
@@ -32,7 +36,16 @@ afterEach(async () => {
     }
 });
 
-const setup = async (): Promise<{ work: string; worktrees: AgentWorktrees; conversation: ConversationWorktree }> => {
+// Writes each file under `root`, making the directories it needs.
+const writeTree = async (root: string, files: Readonly<Record<string, string>>): Promise<void> => {
+    for (const [path, content] of Object.entries(files)) {
+        await mkdir(dirname(join(root, path)), { recursive: true });
+        await writeFile(join(root, path), content);
+    }
+};
+
+// `baseline` joins the two files every suite here starts from, committed before the conversation's copy is cut.
+const setup = async (baseline: Readonly<Record<string, string>> = {}): Promise<{ work: string; worktrees: AgentWorktrees; conversation: ConversationWorktree }> => {
     const base = await mkdtemp(join(tmpdir(), "intentic-present-"));
     tempDirs.push(base);
     const work = join(base, "work");
@@ -42,6 +55,7 @@ const setup = async (): Promise<{ work: string; worktrees: AgentWorktrees; conve
     await ensureRootRepo(workspace, historyRoot);
     await writeFile(join(work, "app.ts"), `${LINES.join("\n")}\n`);
     await writeFile(join(work, "other.ts"), `${LINES.join("\n")}\n`);
+    await writeTree(work, baseline);
     await sh(work, "add", "-A");
     await commit(work, "baseline");
     const worktrees = createAgentWorktrees({
@@ -193,4 +207,72 @@ test("a rebase after the accept leaves the answer where it was: nothing outstand
 
     const state = await review(worktrees, isolatedAgent(landed.repos));
     expect(state.rows).toEqual([]);
+});
+
+// The review is where a dependency the work adds is approved, so what it names must be exactly what the project takes
+// on: names, not versions, per manifest, read from the copy's own files (uncommitted ones too), and nothing claimed from
+// a manifest that cannot be read.
+const json = (value: unknown): string => `${JSON.stringify(value, null, 2)}\n`;
+const DEPENDENCY_BASELINE = {
+    "package.json": json({ name: "app", dependencies: { hono: "^4.0.0" }, devDependencies: { typescript: "^5.0.0" } }),
+    "requirements.txt": "Flask==3.0\n",
+};
+
+// The rows and the dependency reading of the one repo, as the review route asks for them.
+const addedIn = async (worktrees: AgentWorktrees, entry: ReturnType<typeof isolatedAgent>): Promise<AddedDependencies[]> => {
+    const composed = entry.placement.repos[0];
+    if (composed === undefined) {
+        throw new Error("no repo in the composition");
+    }
+    const read = await agentRepoReview(worktrees, entry, composed);
+    return read.addedDependencies(read.changes);
+};
+
+test("a live copy's new dependencies are the names each manifest declares now and did not at the anchor", async () => {
+    const { worktrees, conversation } = await setup(DEPENDENCY_BASELINE);
+    await writeTree(conversation.cwd, {
+        // A version bump of hono and typescript moved to another block are not new; the three others are.
+        "package.json": json({
+            name: "app",
+            dependencies: { hono: "^4.6.0", remotion: "^4.0.0" },
+            devDependencies: { "@remotion/cli": "^4.0.0" },
+            peerDependencies: { react: "*", typescript: "^5.0.0" },
+        }),
+        "video/package.json": json({ name: "video", optionalDependencies: { sharp: "^0.33.0" } }),
+        // Unparseable: left out rather than guessed at, and never a reason the rest goes unread.
+        "broken/package.json": "{ not json",
+        // A manifest that gains nothing gets no entry.
+        "tools/package.json": json({ name: "tools" }),
+        // `flask` is Flask re-pinned; an option line and a bare URL name no package.
+        "requirements.txt": "flask==3.1  # re-pinned\n-r base.txt\nrequests[socks]>=2.31 ; python_version > '3.8'\ngit+https://example.com/x.git\n",
+        "pyproject.toml": '[project]\nname = "tool"\ndependencies = ["httpx>=0.27", "Pydantic_Core"]\n\n[project.optional-dependencies]\ndev = ["pytest"]\n',
+    });
+
+    expect(await addedIn(worktrees, isolatedAgent(conversation.repos))).toEqual([
+        { path: "package.json", added: ["@remotion/cli", "react", "remotion"] },
+        { path: "pyproject.toml", added: ["httpx", "Pydantic_Core", "pytest"] },
+        { path: "requirements.txt", added: ["requests"] },
+        { path: "video/package.json", added: ["sharp"] },
+    ]);
+});
+
+test("a retired copy's new dependencies are read off its branch, the same answer the checkout gave", async () => {
+    const { worktrees, conversation } = await setup(DEPENDENCY_BASELINE);
+    await writeTree(conversation.cwd, { "package.json": json({ name: "app", dependencies: { hono: "^4.0.0", zod: "^4.0.0" } }) });
+    await worktrees.retire("c1", conversation.repos, "add zod");
+
+    expect(await addedIn(worktrees, isolatedAgent(conversation.repos))).toEqual([{ path: "package.json", added: ["zod"] }]);
+});
+
+test("the review's row carries the new dependencies, and says nothing of them when there are none", async () => {
+    const { worktrees, conversation } = await setup(DEPENDENCY_BASELINE);
+    const deps = { agentWorktrees: worktrees, agents: unstubbed<Services["agents"]>("agents", {}), logger };
+    await writeFile(join(conversation.cwd, "app.ts"), edited(1));
+
+    const quiet = await reviewOf(deps, isolatedAgent(conversation.repos));
+    expect(quiet.repos.map((row) => Object.keys(row).sort())).toEqual([["branch", "changes", "modules", "repo"]]);
+
+    await writeTree(conversation.cwd, { "package.json": json({ name: "app", dependencies: { hono: "^4.0.0", remotion: "^4.0.0" } }) });
+    const adding = await reviewOf(deps, isolatedAgent(conversation.repos));
+    expect(adding.repos[0]?.addedDependencies).toEqual([{ path: "package.json", added: ["remotion"] }]);
 });

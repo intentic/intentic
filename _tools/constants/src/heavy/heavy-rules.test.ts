@@ -43,9 +43,8 @@ test.each([
 // Programs that must stay free: several run dozens of times per turn.
 test.each([
     "git status",
-    "npm install",
-    "pnpm install --frozen-lockfile",
-    "bun install",
+    "pnpm install-completion",
+    "pnpm run install-hooks",
     "node -e console.log(1)",
     "check-tsc --fast",
     "cargo fmt",
@@ -61,6 +60,30 @@ test.each(["vitest --watch", "vitest --watchAll", "pnpm test --watch=true", "vue
         expect(matched(invocation)).toBeUndefined();
     },
 );
+
+// An agent may install inside its turn, and the daemon installs beside it: every install takes one lane, one at a time,
+// whichever manager and however it is spelled, including the ones that add a test runner or a type-checker.
+test.each([
+    "npm install",
+    "npm i",
+    "pnpm install --frozen-lockfile",
+    "pnpm add -D vitest",
+    "pnpm add -D vue-tsc",
+    "pnpm --filter web add zod",
+    "pnpm -C app i",
+    "npm --prefix app ci",
+    "pnpm --silent install",
+    "yarn remove left-pad",
+    "bun install",
+    "bun add left-pad",
+    "npm install -g typescript",
+])("the install %s takes the install lane", (invocation) => {
+    expect(matchInvocation(invocation, mergeHeavyRules())).toEqual({ id: "dependency-install", pool: "install", limit: 1, maxHold: HOLD, onDeadline: "run" });
+});
+
+test("a test run that merely mentions an install is a test run", () => {
+    expect(matched("pnpm --filter web test -- --grep install")).toBe("package-script");
+});
 
 test("a repo-wide verification is limited to one, skips at its deadline, and stays in the shared pool", () => {
     expect(matchInvocation("pnpm verify:turn", mergeHeavyRules())).toEqual({ id: "repo-verify", pool: "heavy", limit: 1, maxHold: HOLD, onDeadline: "skip" });

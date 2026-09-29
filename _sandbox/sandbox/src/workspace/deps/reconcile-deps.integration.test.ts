@@ -1,6 +1,8 @@
+import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { promisify } from "node:util";
 import { advanceTimersByTimeAsync, realSleep, SETTLES, waitFor } from "@intentic/testing/bun";
 import type { Logger } from "pino";
 import type { ManagedProcesses } from "../../processes/managed-processes.js";
@@ -23,9 +25,12 @@ const silent = { info: () => undefined, warn: () => undefined } as unknown as Lo
 // `installing` rather than `stale`, so a fake that held a key for a few milliseconds let a maintenance pass in flight
 // rewrite the state under the next assertion about drift. The one test about an install's own lifetime brings its own
 // fake (below), which is where that state belongs.
-const processes = (started: string[]): ManagedProcesses =>
+const processes = (started: string[], commands: string[] = []): ManagedProcesses =>
     ({
-        start: async (key: string) => void started.push(key),
+        start: async (key: string, spec: { readonly command: string }) => {
+            started.push(key);
+            commands.push(spec.command);
+        },
         stop: () => undefined,
         running: () => false,
     }) as unknown as ManagedProcesses;
@@ -322,4 +327,78 @@ test("command failure evidence is scoped to the project the turn started in", as
     const deps = coordinator(root, []);
     expect(await deps.issueAt("two")).toBeUndefined();
     expect(await deps.issueAt("one/src")).toMatchObject({ dir: "one", state: "stale", names: ["vue"] });
+});
+
+const git = async (cwd: string, ...args: string[]): Promise<string> =>
+    (await promisify(execFile)("git", ["-C", cwd, "-c", "user.email=t@example.com", "-c", "user.name=t", ...args])).stdout.trim();
+
+// A conversation's checkout of the root repo, where `from` is the commit its turn started on.
+const branchWith = async (files: Record<string, string>): Promise<{ dir: string; from: string }> => {
+    const dir = await workspace();
+    await git(dir, "init", "-q");
+    await write(dir, "README.md", "root\n");
+    await git(dir, "add", "-A");
+    await git(dir, "commit", "-qm", "base");
+    const from = await git(dir, "rev-parse", "HEAD");
+    for (const [path, content] of Object.entries(files)) {
+        await write(dir, path, content);
+    }
+    await git(dir, "add", "-A");
+    await git(dir, "commit", "-qm", "work");
+    return { dir, from };
+};
+
+test("a land that brought a project the main tree never installed installs it, and leaves one dropped in by hand alone", async () => {
+    const root = await workspace();
+    const manifest = JSON.stringify({ name: "video", dependencies: { remotion: "4.0.0" } });
+    const branch = await branchWith({ "video/package.json": manifest });
+    // The land wrote the branch's project into the main tree; the other one arrived some other way.
+    await write(root, "video/package.json", manifest);
+    await write(root, "dropped/package.json", JSON.stringify({ name: "dropped", dependencies: { "left-pad": "1.0.0" } }));
+    const started: string[] = [];
+    const deps = coordinator(root, started);
+
+    const outcome = await deps.reconcileLand({
+        kind: "land",
+        agentId: "agent-1",
+        branch: "agent/agent-1",
+        repos: [{ repo: "root", from: branch.from, dir: branch.dir }],
+    });
+    await settle(() => started.length > 0);
+
+    expect(outcome).toEqual({ missing: 1, started: [], deferred: true });
+    expect(started).toEqual(["video--install"]);
+});
+
+test("a land whose checkout git cannot read installs nothing on a guess", async () => {
+    const root = await workspace();
+    await write(root, "video/package.json", JSON.stringify({ name: "video", dependencies: { remotion: "4.0.0" } }));
+    const deps = coordinator(root, []);
+    const outcome = await deps.reconcileLand({
+        kind: "land",
+        agentId: "agent-1",
+        branch: "agent/agent-1",
+        repos: [{ repo: "root", from: "abc", dir: join(root, "no-such-checkout") }],
+    });
+    expect(outcome).toBeUndefined();
+});
+
+test("the daemon's own install runs as the line its lane gives it", async () => {
+    const root = await workspace();
+    await drifted(root);
+    const started: string[] = [];
+    const commands: string[] = [];
+    const deps = createDependencyCoordinator({
+        workspace: { root },
+        processes: processes(started, commands),
+        logger: silent,
+        requestsPath: join(root, "requests.json"),
+        settleMs: 20,
+        pollMs: 1,
+        installMaxMs: 200,
+        lane: async (command) => `queued-in-lane ${command}`,
+    });
+    await deps.status();
+    await settle(() => started.length > 0);
+    expect(commands).toEqual(["queued-in-lane pnpm install"]);
 });

@@ -389,6 +389,17 @@ export const AgentChangeSchema = GitChangeSchema.extend({
         ),
 });
 export type AgentChange = z.infer<typeof AgentChangeSchema>;
+// One manifest's new dependency names: the file at the delta's anchor against the file as it stands now, so a review
+// can say what the project takes on before it lands.
+export const AddedDependenciesSchema = z.object({
+    path: z.string().describe("The manifest, relative to the repository root, such as video/package.json."),
+    added: z
+        .array(z.string())
+        .describe(
+            "The names it declares now and did not declare before, sorted. Only new names: a version bump of a dependency already there is not listed.",
+        ),
+});
+export type AddedDependencies = z.infer<typeof AddedDependenciesSchema>;
 // An agent worktree's delta vs its base, deliberately not RepoChanges: no index here, so sharing that shape would force
 // an empty `staged` and a staging affordance that cannot work on a worktree nobody checks out.
 export const AgentRepoChangesSchema = z.object({
@@ -400,6 +411,13 @@ export const AgentRepoChangesSchema = z.object({
         .array(WorkspaceModuleSchema)
         .describe(
             "The packages of the tree these changes came from, so a review can group by package. Carried with the changes rather than looked up separately, because a package the conversation has just created exists only in its own copy and the shared tree has never heard of it.",
+        ),
+    // Absent rather than empty when nothing was added, the common case.
+    addedDependencies: z
+        .array(AddedDependenciesSchema)
+        .optional()
+        .describe(
+            "Dependencies the changed manifests here declare that they did not before (package.json, pyproject.toml, requirements.txt), one entry per manifest that gained any. The review is where a new dependency is approved: a conversation installs freely in its own copy, and this is what the project takes on if the work lands. Absent when none was added.",
         ),
 });
 export type AgentRepoChanges = z.infer<typeof AgentRepoChangesSchema>;

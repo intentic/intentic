@@ -70,6 +70,15 @@ test("the main root is bound aside before the worktree shadows it", () => {
     expect(shadow).toBeGreaterThan(aside);
 });
 
+test("the main tree's package store is bound back in, only where one exists, so installs share one cache", () => {
+    const script = isolationScript(plan);
+    expect(script).toContain(
+        `if [ -d ${shellQuote(`${MAIN_MOUNT}/.pnpm-store`)} ]; then mkdir -p ${shellQuote(`${WORKSPACE_ROOT}/.pnpm-store`)}; mount --bind ${shellQuote(`${MAIN_MOUNT}/.pnpm-store`)} ${shellQuote(`${WORKSPACE_ROOT}/.pnpm-store`)}; fi`,
+    );
+    // Bound before the aside mount goes away for a fenced turn, which has no MAIN_MOUNT to bind from afterwards.
+    expect(script.indexOf(".pnpm-store")).toBeLessThan(script.indexOf("mount -t overlay"));
+});
+
 test("shared state is re-bound from the aside mount, not from the shadowed path", () => {
     const script = isolationScript(plan);
     // From /work this would silently mount the worktree's empty copy; a bind, not overlay, reaches the daemon.

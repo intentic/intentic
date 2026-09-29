@@ -554,3 +554,30 @@ it(`says when the conversation left a checkout standing on a branch of its own`,
     // Standing on no branch at all has no name to print, and says so rather than printing nothing.
     expect(el.textContent).toContain(`intent → no branch at all`);
 });
+
+// Agents install freely in their own copy, so the review is where a person sees what the project takes on: one line
+// per manifest that gained a name, labelled the way the rows are, and nothing at all when none did.
+it(`names the dependencies the work adds, per manifest, and says nothing when it adds none`, async () => {
+    const quiet = await mount();
+    expect(quiet.textContent).not.toContain(`dependenc`);
+
+    app?.unmount();
+    app = undefined;
+    document.body.innerHTML = ``;
+    queryClient.clear();
+
+    const [root, docs] = changes.repos;
+    const adding: AgentChangesResponse = {
+        ...changes,
+        repos: [
+            { ...root!, addedDependencies: [{ path: `video/package.json`, added: [`@remotion/cli`, `react`, `remotion`] }] },
+            // Another repo's manifest is named from the workspace; `react` again counts once in the heading.
+            { ...docs!, addedDependencies: [{ path: `package.json`, added: [`react`] }] },
+        ],
+    };
+    const el = await mount([], adding);
+
+    expect(el.textContent).toContain(`Adds 3 dependencies`);
+    expect(el.textContent).toContain(`video/package.json adds @remotion/cli, react, remotion`);
+    expect(el.textContent).toContain(`docs/package.json adds react`);
+});

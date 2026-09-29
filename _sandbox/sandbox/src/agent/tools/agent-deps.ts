@@ -101,21 +101,22 @@ const notice = (issue: DependencyIssue, names: readonly string[], canInstall: bo
     return (
         `${shown}${names.length > NAMED ? ` and ${names.length - NAMED} more` : ""} ${one ? "is" : "are"} declared under /work ` +
         `and not installed, so that failure is the install being behind rather than a mistake in the code. Do not edit working ` +
-        `source to satisfy it, and do not run an install yourself: from inside a turn it writes to a scratch layer that is ` +
-        `discarded when the conversation ends, and it rewrites the dependency tree other live conversations are reading. The ${
+        `source to satisfy it. ${
             issue.state === "stale"
-                ? `daemon has queued its repair, so this project's own checks are available on a later turn, not this one. `
+                ? `The daemon is already repairing this project in the main tree; \`mcp__deps__install\` waits until it is done, and ` +
+                  `its checks mean what they say after that. `
                 : canInstall
-                  ? `this project has never been set up; call \`mcp__deps__install\` to queue it for after the turn. `
-                  : `this project has never been set up and this persona cannot change it; ask the owner to install it. `
+                  ? `This project has never been set up: run its install yourself (a conversation in its own worktree installs ` +
+                    `into its own copy of the tree), or call \`mcp__deps__install\` to have the daemon install it in the main tree and wait. `
+                  : `This project has never been set up and this persona cannot change it; ask the owner to install it. `
         }Everything ` +
-        `already installed checks normally in the meantime: call \`mcp__deps__status\` for which projects those are. Finish ` +
-        `the rest of the task, say this verification is deferred, and offer to re-run it next turn.`
+        `already installed checks normally in the meantime: call \`mcp__deps__status\` for which projects those are.`
     );
 };
 
 // Keyed by command as well as package, so a root `pnpm test` and one behind `cd app` aren't conflated. Looked up once
-// per name and never revisited, since no install runs mid-turn (it can miss a dependency the turn itself just added).
+// per name and never revisited: an install the turn runs after being told fixes the failure it was told about, and a
+// second telling would only repeat it (it can miss a dependency the turn itself just added).
 export const depsNoticeHooks = (
     issue: (command: string) => Promise<DependencyIssue | undefined>,
     canInstall: boolean,

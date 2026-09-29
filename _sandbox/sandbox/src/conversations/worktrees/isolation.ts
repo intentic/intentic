@@ -31,6 +31,14 @@ const SHARED_STATE = SHARED_STATE_PATHS.map((path) => path.replace(/\/$/, "")).t
 // back in or hits ENOENT. Read-only by contract: a bind ignores `ro`, so the remount is a second step.
 const SHELF = "refs";
 
+// pnpm's package store, which pnpm keeps at the top of the mount a project sits on: `/work/.pnpm-store` for every
+// project in the tree. Inside a namespace that path is the worktree's own, so each conversation's first install would
+// download everything again into a store of its own. Bound back from the main tree: the store is content-addressed and
+// pnpm shares one between concurrent installs by design, and the path an overlaid `node_modules` names in its
+// `.modules.yaml` stays the one pnpm finds. The tree is private; the cache is not. Conditional like the shelf: a
+// workspace nobody ran pnpm in has none, and the worktree keeps its own then.
+export const PACKAGE_STORE = ".pnpm-store";
+
 // Deps and build output a checkout can't carry (MIRRORED_DIRS); caches excluded, a stale tsbuildinfo would falsely
 // agree with the mirror. Each name is a live overlay's lowerdir: empty it, never replace it.
 
@@ -107,6 +115,10 @@ export const isolationScript = (plan: IsolationPlan, trailer: string = ANCHOR_TR
     const shelf = join(plan.root, SHELF);
     lines.push(
         `if [ -d ${shellQuote(join(MAIN_MOUNT, SHELF))} ]; then mkdir -p ${shellQuote(shelf)}; mount --bind ${shellQuote(join(MAIN_MOUNT, SHELF))} ${shellQuote(shelf)}; mount -o remount,bind,ro ${shellQuote(shelf)}; fi`,
+    );
+    const packageStore = join(plan.root, PACKAGE_STORE);
+    lines.push(
+        `if [ -d ${shellQuote(join(MAIN_MOUNT, PACKAGE_STORE))} ]; then mkdir -p ${shellQuote(packageStore)}; mount --bind ${shellQuote(join(MAIN_MOUNT, PACKAGE_STORE))} ${shellQuote(packageStore)}; fi`,
     );
     for (const rel of plan.mirrors) {
         const target = join(plan.root, rel);

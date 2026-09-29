@@ -94,6 +94,8 @@
             "you": "you"
         },
         "agentReviewPanel": {
+            "addsDependencies": "Adds {count} dependency | Adds {count} dependencies",
+            "addsDependenciesHint": "Landing the work adds them to your project, and the sandbox installs them in your tree.",
             "agentHasntChangedAny": "This agent hasn't changed any files. Its conversation is in {remoteName}: open it there to ask for something, and whatever it writes shows up here.",
             "agentHasntChangedAny2": "This agent hasn't changed any files. Ask it for something in the chat: its work shows up here, file by file, to review before it lands.",
             "agentsDiff": "Diff is the agent's",
@@ -118,6 +120,7 @@
             "leftCopiesElsewhere": "This conversation left {count} copy on a branch of its own | This conversation left {count} copies on branches of their own",
             "leftCopiesElsewhereHint": "What's listed here is this conversation's own branch as it was last left. Anything written since went to the branch beside each repository instead, and Land won't carry it.",
             "noBranchAtAll": "no branch at all",
+            "manifestAdds": "adds {names}",
             "markReviewed": "Mark reviewed",
             "markReviewed2": "Mark {label} as reviewed",
             "nextFile": "Next file",
@@ -2457,6 +2460,17 @@
             "verdictDecidesAllowedSilently": "The verdict decides: allowed silently, held as a request, or refused.",
             "watch": "Watch",
             "whetherVerdictStopCommand": "Whether a verdict can stop a command."
+        },
+        "agentProjectInstalls": {
+            "ask": "Ask first",
+            "askNote": "Agents ask before installing packages. You answer in the chat, once or for the whole conversation.",
+            "automatic": "Automatic",
+            "automaticNote": "Agents install the packages a task needs and keep working. A conversation in its own worktree installs into its own copy; the review lists every dependency its work adds before you land it.",
+            "never": "Never",
+            "neverNote": "Agents never install packages themselves. A dependency they add to a manifest is installed when you land their work.",
+            "title": "Project installs",
+            "whenInstalls": "When an agent installs packages",
+            "whetherAsked": "Whether you are asked before pnpm add, npm install or uv sync runs."
         },
         "agentSafetyLog": {
             "all": "All",

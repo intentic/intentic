@@ -6,8 +6,8 @@ import { errorMessage } from "@intentic/base/errors";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 
 // A manifest edit and its lockfile must leave the worktree in the same patch: reconciled here, before the land commits
-// the remainder, since a turn cannot install inside its own worktree. Runs only when the delta changed a manifest
-// without the lockfile; best-effort, pnpm only.
+// the remainder, for a turn that edited a manifest by hand rather than through its package manager. Runs only when the
+// delta changed a manifest without the lockfile; best-effort, pnpm only.
 
 export const LOCKFILE = "pnpm-lock.yaml";
 const MANIFEST = /(^|\/)(package\.json|pnpm-workspace\.yaml)$/;

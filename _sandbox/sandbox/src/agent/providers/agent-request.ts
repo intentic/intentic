@@ -5,6 +5,7 @@ import type {
     AgentEvent,
     CommandJudgeMode,
     PermissionMode,
+    ProjectInstallMode,
     SystemPromptMode,
     TurnNote,
 } from "@intentic/sandbox-contract";
@@ -104,6 +105,8 @@ export interface TurnPolicy {
     readonly unattended?: boolean;
     // Whether the persona may install a missing dependency itself, read by the install-steering and deps hooks.
     readonly dependencyInstallAllowed?: boolean;
+    // The owner's answer for an agent's own project install (settings `projectInstalls`); absent reads as automatic.
+    readonly projectInstalls?: ProjectInstallMode;
     // What the settings-hook gate found (guard/hook-approvals.ts): `held` runs the turn with every hook off; otherwise
     // `digest` names the approved set, absent when there is none, and a mid-turn edit may not move it.
     readonly settingsHooks?: { readonly held: boolean; readonly digest?: string };

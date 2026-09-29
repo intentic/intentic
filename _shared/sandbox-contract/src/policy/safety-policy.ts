@@ -64,6 +64,15 @@ export const COMMAND_RULE_CATALOG: readonly CommandRule[] = CommandClassSchema.o
 export const CommandJudgeModeSchema = z.enum(["off", "watch", "on"]);
 export type CommandJudgeMode = z.infer<typeof CommandJudgeModeSchema>;
 
+// What an agent's own project-dependency install (`pnpm add`, `npm install`, `uv sync`) does, one answer for every
+// turn. Where the install lands is the sandbox's business, not the owner's: an isolated turn installs into its own copy
+// and a main-tree turn takes the install lane the daemon's own installs take. This only says whether a person is asked:
+// - automatic: it runs
+// - ask: a card in the turn; the turn waits on that one call, and "allow for this conversation" stops the asking
+// - never: refused; the manifest change still lands and the daemon installs it then
+export const ProjectInstallModeSchema = z.enum(["automatic", "ask", "never"]);
+export type ProjectInstallMode = z.infer<typeof ProjectInstallModeSchema>;
+
 // What the judge answers, one instruction per verdict:
 // - allow: run it, say nothing, the ordinary answer for a triage false positive
 // - ask: raise the card; the only path to a person, meant to be rare

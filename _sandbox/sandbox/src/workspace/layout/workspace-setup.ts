@@ -132,9 +132,15 @@ export const behindSummary = (status: ProjectSetupStatus): string => {
 
 // Starts the install as a one-shot panel process (attachable tmux): survives a reload, output stays in history.
 // `start` no-ops while the session lives, so a re-drop mid-install can't spawn a second one.
-export const startInstall = async (root: string, project: WorkspaceProject, processes: ManagedProcesses): Promise<void> => {
+// `command` is the recipe's own unless the caller routes it (the coordinator runs it in the heavy table's install lane).
+export const startInstall = async (
+    root: string,
+    project: WorkspaceProject,
+    processes: ManagedProcesses,
+    command: string = project.recipe.command,
+): Promise<void> => {
     await processes.start(installPanelKey(project.dir), {
-        command: project.recipe.command,
+        command,
         cwd: join(root, project.dir),
         oneShot: true,
         workload: "install",
@@ -142,9 +148,14 @@ export const startInstall = async (root: string, project: WorkspaceProject, proc
 };
 
 // The one paragraph a turn is told when /work isn't installed; native runtimes have no other seam for it.
-// A stale project is never told to install; the daemon reconciles it, since an in-turn install rewrites other turns'
-// mounted tree.
+// A stale project is never told to install: the daemon is already repairing it in the install lane. A never-installed
+// one is told what its own install would do, which depends on where the turn stands (`InstallReach`).
 // Schedule the note for the next turn, not merely the next idle period.
+
+// Where an install the turn ran itself would write. `own-copy`: an isolated turn in a namespace, whose dependency
+// folders are overlays of its own. `main-tree`: a turn in the main tree. `ask-owner`: a turn that must not install,
+// because its persona cannot or because its dependency folders are links into the main tree (a cwd-only runtime).
+export type InstallReach = "own-copy" | "main-tree" | "ask-owner";
 
 // Fixed openings stripTurnPreamble anchors on to recognize an injected note in a stored message. The stale notice has its
 // own: without one, a stale-only notice isn't recognized and re-appends on every restore. Defined in constants since
@@ -159,7 +170,19 @@ export const setupNoticeTitle = (notice: string): string => (notice.startsWith(S
 // A project's dir names it; the root's own manifest is "the workspace root", not an empty string.
 const where = (status: ProjectSetupStatus): string => (status.dir === "" ? "the workspace root" : status.dir);
 
-export const setupNoticeFor = (statuses: readonly ProjectSetupStatus[]): string | undefined => {
+const setupLine = (status: ProjectSetupStatus, reach: InstallReach): string => {
+    const needs = `- ${where(status)}: has never been set up and needs \`${status.recipe.command}\`.`;
+    switch (reach) {
+        case "own-copy":
+            return `${needs} Run it there if the task needs it: it installs into this conversation's own copy of the tree, which no other conversation reads.`;
+        case "main-tree":
+            return `${needs} Run it there if the task needs it: this turn works in the main tree, so the install serves every conversation.`;
+        case "ask-owner":
+            return `${needs} Do not run it inside this turn; ask the owner to install it, or add what the task needs to the manifest: it installs when the work lands.`;
+    }
+};
+
+export const setupNoticeFor = (statuses: readonly ProjectSetupStatus[], reach: InstallReach = "ask-owner"): string | undefined => {
     const pending = statuses.filter((status) => status.state === "needs-setup" || status.state === "unsupported");
     const stale = statuses.filter((status) => status.state === "stale");
     if (pending.length === 0 && stale.length === 0) {
@@ -168,7 +191,7 @@ export const setupNoticeFor = (statuses: readonly ProjectSetupStatus[]): string 
     const lines = pending.map((status) =>
         status.state === "unsupported"
             ? `- ${where(status)}: needs \`${status.recipe.manager}\`, which is not installed in this sandbox. Do not attempt the install; say so if it blocks the task.`
-            : `- ${where(status)}: has never been set up and needs \`${status.recipe.command}\`. Do not run it inside this turn; ask the owner to install it.`,
+            : setupLine(status, reach),
     );
     const staleLines = stale.map((status) => `- ${where(status)}: ${behindSummary(status)}.`);
     return [
@@ -178,12 +201,11 @@ export const setupNoticeFor = (statuses: readonly ProjectSetupStatus[]): string 
             : [
                   `${STALE_NOTICE_HEADER}, so an unresolved import there, or a failure tracing to a package at the wrong ` +
                       "version below, is the install being behind rather than a mistake in the code. Do not edit working " +
-                      "source to satisfy one, and do not run an install: from inside a turn " +
-                      "it writes to a scratch layer that is discarded, and it rewrites the dependency tree other live " +
-                      "conversations are reading. The daemon installs it once the turn ends, so the tree is ready on the NEXT " +
-                      "turn, not this one. Nothing else is blocked: every already-installed project type-checks and tests " +
-                      "normally. If this one's own checks are what the task needs, finish the rest, say the verification is " +
-                      "deferred, and offer to re-run it next turn:",
+                      "source to satisfy one, and do not run a repair install yourself: the daemon is already installing it " +
+                      "in the main tree, one install at a time, and this project's checks mean what they say once it " +
+                      "finishes. Nothing else is blocked: every already-installed project type-checks and tests normally. " +
+                      "If this one's own checks are what the task needs and it has not finished by the end, say the " +
+                      "verification is pending:",
                   ...staleLines,
               ]),
     ].join("\n");

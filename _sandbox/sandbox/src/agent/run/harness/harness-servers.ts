@@ -137,14 +137,17 @@ const conditionWatchServer = (deps: HarnessServersDeps, conversationId: string, 
         profile: profileOf(input),
     });
 
-// Dependency readiness asked of the main checkout: an isolated turn's dependencies live in /work and are only mounted
-// into its namespace, so /work's answer is the turn's answer.
-const dependencyServer = (deps: HarnessServersDeps, input: AgentTurn, persona: TurnPersona): McpServerConfig => {
+// Dependency readiness asked of the main checkout: an isolated turn reads the main tree's dependencies through its own
+// layer, so /work's answer is the turn's answer until the turn installs something itself. The worktree is named for
+// what only it holds: a project the conversation's branch created, and where an install of its own would write.
+const dependencyServer = (deps: HarnessServersDeps, input: AgentTurn, context: TurnContext, persona: TurnPersona): McpServerConfig => {
     const title = input.conversationId === undefined ? input.title : deps.agents.entry(input.conversationId)?.social.title?.text;
     return createDepsServer({
         dependencies: deps.dependencies,
         canInstall: persona.powers.files === "write" && persona.powers.shell,
         origin: { kind: "request", ...opt("conversationId", input.conversationId), ...opt("title", title) },
+        worktree: context.base.spec.isolation?.plan.worktree,
+        signal: context.base.signal,
     });
 };
 
@@ -180,7 +183,7 @@ export const harnessServers = (
         ...(persona.powers.shell && input.conversationId !== undefined
             ? { watch: conditionWatchServer(deps, input.conversationId, input, context) }
             : {}),
-        deps: dependencyServer(deps, input, persona),
+        deps: dependencyServer(deps, input, context, persona),
         // The daemon's own records, read-only; gated on `files` rather than its own power, and withheld from a `none` card.
         ...(persona.powers.files === "none"
             ? {}

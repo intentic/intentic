@@ -1,15 +1,20 @@
+import { execFile } from "node:child_process";
 import { statSync } from "node:fs";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
+import { promisify } from "node:util";
 import { sleep } from "@intentic/base/async";
 import { isManifest } from "@intentic/workspace-setup";
 import type { Logger } from "pino";
 import { z } from "zod";
+import { opt } from "../../opt.js";
 import type { ManagedProcesses } from "../../processes/managed-processes.js";
 import { defineDocument } from "../../store/evolution/documents.js";
 import { openDocument } from "../../store/open-document.js";
 import { unresolvedDependencies } from "./dependency-drift.js";
 import { type DependencyOrigin, type DependencyRequestOrigin, originPriority } from "./dependency-origin.js";
 import { behindCount, INSTALLABLE, installPanelKey, type ProjectSetupStatus, startInstall, workspaceSetup } from "../layout/workspace-setup.js";
+
+const execFileAsync = promisify(execFile);
 
 // One coordinator owns dependency maintenance: every drift or setup path feeds it, none starts a package manager
 // itself. It waits for manifest writes to settle, then starts each install panel once, beside the agents rather than
@@ -90,12 +95,36 @@ export interface DependencyCoordinatorDeps {
     readonly settleMs?: number;
     readonly pollMs?: number;
     readonly installMaxMs?: number;
+    // The line an install's command runs as: the heavy table's install lane, which an agent's own install takes too,
+    // so the two never rewrite one tree at once. Absent runs the recipe as it is.
+    readonly lane?: (command: string) => Promise<string>;
 }
 
 const isInside = (project: string, dir: string): boolean => project === "" || dir === project || dir.startsWith(`${project}/`);
 
 const belongsToLand = (dir: string, origin: Extract<DependencyOrigin, { kind: "land" }>): boolean =>
     origin.repos.some(({ repo }) => (dir === "" ? repo === "root" : dir === repo || dir.startsWith(`${repo}/`)));
+
+// The directories of every manifest the land carried, workspace-relative ("." for the workspace root), read from each
+// repo's checkout between where the turn started and what landed. A repo git cannot answer for carries none, so
+// nothing is installed on a guess.
+const landedManifests = async (origin: Extract<DependencyOrigin, { kind: "land" }>): Promise<Set<string>> => {
+    const dirs = new Set<string>();
+    await Promise.all(
+        origin.repos.map(async ({ repo, from, dir }) => {
+            const changed = await execFileAsync("git", ["-C", dir, "diff", "--name-only", "--diff-filter=AM", from, "HEAD"]).then(
+                ({ stdout }) => stdout.split("\n").filter((path) => path !== ""),
+                () => [],
+            );
+            for (const path of changed.filter((each) => isManifest(basename(each)))) {
+                const inRepo = dirname(path);
+                const rel = repo === "root" ? inRepo : inRepo === "." ? repo : `${repo}/${inRepo}`;
+                dirs.add(rel);
+            }
+        }),
+    );
+    return dirs;
+};
 
 export const createDependencyCoordinator = (deps: DependencyCoordinatorDeps): DependencyCoordinator => {
     const requests = openDocument(dependencyRequestsDocument, deps.requestsPath, { read: requestState, fallback: () => ({ projects: {} }) });
@@ -161,6 +190,10 @@ export const createDependencyCoordinator = (deps: DependencyCoordinatorDeps): De
         }));
     };
 
+    // What an install's pane runs: the recipe, in the lane when there is one.
+    const installLine = async (project: ProjectSetupStatus): Promise<string> =>
+        deps.lane === undefined ? project.recipe.command : deps.lane(project.recipe.command);
+
     const pass = async (): Promise<void> => {
         const [projects, requested] = await Promise.all([workspaceSetup(deps.workspace.root, deps.processes), requests.read()]);
         const known = new Map(projects.map((project) => [project.dir, project]));
@@ -195,7 +228,7 @@ export const createDependencyCoordinator = (deps: DependencyCoordinatorDeps): De
             const requestedOrigin = requested.projects[project.dir];
             const origin = causes.get(project.dir) ?? requestedOrigin ?? backgroundOrigin;
             try {
-                await startInstall(deps.workspace.root, project, deps.processes);
+                await startInstall(deps.workspace.root, project, deps.processes, await installLine(project));
             } catch (error) {
                 deps.logger.warn({ err: error, dir: project.dir }, "dependency coordinator: install would not start");
                 for (const listener of failureListeners) {
@@ -317,17 +350,39 @@ export const createDependencyCoordinator = (deps: DependencyCoordinatorDeps): De
         reconcileLand: async (origin) => {
             const projects = await workspaceSetup(deps.workspace.root, deps.processes);
             const stale = projects.filter((project) => project.state === "stale");
-            if (stale.length === 0) {
+            // A project the land brought or first gave a manifest has never been installed in the main tree; the
+            // conversation that made it installed it in its own copy, so the main tree owes the same install. Only
+            // one whose manifest this land carried: a project dropped in by hand stays uninstalled until asked for.
+            const carried = await landedManifests(origin);
+            // Read off the landed repos' own diffs, so it needs no repo-membership test (which credits the root repo
+            // with the workspace root alone, never with a folder of its own like `video/`).
+            const fresh = projects.filter((project) => project.state === "needs-setup" && carried.has(project.dir === "" ? "." : project.dir));
+            if (stale.length === 0 && fresh.length === 0) {
                 return undefined;
             }
             for (const project of stale) {
                 remember(project.dir, belongsToLand(project.dir, origin) ? origin : { kind: "external" });
             }
+            if (fresh.length > 0) {
+                // Durable like an agent's own request, so a restart before the pass still installs them; the land stays
+                // the remembered cause while this process lives.
+                const asked: DependencyRequestOrigin = { kind: "request", conversationId: origin.agentId, ...opt("title", origin.title) };
+                await requests.update((current) => ({
+                    projects: { ...current.projects, ...Object.fromEntries(fresh.map((project) => [project.dir, asked])) },
+                }));
+                for (const project of fresh) {
+                    remember(project.dir, origin);
+                }
+            }
             schedule({ kind: "external" });
             const caused = stale.filter((project) => belongsToLand(project.dir, origin));
-            return caused.length === 0
-                ? undefined
-                : { missing: caused.reduce((total, project) => total + behindCount(project), 0), started: [], deferred: true };
+            const declared = await Promise.all(
+                fresh.map(async (project) =>
+                    (await unresolvedDependencies(join(deps.workspace.root, project.dir)).catch(() => [])).reduce((total, entry) => total + entry.names.length, 0),
+                ),
+            );
+            const missing = caused.reduce((total, project) => total + behindCount(project), 0) + declared.reduce((total, count) => total + count, 0);
+            return caused.length === 0 && fresh.length === 0 ? undefined : { missing, started: [], deferred: true };
         },
         watch: (subscribe) => {
             stopped = false;

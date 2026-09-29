@@ -13,7 +13,7 @@ import { discoverRepos } from "../../workspace/layout/repo-discovery.js";
 import type { WorkspacePaths } from "../../workspace/workspace.js";
 import { dropAgentRef, parkAgentRefs, unparkAgentRef } from "../land/agent-refs.js";
 import { claudeStoreOf, type StoreOwner } from "../../sessions/session-store.js";
-import { mirroredDirs, overlaysDir, type TurnIsolation } from "./isolation.js";
+import { mirroredDirs, overlaysDir, PACKAGE_STORE, type TurnIsolation } from "./isolation.js";
 import { coneFor, fencedComposition } from "./worktree-cone.js";
 import type { Fence } from "@intentic/sandbox-contract";
 
@@ -420,6 +420,10 @@ export const createAgentWorktrees = (
         );
         if (!isolated) {
             await secureLinks(main, worktree, mirrors, repo);
+        } else if (repo === "root" && (await pathExists(join(main, PACKAGE_STORE)))) {
+            // The namespace binds the main tree's package store at the worktree's root (isolation.ts PACKAGE_STORE);
+            // a `git add -A` inside it must not stage the whole store onto the branch.
+            await excludeMirrors(main, [PACKAGE_STORE]);
         }
     };
 

@@ -94,6 +94,8 @@
             "you": "Ty"
         },
         "agentReviewPanel": {
+            "addsDependencies": "Dodaje {count} zależność | Dodaje {count} zależności | Dodaje {count} zależności",
+            "addsDependenciesHint": "Przeniesienie pracy doda je do Twojego projektu, a sandbox zainstaluje je w Twoim drzewie.",
             "agentHasntChangedAny": "Ten agent nie zmienił żadnych plików. Jego rozmowa jest w {remoteName}: otwórz ją tam, żeby o coś poprosić, a wszystko, co napisze, pokaże się tutaj.",
             "agentHasntChangedAny2": "Ten agent nie zmienił żadnych plików. Poproś go o coś na czacie: jego praca pojawi się tutaj, plik po pliku, do przejrzenia, zanim zostanie scalona.",
             "agentsDiff": "Diff pochodzi od agenta",
@@ -117,6 +119,7 @@
             "landedWithFiles": "Scalone, {count} plik do dokończenia | Scalone, {count} pliki do dokończenia | Scalone, {count} plików do dokończenia",
             "leftCopiesElsewhere": "Ta rozmowa zostawiła {count} kopię na własnej gałęzi | Ta rozmowa zostawiła {count} kopie na własnych gałęziach | Ta rozmowa zostawiła {count} kopii na własnych gałęziach",
             "leftCopiesElsewhereHint": "To, co tu widać, to własna gałąź tej rozmowy w stanie, w jakim została zostawiona. Wszystko, co napisano od tamtej pory, trafiło na gałąź wypisaną obok każdego repozytorium, a Przenieś tego nie zabierze.",
+            "manifestAdds": "dodaje {names}",
             "markReviewed": "Oznacz przejrzane",
             "markReviewed2": "Oznacz {label} jako przejrzane",
             "nextFile": "Następny plik",
@@ -2069,6 +2072,17 @@
             "verdictDecidesAllowedSilently": "Werdykt decyduje: dozwolone po cichu, wstrzymane na karcie albo odrzucone.",
             "watch": "Obserwuj",
             "whetherVerdictStopCommand": "Czy werdykt może zatrzymać polecenie."
+        },
+        "agentProjectInstalls": {
+            "ask": "Najpierw pytaj",
+            "askNote": "Agenty pytają przed instalacją pakietów. Odpowiadasz na czacie, raz albo na całą rozmowę.",
+            "automatic": "Automatycznie",
+            "automaticNote": "Agenty instalują pakiety, których potrzebuje zadanie, i pracują dalej. Rozmowa we własnym worktree instaluje do własnej kopii; przegląd wypisuje każdą zależność, którą dodaje jej praca, zanim ją scalisz.",
+            "never": "Nigdy",
+            "neverNote": "Agenty nigdy same nie instalują pakietów. Zależność, którą dopiszą do manifestu, zostaje zainstalowana, gdy scalisz ich pracę.",
+            "title": "Instalacje w projekcie",
+            "whenInstalls": "Gdy agent instaluje pakiety",
+            "whetherAsked": "Czy pytać Cię, zanim uruchomi się pnpm add, npm install albo uv sync."
         },
         "agentSafetyLog": {
             "all": "Wszystkie",

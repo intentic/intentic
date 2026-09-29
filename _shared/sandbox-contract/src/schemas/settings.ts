@@ -2,7 +2,7 @@
 // itself, which those settings adopt.
 import { STATE_DIR } from "@intentic/constants";
 import { z } from "zod";
-import { CommandJudgeModeSchema } from "../policy/safety-policy.js";
+import { CommandJudgeModeSchema, ProjectInstallModeSchema } from "../policy/safety-policy.js";
 import { ModelRoleSchema } from "../models/model-roles.js";
 import { AdmissionPolicySchema, AdmissionRuleSchema, ModelPinSchema } from "./agent.js";
 import { LimitPolicySchema, RetryPolicySchema } from "./turn-break.js";
@@ -517,6 +517,11 @@ export const SandboxSettingsSchema = z.object({
     // whether the judge runs at all. Which model judges is the `safety-judge` role in `modelRoles`, not a field here.
     commandJudge: CommandJudgeModeSchema.default("on").describe(
         "Whether a model reads your safety policy before a flagged command runs. Off judges nothing and asks about nothing; Watch judges everything and records it without ever interrupting you, which is how you find out what your policy actually does before you let it stop anything; On lets the verdict decide. Wiping a disk or deleting under /history asks at every setting — that rule is typed rather than judged, and cannot be turned off.",
+    ),
+    // Only whether a person is asked: where the install lands (the conversation's own copy, or the daemon's install lane
+    // for a main-tree turn) is the sandbox's business, so no setting names it.
+    projectInstalls: ProjectInstallModeSchema.default("automatic").describe(
+        "What happens when an agent installs a project's packages itself (pnpm add, npm install, uv sync). Automatic lets it run and keep working; Ask first stops for your answer in the chat, once or for the whole conversation; Never refuses, and a dependency the agent added to a manifest is installed when you land its work. A conversation in its own worktree installs into its own copy, and the land review lists every dependency its work adds.",
     ),
     // Three separate ceilings since they stop different things: width (parallel fan-out), lifetime (per conversation),
     // depth (how far a child may delegate) — raising width alone just hits the lifetime cap sooner. Defaults mirror the

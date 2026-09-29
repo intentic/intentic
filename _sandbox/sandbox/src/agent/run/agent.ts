@@ -39,7 +39,8 @@ import { searchNoticeHooks } from "../verification/agent-search.js";
 import { editDiagnosticsHooks } from "../verification/agent-diagnostics.js";
 import { createShellEditTracker } from "../tools/agent-shell-edits.js";
 import { EDIT_TOOL_NAMES } from "../../rules/edit-tools.js";
-import { installSteeringHooks } from "../providers/agent-installs.js";
+import { type InstallSteering, installSteeringHooks } from "../providers/agent-installs.js";
+import { INSTALL_GRANTS, installPlacementOf } from "../providers/project-installs.js";
 import { redactionHooks } from "../tools/agent-redaction.js";
 import { secretCommandHooks } from "../tools/agent-secrets.js";
 import { commandGateHooks } from "../../guard/command-guard.js";
@@ -282,6 +283,26 @@ const runtimeSpawn =
         return child;
     };
 
+// A project install is judged by where it writes (the turn's placement) and the owner's setting; an image install is
+// recorded for the ledger.
+const installSteeringOf = (request: HarnessRequest, push: (event: AgentEvent) => void): InstallSteering => ({
+    projectInstalls: {
+        placement: installPlacementOf(request.spec.isolation),
+        mode: request.policy.projectInstalls,
+        canInstall: request.policy.dependencyInstallAllowed === true,
+        conversationId: request.spec.conversationId,
+        grants: INSTALL_GRANTS,
+        cards: request.hooks.cards,
+        push,
+        signal: request.signal,
+        unattended: request.policy.unattended === true,
+        // Read per install, like the command gate: attendance can arrive after the turn starts.
+        steered: () => request.hooks.steered?.() === true,
+    },
+    cwd: request.spec.cwd,
+    ...opt("onImageInstall", request.hooks.onImageInstall),
+});
+
 // On a 401 the CLI asks this callback for a refreshed token and resumes on what comes back; the same token ends the
 // turn. Untyped in sdk.d.ts (present in sdk.mjs), hence the OauthRecoveryOptions extension.
 export type OauthRecoveryOptions = Options & {
@@ -393,7 +414,7 @@ const baseOptions = (
                   : {},
             // Masks every stored credential to its reference in any tool result, not just Bash's.
             request.tools.secrets !== undefined ? redactionHooks(request.tools.secrets.list) : {},
-            installSteeringHooks(request.policy.dependencyInstallAllowed === true, request.hooks.onImageInstall),
+            installSteeringHooks(installSteeringOf(request, push)),
             // Checks classified outbound calls against owner action rules before they run, even under
             // bypassPermissions.
             hasRules(request.policy.actionRules) ? outboundGuardHooks(request.policy.actionRules) : {},
