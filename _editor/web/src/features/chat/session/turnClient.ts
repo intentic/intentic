@@ -20,6 +20,7 @@ import { type ProcedureInput, sandboxRpc } from "../../sandbox/client/sandboxRpc
 import type { PendingAttachment } from "../drafts/useChatAttachments";
 import { accountIntent, type SessionRef, type TurnSettings, turnRequestBody } from "../run/turnRequest";
 import { accountsOutdated } from "../accounts/accountsOutdated";
+import { repointedPickUp } from "../run/pickUp";
 import { type AttachHead, followRun, type SentMessage, type TurnContext } from "../run/turnStream";
 import { invalidateAgentTranscript } from "../transcript/agentTranscript";
 import { type ChatAttachment, continuationFor, isNudgeText } from "../transcript/transcript";
@@ -661,6 +662,9 @@ export class TurnClient {
     // for the route is asked nothing: the picker says it needs an update (accountsOutdated).
     moveAccount(account: string): void {
         const { host } = this;
+        // The card's wait follows the pick at once, off the same reading the composer's schedule uses: the press runs on
+        // the pick, and the daemon re-books a held turn there too.
+        host.pickUp.value = repointedPickUp(host.pickUp.value, host.selection.servingState.value);
         if (!host.registered.value || host.box.value !== undefined || accountsOutdated.value) {
             return;
         }

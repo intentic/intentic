@@ -2045,6 +2045,33 @@ describe(`Conversation`, () => {
         expect(conversation.transcript.messages.value.at(-1)).toMatchObject({ role: `assistant`, text: `on it` });
     });
 
+    // The reported case: refused on one account, then the picker moved the chat to another that reopens sooner. The card
+    // waits for the picked account from then on, as the press and the daemon's booking do, not the refused one's reset.
+    it(`re-times the limit card to the account the picker switched to`, async () => {
+        const now = Math.floor(Date.now() / 1000);
+        const spentUntil = (resetsAt: number) => ({ measuredAt: Date.now(), windows: [{ kind: `five_hour` as const, utilization: 100, resetsAt, gates: `all` as const }] });
+        providerAccounts.value = {
+            ...providerAccounts.value,
+            claude: [
+                { id: `refused`, label: `a`, connectedAt: 0, usage: spentUntil(now + 3 * 3_600), state: { kind: `spent`, reopensAt: now + 3 * 3_600 } },
+                { id: `sooner`, label: `b`, connectedAt: 0, usage: spentUntil(now + 12 * 60), state: { kind: `spent`, reopensAt: now + 12 * 60 } },
+            ],
+        };
+        const conversation = new Conversation(`c1`);
+        conversation.selection.apply({ kind: `set`, picks: { account: `refused` } });
+        daemon.mockImplementation(
+            turnDaemon([
+                { kind: `error`, code: `rate_limit`, message: `Claude usage limit reached.`, account: `refused`, resetsAt: now + 3 * 3_600, held: { ran: false } },
+                { kind: `done` },
+            ]),
+        );
+        await conversation.turn.send(`ship the parser`, settings);
+        expect(conversation.pickUp.value?.readyAt).toBe((now + 3 * 3_600) * 1_000);
+
+        conversation.selection.apply({ kind: `selectAccount`, account: `sooner` });
+        expect(conversation.pickUp.value).toMatchObject({ reason: `limit`, readyAt: (now + 12 * 60) * 1_000, held: { ran: false } });
+    });
+
     // What an armed chat does through a spent allowance is the daemon's appointment now (runLimitRung), fired at the
     // provider's own reset rather than guessed at by a browser timer; turn-resume.integration.test.ts covers it.
 

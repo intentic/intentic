@@ -1,5 +1,5 @@
 import { formatClock, formatWeekdayTime } from "@intentic/ui/format";
-import { pickUpNext, pickUpOf, pickUpShort, pickUpStatus, pickUpWhen, pressCost } from "./pickUp";
+import { pickUpNext, pickUpOf, pickUpShort, pickUpStatus, pickUpWhen, pressCost, repointedPickUp } from "./pickUp";
 
 const NOW = 1_800_000_000_000;
 
@@ -132,5 +132,33 @@ describe(`pickUpNext`, () => {
 
     it(`reports a booked move instead of an hour`, () => {
         expect(pickUpNext({ reason: `limit`, held: { ran: true, moving: `alice` } }, `wait`, NOW)).toBe(`Moving to alice now`);
+    });
+});
+
+// The reported case: refused on one account (back 04:10), then the picker moved the chat to one that reopens at 01:30.
+// The card has to wait for the account the press and the booking now use, or it shows a clock the composer contradicts.
+describe(`repointedPickUp`, () => {
+    const refused = { reason: `limit` as const, readyAt: NOW + 3 * 3_600_000, nextAt: NOW + 3 * 3_600_000, held: { ran: false, moving: `bob` } };
+
+    it(`re-times both clocks to the picked account's reopen, and drops a booked move the pick replaced`, () => {
+        const reopensAt = (NOW + 12 * 60_000) / 1_000;
+        expect(repointedPickUp(refused, { kind: `spent`, reopensAt })).toEqual({
+            reason: `limit`,
+            readyAt: reopensAt * 1_000,
+            nextAt: reopensAt * 1_000,
+            held: { ran: false },
+        });
+        expect(pickUpStatus(repointedPickUp(refused, { kind: `spent`, reopensAt })!, NOW)).toBe(`Limit reached · nothing ran · back about 12 min`);
+    });
+
+    it(`clears the wait when the picked account has room, or reads nothing`, () => {
+        expect(repointedPickUp(refused, { kind: `ready`, room: 60 })).toEqual({ reason: `limit`, held: { ran: false } });
+        expect(repointedPickUp(refused, undefined)).toEqual({ reason: `limit`, held: { ran: false } });
+    });
+
+    it(`leaves every wall that is not about who pays alone`, () => {
+        const stopped = { reason: `stopped` as const, nextAt: NOW + 60_000, held: { ran: true } };
+        expect(repointedPickUp(stopped, { kind: `ready`, room: 60 })).toBe(stopped);
+        expect(repointedPickUp(undefined, { kind: `ready`, room: 60 })).toBeUndefined();
     });
 });

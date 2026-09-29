@@ -1,4 +1,4 @@
-import type { RetryLadder, TurnBreak, TurnBreakPolicy, TurnEnding } from "@intentic/sandbox-contract";
+import type { AccountState, RetryLadder, TurnBreak, TurnBreakPolicy, TurnEnding } from "@intentic/sandbox-contract";
 import { formatClock, formatWeekdayTime } from "@intentic/ui/format";
 import { t } from "@intentic/ui/i18n";
 import { formatReset, formatWait } from "../session/usageStatus";
@@ -61,6 +61,28 @@ export const pickUpOf = (ending: TurnEnding): PickUp => ({
     ...(ending.retries === undefined ? {} : { retries: ending.retries }),
     ...(ending.held === undefined ? {} : { held: ending.held }),
 });
+
+/**
+ * The pick-up after a person picks another account in the picker while a spent allowance holds the turn: the wait is
+ * that account's now, not the refused one's. The press already runs on the pick, and the daemon re-books the held turn
+ * there too (switch-account.ts), so a card still counting down to the refused account's reset would name a wait nothing
+ * is waiting for, beside a composer counting down to the new one. `state` is the picked account's verdict for this
+ * model: spent re-times both clocks to its reopen, anything else clears them (nothing to wait for), and either way a
+ * booked move is gone, since the pick replaced it. Every other wall is not about who pays, and stays as it was.
+ */
+export const repointedPickUp = (pickUp: PickUp | undefined, state: AccountState | undefined): PickUp | undefined => {
+    if (pickUp?.reason !== `limit`) {
+        return pickUp;
+    }
+    const { readyAt: _ready, nextAt: _next, held, ...rest } = pickUp;
+    const reopensAt = state?.kind === `spent` ? state.reopensAt : undefined;
+    const clock = reopensAt === undefined ? {} : { readyAt: reopensAt * 1_000, nextAt: reopensAt * 1_000 };
+    if (held === undefined) {
+        return { ...rest, ...clock };
+    }
+    const { moving: _moving, ...stays } = held;
+    return { ...rest, ...clock, held: stays };
+};
 
 // Past this, a wall-clock time reads better than a countdown nobody can act on; under it, the relative wait wins.
 const CLOCK_FROM_MS = 90 * 60 * 1_000;

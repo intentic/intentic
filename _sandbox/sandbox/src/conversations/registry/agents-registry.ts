@@ -526,7 +526,9 @@ export interface AgentsRegistry {
     readonly setBreakPolicy: (id: string, ending: TurnBreak, policy: TurnBreakPolicy | null) => Promise<AgentSummary | undefined>;
     // Points the conversation at another account of the provider it runs on: the one write that moves who pays
     // (switchAccount). The session goes with the caller's say, separately (`session-cleared`). Leaves `updatedAt` alone.
-    readonly switchAccount: (id: string, account: string) => Promise<AgentSummary | undefined>;
+    // `limit` re-times a spent-allowance ending to the new account's reopen (absent: it reads unspent), so the card states
+    // the instant the re-pointed hold now waits for; the move there is taken back, since the pick has replaced it.
+    readonly switchAccount: (id: string, account: string, limit?: { readonly resetsAt?: number }) => Promise<AgentSummary | undefined>;
     // Moves every conversation running on account `from` to `to`, the survivor a superseded account merged into
     // (account-identity.ts). One write; answers how many moved. Leaves `updatedAt` and every session alone: it is the same
     // person's seat.
@@ -1116,7 +1118,22 @@ export const createFleet = (
                 return { ...entry, postures: (policy === null ? held : { ...held, [ending]: policy }) as Postures };
             });
         },
-        switchAccount: (id, account) => amend(id, (entry) => ({ ...entry, profile: { ...entry.profile, account } })),
+        switchAccount: (id, account, limit) =>
+            amend(id, (entry) => ({
+                ...entry,
+                profile: { ...entry.profile, account },
+                ...(limit !== undefined && entry.ending.kind === "limited"
+                    ? {
+                          ending: {
+                              kind: "limited" as const,
+                              ...opt("failure", entry.ending.failure),
+                              ...opt("resetsAt", limit.resetsAt),
+                              held: entry.ending.held,
+                              scheduled: entry.ending.scheduled,
+                          },
+                      }
+                    : {}),
+            })),
         repointAccount: async (from, to) => {
             const moving = entries.filter((entry) => entry.profile.account === from);
             for (const entry of moving) {

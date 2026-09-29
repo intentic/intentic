@@ -66,6 +66,7 @@ test("asked to run, a held turn runs again at once on the account named, carried
             },
         }),
         claudeSeatCheck: unstubbed<Services["claudeSeatCheck"]>("claudeSeatCheck", { recheck: async () => true }),
+        accountUsage: unstubbed<Services["accountUsage"]>("accountUsage", {}),
     };
     expect(await switchAccount(deps, { conversationId: ID, account: "acct-b", carry: true, run: true })).toEqual({ kind: "moved", run: "run-2" });
     expect(pressed).toEqual([{ routing: { agent: "claude", harness: "native", account: "acct-b", carry: true } }]);
@@ -75,15 +76,17 @@ test("asked to run, a held turn runs again at once on the account named, carried
 });
 
 // A pick in the model picker moves the conversation and nothing else: a turn held by a limit, a stop or a memory
-// refusal stays held until a press asks for it, never started by the pick itself.
-test("without run, a held turn stays held and only the account moves", async () => {
+// refusal stays held until a press asks for it, never started by the pick itself. A limit hold's booking follows the
+// pick, though: it re-runs on the picked account at that account's reopen, and the card's reset says the same instant.
+const heldOnPick = (usage: Awaited<ReturnType<Services["accountUsage"]["read"]>>) => {
     const pressed: unknown[] = [];
-    const moved: string[] = [];
+    const moved: [string, { readonly resetsAt?: number } | undefined][] = [];
+    const sent: unknown[] = [];
     const deps = {
         agents: unstubbed<Services["agents"]>("agents", {
             entry: () => conversationEntry({ id: ID }),
-            switchAccount: async (_id, account) => {
-                moved.push(account);
+            switchAccount: async (_id, account, limit) => {
+                moved.push([account, limit]);
                 return undefined;
             },
         }),
@@ -91,9 +94,20 @@ test("without run, a held turn stays held and only the account moves", async () 
             state: () =>
                 ({
                     phase: { kind: "idle" },
-                    resume: { held: { input: { conversationId: ID, prompt: "go", agent: "claude", harness: "native", account: "acct-a" }, reason: "limit", ran: false } },
+                    resume: {
+                        held: {
+                            input: { conversationId: ID, prompt: "go", agent: "claude", harness: "native", account: "acct-a", model: "opus" },
+                            reason: "limit",
+                            ran: false,
+                            reopensAt: 1_700_020_000,
+                            fired: false,
+                        },
+                    },
                 }) as never,
-            send: () => ({ settled: Promise.resolve() }) as never,
+            send: (_id, event) => {
+                sent.push(event);
+                return { settled: Promise.resolve(), reply: true } as never;
+            },
         }),
         turns: unstubbed<Services["turns"]>("turns", {
             resume: async (_id, routing) => {
@@ -102,10 +116,28 @@ test("without run, a held turn stays held and only the account moves", async () 
             },
         }),
         claudeSeatCheck: unstubbed<Services["claudeSeatCheck"]>("claudeSeatCheck", { recheck: async () => true }),
+        accountUsage: unstubbed<Services["accountUsage"]>("accountUsage", { read: async () => usage }),
     };
-    expect(await switchAccount(deps, { conversationId: ID, account: "acct-b" })).toEqual({ kind: "moved" });
+    return { deps, pressed, moved, sent };
+};
+
+const window = (utilization: number, resetsAt: number) => ({ kind: "five_hour", label: "5h", utilization, resetsAt, gates: "all" }) as never;
+
+test("without run, a held turn stays held, and its booking moves to the picked account's reopen", async () => {
+    const { deps, pressed, moved, sent } = heldOnPick({ "acct-b": { windows: [window(100, 1_700_005_000)] } as never });
+    expect(await switchAccount(deps, { conversationId: ID, account: "acct-b" }, T0)).toEqual({ kind: "moved" });
     expect(pressed).toEqual([]);
-    expect(moved).toEqual(["acct-b"]);
+    expect(sent).toContainEqual({ kind: "held-repointed", account: "acct-b", carry: false, reopensAt: 1_700_005_000 });
+    expect(moved).toEqual([["acct-b", { resetsAt: 1_700_005_000 }]]);
+});
+
+// An account with room has nothing to wait for: the booking is due now (an armed resend goes on the next pass, a
+// `wait` answer still waits for a press), and the card states no clock at all.
+test("a pick onto an account with room clears the wait rather than keeping the refused account's", async () => {
+    const { deps, moved, sent } = heldOnPick({ "acct-b": { windows: [window(40, 1_700_005_000)] } as never });
+    await switchAccount(deps, { conversationId: ID, account: "acct-b" }, T0);
+    expect(sent).toContainEqual({ kind: "held-repointed", account: "acct-b", carry: false, reopensAt: Math.ceil(T0 / 1000) });
+    expect(moved).toEqual([["acct-b", {}]]);
 });
 
 // Picking an account is an attempt on it: a seat-marked one is re-tested at once, not on the rationed schedule, so access

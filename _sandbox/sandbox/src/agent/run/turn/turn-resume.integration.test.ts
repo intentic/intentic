@@ -1788,6 +1788,40 @@ test("a carry the other account refused re-runs fresh on that account, once", as
     clearPendingResume(services, "lim-refused-carry");
 });
 
+// A person picked another account while the hold waited: the appointment is theirs now, at that account's reopen and on
+// that account, in a fresh session since the pick did not carry it. The refused account's own reset fires nothing more.
+test("an armed hold re-pointed by a pick fires at the picked account's reopen, on that account", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "limit-")), [], () => true, new Map(), new Map([["lim-repoint", true]]));
+    const turns: AgentTurn[] = [];
+    const scheduler = createTurnResumeScheduler(drivenBy(services, heldWake(turns)));
+    recordHeldTurn(
+        services,
+        {
+            reason: "limit",
+            input: { prompt: "ship the parser", conversationId: "lim-repoint", isolated: true, account: "spent-one" },
+            sessionId: "s-real",
+            ran: true,
+            reopensAt: REOPENS,
+        },
+        RECORDED,
+    );
+    const sooner = REOPENS - 2 * 60 * 60;
+    expect(services.conversations.send("lim-repoint", { kind: "held-repointed", account: "picked", carry: false, reopensAt: sooner }).reply).toBe(true);
+
+    await scheduler.tick(sooner * 1000 - 1_000);
+    expect(turns).toHaveLength(0);
+    await scheduler.tick(sooner * 1000 + 1);
+    await settle(services, "lim-repoint");
+    expect(turns).toHaveLength(1);
+    expect(turns[0]!.account).toBe("picked");
+    expect(turns[0]!.sessionId).toBeUndefined();
+
+    await scheduler.tick(REOPENS * 1000 + 1);
+    await settle(services, "lim-repoint");
+    expect(turns).toHaveLength(1);
+    clearPendingResume(services, "lim-repoint");
+});
+
 // A booked move (LimitFailure.move) fires on the very next pass, no instant needed, and only once: the entry keeps a
 // `fired` stamp like the appointment does.
 test("a booked move fires on the next pass, with the session the policy said to carry, and only once", async () => {

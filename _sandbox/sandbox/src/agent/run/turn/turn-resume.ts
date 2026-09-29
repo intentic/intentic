@@ -64,6 +64,9 @@ export interface HeldTurn {
     readonly handoffTokens?: number | undefined;
     // Where the owner's policy decided to move this turn, decided once at the failure; the pass only performs it.
     readonly move?: { readonly account: string; readonly carry: boolean } | undefined;
+    // Where a person's pick in the picker re-pointed a limit hold (switchAccount without `run`): not a move, since a pick
+    // is never a press, but the account the booked re-run goes on when it fires, at that account's reopen instead.
+    readonly onto?: { readonly account: string; readonly carry: boolean } | undefined;
     // Set when the other account refuses the carried session, so the retry opens fresh instead of replaying it.
     readonly carryRefused?: boolean | undefined;
     // An auth hold's credential: the account to re-mint, and the refused token the rotation must supersede, not replay.
@@ -426,7 +429,15 @@ const RUNGS: { readonly [R in HeldReason]?: Rung } = {
                 return { routing: { agent, harness, account: move.account, carry: move.carry } };
             }
             const reopensAt = held.reopensAt === undefined ? undefined : held.reopensAt * 1000;
-            return reopensAt !== undefined && reopensAt <= now && reopensAt > held.recordedAt ? { armedBy: "limit" } : undefined;
+            if (reopensAt === undefined || reopensAt > now || reopensAt <= held.recordedAt) {
+                return undefined;
+            }
+            // Re-pointed since the refusal: it goes where the person picked, not back to the account that refused it.
+            if (held.onto !== undefined) {
+                const { agent, harness } = withRuntimeDefaults(held.input);
+                return { armedBy: "limit", routing: { agent, harness, account: held.onto.account, ...(held.onto.carry ? { carry: true } : {}) } };
+            }
+            return { armedBy: "limit" };
         },
         spent: "resume-dropped",
         fire: dispatch(false),
@@ -439,7 +450,7 @@ const runRung = async (services: Services, conversationId: string, held: HeldRec
     const booked = held.fired || rung === undefined ? undefined : rung.verdict(held, now);
     // A move is booked at the failure, but it moves the conversation to another account, so it goes only while the owner
     // still answers the limit with a move: one taken back before this pass waits on its reset like any other hold.
-    const withdrawn = booked?.routing !== undefined && (await breakPolicyFor(services, conversationId, "limit")) !== "move";
+    const withdrawn = held.move !== undefined && booked?.routing !== undefined && (await breakPolicyFor(services, conversationId, "limit")) !== "move";
     const verdict = withdrawn ? rung?.verdict({ ...held, move: undefined }, now) : booked;
     if (verdict === undefined || rung === undefined) {
         return;

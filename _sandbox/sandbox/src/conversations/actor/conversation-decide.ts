@@ -141,6 +141,9 @@ export type ConversationEvent =
     | { readonly kind: "held-fired"; readonly ladder: boolean }
     // A spent stop ladder stands down: the hold stays for a press, never fired by the pass again; the count restarts.
     | { readonly kind: "ladder-spent" }
+    // A person picked another account while a spent allowance held the turn: the booking follows the pick, re-timed to
+    // that account's reopen (`reopensAt`, epoch s; absent leaves it press-only). Answers whether a hold took it.
+    | { readonly kind: "held-repointed"; readonly account: string; readonly carry: boolean; readonly reopensAt?: number }
     // A turn took the conversation's steering seam; it starts unwatched, whatever the last one was.
     | { readonly kind: "turn-registered" }
     // A person's words reached the live turn.
@@ -218,6 +221,7 @@ interface Replies {
     readonly begin: BeginOutcome;
     readonly "resume-superseded": HeldRecord | undefined;
     readonly "held-fired": boolean;
+    readonly "held-repointed": boolean;
     readonly "steer-reserved": number | undefined;
     readonly "steers-taken": readonly (TurnCheckpoint | undefined)[];
     readonly "grant-taken": { readonly always: boolean } | undefined;
@@ -567,6 +571,18 @@ const onHeldFired = (state: ConversationState, ladder: boolean): Decision<boolea
     return unchanged(withResume(state, { held: { ...held, fired: true }, ...(ladder ? { stopTries: held.tries + 1 } : {}) }), true);
 };
 
+// Only an unfired limit hold is re-timed: every other wall is not about which account pays. A pick undoes a booked move,
+// since the person has just said where it goes.
+const onHeldRepointed = (state: ConversationState, event: Extract<ConversationEvent, { kind: "held-repointed" }>): Decision<boolean> => {
+    const { held } = state.resume;
+    if (held === undefined || held.fired || held.reason !== "limit") {
+        return unchanged(state, false);
+    }
+    const { reopensAt: _old, ...rest } = held;
+    const repointed: HeldRecord = { ...rest, ...opt("reopensAt", event.reopensAt), onto: { account: event.account, carry: event.carry }, move: undefined };
+    return unchanged(withResume(state, { held: repointed }), true);
+};
+
 // Bounds runaway steering per conversation; a settling turn empties the boxes, this guards one that never does. Only
 // ever bites at the tail, so it can't shift an earlier message's position.
 const MAX_STEER_SLOTS = 200;
@@ -676,6 +692,7 @@ const HANDLERS: { readonly [K in ConversationEvent["kind"]]: Handler<K> } = {
     "auth-firing": (state, event) => unchanged(withResume(state, { authFiring: event.firing }), undefined),
     "resume-dropped": (state) => unchanged(withResume(state, { held: undefined }), undefined),
     "held-fired": (state, event) => onHeldFired(state, event.ladder),
+    "held-repointed": (state, event) => onHeldRepointed(state, event),
     "ladder-spent": (state) =>
         unchanged(withResume(state, { held: state.resume.held && { ...state.resume.held, fired: true }, stopTries: 0 }), undefined),
     "turn-registered": (state) => unchanged({ ...state, steered: false }, undefined),
