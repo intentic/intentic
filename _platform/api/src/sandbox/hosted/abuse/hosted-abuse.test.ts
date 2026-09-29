@@ -1,6 +1,7 @@
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import type { PrismaClient } from "@intentic/prisma";
 import type { Config } from "../../../config.js";
+import { standingSubjectHash } from "./carried-standing.js";
 import { ABUSE_SUSPENSION_REASON, sweepHostedAbuse } from "./hosted-abuse.js";
 
 // The watch reads the provider's per-machine meter and acts on the free plan: a saturated machine is stopped and
@@ -15,6 +16,8 @@ const MINUTE_MS = 60_000;
 const config = (over: Record<string, unknown> = {}): Config =>
     ({
         webOrigin: `https://app.test`,
+        // What a carried standing's subject is hashed under.
+        betterAuth: { secret: `abuse-test-secret` },
         // Unconfigured mail logs instead of sending, so the real send path runs with no Resend stub.
         email: { apiKey: ``, from: `` },
         ingress: { url: `https://ingress.sbx.test`, signingKey: `k`, zone: `sbx.test` },
@@ -229,6 +232,29 @@ describe(`the abuse watch`, () => {
         const recent = { ...old, createdAt: new Date(NOW.getTime() - 24 * 60 * MINUTE_MS) };
         const lenient = prismaWith([machine()], [recent]);
         expect(await sweepHostedAbuse(lenient.prisma, config({ abuseStrikesToSuspend: 0 }), logger, NOW)).toMatchObject({ stopped: 1, suspended: 0 });
+    });
+
+    it(`counts a deleted account's carried strikes for the same Google subject while its latest is inside the window`, async () => {
+        const DAY = 24 * 60 * MINUTE_MS;
+        const returning = machine({ sandbox: { id: `s1`, name: `dev`, ownerId: `u3`, owner: { email: `back@example.test`, accounts: [{ accountId: `google-subject-a` }] } } });
+        const carried = (standingAt: Date) => ({
+            hostedStanding: {
+                findUnique: jest.fn(async ({ where }: { where: { subjectHash: string } }) =>
+                    where.subjectHash === standingSubjectHash(config(), `google-subject-a`)
+                        ? { subjectHash: where.subjectHash, suspendedAt: null, strikes: 1, standingAt, month: null, freeMinutes: 0 }
+                        : null,
+                ),
+            },
+        });
+
+        stubFly({ cpu: [{ app: `intentic-sbx-a`, instance: `m1`, value: busyCpu(0.99) }] });
+        const recent = prismaWith([returning], [], carried(new Date(NOW.getTime() - 10 * DAY)));
+        expect(await sweepHostedAbuse(recent.prisma, config(), logger, NOW)).toEqual({ stopped: 0, suspended: 1, reported: 0 });
+        expect(recent.created).toEqual([expect.objectContaining({ userId: `u3`, action: `suspended` })]);
+
+        stubFly({ cpu: [{ app: `intentic-sbx-a`, instance: `m1`, value: busyCpu(0.99) }] });
+        const aged = prismaWith([returning], [], carried(new Date(NOW.getTime() - 40 * DAY)));
+        expect(await sweepHostedAbuse(aged.prisma, config(), logger, NOW)).toEqual({ stopped: 1, suspended: 0, reported: 0 });
     });
 
     it(`reports a subscriber's saturated machine without stopping it`, async () => {

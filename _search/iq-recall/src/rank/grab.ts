@@ -1,5 +1,6 @@
 import type { SqliteDb } from "@intentic/base/sqlite";
-import { decayOf, ftsQueryOf, TURN_BM25 } from "./files.js";
+import { decayOf, TURN_BM25 } from "./files.js";
+import { ftsQueryOf } from "./terms.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 

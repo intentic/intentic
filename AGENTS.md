@@ -8,8 +8,10 @@ that invalidated it.** There is no second place to remember: the repository-leve
 `sandbox.md`, `platform.md`, `app-plane.md`, `extensions.md`, `capabilities.md`, `packages.md`,
 `conventions.md`, `testing.md`, `deploy-engine.md`, `languages.md`, `repo.md` — and `ARCHITECTURE.md` at the
 root is the index into them, nothing more. The machinery around the code goes in `docs/ops/` (`docs/README.md`
-states the line), and a decision's reasons go in its commit message. Anything about the WORKSPACE rather than
-this repository belongs in `/work/docs/`.
+states the line). A decision's reasons go in the README or architecture page that states the rule, as a short
+dated note beside it naming the alternative it rejected, if there was one: a landed commit is one line with no
+body (`_sandbox/sandbox/src/git/ops/commit-message.ts`), so it cannot carry them. Anything about the WORKSPACE
+rather than this repository belongs in `/work/docs/`.
 
 - The `# H1` and the **one sentence** under it are parsed: that sentence becomes the package's one-liner
   wherever it is named without being opened. `## Key files` is parsed too: three to six package-relative links,

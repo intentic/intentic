@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import type { Capability } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import type { AgentTool } from "../agent/tools/agent-tools.js";
 import type { Services } from "../composition.js";
@@ -11,6 +12,7 @@ import { contributionRegistry, invalidatingContributions, type ResolvedContribut
 import { capabilitySecretsDocument, fileSecretVault, type SecretVault } from "./credentials/secret-vault.js";
 import { dismissalsDocument, type DismissalsStore, fileDismissalsStore } from "./offers/dismissals-store.js";
 import { openBrowserAccount, type OpenAccountInput } from "./open-account.js";
+import { accountSignInUrls } from "./account-sign-in.js";
 
 // The capability manifest as turns and routes read it, its vaulted secrets, and the tools every turn carries.
 export interface CapabilitiesSlice {
@@ -23,6 +25,8 @@ export interface CapabilitiesSlice {
     // Recommendations the owner declined, so a 'no' survives the reload that would otherwise re-derive it.
     readonly capabilityDismissals: DismissalsStore;
     readonly openBrowserAccount: (input: OpenAccountInput) => Promise<string>;
+    // Where an account signs in (account-sign-in.ts): what type_credential holds a live page's host to.
+    readonly accountSignInUrls: (capability: Capability) => Promise<readonly string[]>;
     readonly composeEnvironment: () => Promise<string | undefined>;
 }
 
@@ -88,6 +92,7 @@ export const createCapabilitiesSlice = ({ config, logger, workspaceRoot, authRoo
             vaultManifestSecrets: () => vaultManifestSecrets(manifest, secretVault, connectors, onUnvaultable),
             capabilityDismissals: fileDismissalsStore(join(workspaceRoot, dismissalsDocument.path)),
             openBrowserAccount: (input) => openBrowserAccount(whole(), input),
+            accountSignInUrls: (capability) => accountSignInUrls(connectors, capability),
             composeEnvironment: () => composeEnvironment(whole()),
         },
     };

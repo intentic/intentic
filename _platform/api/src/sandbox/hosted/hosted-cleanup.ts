@@ -112,16 +112,51 @@ export const releaseHosted = async (prisma: PrismaClient, config: Config, sandbo
     });
 };
 
+/* AN ERASED ACCOUNT'S APPS, DUE NOW (account-erase.ts). Written in the erase's own transaction, so the teardown is on
+ * record before the cascade takes every row that named these apps; a release's week-long hold is pulled forward too,
+ * since the owner who could have taken the release back is the one being erased. */
+export const queueHostedTeardown = async (tx: Prisma.TransactionClient, appNames: Iterable<string>, now: Date): Promise<void> => {
+    for (const appName of new Set(appNames)) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- one small write per app inside one transaction
+        await tx.hostedCleanup.upsert({ where: { appName }, create: { appName, deleteAfter: now }, update: { deleteAfter: now } });
+    }
+};
+
+/* Destroys queued apps now, one at a time. Best-effort: an app an active provision holds is skipped (it cleans up its
+ * own on the way out), and one Fly refuses keeps its row for the next pass. Answers the apps confirmed gone. */
+export const destroyQueuedApps = async (prisma: PrismaClient, config: Config, logger: Logger, appNames: Iterable<string>): Promise<string[]> => {
+    const destroyed: string[] = [];
+    if (config.hosted.flyApiToken === ``) {
+        return destroyed;
+    }
+    for (const appName of appNames) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- provider teardowns are sequential and skip active provisions
+        const done = await withHostedAppLock(config, appName, false, async () => {
+            await cleanupApp(prisma, config, appName);
+            return true;
+        }).catch((error: unknown) => {
+            logger.error({ err: error, app: appName }, `hosted cleanup failed; durable retry pending`);
+            return false;
+        });
+        if (done === true) {
+            destroyed.push(appName);
+        }
+    }
+    return destroyed;
+};
+
+// Every minute (startHostedCleanup), on every replica, and never under the orphan reaper's caps: a row here is a
+// teardown somebody asked for, not a guess about litter.
 export const reconcileHostedCleanup = async (prisma: PrismaClient, config: Config, logger: Logger): Promise<void> => {
     // `deleteAfter` is the row's own hold: a failed provision's litter is due immediately, a released machine's
     // app is due once its volume has outlived the machine by the grace period.
     const pending = await prisma.hostedCleanup.findMany({ where: { deleteAfter: { lte: new Date() } }, orderBy: { createdAt: `asc` } });
-    for (const { appName } of pending) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- provider teardowns are sequential and skip active provisions
-        await withHostedAppLock(config, appName, false, () => cleanupApp(prisma, config, appName)).catch((error: unknown) =>
-            logger.error({ err: error, app: appName }, `hosted cleanup failed; durable retry pending`),
-        );
-    }
+    await destroyQueuedApps(
+        prisma,
+        config,
+        logger,
+        pending.map((row) => row.appName),
+    );
 };
 
 export const kickHostedCleanup = (prisma: PrismaClient, config: Config, logger: Logger): void => {

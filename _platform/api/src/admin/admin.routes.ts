@@ -113,6 +113,6 @@ export const adminRoutes = {
     userUnsuspend: os.admin.userUnsuspend.handler(async ({ context, input }) => {
         const { admin, target } = await confirmedAccount(context, `admin.userUnsuspend`, input);
         context.logger.warn({ admin: admin.email, target: target.email }, `admin suspension lifted`);
-        return liftUserHosted(context.prisma, context.logger, target);
+        return liftUserHosted(context.prisma, context.config, context.logger, target);
     }),
 };

@@ -142,7 +142,7 @@ export const privacyDoc: LegalDoc = {
             paragraphs: ["Under the GDPR we rely on:"],
             list: [
                 "Performance of our contract with you (Art. 6(1)(b)) for account data, sandbox records, hosted machines, hosted usage and the hosted plan.",
-                "Our legitimate interest (Art. 6(1)(f)) in keeping accounts and infrastructure secure, for session and sign-in security data and for acting on abuse reports.",
+                "Our legitimate interest (Art. 6(1)(f)) in keeping accounts and infrastructure secure, for session and sign-in security data, for acting on abuse reports, and for the hosted standing we keep after an account is deleted.",
                 "Our legitimate interest (Art. 6(1)(f)) in understanding and improving the product, for the analytics above. You can object to that one, and the section says how.",
                 "Compliance with a legal obligation (Art. 6(1)(c)) for tax and accounting records of payments.",
             ],
@@ -162,15 +162,16 @@ export const privacyDoc: LegalDoc = {
                 "Unaccepted sandbox invitations: deleted after 90 days.",
                 "Hosted usage records: 13 months.",
                 "Analytics events and session replays: held by PostHog under the retention of our plan with them, and nowhere else. Ask and we delete yours before that.",
-                "Account, sandbox and hosted plan records: until you delete your account.",
+                "Account, sandbox and hosted plan records: until you delete your account. When you do, we also delete your customer record at Stripe, with the payment method saved there; the invoices already issued stay with Stripe for the payment records below.",
+                "Hosted standing after you delete your account: a one-way keyed hash of your Google account identifier, kept with your hosted standing (whether hosted sandboxes were suspended for you, the abuse watch's strike count, and the free hosted hours you used this calendar month) so that deleting an account and signing in again does not reset them. We keep it under our legitimate interest in preventing abuse of the free hosted plan (Art. 6(1)(f)): the suspension and strike count for 12 months after the latest of them, the used hours until the end of that month.",
                 "Payment records: as long as tax law requires us to keep them, currently five years from the end of the accounting year in Poland.",
-                "A hosted sandbox's disk: destroyed with the machine, immediately, when you delete the sandbox or your account, and, for a machine whose owner is not on the hosted plan, when it has gone unopened for the period published in the app, which we warn you about by email first. Our infrastructure provider's automatic daily snapshots of that disk are not destroyed with it, they expire on their own retention schedule, currently five days, so erasure completes within that window rather than instantly. We hold no other copy.",
+                "A hosted sandbox's disk: destroyed with the machine, immediately, when you delete the sandbox or your account (if our infrastructure provider does not answer at that moment, we retry every minute until it does), and, for a machine whose owner is not on the hosted plan, when it has gone unopened for the period published in the app, which we warn you about by email first. Our infrastructure provider's automatic daily snapshots of that disk are not destroyed with it, they expire on their own retention schedule, currently five days, so erasure completes within that window rather than instantly. We hold no other copy.",
             ],
         },
         {
             heading: "Your rights",
             paragraphs: [
-                "You can access, correct, export and erase your data at any time: Settings offers self-service export and account deletion, and deletion takes effect immediately. You also have the rights to restriction, objection and portability under the GDPR.",
+                "You can access, correct, export and erase your data at any time: Settings offers self-service export and account deletion, and deletion takes effect immediately. What outlives it is listed under How long we keep things: the payment records tax law requires, analytics PostHog holds until its retention ends, and the hosted standing. You also have the rights to restriction, objection and portability under the GDPR.",
                 `You can complain to the Polish supervisory authority (UODO, uodo.gov.pl) or to the authority where you live. For anything else, write to ${LEGAL_CONTACT_EMAIL} and we will answer within 30 days.`,
             ],
         },
@@ -283,7 +284,7 @@ export const termsDoc: LegalDoc = {
         {
             heading: "Suspension and termination",
             paragraphs: [
-                "You can stop using the service and delete your account at any time in Settings, which deletes your data immediately and destroys any hosted machine with it.",
+                "You can stop using the service and delete your account at any time in Settings, which deletes your data immediately and destroys any hosted machine with it. A suspension of hosted sandboxes, and the free hosted hours used this month, stay with your Google account for the period the Privacy Policy states, so deleting the account and signing in again does not lift or reset them.",
                 "We may suspend or terminate an account that breaches these terms or the Acceptable Use Policy: with notice where it is reasonable to give it, and without where the breach is serious or ongoing. We may also discontinue the free parts of the service, giving reasonable notice first. If we terminate for reasons other than your breach and you had paid for a membership, we refund the unused portion.",
             ],
         },

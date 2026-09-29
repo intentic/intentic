@@ -588,13 +588,16 @@ ENV TRANSLATOR_URL=http://127.0.0.1:8789 TRANSLATOR_TOKEN=intentic-translator-lo
 # reporting, feedback uploads, and update checks off — the CLIs are version-pinned in this image, so an update
 # probe is pure phone-home. DO_NOT_TRACK covers Claude Code and anything else honoring the convention; Codex
 # reads no env switches at all (its equivalents live in CODEX_HOME/config.toml — codex/codex-config.ts).
+# OPENCODE_DISABLE_SHARE is the one share switch a repo cannot undo: a cloned repo's opencode.json outranks the
+# global `share: "disabled"` (image-packs/opencode.Dockerfile), and `"share": "auto"` uploads every session.
 ENV DO_NOT_TRACK=1 \
     CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 \
     DISABLE_TELEMETRY=1 \
     DISABLE_ERROR_REPORTING=1 \
     DISABLE_FEEDBACK_COMMAND=1 \
     DISABLE_AUTOUPDATER=1 \
-    OPENCODE_DISABLE_AUTOUPDATE=1
+    OPENCODE_DISABLE_AUTOUPDATE=1 \
+    OPENCODE_DISABLE_SHARE=1
 # Toolchain-wide telemetry opt-outs for everything that runs in the sandbox — the agent's Bash tool, the web
 # terminals' zsh, and any install/build/dev command in /work inherit this env. Tools not baked into the image
 # are covered on purpose: the agent installs toolchains at will, and an unused var is inert. Each name is the

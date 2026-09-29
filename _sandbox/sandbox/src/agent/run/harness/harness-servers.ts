@@ -25,6 +25,7 @@ import { opt } from "../../../opt.js";
 // What the servers and the secret seam read of the daemon.
 export type HarnessServersDeps = Pick<
     Services,
+    | "accountSignInUrls"
     | "agents"
     | "capabilities"
     | "cards"
@@ -194,6 +195,7 @@ export const harnessAccounts = (
             // The two verbs past the narrow deps (filing a new account, reading a mailbox code), injected as closures so
             // the tools stay testable without Services or a network.
             openAccount: (request) => deps.openBrowserAccount(request),
+            signInUrls: (capability) => deps.accountSignInUrls(capability),
             fetchCode: fetchEmailCode,
             release: async (account, lane, detail) => {
                 const verdict = await deps.credentialGate.check({

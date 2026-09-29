@@ -6,6 +6,7 @@ import { DAY_MS } from "../../durations.js";
 import { compedEmail, isOnPlan, paidSlotsOf, slotHolders } from "./hosted-plan.js";
 import { hostedTierIn } from "./hosted-shape.js";
 import { getMachineDetail, isFlyGone, LIVE_STATES } from "./fly/fly.js";
+import { carriedFreeMinutes, carriedStandingOf, GOOGLE_SUBJECT_SELECT } from "./abuse/carried-standing.js";
 
 /* THE HOUR METER. A hosted machine's awake minutes are paid for out of one of two kinds of hours, and every minute is
  * charged to exactly one of them:
@@ -105,12 +106,18 @@ const OLDEST_FIRST: Prisma.HostedMachineOrderByWithRelationInput[] = [{ createdA
 /**
  * Every kind of hours this ACCOUNT has this month, live: settled rows plus open stretches, no provider call. `ownerId`
  * is always the sandbox's OWNER, never the caller, so a shared sandbox's guests spend the owner's hours. The one read
- * the Billing page, the wake, the provision gate, a build and the tick all make, so none of them can disagree.
+ * the Billing page, the wake, the provision gate, a build and the tick all make, so none of them can disagree. The free
+ * hours include what a deleted account with the same Google subject spent this month.
  */
-export const accountHoursOf = async (prisma: PrismaClient, config: Config, ownerId: string, now: Date = new Date()): Promise<AccountHours> => {
+export const accountHoursOf = async (
+    prisma: Pick<PrismaClient, "user" | "hostedPlan" | "hostedMachine" | "hostedUsage" | "hostedStanding">,
+    config: Config,
+    ownerId: string,
+    now: Date = new Date(),
+): Promise<AccountHours> => {
     const month = usageMonth(now);
     const [owner, plan, machines, rows] = await Promise.all([
-        prisma.user.findUnique({ where: { id: ownerId }, select: { createdAt: true, email: true } }),
+        prisma.user.findUnique({ where: { id: ownerId }, select: { createdAt: true, email: true, ...GOOGLE_SUBJECT_SELECT } }),
         prisma.hostedPlan.findUnique({ where: { userId: ownerId }, select: { status: true, items: { select: { tier: true, quantity: true } } } }),
         prisma.hostedMachine.findMany({ where: { sandbox: { ownerId } }, select: { sandboxId: true, tier: true, wokeAt: true }, orderBy: OLDEST_FIRST }),
         prisma.hostedUsage.groupBy({ by: [`sandboxId`, `tier`], where: { ownerId, month }, _sum: { minutes: true } }),
@@ -122,11 +129,14 @@ export const accountHoursOf = async (prisma: PrismaClient, config: Config, owner
         rows.reduce((sum, row) => (counts(row) ? sum + (row._sum.minutes ?? 0) : sum), 0);
 
     const freeLive = machines.reduce((sum, machine) => (holders.has(machine.sandboxId) ? sum : sum + liveMinutes(machine.wokeAt, month, now)), 0);
+    // A deleted account's free minutes this month, carried onto this one by its Google subject (carried-standing.ts):
+    // deleting the account and signing in again is not a fresh month.
+    const carried = carriedFreeMinutes(await carriedStandingOf(prisma, config, owner?.accounts), month);
     const freeFull = hostedTierIn(config, FREE_TIER.id).monthlyHours * 60;
     const free = budgetOf(
         `free`,
         FREE_TIER.id,
-        settled((row) => row.tier === FREE_TIER.id) + freeLive,
+        settled((row) => row.tier === FREE_TIER.id) + freeLive + carried,
         comped || freeFull === 0 ? undefined : rampedFreeHours(config, owner?.createdAt, freeFull, now),
     );
 

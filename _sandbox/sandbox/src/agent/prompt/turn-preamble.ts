@@ -1,3 +1,4 @@
+import { TURN_PREAMBLE_SEPARATOR } from "@intentic/constants";
 import { type ResumeDisclosure, resumeDisclosure, type TurnNote, withoutResumeNote } from "@intentic/sandbox-contract";
 import { REPO_SYNC_NOTE_HEADER } from "../../workspace/layout/sync-repos.js";
 import { SETUP_NOTICE_HEADER, STALE_NOTICE_HEADER } from "../../workspace/layout/workspace-setup.js";
@@ -21,7 +22,8 @@ import { stripAttachmentNote } from "./attachment-note.js";
 
 // TurnNote is canonical and becomes wire text once, in composeWirePrompt; the parser half reads a stored prompt back.
 
-const SEPARATOR = "\n\n---\n\n";
+// Shared with session recall, which cuts the same preamble off transcripts it indexes.
+const SEPARATOR = TURN_PREAMBLE_SEPARATOR;
 
 // Given when a `/`-leading prompt names no command (agent-commands.ts); its job is positional, so the CLI's slash
 // parser doesn't claim the message and drop it.
@@ -62,8 +64,8 @@ export const worktreeReminder = (root: string): TurnNote => ({
 
 // Every note opening a PROVIDER-STORE prompt can carry, with the title shown when read back there; the typed path
 // doesn't consult this, so add an entry here only so history/search/adoption can recognize a new note too. Titles must
-// match the ones at each note's own definition site.
-const INJECTED: readonly { readonly header: string; readonly title: string }[] = [
+// match the ones at each note's own definition site. Exported for the drift test against session recall's recogniser.
+export const INJECTED: readonly { readonly header: string; readonly title: string }[] = [
     { header: SPAWN_NOTE_HEADER, title: SPAWN_NOTE_TITLE },
     // Retitled once a spawned agent became a subagent like any other; the prompts records hold still open with it.
     { header: LEGACY_SPAWN_NOTE_HEADER, title: LEGACY_SPAWN_NOTE_TITLE },

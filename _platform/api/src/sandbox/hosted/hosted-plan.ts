@@ -1,8 +1,8 @@
 import { FREE_TIER, type HostedTier, type HostedTierId, hostedTier, isHostedTierId, PAID_TIERS } from "@intentic/constants";
-import type { PrismaClient } from "@intentic/prisma";
+import type { Prisma, PrismaClient, StripeErasure } from "@intentic/prisma";
 import type { Logger } from "pino";
 import type { Config } from "../../config.js";
-import { type StripeGateway, stripeGateway, type StripePrice, type StripeSubscription } from "./hosted-plan-stripe.js";
+import { StripeError, type StripeGateway, stripeGateway, type StripePrice, type StripeSubscription } from "./hosted-plan-stripe.js";
 
 // The one thing this platform sells: a Stripe subscription for a bigger machine than the free rung, never collected,
 // one slot per sandbox. Nothing else in the product reads it: money changes which machine agents run on, never what
@@ -284,29 +284,80 @@ const mirrorItems = async (prisma: PrismaClient, config: Config, planId: string,
     await prisma.hostedPlanItem.deleteMany({ where: { planId, tier: { notIn: seen } } });
 };
 
-// Ends the subscription of an account being deleted: both deletion paths cascade the plan row alone, which used to
-// leave Stripe still charging a ghost account. Called before the cascade; a Stripe refusal is logged, not blocking.
-export const cancelHostedPlan = async (
-    prisma: PrismaClient,
+/* A DELETED ACCOUNT'S STRIPE CUSTOMER, WRITTEN DOWN FIRST. Called inside the erase's own transaction (account-erase.ts)
+ * while the plan row still names the customer and subscription: the cascade takes that row and Stripe does not cascade
+ * with us, so the ids go to `stripe_erasure` before anything is asked of Stripe. A subscription already over is not
+ * cancelled again. Answers what was queued, or nothing for an account that never bought the plan. */
+export const queueStripeErasure = async (
+    tx: Prisma.TransactionClient,
+    userId: string,
+): Promise<Pick<StripeErasure, "customerId" | "subscriptionId"> | undefined> => {
+    const plan = await tx.hostedPlan.findUnique({ where: { userId }, select: { stripeCustomerId: true, stripeSubscriptionId: true, status: true } });
+    if (plan === null) {
+        return undefined;
+    }
+    const queued = { customerId: plan.stripeCustomerId, subscriptionId: OVER_STATUSES.has(plan.status) ? null : plan.stripeSubscriptionId };
+    await tx.stripeErasure.upsert({ where: { customerId: queued.customerId }, create: queued, update: { subscriptionId: queued.subscriptionId } });
+    return queued;
+};
+
+/* ENDS ONE QUEUED CUSTOMER AT STRIPE: the subscription cancelled at once (nobody is left to bill), then the customer
+ * deleted, which takes the saved card, email and address with it and leaves the invoices for the tax record. A
+ * cancel that fails is not the end: deleting the customer cancels its subscriptions too. Stripe answering that either
+ * is already gone counts as done. The row goes only once the customer is gone; until then the daily sweep retries it.
+ * Never throws, so an erasure is never held hostage by a payment API. Answers whether the row is done. */
+export const eraseStripeCustomer = async (
+    prisma: Pick<PrismaClient, "stripeErasure">,
     config: Config,
     logger: Logger,
-    userId: string,
+    row: Pick<StripeErasure, "customerId" | "subscriptionId">,
     gateway?: StripeGateway,
-): Promise<void> => {
-    if (!hostedPlanEnabled(config)) {
-        return;
+): Promise<boolean> => {
+    const ids = { customer: row.customerId, subscription: row.subscriptionId };
+    if (config.hostedPlan.stripeSecretKey === ``) {
+        logger.error(ids, `hosted plan: a deleted account's Stripe customer is queued, and this platform has no Stripe key to delete it with`);
+        return false;
     }
-    const plan = await prisma.hostedPlan.findUnique({ where: { userId }, select: { stripeSubscriptionId: true, status: true } });
-    if (plan === null || OVER_STATUSES.has(plan.status)) {
-        return;
+    const stripe = gateway ?? stripeGateway(config.hostedPlan);
+    if (row.subscriptionId !== null) {
+        try {
+            await stripe.cancelSubscription(row.subscriptionId);
+            logger.info(ids, `hosted plan: subscription cancelled with its account`);
+        } catch (error) {
+            // A 404 is Stripe no longer having it: nothing left to cancel.
+            if (!(error instanceof StripeError && error.status === 404)) {
+                logger.warn({ err: error, ...ids }, `hosted plan: cancelling a deleted account's subscription failed; deleting the customer ends it too`);
+            }
+        }
     }
     try {
-        await (gateway ?? stripeGateway(config.hostedPlan)).cancelSubscription(plan.stripeSubscriptionId);
-        logger.info({ userId, subscription: plan.stripeSubscriptionId }, `hosted plan: subscription cancelled with its account`);
+        await stripe.deleteCustomer(row.customerId);
     } catch (error) {
-        logger.error(
-            { err: error, userId, subscription: plan.stripeSubscriptionId },
-            `hosted plan: cancelling a deleted account's subscription failed; cancel it in Stripe by hand`,
-        );
+        // A 404 is a customer already deleted, which is the outcome this was for.
+        if (!(error instanceof StripeError && error.status === 404)) {
+            logger.error({ err: error, ...ids }, `hosted plan: deleting a deleted account's Stripe customer failed; kept in stripe_erasure for the daily sweep`);
+            return false;
+        }
     }
+    await prisma.stripeErasure.deleteMany({ where: { customerId: row.customerId } });
+    logger.info(ids, `hosted plan: Stripe customer deleted with its account`);
+    return true;
+};
+
+// Retries every customer an erase could not end at Stripe; retention.ts runs it daily, under the job lock.
+export const sweepStripeErasures = async (
+    prisma: Pick<PrismaClient, "stripeErasure">,
+    config: Config,
+    logger: Logger,
+    gateway?: StripeGateway,
+): Promise<{ erased: number; pending: number }> => {
+    const rows = await prisma.stripeErasure.findMany({ orderBy: { createdAt: `asc` } });
+    let erased = 0;
+    for (const row of rows) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- a few calls per row, once a day, gentle on Stripe
+        if (await eraseStripeCustomer(prisma, config, logger, row, gateway)) {
+            erased += 1;
+        }
+    }
+    return { erased, pending: rows.length - erased };
 };

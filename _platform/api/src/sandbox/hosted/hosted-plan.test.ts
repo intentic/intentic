@@ -4,7 +4,7 @@ import type { PrismaClient } from "@intentic/prisma";
 import { configSchema, type Config } from "../../config.js";
 import { call } from "@orpc/server";
 import type { OrpcContext } from "../../context.js";
-import { cancelHostedPlan, checkHostedPlanPrices, compedEmail, hostedSlotsOf, onHostedPlan, paidSlotsOf, slotHolders } from "./hosted-plan.js";
+import { checkHostedPlanPrices, eraseStripeCustomer, queueStripeErasure, sweepStripeErasures, compedEmail, hostedSlotsOf, onHostedPlan, paidSlotsOf, slotHolders } from "./hosted-plan.js";
 import { StripeError, type StripeGateway, type StripePrice } from "./hosted-plan-stripe.js";
 import { hostedPlanRoutes } from "./hosted-plan.orpc.js";
 import { hostedPlanHttpRoutes } from "./hosted-plan.routes.js";
@@ -61,11 +61,17 @@ interface PlanRow {
     syncedAt?: Date;
 }
 
-// Enough Prisma for the plan: the user lookup the comp list needs, the plan reads/writes the webhook makes, and the
-// per-rung slot rows it writes beside them.
-const fakePrisma = (seed?: { plans?: PlanRow[]; users?: { id: string; email: string }[] }) => {
+interface ErasureRow {
+    customerId: string;
+    subscriptionId: string | null;
+}
+
+// Enough Prisma for the plan: the user lookup the comp list needs, the plan reads/writes the webhook makes, the
+// per-rung slot rows it writes beside them, and the queue a deleted account's customer waits in.
+const fakePrisma = (seed?: { plans?: PlanRow[]; users?: { id: string; email: string }[]; erasures?: ErasureRow[] }) => {
     const plans = seed?.plans ?? [];
     const users = seed?.users ?? [];
+    const erasures = seed?.erasures ?? [];
     const planById = (id: string) => plans.find((plan) => (plan.id ?? `plan-1`) === id);
     const prisma = {
         user: { findUnique: jest.fn(async ({ where }: { where: { id: string } }) => users.find((user) => user.id === where.id) ?? null) },
@@ -129,7 +135,27 @@ const fakePrisma = (seed?: { plans?: PlanRow[]; users?: { id: string; email: str
             }),
         },
     };
-    return { prisma: prisma as unknown as PrismaClient, plans };
+    const erasureQueue = {
+        stripeErasure: {
+            upsert: jest.fn(async ({ where, create, update }: { where: { customerId: string }; create: ErasureRow; update: Partial<ErasureRow> }) => {
+                const existing = erasures.find((erasure) => erasure.customerId === where.customerId);
+                if (existing === undefined) {
+                    erasures.push({ ...create });
+                    return create;
+                }
+                return Object.assign(existing, update);
+            }),
+            findMany: jest.fn(async () => [...erasures]),
+            deleteMany: jest.fn(async ({ where }: { where: { customerId: string } }) => {
+                const at = erasures.findIndex((erasure) => erasure.customerId === where.customerId);
+                if (at !== -1) {
+                    erasures.splice(at, 1);
+                }
+                return { count: at === -1 ? 0 : 1 };
+            }),
+        },
+    };
+    return { prisma: { ...prisma, ...erasureQueue } as unknown as PrismaClient, plans, erasures };
 };
 
 const row = (status: string, over: Partial<PlanRow> = {}): PlanRow => ({
@@ -314,45 +340,101 @@ describe(`the hosted plan`, () => {
     });
 });
 
-// Both deletions cascade the plan row, but the Stripe subscription doesn't cancel itself with it; called before the
-// cascade, while the row still names the subscription.
-describe(`cancelling the plan with its account`, () => {
-    it(`cancels a live subscription`, async () => {
-        const gateway = { cancelSubscription: jest.fn(async () => subscription({ status: `canceled` })) } as unknown as StripeGateway;
-        await cancelHostedPlan(fakePrisma({ plans: [row(`active`)] }).prisma, baseConfig, logger, `user-1`, gateway);
-        expect(gateway.cancelSubscription).toHaveBeenCalledWith(`sub_1`);
+// Both deletions cascade the plan row, but Stripe doesn't cascade with it: the ids are queued inside the erase's own
+// transaction, while the row still names them, and the customer is deleted from that queue.
+describe(`ending the Stripe customer with its account`, () => {
+    // Every call the erasure made of Stripe, in order, answering as Stripe would unless told to refuse one.
+    const stripeWith = (refuse: { cancel?: Error; delete?: Error } = {}) => {
+        const calls: string[] = [];
+        const gateway = {
+            cancelSubscription: jest.fn(async (id: string) => {
+                calls.push(`cancel ${id}`);
+                if (refuse.cancel !== undefined) {
+                    throw refuse.cancel;
+                }
+                return subscription({ status: `canceled` });
+            }),
+            deleteCustomer: jest.fn(async (id: string) => {
+                calls.push(`delete ${id}`);
+                if (refuse.delete !== undefined) {
+                    throw refuse.delete;
+                }
+            }),
+        } as unknown as StripeGateway;
+        return { gateway, calls };
+    };
+
+    it(`queues a live subscription and its customer, then cancels the one and deletes the other`, async () => {
+        const { prisma, erasures } = fakePrisma({ plans: [row(`active`)] });
+        const queued = await queueStripeErasure(prisma as never, `user-1`);
+        expect(queued).toEqual({ customerId: `cus_1`, subscriptionId: `sub_1` });
+        expect(erasures).toEqual([{ customerId: `cus_1`, subscriptionId: `sub_1` }]);
+        const { gateway, calls } = stripeWith();
+        expect(await eraseStripeCustomer(prisma, baseConfig, logger, erasures[0] as ErasureRow, gateway)).toBe(true);
+        expect(calls).toEqual([`cancel sub_1`, `delete cus_1`]);
+        expect(erasures).toEqual([]);
     });
 
     it(`also ends one that is past due: Stripe is still trying to charge it`, async () => {
-        const gateway = { cancelSubscription: jest.fn(async () => subscription({ status: `canceled` })) } as unknown as StripeGateway;
-        await cancelHostedPlan(fakePrisma({ plans: [row(`past_due`)] }).prisma, baseConfig, logger, `user-1`, gateway);
-        expect(gateway.cancelSubscription).toHaveBeenCalledTimes(1);
+        const { prisma, erasures } = fakePrisma({ plans: [row(`past_due`)] });
+        await queueStripeErasure(prisma as never, `user-1`);
+        const { gateway, calls } = stripeWith();
+        await sweepStripeErasures(prisma, baseConfig, logger, gateway);
+        expect(calls).toEqual([`cancel sub_1`, `delete cus_1`]);
+        expect(erasures).toEqual([]);
     });
 
-    it(`has nothing to cancel for an account with no plan, an ended one, or a platform selling nothing`, async () => {
-        const gateway = { cancelSubscription: jest.fn() } as unknown as StripeGateway;
-        await cancelHostedPlan(fakePrisma().prisma, baseConfig, logger, `user-1`, gateway);
-        await cancelHostedPlan(fakePrisma({ plans: [row(`canceled`)] }).prisma, baseConfig, logger, `user-1`, gateway);
-        await cancelHostedPlan(fakePrisma({ plans: [row(`active`)] }).prisma, configWith({ stripePrices: `` }), logger, `user-1`, gateway);
-        expect(gateway.cancelSubscription).not.toHaveBeenCalled();
+    it(`deletes an ended subscription's customer without cancelling it again, and queues nothing for an account with no plan`, async () => {
+        const ended = fakePrisma({ plans: [row(`canceled`)] });
+        expect(await queueStripeErasure(ended.prisma as never, `user-1`)).toEqual({ customerId: `cus_1`, subscriptionId: null });
+        const { gateway, calls } = stripeWith();
+        expect(await sweepStripeErasures(ended.prisma, baseConfig, logger, gateway)).toEqual({ erased: 1, pending: 0 });
+        expect(calls).toEqual([`delete cus_1`]);
+
+        const none = fakePrisma();
+        expect(await queueStripeErasure(none.prisma as never, `user-1`)).toBeUndefined();
+        expect(none.erasures).toEqual([]);
     });
 
-    // An erasure must not be held hostage by a payment API; the log line names the manual follow-up.
-    it(`lets the deletion proceed when Stripe refuses, and says so at error level`, async () => {
-        const gateway = {
-            cancelSubscription: jest.fn(async () => {
-                throw new Error(`Stripe refused: down`);
-            }),
-        } as unknown as StripeGateway;
+    it(`counts a customer Stripe no longer has as deleted, and deletes it even when the cancel was refused`, async () => {
+        const gone = fakePrisma({ erasures: [{ customerId: `cus_1`, subscriptionId: `sub_1` }] });
+        const missing = stripeWith({ cancel: new StripeError(`Stripe refused: No such subscription`, 404), delete: new StripeError(`Stripe refused: No such customer`, 404) });
+        expect(await sweepStripeErasures(gone.prisma, baseConfig, logger, missing.gateway)).toEqual({ erased: 1, pending: 0 });
+        expect(gone.erasures).toEqual([]);
+
+        // Deleting the customer cancels what it still has, so a refused cancel does not hold the erasure back.
+        const refused = fakePrisma({ erasures: [{ customerId: `cus_2`, subscriptionId: `sub_2` }] });
+        const down = stripeWith({ cancel: new StripeError(`Stripe refused: down`, 503) });
+        expect(await sweepStripeErasures(refused.prisma, baseConfig, logger, down.gateway)).toEqual({ erased: 1, pending: 0 });
+        expect(down.calls).toEqual([`cancel sub_2`, `delete cus_2`]);
+        expect(refused.erasures).toEqual([]);
+    });
+
+    // An erasure must not be held hostage by a payment API, and a failure must not be only a log line: the ids stay
+    // queued, and the next sweep ends them.
+    it(`keeps the ids queued when Stripe refuses the delete, says so at error level, and the next sweep finishes it`, async () => {
+        const { prisma, erasures } = fakePrisma({ erasures: [{ customerId: `cus_1`, subscriptionId: `sub_1` }] });
         const errors = jest.fn();
-        await cancelHostedPlan(
-            fakePrisma({ plans: [row(`active`)] }).prisma,
-            baseConfig,
-            { info: jest.fn(), error: errors } as never,
-            `user-1`,
-            gateway,
-        );
-        expect(errors).toHaveBeenCalledWith(expect.objectContaining({ subscription: `sub_1` }), expect.stringContaining(`by hand`));
+        const down = stripeWith({ delete: new StripeError(`Stripe refused: down`, 503) });
+        expect(await sweepStripeErasures(prisma, baseConfig, { info: jest.fn(), warn: jest.fn(), error: errors } as never, down.gateway)).toEqual({
+            erased: 0,
+            pending: 1,
+        });
+        expect(erasures).toEqual([{ customerId: `cus_1`, subscriptionId: `sub_1` }]);
+        expect(errors).toHaveBeenCalledWith(expect.objectContaining({ customer: `cus_1`, subscription: `sub_1` }), expect.stringContaining(`daily sweep`));
+
+        const up = stripeWith();
+        expect(await sweepStripeErasures(prisma, baseConfig, logger, up.gateway)).toEqual({ erased: 1, pending: 0 });
+        expect(up.calls).toEqual([`cancel sub_1`, `delete cus_1`]);
+        expect(erasures).toEqual([]);
+    });
+
+    it(`asks Stripe nothing on a platform with no Stripe key, and keeps the ids for when it has one`, async () => {
+        const { prisma, erasures } = fakePrisma({ erasures: [{ customerId: `cus_1`, subscriptionId: `sub_1` }] });
+        const { gateway, calls } = stripeWith();
+        expect(await sweepStripeErasures(prisma, configWith({ stripeSecretKey: `` }), logger, gateway)).toEqual({ erased: 0, pending: 1 });
+        expect(calls).toEqual([]);
+        expect(erasures).toEqual([{ customerId: `cus_1`, subscriptionId: `sub_1` }]);
     });
 });
 

@@ -8,7 +8,8 @@
 RUN --mount=type=cache,target=/root/.npm \
     npm install -g opencode-ai@1.18.33 && opencode --version
 # OpenCode privacy defaults, in the GLOBAL config (the only level where autoupdate:false is honored): no
-# auto-update (the CLI is version-pinned above) and no session sync to opncd.ai, even manual /share. The
-# daemon's server-spawn config (runtimes/opencode/opencode.ts) merges over this file, so runtime overrides are unaffected.
+# auto-update (the CLI is version-pinned above) and no session sync to opncd.ai, even manual /share. A repo's own
+# opencode.json merges over this file and can turn sharing back on, which is why the image also sets
+# OPENCODE_DISABLE_SHARE and the daemon's server spawn (runtimes/opencode/opencode.ts) pins its own `share`.
 RUN mkdir -p /root/.config/opencode \
     && printf '{ "autoupdate": false, "share": "disabled" }\n' > /root/.config/opencode/opencode.json

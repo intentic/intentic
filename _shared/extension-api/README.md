@@ -17,13 +17,16 @@ flowchart LR
   its own backend through `api.backend`, by a path relative to its namespace, never by spelling `/x/<id>`.
 - An extension gives the agent tools one way: `contributes.tools`, served by `api.tools.serve((card) => [...])` in
   the backend. The host owns the MCP transport, each call's deadline and the card lookup, and hands the card's
-  settings with every call; the daemon mounts the server into every turn on every runtime. A plugin's `.mcp.json` is
+  settings with every call; the daemon mounts the server into every turn on every runtime. Each tool may declare its
+  `effect` (`read`, `write` or `destructive`, the `ToolEffect` words the daemon's own tools use), which the host lists
+  as MCP annotations with both hints spelled out; a tool that declares none is listed without them, and Claude Code
+  runs it alone as a destructive write. A plugin's `.mcp.json` is
   deprecated, and a cli card's `mcp` is kept one release as an alias.
 - This package is published to npm, and its API only grows within a major. `extensionApiVersion` moves
   with every surface change (additive is a minor), and a manifest's `engines.intentic` range is matched against it at
   load, failing closed. The editor's `surface-guard.test.ts` fails when the surface moves without a new entry in
-  `src/surface.json`, which records the api's members and, from 2.20.0, a digest of the whole generated manifest
-  schema, since a host's parse drops a field it does not know at any depth.
+  `src/surface.json`, which records the api's members, from 2.20.0 a digest of the whole generated manifest
+  schema, since a host's parse drops a field it does not know at any depth, and from 2.21.0 `ToolDefinition`'s fields.
 - Helpers every extension needs live here too: sandbox-scoped module state (`sandboxRef`, cleared on every sandbox
   switch), background polling for rail badges, `sandboxLedger` (whose writes reject rather than overwrite a file they
   could not read), `sandboxDocument` (a file of the extension's own read through the `conversions` its shape has had,

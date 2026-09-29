@@ -23,7 +23,8 @@ flowchart LR
   ships [plugin/](plugin), whose skill tells the agent when to use it.
 - `contributes.tools` gives the agent `list_notes` and `add_note` as an MCP server named `example`, in every turn on
   every runtime. [src/server.ts](src/server.ts) is the `server` bundle: it only says what the tools are, with
-  `api.tools.serve`, and the host owns the transport and each call's deadline. Tools for one connected account at a
+  `api.tools.serve`, and the host owns the transport and each call's deadline. Each declares its `effect`:
+  `list_notes` reads and `add_note` writes, and a tool that declares none is taken as destructive and run alone. Tools for one connected account at a
   time would add `perCard`, naming a `cli` capability card, and read that card's settings from the argument `serve`
   is called with.
 - The view uses the host's classes only: name a role (`text-muted`, `bg-card`), size against the container

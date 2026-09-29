@@ -35,6 +35,26 @@ test("the tool list follows the card it was asked for", async () => {
     expect(listed).toEqual({ jsonrpc: "2.0", id: 4, result: { tools: [{ name: "echo", description: "Echoes x.", inputSchema: echo.inputSchema }] } });
 });
 
+test("a declared effect is listed as both MCP hints, and a tool that declares none is listed without annotations", async () => {
+    const lookup: ToolDefinition = { ...echo, name: "lookup", effect: "read" };
+    const wipe: ToolDefinition = { ...echo, name: "wipe", effect: "destructive" };
+    const listed = await answerToolMessage({ id: "acme.effects", source: () => [lookup, wipe, echo] }, { message: { jsonrpc: "2.0", id: 8, method: "tools/list" } }, signal);
+    expect(listed).toEqual({
+        jsonrpc: "2.0",
+        id: 8,
+        result: {
+            tools: [
+                { name: "lookup", description: "Echoes x.", inputSchema: echo.inputSchema, annotations: { readOnlyHint: true, destructiveHint: false } },
+                { name: "wipe", description: "Echoes x.", inputSchema: echo.inputSchema, annotations: { readOnlyHint: false, destructiveHint: true } },
+                { name: "echo", description: "Echoes x.", inputSchema: echo.inputSchema },
+            ],
+        },
+    });
+    // toEqual reads an undefined key as absent; the wire must not carry one at all.
+    const tools = (listed?.result as { tools: Record<string, unknown>[] }).tools;
+    expect(Object.keys(tools[2] ?? {})).toEqual(["name", "description", "inputSchema"]);
+});
+
 test("a call answers as MCP content; a throw and a tool the card no longer offers answer as refusals the model reads", async () => {
     const call = (card: string, name: string) =>
         answerToolMessage(serving, { card: { id: card, config: {} }, message: { jsonrpc: "2.0", id: 5, method: "tools/call", params: { name, arguments: { x: "hi" } } } }, signal);

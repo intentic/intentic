@@ -43,6 +43,8 @@ export const activateServer = (api: ExtensionServerApi): void => {
         name: `list_notes`,
         description: `The owner's newest notes in the Example view, newest first.`,
         inputSchema: { type: `object`, properties: { limit: { type: `integer`, minimum: 1, description: `How many; default 10.` } } },
+        // Changes nothing, so a runtime may run it beside other calls and allow it where writes are held.
+        effect: `read`,
         call: async (args) => (await read()).toReversed().slice(0, limitOf(args)),
     };
 
@@ -50,6 +52,8 @@ export const activateServer = (api: ExtensionServerApi): void => {
         name: `add_note`,
         description: `Leave the owner a one-sentence note in the Example view. A breadcrumb, not a report, and never a question.`,
         inputSchema: { type: `object`, properties: { text: { type: `string`, minLength: 1 } }, required: [`text`] },
+        // Adds to the file and loses nothing already in it. A tool that declares no effect is taken as destructive.
+        effect: `write`,
         call: async (args) => {
             const text = String(args[`text`] ?? ``).trim();
             if (text === ``) {

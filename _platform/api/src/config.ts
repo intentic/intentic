@@ -16,6 +16,8 @@ export const configSchema = z.object({
         poolMax: z.coerce.number().int().positive().default(10),
     }),
     betterAuth: z.object({
+        // Also the key material for the hosted-standing hash (HKDF, carried-standing.ts): rotating it signs everyone out
+        // AND orphans every deleted account's carried standing, which then expires unread.
         secret: z.string().min(1).meta({ secret: true }),
     }),
     // Key for encrypting persisted secrets at rest (crypto.ts); unset stores those columns as plaintext.

@@ -6,6 +6,8 @@ import { reapHostedOrphans } from "./sandbox/hosted/hosted.js";
 import { sweepHostedBuilds } from "./sandbox/hosted/build/hosted-build.js";
 import { reapIdleHosted } from "./sandbox/hosted/hosted-idle.js";
 import { kickHostedCleanup } from "./sandbox/hosted/hosted-cleanup.js";
+import { sweepHostedStanding } from "./sandbox/hosted/abuse/carried-standing.js";
+import { sweepStripeErasures } from "./sandbox/hosted/hosted-plan.js";
 import { sweepSandboxTrash } from "./sandbox/sandbox-trash.js";
 import type { Config } from "./config.js";
 import type { Logger } from "pino";
@@ -60,6 +62,12 @@ export const startRetention = (prisma: PrismaClient, config: Config, logger: Log
     const { apiToken, zone, reap, reapDryRun } = config.intenticCloudflare;
     const sweep = async (): Promise<void> => {
         await step(logger, `retention sweep`, () => runRetention(prisma));
+        // A deleted account's carried hosted standing: twelve months after its latest change, its minutes at month's end.
+        await step(logger, `hosted standing sweep`, () => sweepHostedStanding(prisma));
+        // Deleted accounts' Stripe customers an erase could not delete at once; self-gated on the Stripe key.
+        await step(logger, `Stripe erasure sweep`, async () =>
+            config.hostedPlan.stripeSecretKey === `` ? { skipped: `no Stripe key` } : sweepStripeErasures(prisma, config, logger),
+        );
         // Cloudflare is DNS-only now; the one thing still worth sweeping is loopback-certificate residue.
         if (apiToken === `` || zone === ``) {
             return;

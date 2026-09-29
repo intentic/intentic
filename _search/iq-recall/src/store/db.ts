@@ -2,8 +2,9 @@ import { rmSync } from "node:fs";
 import { guardSchemaVersion, openSqlite, type SqliteDb, wrapDb } from "@intentic/base/sqlite";
 
 // Bumped on any table/column change OR extraction-logic change that must re-ingest, mismatch drops and
-// recreates everything (the recall index is a pure cache over ~/.claude/projects transcripts).
-const SCHEMA_VERSION = "2";
+// recreates everything (the recall index is a pure cache over ~/.claude/projects transcripts). 3: stored prompts lost
+// the daemon's turn preamble, and a turn is unique per session (a live v2 index held 419 racing-ingest duplicates).
+const SCHEMA_VERSION = "3";
 
 const DDL = `
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -36,7 +37,9 @@ CREATE TABLE IF NOT EXISTS turns (
     response TEXT NOT NULL DEFAULT '',
     start_byte INTEGER NOT NULL
 );
-CREATE INDEX IF NOT EXISTS turns_session ON turns(session_id);
+-- One row per transcript line: two ingests running at once (the prompt hook's budgeted pass and the SessionStart
+-- background pass) both read a transcript's offset before either writes, and each applied the same delta.
+CREATE UNIQUE INDEX IF NOT EXISTS turns_session_uuid ON turns(session_id, uuid);
 CREATE TABLE IF NOT EXISTS turn_files (
     turn_id INTEGER NOT NULL REFERENCES turns(id) ON DELETE CASCADE,
     path TEXT NOT NULL,

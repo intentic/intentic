@@ -249,6 +249,25 @@ interface Hit {
     readonly body: string;
 }
 
+/* DELETE /v1/customers/{id}, as Stripe answers it: every subscription the customer still has is cancelled at once (and
+ * its event delivered), the customer is gone, and its invoices would stay. A customer it does not have is a 404. */
+const customerDeletion =
+    (customers: Map<string, FakeCustomer>, subscriptions: Map<string, FakeSubscription>, update: FakeStripe["update"]) =>
+    async (hit: Hit): Promise<void> => {
+        const customerId = hit.match[1] ?? "";
+        if (!customers.has(customerId)) {
+            return refuse(hit.res, 404, `No such customer: '${customerId}'`);
+        }
+        for (const subscription of subscriptions.values()) {
+            if (subscription.customer === customerId && subscription.status !== "canceled") {
+                // oxlint-disable-next-line eslint/no-await-in-loop -- one event per subscription, in order
+                await update(subscription.id, { status: "canceled" });
+            }
+        }
+        customers.delete(customerId);
+        json(hit.res, { id: customerId, object: "customer", deleted: true });
+    };
+
 interface Route {
     readonly method: string;
     readonly pattern: RegExp;
@@ -460,6 +479,7 @@ export const startFakeStripe = async (options: FakeStripeOptions): Promise<FakeS
                 json(hit.res, wireSubscription(subscription));
             }),
         },
+        { method: "DELETE", pattern: /^\/v1\/customers\/([^/]+)$/, handle: api(customerDeletion(customers, subscriptions, update)) },
         {
             method: "POST",
             pattern: /^\/v1\/subscriptions\/([^/]+)$/,

@@ -20,8 +20,10 @@
 #   intentic-desktop: /lib/x86_64-linux-gnu/libc.so.6: version `GLIBC_2.39' not found
 #
 # — with a ✗ on "the workspace window opened" and 44 more lines of the same for every library the AppImage
-# vendors (run 34046947138, desktop-verify). The deb installed cleanly on the way there, and that is worth
-# knowing: the bundler's Depends does not name a libc6 floor, so apt cannot refuse the package it should.
+# vendors (run 34046947138, desktop-verify). The deb installed cleanly on the way there because its Depends
+# named no libc6 floor then. tauri.conf.json now declares one (`libc6 (>= 2.39)`, and the matching glibc
+# capability for the rpm), so apt and dnf refuse the package on an older system, and verify-desktop-bundle.sh
+# fails a build whose binaries or vendored libraries import a newer GLIBC_ version than that floor.
 #
 # The version the two share is the ONLY thing coupled here. The package set below stays bare, so what this
 # tier is for — an incomplete Depends, a library the AppImage forgot — is unchanged; a host older than the

@@ -10,6 +10,7 @@ import { stopMachine } from "../fly/fly.js";
 import { hostedEnabled } from "../hosted.js";
 import { onHostedPlan } from "../hosted-plan.js";
 import { closeHostedStretch } from "../hosted-usage.js";
+import { carriedStandingOf, carriedStrikesSince, GOOGLE_SUBJECT_SELECT } from "./carried-standing.js";
 import { suspendHosted } from "./hosted-standing.js";
 
 /* THE ABUSE WATCH. The platform cannot see inside a hosted machine and does not try; what it can read is the
@@ -69,7 +70,12 @@ interface Candidate {
     readonly wokeAt: Date | null;
     // What the busy share is a share OF: a 16-CPU machine at 85% is doing four times the work an 4-CPU one is.
     readonly cpus: number;
-    readonly sandbox: { readonly id: string; readonly name: string; readonly ownerId: string; readonly owner: { readonly email: string } };
+    readonly sandbox: {
+        readonly id: string;
+        readonly name: string;
+        readonly ownerId: string;
+        readonly owner: { readonly email: string; readonly accounts?: readonly { readonly accountId: string }[] };
+    };
 }
 
 interface Verdict {
@@ -159,13 +165,11 @@ const strike = async (
     }
     await stopMachine(config.hosted.flyApiToken, machine.appName, machine.machineId);
     await closeHostedStretch(prisma, { ...machine, ownerId }, now);
-    const prior = await prisma.hostedStrike.count({
-        where: {
-            userId: ownerId,
-            action: { in: [`stopped`, `suspended`] },
-            createdAt: { gte: new Date(now.getTime() - config.hosted.abuseStrikeDays * DAY_MS) },
-        },
-    });
+    const since = new Date(now.getTime() - config.hosted.abuseStrikeDays * DAY_MS);
+    // A deleted account's strikes count too, when its Google subject is this owner's (carried-standing.ts).
+    const prior =
+        (await prisma.hostedStrike.count({ where: { userId: ownerId, action: { in: [`stopped`, `suspended`] }, createdAt: { gte: since } } })) +
+        carriedStrikesSince(await carriedStandingOf(prisma, config, machine.sandbox.owner.accounts), since);
     const suspend = config.hosted.abuseStrikesToSuspend > 0 && prior + 1 >= config.hosted.abuseStrikesToSuspend;
     await prisma.hostedStrike.create({ data: { ...base, action: suspend ? `suspended` : `stopped` } });
     if (suspend) {
@@ -201,7 +205,7 @@ export const sweepHostedAbuse = async (
             machineId: true,
             wokeAt: true,
             cpus: true,
-            sandbox: { select: { id: true, name: true, ownerId: true, owner: { select: { email: true } } } },
+            sandbox: { select: { id: true, name: true, ownerId: true, owner: { select: { email: true, ...GOOGLE_SUBJECT_SELECT } } } },
         },
     });
     if (candidates.length === 0) {

@@ -4,8 +4,8 @@ import type { Logger } from "pino";
 import type { PrismaClient } from "@intentic/prisma";
 import type { Config } from "../config.js";
 import { stopMachine } from "../sandbox/hosted/fly/fly.js";
-import { destroyHosted, hostedEnabled } from "../sandbox/hosted/hosted.js";
-import { cancelHostedPlan } from "../sandbox/hosted/hosted-plan.js";
+import { eraseAccount } from "../account-erase.js";
+import { hostedEnabled } from "../sandbox/hosted/hosted.js";
 import type { StripeGateway } from "../sandbox/hosted/hosted-plan-stripe.js";
 import { hostedSuspensionOf, liftHostedSuspension, suspendHosted } from "../sandbox/hosted/abuse/hosted-standing.js";
 
@@ -30,32 +30,25 @@ export const stopHostedMachine = async (prisma: PrismaClient, config: Config, sa
     return { ok: true, message: `${machine.appName} stopped. The owner's next visit wakes it; nothing was destroyed.` };
 };
 
-// Same teardown as the owner's own delete. Cancels the Stripe subscription first, while the plan row still names it,
-// since it does not cascade with the row.
+// The owner's own deletion, run by an operator: the one erase path (account-erase.ts) queues and destroys the hosted
+// apps, ends the Stripe customer and carries the hosted standing, and then the user row goes.
 export const deleteUserAccount = async (
     prisma: PrismaClient,
     config: Config,
     logger: Logger,
     userId: string,
-    // Injectable so tests drive the cancel without Stripe, as in the plan routes.
+    // Injectable so tests drive the Stripe erasure without Stripe, as in the plan routes.
     gateway?: StripeGateway,
 ): Promise<AdminActionResult> => {
-    const sandboxes = await prisma.sandbox.findMany({
-        where: { ownerId: userId },
-        select: { id: true, hosted: { select: { appName: true } } },
-    });
-    await cancelHostedPlan(prisma, config, logger, userId, gateway);
+    const erased = await eraseAccount(prisma, config, logger, userId, gateway === undefined ? {} : { gateway });
     const user = await prisma.user.delete({ where: { id: userId }, select: { email: true } });
-    for (const sandbox of sandboxes) {
-        if (sandbox.hosted !== null) {
-            try {
-                await destroyHosted(config, sandbox.hosted.appName);
-            } catch (error) {
-                logger.warn({ err: error, app: sandbox.hosted.appName }, `admin delete: hosted teardown failed; orphaned for the reaper`);
-            }
-        }
-    }
-    return { ok: true, message: `${user.email} erased: sandboxes, grants and the hosted plan are gone with the account.` };
+    const pending = erased.apps.length - erased.destroyed.length;
+    return {
+        ok: true,
+        message: `${user.email} erased: sandboxes, grants and the hosted plan are gone with the account${
+            pending === 0 ? `` : `; ${pending === 1 ? `one hosted app is` : `${pending} hosted apps are`} queued for teardown`
+        }${erased.stripe === `queued` ? `; the Stripe customer is queued for deletion` : ``}.`,
+    };
 };
 
 // Switches the hosted lane off for one account and stops its machines now (hosted-standing.ts); the account, its
@@ -64,7 +57,7 @@ export const suspendUserHosted = async (prisma: PrismaClient, config: Config, lo
     if (!hostedEnabled(config)) {
         return { ok: false, message: `The hosted lane is not configured on this platform.` };
     }
-    if ((await hostedSuspensionOf(prisma, user.id)) !== undefined) {
+    if ((await hostedSuspensionOf(prisma, config, user.id)) !== undefined) {
         return { ok: false, message: `${user.email} is already suspended.` };
     }
     const { stopped } = await suspendHosted(prisma, config, logger, user.id, reason);
@@ -74,10 +67,10 @@ export const suspendUserHosted = async (prisma: PrismaClient, config: Config, lo
     };
 };
 
-export const liftUserHosted = async (prisma: PrismaClient, logger: Logger, user: { id: string; email: string }): Promise<AdminActionResult> => {
-    if ((await hostedSuspensionOf(prisma, user.id)) === undefined) {
+export const liftUserHosted = async (prisma: PrismaClient, config: Config, logger: Logger, user: { id: string; email: string }): Promise<AdminActionResult> => {
+    if ((await hostedSuspensionOf(prisma, config, user.id)) === undefined) {
         return { ok: false, message: `${user.email} is not suspended.` };
     }
-    await liftHostedSuspension(prisma, logger, user.id);
+    await liftHostedSuspension(prisma, config, logger, user.id);
     return { ok: true, message: `${user.email} is back in good standing; the owner's next visit wakes their machine.` };
 };

@@ -7,7 +7,7 @@ import { oneTap, oneTimeToken } from "better-auth/plugins";
 import type { Logger } from "pino";
 import type { Config } from "./config.js";
 import { encryptSecret } from "./crypto.js";
-import { cancelHostedPlan } from "./sandbox/hosted/hosted-plan.js";
+import { eraseAccount } from "./account-erase.js";
 import type { PrismaClient } from "@intentic/prisma";
 
 export type Auth = ReturnType<typeof createAuth>;
@@ -46,11 +46,12 @@ export const createAuth = (config: Config, prisma: PrismaClient, logger: Logger)
                 termsAcceptedAt: { type: `date`, required: false, input: false },
                 termsVersion: { type: `string`, required: false, input: false },
             },
-            // Cancels the Stripe subscription before the cascade removes the plan row: Stripe does not cascade with us.
+            // The one erase path (account-erase.ts), before the cascade takes every row that names the account's hosted
+            // apps, its Stripe customer and its standing; the admin delete runs the same.
             deleteUser: {
                 enabled: true,
                 beforeDelete: async (user) => {
-                    await cancelHostedPlan(prisma, config, logger, user.id);
+                    await eraseAccount(prisma, config, logger, user.id);
                 },
             },
         },

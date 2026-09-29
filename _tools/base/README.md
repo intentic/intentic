@@ -1,13 +1,13 @@
 # base
 
-Runtime primitives that every tier, from the daemon to the browser, must run identically: when-expressions, disposal, async schedulers, untrusted-content tags, size and token formatting, fuzzy path scoring, and the file, SQLite, worker-thread and whisper plumbing the Node tiers share.
+Runtime primitives that every tier, from the daemon to the browser, must run identically: when-expressions, disposal, async schedulers, untrusted-content tags, size and token formatting, fuzzy path scoring, the stopwords every full-text query drops, and the file, SQLite, worker-thread and whisper plumbing the Node tiers share.
 
 ```mermaid
 flowchart LR
     manifest["Extension manifests<br/>when strings"] --> base(["base"])
     base -->|"when · fuzzy"| web["Web app<br/>and extension host"]
     base -->|"outside-text · plain-text · lifecycle"| daemon["Sandbox daemon<br/>fileq · webq"]
-    base -->|"fuzzy · sqlite"| iq["iq engine"]
+    base -->|"fuzzy · sqlite · stopwords"| iq["iq engine<br/>and session recall"]
     base -->|"fs · sqlite · worker-calls · whisper"| node["Node tiers<br/>daemon, devices, Discord"]
     base -->|"async · errors · format"| rest["Every tier<br/>devices, deploy, extensions"]
     base -->|"held"| daemon

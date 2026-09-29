@@ -186,6 +186,14 @@ test("client() spawns the server with store:false for every known xai model (see
     }
 });
 
+// A cloned repo's opencode.json can say `"share": "auto"`, which uploads every session to OpenCode's servers; the spawn
+// config is merged after it, so its own `share` is what decides.
+test("client() spawns the server with session sharing disabled", async () => {
+    const xdg = await scratch();
+    await createOpenCodeService(xdg, { fetchImpl: forbiddenFetch }).client();
+    expect(serverSpawns.at(-1)?.config).toHaveProperty("share", "disabled");
+});
+
 // OpenCode defaults an omitted key to `ask`, which nobody on this runtime can answer, so the turn just stops;
 // `external_directory` is the one that found it (attachments read from outside an isolated worktree).
 test("client() spawns the server with EVERY permission answered, not merely the ones anyone thought of", async () => {

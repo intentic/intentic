@@ -145,9 +145,13 @@ test(`the tools the backend serves write the file the view watches, and refuse a
     let served;
     activateServer({ workspaceRoot: root, tools: { serve: (tools) => (served = tools) } });
     const tools = await served(undefined);
+    // Each says what it does, so the runtime can run the read beside other calls instead of as a destructive write.
     assert.deepEqual(
-        tools.map((tool) => tool.name),
-        [`list_notes`, `add_note`],
+        tools.map((tool) => [tool.name, tool.effect]),
+        [
+            [`list_notes`, `read`],
+            [`add_note`, `write`],
+        ],
     );
     const call = (name, args) => tools.find((tool) => tool.name === name).call(args, { signal: new AbortController().signal });
     assert.equal(await call(`add_note`, { text: `first` }), `noted`);

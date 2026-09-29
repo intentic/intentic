@@ -18,4 +18,5 @@ flowchart LR
 - [`architecture/`](architecture) holds one page per subject of how the system fits together, indexed by [ARCHITECTURE.md](../ARCHITECTURE.md). `repo.json` is the authored map of parts, packages and glossary; `index.json` is generated from the package READMEs by `intentic-docs` and never edited by hand.
 - [`ops/`](ops) holds how to run the machinery around the code: CI runners, release and store publishing, code signing, the CLI output protocol.
 - [`marketing/`](marketing) holds positioning, messaging and the press kit. [`user-stories/`](user-stories) holds acceptance stories grouped by journey step, which the acceptance-testing surface reads. Both are product material, not engineering documentation.
+- **A decision's reasons live beside the rule they explain**, in the package README or architecture page that states it, as a short dated note that names the alternative it rejected, if there was one. Landed commits are one line with no body, so git history does not carry them.
 - Anything about the workspace rather than this repository belongs in `/work/docs/`, outside this repository.

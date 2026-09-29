@@ -22,7 +22,8 @@ flowchart LR
 - `update.sh`, reached by overriding the entrypoint, runs two AppImages built with a throwaway signing key and a
   loopback release endpoint, and asserts the app replaces itself with the newer release and still starts.
 - The `FROM` tracks `_tools/ci-base`'s Debian release, because the binary needs at least the glibc it is built
-  with. Bump the two together.
+  with. Bump the two together. The floor users are promised is declared separately, in
+  `_editor/desktop-app/src-tauri/tauri.conf.json`, and `verify-desktop-bundle.sh` fails a build that outgrows it.
 
 ## Key files
 

@@ -3,7 +3,7 @@
 #
 #   verify-desktop-bundle.sh [<dist-bin dir>]        # default: _editor/desktop-app/dist-bin
 #
-# Two regression classes, both invisible to `tauri build` (which succeeds happily either way) and both of which
+# Three regression classes, all invisible to `tauri build` (which succeeds happily either way) and all of which
 # reach a user as "the app installed and then could not do the thing":
 #
 #   1. A SCRIPT DID NOT SHIP. tauri.conf.json bundles by GLOB, over the directory stage-desktop-scripts.sh
@@ -20,6 +20,12 @@
 #      there produces a perfectly working build whose sign-in never returns. The MIME entry is only half of it:
 #      an Exec line with no `%u` field code is launched with no arguments, so the entry wins the handler lookup
 #      and then drops the link — see _editor/desktop-app/src-tauri/main.desktop. Both halves are asserted.
+#
+#   3. THE GLIBC FLOOR MOVED. A glibc symbol is versioned: a binary linked on a newer Debian asks for a newer
+#      GLIBC_x.y, installs cleanly on an older system and dies in the loader. The floor is declared once, as the
+#      deb's `libc6 (>= x.y)` in tauri.conf.json, which is also what makes apt and dnf refuse an unsupported
+#      system. glibc-floor.mjs fails any ELF in the Linux payloads (the AppImage's vendored libraries included)
+#      that imports a newer version, and a .deb or .rpm whose own metadata does not carry the floor.
 #
 # This is deliberately the cheap tier: it is pure archive inspection, runs in seconds, needs no display, no
 # Docker and no privileges — and it is the ONLY automated check that reaches inside the Windows NSIS installer,
@@ -137,6 +143,15 @@ compare_desktop_entry() {
     fi
 }
 
+# The floor, over one extracted Linux payload and, for a package, over the metadata the bundler wrote into it.
+check_glibc_floor() {
+    need objdump "the Linux binaries' glibc symbol versions"
+    need node "the glibc floor"
+    if ! node "$SCRIPTS/glibc-floor.mjs" "$@"; then
+        failures=$((failures + 1))
+    fi
+}
+
 check_deb() {
     local deb="$1" out="$WORK/deb"
     need dpkg-deb "the .deb"
@@ -144,6 +159,7 @@ check_deb() {
     dpkg-deb --fsys-tarfile "$deb" | tar -x -C "$out"
     compare_scripts "deb" "$out"
     compare_desktop_entry "deb" "$out"
+    check_glibc_floor "deb" "$out" "$deb"
     checked=$((checked + 1))
 }
 
@@ -158,6 +174,7 @@ check_rpm() {
     rpm2archive -n <"$rpm" | tar -x -C "$out"
     compare_scripts "rpm" "$out"
     compare_desktop_entry "rpm" "$out"
+    check_glibc_floor "rpm" "$out" "$rpm"
     checked=$((checked + 1))
 }
 
@@ -172,6 +189,7 @@ check_appimage() {
     # app registers the scheme itself at startup (lib.rs). The entry is still asserted: it is what a desktop
     # integrator (appimaged, Gear Lever) would install, and the runtime registration is the fallback, not the plan.
     compare_desktop_entry "appimage" "$out"
+    check_glibc_floor "appimage" "$out"
     checked=$((checked + 1))
 }
 

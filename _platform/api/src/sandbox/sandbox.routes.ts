@@ -91,7 +91,7 @@ const hoursSpent = (budget: HostedBudget, reader: `owner` | `anyone`): string =>
 // words, for every act that would start a machine. Checked before anything is settled, counted or built.
 const requireHostedStanding = async (context: OrpcContext, ownerId: string): Promise<void> => {
     try {
-        await assertHostedStanding(context.prisma, ownerId);
+        await assertHostedStanding(context.prisma, context.config, ownerId);
     } catch (error) {
         if (error instanceof HostedSuspended) {
             throw new ORPCError(`FORBIDDEN`, { message: error.message });
@@ -439,7 +439,7 @@ export const sandboxRoutes = {
             // Fleet-wide capacity, not this account's allowance: a fresh account can still meet a full provider.
             // Region-aware, since stock the residency rule forbids this caller isn't stock to promise.
             hostedCapacity(context.prisma, context.config, hostedRegionFor(context.config.hosted, context.headers)),
-            hostedSuspensionOf(context.prisma, user.id),
+            hostedSuspensionOf(context.prisma, context.config, user.id),
         ]);
         return {
             enabled: true,

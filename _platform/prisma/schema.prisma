@@ -564,6 +564,54 @@ model HostedStrike {
     @@map("hosted_strike")
 }
 
+/* THE HOSTED STANDING A DELETED ACCOUNT LEAVES BEHIND, so that deleting an account and signing in again with the same
+ * Google account does not start clean (api account-erase.ts writes it, hosted-standing.ts reads it). Without it the
+ * suspension, the strikes and the month's free hours all cascaded with the user row, and a fresh sign-in was a fresh
+ * free month with no record of anything.
+ *
+ * Keyed by `subjectHash`, HMAC-SHA256 of the Google account's stable subject (Better Auth's Account.accountId for
+ * provider `google`) under a key derived from the platform's own secret: joined to no row, and naming nobody without
+ * that key. Holds only what abuse control reads: whether the hosted lane was suspended and since when, how many strikes
+ * the watch counted, and the free minutes spent in `month`. Written once, at erase time, by MOVING the account's own
+ * standing into it, so re-running an erase that stopped half way never counts anything twice.
+ *
+ * Expires on its own (api retention.ts): the suspension and strikes twelve months after `standingAt`, the latest of
+ * them; the minutes when their month ends; the row once nothing is left. */
+model HostedStanding {
+    subjectHash String    @id
+    // Null is good standing. No reason is kept: an operator's reason is free text, and the returning owner is told
+    // only that the lane was switched off for their previous account.
+    suspendedAt DateTime?
+    // The watch's strikes that count towards a suspension (`stopped`, `suspended`) within the ledger window at erase.
+    strikes     Int       @default(0)
+    // The latest suspension or strike carried here; null when neither is.
+    standingAt  DateTime?
+    // The calendar month (`YYYY-MM`) `freeMinutes` were spent in, and null when none are carried.
+    month       String?
+    freeMinutes Int       @default(0)
+    createdAt   DateTime  @default(now())
+    updatedAt   DateTime  @updatedAt
+
+    // The retention sweep clears by each clock.
+    @@index([standingAt])
+    @@index([month])
+    @@map("hosted_standing")
+}
+
+/* A DELETED ACCOUNT'S STRIPE CUSTOMER, until Stripe has let go of it (api hosted-plan.ts `eraseStripeCustomer`).
+ * Written in the erase's own transaction, before the cascade takes the plan row that named these ids, so a Stripe
+ * call that fails is retried by the daily sweep instead of left to someone reading a log line. Deleting the customer
+ * removes the saved card, email and address and cancels any subscription it still has; its invoices stay at Stripe for
+ * the tax record. Deleted once Stripe answers that the customer is gone. */
+model StripeErasure {
+    customerId     String   @id
+    // Null when the plan row's subscription had already ended.
+    subscriptionId String?
+    createdAt      DateTime @default(now())
+
+    @@map("stripe_erasure")
+}
+
 /* ONE TIME A HOSTED MACHINE WAS KILLED FOR RUNNING OUT OF MEMORY, as the provider reported it.
  *
  * Fly stamps `oom_killed` on the exit event of a machine the kernel took down, and the hour meter already asks Fly

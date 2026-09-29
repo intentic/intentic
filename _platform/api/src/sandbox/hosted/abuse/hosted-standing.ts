@@ -3,10 +3,20 @@ import type { PrismaClient } from "@intentic/prisma";
 import type { Logger } from "pino";
 import type { Config } from "../../../config.js";
 import { stopOwnerMachines } from "../hosted-meter.js";
+import {
+    CARRIED_SUSPENSION_REASON,
+    carriedStandingOf,
+    GOOGLE_SUBJECT_SELECT,
+    googleSubjectOf,
+    standingSubjectHash,
+} from "./carried-standing.js";
 
 // An account's standing on the hosted lane. Suspended means no machine is provisioned, woken, restarted or rebuilt for
 // it and any awake one is stopped; the account itself, its own-machine sandboxes and its data are untouched. Written by
 // an operator (admin-actions.ts) or by the abuse watch's second strike (hosted-abuse.ts); lifted only by an operator.
+//
+// A deleted account's standing is carried onto the next account with its Google subject (carried-standing.ts): every
+// read here adds it, and a lift clears it too.
 
 export interface HostedSuspension {
     readonly at: Date;
@@ -27,17 +37,33 @@ export class HostedSuspended extends Error {
 export const suspendedMessage = (suspension: HostedSuspension): string =>
     `hosted sandboxes are switched off for this account (${suspension.reason}). A sandbox on your own computer is unaffected; write to ${LEGAL_CONTACT_EMAIL} if you think this is wrong`;
 
-export const hostedSuspensionOf = async (prisma: Pick<PrismaClient, "user">, userId: string): Promise<HostedSuspension | undefined> => {
-    const user = await prisma.user.findUnique({ where: { id: userId }, select: { hostedSuspendedAt: true, hostedSuspendedReason: true } });
-    if (user === null || user.hostedSuspendedAt === null) {
+// The account's own suspension first, then one carried from a deleted account with the same Google subject.
+export const hostedSuspensionOf = async (
+    prisma: Pick<PrismaClient, "user" | "hostedStanding">,
+    config: Pick<Config, "betterAuth">,
+    userId: string,
+): Promise<HostedSuspension | undefined> => {
+    const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { hostedSuspendedAt: true, hostedSuspendedReason: true, ...GOOGLE_SUBJECT_SELECT },
+    });
+    if (user === null) {
         return undefined;
     }
-    return { at: user.hostedSuspendedAt, reason: user.hostedSuspendedReason ?? `acceptable use` };
+    if (user.hostedSuspendedAt !== null) {
+        return { at: user.hostedSuspendedAt, reason: user.hostedSuspendedReason ?? `acceptable use` };
+    }
+    const carried = await carriedStandingOf(prisma, config, user.accounts);
+    return carried?.suspendedAt == null ? undefined : { at: carried.suspendedAt, reason: CARRIED_SUSPENSION_REASON };
 };
 
 // The gate every hosted act passes first; `userId` is the OWNER of the machine, never the caller.
-export const assertHostedStanding = async (prisma: Pick<PrismaClient, "user">, userId: string): Promise<void> => {
-    const suspension = await hostedSuspensionOf(prisma, userId);
+export const assertHostedStanding = async (
+    prisma: Pick<PrismaClient, "user" | "hostedStanding">,
+    config: Pick<Config, "betterAuth">,
+    userId: string,
+): Promise<void> => {
+    const suspension = await hostedSuspensionOf(prisma, config, userId);
     if (suspension !== undefined) {
         throw new HostedSuspended(suspension);
     }
@@ -63,7 +89,16 @@ export const suspendHosted = async (
     return { stopped };
 };
 
-export const liftHostedSuspension = async (prisma: PrismaClient, logger: Logger, userId: string): Promise<void> => {
-    await prisma.user.update({ where: { id: userId }, data: { hostedSuspendedAt: null, hostedSuspendedReason: null } });
+// Lifts the account's own suspension and one carried onto it, which an operator could otherwise never reach.
+export const liftHostedSuspension = async (prisma: PrismaClient, config: Pick<Config, "betterAuth">, logger: Logger, userId: string): Promise<void> => {
+    const user = await prisma.user.update({
+        where: { id: userId },
+        data: { hostedSuspendedAt: null, hostedSuspendedReason: null },
+        select: GOOGLE_SUBJECT_SELECT,
+    });
+    const subject = googleSubjectOf(user.accounts);
+    if (subject !== undefined) {
+        await prisma.hostedStanding.updateMany({ where: { subjectHash: standingSubjectHash(config, subject) }, data: { suspendedAt: null } });
+    }
     logger.warn({ userId }, `hosted standing: suspension lifted`);
 };

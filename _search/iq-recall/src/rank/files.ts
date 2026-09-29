@@ -1,4 +1,5 @@
 import type { SqliteDb } from "@intentic/base/sqlite";
+import { ftsQueryOf } from "./terms.js";
 
 // Mirrors iq-engine's RECENCY_HALF_LIFE_DAYS: a two-week-old association is worth half a fresh one.
 const HALF_LIFE_DAYS = 14;
@@ -6,16 +7,6 @@ const HALF_LIFE_DAYS = 14;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export const decayOf = (ts: number, now: number): number => 2 ** (-Math.max(0, now - ts) / (HALF_LIFE_DAYS * DAY_MS));
-
-// User text to FTS5 query: bare tokens OR-ed and quoted so operators/punctuation can't break the parser; OR since
-// prompts paraphrase, BM25 still favors fuller matches.
-export const ftsQueryOf = (query: string): string | undefined => {
-    const tokens = query.match(/[\p{L}\p{N}_$]+/gu);
-    if (tokens === null || tokens.length === 0) {
-        return undefined;
-    }
-    return tokens.map((token) => `"${token}"`).join(" OR ");
-};
 
 const chunked = <T>(items: readonly T[], size: number): T[][] => {
     const chunks: T[][] = [];

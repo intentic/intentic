@@ -1,4 +1,4 @@
-import { STOPWORDS } from "../plan/tokens.js";
+import { STOPWORDS } from "@intentic/base/stopwords";
 import type { SqliteDb } from "@intentic/base/sqlite";
 import type { EngineHit } from "../types.js";
 

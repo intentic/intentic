@@ -4,7 +4,8 @@ import { type Conversation, conversationsBySession } from "./fleet/conversations
 import { selectForkPoint } from "./fork/fork-point.js";
 import { materializeFork } from "./fork/fork.js";
 import { ingest } from "./ingest/ingest.js";
-import { ftsQueryOf, rankFilesForTopic } from "./rank/files.js";
+import { rankFilesForTopic } from "./rank/files.js";
+import { ftsQueryOf } from "./rank/terms.js";
 import { grabExcerpts } from "./rank/grab.js";
 import { matchSessions } from "./rank/match.js";
 import type { SqliteDb } from "@intentic/base/sqlite";
@@ -105,10 +106,13 @@ export const createRecall = (options: RecallOptions): Recall => {
         sessions(listOptions = {}) {
             const sinceTs = Date.now() - (listOptions.days ?? 45) * DAY_MS;
             const fts = listOptions.query === undefined ? undefined : ftsQueryOf(listOptions.query);
+            // A query of only stopwords and filler names no topic: it matches nothing rather than lifting the filter.
             const filter =
-                fts === undefined
+                listOptions.query === undefined
                     ? undefined
-                    : new Set([
+                    : fts === undefined
+                      ? new Set<number>()
+                      : new Set([
                           ...db()
                               .all("SELECT t.session_id AS id FROM turns_fts JOIN turns t ON t.id = turns_fts.rowid WHERE turns_fts MATCH ?", fts)
                               .map((row) => Number(row["id"])),

@@ -88,7 +88,7 @@ draws documents nobody vouched for (`Source::Files` in `setup_link.rs`).
 - [src-tauri/src/commands.rs](src-tauri/src/commands.rs) — the Tauri commands the launcher calls, and the script each run starts.
 - [src-tauri/src/local.rs](src-tauri/src/local.rs) — the local windows: the sidecar's lifetime, each window's grant, launch arguments.
 - [src/App.vue](src/App.vue) — the launcher face: a handed-over setup, requirements, Docker, this device's sandboxes and sync.
-- [src-tauri/tauri.conf.json](src-tauri/tauri.conf.json) — bundle targets, updater endpoint and the deep-link scheme.
+- [src-tauri/tauri.conf.json](src-tauri/tauri.conf.json) — bundle targets, updater endpoint, the deep-link scheme and the Linux glibc floor.
 
 ## Building
 
@@ -96,6 +96,23 @@ Linux builds need the WebKitGTK development packages (`libwebkit2gtk-4.1-dev`, `
 `libayatana-appindicator3-dev`, `librsvg2-dev`, `patchelf`), plus `xdg-utils` and `file` for the AppImage.
 [build-desktop.sh](../../_tools/scripts/desktop/build-desktop.sh) installs the full list on Debian and builds the
 release artifacts.
+
+### Which Linux runs it
+
+The Linux artifacts are linked on `_tools/ci-base`'s Debian 13 (glibc 2.41), and the binary imports `GLIBC_2.39`
+symbols, so every Linux artifact needs glibc 2.39 or newer: Ubuntu 24.04, Debian 13, Fedora 40, RHEL, AlmaLinux and
+Rocky Linux 10, openSUSE Tumbleweed and Leap 16.0, and anything newer. Ubuntu 22.04, Debian 12, RHEL 9 and Leap 15
+are too old. The AppImage vendors WebKitGTK and GTK but never glibc, so the same floor applies to it.
+
+`tauri.conf.json` declares the floor where package managers read it: the deb depends on `libc6 (>= 2.39)` and the
+rpm requires `libc.so.6(GLIBC_2.39)(64bit)`, the capability glibc provides and rpmbuild itself would generate. The
+rpm entry is a capability name rather than `glibc >= 2.39` because the bundler writes every rpm depends entry as a
+bare name, and a name with a version in it matches no package. The deb's entry is the one source:
+[glibc-floor.mjs](../../_tools/scripts/desktop/glibc-floor.mjs), run by `verify-desktop-bundle.sh` on every build,
+reads it, fails when the rpm's entry disagrees, when a built package's metadata lacks the floor, or when any ELF in the
+deb, rpm or AppImage (vendored libraries included) imports a newer `GLIBC_` version, and names the file and symbol.
+Moving the floor means both entries, the download page (`_site/site/src/pages/download.astro`) and the quickstart's
+desktop section. To check a local build, run `bash _tools/scripts/desktop/verify-desktop-bundle.sh <dist-bin dir>`.
 
 ```sh
 pnpm --filter @intentic/desktop-app tauri:dev        # launcher on :47146, workspace from INTENTIC_APP_URL

@@ -122,4 +122,9 @@
 // arrived unseen by any grain, and a digest of the whole generated manifest schema (`manifestSchema`), so a field added
 // anywhere in the manifest, not only at the top level, needs a new version: an older host's parse drops what it does not
 // know without a word.
-export const extensionApiVersion = "2.20.0";
+// 2.21.0 lets a tool say what it does: `ToolDefinition.effect` (`read`, `write` or `destructive`, the `ToolEffect` words
+// the daemon's own tools and every device's tools use), listed to the model as MCP annotations. Until now every
+// extension tool was listed with none, which Claude Code reads as a destructive write and runs alone, so a read-only
+// tool was serialised and looked dangerous. Additive: a tool that declares nothing is listed as before, and an older
+// host ignores the field. The recorded surface grows a grain for it, `ToolDefinition`'s own fields (`toolDefinition`).
+export const extensionApiVersion = "2.21.0";

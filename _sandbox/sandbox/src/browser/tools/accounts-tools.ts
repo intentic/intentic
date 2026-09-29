@@ -2,7 +2,7 @@ import { randomInt } from "node:crypto";
 import type { McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-sdk";
 import { errorMessage } from "@intentic/base/errors";
 import { sdk } from "../../engines/claude-sdk.js";
-import type { AgentEvent, BrowserConfig, Capability, IdentityConfig } from "@intentic/sandbox-contract";
+import { type AgentEvent, type BrowserConfig, type Capability, grantSite, type IdentityConfig } from "@intentic/sandbox-contract";
 import { toolAnnotations } from "@intentic/sandbox-contract/peer-mcp-server";
 import { z } from "zod";
 import type { OpenAccountInput } from "../../capabilities/open-account.js";
@@ -58,6 +58,8 @@ export interface AccountsDeps {
     readonly fetchCode: (mailbox: Mailbox, site: string, now: Date) => ReturnType<typeof fetchEmailCode>;
     // Second gate check though a gated account is usually unmounted: mount filter and grants can change mid-turn.
     readonly release: (account: string, lane: "session" | "otp", detail: string) => Promise<{ readonly ok: true } | { readonly refusal: string }>;
+    // Where an account signs in (capabilities/account-sign-in.ts): the site type_credential holds the live page to.
+    readonly signInUrls: (capability: Capability) => Promise<readonly string[]>;
 }
 
 // Resolved per call, not cached at server build: a password added mid-turn, or an account opened mid-turn by
@@ -148,6 +150,111 @@ export const focusedEditable = async (page: import("playwright").Page): Promise<
         })
         .catch(() => false);
 
+// Operators that sign in across more than one registrable domain: a site under any member stands for every member.
+// Listed by hand, and only domains one operator owns outright, never a shared suffix (github.io, vercel.app), which is
+// what a public-suffix list would otherwise have to tell apart.
+const SIGN_IN_FAMILIES: readonly (readonly string[])[] = [
+    ["x.com", "twitter.com"],
+    ["google.com", "youtube.com"],
+    ["live.com", "microsoft.com", "microsoftonline.com", "outlook.com"],
+    ["yahoo.com"],
+    ["proton.me"],
+    ["icloud.com", "apple.com"],
+];
+
+// The host a URL is on, as the browser parses it (no userinfo, port or trailing dot) with "www." dropped; a bare
+// "reddit.com" on a card reads as a site grant does (grantSite). Undefined for a page on no site (about:blank, data:).
+export const siteHostOf = (url: string): string | undefined => {
+    const parsed = URL.parse(url) ?? URL.parse(`https://${grantSite(url)}`);
+    if (parsed === null || (parsed.protocol !== "https:" && parsed.protocol !== "http:")) {
+        return undefined;
+    }
+    const host = parsed.hostname.replace(/\.$/, "").replace(/^www\./, "");
+    return host === "" ? undefined : host;
+};
+
+const under = (host: string, site: string): boolean => host === site || host.endsWith(`.${site}`);
+
+// The sites an account signs in on, from its sign-in URLs: each URL's host, widened to its operator's family, and
+// reduced to the widest of each (accounts.google.com is already under google.com).
+export const accountSites = (urls: readonly string[]): string[] => {
+    const own = urls.map(siteHostOf).filter((host): host is string => host !== undefined);
+    const all = [...new Set([...own, ...own.flatMap((site) => SIGN_IN_FAMILIES.find((family) => family.some((domain) => under(site, domain))) ?? [])])];
+    return all.filter((site) => !all.some((other) => other !== site && under(site, other)));
+};
+
+// A page is on the account's site when its host is one of the sites or a subdomain of one: "old.reddit.com" is
+// reddit's, "reddit.com.evil.example" and "reddit-login.example" are not.
+export const onAccountSite = (pageHost: string, sites: readonly string[]): boolean => sites.some((site) => under(pageHost, site));
+
+type Page = import("playwright").Page;
+type ToolResult = ReturnType<typeof ok> | ReturnType<typeof fail>;
+
+// The host a credential would land on, or why it must not: checked before the release, so a wrong site raises no
+// approval card, and again after it, since the page can move while a person decides.
+const typingHost = (page: Page, account: string, sites: readonly string[]): { readonly host: string } | { readonly refusal: string } => {
+    const url = page.url();
+    const host = siteHostOf(url);
+    if (host === undefined) {
+        return { refusal: `this page (${url}) is on no site: open "${account}"'s sign-in page first` };
+    }
+    if (sites.length > 0 && !onAccountSite(host, sites)) {
+        return {
+            refusal: `this page is on ${host}, but "${account}" signs in on ${sites.join(" or ")}; open the real sign-in page first. Nothing was typed`,
+        };
+    }
+    return { host };
+};
+
+// type_credential: the stored value typed into the focused field of the account's live page, only on its own site.
+export const typeCredential = async (
+    deps: AccountsDeps,
+    account: string,
+    field: "username" | "password",
+    pageOf: (capability: Capability) => Page | undefined = (capability) => browserAccountPage(profileOwner(capability)),
+): Promise<ToolResult> => {
+    const capability = await turnEntry(deps, account);
+    if (capability === undefined) {
+        return fail(NO_ACCOUNT(account));
+    }
+    const value = await credentialValue(deps, capability, field);
+    if (value === undefined || value === "") {
+        return fail(
+            field === "password"
+                ? `no password is stored for "${account}": ask the owner to add it on the account's card, or raise request_help so they can type it themselves`
+                : `no username is stored for "${account}", ask the owner, or read it off the site if it is visible`,
+        );
+    }
+    const page = pageOf(capability);
+    if (page === undefined) {
+        return fail(`"${account}" has no live browser page: open the site with its browser tools first`);
+    }
+    const sites = accountSites(await deps.signInUrls(capability));
+    const where = typingHost(page, account, sites);
+    if ("refusal" in where) {
+        return fail(where.refusal);
+    }
+    if (!(await focusedEditable(page))) {
+        return fail("no text field is focused on the page: browser_click the field first, then call this again");
+    }
+    // No site on record leaves nothing to hold the page to, so the approver is the check: the host is in what they read.
+    const detail =
+        sites.length === 0
+            ? `type the stored ${field} for ${account} on ${where.host}, a site nothing on record ties ${account} to`
+            : `type the stored ${field} for ${account} on ${where.host}`;
+    const released = await deps.release(account, "session", detail);
+    if ("refusal" in released) {
+        return fail(released.refusal);
+    }
+    const still = typingHost(page, account, sites);
+    if ("refusal" in still || still.host !== where.host) {
+        return fail(`the page moved to ${siteHostOf(page.url()) ?? page.url()} while the release was decided; nothing was typed: call this again`);
+    }
+    // Human-ish keystroke cadence matching this profile's stealth posture; insertText skips key events forms need.
+    await page.keyboard.type(value, { delay: 30 });
+    return ok(field === "username" ? `typed the stored username on ${where.host}: ${value}` : `typed the stored password on ${where.host} (not shown)`);
+};
+
 export type AccountsServerFactory = (push: (event: AgentEvent) => void, signal: AbortSignal) => McpSdkServerConfigWithInstance;
 
 export const accountsServer =
@@ -159,40 +266,12 @@ export const accountsServer =
             tools: [
                 sdk().tool(
                     "type_credential",
-                    "Type an account's STORED username or password into the focused field of its live browser page. You never see the value: click the field with the browser tools first, then call this. An identity's username is its email; an identity-born account with no username of its own types its identity's email. The result confirms the typed username (you may need it, e.g. to find its inbox); a password is never echoed.",
+                    "Type an account's STORED username or password into the focused field of its live browser page. You never see the value: click the field with the browser tools first, then call this. An identity's username is its email; an identity-born account with no username of its own types its identity's email. Refuses a page whose host is not the account's own site (a lookalike, or anywhere a page sent you), before anything is typed: open the real sign-in page first. The result names the host it typed on and confirms the typed username (you may need it, e.g. to find its inbox); a password is never echoed.",
                     {
                         account: z.string().describe("The account (capability id) whose credential to type"),
                         field: z.enum(["username", "password"]).describe("Which stored value to type"),
                     },
-                    async ({ account, field }) => {
-                        const capability = await turnEntry(deps, account);
-                        if (capability === undefined) {
-                            return fail(NO_ACCOUNT(account));
-                        }
-                        const value = await credentialValue(deps, capability, field);
-                        if (value === undefined || value === "") {
-                            return fail(
-                                field === "password"
-                                    ? `no password is stored for "${account}": ask the owner to add it on the account's card, or raise request_help so they can type it themselves`
-                                    : `no username is stored for "${account}", ask the owner, or read it off the site if it is visible`,
-                            );
-                        }
-                        const page = browserAccountPage(profileOwner(capability));
-                        if (page === undefined) {
-                            return fail(`"${account}" has no live browser page: open the site with its browser tools first`);
-                        }
-                        if (!(await focusedEditable(page))) {
-                            return fail("no text field is focused on the page: browser_click the field first, then call this again");
-                        }
-                        const released = await deps.release(account, "session", `type the stored ${field} for ${account}`);
-                        if ("refusal" in released) {
-                            return fail(released.refusal);
-                        }
-                        // Human-ish keystroke cadence matching this profile's stealth posture; insertText skips key
-                        // events forms need.
-                        await page.keyboard.type(value, { delay: 30 });
-                        return ok(field === "username" ? `typed the stored username: ${value}` : "typed the stored password (not shown)");
-                    },
+                    async ({ account, field }) => typeCredential(deps, account, field),
                     // A typed credential reaches the page, and nothing takes it back.
                     { annotations: toolAnnotations("destructive") },
                 ),

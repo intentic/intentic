@@ -19,6 +19,7 @@ import { testIngressConfig } from "../testing.js";
 import { sandboxHostname } from "../sandbox/reachability.js";
 import { hostedSlotsOf, onHostedPlan } from "../sandbox/hosted/hosted-plan.js";
 import { hostedBudgetOf } from "../sandbox/hosted/hosted-usage.js";
+import { standingSubjectHash } from "../sandbox/hosted/abuse/carried-standing.js";
 import { DAY_MS } from "../durations.js";
 
 // Runs the real api and router on real Postgres, Stripe stood in for at its one seam: checkout to webhook to mirrored
@@ -498,15 +499,34 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         expect((await state(alice)).body).toMatchObject({ onPlan: true, status: `active` });
     });
 
-    it(`ends the subscription on Stripe before the account goes, through Better Auth's real deletion`, async () => {
+    it(`ends the subscription, deletes the customer and destroys the machine before the account goes, through Better Auth's real deletion`, async () => {
+        const machine = await prisma.hostedMachine.findUniqueOrThrow({ where: { sandboxId }, select: { appName: true } });
+        expect(fly.apps.has(machine.appName)).toBe(true);
+        // A Google sign-in, so the erase has a subject to carry the account's standing on.
+        await prisma.account.create({ data: { id: `account-${alice.id}`, accountId: `google-subject-alice`, providerId: `google`, userId: alice.id } });
+        await prisma.user.update({ where: { id: alice.id }, data: { hostedSuspendedAt: new Date(`2026-09-01T00:00:00Z`), hostedSuspendedReason: `mining` } });
+
         const deleted = await auth.api.deleteUser({ headers: new Headers({ cookie: alice.cookie }), body: {} });
         expect(deleted).toMatchObject({ success: true });
 
         const cancel = lastCall(stripe, `DELETE`, `/subscriptions/${subscriptionId}`);
         expect(cancel?.authorized).toBe(true);
         expect(stripe.subscriptions.get(subscriptionId)?.status).toBe(`canceled`);
+        expect(lastCall(stripe, `DELETE`, `/customers/${customerId}`)?.authorized).toBe(true);
+        expect(stripe.customers.has(customerId)).toBe(false);
+        expect(await prisma.stripeErasure.count()).toBe(0);
+        // Destroyed inline, not left for the orphan reaper; nothing left in the queue either.
+        expect(fly.apps.has(machine.appName)).toBe(false);
+        expect(await prisma.hostedCleanup.findUnique({ where: { appName: machine.appName } })).toBeNull();
         expect(await prisma.user.findUnique({ where: { id: alice.id } })).toBeNull();
         expect(await prisma.hostedPlan.findUnique({ where: { stripeCustomerId: customerId } })).toBeNull();
+        // The standing outlived the account, keyed by nothing but the subject's keyed hash.
+        expect(await prisma.hostedStanding.findUnique({ where: { subjectHash: standingSubjectHash(config, `google-subject-alice`) } })).toMatchObject({
+            suspendedAt: new Date(`2026-09-01T00:00:00Z`),
+            strikes: 0,
+            standingAt: new Date(`2026-09-01T00:00:00Z`),
+            month: new Date().toISOString().slice(0, 7),
+        });
     });
 
     it(`puts an account on the operator's comp list on the plan with no row and no charge`, async () => {

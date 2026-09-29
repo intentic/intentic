@@ -12,7 +12,15 @@ export interface StripeClientConfig {
 }
 
 // Why a refusal happened, not just that one did: Stripe's `{ error: { message } }` is meant for a person to act on.
-export class StripeError extends Error {}
+// `status` is the HTTP status Stripe answered, absent when the error was made without one.
+export class StripeError extends Error {
+    readonly status: number | undefined;
+
+    constructor(message: string, status?: number) {
+        super(message);
+        this.status = status;
+    }
+}
 
 const RefusalSchema = z.object({ error: z.object({ message: z.string() }) });
 
@@ -25,7 +33,7 @@ const refusal = async (call: string, response: Response): Promise<StripeError> =
         // Not Stripe's envelope (a proxy's HTML page, a truncated body); keep the raw evidence instead.
         said = undefined;
     }
-    return new StripeError(said !== undefined ? `Stripe refused: ${said}` : `Stripe ${call} failed (HTTP ${response.status}): ${body}`);
+    return new StripeError(said !== undefined ? `Stripe refused: ${said}` : `Stripe ${call} failed (HTTP ${response.status}): ${body}`, response.status);
 };
 
 // Stripe encodes requests as x-www-form-urlencoded with bracketed nesting; the plan needs only one level, spelled
@@ -182,6 +190,9 @@ export interface StripeGateway {
     // Cancels at once, for an account being deleted with nobody left to bill; answers the subscription in its final
     // state.
     readonly cancelSubscription: (id: string) => Promise<StripeSubscription>;
+    // Deletes a customer for good, for an account being deleted: Stripe drops the saved payment methods and cancels
+    // any subscription still on it, and keeps the invoices already issued. Refuses with 404 once it is gone.
+    readonly deleteCustomer: (id: string) => Promise<void>;
     /**
      * Sets the whole slot picture in one update, with Stripe's default proration so a mid-month change is prorated:
      * an entry naming an existing item changes it (quantity 0 deletes it), one naming only a price adds it. Answers
@@ -213,6 +224,9 @@ export const stripeGateway = (client: StripeClientConfig, fetchFn: typeof fetch 
         SessionSchema.parse(await post(fetchFn, client, `/billing_portal/sessions`, { customer: customerId, return_url: returnUrl })),
     subscription: async (id) => toSubscription(await get(fetchFn, client, `/subscriptions/${encodeURIComponent(id)}`), now),
     cancelSubscription: async (id) => toSubscription(await send(fetchFn, client, `DELETE`, `/subscriptions/${encodeURIComponent(id)}`, {}), now),
+    deleteCustomer: async (id) => {
+        await send(fetchFn, client, `DELETE`, `/customers/${encodeURIComponent(id)}`, {});
+    },
     setItems: async (id, items) =>
         toSubscription(
             await post(fetchFn, client, `/subscriptions/${encodeURIComponent(id)}`, {

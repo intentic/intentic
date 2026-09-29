@@ -1,5 +1,5 @@
 import { generateKeyPairSync } from "node:crypto";
-import type { Prisma } from "@intentic/prisma";
+import type { Prisma, PrismaClient } from "@intentic/prisma";
 import { CLEAR_STATE_PLAN, type FakeFlyExecAnswer, type FakeFlyMachine } from "@intentic/testing/fly-fake";
 import { DAEMON_HEALTH_COMMAND } from "./sandbox/hosted/gate/daemon-health.js";
 import type { HostedGateRecord } from "./sandbox/hosted/gate/gate-row.js";
@@ -124,3 +124,260 @@ export const machineAnswers =
         healthAsks.set(machine, asked + 1);
         return (options.health ?? (() => healthAnswer({ boot: { ready: true }, state: { journal: `none` } })))(asked, machine);
     };
+
+/* AN ACCOUNT'S ROWS, HELD IN MEMORY, for the erase path (account-erase.ts) and every read of hosted standing: the user
+ * and its Google account, sandboxes with their machines, trash, provisions, the cleanup queue, the plan and the Stripe
+ * queue, strikes, usage and carried standing records. Each delegate answers the `where` shapes the platform writes
+ * (equality, null, `in`, `not: null`, `lt`, `lte`, `gte`, and a machine's `sandbox: { ownerId }`), returns whole rows
+ * whatever the `select`, and cascades a user's or sandbox's delete the way the schema does. `locked` records every
+ * sandbox row lock taken, in order. */
+type Scalar = string | number | boolean | Date | null;
+
+interface Operators {
+    readonly in?: readonly Scalar[];
+    readonly not?: null;
+    readonly lt?: Scalar;
+    readonly lte?: Scalar;
+    readonly gte?: Scalar;
+}
+
+type Condition = Scalar | Operators;
+type Where = Readonly<Partial<Record<string, Condition>>>;
+type FakeRow = Readonly<Partial<Record<string, Scalar | readonly FakePlanItem[]>>>;
+
+interface FakePlanItem {
+    readonly tier: string;
+    readonly quantity: number;
+}
+
+// A type rather than an interface, so a row reads as the column map the `where` matcher indexes.
+type FakeUser = {
+    id: string;
+    email: string;
+    createdAt: Date;
+    hostedSuspendedAt: Date | null;
+    hostedSuspendedReason: string | null;
+};
+
+interface FakeGoogleAccount {
+    readonly accountId: string;
+}
+
+export type FakeAccountRows = {
+    users: FakeUser[];
+    accounts: { userId: string; providerId: string; accountId: string }[];
+    sandboxes: { id: string; ownerId: string }[];
+    machines: { sandboxId: string; appName: string; tier: string; wokeAt: Date | null; createdAt: Date }[];
+    trash: { id: string; ownerId: string; appName: string | null }[];
+    provisions: { userId: string; appName: string }[];
+    cleanup: { appName: string; deleteAfter: Date }[];
+    plans: { userId: string; stripeCustomerId: string; stripeSubscriptionId: string; status: string; items: FakePlanItem[] }[];
+    erasures: { customerId: string; subscriptionId: string | null }[];
+    strikes: { userId: string; action: string; createdAt: Date }[];
+    usage: { ownerId: string; sandboxId: string | null; month: string; tier: string; minutes: number }[];
+    standing: {
+        subjectHash: string;
+        suspendedAt: Date | null;
+        strikes: number;
+        standingAt: Date | null;
+        month: string | null;
+        freeMinutes: number;
+    }[];
+};
+
+// Dates by instant, everything else as text: the months (`YYYY-MM`) and ids the platform compares sort that way.
+const order = (left: Scalar | readonly FakePlanItem[] | undefined, right: Scalar): number =>
+    left instanceof Date && right instanceof Date ? left.getTime() - right.getTime() : String(left).localeCompare(String(right));
+
+const operatorsMatch = (value: Scalar | readonly FakePlanItem[] | undefined, { in: among, not, lt, lte, gte }: Operators): boolean => {
+    const present = value !== null && value !== undefined;
+    return (
+        (among === undefined || among.some((candidate) => candidate === value)) &&
+        (not === undefined || present) &&
+        (lt === undefined || (present && order(value, lt) < 0)) &&
+        (lte === undefined || (present && order(value, lte) <= 0)) &&
+        (gte === undefined || (present && order(value, gte) >= 0))
+    );
+};
+
+const fieldMatches = (value: Scalar | readonly FakePlanItem[] | undefined, condition: Condition | undefined): boolean => {
+    if (condition === undefined) {
+        return true;
+    }
+    if (condition === null) {
+        return value === null || value === undefined;
+    }
+    if (condition instanceof Date) {
+        return value instanceof Date && value.getTime() === condition.getTime();
+    }
+    return condition instanceof Object ? operatorsMatch(value, condition) : value === condition;
+};
+
+const rowMatches = (row: FakeRow, where: Where | undefined): boolean =>
+    Object.entries(where ?? {}).every(([column, condition]) => fieldMatches(row[column], condition));
+
+// Removes every row a `where` matches, in place, so every delegate over the same array sees the delete.
+const dropWhere = <Row extends FakeRow>(rows: Row[], where: Where | undefined): number => {
+    const doomed = rows.filter((row) => rowMatches(row, where));
+    for (const row of doomed) {
+        rows.splice(rows.indexOf(row), 1);
+    }
+    return doomed.length;
+};
+
+// One table's delegate over an array the fixture owns; `key` names the unique column upserts and findUnique address.
+const table = <Row extends FakeRow>(rows: Row[], key: keyof Row & string, fill: (create: Partial<Row>) => Row) => ({
+    findUnique: jest.fn(async ({ where }: { where: Where }) => rows.find((row) => row[key] === where[key]) ?? null),
+    findFirst: jest.fn(async ({ where }: { where?: Where } = {}) => rows.find((row) => rowMatches(row, where)) ?? null),
+    findMany: jest.fn(async ({ where }: { where?: Where } = {}) => rows.filter((row) => rowMatches(row, where))),
+    count: jest.fn(async ({ where }: { where?: Where } = {}) => rows.filter((row) => rowMatches(row, where)).length),
+    upsert: jest.fn(async ({ where, create, update }: { where: Where; create: Partial<Row>; update: Partial<Row> }) => {
+        const existing = rows.find((row) => row[key] === where[key]);
+        if (existing !== undefined) {
+            return Object.assign(existing, update);
+        }
+        const made = fill(create);
+        rows.push(made);
+        return made;
+    }),
+    updateMany: jest.fn(async ({ where, data }: { where?: Where; data: Partial<Row> }) => {
+        const hits = rows.filter((row) => rowMatches(row, where));
+        for (const row of hits) {
+            Object.assign(row, data);
+        }
+        return { count: hits.length };
+    }),
+    deleteMany: jest.fn(async ({ where }: { where?: Where } = {}) => ({ count: dropWhere(rows, where) })),
+});
+
+// A sandbox's delete takes its machine and nulls its usage rows' sandbox, as the schema's cascade and SetNull do.
+const dropSandboxes = (rows: FakeAccountRows, where: Where | undefined): number => {
+    const doomed = new Set(rows.sandboxes.filter((sandbox) => rowMatches(sandbox, where)).map((sandbox) => sandbox.id));
+    dropWhere(rows.sandboxes, { id: { in: [...doomed] } });
+    dropWhere(rows.machines, { sandboxId: { in: [...doomed] } });
+    for (const usage of rows.usage) {
+        if (usage.sandboxId !== null && doomed.has(usage.sandboxId)) {
+            usage.sandboxId = null;
+        }
+    }
+    return doomed.size;
+};
+
+// The user's delete, and everything the schema ties to it; the standing and the two queues are tied to nothing.
+const dropUser = (rows: FakeAccountRows, id: string): FakeUser => {
+    const user = rows.users.find((candidate) => candidate.id === id);
+    if (user === undefined) {
+        throw new Error(`no user ${id}`);
+    }
+    dropWhere(rows.users, { id });
+    dropSandboxes(rows, { ownerId: id });
+    dropWhere(rows.accounts, { userId: id });
+    dropWhere(rows.trash, { ownerId: id });
+    dropWhere(rows.provisions, { userId: id });
+    dropWhere(rows.plans, { userId: id });
+    dropWhere(rows.strikes, { userId: id });
+    dropWhere(rows.usage, { ownerId: id });
+    return user;
+};
+
+// The user row, with its Google accounts beside it when the read selected them (GOOGLE_SUBJECT_SELECT).
+const userRead = (rows: FakeAccountRows, user: FakeUser | undefined, select?: { readonly accounts?: object }): (FakeUser & { accounts?: FakeGoogleAccount[] }) | null => {
+    if (user === undefined) {
+        return null;
+    }
+    if (select?.accounts === undefined) {
+        return user;
+    }
+    return { ...user, accounts: rows.accounts.filter((account) => account.userId === user.id && account.providerId === `google`) };
+};
+
+const userDelegate = (rows: FakeAccountRows) => ({
+    findUnique: jest.fn(async ({ where, select }: { where: { id: string }; select?: { accounts?: object } }) =>
+        userRead(rows, rows.users.find((user) => user.id === where.id), select),
+    ),
+    update: jest.fn(async ({ where, data, select }: { where: { id: string }; data: Partial<FakeUser>; select?: { accounts?: object } }) => {
+        const user = rows.users.find((candidate) => candidate.id === where.id);
+        if (user === undefined) {
+            throw new Error(`no user ${where.id}`);
+        }
+        return userRead(rows, Object.assign(user, data), select);
+    }),
+    delete: jest.fn(async ({ where }: { where: { id: string } }) => dropUser(rows, where.id)),
+});
+
+// The meter's one grouping of usage rows, by sandbox and tier.
+const usageGroups = (rows: FakeAccountRows, where: Where | undefined) => {
+    const groups = new Map<string, { sandboxId: string | null; tier: string; _sum: { minutes: number } }>();
+    for (const usage of rows.usage.filter((row) => rowMatches(row, where))) {
+        const group = groups.get(`${usage.sandboxId}/${usage.tier}`) ?? { sandboxId: usage.sandboxId, tier: usage.tier, _sum: { minutes: 0 } };
+        group._sum.minutes += usage.minutes;
+        groups.set(`${usage.sandboxId}/${usage.tier}`, group);
+    }
+    return [...groups.values()];
+};
+
+// A machine read by its sandbox's owner, the one relation filter the erase and the meter use.
+const machineDelegate = (rows: FakeAccountRows) => ({
+    findMany: jest.fn(async ({ where }: { where?: { readonly sandbox?: { readonly ownerId: string } } } = {}) =>
+        rows.machines.filter((machine) => where?.sandbox === undefined || rows.sandboxes.some((sandbox) => sandbox.id === machine.sandboxId && sandbox.ownerId === where.sandbox?.ownerId)),
+    ),
+});
+
+const EMPTY_ROWS = (): FakeAccountRows => ({
+    users: [],
+    accounts: [],
+    sandboxes: [],
+    machines: [],
+    trash: [],
+    provisions: [],
+    cleanup: [],
+    plans: [],
+    erasures: [],
+    strikes: [],
+    usage: [],
+    standing: [],
+});
+
+export const fakeAccountStore = (seed: Partial<FakeAccountRows> = {}) => {
+    const rows: FakeAccountRows = { ...EMPTY_ROWS(), ...seed };
+    const locked: string[] = [];
+    const delegates = {
+        $queryRaw: jest.fn(async (_sql: TemplateStringsArray, id: string) => {
+            locked.push(id);
+            return [];
+        }),
+        user: userDelegate(rows),
+        account: table(rows.accounts, `accountId`, (create) => ({ userId: ``, providerId: ``, accountId: ``, ...create })),
+        sandbox: {
+            findMany: jest.fn(async ({ where }: { where?: Where } = {}) => rows.sandboxes.filter((sandbox) => rowMatches(sandbox, where))),
+            deleteMany: jest.fn(async ({ where }: { where?: Where } = {}) => ({ count: dropSandboxes(rows, where) })),
+        },
+        hostedMachine: machineDelegate(rows),
+        sandboxTrash: table(rows.trash, `id`, (create) => ({ id: ``, ownerId: ``, appName: null, ...create })),
+        hostedProvision: table(rows.provisions, `appName`, (create) => ({ userId: ``, appName: ``, ...create })),
+        hostedCleanup: table(rows.cleanup, `appName`, (create) => ({ appName: ``, deleteAfter: new Date(0), ...create })),
+        hostedPoolMachine: { deleteMany: jest.fn(async () => ({ count: 0 })) },
+        hostedPlan: table(rows.plans, `userId`, (create) => ({ userId: ``, stripeCustomerId: ``, stripeSubscriptionId: ``, status: ``, items: [], ...create })),
+        stripeErasure: table(rows.erasures, `customerId`, (create) => ({ customerId: ``, subscriptionId: null, ...create })),
+        hostedStrike: table(rows.strikes, `createdAt`, (create) => ({ userId: ``, action: ``, createdAt: new Date(0), ...create })),
+        hostedUsage: {
+            ...table(rows.usage, `sandboxId`, (create) => ({ ownerId: ``, sandboxId: null, month: ``, tier: ``, minutes: 0, ...create })),
+            groupBy: jest.fn(async ({ where }: { where?: Where }) => usageGroups(rows, where)),
+        },
+        hostedStanding: table(rows.standing, `subjectHash`, (create) => ({
+            subjectHash: ``,
+            suspendedAt: null,
+            strikes: 0,
+            standingAt: null,
+            month: null,
+            freeMinutes: 0,
+            ...create,
+        })),
+    };
+    // One transaction is the same store: the erase's work runs against it directly, and a throw leaves what it wrote.
+    const db = { ...delegates, $transaction: jest.fn(async <T>(work: (tx: typeof delegates) => Promise<T>): Promise<T> => work(delegates)) };
+    // SAFETY: every delegate the erase path, the standing reads and the sweeps call is present above (a missing one
+    // fails the test naming the call), and each answers in the shape Prisma would for the fields they read.
+    const prisma: PrismaClient = db as never;
+    return { db, prisma, rows, locked };
+};

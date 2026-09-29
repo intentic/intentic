@@ -7,7 +7,13 @@ const XDG = "/nonexistent/opencode-env/xdg";
 const PRIOR_XDG = "/prior/xdg";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
-const pinned = () => ({ xdg: process.env["XDG_DATA_HOME"], path: process.env["PATH"], stamp: process.env[SPAWN_STAMP_ENV] });
+const pinned = () => ({
+    xdg: process.env["XDG_DATA_HOME"],
+    path: process.env["PATH"],
+    stamp: process.env[SPAWN_STAMP_ENV],
+    share: process.env["OPENCODE_DISABLE_SHARE"],
+    projectConfig: process.env["OPENCODE_DISABLE_PROJECT_CONFIG"],
+});
 
 const server = { url: "http://127.0.0.1:0", close: (): void => {} };
 
@@ -48,7 +54,7 @@ afterEach(() => {
     }
 });
 
-test("boot pins XDG_DATA_HOME and the spawn stamp across the spawn call and restores them before the server is up", async () => {
+test("boot pins XDG_DATA_HOME, the spawn stamp and OpenCode's lockdown switches across the spawn call and restores them before the server is up", async () => {
     const before = pinned();
     const spawn = heldSpawn();
     const service = createOpenCodeService(XDG, { spawnServer: spawn.spawnServer });
@@ -56,13 +62,15 @@ test("boot pins XDG_DATA_HOME and the spawn stamp across the spawn call and rest
     const client = service.client();
     await spawn.spawned;
 
-    expect(spawn.seen).toStrictEqual([{ xdg: XDG, path: expect.any(String), stamp: expect.stringMatching(UUID) }]);
+    // Pinned on the spawn rather than left to the image, so a bare dev run ignores a repo's opencode.json too.
+    expect(spawn.seen).toStrictEqual([{ xdg: XDG, path: expect.any(String), stamp: expect.stringMatching(UUID), share: "1", projectConfig: "1" }]);
     // The server has not printed its listening line yet: a child spawned now must see the daemon's own environment.
-    expect(pinned()).toStrictEqual({ xdg: PRIOR_XDG, path: before.path, stamp: undefined });
+    const restored = { xdg: PRIOR_XDG, path: before.path, stamp: undefined, share: before.share, projectConfig: before.projectConfig };
+    expect(pinned()).toStrictEqual(restored);
 
     spawn.release().resolve(server);
     await client;
-    expect(pinned()).toStrictEqual({ xdg: PRIOR_XDG, path: before.path, stamp: undefined });
+    expect(pinned()).toStrictEqual(restored);
 });
 
 test("a boot that times out leaves the environment as it found it, and the next call boots again", async () => {
@@ -76,7 +84,7 @@ test("a boot that times out leaves the environment as it found it, and the next 
     first.release().reject(new Error("Timeout waiting for server to start after 60000ms"));
 
     await expect(failed).rejects.toThrow("Timeout waiting for server to start after 60000ms");
-    expect(pinned()).toStrictEqual({ xdg: PRIOR_XDG, path: before.path, stamp: undefined });
+    expect(pinned()).toStrictEqual({ xdg: PRIOR_XDG, path: before.path, stamp: undefined, share: before.share, projectConfig: before.projectConfig });
 
     const second = heldSpawn();
     spawnServer = second.spawnServer;

@@ -116,6 +116,17 @@
                 "default": "./dist/fuzzy.js"
             }
         },
+        "./stopwords": {
+            "types": "./dist/stopwords.d.ts",
+            "import": {
+                "@intentic/src": "./src/stopwords.ts",
+                "default": "./dist/stopwords.js"
+            },
+            "require": {
+                "@intentic/src": "./src/stopwords.ts",
+                "default": "./dist/stopwords.js"
+            }
+        },
         "./sqlite": {
             "types": "./dist/sqlite.d.ts",
             "import": {

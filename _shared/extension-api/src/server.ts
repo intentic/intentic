@@ -1,5 +1,10 @@
 import type { sandboxContract } from "@intentic/sandbox-contract";
+import type { ToolEffect } from "@intentic/sandbox-contract/peer-mcp-server";
 import type { ContractRouterClient } from "@orpc/contract";
+
+// The effect vocabulary the daemon's own tools and every device's tools declare, re-exported so a tool here says what it
+// does in the same words.
+export type { ToolEffect };
 
 // Backend counterpart to `IntenticApi` (api.ts); a manifest `server` bundle's `activateServer` runs in a node process
 // shared by every enabled extension, separate from the daemon. Mediates only the extension's route namespace (mount)
@@ -38,6 +43,10 @@ export interface ToolDefinition {
     readonly description: string;
     // A JSON Schema object for the arguments (`z.toJSONSchema(schema)` produces one).
     readonly inputSchema: Readonly<Record<string, unknown>>;
+    // What one call can do to the world: `read` changes nothing, so a runtime may run several at once and allow it where
+    // writes are held; `write` changes something recoverable; `destructive` may lose something. Listed to the model as
+    // MCP annotations. Undeclared, it is listed with none, which Claude Code reads as a destructive write run alone.
+    readonly effect?: ToolEffect;
     // A string answers as text, a ToolResult as itself, anything else as its JSON; a throw answers as a tool error.
     readonly call: (args: Readonly<Record<string, unknown>>, context: ToolCallContext) => Promise<ToolResult | string | unknown> | ToolResult | string | unknown;
 }

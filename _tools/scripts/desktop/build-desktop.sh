@@ -333,6 +333,7 @@ ls -lh "$OUT"
 
 # Verify what was just built before anything publishes it. Here rather than as a separate CI step because this
 # is the only place every release artifact exists at once, and because a bundle that shipped without its
-# scripts — or without the intentic:// registration — is not a thing to discover after the GitHub Release is
-# cut. Seconds, no Docker, no display; see the script's header for the two regression classes.
+# scripts, without the intentic:// registration or linked against a newer glibc than it declares is not a thing
+# to discover after the GitHub Release is cut. Seconds, no Docker, no display; see the script's header for the
+# regression classes it catches.
 bash "$ROOT/_tools/scripts/desktop/verify-desktop-bundle.sh" "$OUT"

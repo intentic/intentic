@@ -1,4 +1,5 @@
 import { errorMessage } from "@intentic/base/errors";
+import { toolAnnotations } from "@intentic/sandbox-contract/peer-mcp-server";
 import type { ToolCard, ToolContent, ToolDefinition, ToolResult } from "@intentic/extension-api";
 import type { RpcMessage } from "../../agent/tools/turn-mounts.js";
 
@@ -50,6 +51,15 @@ const runCall = async (tool: ToolDefinition, args: Readonly<Record<string, unkno
     return Promise.race([ran, aborted]);
 };
 
+// One tool as `tools/list` names it. A declared effect is spelled by the helper the daemon's own tools use, both hints
+// out; an undeclared one gets no annotations at all, as before `effect` existed.
+const listed = (tool: ToolDefinition): Record<string, unknown> => ({
+    name: tool.name,
+    description: tool.description,
+    inputSchema: tool.inputSchema,
+    ...(tool.effect === undefined ? {} : { annotations: toolAnnotations(tool.effect) }),
+});
+
 export interface ToolRequest {
     readonly card?: ToolCard;
     readonly conversationId?: string;
@@ -98,7 +108,7 @@ export const answerToolMessage = async (
         return {
             jsonrpc: "2.0",
             id: message.id,
-            result: { tools: tools.map((tool) => ({ name: tool.name, description: tool.description, inputSchema: tool.inputSchema })) },
+            result: { tools: tools.map(listed) },
         };
     }
     const name = message.params?.["name"];

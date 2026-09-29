@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { pathExists } from "@intentic/base/fs";
+import { SETUP_NOTICE_HEADER, STALE_NOTICE_HEADER } from "@intentic/constants";
 import { REFERENCE_DIR } from "@intentic/workspace-ignore";
 import { isManifest, managerFromPackageJson, recipeFor, type SetupRecipe } from "@intentic/workspace-setup";
 import { onPath } from "../../system/boot/on-path.js";
@@ -145,12 +146,10 @@ export const startInstall = async (root: string, project: WorkspaceProject, proc
 // mounted tree.
 // Schedule the note for the next turn, not merely the next idle period.
 
-// Fixed opening stripTurnPreamble anchors on to recognize an injected note in a stored message.
-export const SETUP_NOTICE_HEADER =
-    "Dependencies are NOT installed for the following projects, so their type-checks, linters and tests cannot work yet";
-
-// Its own opening: without one, a stale-only notice isn't recognized and re-appends on every restore.
-export const STALE_NOTICE_HEADER = "Some dependencies declared under /work are not installed";
+// Fixed openings stripTurnPreamble anchors on to recognize an injected note in a stored message. The stale notice has its
+// own: without one, a stale-only notice isn't recognized and re-appends on every restore. Defined in constants since
+// session recall, outside the sandbox, recognises them too.
+export { SETUP_NOTICE_HEADER, STALE_NOTICE_HEADER };
 
 // Titles beside each header (turn-preamble.ts pairs them); picked from the built notice's own opening.
 export const SETUP_NOTICE_TITLE = "Dependencies aren't installed yet";

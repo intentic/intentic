@@ -29,10 +29,11 @@
         },
         "linux": {
             "deb": {
-                "depends": [],
+                "depends": ["libc6 (>= 2.39)"],
                 "desktopTemplate": "main.desktop"
             },
             "rpm": {
+                "depends": ["libc.so.6(GLIBC_2.39)(64bit)"],
                 "desktopTemplate": "main.desktop"
             }
         },

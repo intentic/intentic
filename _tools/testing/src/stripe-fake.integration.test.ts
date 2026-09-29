@@ -168,6 +168,27 @@ describe(`the Stripe stand-in's test door`, () => {
 });
 
 describe(`the Stripe stand-in's API`, () => {
+    it(`deletes a customer the way Stripe does: its live subscription cancelled with it, and a second delete refused as missing`, async () => {
+        const { stripe: fake, delivered } = await collecting();
+        const url = await openCheckout(fake);
+        await fetch(`${url}/pay`, { method: `POST`, redirect: `manual` });
+        await waitFor(() => expect(delivered).toHaveLength(1));
+        const customerId = [...fake.customers.keys()][0] ?? ``;
+        const subscriptionId = [...fake.subscriptions.keys()][0] ?? ``;
+        const remove = () => fetch(`${fake.url}/customers/${customerId}`, { method: `DELETE`, headers: { authorization: `Bearer ${SECRETS.secretKey}` } });
+
+        const deleted = await remove();
+        expect(deleted.status).toBe(200);
+        expect(await deleted.json()).toEqual({ id: customerId, object: `customer`, deleted: true });
+        expect(fake.customers.has(customerId)).toBe(false);
+        expect(fake.subscriptions.get(subscriptionId)?.status).toBe(`canceled`);
+        expect(delivered.at(-1)).toMatchObject({ type: `customer.subscription.deleted`, object: { id: subscriptionId, status: `canceled` } });
+
+        const again = await remove();
+        expect(again.status).toBe(404);
+        expect(await again.json()).toEqual({ error: expect.objectContaining({ message: `No such customer: '${customerId}'` }) });
+    });
+
     it(`refuses a call carrying the wrong key, in Stripe's own envelope, and logs it as unauthorized`, async () => {
         const { stripe: fake } = await collecting();
         const response = await fetch(`${fake.url}/checkout/sessions`, {

@@ -1,5 +1,5 @@
 import { RESUME_NOTES, withResumeNote } from "@intentic/sandbox-contract";
-import { WORKSPACE_ROOT } from "@intentic/constants";
+import { opensWithInjectedNote, stripInjectedPreamble, WORKSPACE_ROOT } from "@intentic/constants";
 import { setupNoticeFor, SETUP_NOTICE_HEADER } from "../../workspace/layout/workspace-setup.js";
 import { LEGACY_SPAWN_NOTE_HEADER, SPAWN_NOTE_HEADER, SPAWN_NOTE_TITLE } from "../subagents/spawn-note.js";
 import { SKILL_CATALOG_NOTE_HEADER, SKILL_CATALOG_NOTE_TITLE } from "../../store/loaded-skills.js";
@@ -7,6 +7,7 @@ import { withRuntimeHistory } from "../providers/runtime-history.js";
 import { withAttachmentNote } from "./attachment-note.js";
 import {
     composeWirePrompt,
+    INJECTED,
     LITERAL_SLASH_NOTE,
     parsePromptEnvelope,
     parseQueuedPrompt,
@@ -17,6 +18,16 @@ import {
 
 const notice = `${SETUP_NOTICE_HEADER}\n(a dropped project arrives without them on purpose):\n- intentic: run \`pnpm install\` there first.`;
 const note = `${SPAWN_NOTE_HEADER}\n\nThis sandbox can start full agents on any connected provider from your shell.`;
+
+// Session recall indexes transcripts outside the sandbox and cuts the preamble with the recogniser in constants: a
+// header added here that it does not recognise would be indexed as the user's own words.
+test("every header the daemon parses is one session recall recognises and cuts at the same place", () => {
+    expect(INJECTED.filter(({ header }) => !opensWithInjectedNote(header)).map(({ header }) => header)).toEqual([]);
+    for (const { header } of INJECTED) {
+        const wire = withTurnPreamble([`${header}\n\nbody of the note`], "fix the bug");
+        expect([stripTurnPreamble(wire), stripInjectedPreamble(wire)]).toEqual(["fix the bug", "fix the bug"]);
+    }
+});
 
 test("strip is the builder's inverse, for one note and for both", () => {
     expect(stripTurnPreamble(withTurnPreamble([notice], "fix the bug"))).toBe("fix the bug");

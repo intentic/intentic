@@ -55,6 +55,13 @@ export interface OpenCodeService {
 // loaded host can miss it.
 const BOOT_TIMEOUT_MS = 60_000;
 
+// OpenCode's own off switches, pinned on the spawn so they hold in a bare dev run as well as in the image. Without them
+// a cloned repo's opencode.json or .opencode/ configures this runtime: plugins, MCP servers, custom tools that replace a
+// built-in by name (and so slip past ASK_ABOUT), and `share: "auto"`, which uploads every session to OpenCode's servers.
+// Skipping project config also skips OpenCode's own read of the repo's AGENTS.md, which the daemon already composes
+// into every turn (agent/prompt/workspace-memory.ts); `.agents/skills` and `.claude/skills` are not gated by it.
+export const OPENCODE_LOCKDOWN_ENV = { OPENCODE_DISABLE_SHARE: "1", OPENCODE_DISABLE_PROJECT_CONFIG: "1" } as const;
+
 // Every OpenCode permission key needs an explicit answer: an omitted one defaults to `ask`, which nothing on this
 // container-isolated runtime can ever answer, silently stalling the turn.
 // `bash` is a pattern map, not flat allow, so the owner's command rulebook can see interesting commands before they run
@@ -353,6 +360,7 @@ export const createOpenCodeService = (
         // it is without one.
         const starting = pinnedAcross(
             {
+                ...OPENCODE_LOCKDOWN_ENV,
                 XDG_DATA_HOME: xdgDataHome,
                 PATH: stored === undefined ? undefined : `${dirname(stored)}:${process.env["PATH"] ?? ""}`,
                 [SPAWN_STAMP_ENV]: stamp,
@@ -363,7 +371,10 @@ export const createOpenCodeService = (
                     ...(options.port === undefined ? {} : { port: options.port }),
                     // No provider key: xAI auth is OAuth, stored by OpenCode. Runs autonomously since the container is the
                     // isolation boundary; every permission is answered (ALLOW_EVERY_PERMISSION).
+                    // This config is OPENCODE_CONFIG_CONTENT, merged after any project opencode.json, so its `share`
+                    // wins over a repo's `"share": "auto"` even where project config is read.
                     config: {
+                        share: "disabled",
                         permission: ALLOW_EVERY_PERMISSION,
                         provider: {
                             xai: { models: Object.fromEntries(storeOptOut.map((id) => [id, { options: { store: false } }])) },

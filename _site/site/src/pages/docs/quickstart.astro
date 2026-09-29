@@ -201,7 +201,7 @@ eval "$RUN"
     </p>
     <ul>
         <li><strong>Windows</strong>: <a href="/desktop/windows">Intentic setup .exe</a>, Windows 10 and 11, 64-bit. Installs for your user; no admin rights.</li>
-        <li><strong>Linux</strong>: <a href="/desktop/linux">AppImage</a> (<code>chmod +x</code> and run), or <a href="/desktop/deb">.deb</a> / <a href="/desktop/rpm">.rpm</a>.</li>
+        <li><strong>Linux</strong>: <a href="/desktop/linux">AppImage</a> (<code>chmod +x</code> and run), or <a href="/desktop/deb">.deb</a> / <a href="/desktop/rpm">.rpm</a>. All three need glibc 2.39 or newer: Ubuntu 24.04, Debian 13, Fedora 40, RHEL 10, openSUSE Tumbleweed or Leap 16, or later. On an older release, use the <a href="#setup-command">setup command</a>.</li>
         <li><strong>macOS</strong>: no build yet. Use the <a href="#setup-command">setup command</a>; it does the same thing.</li>
     </ul>
     <p>Install it, sign in, and click <strong>Run on this computer</strong> on the setup card. There is no code to copy: the click hands the app your setup code, and the app installs Docker if the machine has none, starts the sandbox and its tunnel, and opens your workspace when it answers.</p>

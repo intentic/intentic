@@ -1,6 +1,7 @@
 import { statSync } from "node:fs";
 import { appendFile, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { TURN_PREAMBLE_SEPARATOR } from "@intentic/constants";
 import { makeRecallFixture } from "../testing.js";
 import type { SqliteDb } from "@intentic/base/sqlite";
 import { openRecallDb } from "../store/db.js";
@@ -13,11 +14,13 @@ let root: string;
 let projectsDir: string;
 let cleanup: () => Promise<void>;
 let db: SqliteDb;
+let dbPath: string;
 
 beforeAll(async () => {
     let claudeDir: string;
     ({ root, claudeDir, projectsDir, cleanup } = await makeRecallFixture());
-    db = openRecallDb(join(claudeDir, "recall.db"));
+    dbPath = join(claudeDir, "recall.db");
+    db = openRecallDb(dbPath);
 });
 afterAll(async () => {
     db.close();
@@ -211,4 +214,33 @@ test("what a budget skipped is picked up by the next run", async () => {
     const stats = await ingest(db, { root, projectsDir });
     expect(stats.sessions).toBe(2);
     expect(turnsOf(SESSION_C)).toEqual([{ ordinal: 0, prompt: "Add a budget to the recall ingest loop" }]);
+});
+
+/* THE DAEMON'S TURN PREAMBLE: indexed prompts are the user's words, the notes in front of them are not. */
+const SESSION_D = "aaaaaaaa-0000-4000-8000-000000000004";
+
+test("an ingested turn with a daemon preamble is indexed without it", async () => {
+    const preamble = `## Map of this project\n\nYou are at the top of the workspace: four orientation areas.${TURN_PREAMBLE_SEPARATOR}`;
+    await writeSession(SESSION_D, `${preamble}Rename the token helper`);
+    await ingest(db, { root, projectsDir });
+    expect(turnsOf(SESSION_D)).toEqual([{ ordinal: 0, prompt: "Rename the token helper" }]);
+    // No row anywhere carries the note's words, FTS included: "orientation" appears only in the preamble.
+    expect(db.all("SELECT rowid FROM turns_fts WHERE turns_fts MATCH 'orientation'")).toEqual([]);
+});
+
+/* TWO INGESTS AT ONCE: the prompt hook's budgeted pass and the SessionStart background pass overlap. */
+const SESSION_E = "aaaaaaaa-0000-4000-8000-000000000005";
+
+test("two ingests racing over the same new transcript store each turn once", async () => {
+    await writeSession(SESSION_E, "Cache the fleet registry lookup");
+    // A second handle on the same file, as a second process holds: both read the transcript's offset before either
+    // writes, so both parse and apply the same delta.
+    const other = openRecallDb(dbPath);
+    try {
+        await Promise.all([ingest(db, { root, projectsDir }), ingest(other, { root, projectsDir })]);
+    } finally {
+        other.close();
+    }
+    expect(turnsOf(SESSION_E)).toEqual([{ ordinal: 0, prompt: "Cache the fleet registry lookup" }]);
+    expect(db.all("SELECT rowid FROM turns_fts WHERE turns_fts MATCH 'fleet'")).toHaveLength(1);
 });

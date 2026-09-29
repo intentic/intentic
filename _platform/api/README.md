@@ -76,6 +76,22 @@ flowchart LR
   change went on.
 - A daemon's announce may name its `version` (semver, at most 64 characters). It is stored on the sandbox row
   (`daemonVersion`), and an announce that names none, or something else, clears it.
+- Deleting an account runs one erase path whichever side asks (`src/account-erase.ts`): Better Auth's `beforeDelete`
+  for the owner's own deletion, `deleteUserAccount` for an operator's. Before the cascade, in one transaction, it queues
+  every Fly app the account owns (live machines, trashed sandboxes, a release's held volume, a provision in flight)
+  into `HostedCleanup` due now, queues the Stripe customer and subscription into `stripe_erasure`, moves the hosted
+  standing onto `hosted_standing`, and deletes the sandboxes so a provision mid-flight cleans up after itself. Then it
+  destroys the apps and deletes the Stripe customer at once, best-effort. The cleanup sweep retries a failed app every
+  minute and is not held back by the orphan reaper's caps; the retention sweep retries a failed Stripe customer daily.
+  Running it again after a partial failure is safe: the queues are upserts, and the standing is moved, not copied.
+- A deleted account's hosted standing outlives it (`sandbox/hosted/abuse/carried-standing.ts`): the suspension, the
+  abuse watch's strike count and the month's free minutes, keyed by HMAC-SHA256 of the Google subject under a key
+  derived from `BETTER_AUTH_SECRET` with HKDF and a fixed label. The suspension gate, the hour meter and the abuse watch
+  add it to whichever account's Google subject hashes to it, so deleting an account and signing in again does not
+  reset them; an operator's lift clears a carried suspension too. The retention sweep clears the standing twelve months
+  after its latest change, the minutes when their month ends, and the row once both are gone. Rotating
+  `BETTER_AUTH_SECRET` orphans every record. (2026-09-29: derived rather than a new env var, so no deployment has to
+  carry one more secret. A dedicated key would survive a session-secret rotation, at the cost of one more thing to set.)
 - `src/config.ts` is the one config schema; each field is an env var in SCREAMING_SNAKE. A lane whose credential is
   unset (Stripe, APNs, trial keys, Fly) is switched off rather than failing the boot.
 - Bun runs the TypeScript source; there is no build. The image applies migrations and then refuses to start if the

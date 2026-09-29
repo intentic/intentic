@@ -1,6 +1,7 @@
 import { readdirSync, statSync } from "node:fs";
 import { basename, isAbsolute, join, relative } from "node:path";
 import { isMissing } from "@intentic/base/errors";
+import { stripInjectedPreamble } from "@intentic/constants";
 import { readLines } from "../transcript/line-reader.js";
 import { aiTitleOf, assistantTextOf, fileTouchesOf, parseLine, timestampOf, typedPromptOf, uuidOf } from "../transcript/lines.js";
 import type { SqliteDb } from "@intentic/base/sqlite";
@@ -82,11 +83,13 @@ const parseDelta = async (path: string, fromByte: number, lastOrdinal: number, r
         if (title !== undefined) {
             delta.title = title;
         }
-        const prompt = typedPromptOf(line);
+        const typed = typedPromptOf(line);
         const uuid = uuidOf(line);
-        if (prompt !== undefined && uuid !== undefined && ts !== undefined) {
+        if (typed !== undefined && uuid !== undefined && ts !== undefined) {
             ordinal += 1;
-            delta.newTurns.push({ uuid, ordinal, ts, prompt, startByte });
+            // Indexed as the user's words: a daemon preamble in front of them is the same notes on every turn. A turn
+            // that was all preamble stays a turn (with an empty prompt), so ordinals still name the transcript's turns.
+            delta.newTurns.push({ uuid, ordinal, ts, prompt: stripInjectedPreamble(typed), startByte });
             continue;
         }
         if (ordinal < 0) {
@@ -138,7 +141,9 @@ const applyDelta = (db: SqliteDb, transcriptPath: string, sessionId: string, del
     const newOrdinals = new Set(delta.newTurns.map((turn) => turn.ordinal));
     for (const turn of delta.newTurns) {
         db.run(
-            "INSERT INTO turns (session_id, uuid, ordinal, ts, prompt, response, start_byte) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            // A concurrent ingest that applied this delta first already holds the turn; everything below is idempotent.
+            `INSERT INTO turns (session_id, uuid, ordinal, ts, prompt, response, start_byte) VALUES (?, ?, ?, ?, ?, ?, ?)
+             ON CONFLICT(session_id, uuid) DO NOTHING`,
             sessionRowId,
             turn.uuid,
             turn.ordinal,

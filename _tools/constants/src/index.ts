@@ -4,6 +4,7 @@
 export * from "./provider-logos.js";
 export * from "./profile.js";
 export * from "./hosted-tiers.js";
+export * from "./turn-preamble.js";
 
 // Fixed directory layouts shared across the package boundary; kept as plain values (no node:fs) since this module is
 // importable from the browser. WORKSPACE_ROOT and HISTORY_ROOT are just defaults: a running daemon reads its actual
@@ -40,7 +41,7 @@ export const FIELD_NOTES_FILE = ".intentic/config/field-notes.toon";
 export const HOST_STATE_ROOT = "/opt/intentic";
 
 // Clickwrap version stamped at sign-up; bump on any material change to the terms or privacy policy.
-export const LEGAL_VERSION = "2026-09-03";
+export const LEGAL_VERSION = "2026-09-29";
 export const LEGAL_CONTACT_EMAIL = "contact@intentic.dev";
 
 // Legal-entity identification EU e-commerce law requires published on the site. ADDRESS and TAX_ID are deliberately

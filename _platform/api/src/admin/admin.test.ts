@@ -19,6 +19,7 @@ import { rollupAdminDaily } from "./admin-rollup.js";
 import { adminTrends } from "./admin-trends.js";
 import { adminUserDetail } from "./admin-user.js";
 import { adminUsers } from "./admin-users.js";
+import { fakeAccountStore } from "../testing.js";
 
 // The admin surface's security story is one guard: an empty allowlist refuses everyone, a non-admin gets FORBIDDEN,
 // matching is by address not spelling. Reads are pinned on arithmetic that would drift silently.
@@ -932,49 +933,69 @@ describe(`admin actions`, () => {
             expect(stopped).toEqual([expect.stringContaining(`/apps/intentic-sbx-a/machines/m1/stop`)]);
             expect(updates[0]).toMatchObject({ hostedSuspendedReason: `mining` });
             expect((await suspendUserHosted(prisma, hostedOn, logger, { id: `u2`, email: `victim@example.com` }, `again`)).ok).toBe(false);
-            expect((await liftUserHosted(prisma, logger, { id: `u2`, email: `victim@example.com` })).ok).toBe(true);
+            expect((await liftUserHosted(prisma, hostedOn, logger, { id: `u2`, email: `victim@example.com` })).ok).toBe(true);
             expect(updates[1]).toEqual({ hostedSuspendedAt: null, hostedSuspendedReason: null });
         } finally {
             unstubAllGlobals();
         }
     });
 
-    // One sandbox with no machine, a user row to delete, and a plan row (or none).
-    const erasurePrisma = (plan: { stripeSubscriptionId: string; status: string } | null, onDelete: (args: Record<string, unknown>) => void) =>
-        ({
-            sandbox: { findMany: async () => [{ id: `sb1`, hosted: null }] },
-            hostedPlan: { findUnique: async () => plan },
-            user: {
-                delete: async (args: Record<string, unknown>) => {
-                    onDelete(args);
-                    return { email: `gone@example.com` };
-                },
-            },
-        }) as unknown as PrismaClient;
+    // One sandbox with no machine, a user row to delete, and a plan row (or none): the account store the erase path
+    // reads (testing.ts), with nothing hosted, so no provider is asked anything.
+    const erasureStore = (plan: { stripeSubscriptionId: string; status: string } | null) =>
+        fakeAccountStore({
+            users: [{ id: `u1`, email: `gone@example.com`, createdAt: NOW, hostedSuspendedAt: null, hostedSuspendedReason: null }],
+            sandboxes: [{ id: `sb1`, ownerId: `u1` }],
+            plans: plan === null ? [] : [{ userId: `u1`, stripeCustomerId: `cus_1`, items: [], ...plan }],
+        });
 
     it(`erasure deletes the user row and reports the address it erased (no hosted, no plan: nothing external)`, async () => {
-        let deleted: Record<string, unknown> | undefined;
-        const prisma = erasurePrisma(null, (args) => {
-            deleted = args;
-        });
-        const result = await deleteUserAccount(prisma, configWith(), logger, `u1`);
-        expect(result.ok).toBe(true);
-        expect(result.message).toContain(`gone@example.com`);
-        expect(deleted).toMatchObject({ where: { id: `u1` } });
+        const store = erasureStore(null);
+        const result = await deleteUserAccount(store.prisma, configWith(), logger, `u1`);
+        expect(result).toEqual({ ok: true, message: `gone@example.com erased: sandboxes, grants and the hosted plan are gone with the account.` });
+        expect(store.db.user.delete).toHaveBeenCalledWith({ where: { id: `u1` }, select: { email: true } });
+        expect(store.rows.users).toEqual([]);
+        expect(store.rows.sandboxes).toEqual([]);
     });
 
-    it(`erasure cancels the account's live subscription before the cascade takes its row`, async () => {
+    it(`erasure cancels the account's live subscription and deletes its Stripe customer before the cascade takes its row`, async () => {
         const order: string[] = [];
-        const prisma = erasurePrisma({ stripeSubscriptionId: `sub_1`, status: `active` }, () => order.push(`delete`));
+        const store = erasureStore({ stripeSubscriptionId: `sub_1`, status: `active` });
+        store.db.user.delete.mockImplementationOnce(async () => {
+            order.push(`delete`);
+            return { id: `u1`, email: `gone@example.com`, createdAt: NOW, hostedSuspendedAt: null, hostedSuspendedReason: null };
+        });
         const gateway = {
             cancelSubscription: async (id: string) => {
                 order.push(`cancel ${id}`);
-                return { id, customer: `cus_1`, status: `canceled`, currentPeriodEnd: new Date(), cancelAtPeriodEnd: false, itemId: ``, quantity: 1 };
+                return { id, customer: `cus_1`, status: `canceled`, currentPeriodEnd: new Date(), cancelAtPeriodEnd: false, items: [] };
+            },
+            deleteCustomer: async (id: string) => {
+                order.push(`delete customer ${id}`);
             },
         } as unknown as StripeGateway;
-        const result = await deleteUserAccount(prisma, configWith(), logger, `u1`, gateway);
+        const result = await deleteUserAccount(store.prisma, configWith(), logger, `u1`, gateway);
         expect(result.ok).toBe(true);
-        expect(order).toEqual([`cancel sub_1`, `delete`]);
+        expect(order).toEqual([`cancel sub_1`, `delete customer cus_1`, `delete`]);
+        expect(store.rows.erasures).toEqual([]);
+    });
+
+    it(`erasure says so when Stripe would not delete the customer, which stays queued for the daily sweep`, async () => {
+        const store = erasureStore({ stripeSubscriptionId: `sub_1`, status: `active` });
+        const gateway = {
+            cancelSubscription: async () => {
+                throw new Error(`Stripe refused: down`);
+            },
+            deleteCustomer: async () => {
+                throw new Error(`Stripe refused: down`);
+            },
+        } as unknown as StripeGateway;
+        const result = await deleteUserAccount(store.prisma, configWith(), logger, `u1`, gateway);
+        expect(result).toEqual({
+            ok: true,
+            message: `gone@example.com erased: sandboxes, grants and the hosted plan are gone with the account; the Stripe customer is queued for deletion.`,
+        });
+        expect(store.rows.erasures).toEqual([{ customerId: `cus_1`, subscriptionId: `sub_1` }]);
     });
 
     const logger = { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} } as unknown as Logger;
