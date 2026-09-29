@@ -53,6 +53,11 @@ describe(`what a child says it runs on`, () => {
         expect(look.titleHint).toBeUndefined();
     });
 
+    it(`drops Claude's default subagent type from the row, keeping a chosen one`, () => {
+        expect(childLook(inProcess({ description: `Scan`, agentType: `general-purpose` }), `claude`).tag).toBeUndefined();
+        expect(childLook(inProcess({ description: `Scan` }), `claude`).tag).toBe(`Explore`);
+    });
+
     it(`reads an in-process subagent's served model and tier on its parent's provider, keeping the note on where it opens`, () => {
         const look = childLook(inProcess({ model: `claude-opus-x`, effort: `max` }), `claude`);
         expect(look.run).toMatchObject({ provider: `claude`, modelId: `claude-opus-x`, effort: { label: `Max` } });

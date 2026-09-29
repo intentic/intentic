@@ -97,7 +97,8 @@ export const childLook = (child: TrayChild, provider: AgentProvider): ChildLook 
         const live = subagentLive(child);
         const meta = subagentStatusMeta(child.status);
         const title = subagentTitle(child) ?? t(`shared.subagent`);
-        const tag = child.agentType ?? t(`shared.subagent`);
+        // Claude's default type says nothing a row needs: only a chosen type (Explore, Plan…) earns the second line.
+        const tag = child.agentType === `general-purpose` ? undefined : (child.agentType ?? t(`shared.subagent`));
         return {
             title,
             titleHint: { title: t(`agents.childRows.inProcess`), note: t(`agents.childRows.opensInThisChat`) },
