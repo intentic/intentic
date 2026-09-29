@@ -21,9 +21,10 @@ import {
     seedValues,
     shownFields,
     type StoredSecrets,
+    submitAnywayWord,
     submitWord,
 } from "./model/form";
-import { containerUrlFix, expandPaste, normalizeFieldValue, summarisesWireguard, wireguardSummary } from "./model/normalize";
+import { cleanedPaste, containerUrlFix, expandPaste, normalizeFieldValue, summarisesWireguard, wireguardSummary } from "./model/normalize";
 import { answersSummary, hostPresets } from "./model/previews";
 import { versionReadToken } from "./model/refs";
 import { openingName, suggestName } from "./model/tiles";
@@ -31,6 +32,14 @@ import { openingName, suggestName } from "./model/tiles";
 // The configuration form over the open tile: its answers and name, which boxes were left and whether a submit was
 // refused, what a paste unpacked, the Advanced fold, and what the answers add up to. Re-seeded whenever the URL opens
 // another tile or connection.
+
+// A box's value once a paste lands at its caret, over any selection; at the end when the caret is unknown.
+const splicedAtCaret = (current: string, event: ClipboardEvent, pasted: string): string => {
+    const box = event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement ? event.target : undefined;
+    const start = box?.selectionStart ?? current.length;
+    const end = box?.selectionEnd ?? current.length;
+    return `${current.slice(0, start)}${pasted}${current.slice(end)}`;
+};
 
 export interface FormHost {
     readonly selected: Readonly<Ref<CapabilityCatalogEntry | undefined>>;
@@ -140,9 +149,12 @@ export const useCapabilityForm = ({ selected, editing, instances, capabilities, 
         values[field.key] = normalizeFieldValue(field, values[field.key] ?? ``);
         touched.add(field.key);
     };
-    // Editing by hand outdates the paste summary.
+    // Editing by hand outdates the paste summary, and a Test's answer, which was about the values before the edit.
     const onFieldInput = (field: CapabilityField): void => {
         delete pasteNotes[field.key];
+        if (probeResult.value?.checked === true) {
+            probeResult.value = undefined;
+        }
     };
     // A paste recognisably holding more than one field (an ssh command, connection string, deep link, known-provider
     // email) fills every field it can and notes where; anything else falls through to an ordinary paste.
@@ -154,6 +166,14 @@ export const useCapabilityForm = ({ selected, editing, instances, capabilities, 
         }
         const expansion = expandPaste(entry, field, values, text);
         if (expansion === undefined) {
+            // A token or URL pasted with a line break, spaces or an invisible character at it lands cleaned (cleanedPaste),
+            // at the caret, so the box holds exactly what a Test and the save will send.
+            const cleaned = cleanedPaste(field, text);
+            if (cleaned !== undefined) {
+                event.preventDefault();
+                values[field.key] = splicedAtCaret(values[field.key] ?? ``, event, cleaned);
+                onFieldInput(field);
+            }
             return;
         }
         event.preventDefault();
@@ -245,7 +265,14 @@ export const useCapabilityForm = ({ selected, editing, instances, capabilities, 
         },
         auditable: computed(() => auditOffered(selected.value?.kind, values)),
         updateFrom: computed(() => replacedPin(selected.value?.kind, editing.value, values)),
-        submitLabel: computed(() => submitWord(editing.value !== undefined, selected.value?.kind)),
+        // After a Test that failed, the press says what it now does: keeps a connection its own service just refused. It
+        // stays a press, since a Test can fail for reasons the connection outlives (a server asleep, a network only the
+        // agent reaches).
+        submitLabel: computed(() =>
+            probeResult.value?.checked === true && !probeResult.value.ok
+                ? submitAnywayWord(editing.value !== undefined, selected.value?.kind)
+                : submitWord(editing.value !== undefined, selected.value?.kind),
+        ),
         // Every box counts as visited from a submit on; a refusal past this point is one the reader is shown.
         touchAll: (): void => {
             touched.add(`name`);

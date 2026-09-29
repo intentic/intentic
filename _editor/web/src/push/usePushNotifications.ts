@@ -4,12 +4,15 @@ import { webPushDriver } from "./webPush";
 import { inNativeShell } from "../shell/window/capacitor";
 import { sandboxRpc } from "../features/sandbox/client/sandboxRpc";
 import { useSandbox } from "../features/sandbox/client/useSandbox";
+import { storedValue, storeValue } from "../lib/browserStorage";
 
 // Push, from the device's side: HOW it is received is the driver's business; this composable owns the enabling chain
 // (transport, permission, registration, daemon-stored) and reports which link failed, since `denied` is terminal.
 // Per-device and per-sandbox: enabling on a laptop says nothing about a phone.
 
 export type PushState =
+    // Not confirmed by the daemon yet, with nothing confirmed on an earlier visit: claims neither on nor off.
+    | "checking"
     // No push transport here (no Push API / no secure origin in a browser; a shell build without the plugin).
     | "unsupported"
     // The user blocked notifications for this app; nothing here can recover it.
@@ -21,14 +24,29 @@ export type PushState =
 // The one driver decision, made once at module load: the environment cannot change under a running page.
 const driver = inNativeShell() ? nativePushDriver : webPushDriver;
 
+// What the daemon last confirmed for this device and sandbox, so a page opens on what was true then instead of a
+// guess: a phone's Menu said "off" while pushes arrived, until the daemon answered and the row vanished under a finger.
+const confirmedKey = (sandboxId: string): string => `intentic.push.confirmed.${sandboxId}`;
+const lastConfirmed = (sandboxId: string | undefined): PushState | undefined => {
+    const stored = sandboxId === undefined ? undefined : storedValue(confirmedKey(sandboxId));
+    return stored === `on` || stored === `off` ? stored : undefined;
+};
+
 export function usePushNotifications() {
-    const { reachable } = useSandbox();
-    const state = ref<PushState>(driver.supported() ? `off` : `unsupported`);
+    const { reachable, activeSandboxId } = useSandbox();
+    const state = ref<PushState>(driver.supported() ? (lastConfirmed(activeSandboxId.value) ?? `checking`) : `unsupported`);
+    // Kept per sandbox, under the one the answer came from.
+    const confirm = (sandboxId: string | undefined, next: `on` | `off`): void => {
+        state.value = next;
+        if (sandboxId !== undefined) {
+            storeValue(confirmedKey(sandboxId), next);
+        }
+    };
     const busy = ref(false);
     const error = ref<string | undefined>(undefined);
     // How many devices the last test reached; undefined until sent, telling a swallowed push from one never sent.
     const delivered = ref<number | undefined>(undefined);
-    const canToggle = computed(() => state.value !== `unsupported` && state.value !== `denied` && !busy.value && reachable.value);
+    const canToggle = computed(() => ![`checking`, `unsupported`, `denied`].includes(state.value) && !busy.value && reachable.value);
 
     // Bumped by every action so a slow, in-flight `refresh` can detect it is stale and skip writing.
     let revision = 0;
@@ -48,6 +66,7 @@ export function usePushNotifications() {
             return;
         }
         const started = revision;
+        const sandboxId = activeSandboxId.value;
         try {
             const id = await driver.localId();
             const config = await sandboxRpc.push.config(id === null ? {} : { id });
@@ -55,7 +74,7 @@ export function usePushNotifications() {
                 return;
             }
             // All three must agree before reporting on; any single mismatch would silently claim a dead chain works.
-            state.value = id !== null && config.subscribed && (await driver.bound(config.publicKey)) ? `on` : `off`;
+            confirm(sandboxId, id !== null && config.subscribed && (await driver.bound(config.publicKey)) ? `on` : `off`);
         } catch {
             // An unreadable daemon says nothing new; keep the last known state through a transient blip.
         }
@@ -67,6 +86,7 @@ export function usePushNotifications() {
         delivered.value = undefined;
         revision += 1;
         busy.value = true;
+        const sandboxId = activeSandboxId.value;
         try {
             const minted = await driver.mint(async () => (await sandboxRpc.push.config({})).publicKey);
             if (minted.outcome !== `granted`) {
@@ -74,7 +94,7 @@ export function usePushNotifications() {
                 return;
             }
             await sandboxRpc.push.subscribe(minted.channel);
-            state.value = `on`;
+            confirm(sandboxId, `on`);
         } catch (cause) {
             error.value = cause instanceof Error ? cause.message : `Could not enable notifications.`;
             await refresh();
@@ -88,6 +108,7 @@ export function usePushNotifications() {
         delivered.value = undefined;
         revision += 1;
         busy.value = true;
+        const sandboxId = activeSandboxId.value;
         try {
             const id = await driver.localId();
             if (id !== null) {
@@ -95,7 +116,7 @@ export function usePushNotifications() {
                 await sandboxRpc.push.unsubscribe({ id });
                 await driver.drop();
             }
-            state.value = `off`;
+            confirm(sandboxId, `off`);
         } catch (cause) {
             error.value = cause instanceof Error ? cause.message : `Could not turn notifications off.`;
             await refresh();
@@ -122,7 +143,7 @@ export function usePushNotifications() {
     };
 
     // Reconciles on mount and every time the daemon reconnects, not mount alone: the page can mount before the daemon
-    // answers, and a `refresh` landing in that gap has nobody to ask, leaving `state` stuck at its initial `off`.
+    // answers, and a `refresh` landing in that gap has nobody to ask, leaving `state` stuck where it started.
     watch(reachable, () => void refresh(), { immediate: true });
 
     return { state, busy, error, delivered, canToggle, enable, disable, sendTest, refresh };

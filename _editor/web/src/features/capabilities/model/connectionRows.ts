@@ -4,6 +4,7 @@ import type { CapabilityKind, Device, HostSummary, NetdiskLink, VpnLink, WebExtS
 import type { CapabilityConnection, CapabilityConnectionGroup } from "../connect/CapabilityConnections.vue";
 import { type ConnectionState, connectionFacts, connectionState, netdiskFacts, vpnFacts } from "./connections";
 import { type DeviceConnection, sameMachineNote } from "./deviceConnections";
+import { categoryLabel, entryName } from "./catalogCopy";
 import type { CatalogTile } from "./slices";
 import { entryIcon } from "./tiles";
 
@@ -52,6 +53,12 @@ export const tileRowFacts = (kind: CapabilityKind | undefined, instance: Capabil
 // search for: the name they gave it and the address they typed, neither in any tile's prose.
 export type ConnectionRow = CapabilityConnection & { readonly category: CapabilityCategory; readonly rank: number; readonly haystack: string };
 
+// A tile answers the filter to its English name and to the one on screen, when the reader's language has another.
+const searchedNames = (entry: CatalogTile[`entry`]): string => {
+    const name = entryName(entry);
+    return name === entry.name ? name : `${entry.name} ${name}`;
+};
+
 export const connectionRow = (tile: CatalogTile, instance: CapabilitySummary, sources: ConnectionSources): ConnectionRow => {
     const state = liveState(tile.entry, instance, sources);
     const facts =
@@ -60,9 +67,10 @@ export const connectionRow = (tile: CatalogTile, instance: CapabilitySummary, so
         (tile.entry.kind === `device` ? hostFacts(instance, sources) : connectionFacts(instance));
     // An unnamed connection took the tile's id; the tile is then the name, and the line below is free for facts.
     const named = instance.id !== tile.entry.id;
+    const name = entryName(tile.entry);
     return {
-        title: named ? instance.id : tile.entry.name,
-        tile: named ? tile.entry.name : undefined,
+        title: named ? instance.id : name,
+        tile: named ? name : undefined,
         entryId: tile.entry.id,
         id: instance.id,
         logo: tile.entry.logo,
@@ -75,7 +83,7 @@ export const connectionRow = (tile: CatalogTile, instance: CapabilitySummary, so
         code: state.rank <= 1 ? instance.status.code : undefined,
         category: tile.entry.category,
         rank: state.rank,
-        haystack: `${instance.id} ${tile.entry.name} ${tile.entry.kind} ${facts}`.toLowerCase(),
+        haystack: `${instance.id} ${searchedNames(tile.entry)} ${tile.entry.kind} ${facts}`.toLowerCase(),
     };
 };
 
@@ -83,7 +91,7 @@ export const connectionRow = (tile: CatalogTile, instance: CapabilitySummary, so
 // the Devices board's own rules; the note is what this tile can't do with it yet.
 export const deviceConnectionRow = (tile: CatalogTile, device: DeviceConnection): ConnectionRow => ({
     title: device.title,
-    tile: tile.entry.name,
+    tile: entryName(tile.entry),
     entryId: tile.entry.id,
     id: device.id,
     logo: tile.entry.logo,
@@ -94,7 +102,7 @@ export const deviceConnectionRow = (tile: CatalogTile, device: DeviceConnection)
     note: device.note,
     category: tile.entry.category,
     rank: device.rank,
-    haystack: `${device.machine} ${tile.entry.name} ${tile.entry.kind} ${device.detail}`.toLowerCase(),
+    haystack: `${device.machine} ${searchedNames(tile.entry)} ${tile.entry.kind} ${device.detail}`.toLowerCase(),
 });
 
 export const connectionRows = (tiles: readonly CatalogTile[], devices: readonly DeviceConnection[], sources: ConnectionSources): ConnectionRow[] => [
@@ -112,5 +120,5 @@ export const groupConnections = (rows: readonly ConnectionRow[]): CapabilityConn
         const grouped = rows
             .filter((row) => row.category === category.id)
             .toSorted((left, right) => left.rank - right.rank || left.id.localeCompare(right.id));
-        return grouped.length === 0 ? [] : [{ label: category.label, rows: grouped }];
+        return grouped.length === 0 ? [] : [{ label: categoryLabel(category), rows: grouped }];
     });

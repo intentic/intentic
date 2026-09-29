@@ -142,15 +142,25 @@ export class Conversation {
         this.selection = new ComposerSelection(this);
         this.failures = new TurnFailures(this);
         this.requests = new CardReplies(this);
-        // Detached: the conversation outlives whichever component made it, and the watcher is reachable only through it.
-        effectScope(true).run(() =>
+        // Detached: the conversation outlives whichever component made it, and the watchers are reachable only through it.
+        effectScope(true).run(() => {
             watch(
                 () => this.draft.value.trim() !== `` || this.attachments.value.length > 0,
                 (now) => {
                     this.unsent.value = now;
                 },
                 { flush: `sync`, immediate: true },
-            ),
-        );
+            );
+            // A turn streaming is the sandbox answering, and its own freshest copy: a read that failed before it no longer
+            // speaks for what is on screen, and left standing it came back once the turn settled.
+            watch(
+                () => this.turn.streaming.value,
+                (streaming) => {
+                    if (streaming) {
+                        this.transcript.refresh.value = undefined;
+                    }
+                },
+            );
+        });
     }
 }

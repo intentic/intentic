@@ -157,6 +157,72 @@ describe(`a message`, () => {
     });
 });
 
+// Typed replies like "Proceed…" read as approval to the person and as a rejection to the turn, which then sat 16 minutes
+// in plan mode: the bar's Approve takes the notes with it, and Send (keep planning) says so on its face.
+describe(`a plan waiting on an answer`, () => {
+    const withPlan = () => {
+        const composer = composerOf();
+        composer.chat.transcript.adopt([
+            { id: 1, role: `user`, text: `plan it` },
+            { id: 2, role: `assistant`, text: ``, plan: { requestId: `d1`, text: `# Ship the importer`, status: `pending` } },
+        ]);
+        return composer;
+    };
+
+    it(`says typing keeps it planning`, () => {
+        const { send } = withPlan();
+
+        expect(send.intent.value).toBe(`plan`);
+        expect(send.composerPlaceholder.value).toBe(`Write notes to keep planning, or approve above…`);
+    });
+
+    it(`approves with the notes in the box, which follow the approval as a message`, async () => {
+        const { chat, say, send } = withPlan();
+        const reply = jest.spyOn(chat.requests, `reply`).mockResolvedValue(true);
+        chat.draft.value = `use the v2 endpoint`;
+        chat.attachments.value = [CHIP];
+
+        await send.approvePlan();
+
+        expect(reply.mock.calls).toEqual([[`d1`, { kind: `plan`, approve: true }]]);
+        expect(say.mock.calls).toEqual([[`use the v2 endpoint`, [{ name: `shot.png`, path: CHIP.path }], undefined]]);
+        expect(chat.draft.value).toBe(``);
+        expect(chat.attachments.value).toEqual([]);
+    });
+
+    it(`approves alone with an empty box, and gives the notes back when the approval did not land`, async () => {
+        const { chat, say, send } = withPlan();
+        const reply = jest.spyOn(chat.requests, `reply`).mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+
+        await send.approvePlan();
+        chat.draft.value = `use the v2 endpoint`;
+        chat.attachments.value = [CHIP];
+        await send.approvePlan();
+
+        expect(reply.mock.calls).toEqual([
+            [`d1`, { kind: `plan`, approve: true }],
+            [`d1`, { kind: `plan`, approve: true }],
+        ]);
+        expect(say).not.toHaveBeenCalled();
+        expect(chat.draft.value).toBe(`use the v2 endpoint`);
+        expect(chat.attachments.value).toEqual([CHIP]);
+    });
+
+    it(`keeps planning with the box's notes as feedback, or a bare no when the box is empty`, () => {
+        const { chat, send } = withPlan();
+        const reply = jest.spyOn(chat.requests, `reply`).mockResolvedValue(true);
+
+        send.keepPlanning();
+        chat.draft.value = `smaller steps`;
+        send.keepPlanning();
+
+        expect(reply.mock.calls).toEqual([
+            [`d1`, { kind: `plan`, approve: false }],
+            [`d1`, { kind: `plan`, approve: false, feedback: `smaller steps` }],
+        ]);
+    });
+});
+
 describe(`what intercepts a press`, () => {
     it(`places the words as the agent's when the voice is armed, and keeps them when the place is refused`, async () => {
         const { chat, host, say, send } = composerOf();

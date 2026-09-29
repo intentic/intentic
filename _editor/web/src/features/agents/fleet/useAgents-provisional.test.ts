@@ -21,7 +21,7 @@ import type { AgentSummary } from "@intentic/sandbox-contract";
 import { ref } from "vue";
 import { useAgents } from "./useAgents";
 import type { FleetAgent } from "./useAgents-fleet";
-import { CEILING_MS, GRACE_MS, claim, hold, pendingOn } from "./useAgents-provisional";
+import { answeredHere, CEILING_MS, GRACE_MS, claim, hold, pendingOn } from "./useAgents-provisional";
 import { setAgents } from "./useAgents-registry";
 
 const none = { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false };
@@ -305,5 +305,37 @@ describe("a write drawn from the press", () => {
         await expect(useAgents().setAutoLand(`a1`, false)).rejects.toThrow(`refused`);
 
         expect(shown(`a1`)?.autoLand).toBe(true);
+    });
+});
+
+// Answered on the phone, the board kept "Permission" and "1 needs you" for sixteen seconds: an answer given here is drawn
+// at once, and the roster's next word about the conversation takes over.
+describe("an answer given in a chat here", () => {
+    it("clears the ask it answered at once, the turn back at work", () => {
+        roster(card(`a1`, { status: `awaiting`, attention: { ...none, permission: true } }));
+        expect(useAgents().attention.value).toBe(1);
+
+        answeredHere(`a1`, `permission`);
+
+        expect(shown(`a1`)).toMatchObject({ status: `running`, attention: none });
+        expect([laneOf(`a1`), useAgents().attention.value]).toEqual([`active`, 0]);
+    });
+
+    it("keeps a second ask the turn still waits on", () => {
+        roster(card(`a1`, { status: `awaiting`, attention: { ...none, permission: true, question: true } }));
+
+        answeredHere(`a1`, `permission`);
+
+        expect(shown(`a1`)).toMatchObject({ status: `awaiting`, attention: { ...none, question: true } });
+        expect(laneOf(`a1`)).toBe(`attention`);
+    });
+
+    it("hands over to the roster's next word about the conversation, whatever it says", () => {
+        roster(card(`a1`, { status: `awaiting`, attention: { ...none, permission: true } }));
+        answeredHere(`a1`, `permission`);
+
+        roster(card(`a1`, { status: `awaiting`, updatedAt: 2_000, attention: { ...none, permission: true } }));
+
+        expect(shown(`a1`)).toMatchObject({ status: `awaiting`, attention: { ...none, permission: true } });
     });
 });

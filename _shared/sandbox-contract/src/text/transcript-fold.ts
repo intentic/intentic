@@ -10,13 +10,14 @@ import {
     type TranscriptSubagent,
     type TranscriptTool,
 } from "../events/transcript.js";
-import { contextTrimLine } from "../schemas/context-trim.js";
-import { keptWarmLine } from "../schemas/keep-warm.js";
+import { contextTrimLine, contextTrimNotice } from "../schemas/context-trim.js";
+import { keptWarmLine, keptWarmNotice } from "../schemas/keep-warm.js";
 import { isLandConflict } from "../events/land-conflict.js";
 import { turnedAwayCode } from "../policy/turned-away.js";
 import { mentionedPathTokens } from "./mentions.js";
 import { unspokenPromptRow } from "../events/agent-words.js";
 import { needRowText } from "../events/need-wake.js";
+import { noticeCode, sandboxNoticeOf } from "../events/sandbox-notice.js";
 
 // Folds a turn's frames into rows once, live and for the settled record alike, so a reopened chat matches what was on
 // screen. The main turn's frames are its rows; a frame a subagent produced (tagged with the call that spawned it) nests
@@ -31,6 +32,7 @@ export type TurnEnding = "settled" | "stopped";
 
 // A compaction's row, live and restored from the provider's store alike.
 export const COMPACTED_NOTICE = "Context compacted to free up space.";
+export const compactedRow = (): TranscriptRow => ({ role: "notice", text: COMPACTED_NOTICE, noticeCode: noticeCode({ code: "compacted" }) });
 
 // Where a tool card lives: its row, and the parent card it nests under when it's a helper's own call.
 interface CardPlace {
@@ -108,12 +110,17 @@ const syncLine = (sync: { commits: number; blocked: readonly string[] }): string
 // Row for a spawned child's work gone into its parent's checkout, or held off it by a clash with the parent's edits.
 const intoParentRow = (event: Extract<AgentEvent, { kind: "landed" }>): TranscriptRow => {
     if (event.landed) {
-        return { role: "notice", text: `Changes went into the parent agent's checkout, as its in-process subagents' edits do: they reach your workspace with its land.` };
+        return {
+            role: "notice",
+            text: `Changes went into the parent agent's checkout, as its in-process subagents' edits do: they reach your workspace with its land.`,
+            noticeCode: noticeCode({ code: "intoParent" }),
+        };
     }
     const files = (event.conflicts ?? []).flatMap((conflict) => conflict.paths).length;
     return {
         role: "notice",
         text: `${files} file(s) clash with the parent agent's own edits, so nothing was written into its checkout. The parent was told, and can bring the changes in to resolve.`,
+        noticeCode: noticeCode({ code: "intoParentClash", params: { files } }),
     };
 };
 
@@ -124,25 +131,32 @@ const landedRow = (event: Extract<AgentEvent, { kind: "landed" }>): TranscriptRo
         return intoParentRow(event);
     }
     if (event.held === true) {
-        return { role: "notice", text: `Finished: the work is on this agent's branch, ready to land from its review.` };
+        return { role: "notice", text: `Finished: the work is on this agent's branch, ready to land from its review.`, noticeCode: noticeCode({ code: "landHeld" }) };
     }
     if (!event.landed) {
         // Per-file cause (your edits, a moved main line, a binary) is spelled out in the review, not named here.
         const conflicts = event.conflicts ?? [];
+        const files = conflicts.flatMap((conflict) => conflict.paths).length;
+        const repos = conflicts.map((conflict) => conflict.repo).join(`, `);
         return {
             role: "notice",
-            text: `${conflicts.flatMap((conflict) => conflict.paths).length} file(s) couldn't land automatically in ${conflicts
-                .map((conflict) => conflict.repo)
-                .join(`, `)}. Open the agent's review to see what blocked them and land from there.`,
+            text: `${files} file(s) couldn't land automatically in ${repos}. Open the agent's review to see what blocked them and land from there.`,
+            noticeCode: noticeCode({ code: "landConflict", params: { files, repos } }),
         };
     }
     // noticeAction fires only here, right as the auto-behavior ran; an active install takes the slot instead.
+    const deps = event.deps === undefined || event.deps.missing === 0 ? undefined : event.deps;
     return {
         role: "notice",
         text: `Changes landed in your workspace: review them in the Changes panel.${dependencyLine(event.deps)}`,
         noticeAction: (event.deps?.started.length ?? 0) > 0 ? "depsInstall" : "landHold",
+        noticeCode: noticeCode({ code: "landed", params: deps === undefined ? undefined : { deps: deps.missing, queued: deps.deferred || undefined } }),
     };
 };
+
+// A failure's own sentence and code, which every coded error row carries ahead of what it adds.
+const failureOf = (event: Extract<AgentEvent, { kind: "error" }>): { message: string; error?: string } =>
+    event.code === undefined ? { message: event.message } : { message: event.message, error: event.code };
 
 // The clause after a refusal that ran nothing. A turn somebody typed is held in its conversation's queue for another
 // press; a turn that started itself — an automation, a loop, a watch wake — has no typed message and nobody watching,
@@ -164,6 +178,7 @@ const memoryPress = (event: Extract<AgentEvent, { kind: "error" }>): "sendAnyway
 const heldRow = (event: Extract<AgentEvent, { kind: "error" }>): TranscriptRow => {
     const unattended = event.unattended === true;
     const memory = event.code === "sandbox-memory-low";
+    const said = failureOf(event);
     if (event.held !== undefined && !unattended) {
         return {
             role: "notice",
@@ -172,55 +187,95 @@ const heldRow = (event: Extract<AgentEvent, { kind: "error" }>): TranscriptRow =
                 : `${event.message} Nothing has run yet: the message above is kept here to send again once that is sorted.`,
             noticeAction: memory ? memoryPress(event) : "sendAgain",
             sandboxHeld: true,
+            noticeCode: noticeCode({ code: "kept", params: { ...said, memory: memory || undefined } }),
         };
     }
     if (!memory || unattended) {
-        return { role: "notice", text: `${event.message} ${undelivered(unattended)}` };
+        return {
+            role: "notice",
+            text: `${event.message} ${undelivered(unattended)}`,
+            noticeCode: noticeCode({ code: "undelivered", params: { ...said, unattended: unattended || undefined } }),
+        };
     }
     return {
         role: "notice",
         text: `${event.message} Your message is held: send it again to start anyway.`,
         noticeAction: memoryPress(event),
+        noticeCode: noticeCode({ code: "memoryHeld", params: said }),
     };
 };
+
+// What an armed credential renewal promises, and what its row says instead once a later failure in the same run took
+// that promise back (TranscriptFold.withdrawRenewal).
+const RENEWING = "The credential is being renewed and this turn continues automatically.";
+const RENEWAL_WITHDRAWN =
+    "The credential was being renewed, but the turn stopped before it could continue: it will not carry on by itself, so press Continue to pick it back up.";
 
 // Row for a turn-ending error: the provider's own message plus one clause on what happens next. The live wait itself is
 // drawn by the chat, not stored here.
 const errorRow = (event: Extract<AgentEvent, { kind: "error" }>): TranscriptRow => {
     const { message, code } = event;
+    const said = failureOf(event);
     switch (code) {
-        case "provider-outage":
-            return { role: "notice", text: `${message} ${retryClause(event) ?? `Nothing is retrying it, so the turn is waiting here.`}` };
+        case "provider-outage": {
+            const retry = retryClause(event);
+            return retry === undefined
+                ? {
+                      role: "notice",
+                      text: `${message} Nothing is retrying it, so the turn is waiting here.`,
+                      noticeCode: noticeCode({ code: "outageWaiting", params: said }),
+                  }
+                : { role: "notice", text: `${message} ${retry.text}`, noticeCode: retry.code };
+        }
         case "claude-token-refused":
             return event.autoResume === "scheduled"
                 ? {
                       role: "notice",
-                      text: `${message} The credential is being renewed and this turn continues automatically.`,
+                      text: `${message} ${RENEWING}`,
                       noticeWait: "credentialRenewal",
+                      noticeCode: noticeCode({ code: "renewing", params: said }),
                   }
-                : { role: "notice", text: `${message} Reconnect the account to pick this conversation back up.` };
+                : {
+                      role: "notice",
+                      text: `${message} Reconnect the account to pick this conversation back up.`,
+                      noticeCode: noticeCode({ code: "reconnect", params: said }),
+                  };
         case "rate_limit":
             return { role: "notice", text: message };
         default:
             break;
     }
     if (!turnedAwayCode(code)) {
-        const clause = retryClause(event);
-        return { role: "notice", text: clause === undefined ? message : `${message} ${clause}` };
+        const retry = retryClause(event);
+        if (retry !== undefined) {
+            return { role: "notice", text: `${message} ${retry.text}`, noticeCode: retry.code };
+        }
+        // A failure the sandbox names by code is coded too, so a reader that words that failure itself can; the
+        // provider's own uncoded words are only ever themselves.
+        return code === undefined ? { role: "notice", text: message } : { role: "notice", text: message, noticeCode: noticeCode({ code: "failed", params: said }) };
     }
     return heldRow(event);
 };
 
 // What a laddered wall's automatic re-runs are doing, said on the failure's own row so the count stays in the record.
-const retryClause = (event: Extract<AgentEvent, { kind: "error" }>): string | undefined => {
+const retryClause = (event: Extract<AgentEvent, { kind: "error" }>): { text: string; code: NonNullable<TranscriptRow["noticeCode"]> } | undefined => {
     const { retries } = event;
     if (retries === undefined) {
         return undefined;
     }
+    const said = failureOf(event);
     if (event.autoResume === "scheduled") {
-        return `Retrying by itself: attempt ${retries.made + 1} of ${retries.max}.`;
+        return {
+            text: `Retrying by itself: attempt ${retries.made + 1} of ${retries.max}.`,
+            code: noticeCode({ code: "retrying", params: { ...said, attempt: retries.made + 1, of: retries.max } }),
+        };
     }
-    return retries.made >= retries.max ? `Retried ${retries.made} of ${retries.max} times by itself; nothing more is sent automatically.` : undefined;
+    return retries.made >= retries.max
+        ? {
+              text: `Retried ${retries.made} of ${retries.max} times by itself; nothing more is sent automatically.`,
+              code: noticeCode({ code: "retried", params: { ...said, made: retries.made, of: retries.max } }),
+          }
+        : undefined;
 };
 
 // The turn's opening user row: text, timestamp, attachments, the message's id, and whatever the daemon later stamps onto
@@ -359,22 +414,23 @@ export class TranscriptFold {
             case "prompt_cache": {
                 // Only a conversation the sandbox kept warm gets a row: every other turn's cache is its own business.
                 const line = keptWarmLine(event);
-                return line === undefined ? [] : this.pushRow({ role: "notice", text: line });
+                const notice = keptWarmNotice(event);
+                return line === undefined || notice === undefined ? [] : this.pushRow({ role: "notice", text: line, noticeCode: noticeCode(notice) });
             }
             case "context_trim":
                 // A row of its own rather than a stamp on the message: what was left out is not part of what was sent,
                 // and the fold beside the message only ever lists notes that actually rode.
-                return this.pushRow({ role: "notice", text: contextTrimLine(event) });
+                return this.pushRow({ role: "notice", text: contextTrimLine(event), noticeCode: noticeCode(contextTrimNotice(event)) });
             case "worktree":
                 return event.sync === undefined ? [] : this.synced(event.sync);
             case "landed":
                 return this.pushRow(landedRow(event));
             case "compact":
-                return this.pushRow({ role: "notice", text: COMPACTED_NOTICE });
+                return this.pushRow(compactedRow());
             case "error":
                 // Keeps a refusal (no prose from the provider) from reading as a session that ended mid-question.
                 // A refusal that ran nothing takes its message back out ahead of the notice standing in for it.
-                return [...this.retract(event), ...this.pushRow(errorRow(event))];
+                return [...this.retract(event), ...this.withdrawRenewal(event), ...this.pushRow(errorRow(event))];
             case "plan": {
                 // Folds a plan into an identical retired prose bubble instead of drawing the same markdown twice.
                 const adjacent = this.rows.at(-1);
@@ -547,6 +603,29 @@ export class TranscriptFold {
         return [{ op: "drop", index: opener }];
     }
 
+    // A run holds one hold, and each failure replaces it: a later failure in the run that armed a credential renewal is
+    // what the sandbox acts on now, so the renewal row's "continues automatically" is no longer true. It says the turn
+    // stopped instead, and no longer names a wait nobody is running. A renewal armed again keeps its promise.
+    private withdrawRenewal(event: Extract<AgentEvent, { kind: "error" }>): TranscriptPatch[] {
+        if (event.code === "claude-token-refused" && event.autoResume === "scheduled") {
+            return [];
+        }
+        const index = this.rows.findLastIndex((row) => row.role === "notice" && row.noticeWait === "credentialRenewal");
+        const row = this.rows[index];
+        if (row === undefined) {
+            return [];
+        }
+        const { noticeWait: _withdrawn, ...rest } = row;
+        const withdrawn: TranscriptRow = { ...rest, text: row.text.replace(RENEWING, RENEWAL_WITHDRAWN) };
+        // The code says the same as the words: the row still quotes its failure, and now reports the stop.
+        const renewing = sandboxNoticeOf(row);
+        if (renewing?.code === "renewing") {
+            withdrawn.noticeCode = noticeCode({ code: "renewalWithdrawn", params: renewing.params });
+        }
+        this.rows[index] = withdrawn;
+        return [this.replace(index)];
+    }
+
     /**
      * Ends the turn: closes the open bubble, freezes every still-pending card as nobody's decision, and notes a user
      * stop.
@@ -560,7 +639,7 @@ export class TranscriptFold {
             }
         }
         if (ending === "stopped") {
-            patches.push(...this.pushRow({ role: "notice", text: `Stopped.` }));
+            patches.push(...this.pushRow({ role: "notice", text: `Stopped.`, noticeCode: noticeCode({ code: "stopped" }) }));
         }
         return patches;
     }
@@ -727,8 +806,10 @@ export class TranscriptFold {
     // saying so again one row under its own errand only repeats it. What did move is still told.
     private synced(sync: { commits: number; blocked: readonly string[] }): TranscriptPatch[] {
         const opener = this.opener === undefined ? undefined : this.rows[this.opener];
-        const text = syncLine(opener !== undefined && isLandConflict(opener.text) ? { ...sync, blocked: [] } : sync);
-        return text === "" ? [] : this.pushRow({ role: "notice", text });
+        const told = opener !== undefined && isLandConflict(opener.text) ? { ...sync, blocked: [] } : sync;
+        const text = syncLine(told);
+        const blocked = told.blocked.length > 0 ? told.blocked.join(`, `) : undefined;
+        return text === "" ? [] : this.pushRow({ role: "notice", text, noticeCode: noticeCode({ code: "synced", params: { commits: told.commits, blocked } }) });
     }
 
     private stampOpener(mutate: (row: TranscriptRow) => void): TranscriptPatch[] {

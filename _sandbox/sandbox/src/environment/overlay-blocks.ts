@@ -39,6 +39,22 @@ export const splitBlocks = (content: string): OverlayBlock[] => {
     return blocks;
 };
 
+// A named block is one tool, so a later block of the same name replaces the earlier one in the earlier one's place
+// (the order, and so the hash, stays put); an exact repeat collapses to one.
+export const uniqueBlocks = (blocks: readonly OverlayBlock[]): OverlayBlock[] => [...new Map(blocks.map((block) => [block.name, block])).values()];
+
+// The inverse of splitBlocks, in the spelling every writer of the custom section has always used.
+export const renderBlocks = (blocks: readonly OverlayBlock[]): string =>
+    blocks.map((block) => (block.name === "" ? block.body : `# ---- ${block.name} ----\n${block.body}`)).join("\n\n");
+
+// The section as written, unless it names a tool twice: then once per tool. A file that repeats nothing is kept byte
+// for byte, so the overlay composed from it keeps its hash and no rebuild is asked for over whitespace.
+export const withoutRepeats = (content: string): string => {
+    const blocks = splitBlocks(content);
+    const unique = uniqueBlocks(blocks);
+    return unique.length === blocks.length ? content : renderBlocks(unique);
+};
+
 // A comment line's text, or undefined if it isn't one; a bare `#` is a paragraph break, so empty string must stay
 // distinct from "not a comment".
 const commentText = (line: string): string | undefined => {

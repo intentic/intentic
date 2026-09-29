@@ -1,13 +1,14 @@
-import type { TurnFact } from "@intentic/sandbox-contract";
+import type { AgentProvider, TurnFact } from "@intentic/sandbox-contract";
+import { t } from "@intentic/ui/i18n";
 import { ref } from "vue";
-import type { PickUp } from "./pickUp";
+import { cooledPickUp, type PickUp, warmedPickUp } from "./pickUp";
 import { bindingWindow, usageStatusFor } from "../session/usageStatus";
 import type { ComposerSelection } from "../session/composerSelection";
 import type { Conversation } from "../session/conversation";
 import type { TranscriptView } from "../session/transcriptView";
 import type { TurnClient } from "../session/turnClient";
 import { importOrReload } from "../../../router/staleChunk";
-import { markNeedsReauth } from "../accounts/providerAccounts";
+import { markNeedsReauth, providerAccounts } from "../accounts/providerAccounts";
 
 // Maps a turn failure's code to what this window does: whether the user is needed (the error line) or merely informed, and
 // whether the turn returns on its own. The daemon owns the failure's transcript line and keeps a refused message in the
@@ -45,6 +46,18 @@ export class TurnFailures {
     // Credential renewal wait; cleared on reattach or timeout. Carries `since`, not a reset instant.
     readonly credentialRenewal = ref<{ since: number } | undefined>();
 
+    // The words of a failure that took back what an earlier one in the same turn promised (to come back by itself): the
+    // sandbox keeps one hold per turn, so the later failure is the one it acts on. Its roster keeps reading `resuming`
+    // regardless, so the board draws the stop this chat shows from this (TabFacts.resumeWithdrawn). Cleared as a turn starts.
+    readonly resumeWithdrawn = ref<string | undefined>();
+
+    // Whether this turn's last failure said it comes back by itself, as the sandbox reads one (comingBackNow): a re-mint,
+    // a retry or a re-run is booked, a spent allowance's reset is not.
+    private promised = false;
+
+    // Whether this turn failed at all; a turn that ended on none proves the account it ran on still signs in.
+    private failed = false;
+
     // A turn that outgrew the model's window, which the daemon re-runs in a fresh session; watched once the stream ends.
     private freshSession = false;
 
@@ -56,6 +69,12 @@ export class TurnFailures {
     // Routes a turn failure by its code to how it is presented and recovered from.
     apply(error: TurnError): void {
         const { message, code } = error;
+        const comingBack = error.autoResume === `scheduled` && code !== `rate_limit`;
+        if (this.promised && !comingBack) {
+            this.withdrawResume(message);
+        }
+        this.promised = comingBack;
+        this.failed = true;
         switch (code) {
             case `claude-reauth`:
                 // Credential dead, nothing ran: the daemon holds the message in the queue until the account is back.
@@ -162,13 +181,24 @@ export class TurnFailures {
         const model = this.host.selection.model.value === `` ? undefined : { id: this.host.selection.model.value };
         // The account the frame names served the turn; one naming none has no reading of its own to guess a reset from.
         const resetsAt = error.resetsAt ?? bindingWindow(usageStatusFor(this.host.selection.provider.value, error.account, model), model)?.resetsAt;
-        this.host.pickUp.value = {
+        // Rests the press a minute when nothing ran (pickUp.cooledPickUp), then hands it back.
+        const pickUp = cooledPickUp({
             reason: `limit`,
             // `resetsAt` always comes from the frame, never the store's fallback; `nextAt` is the daemon's own booking.
             ...(resetsAt === undefined ? {} : { readyAt: resetsAt * 1_000 }),
             ...(error.nextAt === undefined ? {} : { nextAt: error.nextAt * 1_000 }),
             ...(error.held === undefined ? {} : { held: error.held }),
-        };
+        });
+        this.host.pickUp.value = pickUp;
+        const until = pickUp.coolUntil;
+        if (until !== undefined) {
+            setTimeout(() => {
+                const shown = this.host.pickUp.value;
+                if (shown?.coolUntil === until) {
+                    this.host.pickUp.value = warmedPickUp(shown);
+                }
+            }, until - Date.now());
+        }
     }
 
     // Provider outage with a resume in flight: muted notice naming when it retries, not the error line, since it
@@ -252,7 +282,32 @@ export class TurnFailures {
     clear(): void {
         this.outageResume.value = undefined;
         this.credentialRenewal.value = undefined;
+        this.resumeWithdrawn.value = undefined;
+        this.promised = false;
+        this.failed = false;
         this.freshSession = false;
+    }
+
+    // A later failure replaced the hold an earlier one armed, so nothing comes back by itself: no renewal spinner, no
+    // outage countdown, and no probe that would give up minutes later and blame the credential. The transcript's row
+    // says so itself (transcript-fold's withdrawRenewal); the stop's own pick-up is the way on.
+    private withdrawResume(message: string): void {
+        this.credentialRenewal.value = undefined;
+        this.outageResume.value = undefined;
+        this.freshSession = false;
+        this.cancelProbe();
+        this.resumeWithdrawn.value = message;
+    }
+
+    // Called as a turn's stream ends. One that ended on no failure ran on an account that signs in, so a reconnect this
+    // provider's accounts were marked for is asked of the sandbox again rather than left standing until some later read:
+    // the list's answer, not this window's, is what lights or clears the banner.
+    settled(): void {
+        const provider = this.host.selection.provider.value;
+        if (this.failed || !(providerAccounts.value[provider] ?? []).some((account) => account.needsReauth === true)) {
+            return;
+        }
+        rereadAccounts(provider);
     }
 
     // Probes for the daemon's restarted run starting at `dueAt` + the profile's delay, then on its interval until
@@ -296,16 +351,24 @@ export class TurnFailures {
         clearTimeout(this.timer);
     }
 
-    // Probe budget exhausted with nothing to attach to: the re-mint failed for good, so this stops the spinner
-    // and asks for a reconnect.
+    // Probe budget exhausted with nothing to attach to: the spinner stops and the turn is said to have stopped. Whether the
+    // account needs reconnecting is the sandbox's to say, never this window's guess from a timeout (one such guess sat on
+    // every chat for two hours while the account kept answering), so its account list is read again instead.
     private giveUpOnRenewal(): void {
         if (this.credentialRenewal.value === undefined) {
             return;
         }
         this.credentialRenewal.value = undefined;
-        const detail = `Claude sign-in could not be renewed: reconnect the account.`;
-        this.markReauth({}, detail);
-        this.host.transcript.notice(`${detail} This turn stopped where it was; sending again picks the conversation back up.`);
+        rereadAccounts(this.host.selection.provider.value);
+        this.host.transcript.notice(t(`chat.turnFailures.renewalDidNotResume`));
         this.host.transcript.persist();
     }
 }
+
+// The sandbox's own account list for a provider, which is what marks an account for reconnecting or clears it. Late
+// imported, as the catalog is above: the accounts module reaches back into the conversation tabs.
+const rereadAccounts = (provider: AgentProvider): void =>
+    importOrReload(
+        () => import(`../accounts/useChat-accounts`),
+        (accounts) => accounts.refreshAccounts(provider).catch(() => undefined),
+    );

@@ -1,4 +1,4 @@
-import type { AgentStatus, ParkKind } from "@intentic/sandbox-contract";
+import type { AgentStatus, ParkKind, WaitingPermission } from "@intentic/sandbox-contract";
 import type { LandStanding } from "../land/standing.js";
 import type { EndingStatus } from "../registry/agents-store.js";
 import { awaitingWake, type ConversationState } from "./conversation-state.js";
@@ -36,3 +36,13 @@ export const conversationStatus = (
 // What the card's attention lanes read: the kinds of every card parked right now, none outside a live turn.
 export const parkedKinds = (state: ConversationState | undefined): readonly ParkKind[] =>
     state?.phase.kind === "running" ? state.phase.parked.map((card) => card.kind) : [];
+
+// The oldest permission parked right now, as a card can answer it (AgentSummary.permissionAsk); none outside a live
+// turn, and none a stop is already unwinding, whose cards no answer reaches.
+export const permissionAskOf = (state: ConversationState | undefined): WaitingPermission | undefined => {
+    if (state?.phase.kind !== "running" || state.phase.stopping !== undefined) {
+        return undefined;
+    }
+    const card = state.phase.parked.find((parked) => parked.kind === "permission");
+    return card === undefined ? undefined : { requestId: card.requestId, ask: card.ask ?? "" };
+};

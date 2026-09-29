@@ -14,6 +14,8 @@ const { rpcKey } = await import("../../../lib/queryKeys");
 const { providerAccounts } = await import("../accounts/providerAccounts");
 const { providerModels } = await import("../accounts/providerCatalog");
 const { agentRunChoice, shellModelPicking } = await import("./shellModelPicking");
+const { rememberPick } = await import("../run/turnDefaults");
+const { useChat } = await import("../run/useChat");
 
 // Keep this test independent of VueQueryPlugin so it proves no injection occurs.
 const mounted = (setup: () => () => unknown): App => {
@@ -121,4 +123,19 @@ test(`the standing choice carries the whole pinned entry, not merely the pair an
         thinking: false,
         fast: true,
     });
+});
+
+// C4: a run starts a conversation of its own, so with nothing pinned it opens on what a NEW chat would, never on
+// whatever the open chat was moved to. Pipelines' Fix sends this along, and a sandbox with no pin runs it.
+test(`with nothing pinned, the standing choice is the model a new chat would open on, not the open chat's`, () => {
+    queryClient.setQueryData(rpcKey(`settings.get`), { modelRoles: {} });
+    rememberPick({ provider: `claude`, value: `claude-sonnet-4-6` });
+    const open = useChat().active.value.selection;
+    open.apply({ kind: `selectModel`, pick: { provider: `claude`, value: `claude-opus-4-6` } });
+    rememberPick({ provider: `zai`, value: `glm-4.6` });
+
+    const choice = agentRunChoice(ROLE);
+
+    expect([open.provider.value, open.model.value]).toEqual([`claude`, `claude-opus-4-6`]);
+    expect({ provider: choice.provider, model: choice.model }).toEqual({ provider: `zai`, model: `glm-4.6` });
 });

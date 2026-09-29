@@ -5,6 +5,7 @@ import { noticeFrom, noticeOf } from "@intentic/ui/async";
 import { computed, onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { idTokenClaims } from "./googleToken";
+import { handoffSpent, markHandoffSpent } from "./handoffSpent";
 import { apiClient } from "../../lib/useApi";
 import { useAuth } from "./useAuth";
 import { useGoogleIdentity } from "./useGoogleIdentity";
@@ -32,6 +33,8 @@ const error = ref<NoticeModel | undefined>(undefined);
 const working = ref(false);
 // Which wait the user is in; only `signin` (Google) can need a click, so only then does the button show.
 const stage = ref<`checking` | `signin` | `handing` | `done`>(`checking`);
+// Opened again after its hand-off finished (a restored tab): done, with nothing to redo (handoffSpent.ts).
+const spent = ref(false);
 
 // The app's press said "not that account" (`intentic://signin?switch=1`), so every road that answers without asking
 // is refused here and Google's chooser is what this page puts up. The fork below turns it on too.
@@ -51,10 +54,11 @@ const googleButton = ref<HTMLElement>();
 const HANDOFF_USABLE_FOR_MS = 45 * 60 * 1000;
 
 // The three waits, in the order they happen; the rail below draws one station per beat.
+// Each name is asked for at render, so it follows the reader's language.
 const BEATS = [
-    { of: `checking`, name: `Check this browser` },
-    { of: `signin`, name: `Confirm with Google` },
-    { of: `handing`, name: `Hand it over` },
+    { of: `checking`, name: () => t(`auth.desktopAuth.beatCheckBrowser`) },
+    { of: `signin`, name: () => t(`auth.desktopAuth.beatConfirmGoogle`) },
+    { of: `handing`, name: () => t(`auth.desktopAuth.beatHandOver`) },
 ] as const;
 
 // How many beats are behind us, which is both the lit station count and the rail's fill. A beat the flow SKIPPED
@@ -107,7 +111,7 @@ const useGooglesOwnPage = async (): Promise<void> => {
 const agreed = async (idToken: string, session: boolean): Promise<boolean> => {
     const google = idTokenClaims(idToken)?.email;
     if (google === undefined) {
-        error.value = noticeOf(`Google's answer couldn't be read. Try signing in again.`);
+        error.value = noticeOf(t(`auth.desktopAuth.googleAnswerUnreadable`));
         return false;
     }
     googleEmail.value = google;
@@ -135,7 +139,7 @@ const linkParts = (): { readonly state: string; readonly challenge: string } | u
 const hand = async (): Promise<void> => {
     const link = linkParts();
     if (link === undefined) {
-        error.value = noticeOf(`This link is missing the value that ties it to your app: open Intentic and sign in from there.`);
+        error.value = noticeOf(t(`auth.desktopAuth.linkMissingValue`));
         return;
     }
     // Parks the credential for one pickup; the app receives only the row's id, never the credential itself.
@@ -143,6 +147,7 @@ const hand = async (): Promise<void> => {
         stage.value = `handing`;
         const { handoff } = await apiClient.desktop.handoff({ idToken, challenge: link.challenge });
         stage.value = `done`;
+        markHandoffSpent(link.state);
         globalThis.location.href = desktopAuthLink(handoff, link.state, arrivingProfile());
     };
     working.value = true;
@@ -163,7 +168,7 @@ const hand = async (): Promise<void> => {
             idToken = await getIdToken({ gate: false, usableFor: HANDOFF_USABLE_FOR_MS, pick: picking.value });
         }
         if (idToken === undefined) {
-            error.value = noticeOf(`Intentic needs your Google sign-in to reach your sandbox.`);
+            error.value = noticeOf(t(`auth.desktopAuth.needsGoogleSignIn`));
             return;
         }
         // A refusal inside (client-id mismatch, no endpoint) falls to the catch below, which offers Google's own page.
@@ -171,7 +176,7 @@ const hand = async (): Promise<void> => {
             await deliver(idToken);
         }
     } catch (err) {
-        error.value = noticeFrom(err, `Couldn't finish signing in to the app.`);
+        error.value = noticeFrom(err, t(`auth.desktopAuth.couldntFinishInApp`));
     } finally {
         working.value = false;
     }
@@ -189,7 +194,7 @@ const continueAsGoogle = async (): Promise<void> => {
     try {
         await signInWithGoogleCredential(pair.idToken);
     } catch (err) {
-        error.value = noticeFrom(err, `Couldn't sign in to Intentic as ${pair.google}.`);
+        error.value = noticeFrom(err, t(`auth.desktopAuth.couldntSignInAs`, { email: pair.google }));
         return;
     } finally {
         working.value = false;
@@ -229,8 +234,17 @@ watch(
     { flush: `post`, immediate: true },
 );
 
-// Automatic: reaching this page already means the app's button was pressed; asking again would be redundant.
-onMounted(() => void hand());
+// Automatic: reaching this page already means the app's button was pressed; asking again would be redundant. Unless
+// this very hand-off already finished here: then the tab is a restored one, and the app stopped waiting long ago.
+onMounted(() => {
+    const link = linkParts();
+    if (link !== undefined && handoffSpent(link.state)) {
+        spent.value = true;
+        stage.value = `done`;
+        return;
+    }
+    void hand();
+});
 </script>
 
 <template>
@@ -339,9 +353,10 @@ onMounted(() => void hand());
                         <span class="entry-seal-ring"></span>
                         <AppBrand shape="mark" class="entry-seal-mark" />
                     </div>
-                    <p class="gate-say" role="status">{{ t(`auth.desktopAuth.closeTab`) }}</p>
-                    <p class="gate-aside">{{ t(`auth.desktopAuth.appDidntComeForward`) }}</p>
-                    <div class="gate-actions">
+                    <p class="gate-say" role="status">{{ spent ? t(`auth.desktopAuth.alreadyHandedOver`) : t(`auth.desktopAuth.closeTab`) }}</p>
+                    <p v-if="spent" class="gate-aside">{{ t(`auth.desktopAuth.signInAgainFromApp`) }}</p>
+                    <p v-else class="gate-aside">{{ t(`auth.desktopAuth.appDidntComeForward`) }}</p>
+                    <div v-if="!spent" class="gate-actions">
                         <Button :label="t(`auth.words.sendItAgain`)" severity="secondary" :loading="working" @click="hand" />
                     </div>
                 </template>
@@ -397,7 +412,7 @@ onMounted(() => void hand());
                         :aria-current="index === reached ? `step` : undefined"
                     >
                         <span class="entry-lozenge"></span>
-                        <h2>{{ beat.name }}</h2>
+                        <h2>{{ beat.name() }}</h2>
                     </li>
                 </ol>
             </section>

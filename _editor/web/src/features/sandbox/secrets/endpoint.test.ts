@@ -19,6 +19,15 @@ const CERT_HOST = `abc123def456.local.example.com`;
 // Self-hosted lane: no machine record, so it might be a loopback hop away.
 const anywhere = { hosted: null, localHostname: CERT_HOST };
 
+it(`never offers the loopback shortcut on a phone, which no sandbox runs on`, () => {
+    const android = `Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Mobile Safari/537.36`;
+    const iphone = `Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148`;
+    const linuxApp = `Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15`;
+    expect(couldBeOnThisMachine(anywhere, android)).toBe(false);
+    expect(couldBeOnThisMachine(anywhere, iphone)).toBe(false);
+    expect(couldBeOnThisMachine(anywhere, linuxApp)).toBe(true);
+});
+
 // Mocks GET /health; `id` undefined models a daemon too old to name itself.
 const health = (id: string | undefined): Response =>
     new Response(JSON.stringify({ ok: true, sandboxId: id }), { status: 200, headers: { "content-type": `application/json` } });

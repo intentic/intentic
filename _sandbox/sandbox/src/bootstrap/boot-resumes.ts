@@ -1,3 +1,4 @@
+import { fileRestartResume } from "../agent/run/turn/restart-resume.js";
 import { createTurnResumeScheduler, resumeInterruptedTurns } from "../agent/run/turn/turn-resume.js";
 import { adoptBackgroundJobs } from "../agent/tools/jobs/background-adoption.js";
 import { restoreBackgroundJobs } from "../agent/tools/jobs/background-jobs.js";
@@ -16,8 +17,16 @@ export const startBootResumes = ({ logger, role, services, shutdown }: BootPhase
     }
 
     // Detached: an interrupted turn is a whole turn, and an interrupted automation fire a whole fire. What waited in a
-    // queue goes after them: behind a resumed turn when its conversation has one, at once when it has none.
-    void resumeInterruptedTurns(services)
+    // queue goes after them: behind a resumed turn when its conversation has one, at once when it has none. Whether
+    // the owner started this restart and asked for its cut turns back is read once, here, for both passes.
+    const ownerAsked = fileRestartResume(services.config.historyRoot)
+        .take(Date.now())
+        .catch((error: unknown) => {
+            logger.warn({ err: error }, "whether the owner asked this restart to resume could not be read, so only the settings decide");
+            return false;
+        });
+    void ownerAsked
+        .then((asked) => resumeInterruptedTurns(services, Date.now(), asked))
         .catch((error: unknown) => logger.error({ err: error }, "interrupted turns could not be resumed, they stand on the record as interrupted"))
         .then(() => {
             for (const conversationId of services.agents.ids()) {
@@ -26,9 +35,11 @@ export const startBootResumes = ({ logger, role, services, shutdown }: BootPhase
                 }
             }
         });
-    void resumeInterruptedFires(services).catch((error: unknown) =>
-        logger.error({ err: error }, "interrupted automation fires could not be re-fired, they stand on the record as interrupted"),
-    );
+    void ownerAsked
+        .then((asked) => resumeInterruptedFires(services, Date.now(), asked))
+        .catch((error: unknown) =>
+            logger.error({ err: error }, "interrupted automation fires could not be re-fired, they stand on the record as interrupted"),
+        );
 
     // Each watch is re-checked once, since it may have resolved during the rebuild.
     void restoreWatchers().catch((error: unknown) => logger.error({ err: error }, "armed condition watches could not be restored"));

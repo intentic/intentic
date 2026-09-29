@@ -17,6 +17,8 @@ flowchart LR
   `summaryOf`. A README that opens with a heading and nothing else gives an empty tile.
 - Opening a tile makes the project the shell's scope, and every other area narrows to it. While a project is open
   the rail tile wears its two-letter monogram and a badge that names it.
+- "See it running" appears only at desktop widths, where the shell mounts the preview panel it opens. A phone has no
+  such panel, and its router would send the link to the Agents board.
 - New project fills in the first free name in a series and creates the folder through the daemon, which has the
   last word on valid names.
 - The list is never polled: the host's repository push re-reads it when a clone, scaffold or delete lands.

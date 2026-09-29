@@ -10,7 +10,7 @@ import { checkpointWorktree } from "../../checkpoints/checkpoint-worktree.js";
 import { opt } from "../../../opt.js";
 import type { TurnInput } from "../../../seams/turn-starter.js";
 import type { TurnCloser, TurnEnding } from "./turn-close.js";
-import { landedFrame, settleLandBooks, settleParentBooks } from "./turn-landing.js";
+import { keepLandFailure, landedFrame, settleLandBooks, settleParentBooks } from "./turn-landing.js";
 
 // Where a conversation's turn runs, as the one value its lifecycle is parameterized by: the runner, the main tree, or a
 // worktree. Each announces itself, hands over the turn's body, and has its own after-turn and its own books; the
@@ -177,7 +177,10 @@ async function* landIntoParent(
         deps.perf.track("agent.land", { id: conversationId, mode: "check", span: "outstanding" }, () =>
             landAgent(deps.agentWorktrees, entry, "check", "outstanding", into),
         ),
-    );
+    ).catch(async (cause: unknown) => {
+        await keepLandFailure(deps, conversationId, cause);
+        throw cause;
+    });
     reportLockfileFailures(deps.logger, conversationId, landed);
     if (landed.changed) {
         await deps.agents.recordLanded(conversationId, landed);

@@ -1,6 +1,7 @@
 import type { HostedOffer, HostedStatus, SandboxSummary } from "@intentic/api-contract";
 import type { NoticeModel } from "@intentic/ui";
 import { noticeFrom, noticeOf, useNow } from "@intentic/ui/async";
+import { t } from "@intentic/ui/i18n";
 import { computed, onScopeDispose, type Ref, ref } from "vue";
 import { track } from "../../../app/analytics";
 import { arrivingProfile } from "../../../app/useProfile";
@@ -183,7 +184,7 @@ export const useHostedLane = (host: HostedLaneHost) => {
             if (action === lane.value.action) {
                 // No machines left isn't a failure notice: the card replaces itself with what to do instead.
                 hostedRefusedForRoom.value = isAtCapacity(err);
-                hostedError.value = noticeFrom(err, `Couldn't start a machine for you right now.`);
+                hostedError.value = noticeFrom(err, t(`setup.useHostedLane.startFailed`));
             }
             return false;
         } finally {
@@ -214,8 +215,8 @@ export const useHostedLane = (host: HostedLaneHost) => {
     const refuseRestart = (err: unknown): void => {
         hostedRefusedForRoom.value = isAtCapacity(err);
         hostedError.value = hostedRefusedForRoom.value
-            ? noticeOf(`We're out of machines right now, so we can't build you another one this minute.`, { tone: `warning` })
-            : noticeFrom(err, `Couldn't start it over. Try again in a moment.`);
+            ? noticeOf(t(`setup.useHostedLane.outOfMachines`), { tone: `warning` })
+            : noticeFrom(err, t(`setup.useHostedLane.restartFailed`));
     };
 
     // The wait's one recovery, as the failure it answers says: rebuild or restart. The clock restarts with the machine.
@@ -269,7 +270,7 @@ export const useHostedLane = (host: HostedLaneHost) => {
             row.report.value = null;
             return true;
         } catch (err) {
-            hostedError.value = noticeFrom(err, `Couldn't remove the machine we started. Try again in a moment.`);
+            hostedError.value = noticeFrom(err, t(`setup.useHostedLane.removeFailed`));
             step({ kind: `refused` });
             return false;
         } finally {

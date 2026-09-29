@@ -30,7 +30,7 @@ const complete = async (): Promise<void> => {
     const handoff = route.query[`handoff`];
     const verifier = route.query[`verifier`];
     if (typeof handoff !== `string` || handoff === `` || typeof verifier !== `string` || verifier === ``) {
-        error.value = noticeOf(`This sign-in link is incomplete.`);
+        error.value = noticeOf(t(`auth.desktopAuthComplete.linkIncomplete`));
         return;
     }
     try {
@@ -43,17 +43,17 @@ const complete = async (): Promise<void> => {
             body: JSON.stringify({ token: ott }),
         });
         if (!verified.ok) {
-            error.value = noticeOf(`That sign-in had already expired. Sign in from the app again.`);
+            error.value = noticeOf(t(`auth.desktopAuthComplete.expired`));
             return;
         }
         if (!adoptIdToken(idToken)) {
-            error.value = noticeOf(`That sign-in had already expired. Sign in from the app again.`);
+            error.value = noticeOf(t(`auth.desktopAuthComplete.expired`));
             return;
         }
         await refresh();
         await router.replace(`/`);
     } catch (err) {
-        error.value = noticeFrom(err, `Couldn't finish signing in.`);
+        error.value = noticeFrom(err, t(`auth.desktopAuthComplete.couldntFinish`));
     }
 };
 

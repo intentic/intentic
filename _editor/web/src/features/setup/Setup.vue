@@ -11,11 +11,13 @@ import {
     Notice,
     SegmentedControl,
     StepSection,
+    timeAgo,
     ui,
     useDevice,
     useOsPreference,
     vAction,
 } from "@intentic/ui";
+import { useNow } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import Checkbox from "primevue/checkbox";
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
@@ -34,7 +36,7 @@ import { useSandbox } from "../sandbox/client/useSandbox";
 import { mintSyncPairing } from "../sandbox/devices/sync/useDesktopSync";
 import { sandboxIdFromToken } from "../sandbox/session/sandboxIdFromToken";
 import DesktopSetupProgress from "./DesktopSetupProgress.vue";
-import { useDesktopSetup } from "./desktopSetup";
+import { setupUnderWay, useDesktopSetup } from "./desktopSetup";
 import { useProjectHandoff } from "./hostedProject";
 import SetupCompose from "./SetupCompose.vue";
 import SetupHandoff from "./SetupHandoff.vue";
@@ -42,7 +44,7 @@ import SetupNudge from "./SetupNudge.vue";
 import SetupRunDetails from "./SetupRunDetails.vue";
 import SetupRungArt from "./SetupRungArt.vue";
 import SetupSyncOption from "./SetupSyncOption.vue";
-import { setupProjectOf } from "./setupArrival";
+import { resumedRow, setupProjectOf } from "./setupArrival";
 import { probeDaemon } from "./setupAttach";
 import { lockedReasonOf } from "./flow/commandHandoff";
 import { DEV_SANDBOX_IMAGE } from "./flow/installCommand";
@@ -69,7 +71,7 @@ const { user } = useAuth();
 const { getIdToken, warmIdToken } = useGoogleIdentity();
 // The preferred shell, a persisted singleton shared across screens.
 const { cmdOs } = useOsPreference();
-const { report: desktopReport, heardAt: desktopHeardAt } = useDesktopSetup();
+const { report: desktopReport, heardAt: desktopHeardAt, ended: desktopEnded } = useDesktopSetup();
 // Token and zone discovery shared with useCloudflareZones; it feeds only the command, never .env.
 const cf = useCloudflareZones();
 const { cfToken, cfTokenValid, selectedZone, zonesLoading, zonesError } = cf;
@@ -162,11 +164,33 @@ const { emailed, handoff, reportFailures, buildStage, nudging, stalled, nudgeVar
 const attach = useAttachLane({ sandbox, row, minted: () => setup.value?.hostname, getIdToken, probe: probeDaemon });
 const { domain, attachToken, attaching, attachOutcome, originHelp, normalizedDomain, ownAddress, domainProblem, connectDomain } = attach;
 const { status } = useRegistryWatch({ sandbox, row, hosted, mintedFor: command.mintedFor });
+// The app's install under way: "Set it up now" waits for it to end rather than starting a second one (desktopSetup.ts).
+// Ticks only while a claim with no word from the app is what holds the button, so that hold can run out.
+const claimClock = useNow(() => handoff.value === `claimed` && desktopReport.value === undefined && claimedAt.value !== null);
+const installUnderWay = computed(() =>
+    setupUnderWay({
+        report: desktopReport.value,
+        claimed: handoff.value === `claimed`,
+        failed: reportFailures.value !== null,
+        ended: desktopEnded.value,
+        claimedFor: claimedAt.value === null ? undefined : claimClock.value - Date.parse(claimedAt.value),
+    }),
+);
 
 // Another sandbox to go back to: not this one, and not one that has never reported in.
 const otherWorkspace = computed(() => sandbox.sandboxes.value.some((entry) => entry.id !== created.value?.id && entry.lastSeenAt !== null));
-// Reconnecting a sandbox that has run before reads differently from resuming one that never started.
-const neverStarted = computed(() => created.value !== null && created.value.lastSeenAt === null);
+// Reconnecting a sandbox that has run before reads differently from resuming one that never started, and from one whose
+// container its machine deleted: only that one is "cleaned up" (resumedRow).
+const resumedLine = computed((): string => {
+    const resumed = created.value;
+    const kind = resumed === null ? `never-ran` : resumedRow(resumed);
+    if (kind === `never-ran` || resumed === null || resumed.lastSeenAt === null) {
+        return t(`setup.setup.pickingUpWhereLeft`);
+    }
+    return kind === `removed`
+        ? t(`setup.setup.stillOnPlatformCleanup`)
+        : t(`setup.setup.setUpBeforeLastSeen`, { when: timeAgo(Date.parse(resumed.lastSeenAt), { days: true }) });
+});
 // Whether a provision lane exists (a machine or an address); without either, attach is the whole flow, not a detour.
 const provisionOffered = computed(() => addressed.value || hostedOffered.value);
 // Whether a machine left unopened is collected: every account's but one on the plan or its comp, whatever its hours say.
@@ -462,11 +486,12 @@ onUnmounted(() => row.discardDraft(committed.value));
                             <button v-if="!originHelp" type="button" :class="ui.linkButton(`mt-1 text-2xs`)" @click="originHelp = true">
                                 {{ t(`setup.setup.checkedBothStillNothing`) }}
                             </button>
-                            <span v-else class="mt-1 block text-2xs">
-                                {{ t(`setup.setup.daemonsWebOrigin`) }} <code>WEB_ORIGIN</code> {{ t(`setup.setup.alsoToName`) }}
-                                <span>{{ webOrigin ?? PLATFORM_WEB_ORIGIN }}</span
-                                >. Otherwise your browser blocks the call before it's sent.
-                            </span>
+                            <i18n-t v-else keypath="setup.setup.webOriginMustName" tag="span" class="mt-1 block text-2xs" scope="global">
+                                <template #variable><code>WEB_ORIGIN</code></template>
+                                <template #origin
+                                    ><span>{{ webOrigin ?? PLATFORM_WEB_ORIGIN }}</span></template
+                                >
+                            </i18n-t>
                         </Notice>
                         <Notice
                             v-else-if="attachOutcome?.kind === `timeout`"
@@ -557,7 +582,7 @@ onUnmounted(() => row.discardDraft(committed.value));
                             </button>
                         </template>
                         <p v-else class="text-xs text-muted">
-                            {{ neverStarted ? t(`setup.setup.pickingUpWhereLeft`) : t(`setup.setup.stillOnPlatformCleanup`) }}
+                            {{ resumedLine }}
                             <button type="button" class="cursor-pointer text-link hover:underline" @click="startFresh">
                                 {{ t(`setup.setup.useNewSandboxInstead`) }}</button
                             >.
@@ -913,7 +938,13 @@ onUnmounted(() => row.discardDraft(committed.value));
                                 <p class="text-xs text-muted">
                                     {{ t(`setup.setup.installsDockerNeedStarts`) }}
                                 </p>
-                                <Button :label="t(`setup.setup.setUpNow`)" class="w-full justify-center md:w-fit" @click="runHere">
+                                <Button
+                                    :label="t(`setup.setup.setUpNow`)"
+                                    class="w-full justify-center md:w-fit"
+                                    :loading="installUnderWay"
+                                    :disabled="installUnderWay"
+                                    @click="runHere"
+                                >
                                     <template #icon><Icon name="bolt" /></template>
                                 </Button>
                             </template>
@@ -1088,9 +1119,11 @@ onUnmounted(() => row.discardDraft(committed.value));
                                 </span>
                             </p>
 
-                            <!-- THE APP'S OWN BAR, on this page: what "Back to your workspace" leaves behind. -->
+                            <!-- THE APP'S OWN BAR, on this page: what "Back to your workspace" leaves behind. Kept once the machine
+                                 claims the code, since the image pull after it is the long part: hiding it there left one static
+                                 line for four minutes. -->
                             <DesktopSetupProgress
-                                v-if="launched && desktopReport && handoff !== `claimed`"
+                                v-if="launched && desktopReport"
                                 :report="desktopReport"
                                 :heard-at="desktopHeardAt"
                             />

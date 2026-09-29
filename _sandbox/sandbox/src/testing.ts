@@ -12,6 +12,7 @@ import type { BrowserRouter } from "./browser/tools/browser-router.js";
 import type { ConversationActors } from "./conversations/actor/conversation-actors.js";
 import { turnJournalRows } from "./agent/run/turn/turn-journal.js";
 import { createFleet, type Fleet, type FleetStore } from "./conversations/registry/agents-registry.js";
+import type { LandedPresences } from "./conversations/land/landed-presence.js";
 import type { BeginOutcome, BeginTurn, ConversationEvent } from "./conversations/actor/conversation-decide.js";
 import { type IsolatedAgent, type PersistedAgent, type RepoRecord, sqliteAgentsStore } from "./conversations/registry/agents-store.js";
 import { type ConversationsDb, openConversationsDb } from "./store/conversations-db.js";
@@ -191,14 +192,21 @@ export const fleetStoreOver = (db: ConversationsDb, units: Pick<ConversationUnit
 export const beginTurn = (conversations: Pick<ConversationActors, "send">, turn: BeginTurn, now: number): Promise<BeginOutcome> =>
     conversations.send(turn.conversationId, { kind: "begin", turn }, now).settled;
 
+// A landed-presence probe that never finds anything missing, and so never names anyone: the one stand-in for suites
+// whose land never reaches git (landed-presence.integration.test.ts derives the real one).
+export const noPresences = (): LandedPresences => ({
+    of: () => undefined,
+    note: () => {},
+    refresh: async () => false,
+    measured: () => false,
+    forget: () => {},
+    metrics: () => ({}),
+});
+
 // A fleet over nothing: entries kept in an in-memory database (the real store, the real SQL), and land probes that
 // never find a standing or a presence to report. Pass the store over the database a suite's other stores share.
 export const memoryFleet = (store: FleetStore = fleetStoreOver(openConversationsDb(IN_MEMORY))): Fleet =>
-    createFleet(
-        store,
-        { of: () => "idle", causesOf: () => [], refresh: async () => false, forget: () => {} },
-        { of: () => undefined, refresh: async () => false, forget: () => {}, metrics: () => ({}) },
-    );
+    createFleet(store, { of: () => "idle", causesOf: () => [], refresh: async () => false, forget: () => {} }, noPresences());
 
 // A memory fleet that also hands every conversation event to `note` as it is sent, for suites pinning what a flow tells
 // a conversation, and in which order.

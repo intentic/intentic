@@ -4,15 +4,19 @@ import { formatWeekdayTime } from "@intentic/ui/format";
 import {
     type AgentAttention,
     type AgentOrigin,
+    type AgentProvider,
     type AgentStatus,
     type AgentSummary,
     type AgentWatch,
     awaitsWake,
     type LandConflictReason,
+    type LandedRemover,
+    type LandFailure,
     type LoopState,
     type SubagentStatus,
 } from "@intentic/sandbox-contract";
 import { t } from "@intentic/ui/i18n";
+import { useVocabulary } from "../../../core-views/vocabulary";
 import { parentOf } from "../board/ownership";
 
 // Every projection of a fleet agent's state (lane, attention label, drill-in verb, glyphs). Nothing else may
@@ -53,12 +57,21 @@ export interface AgentStanding {
     readonly limitScheduled?: boolean;
     /** The account the owner's policy is moving the held turn to, while that move is booked (a scheduled card's sentence). */
     readonly limitMoving?: string;
+    // A land that broke (AgentSummary.landFailure), standing until one goes through whatever turns run after it. Absent
+    // from a sandbox older than it, where only a turn's own `failure` can say so.
+    readonly landFailure?: LandFailure;
 }
 
 // A spent allowance, not a failure to fix: nothing broken, and it comes back. Read off `failureCode` rather than
 // the provider's own sentence, which varies per provider; the code is the daemon's own classification
 // (error-frames.ts).
 export const limited = (agent: AgentStanding): boolean => agent.status === `error` && agent.failureCode === `rate_limit`;
+
+// A message held at the door because the sandbox is short of memory (turn-admission): nothing ran and nothing failed,
+// it waits for a person's "send anyway". The daemon files it as an `error`, so this is read off the code, as `limited`
+// is, and the chip and glyph say held rather than error; the lane stays Attention, since the press is the reader's.
+export const memoryHeld = (agent: Pick<AgentStanding, "status" | "failureCode">): boolean =>
+    agent.status === `error` && agent.failureCode === `sandbox-memory-low`;
 
 // Whether the window is still shut, feeding only the card's countdown, never the lane: a stranded card stays in
 // Attention shut or open. No published instant means never closed, not a guessed one.
@@ -69,6 +82,43 @@ export const limitClosed = (agent: AgentStanding, now: number = Date.now()): boo
 // for the limit says so (`resend` or `move`); that answer starts at `wait`. It changes what the card says, not its lane:
 // until the reset the work is stalled, for hours, and moving it to an account with room is often the reader's to do.
 export const limitScheduled = (agent: AgentStanding): boolean => limited(agent) && agent.limitScheduled === true;
+
+// Agents one provider's spent allowance stopped, each holding its refused turn and none booked to go again, gathered
+// for the board's one press instead of a walk down the lane pressing each (seven presses on seven cards, on a phone).
+// Only groups of two or more: one card already carries its own press. `reopensAt` is the latest reset among them (ms)
+// when every one of them published one still ahead, which is when "Resume all when it's back" can book them all
+// (the resume pass fires a held turn at its reset once the conversation answers the limit with a resend); otherwise
+// the press sends them all now, and one still refused says so on its own card.
+export interface LimitGroup {
+    readonly provider: AgentProvider;
+    readonly ids: readonly string[];
+    readonly reopensAt?: number;
+}
+export const limitGroups = (
+    agents: readonly (AgentStanding & {
+        readonly id: string;
+        readonly provider: AgentProvider;
+        readonly archivedAt?: number | undefined;
+        readonly sandboxId?: string | undefined;
+    })[],
+    now: number,
+): LimitGroup[] => {
+    const byProvider = new Map<AgentProvider, (typeof agents)[number][]>();
+    for (const agent of agents) {
+        if (limited(agent) && agent.limitHeld === true && !limitScheduled(agent) && agent.archivedAt === undefined && agent.sandboxId === undefined) {
+            byProvider.set(agent.provider, [...(byProvider.get(agent.provider) ?? []), agent]);
+        }
+    }
+    return [...byProvider.entries()]
+        .filter(([, held]) => held.length > 1)
+        .map(([provider, held]) => {
+            const ahead = held.flatMap((agent) =>
+                agent.limitResetsAt === undefined || agent.limitResetsAt * 1_000 <= now ? [] : [agent.limitResetsAt * 1_000],
+            );
+            const ids = held.map((agent) => agent.id);
+            return ahead.length === held.length ? { provider, ids, reopensAt: Math.max(...ahead) } : { provider, ids };
+        });
+};
 
 // A booked move: the owner's policy is already carrying the held turn to another account, on the resume pass's next
 // beat, seconds away. The one spent allowance that is not a stall, so the one kept out of Attention.
@@ -121,12 +171,12 @@ const statusMeta = () =>
         resuming: { icon: `spinner`, spin: true, label: t(`agents.agentStatus.resuming`), class: `text-link` },
         // The daemon is rebasing the branch and carrying its work into the workspace; nothing has finished yet, nothing has
         // failed, and nothing may act on the branch until it settles, so the running spinner and blue.
-        landing: { icon: `spinner`, spin: true, label: t(`agents.words.landing`), class: `text-link` },
+        landing: { icon: `spinner`, spin: true, label: useVocabulary().value.landing, class: `text-link` },
         awaiting: { icon: `exclamation-circle`, label: t(`shared.needs`), class: `text-primary-500` },
-        landed: { icon: `check-circle`, label: t(`agents.agentStatus.landed`), class: `text-success` },
+        landed: { icon: `check-circle`, label: useVocabulary().value.landed, class: `text-success` },
         // Finished with auto-land off: work is safe on the branch, waiting for a deliberate Land. Link-blue, not an
         // attention hue, since the user chose this.
-        ready: { icon: `download`, label: t(`agents.agentStatus.readyToLand`), class: `text-link` },
+        ready: { icon: `download`, label: useVocabulary().value.readyToLand, class: `text-link` },
         conflict: { icon: `exclamation-triangle`, label: t(`agents.agentStatus.conflict`), class: `text-warning` },
         error: { icon: `exclamation-triangle`, label: t(`agents.agentStatus.error`), class: `text-danger` },
         // Warning, not danger: the daemon died underneath it (rebuild, crash), a fact about the sandbox rather than the
@@ -143,6 +193,13 @@ const statusMeta = () =>
 // send a status this build has never heard of.
 export const agentStatusMeta = (status: AgentStatus | ClientAgentStatus): { icon: IconName; spin?: boolean; label: string; class: string } =>
     statusMeta()[status] ?? statusMeta().idle;
+
+// A card's glyph, read off its standing rather than its status alone: the one `error` that is not one (a message held for
+// memory) wears a hold's glyph and says why, in the reader's language, where the daemon's sentence is English.
+export const agentStandingMeta = (
+    agent: Pick<AgentStanding, "status" | "failureCode">,
+): { icon: IconName; spin?: boolean; label: string; class: string } =>
+    memoryHeld(agent) ? { icon: `pause`, label: t(`agents.agentStatus.heldMemory`), class: `text-warning` } : agentStatusMeta(agent.status);
 
 // The same glyphs for a subagent a runtime ran in-process, which has no conversation and so no AgentStatus, only the
 // roster's word (SubagentStatus). Where the two vocabularies name the same standing they wear the same glyph, so a tray
@@ -227,6 +284,10 @@ export const writingNow = (agent: AgentStanding): boolean => agent.status === `r
 // account with room, a reset spent early) is the reader's. A booked move is the one exception: it is already going.
 const BLOCKING_ENDINGS: ReadonlySet<AgentStatus | ClientAgentStatus> = new Set([`error`, `interrupted`, `stopping`, `stopped`, `failed`]);
 
+// A land that broke and still stands: its work is stuck on the branch, whatever the turn after it did, so the card is
+// the reader's to look at. Not while a turn or a land is under way, which ends in another land of its own.
+export const landBroken = (agent: AgentStanding): boolean => agent.landFailure !== undefined && !turnInFlight(agent);
+
 export const blocked = (agent: AgentStanding): boolean =>
     limitMoveBooked(agent)
         ? false
@@ -238,6 +299,7 @@ export const blocked = (agent: AgentStanding): boolean =>
           // A need outlives its turn (docs/architecture/needs.md): a conversation still running carries on beside it
           // and stays in Active, one that stopped is waiting on nothing but the answer.
           (agent.attention.need === true && agent.status !== `running`) ||
+          landBroken(agent) ||
           BLOCKING_ENDINGS.has(agent.status);
 
 // The half of `blocked` that is literally waiting on an answer (plan, question, permission, capability), narrower
@@ -314,6 +376,12 @@ const ATTENTION_RANK = [
 const leadingPark = (agent: AgentStanding): keyof AgentAttention | undefined =>
     ATTENTION_RANK.find((flag) => agent.attention[flag]) ?? (agent.status === `conflict` ? `conflict` : undefined);
 
+// The one refusal whose chip reads "Your edits": the card leads with a land conflict only the reader's own uncommitted
+// edits stand in. What a surface that names the Sandbox pages behind such a refusal keys off (settingsChip), never the
+// word itself.
+export const editsRefusal = (agent: AgentStanding): boolean =>
+    !limited(agent) && !memoryHeld(agent) && leadingPark(agent) === `conflict` && conflictIsYours(agent);
+
 // The one-line "why this card needs you" label, shared by the card chip, the Changes legend's hover card, and any
 // future toast.
 export const attentionReason = (agent: AgentStanding): string | undefined => {
@@ -323,15 +391,57 @@ export const attentionReason = (agent: AgentStanding): string | undefined => {
     if (limited(agent)) {
         return t(`agents.agentStatus.usageLimit`);
     }
+    // Held, not failed: the chip is the word the reader acts on ("send anyway"), and "error" sent people hunting a fault.
+    if (memoryHeld(agent)) {
+        return t(`agents.agentStatus.held`);
+    }
     const park = leadingPark(agent);
     if (park !== undefined) {
         // Same length as the generic word it replaces, and it names the half of the report the reader can act on:
         // "Land conflict" beside a button only they can press read as the agent's problem.
-        return park === `conflict` && conflictIsYours(agent) ? t(`agents.agentStatus.edits`) : attentionWords()[park].chip;
+        return editsRefusal(agent) ? t(`agents.agentStatus.edits`) : attentionWords()[park].chip;
+    }
+    // A land that broke says so rather than "Error": the turn itself finished, and its work is what is stuck.
+    if (landFailure(agent) !== undefined) {
+        return useVocabulary().value.couldntLand;
     }
     // A park the attention block can't name: `awaiting` covers a browser or terminal hand-off, neither of which raises
     // a wire flag, so it arrives as a bare status. Checked last, only once nothing more specific applies.
     return endingReasons()[agent.status] ?? (agent.status === `awaiting` ? t(`agents.agentStatus.waitingOn`) : undefined);
+};
+
+// A land that broke: the daemon ran git to carry the work into the workspace and git refused, or the agent's copy lost
+// its link to it, which is a different thing from the agent erring, and the one ending a card must never let read as
+// finished. The sandbox keeps it on the card until a land goes through (`landFailure`, landBroken); one older than that
+// says it only as the turn's failure, the raw `Command failed: git …` it ended on, which the next turn clears.
+// Undefined for every other card; otherwise the reason in plain words, git's own last line where no plainer one fits.
+// The raw sentence stays in the card's hover.
+const GIT_FAILURE = /^Command failed: git\b/u;
+// Git's words for a checkout that no longer shares history with the workspace: an object or range it cannot find, or
+// a link it cannot follow. Said as what it means to the reader, since "bad object 3e03077" means nothing to them.
+const LOST_LINK = /bad object|invalid symmetric difference|unknown revision|not a git repository|\.git file broken|not a valid object/iu;
+// Git's refusal as the reader is told it.
+const gitReason = (failure: string): string => {
+    if (LOST_LINK.test(failure)) {
+        return t(`agents.agentStatus.lostLink`);
+    }
+    const said = /fatal: (.+)$/u.exec(failure)?.[1]?.trim();
+    return said === undefined || said === `` ? t(`agents.agentStatus.gitRefused`) : said;
+};
+export const landFailure = (agent: AgentStanding): string | undefined => {
+    const broke = agent.landFailure;
+    if (broke !== undefined) {
+        if (!landBroken(agent)) {
+            return undefined;
+        }
+        // The sandbox's own sentence for a lost link is long and English; the code says it in the reader's language.
+        return broke.code === `unlinked` ? t(`agents.agentStatus.lostLink`) : GIT_FAILURE.test(broke.reason) ? gitReason(broke.reason) : broke.reason;
+    }
+    const failure = agent.failure;
+    if (agent.status !== `error` || limited(agent) || failure === undefined || !GIT_FAILURE.test(failure)) {
+        return undefined;
+    }
+    return gitReason(failure);
 };
 
 // The endings, tabled rather than chained since a sixth condition (`limited`) has to be checked ahead of them.
@@ -354,7 +464,11 @@ export type FleetLane = "attention" | "active" | "finished";
 // A card's standing on its own, carried where a whole card can't go (a chat tab, a summons to another window):
 // every field `laneOf` reads and nothing else, with absent ones left out rather than spelled as undefined, since
 // this is persisted and posted between windows.
-export const standingFrom = (agent: AgentStanding): AgentStanding => ({
+export const standingFrom = (agent: AgentStanding): AgentStanding => {
+    const standing = standingCopy(agent);
+    return agent.landFailure === undefined ? standing : { ...standing, landFailure: agent.landFailure };
+};
+const standingCopy = (agent: AgentStanding): AgentStanding => ({
     status: agent.status,
     // Copied, not referenced: this outlives the roster entry it was read from, in a tab and in storage.
     attention: { ...agent.attention },
@@ -472,9 +586,21 @@ export const attentionCalls = (
 // stays Finished since the user already made that decision, and it's orthogonal to the turn lifecycle (a
 // since-resumed agent can equally have had its land discarded). Undefined when nothing is missing, which is nearly
 // all agents.
-export const landedAway = (agent: {
-    readonly landedPresence?: { readonly landed: number; readonly present: number };
-}): { text: string; hint?: string; tip: Tip; icon: IconName } | undefined => {
+// `me` is the reader's address, so their own discard reads as theirs. `offerReland` is whether the card offers Land
+// again: not when an agent took the work out, since that was its doing on purpose (an orchestrator tidying away a
+// reviewer's patches), and a press that puts it back is the one this line invited from a reader who could not know. The
+// card menu keeps it for whoever does.
+export interface LandedAway {
+    readonly text: string;
+    readonly hint?: string;
+    readonly tip: Tip;
+    readonly icon: IconName;
+    readonly offerReland: boolean;
+}
+export const landedAway = (
+    agent: { readonly landedPresence?: { readonly landed: number; readonly present: number; readonly removedBy?: LandedRemover } },
+    me?: string,
+): LandedAway | undefined => {
     const presence = agent.landedPresence;
     if (presence === undefined) {
         return undefined;
@@ -482,21 +608,49 @@ export const landedAway = (agent: {
     // The hint is a clause, not a paragraph: read as the tail of `text` on one line, carrying only the fact "removed"
     // doesn't say, the branch still has it. The hover's card counts the files: how many are still in the workspace.
     const inWorkspace = { label: t(`agents.agentStatus.inWorkspace`), value: `${presence.present}/${presence.landed}` };
+    const by = removedBy(presence.removedBy, me);
+    const offerReland = presence.removedBy?.kind !== `agent`;
     // The common shape: the whole of it, one discard, no arithmetic to read.
     if (presence.present === 0) {
         return {
-            text: t(`agents.agentStatus.removed`),
+            text: by.line ?? t(`agents.agentStatus.removed`),
             hint: t(`agents.agentStatus.onBranch`),
-            tip: { title: t(`agents.agentStatus.removed`), rows: [inWorkspace], note: t(`agents.agentStatus.stillOnBranch`) },
+            tip: { title: t(`agents.agentStatus.removedAfterLanding`), rows: [inWorkspace], note: `${t(`agents.agentStatus.stillOnBranch`)}. ${by.note}` },
             icon: `link-broken`,
+            offerReland,
         };
     }
     // A partial discard: the fraction is enough to decide whether enough survived.
     return {
         text: `${presence.present}/${presence.landed}`,
-        tip: { title: t(`agents.agentStatus.partlyRemoved`), rows: [inWorkspace], note: t(`agents.agentStatus.restOnBranch`) },
+        tip: { title: t(`agents.agentStatus.partlyRemoved`), rows: [inWorkspace], note: `${t(`agents.agentStatus.restOnBranch`)}. ${by.note}` },
         icon: `arrows-h`,
+        offerReland,
     };
+};
+
+// Who took landed work out, as the card's line (absent where "Removed" alone is all it can say) and the hover's
+// sentence. The sandbox names someone only when one party acted on the workspace while the work went; otherwise the
+// hover says it could have been either, and that Land again puts back what was taken out on purpose.
+interface RemovalWords {
+    readonly line?: string;
+    readonly note: string;
+}
+const removedBy = (by: LandedRemover | undefined, me: string | undefined): RemovalWords => {
+    if (by === undefined) {
+        return { note: t(`agents.agentStatus.removedByWhom`) };
+    }
+    if (by.kind === `agent`) {
+        const who = by.title ?? t(`agents.agentStatus.anotherAgent`);
+        return { line: t(`agents.agentStatus.removedBy`, { who }), note: t(`agents.agentStatus.takenOutByAgent`, { who }) };
+    }
+    if (by.email !== undefined && by.email === me) {
+        return { line: t(`agents.agentStatus.removedByYou`), note: t(`agents.agentStatus.takenOutByYou`) };
+    }
+    const who = by.name ?? by.email;
+    return who === undefined
+        ? { note: t(`agents.agentStatus.takenOutInChanges`) }
+        : { line: t(`agents.agentStatus.removedBy`, { who }), note: t(`agents.agentStatus.takenOutBy`, { who }) };
 };
 
 // One bit, "this session isn't done yet", for surfaces that name an agent by its output rather than itself (the
@@ -549,13 +703,27 @@ export const reviewAction = (agent: AgentStanding & { readonly branch?: string; 
     }
     // A spent allowance is not an error to view: there's nothing to diagnose in the transcript, and the destination is
     // the conversation itself. Checked before the `error` branch below, which it would otherwise fall into.
-    if (limited(agent)) {
+    // Neither is a held message: the press that sends it is in the conversation. Nor a bare park on a browser or a
+    // terminal, whose hand-off card is drawn there too (drillTarget).
+    if (limited(agent) || memoryHeld(agent) || agent.status === `awaiting`) {
         return t(`agents.agentStatus.openChat`);
     }
     return (
         endingActions()[agent.status] ??
         (agent.diff !== undefined && agent.diff.files > 0 ? t(`agents.agentStatus.reviewChanges`) : t(`agents.words.review`))
     );
+};
+
+// Where the card's drill-in leads. An ask answered on its own card (a plan, a question, a permission, a setup, a
+// release, a need, a hand-off) and a spent allowance lead to the chat, where that card and the way on are drawn: the
+// review page draws none of them, and an "Approve" that led there was a round trip to a page with nothing to approve.
+// A refused land's report, an error, and a diff to read are the review page's.
+export const drillTarget = (agent: AgentStanding): `chat` | `review` => {
+    const park = leadingPark(agent);
+    if (park !== undefined) {
+        return park === `conflict` ? `review` : `chat`;
+    }
+    return limited(agent) || memoryHeld(agent) || agent.status === `awaiting` ? `chat` : `review`;
 };
 
 // Endings whose destination is named by the ending itself rather than by the diff; tabled for the same reason as
@@ -568,7 +736,7 @@ const endingActions = (): Partial<Record<AgentStatus | ClientAgentStatus, string
     stopped: t(`agents.agentStatus.seeWhereStopped`),
     // Names both halves of the destination: reading the held work and landing it. The card's own primary button lands
     // without the trip (AgentCard).
-    ready: t(`agents.agentStatus.reviewLand`),
+    ready: useVocabulary().value.reviewAndLand,
 });
 
 // Whether a clean turn's work lands by itself, folding the agent's own override, the sandbox default, and the

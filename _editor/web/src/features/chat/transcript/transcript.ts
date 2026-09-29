@@ -189,6 +189,11 @@ export const CONTINUATIONS = {
     afterDenial: `Continue, without the step I declined.`,
 } as const;
 
+// Which of the app's own continuations a prompt is, word for word. It goes out in English, since that is what the
+// agent reads and what stored transcripts hold, so the transcript names it to put it in the reader's language.
+export const continuationKind = (text: string): keyof typeof CONTINUATIONS | undefined =>
+    text === CONTINUATIONS.plain ? `plain` : text === CONTINUATIONS.afterDenial ? `afterDenial` : undefined;
+
 // Normalizes to lower case, single-spaced, with trailing "."/"!"/"…" stripped; a trailing "?" is kept, since
 // "continue?" asks rather than consents.
 const bareText = (text: string): string =>

@@ -64,6 +64,7 @@ import { queryClient } from "../../../lib/queryPersistence";
 import { desyncAgents, useAgents } from "./useAgents";
 import { canArchive, doneWith, FINISHED_WINDOW, type FleetAgent, TIDY_AFTER_MS, tidyDue, windowFinished, withKeptWords } from "./useAgents-fleet";
 import { auditRoster, setAgents } from "./useAgents-registry";
+import { clockOffset, resetSandboxClock } from "./sandboxClock";
 import { runningTurn } from "../../../testing/runningTurn";
 import { IDLE } from "../../chat/session/runPhase";
 
@@ -360,6 +361,42 @@ describe("roster frames the board can skip", () => {
         // The array too, not just its entries, so `lanes` never re-groups and the board never re-renders.
         expect(useAgents().fleet.value).toBe(before);
         expect(cardsById().get(`a1`)).toBe(wasA1);
+    });
+});
+
+// A frame restamping a conversation is a reading of the sandbox's clock only as it happens: the first snapshot after a
+// reconnect, or a read, compares against a roster that stood still while the stream was gone, and a card restamped
+// three minutes before the wake would skew every countdown by three minutes.
+describe("the sandbox clock", () => {
+    const summary = (id: string, updatedAt: number): AgentSummary => ({
+        id,
+        status: `running`,
+        provider: `claude`,
+        harness: `native`,
+        updatedAt,
+        seenAt: updatedAt + 1,
+        attention: { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false },
+    });
+
+    beforeEach(() => {
+        resetSandboxScope();
+        resetSandboxClock();
+    });
+
+    it("reads it off live frames, never off a reconnect's snapshot or a read", () => {
+        const now = Date.now();
+        setAgents([summary(`a1`, now - 600_000)], 1, true);
+        desyncAgents();
+        // Restamped three minutes ago, while this page slept: the reconnect's first frame is no reading.
+        setAgents([summary(`a1`, now - 180_000)], 2, true);
+        expect(clockOffset.value).toBe(0);
+        // ...nor is a read.
+        setAgents([summary(`a1`, now - 170_000)], 3);
+        expect(clockOffset.value).toBe(0);
+        // A frame of the stream now following it is: the sandbox's clock runs 96 s behind this one.
+        setAgents([summary(`a1`, now - 96_000)], 4, true);
+        expect(clockOffset.value).toBeGreaterThanOrEqual(96_000);
+        expect(clockOffset.value).toBeLessThan(100_000);
     });
 });
 
@@ -1001,6 +1038,29 @@ describe("draft cards", () => {
         expect(useAgents().agentById(`a1`)?.status).toBe(`stopping`);
         conversation.turn.phase.value = IDLE;
         expect(useAgents().agentById(`a1`)?.status).toBe(`stopped`);
+    });
+
+    // A 401 armed "continues automatically" and a stop came a second later, while the roster went on reading `resuming`
+    // (the sandbox keeps that flag once a stop replaces the hold): the sidebar said working for 41 minutes beside the
+    // chat's "stopped short". The card wears the stop the chat saw, until the roster says anything but `resuming`.
+    it("files a resume a later stop took back, as the chat saw it, under Attention with the stop's words", () => {
+        const held = registered(`a1`);
+        setAgents([{ ...held, status: `resuming`, updatedAt: 4_000 }], 0);
+        const conversation = new Conversation(`a1`);
+        conversation.registered.value = true;
+        useChat().conversations.value = [...useChat().conversations.value, conversation];
+        expect(activeIds()).toEqual([`a1`]);
+
+        conversation.failures.apply({ kind: `error`, code: `claude-token-refused`, message: `401 revoked`, autoResume: `scheduled` });
+        expect(activeIds()).toEqual([`a1`]);
+        conversation.failures.apply({ kind: `error`, message: `Claude Code returned an error result: 401` });
+
+        expect(activeIds()).toEqual([]);
+        const card = useAgents().agentById(`a1`);
+        expect({ status: card?.status, failure: card?.failure }).toEqual({ status: `error`, failure: `Claude Code returned an error result: 401` });
+        // The roster moving on is newer than anything this chat saw.
+        setAgents([{ ...held, status: `running`, startedAt: 6_000, updatedAt: 6_000 }], 1);
+        expect(useAgents().agentById(`a1`)?.status).toBe(`running`);
     });
 
     // Waving a parked card away ends the turn too, but owes nothing after: Finished from the press, the question gone

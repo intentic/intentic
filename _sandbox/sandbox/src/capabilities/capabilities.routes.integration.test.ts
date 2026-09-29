@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 
 import { tmpdir } from "node:os";
@@ -15,6 +16,7 @@ import { services } from "../harness/route-services.testing.js";
 import { memoryPersonasStore } from "../harness/route-stores.testing.js";
 import { testConfig } from "../testing.js";
 import { memoryCapabilitiesStore, memoryDismissalsStore } from "./capabilities-slice.testing.js";
+import { capabilitiesDocument, fileCapabilitiesStore } from "./capabilities-store.js";
 import { publicKeyOf } from "./credentials/ssh-keys.js";
 
 // Capabilities routes, driven over the HTTP surface exactly as the browser does; split from app.integration.test.ts.
@@ -133,6 +135,25 @@ test("capabilities.add and rename refuse an id that collides with a daemon serve
     }
     // An ordinary id for the same kind is not refused by this rule: the add streams and records it.
     expect(await addFailure("komodo")).toBeUndefined();
+});
+
+// The page's own writes are committed as they land (settings/settings-versions.ts): left uncommitted, capabilities.json
+// read as the owner's edits and a land touching it was refused.
+test("a connection added or removed on its page is committed on its own, leaving nothing for the owner to save", async () => {
+    const workspace = tempWorkspace([]);
+    const git = (...args: string[]): string => execFileSync("git", args, { cwd: workspace.root, encoding: "utf8" }).trim();
+    git("init", "-q");
+    git("-c", "user.name=owner", "-c", "user.email=owner@example.com", "commit", "-q", "--allow-empty", "-m", "Initialize workspace");
+    const agentWorktrees = { ...services().agentWorktrees, mainDir: () => workspace.root };
+    const capabilities = fileCapabilitiesStore(join(workspace.root, capabilitiesDocument.path));
+    const client = clientFor(createApp(services({ workspace, capabilities, agentWorktrees })));
+
+    await collect(await client.capabilities.add({ id: "notes", kind: "mcp", config: { url: "https://notes.example.com/mcp" } }));
+    expect(git("log", "-1", "--format=%s", "--name-only").split("\n")).toEqual(["Settings: connection notes", "", capabilitiesDocument.path]);
+
+    await client.capabilities.remove({ id: "notes" });
+    expect(git("log", "-1", "--format=%s")).toBe("Settings: removed connection notes");
+    expect(git("status", "--porcelain", "--", capabilitiesDocument.path)).toBe("");
 });
 
 test("capabilities.add composes the entry's image fragment into the overlay and nags for the rebuild; remove drops it", async () => {

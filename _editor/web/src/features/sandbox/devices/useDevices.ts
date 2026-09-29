@@ -69,14 +69,16 @@ export interface DeviceSandboxPayload {
     // Set when the op is aimed at the sandbox relaying it: the daemon dies mid-stream, so a lost connection is the
     // op landing rather than a failure. Only the caller knows which sandbox is serving the page.
     severing?: boolean | undefined;
+    // The owner asking, as they restart the sandbox relaying this, for the turns it cuts to run again once it is back.
+    resumeTurns?: boolean | undefined;
 }
 
-// hash/to/shape/when/resources/setupCode are set only when present; the schema rejects an explicit undefined.
+// hash/to/shape/when/resources/setupCode/resumeTurns are set only when present; the schema rejects an explicit undefined.
 const flowInput = (
     hostId: string,
     slug: string,
     op: DeviceSandboxOp,
-    { hash, to, shape, when, resources, setupCode }: DeviceSandboxPayload,
+    { hash, to, shape, when, resources, setupCode, resumeTurns }: DeviceSandboxPayload,
 ): DeviceSandboxFlowInput => {
     const input: DeviceSandboxFlowInput = { id: hostId, slug, op };
     if (hash !== undefined) {
@@ -96,6 +98,9 @@ const flowInput = (
     }
     if (setupCode !== undefined) {
         input.setupCode = setupCode;
+    }
+    if (resumeTurns === true) {
+        input.resumeTurns = true;
     }
     return input;
 };

@@ -1,6 +1,7 @@
 import { STATE_DIR } from "@intentic/constants";
 import type { AgentEvent } from "../events/agent-events.js";
-import type { TranscriptPatch, TranscriptRow } from "../events/transcript.js";
+import { type TranscriptPatch, type TranscriptRow, TranscriptRowSchema } from "../events/transcript.js";
+import { sandboxNoticeOf } from "../events/sandbox-notice.js";
 import { watchWakePrompt } from "../events/watch-wake.js";
 import { LAND_CONFLICT_OPENING } from "../events/land-conflict.js";
 import { RESUME_NOTES } from "../events/resume.js";
@@ -11,6 +12,10 @@ import { applyTranscriptPatch, foldTurn, TranscriptFold, userRow } from "./trans
 const SENT_AT = 1_767_225_600_000;
 const openingOf = (prompt: string): TranscriptRow[] => [userRow(prompt, SENT_AT, [])];
 const foldOf = (prompt: string, events: readonly AgentEvent[]): TranscriptRow[] => foldTurn(openingOf(prompt), events);
+// What an armed credential renewal's row promises.
+const RENEWING_TEXT = "The credential is being renewed and this turn continues automatically.";
+// The same row as a code, which an app words in its reader's language (sandbox-notice.ts).
+const RENEWING_CODE = { code: "renewing", params: { message: "Token refused.", error: "claude-token-refused" } };
 
 // The one fold every window and the stored record draw from; pins what a live, reopened and stored chat all show.
 describe("foldTurn", () => {
@@ -299,24 +304,62 @@ describe("foldTurn", () => {
         ];
         // The row states what happened and nothing more: what happens next, and the one control that changes it, are
         // the chat card's, asked once (ChatContinueStrip), not a second switch on a transcript line.
-        expect(foldOf("hi", outage).at(-1)).toEqual({ role: "notice", text: "Anthropic is down. Retrying by itself: attempt 2 of 6." });
+        expect(foldOf("hi", outage).at(-1)).toEqual({
+            role: "notice",
+            text: "Anthropic is down. Retrying by itself: attempt 2 of 6.",
+            noticeCode: { code: "retrying", params: { message: "Anthropic is down.", error: "provider-outage", attempt: 2, of: 6 } },
+        });
         const renewal: AgentEvent[] = [{ kind: "error", code: "claude-token-refused", message: "Token refused.", autoResume: "scheduled" }];
         expect(foldOf("hi", renewal).at(-1)).toEqual({
             role: "notice",
             text: "Token refused. The credential is being renewed and this turn continues automatically.",
             noticeWait: "credentialRenewal",
+            noticeCode: RENEWING_CODE,
         });
+    });
+
+    // The sandbox keeps one hold per run and each failure replaces it: a stop right after an armed renewal is what it acts
+    // on, so the renewal row must stop promising a continuation that is never coming (one sat in a chat for 41 minutes).
+    it("takes back a renewal's promise when a later failure in the same run stops the turn", () => {
+        const refused: AgentEvent = { kind: "error", code: "claude-token-refused", message: "Token refused.", autoResume: "scheduled" };
+        const stopped: AgentEvent = { kind: "error", message: "Claude Code returned an error result: 401." };
+        const fold = new TranscriptFold(openingOf("hi"));
+        fold.apply(refused);
+        const patches = fold.apply(stopped);
+        // The code moves with the words, so an app wording the row itself says the stop too, not the old promise.
+        const withdrawn: TranscriptRow = {
+            role: "notice",
+            text: "Token refused. The credential was being renewed, but the turn stopped before it could continue: it will not carry on by itself, so press Continue to pick it back up.",
+            noticeCode: { code: "renewalWithdrawn", params: { message: "Token refused.", error: "claude-token-refused" } },
+        };
+        // The live window hears the rewrite as a patch on the row it already drew, then the stop's own row.
+        expect(patches).toEqual([
+            { op: "replace", index: 1, row: withdrawn },
+            { op: "append", row: { role: "notice", text: "Claude Code returned an error result: 401." } },
+        ]);
+        expect(fold.rows.slice(1)).toEqual([withdrawn, { role: "notice", text: "Claude Code returned an error result: 401." }]);
+        // A renewal armed again keeps its promise.
+        const again = new TranscriptFold(openingOf("hi"));
+        again.apply(refused);
+        const renewing: TranscriptRow = { role: "notice", text: `Token refused. ${RENEWING_TEXT}`, noticeWait: "credentialRenewal", noticeCode: RENEWING_CODE };
+        expect(again.apply(refused)).toEqual([{ op: "append", row: renewing }]);
+        expect(again.rows[1]).toEqual(renewing);
     });
 
     // The count lives in the record, so a reader scrolling back sees how many times a stuck turn was sent again.
     it("says on a stopped turn's row which automatic try comes next, or that the ladder stood down", () => {
         const timedOut = "Google turn timed out waiting for OpenCode.";
         const booked: AgentEvent[] = [{ kind: "error", message: timedOut, autoResume: "scheduled", nextAt: 1, retries: { made: 1, max: 3 } }];
-        expect(foldOf("hi", booked).at(-1)).toEqual({ role: "notice", text: `${timedOut} Retrying by itself: attempt 2 of 3.` });
+        expect(foldOf("hi", booked).at(-1)).toEqual({
+            role: "notice",
+            text: `${timedOut} Retrying by itself: attempt 2 of 3.`,
+            noticeCode: { code: "retrying", params: { message: timedOut, attempt: 2, of: 3 } },
+        });
         const spent: AgentEvent[] = [{ kind: "error", message: timedOut, autoResume: "available", retries: { made: 3, max: 3 } }];
         expect(foldOf("hi", spent).at(-1)).toEqual({
             role: "notice",
             text: `${timedOut} Retried 3 of 3 times by itself; nothing more is sent automatically.`,
+            noticeCode: { code: "retried", params: { message: timedOut, made: 3, of: 3 } },
         });
         // An outage nobody armed says so, instead of promising the breaker's retry.
         const unarmed: AgentEvent[] = [
@@ -332,6 +375,7 @@ describe("foldTurn", () => {
         expect(foldOf("hi", unarmed).at(-1)).toEqual({
             role: "notice",
             text: "Anthropic is down. Nothing is retrying it, so the turn is waiting here.",
+            noticeCode: { code: "outageWaiting", params: { message: "Anthropic is down.", error: "provider-outage" } },
         });
     });
 
@@ -343,18 +387,25 @@ describe("foldTurn", () => {
             { kind: "landed", landed: true, deps: { missing: 1, started: ["deps-1"], deferred: false } },
         ];
         expect(foldOf("go", events).slice(1)).toEqual([
-            { role: "notice", text: "Your workspace moved on while this agent waited, its branch was rebased onto your latest 2 commits." },
+            {
+                role: "notice",
+                text: "Your workspace moved on while this agent waited, its branch was rebased onto your latest 2 commits.",
+                noticeCode: { code: "synced", params: { commits: 2 } },
+            },
             { role: "assistant", text: "on it" },
-            { role: "notice", text: "Context compacted to free up space." },
+            { role: "notice", text: "Context compacted to free up space.", noticeCode: { code: "compacted" } },
             {
                 role: "notice",
                 text: "Changes landed in your workspace: review them in the Changes panel. Installing 1 dependency it added or changed; the project's checks run when that finishes, and the outcome lands in Activity.",
                 noticeAction: "depsInstall",
+                noticeCode: { code: "landed", params: { deps: 1 } },
             },
         ]);
-        expect(foldOf("go", [{ kind: "landed", landed: true, held: true }]).at(-1)?.text).toBe(
-            "Finished: the work is on this agent's branch, ready to land from its review.",
-        );
+        expect(foldOf("go", [{ kind: "landed", landed: true, held: true }]).at(-1)).toEqual({
+            role: "notice",
+            text: "Finished: the work is on this agent's branch, ready to land from its review.",
+            noticeCode: { code: "landHeld" },
+        });
     });
 
     // The reconciler starts a land's install within seconds, in the install lane; it never waits for turns to end, so
@@ -364,6 +415,7 @@ describe("foldTurn", () => {
             role: "notice",
             text: "Changes landed in your workspace: review them in the Changes panel. 3 dependencies it added or changed are being installed in your tree: the install waits for any other install to finish, appears in Work terminals, and its outcome lands in Activity.",
             noticeAction: "landHold",
+            noticeCode: { code: "landed", params: { deps: 3, queued: true } },
         });
     });
 
@@ -373,11 +425,13 @@ describe("foldTurn", () => {
         expect(foldOf("go", [{ kind: "landed", landed: true, into: "p1" }]).at(-1)).toEqual({
             role: "notice",
             text: "Changes went into the parent agent's checkout, as its in-process subagents' edits do: they reach your workspace with its land.",
+            noticeCode: { code: "intoParent" },
         });
         const clash: AgentEvent = { kind: "landed", landed: false, into: "p1", conflicts: [{ repo: "root", paths: [{ path: "app.ts", reason: "diverged" }], clean: 0 }] };
         expect(foldOf("go", [clash]).at(-1)).toEqual({
             role: "notice",
             text: "1 file(s) clash with the parent agent's own edits, so nothing was written into its checkout. The parent was told, and can bring the changes in to resolve.",
+            noticeCode: { code: "intoParentClash", params: { files: 1 } },
         });
     });
 
@@ -392,11 +446,17 @@ describe("foldTurn", () => {
             {
                 role: "notice",
                 text: "Couldn't rebase onto your workspace in intentic: the turn is running from the older base, so its land may need a resolve.",
+                noticeCode: { code: "synced", params: { commits: 0, blocked: "intentic" } },
             },
         ]);
         const mixed: AgentEvent = { kind: "worktree", branch: "agent/x", base: "abc1234", sync: { commits: 3, blocked: ["intentic"] } };
+        // The code leaves out what the words leave out: the resolve turn is not told its own errand in any language.
         expect(foldOf(resolve, [mixed]).slice(1)).toEqual([
-            { role: "notice", text: "Your workspace moved on while this agent waited, its branch was rebased onto your latest 3 commits." },
+            {
+                role: "notice",
+                text: "Your workspace moved on while this agent waited, its branch was rebased onto your latest 3 commits.",
+                noticeCode: { code: "synced", params: { commits: 3 } },
+            },
         ]);
     });
 
@@ -523,7 +583,7 @@ describe("foldTurn", () => {
         const events: AgentEvent[] = [{ kind: "credential_offer", requestId: "c1", offer }];
         expect(foldTurn(openingOf("post it"), events, "stopped").slice(1)).toEqual([
             { role: "assistant", text: "", credentialOffer: { requestId: "c1", offer, status: "cancelled" } },
-            { role: "notice", text: "Stopped." },
+            { role: "notice", text: "Stopped.", noticeCode: { code: "stopped" } },
         ]);
     });
 
@@ -534,7 +594,7 @@ describe("foldTurn", () => {
         ];
         expect(foldTurn(openingOf("go"), events, "stopped").slice(1)).toEqual([
             { role: "assistant", text: "half", question: { requestId: "q1", questions: [], status: "cancelled" } },
-            { role: "notice", text: "Stopped." },
+            { role: "notice", text: "Stopped.", noticeCode: { code: "stopped" } },
         ]);
     });
 });
@@ -766,7 +826,13 @@ describe(`a refusal that ran nothing`, () => {
         const fold = new TranscriptFold(openingOf(`land it`));
         const patches = fold.apply(REFUSED);
 
-        expect(fold.rows).toEqual([{ role: `notice`, text: expect.stringContaining(`held for you to send again`) }]);
+        expect(fold.rows).toEqual([
+            {
+                role: `notice`,
+                text: expect.stringContaining(`held for you to send again`),
+                noticeCode: { code: `undelivered`, params: { message: REFUSED.message, error: REFUSED.code } },
+            },
+        ]);
         expect(fold.ranNothing).toBe(true);
         // Dropped ahead of the notice that stands in for it: a window applies patches in order, and an append first
         // would have it renumber every row under an index that is about to move.
@@ -851,5 +917,96 @@ describe(`a refusal that ran nothing`, () => {
             fold.apply({ kind: `delta`, text: `on it` });
             expect(fold.turnedAway(REFUSED)).toBe(false);
         });
+    });
+});
+
+// The sandbox's own notices ride as a code beside their English words, so an app can say them in the reader's language
+// and words (sandbox-notice.ts). The words stay exactly as they were: older apps, stored records and agents read them.
+describe(`the code beside a notice's words`, () => {
+    const GIB = 1024 ** 3;
+    const lowMemory = {
+        kind: `error`,
+        code: `sandbox-memory-low`,
+        message: `Sandbox memory is low: 15.9 GiB of 16.0 GiB used.`,
+        memory: { limitBytes: 16 * GIB, residentBytes: 15.9 * GIB, swapBytes: 0 },
+    } as const satisfies AgentEvent;
+    const lastOf = (events: readonly AgentEvent[]): TranscriptRow | undefined => foldOf(`land it`, events).at(-1);
+
+    it(`names each land outcome, with the counts and repos its sentence was worded from`, () => {
+        expect(lastOf([{ kind: `landed`, landed: true }])).toEqual({
+            role: `notice`,
+            text: `Changes landed in your workspace: review them in the Changes panel.`,
+            noticeAction: `landHold`,
+            noticeCode: { code: `landed` },
+        });
+        expect(lastOf([{ kind: `landed`, landed: true, deps: { missing: 2, started: [], deferred: true } }])?.noticeCode).toEqual({
+            code: `landed`,
+            params: { deps: 2, queued: true },
+        });
+        const conflicts = [
+            { repo: `root`, paths: [{ path: `a.ts`, reason: `diverged` as const }], clean: 0 },
+            { repo: `web`, paths: [{ path: `b.ts`, reason: `diverged` as const }, { path: `c.ts`, reason: `diverged` as const }], clean: 0 },
+        ];
+        expect(lastOf([{ kind: `landed`, landed: false, conflicts }])).toEqual({
+            role: `notice`,
+            text: `3 file(s) couldn't land automatically in root, web. Open the agent's review to see what blocked them and land from there.`,
+            noticeCode: { code: `landConflict`, params: { files: 3, repos: `root, web` } },
+        });
+    });
+
+    it(`names each memory hold by where the message waits`, () => {
+        expect(lastOf([lowMemory])?.noticeCode).toEqual({ code: `memoryHeld`, params: { message: lowMemory.message, error: `sandbox-memory-low` } });
+        expect(lastOf([{ ...lowMemory, held: { ran: false } }])?.noticeCode).toEqual({
+            code: `kept`,
+            params: { message: lowMemory.message, error: `sandbox-memory-low`, memory: true },
+        });
+        expect(lastOf([{ ...lowMemory, unattended: true }])?.noticeCode).toEqual({
+            code: `undelivered`,
+            params: { message: lowMemory.message, error: `sandbox-memory-low`, unattended: true },
+        });
+    });
+
+    it(`codes a failure the sandbox names, and leaves a provider's own words to themselves`, () => {
+        const busy = `This agent is already running a turn, wait for it to finish.`;
+        expect(lastOf([{ kind: `error`, code: `agent-busy`, message: busy }])).toEqual({
+            role: `notice`,
+            text: busy,
+            noticeCode: { code: `failed`, params: { message: busy, error: `agent-busy` } },
+        });
+        expect(lastOf([{ kind: `error`, message: `Overloaded.` }])).toEqual({ role: `notice`, text: `Overloaded.` });
+        expect(lastOf([{ kind: `error`, code: `claude-token-refused`, message: `Token refused.` }])).toEqual({
+            role: `notice`,
+            text: `Token refused. Reconnect the account to pick this conversation back up.`,
+            noticeCode: { code: `reconnect`, params: { message: `Token refused.`, error: `claude-token-refused` } },
+        });
+    });
+
+    // A reader decodes a code with this build's own schema: every code the fold writes has to be one it knows.
+    it(`writes only codes this build can read back`, () => {
+        const events: AgentEvent[][] = [
+            [{ kind: `worktree`, branch: `agent/x`, base: `abc1234`, sync: { commits: 1, blocked: [`web`] } }],
+            [{ kind: `compact`, trigger: `auto` }],
+            [{ kind: `landed`, landed: true, into: `p1` }],
+            [{ kind: `landed`, landed: false, into: `p1`, conflicts: [] }],
+            [{ kind: `landed`, landed: true, held: true }],
+            [{ kind: `error`, code: `provider-outage`, message: `Down.`, autoResume: `available` }],
+            [lowMemory],
+            [{ ...lowMemory, held: { ran: false } }],
+            [{ kind: `error`, code: `claude-token-refused`, message: `Token refused.`, autoResume: `scheduled` }, { kind: `error`, message: `401.` }],
+        ];
+        const rows = events.flatMap((turn) => foldTurn(openingOf(`go`), turn, `stopped`)).filter((row) => row.noticeCode !== undefined);
+        expect(rows.filter((row) => sandboxNoticeOf(row) === undefined)).toEqual([]);
+        expect(new Set(rows.map((row) => row.noticeCode?.code))).toEqual(
+            new Set([`synced`, `compacted`, `intoParent`, `intoParentClash`, `landHeld`, `outageWaiting`, `memoryHeld`, `kept`, `renewalWithdrawn`, `stopped`]),
+        );
+    });
+
+    // A newer sandbox's code must not cost an older app the whole page: the row parses, and the reader draws its words.
+    it(`reads a row whose code this build does not know, and one written before rows carried codes`, () => {
+        const newer: TranscriptRow = { role: `notice`, text: `Something new happened.`, noticeCode: { code: `somethingNew`, params: { count: 2 } } };
+        expect(TranscriptRowSchema.parse(newer)).toEqual(newer);
+        expect(sandboxNoticeOf(newer)).toBeUndefined();
+        expect(TranscriptRowSchema.parse({ role: `notice`, text: `Stopped.` })).toEqual({ role: `notice`, text: `Stopped.` });
+        expect(sandboxNoticeOf({ noticeCode: { code: `landConflict`, params: { files: `three` } } })).toBeUndefined();
     });
 });

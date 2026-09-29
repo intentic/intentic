@@ -23,6 +23,14 @@ describe(`sandboxAvailability`, () => {
         expect(sandboxAvailability(state, true, true, 1_000 + SANDBOX_BUSY_AFTER_MS)).toBe("busy");
     });
 
+    // A page hidden overnight wakes to an outage that began before it slept: none of that time was spent waiting.
+    it(`does not count the time the page spent hidden toward a wait`, () => {
+        const state = drive({ kind: "frame", at: 0 }, failed(1_000));
+        const now = 1_000 + 8 * 60 * 60_000;
+        expect(sandboxAvailability(state, true, true, now, false, now - 1_000 - 1)).toBe("stale");
+        expect(sandboxAvailability(state, true, true, now, false, now - 1_000 - SANDBOX_BUSY_AFTER_MS)).toBe("busy");
+    });
+
     it(`treats a restored snapshot as established even before this session receives a frame`, () => {
         const state = drive({ kind: "connect" }, failed(1_000));
         expect(state.everOnline).toBe(false);
@@ -51,6 +59,13 @@ describe(`sandboxAvailability`, () => {
         const state = drive({ kind: "connect" }, detached(1_000));
         expect(sandboxAvailability(state, true, false, 1_000 + DETACHED_AFTER_MS - 1)).toBe("starting");
         expect(sandboxAvailability(state, true, false, 1_000 + DETACHED_AFTER_MS)).toBe("detached");
+    });
+
+    // The gate counts only the time the page was visible (useVisibleOutage); the dot must not call it detached sooner.
+    it(`counts only the outage the page was visible for before calling it detached`, () => {
+        const state = drive({ kind: "connect" }, detached(1_000));
+        expect(sandboxAvailability(state, true, false, 1_000 + DETACHED_AFTER_MS, false, 10 * 60_000)).toBe("starting");
+        expect(sandboxAvailability(state, true, false, 1_000 + DETACHED_AFTER_MS + 10 * 60_000, false, 10 * 60_000)).toBe("detached");
     });
 
     it(`says detached over busy for a workspace that had painted before`, () => {

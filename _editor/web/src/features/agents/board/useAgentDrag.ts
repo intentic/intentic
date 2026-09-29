@@ -196,6 +196,40 @@ const landNow = (id: string, at?: string): Promise<void> => perform(id, `land`, 
 // already reviewed once.
 const relandNow = (id: string, at?: string): Promise<void> => perform(id, `reland`, at);
 
+// A land pressed on a phone asks first, naming what it puts where: there a card's press sits under the thumb that
+// scrolls the board, and "Land again" was pressed on work another agent had taken out on purpose, by a reader who could
+// not tell what it would do. A desktop press states itself, as landNow says.
+// What the confirm names is read off the card as it was pressed: its title and how many files its work touches.
+export interface LandAsk {
+    readonly id: string;
+    readonly at: string | undefined;
+    readonly chosen: `land` | `reland`;
+    readonly title: string | undefined;
+    readonly files: number | undefined;
+}
+const pendingLand = sandboxRef<LandAsk | undefined>(() => undefined);
+
+// The card's Land now or Land again: straight through, or held for the confirm when `confirmFirst` (a phone).
+const pressLand = (agent: Pick<FleetAgent, "id" | "sandboxId" | "title" | "diff">, chosen: LandAsk[`chosen`], confirmFirst: boolean): Promise<void> => {
+    if (!confirmFirst) {
+        return perform(agent.id, chosen, agent.sandboxId);
+    }
+    pendingLand.value = { id: agent.id, at: agent.sandboxId, chosen, title: agent.title, files: agent.diff?.files };
+    return Promise.resolve();
+};
+
+const confirmLand = (): void => {
+    const ask = pendingLand.value;
+    pendingLand.value = undefined;
+    if (ask !== undefined) {
+        void perform(ask.id, ask.chosen, ask.at);
+    }
+};
+
+const cancelLand = (): void => {
+    pendingLand.value = undefined;
+};
+
 // The fourth press to share `perform`, for a card's own readout rather than the drop or context menu. No dialog: the
 // card already names the condition it's ending, and re-arming it is a sentence to the agent.
 const unwatchNow = (id: string, at?: string): Promise<void> => perform(id, `unwatch`, at);
@@ -285,6 +319,10 @@ export function useAgentDrag() {
         resolveNow,
         landNow,
         relandNow,
+        pendingLand,
+        pressLand,
+        confirmLand,
+        cancelLand,
         unwatchNow,
     };
 }

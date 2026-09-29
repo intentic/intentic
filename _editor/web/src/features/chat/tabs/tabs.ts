@@ -1,4 +1,5 @@
 import type { AgentOrigin } from "@intentic/sandbox-contract";
+import { computed, type ComputedRef } from "vue";
 import { useAgents } from "../../agents/fleet/useAgents";
 import type { FleetAgent } from "../../agents/fleet/useAgents-fleet";
 import { type FleetLane, laneOf, NO_ATTENTION, unregistered } from "../../agents/fleet/agentStatus";
@@ -6,6 +7,7 @@ import type { Conversation } from "../session/conversation";
 import { draftPreview } from "../drafts/draftPreview";
 import { useChat } from "../run/useChat";
 import { standingOf, untouchedDraft } from "./tabFacts";
+import { twinsOf } from "./titleTwins";
 
 // Facts the open-chat list and header both need, kept as projections rather than component state, so the two
 // surfaces (and the close-set menus) read the same thing instead of duplicating it.
@@ -14,6 +16,12 @@ import { standingOf, untouchedDraft } from "./tabFacts";
 // stand-in title, replaced (not merged) the moment a real one arrives.
 export const tabLabel = (conversation: Conversation): string =>
     conversation.title.value ?? draftPreview(conversation.draft.value) ?? (conversation.isolated.value ? `New agent` : `New chat`);
+
+// Titles two or more open chats share (titleTwins.ts), held once for every row that asks; made on first use, since this
+// module is imported before the chat list exists.
+let twins: ComputedRef<ReadonlySet<string>> | undefined;
+export const twinTitles = (): ReadonlySet<string> =>
+    (twins ??= computed(() => twinsOf(useChat().conversations.value.map((conversation) => conversation.title.value)))).value;
 
 // Opened by an outside message (a Discord mention, a visitor, a webhook) rather than the user; read from the
 // fleet registry, since a plain conversation carries no origin of its own.

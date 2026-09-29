@@ -3,7 +3,10 @@ import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
 import { hasSession } from "../browser/sessions/session-store.js";
+import { versionedSettingsWrite } from "../settings/settings-versions.js";
+import { stateRelPath } from "../state-paths.js";
 import { reachablePersonas } from "./persona-reach.js";
+import { personasDocument } from "./personas-store.js";
 import {
     listPersonaSkills,
     readPersonaPrompt,
@@ -33,6 +36,13 @@ export const createPersonasRoutes = (services: Services) => {
         return found;
     };
 
+    // Every write here is the Personas page's own, so each is committed as it lands (settings-versions.ts): left
+    // uncommitted, a land touching personas.json was refused as the owner's edits. Only where the paths held nothing
+    // uncommitted before it: a kit folder an agent's land left changes in is not the page's to commit unreviewed.
+    const kitPath = (id: string): string => stateRelPath(".intentic/config/personas/", id);
+    const versioned = <T>(paths: readonly string[], subject: string, write: () => Promise<T>): Promise<T> =>
+        versionedSettingsWrite(services, paths, `Settings: ${subject}`, write);
+
     return {
         list: i.list.handler(async ({ context }) => {
             // A fenced member is shown the personas that work in the part of the workspace they hold, and nothing about
@@ -51,12 +61,15 @@ export const createPersonasRoutes = (services: Services) => {
             return { personas, connected };
         }),
         save: i.save.handler(async ({ input }) => {
-            await services.personas.upsert(input);
+            await versioned([personasDocument.path], `persona ${input.label ?? input.id}`, () => services.personas.upsert(input));
             return { ok: true as const };
         }),
         remove: i.remove.handler(async ({ input }) => {
-            await services.personas.remove(input.id);
-            await removePersonaKit(root, input.id);
+            const removed = await services.personas.get(input.id);
+            await versioned([personasDocument.path, kitPath(input.id)], `removed persona ${removed?.label ?? input.id}`, async () => {
+                await services.personas.remove(input.id);
+                await removePersonaKit(root, input.id);
+            });
             return { ok: true as const };
         }),
         kit: i.kit.handler(async ({ input }) => {
@@ -66,11 +79,9 @@ export const createPersonasRoutes = (services: Services) => {
         savePrompt: i.savePrompt.handler(async ({ input }) => {
             const persona = await requirePersona(input.id);
             // Emptying deletes the file; storing "" would leave it on a blank custom prompt, not "not written yet".
-            if (input.prompt.trim() === "") {
-                await removePersonaPrompt(root, input.id);
-                return { ok: true as const };
-            }
-            await writePersonaPrompt(root, input.id, persona.label, input.prompt);
+            await versioned([kitPath(input.id)], `persona ${persona.label ?? persona.id} prompt`, () =>
+                input.prompt.trim() === "" ? removePersonaPrompt(root, input.id) : writePersonaPrompt(root, input.id, persona.label, input.prompt),
+            );
             return { ok: true as const };
         }),
         readSkill: i.readSkill.handler(async ({ input }) => {
@@ -82,11 +93,13 @@ export const createPersonasRoutes = (services: Services) => {
         }),
         saveSkill: i.saveSkill.handler(async ({ input }) => {
             const persona = await requirePersona(input.id);
-            await writePersonaSkill(root, input.id, persona.label, { name: input.name, description: input.description, body: input.body });
+            await versioned([kitPath(input.id)], `persona ${persona.label ?? persona.id} skill ${input.name}`, () =>
+                writePersonaSkill(root, input.id, persona.label, { name: input.name, description: input.description, body: input.body }),
+            );
             return { ok: true as const };
         }),
         removeSkill: i.removeSkill.handler(async ({ input }) => {
-            await removePersonaSkill(root, input.id, input.name);
+            await versioned([kitPath(input.id)], `removed skill ${input.name} from persona ${input.id}`, () => removePersonaSkill(root, input.id, input.name));
             return { ok: true as const };
         }),
     };

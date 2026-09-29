@@ -1,5 +1,5 @@
 import { TURN_PREAMBLE_SEPARATOR } from "@intentic/constants";
-import { type ResumeDisclosure, resumeDisclosure, type TurnNote, withoutResumeNote } from "@intentic/sandbox-contract";
+import { RESUME_NOTES, type ResumeDisclosure, resumeDisclosure, type TurnNote, withoutResumeNote } from "@intentic/sandbox-contract";
 import { REPO_SYNC_NOTE_HEADER } from "../../workspace/layout/sync-repos.js";
 import { SETUP_NOTICE_HEADER, STALE_NOTICE_HEADER } from "../../workspace/layout/workspace-setup.js";
 import { PERSONA_NOTE_HEADER } from "../../personas/personas.js";
@@ -16,9 +16,10 @@ import { WORKSPACE_MAP_NOTE_HEADER } from "@intentic/agent-context/workspace-map
 import { MEMORY_NOTE_HEADER, MEMORY_NOTE_TITLE } from "./workspace-memory.js";
 import { SKILL_CATALOG_NOTE_HEADER, SKILL_CATALOG_NOTE_TITLE } from "../../store/loaded-skills.js";
 import { CONTEXT_NOTE_HEADER, CONTEXT_NOTE_TITLE } from "../context/context-note.js";
-import { parseRuntimeHistory, type RuntimeHistoryMessage } from "../providers/runtime-history.js";
+import { basename } from "node:path";
+import { parseRuntimeHistory, RUNTIME_HISTORY_HEADER, type RuntimeHistoryMessage } from "../providers/runtime-history.js";
 import { opt } from "../../opt.js";
-import { stripAttachmentNote } from "./attachment-note.js";
+import { ATTACHMENT_NOTE_HEADER, stripAttachmentNote } from "./attachment-note.js";
 
 // TurnNote is canonical and becomes wire text once, in composeWirePrompt; the parser half reads a stored prompt back.
 
@@ -191,4 +192,43 @@ export const parsePromptEnvelope = (stored: string): PromptEnvelope => {
         notes: preambleNotes(body),
         ...opt("resume", resumeDisclosure(stored) ?? inner.resume),
     };
+};
+
+// As long as the Claude SDK's own list lets a first prompt run, so a title from the daemon's side reads like one from its.
+const TITLE_LENGTH = 200;
+
+// What names a conversation opened by this stored prompt: the user's own words on one line, every layer the daemon
+// wraps round them taken off. A handoff titles by the conversation's opening words, else by its prompt as queued; an
+// attachment-only opener by what was dropped in. Undefined when the prompt says nothing at all.
+export const storedPromptTitle = (stored: string): string | undefined => {
+    const { spoken, queued, attachments, handoff } = parsePromptEnvelope(stored);
+    const words = handoff === undefined ? spoken : (handoff.history.find((message) => message.role === "user")?.text ?? queued);
+    const title = words.replaceAll(/\s+/g, " ").trim() || attachments.map((path) => basename(path)).join(", ");
+    return title === "" ? undefined : title.length > TITLE_LENGTH ? `${title.slice(0, TITLE_LENGTH).trim()}…` : title;
+};
+
+// The Claude SDK's session list hands a first prompt over flattened: every newline a space, trimmed, and cut at 200
+// characters. The separator survives that as spaces round `---`, and a trailing attachment note as a run of text after
+// two spaces, when the cut left either in at all.
+const FLAT_SEPARATOR = SEPARATOR.replaceAll("\n", " ");
+const FLAT_ATTACHMENT_NOTE = `  ${ATTACHMENT_NOTE_HEADER} `;
+
+// What only the stored message, newlines intact, can still be read through (storedPromptTitle): a runtime handoff's
+// carried transcript, a re-run note, an attachment note standing alone.
+const LAYERED_OPENINGS = [RUNTIME_HISTORY_HEADER, ATTACHMENT_NOTE_HEADER, ...Object.values(RESUME_NOTES)];
+
+// The user's words in a first prompt as that list hands it over. The notes in front come off when the cut left their
+// separator in; undefined when it did not, or when what is left opens with another of the daemon's layers.
+export const flatSpokenWords = (flat: string): string | undefined => {
+    const noted = INJECTED.some(({ header }) => flat.startsWith(header));
+    const at = noted ? flat.indexOf(FLAT_SEPARATOR) : 0;
+    if (at === -1) {
+        return undefined;
+    }
+    const words = noted ? flat.slice(at + FLAT_SEPARATOR.length) : flat;
+    if (LAYERED_OPENINGS.some((opening) => words.startsWith(opening))) {
+        return undefined;
+    }
+    const note = words.indexOf(FLAT_ATTACHMENT_NOTE);
+    return (note === -1 ? words : words.slice(0, note)).trim() || undefined;
 };

@@ -1,5 +1,6 @@
 import { type AgentReply, type RequestField, settledRequests, type TranscriptRequests } from "@intentic/sandbox-contract";
 import { ref } from "vue";
+import { type AnsweredPark, cardAnswered } from "./cardAnswered";
 import { postTurnControl } from "../run/turnStream";
 import type { ChatAttachment, ChatMessage } from "../transcript/transcript";
 import type { Conversation } from "./conversation";
@@ -14,6 +15,22 @@ type WithoutRequest<R> = R extends unknown ? Omit<R, "requestId"> : never;
 
 // A card's answer as the contract types it, less the request id `reply` is addressed by.
 export type CardAnswer = WithoutRequest<AgentReply>;
+
+// The board's flag each kind of answer clears (AgentAttention), where the card has one; a payment or a hand-off has none.
+const parkOf = (kind: CardAnswer["kind"]): AnsweredPark | undefined => {
+    switch (kind) {
+        case `plan`:
+        case `question`:
+        case `permission`:
+            return kind;
+        case `capability_offer`:
+            return `capability`;
+        case `credential_offer`:
+            return `credential`;
+        default:
+            return undefined;
+    }
+};
 
 // Which transcript field holds the card each kind of answer settles.
 const FIELD_OF: Readonly<Record<CardAnswer["kind"], RequestField>> = {
@@ -87,7 +104,7 @@ export const requestIdOf = (row: TranscriptRequests): string | undefined =>
         .find((requestId) => requestId !== undefined);
 
 // What replying reads and writes of the conversation around it.
-type RepliesHost = Pick<Conversation, "box" | "error" | "peek"> & {
+type RepliesHost = Pick<Conversation, "conversationId" | "box" | "error" | "peek"> & {
     readonly transcript: Pick<TranscriptView, "messages" | "attachCard">;
     readonly turn: Pick<TurnClient, "stop" | "endedByReader">;
 };
@@ -122,6 +139,8 @@ export class CardReplies {
             // The same derivation the daemon uses for the `resolved` row, applied here so the card reads answered; only
             // this card, since the rule reads every other one it is handed as left unanswered.
             this.host.transcript.attachCard(message.id, settledRequests(cardOf(message, field), body));
+            // The board and the rail stop saying it waits on you now, not a roster frame later.
+            cardAnswered(this.host.conversationId, parkOf(answer.kind));
         } finally {
             // Released even on failure: the card goes back to `pending` on screen, so it must be answerable again.
             const left = new Set(this.replying.value);

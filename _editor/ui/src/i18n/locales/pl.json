@@ -106,6 +106,8 @@
         "roundsStopped": "Obiegi wstrzymane"
     },
     "deviceAgentGroup": {
+        "agent": "Agent",
+        "agent2": "Agent {version}",
         "agentOnThisDevice": "Agent na tym urządzeniu"
     },
     "deviceDetail": {
@@ -113,13 +115,17 @@
         "busyHere": "Zajęte tutaj",
         "conflicts": "{count} konflikt | {count} konflikty | {count} konfliktów",
         "container": "Kontener",
+        "copyId": "Kopiuj ID",
         "copyPath": "Kopiuj ścieżkę",
         "deviceIsntSyncingFolder": "To urządzenie nie synchronizuje żadnego folderu ani nie trzyma portów dla tego sandboxa.",
         "filesOrPortsOnly": "Tylko pliki lub porty",
         "filesSync": "Pliki synchronizowane",
+        "folder": "Folder",
+        "id": "ID",
         "image": "Obraz",
         "interruptedTitle": "Przerwana aktualizacja",
         "leftAlone": "Pominięte",
+        "localhost": "localhost:",
         "more": "… i {more} więcej",
         "noFolderDeviceOnly": "brak folderu: to urządzenie odbija tylko porty",
         "noFolderSynced": "brak synchronizowanego folderu",
@@ -128,10 +134,16 @@
         "offDeviceIsntPutting": "Wyłączone: to urządzenie nie wystawia portów tego sandboxa na własnym localhoście. Synchronizacja plików działa bez zmian.",
         "onLocalhost": "Na localhost",
         "ports": "Porty",
+        "running": "działa",
         "show": "pokaż go",
         "startPutsItBack": "Start przywraca",
         "stopped": "zatrzymany",
-        "syncPaused": "Synchronizacja wstrzymana"
+        "syncPaused": "Synchronizacja wstrzymana",
+        "working": "pracuje…",
+        "version": "Wersja",
+        "interruptedUpdate": "przerwana aktualizacja — Start przywraca poprzednią wersję",
+        "interruptedUpdateHint": "Aktualizacja została przerwana, a poprzednia wersja odłożona na bok: Start ją przywraca.",
+        "previousReadyUntil": "poprzednia wersja gotowa do {when}"
     },
     "imageView": {
         "actualSize": "Rozmiar rzeczywisty",
@@ -155,7 +167,8 @@
         "allRepositories": "Wszystkie repozytoria"
     },
     "markdownDocument": {
-        "document": "Dokument"
+        "document": "Dokument",
+        "overLimit": "{over} znak ponad limit {max} znaków | {over} znaki ponad limit {max} znaków | {over} znaków ponad limit {max} znaków"
     },
     "markdownDocumentSurface": {
         "document": "Dokument"
@@ -204,6 +217,8 @@
         "default": "domyślnie",
         "defaultIs": "domyślnie: {value}",
         "fullAccessToComputers": "Pełny dostęp do urządzeń i jądra tego komputera, tak jak potrzebuje go zagnieżdżony silnik Dockera. Tylko dla narzędzia, które bez tego nie zadziała.",
+        "gib": "GiB",
+        "gpu": "GPU",
         "memory": "Pamięć",
         "memoryCapInGib": "Limit pamięci w GiB",
         "memoryWhole": "Całe GiB, co najmniej {min}. Puste to wartość domyślna: wszystko, co ten komputer ma ponad to, co zostawia sobie.",
@@ -222,16 +237,27 @@
     "sandboxSandboxVerbs": {
         "deletesSandboxEverythingIn": "To usuwa sandbox i wszystko, co w nim jest (jego pliki i jego historię), z tego urządzenia. Przez tydzień można go tam odzyskać: `ic sandbox restore` na tej maszynie go przywraca.",
         "sandboxRestartsOntoImage": "Sandbox restartuje na obrazie, na którym działał przed ostatnią aktualizacją. Jego pliki zostają.",
-        "sandboxRestartsOntoNewest": "Sandbox restartuje na najnowszym obrazie i przez ten czas jest niedostępny — sekundy, jeśli aktualizacja jest już pobrana, kilka minut, jeśli nie. Jego pliki zostają."
+        "sandboxRestartsOntoNewest": "Sandbox restartuje na najnowszym obrazie i przez ten czas jest niedostępny — sekundy, jeśli aktualizacja jest już pobrana, kilka minut, jeśli nie. Jego pliki zostają.",
+        "rollBackTo": "Cofnij do {version}",
+        "versionBefore": "wersja sprzed tej",
+        "rollBackToHeader": "Cofnąć {name} do {version}?",
+        "sandboxRestartsOntoVersion": "Sandbox restartuje się na {version}, starszej wersji, którą zachowała ta maszyna. Jego pliki zostają."
     },
     "searchBar": {
+        "aa": "Aa",
         "matchCase": "Uwzględniaj wielkość liter"
     },
     "stepSection": {
         "done": "{title}: gotowe"
     },
     "timeWindow": {
-        "all": "Wszystko"
+        "all": "Wszystko",
+        "todayAt": "dziś o {time}",
+        "tomorrowAt": "jutro o {time}"
+    },
+    "useOsPreference": {
+        "linuxMacos": "Linux / macOS",
+        "windowsPowershell": "Windows (PowerShell)"
     },
     "resizeSeam": {
         "doubleClickResets": "Dwuklik przywraca"

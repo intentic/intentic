@@ -15,7 +15,7 @@ flowchart LR
 
 ## Shipped languages
 
-- [`_editor/ui/src/i18n/locales.ts`](../../_editor/ui/src/i18n/locales.ts) declares `LOCALES` and `negotiate`. English is the source language and the fallback for any key a translation lacks, so it is compiled in; every other language is a lazy chunk.
+- [`_editor/ui/src/i18n/locales.ts`](../../_editor/ui/src/i18n/locales.ts) declares `LOCALES` and `negotiate`. English is the source language and the fallback for any key a translation lacks, so it is compiled in; every other language is a lazy chunk. Polish may lack none (see Checks below).
 - A stored choice (`ui-locale`) wins. Without one, `negotiate` walks `navigator.languages` and matches on the primary subtag, since only base languages ship.
 - The pre-paint script in [`_editor/web/index.html`](../../_editor/web/index.html) repeats that rule in ES5 to set `<html lang>` before anything renders. [`bootLocale.test.ts`](../../_editor/web/src/bootLocale.test.ts) fails if the two disagree.
 
@@ -51,7 +51,9 @@ An extension builds its catalog and translator in one call, `extensionI18n` from
 
 ## Checks
 
-- [`i18n-catalogs.mjs`](../../_tools/checks/i18n-catalogs.mjs): a translation holds only keys English has, with the same placeholders and plural forms. `--fix` drops the extras.
+- [`i18n-catalogs.mjs`](../../_tools/checks/i18n-catalogs.mjs): a translation holds only keys English has, with the same placeholders and plural forms. `--fix` drops the extras. Polish must also hold every key English has, in every catalog: a change that adds an English message adds its Polish in the same change, since `--fix` cannot write one. German, Spanish and French may still be subsets that fall back to English.
+
+  (2026-09-29) Polish is held complete because it has users: the session-replay review of 2026-09-28 found Polish users meeting English exactly where it hurt most, on the stopped-turn strip, the discard dialog and the /connect page, from about 500 keys pl.json lacked. The other languages have no such users yet, so the rule waits for them rather than blocking every change on three more translations.
 - [`i18n-keys.mjs`](../../_tools/checks/i18n-keys.mjs): every `t()` key exists, every message is used, and every message compiles. vue-i18n's `t` accepts any string, so the compiler cannot catch a typo.
 - [`i18n-shared.mjs`](../../_tools/checks/i18n-shared.mjs): every `shared.*` message is a noun phrase. It refuses a conjunction, a personal pronoun, a leading imperative, a placeholder, punctuation at an edge and a key ending in a digit (`sandbox2`). A message that is right where it stands is listed with its reason in the check's `ALLOWED`, since a catalog has no comments to hold the pragma.
 - [`i18n-literals.mjs`](../../_tools/checks/i18n-literals.mjs): no English typed into a shipped `.vue` template, nor handed from code to what says it on screen (`say`, `warn`, `noticeOf`, `noticeFrom`, a store's `run(task, wrote)`).

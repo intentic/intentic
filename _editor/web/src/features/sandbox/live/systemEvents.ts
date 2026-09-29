@@ -146,7 +146,7 @@ export const applySystemEvent = (event: SystemEvent, sandboxId: string): void =>
             // Roster is versioned, not last-frame-wins: it races GET /agents and this browser's own optimistic
             // archive/restore
             // (see useAgents.ts).
-            setAgents(event.agents, event.rev);
+            setAgents(event.agents, event.rev, true);
             return;
         case `runtimeChanged`:
             // No roster in the frame: invalidation only reaches queries someone is observing, so an idle tab pays

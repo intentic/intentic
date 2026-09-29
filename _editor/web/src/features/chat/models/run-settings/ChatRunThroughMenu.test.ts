@@ -4,6 +4,7 @@ import "@intentic/testing/dom";
 import type { LoopDesign, Workflow } from "@intentic/sandbox-contract";
 import { type App, createApp, h, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
+import { installI18n } from "@intentic/ui/i18n";
 
 // The kit's barrel reaches for matchMedia at import time (its device tracker), which jsdom does not have.
 
@@ -30,8 +31,9 @@ const mount = (armed: { loop?: string; workflow?: string } = {}): HTMLElement =>
                 onManage: () => (picked.manage += 1),
             }),
     });
-    // Icon is registered app-wide in the real app.
+    // Icon is registered app-wide in the real app, and so is `<i18n-t>`, which the empty state's one sentence needs.
     app.component(`Icon`, IconStub);
+    installI18n(app);
     app.mount(element);
     return element;
 };

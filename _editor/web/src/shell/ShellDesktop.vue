@@ -634,7 +634,12 @@ const wallpapered = useWallpaperedRoute();
             <!-- Same overlay as the switcher and account avatar: AnchoredOverlay rows, not PrimeVue's ContextMenu. -->
             <AnchoredOverlay v-model="moreOpen" :anchor="moreTrigger ?? undefined" side="right" cross="start">
                 <div class="flex w-48 flex-col gap-0.5 p-1">
-                    <p v-if="moreTiles.length === 0" class="px-2 py-1.5 text-xs text-subtle">{{ t(`shell.shellDesktop.everySectionOnRail`) }}</p>
+                    <!-- With every section pinned the menu is empty, and saying only that sent its reader back four times: it
+                         says where the way back is too (the tile's own menu, onTileContextMenu). -->
+                    <template v-if="moreTiles.length === 0">
+                        <p class="px-2 pt-1.5 text-xs text-subtle">{{ t(`shell.shellDesktop.everySectionOnRail`) }}</p>
+                        <p class="px-2 pb-1.5 text-2xs text-subtle">{{ t(`shell.shellDesktop.howToUnpin`) }}</p>
+                    </template>
                     <!-- Two controls per row — go there, and pin it (keepOnRail) — as siblings, not nested. -->
                     <div
                         v-for="tile in moreTiles"

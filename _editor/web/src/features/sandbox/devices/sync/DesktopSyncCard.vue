@@ -254,6 +254,9 @@ onUnmounted(stop);
                 </template>
             </template>
 
+            <!-- Asked and not yet answered: neither the offer nor the refusal, which used to show first and then be contradicted. -->
+            <p v-else-if="available === undefined" class="text-2xs text-subtle">{{ t(`sandbox.desktopSyncCard.checkingSync`) }}</p>
+
             <!-- No SSH way in on a loopback/preview sandbox or one behind intentic's own tunnels (web traffic only): sync has nothing to ride. -->
             <div v-else :class="ui.emptyState()">
                 {{ t(`sandbox.desktopSyncCard.desktopSyncNeedsSsh`) }}

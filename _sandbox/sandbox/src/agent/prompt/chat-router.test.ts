@@ -1,6 +1,7 @@
 import { type Area, type ModelOffer, modelPinKey, type Persona } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../composition.js";
+import { RoleModelUnsetError } from "../../seams/role-model-unset.js";
 
 /* THE ROUTER, at the seam it spends: askRoleModel is mocked so a test can hand back a reply and see what the router
    makes of it, and the offer is mocked so a test can state what is connected. One reading answers both halves, so what
@@ -310,6 +311,16 @@ test("a spent chain takes nothing with it: every half says why, and what settled
         model: { reason: "Couldn't choose a model: every account is out of allowance" },
     });
     expect(warn).toHaveBeenCalledWith({ err: expect.any(Error) }, "chat router: no answer, the chat keeps what it had");
+});
+
+// Routing with no model is how it is switched off: a setting, which every chat used to open on as an error.
+test("routing switched off says nothing about personas, and tells an Auto chat which job picks its model", async () => {
+    ask.mockRejectedValue(new RoleModelUnsetError("model-router"));
+    expect(await routeChat(services(), PERSONA_ONLY, undefined)).toEqual({});
+    expect(await routeChat(services(), BOTH, undefined)).toEqual({
+        model: { reason: `Auto picks a model only when "New chat routing" has one in Sandbox ▸ Agent ▸ Models, so this chat keeps the model it had.` },
+    });
+    expect(warn).not.toHaveBeenCalled();
 });
 
 test("a chat with nothing left to ask spends nothing at all", async () => {

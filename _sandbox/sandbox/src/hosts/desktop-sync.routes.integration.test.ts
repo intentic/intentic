@@ -12,6 +12,7 @@ import { tempWorkspace } from "../harness/route-fakes.testing.js";
 import { fakeFiles } from "../workspace/workspace-slice.testing.js";
 import { services } from "../harness/route-services.testing.js";
 import { memoryCapabilitiesStore } from "../capabilities/capabilities-slice.testing.js";
+import { rejectForbidden } from "../harness/route-client.testing.js";
 
 // One machine can hold two doors and only one of them is ever drawn: the ssh key desktop sync rides, and a device
 // enrollment, which no screen lists once its capability card is gone. Revoking a machine's access has to end both, or
@@ -129,4 +130,68 @@ test("a host key file that holds no key line is not handed over", async () => {
     const response = await enrolling(historyRoot)();
 
     expect(SyncEnrollmentAnswerSchema.parse(await response.json())).toStrictEqual({ ok: true, syncToken: expect.any(String), mode: "sync" });
+});
+
+// A machine's setup goes on past its enrollment (the folder, the sync engine, the SSH probe) and can fail there; its
+// retry enrolls again with the same pairing. Spent on first use, every retry failed at enrollment instead, the
+// desktop app's Try again included. The pairing stays good for the key that redeemed it, and for no other.
+describe("a pairing redeemed once", () => {
+    const LAPTOP = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILaptopLaptopLaptop laptop";
+    const STRANGER = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIStrangerStranger stranger";
+    const door = () => {
+        stubEnv("HOME", mkdtempSync(join(tmpdir(), "sync-reenroll-home-")));
+        // Not the owner: past the pairing, nobody gets in on a Google token here.
+        const svc = services({
+            config: { ...testConfig, historyRoot: mkdtempSync(join(tmpdir(), "sync-reenroll-history-")) },
+            auth: { authorize: rejectForbidden, authorizeOwner: rejectForbidden },
+        });
+        const served = createApp(svc);
+        const pair = svc.syncPairings.mint("mirror").token;
+        const enroll = async (key: string): Promise<Response> =>
+            served.request("/system/authorized-key", {
+                method: "POST",
+                headers: { "content-type": "application/json", "x-intentic-pair": pair },
+                body: JSON.stringify({ key }),
+            });
+        return { svc, pair, enroll, served };
+    };
+
+    it("enrolls the same machine key again, under the mode the pairing granted", async () => {
+        const { enroll } = door();
+        expect((await enroll(LAPTOP)).status).toBe(200);
+
+        const again = await enroll(LAPTOP);
+
+        expect(again.status).toBe(200);
+        expect(SyncEnrollmentAnswerSchema.parse(await again.json())).toMatchObject({ ok: true, mode: "mirror" });
+    });
+
+    // Revoked minutes after enrolling: the retry window must not let the machine walk back in with the same pairing.
+    it("is spent for the same key too once that machine's enrollment is revoked", async () => {
+        const { enroll, served } = door();
+        const first = SyncEnrollmentAnswerSchema.parse(await (await enroll(LAPTOP)).json());
+        const revoked = await served.request("/system/authorized-key", { method: "DELETE", headers: { "x-intentic-sync": first.syncToken ?? "" } });
+        expect(revoked.status).toBe(200);
+
+        expect((await enroll(LAPTOP)).status).toBe(403);
+    });
+
+    it("is spent for any other key", async () => {
+        const { enroll } = door();
+        expect((await enroll(LAPTOP)).status).toBe(200);
+
+        expect((await enroll(STRANGER)).status).toBe(403);
+    });
+
+    it("is spent for the same key too once the pairing's lifetime has passed", async () => {
+        const { enroll } = door();
+        expect((await enroll(LAPTOP)).status).toBe(200);
+        const later = Date.now() + 10 * 60 * 1000 + 1;
+        const clock = jest.spyOn(Date, "now").mockReturnValue(later);
+        try {
+            expect((await enroll(LAPTOP)).status).toBe(403);
+        } finally {
+            clock.mockRestore();
+        }
+    });
 });

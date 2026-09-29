@@ -40,6 +40,7 @@ export function useEnvironmentContents(enabled: () => boolean) {
     // Kept distinct from 'the answer is empty': probing takes a moment, and reading that gap as empty would flash a
     // full sandbox as stock.
     const loading = computed(() => query.isPending.value || (query.isFetching.value && items.value.length === 0));
+    const fetching = computed(() => query.isFetching.value);
     const groups = computed((): ContentsGroup[] =>
         originGroups()
             .map((group) => ({
@@ -57,5 +58,8 @@ export function useEnvironmentContents(enabled: () => boolean) {
         void query.refetch();
     };
 
-    return { groups, awaiting, loading, error, refresh };
+    // When the rows on screen were read (ms, 0 before any read), for a reader that must know they postdate something.
+    const readAt = computed(() => query.dataUpdatedAt.value);
+
+    return { groups, awaiting, loading, fetching, error, refresh, readAt };
 }

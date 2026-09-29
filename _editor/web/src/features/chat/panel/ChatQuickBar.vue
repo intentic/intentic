@@ -2,7 +2,7 @@
 import { isOverlayTarget, ProgressRing, ui, useHoverIntent } from "@intentic/ui";
 import { computed, onBeforeUnmount, ref, shallowRef, useTemplateRef, watch } from "vue";
 import { useRouter } from "vue-router";
-import { quickBarTranscript, chatParked } from "./chatPanelLayout";
+import { quickBarShowAsk, quickBarTranscript, chatParked } from "./chatPanelLayout";
 import { chatBarSlot } from "../../../shell/window/panelSlots";
 import { focusComposer } from "../tabs/useChat-tabs";
 import { useChat } from "../run/useChat";
@@ -181,6 +181,15 @@ const openChat = (): void => {
 watch(composerFocus, () => {
     if (chatParked.value) {
         expand(false);
+    }
+});
+
+// A board card's click asks for the chat itself, not a pill naming it (showParkedChat): the box and its transcript, kept,
+// as a press and the eye's press keep them, a question waiting included, since its card is drawn in that transcript.
+watch(quickBarShowAsk, () => {
+    apply({ kind: `open`, keep: true, asking: false });
+    if (bar.value.transcript !== `kept`) {
+        apply({ kind: `transcript`, keep: true });
     }
 });
 

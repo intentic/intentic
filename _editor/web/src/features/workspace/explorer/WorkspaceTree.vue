@@ -283,6 +283,8 @@ defineExpose({ focusTree });
             <!-- Everything above the first row, in one element the window measures so it knows where the rows start. -->
             <div ref="preamble">
                 <div class="h-1"></div>
+                <!-- What the host says above the rows (WorkspaceDesktop's project note); measured with the rest of the preamble. -->
+                <slot name="preamble" />
                 <!-- Phantom create row at the tree's own root, the open project's folder when one is (also covers an empty
                      workspace). The root draws no row of its own, so this is the only place its input can sit. -->
                 <div v-if="edit.kind === 'creating' && edit.dir === rootDir" class="flex flex-col" style="padding-left: 0.5rem">

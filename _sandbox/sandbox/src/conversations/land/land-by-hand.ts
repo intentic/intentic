@@ -5,7 +5,7 @@ import { opt } from "../../opt.js";
 import type { IsolatedAgent, RepoRecord } from "../registry/agents-store.js";
 import { landAgent, reportLockfileFailures } from "./land.js";
 import { intoOf, type LandTarget, landTargetOf, upstreamOf, underLeases } from "./land-target.js";
-import { settleParentBooks } from "../../agent/run/placement/turn-landing.js";
+import { keepLandFailure, settleParentBooks } from "../../agent/run/placement/turn-landing.js";
 import { syncBeforeLand } from "./sync.js";
 import { settleLandingInBackground, versionCommitsSettled } from "./version-landed.js";
 
@@ -66,9 +66,15 @@ export const landByHand = async (services: LandByHandDeps, entry: IsolatedAgent,
         from: rung === "cumulative" ? base : (landedTip ?? base),
         dir: services.agentWorktrees.worktreeDir(entry.id, repo),
     }));
-    const result = await services.perf.track("agent.land", { id: entry.id, mode, span: rung }, () =>
-        landAgent(services.agentWorktrees, { ...entry, placement: { ...entry.placement, repos: composition } }, mode, rung, into),
-    );
+    // A land that breaks stays on the card until one goes through (recordLandFailure); the press still hears the error.
+    const result = await services.perf
+        .track("agent.land", { id: entry.id, mode, span: rung }, () =>
+            landAgent(services.agentWorktrees, { ...entry, placement: { ...entry.placement, repos: composition } }, mode, rung, into),
+        )
+        .catch(async (cause: unknown) => {
+            await keepLandFailure(services, entry.id, cause);
+            throw cause;
+        });
     reportLockfileFailures(services.logger, entry.id, result);
     // Stores the tips and conflict report, re-derives standing, and clears the prior ending without a turn.
     await services.agents.recordLanded(entry.id, result);

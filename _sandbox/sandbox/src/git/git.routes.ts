@@ -30,6 +30,7 @@ import { AGENT_GIT_AUTHOR } from "../git-identity.js";
 import { gitFailureReason } from "./git.js";
 import { parsableMessage } from "./ops/commit-message.js";
 import { createPushRuns } from "./ops/push-run.js";
+import { opt } from "../opt.js";
 
 // How long a scan result is reused: absorbs a refetch burst, short enough a save still shows live.
 const COALESCE_MS = 500;
@@ -636,10 +637,16 @@ export const createGitRoutes = (services: Services) => {
                 return result;
             }),
         ),
-        discard: i.discard.handler(({ input }) =>
+        discard: i.discard.handler(({ input, context }) =>
             onRepo(input.repo, async (dir) => {
                 // Snapshot before discard: git can't walk this back (untracked deleted, no reflog for worktree state).
                 await services.history.snapshot("user", `before discard in ${input.repo}`);
+                // Named before the tree moves, so landed work going with it is read as this person's doing, not an agent's.
+                services.agents.noteRemover({
+                    kind: "person",
+                    ...opt("email", context.identity?.email),
+                    ...opt("name", context.identity?.name),
+                });
                 await discardTarget(input.repo, dir, input);
                 invalidateScan();
                 // Worktree changed, so record it like any other user write.

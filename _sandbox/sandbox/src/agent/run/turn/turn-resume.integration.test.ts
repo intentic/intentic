@@ -12,6 +12,7 @@ import {
     type SandboxSettings,
     SandboxSettingsSchema,
     type TranscriptRow,
+    NATIVE_PROVIDERS,
     withResumeNote,
 } from "@intentic/sandbox-contract";
 import { waitFor, SETTLES } from "@intentic/testing/bun";
@@ -60,6 +61,9 @@ const fakeServices = (
         // Read as data by run-role health, so it has to be a real seam: the helpers below spread this object, and a
         // spread keeps only own keys, dropping unstubbed's throwing proxy. Empty ledger: no rung has a failing streak.
         usage: unstubbed<Services["usage"]>("usage", { turns: async () => [] }),
+        // No provider connected: a run role with no pin keeps the wire's default. `withProviders` wires real ones.
+        providerReadiness: async () => Object.fromEntries(NATIVE_PROVIDERS.map((provider) => [provider, false])) as Awaited<ReturnType<Services["providerReadiness"]>>,
+        capabilities: unstubbed<Services["capabilities"]>("capabilities", { list: async () => [] }),
         // Real actors hold the stranded records; only an abandon is answered here, `takes` saying whether the turn had
         // unwound enough for it to land.
         conversations: {
@@ -371,6 +375,18 @@ test("who is watching does not move the pin: the same role answers either way", 
 test("an empty agent-run list leaves the turn unset rather than inventing one", async () => {
     const ran = await ranWith({ modelRoles: { [ROLE]: [] } }, { prompt: "fix CI", conversationId: "ar-unpinned", runRole: ROLE });
     expect(ran.model).toBeUndefined();
+});
+
+// The row reads "chat default", and a provider nobody connected is no default: a Fix pressed on a sandbox with only
+// another provider connected once opened on Claude and failed at once.
+test("an unpinned run opens on the provider this sandbox has connected, not on one it has not", async () => {
+    const ran = await ranWith({ modelRoles: {} }, { prompt: "fix CI", conversationId: "ar-connected", runRole: ROLE }, ["codex"]);
+    expect([ran.agent, ran.model]).toEqual(["codex", undefined]);
+});
+
+test("an unpinned run keeps the default provider while it is connected", async () => {
+    const ran = await ranWith({ modelRoles: {} }, { prompt: "fix CI", conversationId: "ar-default", runRole: ROLE }, ["gemini", "claude"]);
+    expect([ran.agent, ran.model]).toEqual(["claude", undefined]);
 });
 
 // A token rotation retires every in-flight turn's snapshotted credential at once, failing them with `401 OAuth access
@@ -804,9 +820,22 @@ test("autoResumeOnRestart off records the interruption and re-runs nothing", asy
         {
             role: "notice",
             text: "The sandbox restarted before this turn finished. Send another message to continue from the saved worktree.",
+            noticeCode: { code: "restartInterrupted" },
         },
     ]);
     expect((await services.automations.get("nightly"))?.runs[0]).toMatchObject({ outcome: "interrupted" });
+});
+
+// E2: after a rebuild the owner started with agents mid-turn, and asked in the dialog to continue them, the cut turns
+// run again by themselves even though autoResumeOnRestart is off; the next plain restart leaves them to wait again.
+test("a restart the owner asked to pick up after resumes the cut turns with autoResumeOnRestart off", async () => {
+    const services = await journalServices(mkdtempSync(join(tmpdir(), "restart-")), false);
+    await services.turnJournal.recordTurn(journalled("rs-asked", { sessionId: "s-partial" }));
+    const prompts: string[] = [];
+    await resumeInterruptedTurns(drivenBy(services, fakeWake(prompts)), BOOT_AT, true);
+    await waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
+    expect(prompts[0]).toMatch(/restarted/i);
+    expect(prompts[0]).toContain("finish the report");
 });
 
 // The transcript record is appended per settled turn, so an interrupted turn recorded nothing; boot reads the session's
@@ -836,6 +865,7 @@ test("an interrupted turn is recorded from the work it did, not from its prompt 
         {
             role: "notice",
             text: "The sandbox restarted before this turn finished. Send another message to continue from the saved worktree.",
+            noticeCode: { code: "restartInterrupted" },
         },
     ]);
 });
@@ -1047,10 +1077,11 @@ test("rejecting the restored plan with feedback goes back into plan mode carryin
     await resumeInterruptedTurns(drivenBy(services, capture), BOOT_AT);
     await cardsUp(observed, "plan");
 
-    const feedback = "Use pnpm, not npm.";
+    // Notes that read like consent ("proceed, but…") must stay a rejection, framed as the live gate frames it.
+    const feedback = "Proceed, but use pnpm, not npm.";
     expect(services.cards.resolve({ kind: "plan", requestId: "r-rej", approve: false, feedback })).toBe("settled");
     await waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
-    expect(prompts[0]).toContain(feedback);
+    expect(prompts[0]).toContain(`The user rejected the plan with this feedback:\n${feedback}\n\nRevise the plan. Still do not execute it.`);
     expect(inputs[0]).toMatchObject({ permissionMode: "plan" });
     await settle(services, "pk-rej");
 });

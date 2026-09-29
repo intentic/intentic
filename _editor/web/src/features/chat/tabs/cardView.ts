@@ -16,6 +16,7 @@ import { cardProof, type ProofMark } from "../../agents/board/cards/proofSeal";
 import { type CacheCooling, cacheCooling, type WarmMark, warmMark } from "../../agents/fleet/prompt-cache/promptCache";
 import { snapshotFingerprint } from "../../agents/fleet/useAgents-registry";
 import type { FleetAgent } from "../../agents/fleet/useAgents-fleet";
+import { sandboxNow } from "../../agents/fleet/sandboxClock";
 import { modelLabelFor } from "../accounts/providerCatalog";
 import { statusIcon, statusLabel } from "../models/catalog";
 import type { Conversation } from "../session/conversation";
@@ -61,20 +62,26 @@ const statusOf = (entry: OpenChat): CardView[`status`] => {
 };
 
 // Model label as the pickers show it; falls back to the provider name when no model is recorded yet. `activeModel` is
-// what last ran; `model` is what the composer would send next.
+// what last ran, as its runtime reported it; `sentModel` what the last turn went out under, for a runtime that reports
+// none; `model` is what the composer would send next, which is only the answer before anything was sent: a pick made
+// while a reply runs applies from the next message, so the card must not claim it answers the one in flight.
 const modelOf = (entry: OpenChat): string | undefined => {
     const { agent, conversation } = entry;
     const provider = agent?.provider ?? conversation.selection.provider.value;
-    const model = agent?.model ?? conversation.activeModel.value ?? conversation.selection.model.value;
+    const model = agent?.model ?? conversation.activeModel.value ?? conversation.selection.state.value.sentModel ?? conversation.selection.model.value;
     if (model !== null && model !== ``) {
         return modelLabelFor(provider, model);
     }
     return sessionCategory(tabLabel(conversation), agent?.titleAction) === undefined ? undefined : providerLabel(provider);
 };
 
+// What tells a chat apart from another of the same title: the model it runs on, else at least its provider.
+export const modelOrProvider = (entry: OpenChat): string =>
+    modelOf(entry) ?? providerLabel(entry.agent?.provider ?? entry.conversation.selection.provider.value);
+
 // Live-line text prefers the registry's activity frames (richer); falls back to the conversation's own streaming state
 // so a working card stays findable even when the fleet join is cold.
-const liveOf = (entry: OpenChat): CardView[`live`] => {
+export const liveOf = (entry: OpenChat): CardView[`live`] => {
     const { agent, conversation } = entry;
     // Ended by a person and only unwinding: the corner's glyph already says how, and a working line under a clock still
     // counting would say the Stop had not taken.
@@ -89,7 +96,11 @@ const liveOf = (entry: OpenChat): CardView[`live`] => {
         };
     }
     if (conversation.turn.streaming.value) {
-        return { icon: activityIcon(undefined), text: t(`ui.status.working`), since: conversation.turn.turnStartedAt.value };
+        // On the sandbox's clock the rail counts against (sandboxClock.ts): a turn attached to already is, one this browser
+        // sent is put on it.
+        const since = conversation.turn.turnStartedAt.value;
+        const onSandbox = since === undefined || conversation.turn.turnOnSandboxClock.value ? since : sandboxNow(since);
+        return { icon: activityIcon(undefined), text: t(`ui.status.working`), since: onSandbox };
     }
     return undefined;
 };

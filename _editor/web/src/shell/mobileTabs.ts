@@ -14,6 +14,12 @@ export interface ApprovalsTile {
     readonly badge: ViewBadge | undefined;
 }
 
+// The Review tab's badge speaks for the page the tab opens and nothing else: the approvals queue's own count when that
+// pack is on, else what the Changes panel it falls back to shows. Uncommitted files once rode on the approvals count,
+// so every land raised a number the Approvals page then said was "Nothing waiting".
+export const reviewBadgeFor = (approvals: ApprovalsTile | undefined, changes: ViewBadge | undefined): ViewBadge | undefined =>
+    approvals === undefined ? changes : approvals.badge;
+
 /** The approvals extension's activation, when the pack is on: the Review tab's target and its owed-count. */
 export function useApprovalsTile(): ComputedRef<ApprovalsTile | undefined> {
     const { panels } = usePanels();

@@ -60,12 +60,15 @@ const settledAvailability = (state: ConnectionState, removed: boolean): SandboxA
     return state.failure !== undefined && isBlocked(state.failure) ? `blocked` : undefined;
 };
 
+// `hiddenMs` is the part of the outage the page spent hidden or asleep: a page woken after a night has waited none of it,
+// so it does not read as a long wait (useVisibleOutage in gates/useRecovery.ts).
 export const sandboxAvailability = (
     state: ConnectionState,
     ready: boolean,
     established: boolean,
     now: number,
     removed = false,
+    hiddenMs = 0,
 ): SandboxAvailability => {
     const settled = settledAvailability(state, removed);
     if (settled !== undefined) {
@@ -76,13 +79,13 @@ export const sandboxAvailability = (
     }
     // Ahead of `starting`: a sandbox that never painted and is not dialled in is not starting, and saying so was the
     // difference between a dot that resolves and one that spins for as long as the tab is open.
-    if (state.failure?.kind === `detached` && outageMs(state, now) >= DETACHED_AFTER_MS) {
+    if (state.failure?.kind === `detached` && outageMs(state, now) - hiddenMs >= DETACHED_AFTER_MS) {
         return `detached`;
     }
     if (!established) {
         return `starting`;
     }
-    return outageMs(state, now) >= SANDBOX_BUSY_AFTER_MS ? `busy` : `stale`;
+    return outageMs(state, now) - hiddenMs >= SANDBOX_BUSY_AFTER_MS ? `busy` : `stale`;
 };
 
 // Blocks only when nothing can be painted yet or the wait needs explaining; a still-warm reconnect can render a

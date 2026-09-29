@@ -3,7 +3,14 @@
         "branchesFailing": "Gałęzie z błędem: {count}",
         "pipelines": "Pipeline'y",
         "streakOnCommit": "{repo} {branch} · {runs} nieudane · {sha}",
-        "streakOverCommits": "{repo} {branch} · {commits} commity · {runs} nieudane"
+        "streakOverCommits": "{repo} {branch} · {commits} commity · {runs} nieudane",
+        "running": "{count} w toku",
+        "queued": "{count} w kolejce",
+        "noRunsYet": "Jeszcze żadnych uruchomień",
+        "nothingFailing": "Nic nie zawodzi",
+        "branchCountFailing": "{count} gałąź z błędem | {count} gałęzie z błędem | {count} gałęzi z błędem",
+        "runCount": "{count} uruchomienie | {count} uruchomienia | {count} uruchomień",
+        "webhookNotRegistered": "webhook niezarejestrowany"
     },
     "mainFailure": {
         "continueFix": "Kontynuuj naprawę",

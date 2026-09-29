@@ -2,6 +2,7 @@
 <script setup lang="ts">
 import type { CapabilityCatalogEntry } from "@intentic/capability-catalog";
 import { computed } from "vue";
+import { entryGuide } from "../model/catalogCopy";
 import { guideParts, guidePartsPrefixed, guideTokenUrl } from "./credentialGuide";
 import { useT } from "@intentic/ui/i18n";
 
@@ -14,12 +15,14 @@ const tokenUrl = computed<string | undefined>(() => guideTokenUrl(entry, values)
 // Weight and colour mark a literal, not a chip or mono span: those visually outweighed the short surrounding prose.
 const literal = `font-medium text-content`;
 
-const linkLabel = computed(() => entry.guide?.linkLabel ?? `Create a token`);
-const scopes = computed(() => entry.guide?.scopes);
+// The prose in the reader's language; the link above is built from the untranslated guide.
+const guide = computed(() => entryGuide(entry));
+const linkLabel = computed(() => guide.value?.linkLabel ?? t(`capabilities.credentialGuide.createToken`));
+const scopes = computed(() => guide.value?.scopes);
 const scopeParts = computed(() =>
     scopes.value === undefined ? [] : guidePartsPrefixed(t(`capabilities.credentialGuide.needs`), scopes.value),
 );
-const steps = computed<readonly string[]>(() => entry.guide?.steps ?? []);
+const steps = computed<readonly string[]>(() => guide.value?.steps ?? []);
 </script>
 
 <template>

@@ -1,4 +1,4 @@
-import { agentContract, type ConversationQueue, DEFAULT_PROVIDER, speakerVoice } from "@intentic/sandbox-contract";
+import { agentContract, type ConversationQueue, DEFAULT_PROVIDER, noticeCode, speakerVoice } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import { routeChat } from "../prompt/chat-router.js";
 import type { Services } from "../../composition.js";
@@ -150,7 +150,7 @@ export const createAgentRoutes = (services: Services) => {
             const held = services.cards.conversationOf(input.requestId);
             const run = held === undefined ? undefined : turnRunOf(services.conversations, held);
             if (input.kind === "question" && input.cancelled === true) {
-                run?.note({ role: "notice", text: "Question dismissed." });
+                run?.note({ role: "notice", text: "Question dismissed.", noticeCode: noticeCode({ code: "questionDismissed" }) });
             }
             // Who's answering, carried into settlement; the card itself decides who may answer.
             const applied = await applyReply(services, input, context.identity);

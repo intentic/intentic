@@ -1,4 +1,5 @@
 import type { GitChange, MatchSnippet, SessionOwner, TranscriptRow } from "@intentic/sandbox-contract";
+import { readableProviderText } from "../../agent/providers/provider-error-text.js";
 import type { Services } from "../../composition.js";
 import { agentRepoChanges } from "../land/agent-changes.js";
 import { transcriptFile } from "../../sessions/transcript-record.js";
@@ -277,13 +278,16 @@ export interface RecallOptions {
     readonly diff?: boolean;
 }
 
+const shown = (failure: string | undefined): string | undefined => (failure === undefined ? undefined : readableProviderText(failure));
+
 // The last turn's failure as the board reports it, a spent allowance under the rate limit's own code.
 const failureOf = (ending: Ending): Pick<FleetRecall, "failure" | "failureCode" | "limitResetsAt"> => {
     switch (ending.kind) {
+        // Read as words here too, so a card that failed before the turn's own frame was cleaned reads the same.
         case "failed":
-            return present({ failure: ending.failure, failureCode: ending.code });
+            return present({ failure: shown(ending.failure), failureCode: ending.code });
         case "limited":
-            return present({ failure: ending.failure, failureCode: "rate_limit", limitResetsAt: ending.resetsAt });
+            return present({ failure: shown(ending.failure), failureCode: "rate_limit", limitResetsAt: ending.resetsAt });
         default:
             return {};
     }

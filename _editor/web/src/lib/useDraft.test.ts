@@ -1,5 +1,5 @@
 import { effectScope, nextTick, ref } from "vue";
-import { useDraft } from "./useDraft";
+import { useDraft, useTrimmedDraft } from "./useDraft";
 
 // The seeding rule carries a bug's history (see the composable): a dirty-check guard once blocked the INITIAL
 // seed, because an empty draft always differs from a saved value. These pin the three states the seed
@@ -56,5 +56,49 @@ describe(`useDraft`, () => {
         saved.value = ``;
         await nextTick();
         expect(draft.value).toBe(``);
+    });
+});
+
+// A setting saved as `text.trim()` under a document editor whose text always ends in the gap after its last block.
+describe(`useTrimmedDraft`, () => {
+    const drafted = (saved: ReturnType<typeof ref<string | undefined>>) => effectScope().run(() => useTrimmedDraft(() => saved.value))!;
+
+    it(`reads the saved value as the draft once a save wrote the draft trimmed, so nothing is left unsaved`, async () => {
+        const saved = ref<string | undefined>(`Be brief.`);
+        const { draft, stored } = drafted(saved);
+        draft.value = `Be brief. Cite files.\n\n`;
+        expect(stored.value).toBe(`Be brief.`);
+
+        saved.value = draft.value.trim();
+        await nextTick();
+
+        expect(stored.value).toBe(`Be brief. Cite files.\n\n`);
+        expect(draft.value).toBe(`Be brief. Cite files.\n\n`);
+    });
+
+    it(`forgives only the ends: a change inside the text still reads as a change`, () => {
+        const saved = ref<string | undefined>(`Be brief.`);
+        const { draft, stored } = drafted(saved);
+
+        draft.value = `Be  brief.`;
+
+        expect(stored.value).toBe(`Be brief.`);
+    });
+
+    it(`follows a change made elsewhere while the draft differs from the saved value only at its ends`, async () => {
+        const saved = ref<string | undefined>(`one`);
+        const { draft } = drafted(saved);
+        draft.value = `one\n\n`;
+
+        saved.value = `two`;
+        await nextTick();
+
+        expect(draft.value).toBe(`two`);
+    });
+
+    it(`stays unknown until the value loads`, () => {
+        const { stored } = drafted(ref<string | undefined>(undefined));
+
+        expect(stored.value).toBeUndefined();
     });
 });

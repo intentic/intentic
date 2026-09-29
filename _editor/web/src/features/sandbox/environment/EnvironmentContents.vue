@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { EnvironmentItem } from "@intentic/api-contract";
-import { BrandMark, Code, DisclosureRow, Notice, RowGroup, RowNote, SkeletonRows, type Tip, ui } from "@intentic/ui";
+import { BrandMark, Button, Code, DisclosureRow, Notice, RowGroup, RowNote, SkeletonRows, type Tip, ui } from "@intentic/ui";
 import { computed, ref } from "vue";
 import type { ContentsGroup } from "./useEnvironmentContents";
 import { useSandboxOutline } from "../overview/useSandboxOutline";
@@ -13,11 +13,23 @@ import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
 
-const { groups, loading, error } = defineProps<{
+const {
+    groups,
+    loading,
+    error,
+    removable = false,
+    busy = false,
+} = defineProps<{
     groups: ContentsGroup[];
     loading: boolean;
     error?: string;
+    // Whether the reader may take an agent-asked block out: the card's owner gate, not this list's.
+    removable?: boolean;
+    // A decision elsewhere on the card is on its way, so none is started here meanwhile.
+    busy?: boolean;
 }>();
+// Asks the card to take one block out; the card confirms it, naming the tool, before anything is posted.
+const emit = defineEmits<{ remove: [item: EnvironmentItem] }>();
 
 // Wrapped in computed since a destructured prop is a value, not a ref the gate can watch.
 const outline = useSandboxOutline(computed(() => loading));
@@ -88,8 +100,12 @@ const explanation = (item: EnvironmentItem): string => item.detail ?? item.purpo
 const paragraphs = (item: EnvironmentItem): string[] => explanation(item).split(`\n\n`);
 const opening = (item: EnvironmentItem): string => paragraphs(item)[0] ?? ``;
 const rest = (item: EnvironmentItem): string => paragraphs(item).slice(1).join(`\n\n`);
-// True whenever there is anything beyond the row's own line: detail, commands, or a plumbing extras count.
-const expandable = (item: EnvironmentItem): boolean => item.detail !== undefined || item.commands !== undefined || item.extras !== undefined;
+// Only a row the sandbox names a block for is the owner's to take out: a capability's cost goes with its capability, and
+// a sandbox too old to remove one names none.
+const canRemove = (item: EnvironmentItem): boolean => removable && item.block !== undefined;
+// True whenever there is anything beyond the row's own line: detail, commands, a plumbing extras count, or Remove.
+const expandable = (item: EnvironmentItem): boolean =>
+    item.detail !== undefined || item.commands !== undefined || item.extras !== undefined || canRemove(item);
 </script>
 
 <template>
@@ -184,6 +200,19 @@ const expandable = (item: EnvironmentItem): boolean => item.detail !== undefined
                             :label="t(`sandbox.environmentContents.whatInstalls`)"
                             :clamp-lines="10"
                         />
+                        <!-- Inside the opened row, under what it installs: taking a tool out is read about before it is pressed. -->
+                        <Button
+                            v-if="canRemove(item)"
+                            :label="t(`sandbox.environmentContents.removeFromEnvironment`)"
+                            size="small"
+                            severity="danger"
+                            :text="true"
+                            :disabled="busy"
+                            class="self-start"
+                            @click="emit(`remove`, item)"
+                        >
+                            <template #icon><Icon name="trash" /></template>
+                        </Button>
                     </div>
                 </template>
             </DisclosureRow>

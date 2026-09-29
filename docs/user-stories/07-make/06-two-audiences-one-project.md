@@ -6,7 +6,7 @@ I keep my file tree, my Changes panel with its stages and commits, and my agent 
 
 ## Acceptance criteria
 
-- [ ] The audience answer is stored per browser, so two people on one sandbox can hold different answers at once
+- [ ] The audience answer is stored per person (the sandbox keeps each member's, and each browser keeps a copy for a sandbox too old to), so two people on one sandbox can hold different answers at once and one person's devices agree
 - [ ] A collaborator's answer never writes a sandbox rule, and the arrival card offers the rules checkbox only to a maintainer or owner
 - [ ] Switching the answer in Settings changes tiles, words, the tree filter and the markdown diff default, and leaves every file, agent and rule as it was
 - [ ] Switching the Project extension off returns the maker's rail to the Workspace tile in the same seat

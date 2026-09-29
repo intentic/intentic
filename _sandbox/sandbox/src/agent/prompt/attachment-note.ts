@@ -19,26 +19,26 @@ export const splitAttachments = (attachments: readonly string[] = []): { images:
 export const withFileNote = (prompt: string, files: readonly string[]): string =>
     files.length === 0 ? prompt : `${prompt}\n\nThe user attached these files: read them as needed:\n${files.map((path) => `- ${path}`).join("\n")}`;
 
-const NOTE_HEADER = "The user attached these files: read them with the Read tool as needed:";
+export const ATTACHMENT_NOTE_HEADER = "The user attached these files: read them with the Read tool as needed:";
 
 // Claude Code's attachment mechanism: its Read tool handles files from disk. An empty prompt means an attachment-only
 // message, where the note is the whole thing.
 export const withAttachmentNote = (prompt: string, paths: readonly string[]): string => {
-    const note = `${NOTE_HEADER}\n${paths.map((path) => `- ${path}`).join("\n")}`;
+    const note = `${ATTACHMENT_NOTE_HEADER}\n${paths.map((path) => `- ${path}`).join("\n")}`;
     return prompt === "" ? note : `${prompt}\n\n${note}`;
 };
 
 // Anchored, not fuzzy: only a message ending in the header followed by nothing but `- path` lines is touched, so quoted
 // wording elsewhere survives.
 export const stripAttachmentNote = (text: string): { text: string; attachments: string[] } => {
-    const marker = `\n\n${NOTE_HEADER}\n`;
+    const marker = `\n\n${ATTACHMENT_NOTE_HEADER}\n`;
     // Opening on the header is the note alone; the marker at 0 is a blank line before it, as after a stripped re-run note.
-    const alone = text.startsWith(`${NOTE_HEADER}\n`);
+    const alone = text.startsWith(`${ATTACHMENT_NOTE_HEADER}\n`);
     const at = alone ? 0 : text.lastIndexOf(marker);
     if (at === -1) {
         return { text, attachments: [] };
     }
-    const lines = text.slice(alone ? NOTE_HEADER.length + 1 : at + marker.length).split("\n");
+    const lines = text.slice(alone ? ATTACHMENT_NOTE_HEADER.length + 1 : at + marker.length).split("\n");
     if (!lines.every((line) => line.startsWith("- "))) {
         return { text, attachments: [] };
     }

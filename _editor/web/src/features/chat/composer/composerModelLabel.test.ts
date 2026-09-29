@@ -2,7 +2,7 @@
 // line above the composer says nothing is connected, and a pill reading "Claude Opus 5" beside it contradicts it and
 // hides the one thing the control is there for.
 import "@intentic/testing/dom";
-import { composerModelReading } from "./composerModelLabel";
+import { composerModelReading, stillRunningOn } from "./composerModelLabel";
 import { accountsLoaded, providerAccounts, translatorAccounts } from "../accounts/providerAccounts";
 import { acpProviders, endpointProviders, endpointsLoaded, perProvider, providerModels, trialStatus } from "../accounts/providerCatalog";
 
@@ -50,4 +50,23 @@ it(`says Auto over a connected provider, and the press over an unconnected one`,
 
     providerAccounts.value = perProvider(() => []);
     expect(composerModelReading({ ...CHAT, auto: true })).toEqual({ label: `Choose a model`, unset: true });
+});
+
+// A pick made while a reply runs is for the next message; the reply keeps the model it was sent under.
+it(`names the model a running reply keeps when the pick is for the next message`, () => {
+    providerModels.value = {
+        ...perProvider(() => []),
+        claude: [
+            { value: `claude-opus-5`, label: `Claude Opus 5` },
+            { value: `claude-haiku-4-5`, label: `Claude Haiku 4.5` },
+        ],
+    };
+
+    expect(stillRunningOn(CHAT, { streaming: true, sentModel: `claude-haiku-4-5` })).toBe(`Claude Haiku 4.5`);
+});
+
+it(`says nothing once the reply has ended, or while it runs on the model picked`, () => {
+    expect(stillRunningOn(CHAT, { streaming: false, sentModel: `claude-haiku-4-5` })).toBeUndefined();
+    expect(stillRunningOn(CHAT, { streaming: true, sentModel: `claude-opus-5` })).toBeUndefined();
+    expect(stillRunningOn(CHAT, { streaming: true, sentModel: undefined })).toBeUndefined();
 });

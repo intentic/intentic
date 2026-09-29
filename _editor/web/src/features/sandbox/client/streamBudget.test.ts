@@ -1,6 +1,8 @@
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import {
     acquireStreamSlot,
+    measuredProtocol,
+    recordProtocols,
     resetStreamBudget,
     setStreamCapacity,
     setStreamOverflow,
@@ -18,38 +20,72 @@ beforeEach(() => {
 const take = async (signal?: AbortSignal): Promise<(() => void) | undefined> => acquireStreamSlot(`attach`, signal);
 
 describe(`streamCapacity`, () => {
-    it(`only caps the transport that cannot multiplex`, () => {
-        // h2 multiplexes many streams on one connection, so capping there would serialize for nothing.
-        expect(streamCapacity(`local`)).toBe(Number.POSITIVE_INFINITY);
-        expect(streamCapacity(`public`)).toBe(Number.POSITIVE_INFINITY);
-        expect(streamCapacity(undefined)).toBe(Number.POSITIVE_INFINITY);
-        // Plain http loopback is HTTP/1.1 and always will be: no browser speaks cleartext h2.
-        expect(streamCapacity(`local-insecure`)).toBe(4);
+    it(`caps whatever the browser did not negotiate as h2 or h3, on any address`, () => {
+        // The Linux app's WebKitGTK spoke HTTP/1.1 to the certified loopback name, which was assumed h2 by its kind.
+        for (const kind of [`local`, `local-insecure`, `public`] as const) {
+            expect(streamCapacity(kind, `http/1.1`)).toBe(4);
+            expect(streamCapacity(kind, `h2`)).toBe(Number.POSITIVE_INFINITY);
+            expect(streamCapacity(kind, `h3`)).toBe(Number.POSITIVE_INFINITY);
+        }
+    });
+
+    it(`reads an unmeasured loopback route as HTTP/1.1 under WebKit and an unmeasured tunnel as multiplexed`, () => {
+        expect(streamCapacity(`local`, undefined, true)).toBe(4);
+        expect(streamCapacity(`local-insecure`, undefined, true)).toBe(4);
+        expect(streamCapacity(`public`, undefined, true)).toBe(Number.POSITIVE_INFINITY);
+        expect(streamCapacity(undefined, undefined, true)).toBe(Number.POSITIVE_INFINITY);
+    });
+
+    // A front too old to send Timing-Allow-Origin leaves the protocol unknown for good: Blink and Gecko reach the
+    // certified loopback name over h2, so capping them there would push a third window or stream to the tunnel.
+    it(`leaves the certified loopback name uncapped for engines that multiplex it, and plain HTTP capped for all`, () => {
+        expect(streamCapacity(`local`, undefined, false)).toBe(Number.POSITIVE_INFINITY);
+        expect(streamCapacity(`local-insecure`, undefined, false)).toBe(4);
+        expect(streamCapacity(`local`, `http/1.1`, false)).toBe(4);
     });
 
     it(`leaves the browser room for ordinary requests`, () => {
         // The point: connections are shared with ordinary requests, so streams may not claim all of them.
-        expect(streamCapacity(`local-insecure`)).toBeLessThan(6);
+        expect(streamCapacity(`local`, `http/1.1`)).toBeLessThan(6);
+    });
+});
+
+describe(`measuredProtocol`, () => {
+    const timing = (name: string, nextHopProtocol: string) => ({ name, nextHopProtocol });
+
+    it(`knows an origin's protocol once one of its responses was timed, and nothing before`, () => {
+        expect(measuredProtocol(`https://box.example:4750`)).toBeUndefined();
+        recordProtocols([timing(`https://box.example:4750/health`, `http/1.1`), timing(`https://tunnel.example/health`, `h2`)]);
+        expect(measuredProtocol(`https://box.example:4750`)).toBe(`http/1.1`);
+        expect(measuredProtocol(`https://tunnel.example`)).toBe(`h2`);
+        expect(measuredProtocol(`https://box.example:4751`)).toBeUndefined();
+    });
+
+    it(`keeps what it knew through a response that hides its timing`, () => {
+        // A cross-origin response without Timing-Allow-Origin reads as "", which says nothing about the connection.
+        recordProtocols([timing(`https://box.example/health`, `h2`), timing(`https://box.example/agent/attach`, ``)]);
+        expect(measuredProtocol(`https://box.example`)).toBe(`h2`);
     });
 });
 
 describe(`streamPermits`, () => {
     it(`splits the capped budget into pools that spend it exactly`, () => {
         // Disjoint and exhaustive: every permit belongs to one pool, and pools must never sum past capacity.
-        const pools = streamPermits(`local-insecure`, `events`) + streamPermits(`local-insecure`, `attach`);
-        expect(pools).toBe(streamCapacity(`local-insecure`));
+        const pools = streamPermits(`local`, undefined, `events`) + streamPermits(`local`, undefined, `attach`);
+        expect(pools).toBe(streamCapacity(`local`, undefined));
     });
 
     it(`keeps a permit for liveness that the attaches cannot take`, () => {
         // /events makes a window live; sharing its queue with attaches is how a window ends up frozen on a stale view.
-        expect(streamPermits(`local-insecure`, `events`)).toBeGreaterThan(0);
-        expect(streamPermits(`local-insecure`, `attach`)).toBeGreaterThan(0);
+        expect(streamPermits(`local`, `http/1.1`, `events`)).toBe(2);
+        expect(streamPermits(`local`, `http/1.1`, `attach`)).toBe(2);
     });
 
     it(`rations nothing on a transport that multiplexes`, () => {
         for (const stream of [`events`, `attach`] satisfies StreamKind[]) {
-            expect(streamPermits(`public`, stream)).toBe(Number.POSITIVE_INFINITY);
-            expect(streamPermits(`local`, stream)).toBe(Number.POSITIVE_INFINITY);
+            expect(streamPermits(`local`, `h2`, stream)).toBe(Number.POSITIVE_INFINITY);
+            expect(streamPermits(`public`, `h3`, stream)).toBe(Number.POSITIVE_INFINITY);
+            expect(streamPermits(`public`, undefined, stream)).toBe(Number.POSITIVE_INFINITY);
         }
     });
 });
@@ -150,13 +186,51 @@ describe(`acquireStreamSlot`, () => {
         try {
             setStreamCapacity(() => 1);
             const overflowed = jest.fn();
-            setStreamOverflow(overflowed);
+            setStreamOverflow(() => {
+                overflowed();
+                return true;
+            });
             await take();
 
             const queued = take();
             await advanceTimersByTimeAsync(10_000);
             expect(overflowed).toHaveBeenCalledTimes(1);
             // Admitted, not refused: the caller opens on a transport with nothing to ration.
+            expect(await queued).toEqual(expect.any(Function));
+        } finally {
+            jest.useRealTimers();
+        }
+    });
+
+    it(`keeps short-request connections reserved when no alternate transport exists`, async () => {
+        jest.useFakeTimers();
+        try {
+            setStreamCapacity(() => 1);
+            setStreamOverflow(() => false);
+            const release = await take();
+            const queued = take();
+            let admitted = false;
+            void queued.then(() => {
+                admitted = true;
+            });
+            await advanceTimersByTimeAsync(10_000);
+            expect(admitted).toBe(false);
+            release?.();
+            expect(await queued).toEqual(expect.any(Function));
+        } finally {
+            jest.useRealTimers();
+        }
+    });
+
+    it(`still opens a window's one /events stream when no alternate transport exists`, async () => {
+        // Waiting there would leave the window never live; one stream past the pool costs a reserved connection.
+        jest.useFakeTimers();
+        try {
+            setStreamCapacity(() => 1);
+            setStreamOverflow(() => false);
+            await acquireStreamSlot(`events`);
+            const queued = acquireStreamSlot(`events`);
+            await advanceTimersByTimeAsync(5_000);
             expect(await queued).toEqual(expect.any(Function));
         } finally {
             jest.useRealTimers();

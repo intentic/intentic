@@ -33,8 +33,10 @@ export interface EmulatedPlan {
 const proposed = (capture: PlanPhaseResult, signal: AbortSignal): string | undefined =>
     capture.errored || capture.planText === undefined || capture.planText.trim() === "" || signal.aborted ? undefined : capture.planText;
 
-// The next planning message after a rejection, carrying what the user said when they said anything.
-const revision = (feedback: string | undefined): string => {
+// The next planning message after a rejection, carrying what the user said when they said anything. Framed, so notes
+// that read like consent ("proceed", "approved with…") are never taken as leave to execute; the SDK's own plan gate
+// sends the same words as its deny (agent.ts).
+export const planRevision = (feedback: string | undefined): string => {
     const said = feedback?.trim();
     return said !== undefined && said !== ""
         ? `The user rejected the plan with this feedback:\n${said}\n\nRevise the plan. Still do not execute it.`
@@ -64,7 +66,7 @@ async function* emulate(request: Pick<AgentRequest, "spec" | "signal" | "hooks">
             yield* emulated.execute(sessionId);
             return;
         }
-        prompt = revision(decision.feedback);
+        prompt = planRevision(decision.feedback);
     }
 }
 

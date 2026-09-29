@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
 import { defaultGit } from "@intentic/scaffold";
-import { type AgentTurn, SandboxSettingsSchema } from "@intentic/sandbox-contract";
+import { type AgentTurn, type ModelPin, NATIVE_PROVIDERS, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import { call } from "@orpc/server";
 import { SETTLES, waitFor } from "@intentic/testing/bun";
@@ -53,7 +53,14 @@ const SPENT: CiFailure = {
     changed: false,
 };
 
-const harness = async () => {
+// Which providers this sandbox can serve, and what Models pins for fixing pipelines; Claude alone and nothing, unless
+// a test says otherwise.
+interface Setup {
+    readonly ready?: readonly string[];
+    readonly pinned?: readonly ModelPin[];
+}
+
+const harness = async ({ ready = ["claude"], pinned = [] }: Setup = {}) => {
     const root = mkdtempSync(join(tmpdir(), "ci-fix-"));
     const dir = join(root, "web");
     await mkdir(dir, { recursive: true });
@@ -85,7 +92,14 @@ const harness = async () => {
         ciHooks: unstubbed<Services["ciHooks"]>("ciHooks", { warnings: () => new Map() }),
         // Loopback: no identities, so the caller is the owner.
         auth: undefined,
-        sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
+        sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", {
+            get: async () => SandboxSettingsSchema.parse({ modelRoles: { "pipeline-fix": pinned } }),
+        }),
+        // SAFETY: one entry per native provider, which is the whole of the record's keys.
+        providerReadiness: async () =>
+            Object.fromEntries(NATIVE_PROVIDERS.map((provider) => [provider, ready.includes(provider)])) as Awaited<ReturnType<Services["providerReadiness"]>>,
+        // A pin's rung is asked whether it has been dying; none has.
+        usage: unstubbed<Services["usage"]>("usage", { turns: async () => [] }),
         agents: unstubbed<Services["agents"]>("agents", { list: () => [], listArchived: () => [], clearArchived: async () => {} }),
         turnJournal: sqliteTurnJournal(openConversationsDb(conversationsDbPath(root))),
         transcripts: unstubbed<Services["transcripts"]>("transcripts", { read: async () => [], append: async () => {} }),
@@ -117,6 +131,31 @@ test("a pressed Fix starts an ordinary session: a run role, and nothing marking 
     const turn = started[0]!;
     expect(turn).toMatchObject({ isolated: true, runRole: "pipeline-fix" });
     expect(turn.unattended).toBeUndefined();
+});
+
+// C4: the Fix button names the model a new chat would open on, and the press sends it; the sandbox used to open an
+// unpinned fix on Claude, which a Z.ai-only owner never connected.
+test("a plain Fix with nothing pinned opens on the chat default the pressing browser sent", async () => {
+    const { routes, started } = await harness({ ready: ["claude", "zai"] });
+    await call(routes.fix, { repo: "web", runId: RUN_ID, fallback: { agent: "zai", model: "glm-4.6" } }, { context });
+    await waitFor(() => expect(started).toHaveLength(1), SETTLES);
+    expect(started[0]).toMatchObject({ agent: "zai", model: "glm-4.6", runRole: "pipeline-fix" });
+});
+
+test("a model pinned for fixing pipelines wins over the chat default the browser sent", async () => {
+    const { routes, started } = await harness({ ready: ["claude", "zai"], pinned: [{ provider: "claude", model: "claude-sonnet-4-6" }] });
+    await call(routes.fix, { repo: "web", runId: RUN_ID, fallback: { agent: "zai", model: "glm-4.6" } }, { context });
+    await waitFor(() => expect(started).toHaveLength(1), SETTLES);
+    expect(started[0]).toMatchObject({ agent: "claude", model: "claude-sonnet-4-6" });
+});
+
+// A chat default on a provider this sandbox cannot serve is no better than Claude was: the sandbox's own fallback runs.
+test("a chat default this sandbox cannot serve gives way to a provider it can", async () => {
+    const { routes, started } = await harness({ ready: ["zai"] });
+    await call(routes.fix, { repo: "web", runId: RUN_ID, fallback: { agent: "codex", model: "gpt-5" } }, { context });
+    await waitFor(() => expect(started).toHaveLength(1), SETTLES);
+    expect(started[0]?.agent).toBe("zai");
+    expect(started[0]?.model).toBeUndefined();
 });
 
 // `gh` is not in the sandbox image, so a prompt naming it sends the fix agent at a wall and it gives up on verifying.

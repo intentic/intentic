@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
 import { defaultGit } from "@intentic/scaffold";
-import { type AgentSummary, type PipelineRun, SandboxSettingsSchema } from "@intentic/sandbox-contract";
+import { type AgentSummary, NATIVE_PROVIDERS, type PipelineRun, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import { fileCapabilitiesStore } from "../capabilities/capabilities-store.js";
 import type { Services } from "../composition.js";
@@ -106,6 +106,10 @@ const harness = async (autoRepair = true) => {
         // Where the streak lives, so a restart (resetMainFixer) keeps it.
         ciStore: fileCiStore(join(root, STATE_DIR, "secrets", "ci.json")),
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse(settings) }),
+        // Claude is the one provider this sandbox can serve: a fix with nothing pinned opens on it (ci-fix.ts).
+        // SAFETY: one entry per native provider, which is the whole of the record's keys.
+        providerReadiness: async () =>
+            Object.fromEntries(NATIVE_PROVIDERS.map((provider) => [provider, provider === "claude"])) as Awaited<ReturnType<Services["providerReadiness"]>>,
         agents: unstubbed<Services["agents"]>("agents", {
             list: () => [...agents.values()],
             listArchived: () => [],

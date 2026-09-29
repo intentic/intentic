@@ -34,11 +34,13 @@ const setKind = (kind: string, runner: string | undefined): void => {
     <RowGroup :label="t(`sandbox.agentOffload.title`)">
         <RowNote>
             {{ t(`sandbox.agentOffload.intro`) }}
-            <template v-if="noRunners">
-                {{ t(`sandbox.agentOffload.noRunnersBefore`) }}
-                <RouterLink :to="{ name: `sandbox`, params: { tab: `devices` }, query: {} }" class="underline">{{ t(`sandbox.words.devicesSection`) }}</RouterLink>
-                {{ t(`sandbox.agentOffload.noRunnersAfter`) }}
-            </template>
+            <i18n-t v-if="noRunners" keypath="sandbox.agentOffload.noRunners" tag="span" scope="global">
+                <template #devices
+                    ><RouterLink :to="{ name: `sandbox`, params: { tab: `devices` }, query: {} }" class="underline">{{
+                        t(`sandbox.words.devicesSection`)
+                    }}</RouterLink></template
+                >
+            </i18n-t>
         </RowNote>
 
         <Row v-for="kind in kinds" :key="kind.id" icon="bolt" :title="kindTitle(kind)" :description="kindDetail(kind)">

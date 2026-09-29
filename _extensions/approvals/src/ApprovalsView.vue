@@ -45,6 +45,7 @@ import { useHeldWakes, waitingOf } from "./useHeldWakes";
 import { useHookRequests, waitingHooksOf } from "./useHookRequests";
 import { usePlatformCatalog } from "./usePlatformCatalog";
 import { usePostEdit } from "./usePostEdit";
+import { useWaitingAgents } from "./useWaitingAgents";
 import { t } from "./i18n.js";
 
 // The approval inbox: the agent proposes a post or an action, and only the owner's click makes it real. Approving isn't
@@ -73,6 +74,18 @@ const hooksNotice = computed<NoticeModel | undefined>(() => {
     // The record of approvals could not be read, so no settings hook runs anywhere until one is approved again.
     return ledgerUnreadable.value ? { tone: `danger`, title: t(`approvalsView.hookLedgerUnreadable`) } : undefined;
 });
+// What agents ask while they work (a permission, a question, a plan) is answered in their own chat, never here; the page
+// says where, rather than "Nothing waiting" over cards that are waiting somewhere else.
+const waitingAgents = useWaitingAgents();
+const agentsNotice = computed<NoticeModel | undefined>(() =>
+    waitingAgents.value === 0
+        ? undefined
+        : {
+              tone: `info`,
+              title: t(`approvalsView.agentsWaitInChats`, { count: waitingAgents.value }, waitingAgents.value),
+              action: { label: t(`approvalsView.seeWhatNeedsYou`), run: () => host().navigate(`/needs`) },
+          },
+);
 // Below maintainer, the queue is read-only (the daemon floors the mutation too); a viewer can still watch.
 const canShip = computed(() => roleAtLeast(host().sandbox.role(), `maintainer`));
 const { notice: actionError, run } = useAsyncAction();
@@ -382,7 +395,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
     <SplitView :title="t(`approvalsView.approvals`)" scroll="page" :scroll-key="railScope">
         <!-- Whole-page banners: the countdown speaks for every slice, and an unparsed file has no slice to belong to. -->
         <template #strips>
-            <NoticeStack :of="[actionError, listNotice, heldNotice, hooksNotice, goingAheadNotice]" />
+            <NoticeStack :of="[actionError, listNotice, heldNotice, hooksNotice, goingAheadNotice, agentsNotice]" />
             <Notice v-if="invalid.length > 0" tone="warning">
                 {{ invalid.length }} {{ t(`approvalsView.file`) }}{{ invalid.length === 1 ? "" : "s" }} {{ t(`approvalsView.couldntReadWontRun`) }}
                 <span class="font-mono">{{ invalid.join(", ") }}</span>
@@ -406,8 +419,9 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                 </template>
 
                 <!-- Nothing at all. The rail hides its own tile here, so a reader arriving deliberately is owed an explanation. -->
+                <!-- With agents waiting in their chats, the notice above says where; "Nothing waiting" would contradict it. -->
                 <p v-else-if="isEmpty" :class="ui.emptyState(`py-8`)">
-                    {{ t(`approvalsView.nothingWaitingPostsAgent`) }}
+                    {{ waitingAgents > 0 ? t(`approvalsView.nothingHereToApprove`) : t(`approvalsView.nothingWaitingPostsAgent`) }}
                 </p>
 
                 <div v-else class="flex flex-col gap-6">

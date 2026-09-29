@@ -1,4 +1,5 @@
-import type { TurnNote } from "./transcript.js";
+import { noticeCode, type ResumeNoticeReason } from "./sandbox-notice.js";
+import type { TranscriptRow, TurnNote } from "./transcript.js";
 
 // What a resumed turn's prompt says happened; lives on the wire since the client must recognise it too.
 
@@ -46,22 +47,34 @@ export type ResumeReason = keyof typeof RESUME_NOTES;
 
 // How a resumed turn's interruption reads to a person: `notice` for the whole-turn re-runs, a muted line with the
 // repeat dropped; `note` for the answered case, the user's real answer disclosed normally.
-export type ResumeDisclosure = { readonly kind: "notice"; readonly text: string } | { readonly kind: "note"; readonly note: TurnNote };
+// A notice names its reason too, so the row it becomes can say it in the reader's language (sandbox-notice.ts).
+export type ResumeDisclosure =
+    | { readonly kind: "notice"; readonly text: string; readonly reason: ResumeNoticeReason }
+    | { readonly kind: "note"; readonly note: TurnNote };
+
+const notice = (reason: ResumeNoticeReason, text: string): ResumeDisclosure => ({ kind: "notice", text, reason });
 
 const RESUME_DISCLOSURES: Record<ResumeReason, ResumeDisclosure> = {
-    auth: { kind: "notice", text: "Claude sign-in renewed, this turn picked up where it left off." },
-    outage: { kind: "notice", text: "The model provider came back, this turn picked up where it left off." },
-    restart: { kind: "notice", text: "The sandbox came back, this turn picked up where it left off." },
-    stopped: { kind: "notice", text: "Sent again after the turn stopped short, picking up where it left off." },
+    auth: notice("auth", "Claude sign-in renewed, this turn picked up where it left off."),
+    outage: notice("outage", "The model provider came back, this turn picked up where it left off."),
+    restart: notice("restart", "The sandbox came back, this turn picked up where it left off."),
+    stopped: notice("stopped", "Sent again after the turn stopped short, picking up where it left off."),
     // None of these four auto-resumed, a person pressed Continue; `switched`/`carried` name the differing account.
-    limit: { kind: "notice", text: "Sent again after the allowance ran out mid-turn, picking up where it left off." },
-    switched: { kind: "notice", text: "Sent again on the switched account after the allowance ran out mid-turn, in a fresh session." },
-    carried: { kind: "notice", text: "Sent again on the switched account after the allowance ran out mid-turn, carrying the session with it." },
-    refused: { kind: "notice", text: "Sent again after the allowance refused it: nothing had run." },
-    door: { kind: "notice", text: "Sent again: the first attempt was turned away before anything ran." },
-    overflow: { kind: "notice", text: "Sent again in a fresh session after the last one outgrew the model's context window." },
+    limit: notice("limit", "Sent again after the allowance ran out mid-turn, picking up where it left off."),
+    switched: notice("switched", "Sent again on the switched account after the allowance ran out mid-turn, in a fresh session."),
+    carried: notice("carried", "Sent again on the switched account after the allowance ran out mid-turn, carrying the session with it."),
+    refused: notice("refused", "Sent again after the allowance refused it: nothing had run."),
+    door: notice("door", "Sent again: the first attempt was turned away before anything ran."),
+    overflow: notice("overflow", "Sent again in a fresh session after the last one outgrew the model's context window."),
     answered: { kind: "note", note: { title: "Picked back up after a sandbox restart", text: RESUME_NOTES.answered } },
 };
+
+/** The row a whole-turn re-run stands in for its repeated words with, wherever a reader restores one. */
+export const resumeNoticeRow = (resume: Extract<ResumeDisclosure, { kind: "notice" }>): TranscriptRow => ({
+    role: "notice",
+    text: resume.text,
+    noticeCode: noticeCode({ code: "resumed", params: { reason: resume.reason } }),
+});
 
 // What a stored prompt's resume note should be shown as; undefined when the prompt isn't a resume, so any reader can
 // ask without checking first.

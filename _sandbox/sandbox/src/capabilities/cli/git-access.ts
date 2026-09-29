@@ -7,6 +7,7 @@ import { directExec, type ExecInTerminal } from "../../terminal/terminal-run.js"
 import { hostConfPath, hostKeyPath, hostsDir, removeSshHost, writeSshHost } from "../ssh-hosts.js";
 import type { ConnectorHook } from "./connector-hooks.js";
 
+// With git access on, the account also names who commits here when the sandbox has no identity (ensureGitIdentity).
 // Git access on gets real git credentials beyond the curl-API skill: HTTPS always, set up first, and SSH best-effort.
 // SSH: a generated key registered via the token, alias written once confirmed; unregisterable keys route over https.
 // Keyed by host; half this state lives on the volume, half on the container's fs, which restoreGitAccess restores.
@@ -42,6 +43,13 @@ export interface GitAccessDeps {
     readonly deleteKey: (host: GitHost, title: string) => Promise<void>;
     // Asked of ssh itself, not the account API, so a token that can't even list keys gets a truthful answer.
     readonly keyAuthenticates: (host: GitHost, keyPath: string) => Promise<boolean>;
+    // The account's own name and commit address, for a sandbox with no git identity; absent where nothing asks.
+    readonly accountIdentity?: (host: GitHost) => Promise<GitIdentity | undefined>;
+}
+
+export interface GitIdentity {
+    readonly name: string;
+    readonly email: string;
 }
 
 const fileExists = (path: string): Promise<boolean> =>
@@ -165,7 +173,60 @@ const keyAuthenticatesReal = async (host: GitHost, keyPath: string): Promise<boo
     return /successfully authenticated|welcome to gitlab/i.test(output);
 };
 
-const realDeps: GitAccessDeps = { uploadKey: uploadKeyReal, deleteKey: deleteKeyReal, keyAuthenticates: keyAuthenticatesReal };
+const text = (value: unknown): string | undefined => (typeof value === "string" && value.trim() !== "" ? value.trim() : undefined);
+
+// Who the token belongs to, as a commit should name them: the account's display name (its login when it has none) and
+// its own commit address, or the provider's noreply address when the account keeps its email private.
+const accountIdentityReal = async (host: GitHost): Promise<GitIdentity | undefined> => {
+    const headers = host.provider === "github" ? githubHeaders(host.token) : { "PRIVATE-TOKEN": host.token };
+    const response = await fetch(`${host.apiBase}/user`, { headers, signal: AbortSignal.timeout(15_000) });
+    if (!response.ok) {
+        return undefined;
+    }
+    const user = (await response.json()) as Record<string, unknown>;
+    const login = text(user["login"]) ?? text(user["username"]);
+    const id = typeof user["id"] === "number" ? user["id"] : undefined;
+    if (login === undefined || id === undefined) {
+        return undefined;
+    }
+    const noreply = host.provider === "github" ? `${id}+${login}@users.noreply.github.com` : `${id}-${login}@users.noreply.${host.host}`;
+    const email = host.provider === "github" ? text(user["email"]) : (text(user["commit_email"]) ?? text(user["public_email"]));
+    return { name: text(user["name"]) ?? login, email: email ?? noreply };
+};
+
+const realDeps: GitAccessDeps = {
+    uploadKey: uploadKeyReal,
+    deleteKey: deleteKeyReal,
+    keyAuthenticates: keyAuthenticatesReal,
+    accountIdentity: accountIdentityReal,
+};
+
+// What the sandbox's own git config says for one key, undefined when it says nothing (`--get` exits 1 then).
+const globalGit = async (key: string): Promise<string | undefined> =>
+    directExec("git", ["config", "--global", "--get", key]).then(
+        ({ stdout }) => text(stdout),
+        () => undefined,
+    );
+
+// Who commits here when nobody said: the connected account, so an agent's own `git commit` works instead of failing
+// "Author identity unknown" and the agent making a name up. Only a key the sandbox leaves unset is written, never one
+// the owner set, and a failed lookup leaves both as they are.
+export const ensureGitIdentity = async (host: GitHost, exec: ExecInTerminal, deps: GitAccessDeps = realDeps): Promise<void> => {
+    const [name, email] = await Promise.all([globalGit("user.name"), globalGit("user.email")]);
+    if ((name !== undefined && email !== undefined) || deps.accountIdentity === undefined) {
+        return;
+    }
+    const account = await deps.accountIdentity(host).catch(() => undefined);
+    if (account === undefined) {
+        return;
+    }
+    if (name === undefined) {
+        await exec("git", ["config", "--global", "user.name", account.name]);
+    }
+    if (email === undefined) {
+        await exec("git", ["config", "--global", "user.email", account.email]);
+    }
+};
 
 // https base every ssh-form remote for this host rewrites onto, keyed so github.com and a self-hosted gitlab don't
 // collide; trailing slash makes both remote forms land on the same URL.
@@ -200,6 +261,7 @@ const disableHttpsRewrite = async (host: GitHost, exec: ExecInTerminal): Promise
 // HTTPS configures first and unconditionally so git works either way; the alias writes only once the key is confirmed.
 export const setupGitAccess = async (host: GitHost, exec: ExecInTerminal, deps: GitAccessDeps = realDeps): Promise<string | undefined> => {
     await ensureHttpsCredential(host, exec);
+    await ensureGitIdentity(host, exec, deps);
     const publicKey = await ensureKeyPair(host, exec);
     const refusal = await deps.uploadKey(host, publicKey, KEY_TITLE).then(
         () => undefined,
@@ -225,6 +287,8 @@ export const restoreGitAccess = async (host: GitHost, exec: ExecInTerminal, deps
         return setupGitAccess(host, exec, deps);
     }
     await ensureHttpsCredential(host, exec);
+    // A recreated container lost its global git config, the identity with it.
+    await ensureGitIdentity(host, exec, deps);
     // Alias next to the key means the key is on the account: written only after a successful upload.
     if (await fileExists(hostConfPath(host.host))) {
         await writeSshHost(host.host, { host: host.host, user: "git", port: 22, identityFile: hostKeyPath(host.host) });

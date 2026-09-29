@@ -111,6 +111,15 @@ test("the lean form describes a many-sided machine in one line per machine", () 
     expect(lean).not.toContain("ONE computer");
 });
 
+// The product's own guide is baked where only the Claude Code loop's skill loader looks; every other runtime is pointed
+// at its file instead, since an owner's first question is often about the product itself.
+test("a runtime outside the loop is pointed at the product guide's file, and the loop is not", () => {
+    for (const variant of ["full", "lean"] as const) {
+        expect(guidanceBlock(variant, undefined)).toContain("`/root/.claude/skills/intentic/SKILL.md`");
+        expect(guidanceBlock(variant, EVERYTHING_MOUNTED)).not.toContain("/root/.claude/skills/intentic/SKILL.md");
+    }
+});
+
 // A runtime outside the Claude Code loop has no ToolSearch, no cards, no skill loader and no background Bash.
 test("a runtime outside the loop is told nothing that names a loop-only mechanism, in either form", () => {
     for (const variant of ["full", "lean"] as const) {

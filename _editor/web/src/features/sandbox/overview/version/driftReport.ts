@@ -1,3 +1,4 @@
+import { t } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { appBehind, comparedRouteCount, daemonBehind, driftedRoutes, missingRoutes, unknownDaemonRoutes } from "../useDaemonRoutes";
 
@@ -35,59 +36,64 @@ export interface DriftArea {
 // Each contract group named as the product names it, with the screen it serves. Without this the card reports
 // `agent` and `agents` as two things a reader is supposed to tell apart — a distinction only the contract makes.
 // A group with no entry falls back to its own name: an unknown group means the OTHER side has a feature this build
-// predates, so there is no honest label for it here.
-const AREAS: Readonly<Record<string, { label: string; where: string }>> = {
-    accounts: { label: `Accounts`, where: `the accounts this sandbox signs in as` },
-    activity: { label: `Activity log`, where: `the audit feed of what the agent did` },
-    agent: { label: `Running a turn`, where: `sending, stopping and following a turn` },
-    agents: { label: `The fleet`, where: `the agent board and each agent's status` },
-    approvals: { label: `Approvals`, where: `what the agent prepared for you to allow` },
-    areas: { label: `Workspace areas`, where: `who is allowed to see which parts of the workspace` },
-    automations: { label: `Automations`, where: `scheduled wake-ups and their approvals` },
-    capabilities: { label: `Capabilities`, where: `connectors, accounts and the cards that grant them` },
-    chores: { label: `Chores`, where: `maintenance runs and their evidence` },
-    ci: { label: `CI`, where: `check runs and their results` },
-    diff: { label: `Changes`, where: `the diff panel and file-by-file review` },
-    endpoints: { label: `AI models`, where: `the models this sandbox is allowed to use` },
-    exit: { label: `Exit nodes`, where: `which country this sandbox's traffic leaves from` },
-    extensions: { label: `Extensions`, where: `installed extensions and their views` },
-    git: { label: `Git`, where: `branches, commits and what is staged` },
-    history: { label: `History`, where: `the record of past conversations and turns` },
-    intentic: { label: `Deployments`, where: `deployment plans and the runs that apply them` },
-    inventory: { label: `Deploy inventory`, where: `what this workspace has and wants deployed` },
-    issues: { label: `Issues`, where: `reported problems and their reports` },
-    logs: { label: `Logs`, where: `the sandbox's own log files` },
-    loops: { label: `Loops`, where: `running and saved agent loops` },
-    needs: { label: `Requests`, where: `what the agent asked you to connect or provide` },
-    netdisk: { label: `Network disks`, where: `mounted network storage` },
-    offload: { label: `Offloaded work`, where: `heavy commands sent to a runner on one of your machines` },
-    panels: { label: `Panels`, where: `the operator panels in the sidebar` },
-    personas: { label: `Personas`, where: `the identities the agent speaks as` },
-    ports: { label: `Ports`, where: `what this sandbox listens on, and previews` },
-    providers: { label: `AI accounts`, where: `the accounts your agents run on` },
-    public: { label: `Outbox`, where: `files published at the sandbox's public address` },
-    push: { label: `Pushing`, where: `sending work to a repository` },
-    safety: { label: `Safety policy`, where: `the policy document and what it decided` },
-    secrets: { label: `Secrets`, where: `stored credentials and which are missing` },
-    sessions: { label: `Conversations`, where: `the conversation list and its messages` },
-    settings: { label: `Sandbox settings`, where: `everything on the Sandbox tabs` },
-    share: { label: `Shared pages`, where: `conversations published as read-only pages` },
-    skills: { label: `Skills`, where: `what the agent knows and what is switched on` },
+// predates, so there is no honest label for it here. Each entry reads the catalog when asked rather than at import,
+// so a language switched after the page loaded names the areas in that language.
+interface AreaName {
+    readonly label: string;
+    readonly where: string;
+}
+const AREAS: Readonly<Record<string, () => AreaName>> = {
+    accounts: () => ({ label: t(`sandbox.driftReport.areas.accounts.label`), where: t(`sandbox.driftReport.areas.accounts.where`) }),
+    activity: () => ({ label: t(`sandbox.driftReport.areas.activity.label`), where: t(`sandbox.driftReport.areas.activity.where`) }),
+    agent: () => ({ label: t(`sandbox.driftReport.areas.agent.label`), where: t(`sandbox.driftReport.areas.agent.where`) }),
+    agents: () => ({ label: t(`sandbox.driftReport.areas.agents.label`), where: t(`sandbox.driftReport.areas.agents.where`) }),
+    approvals: () => ({ label: t(`sandbox.driftReport.areas.approvals.label`), where: t(`sandbox.driftReport.areas.approvals.where`) }),
+    areas: () => ({ label: t(`sandbox.driftReport.areas.areas.label`), where: t(`sandbox.driftReport.areas.areas.where`) }),
+    automations: () => ({ label: t(`sandbox.driftReport.areas.automations.label`), where: t(`sandbox.driftReport.areas.automations.where`) }),
+    capabilities: () => ({ label: t(`sandbox.driftReport.areas.capabilities.label`), where: t(`sandbox.driftReport.areas.capabilities.where`) }),
+    chores: () => ({ label: t(`sandbox.driftReport.areas.chores.label`), where: t(`sandbox.driftReport.areas.chores.where`) }),
+    ci: () => ({ label: t(`sandbox.driftReport.areas.ci.label`), where: t(`sandbox.driftReport.areas.ci.where`) }),
+    diff: () => ({ label: t(`sandbox.driftReport.areas.diff.label`), where: t(`sandbox.driftReport.areas.diff.where`) }),
+    endpoints: () => ({ label: t(`sandbox.driftReport.areas.endpoints.label`), where: t(`sandbox.driftReport.areas.endpoints.where`) }),
+    exit: () => ({ label: t(`sandbox.driftReport.areas.exit.label`), where: t(`sandbox.driftReport.areas.exit.where`) }),
+    extensions: () => ({ label: t(`sandbox.driftReport.areas.extensions.label`), where: t(`sandbox.driftReport.areas.extensions.where`) }),
+    git: () => ({ label: t(`sandbox.driftReport.areas.git.label`), where: t(`sandbox.driftReport.areas.git.where`) }),
+    history: () => ({ label: t(`sandbox.driftReport.areas.history.label`), where: t(`sandbox.driftReport.areas.history.where`) }),
+    intentic: () => ({ label: t(`sandbox.driftReport.areas.intentic.label`), where: t(`sandbox.driftReport.areas.intentic.where`) }),
+    inventory: () => ({ label: t(`sandbox.driftReport.areas.inventory.label`), where: t(`sandbox.driftReport.areas.inventory.where`) }),
+    issues: () => ({ label: t(`sandbox.driftReport.areas.issues.label`), where: t(`sandbox.driftReport.areas.issues.where`) }),
+    logs: () => ({ label: t(`sandbox.driftReport.areas.logs.label`), where: t(`sandbox.driftReport.areas.logs.where`) }),
+    loops: () => ({ label: t(`sandbox.driftReport.areas.loops.label`), where: t(`sandbox.driftReport.areas.loops.where`) }),
+    needs: () => ({ label: t(`sandbox.driftReport.areas.needs.label`), where: t(`sandbox.driftReport.areas.needs.where`) }),
+    netdisk: () => ({ label: t(`sandbox.driftReport.areas.netdisk.label`), where: t(`sandbox.driftReport.areas.netdisk.where`) }),
+    offload: () => ({ label: t(`sandbox.driftReport.areas.offload.label`), where: t(`sandbox.driftReport.areas.offload.where`) }),
+    panels: () => ({ label: t(`sandbox.driftReport.areas.panels.label`), where: t(`sandbox.driftReport.areas.panels.where`) }),
+    personas: () => ({ label: t(`sandbox.driftReport.areas.personas.label`), where: t(`sandbox.driftReport.areas.personas.where`) }),
+    ports: () => ({ label: t(`sandbox.driftReport.areas.ports.label`), where: t(`sandbox.driftReport.areas.ports.where`) }),
+    providers: () => ({ label: t(`sandbox.driftReport.areas.providers.label`), where: t(`sandbox.driftReport.areas.providers.where`) }),
+    public: () => ({ label: t(`sandbox.driftReport.areas.public.label`), where: t(`sandbox.driftReport.areas.public.where`) }),
+    push: () => ({ label: t(`sandbox.driftReport.areas.push.label`), where: t(`sandbox.driftReport.areas.push.where`) }),
+    safety: () => ({ label: t(`sandbox.driftReport.areas.safety.label`), where: t(`sandbox.driftReport.areas.safety.where`) }),
+    secrets: () => ({ label: t(`sandbox.driftReport.areas.secrets.label`), where: t(`sandbox.driftReport.areas.secrets.where`) }),
+    sessions: () => ({ label: t(`sandbox.driftReport.areas.sessions.label`), where: t(`sandbox.driftReport.areas.sessions.where`) }),
+    settings: () => ({ label: t(`sandbox.driftReport.areas.settings.label`), where: t(`sandbox.driftReport.areas.settings.where`) }),
+    share: () => ({ label: t(`sandbox.driftReport.areas.share.label`), where: t(`sandbox.driftReport.areas.share.where`) }),
+    skills: () => ({ label: t(`sandbox.driftReport.areas.skills.label`), where: t(`sandbox.driftReport.areas.skills.where`) }),
     // Named for what a reader would actually open, not for the group: "the sandbox itself" would collide with the
     // row above that IS the sandbox, and "internals" tells nobody which screen to distrust.
-    system: { label: `Terminals and devices`, where: `terminals, restarts, devices and syncing` },
-    translator: { label: `Subscriptions`, where: `AI plans you signed in to instead of paying per token` },
-    usage: { label: `Usage`, where: `what each account has spent and what is left` },
-    vpn: { label: `VPN`, where: `this sandbox's VPN connection` },
-    workflows: { label: `Workflows`, where: `multi-agent workflow runs` },
-    workspace: { label: `Files`, where: `the file tree, the editor and search` },
+    system: () => ({ label: t(`sandbox.driftReport.areas.system.label`), where: t(`sandbox.driftReport.areas.system.where`) }),
+    translator: () => ({ label: t(`sandbox.driftReport.areas.translator.label`), where: t(`sandbox.driftReport.areas.translator.where`) }),
+    usage: () => ({ label: t(`sandbox.driftReport.areas.usage.label`), where: t(`sandbox.driftReport.areas.usage.where`) }),
+    vpn: () => ({ label: t(`sandbox.driftReport.areas.vpn.label`), where: t(`sandbox.driftReport.areas.vpn.where`) }),
+    workflows: () => ({ label: t(`sandbox.driftReport.areas.workflows.label`), where: t(`sandbox.driftReport.areas.workflows.where`) }),
+    workspace: () => ({ label: t(`sandbox.driftReport.areas.workspace.label`), where: t(`sandbox.driftReport.areas.workspace.where`) }),
 };
 
 // A route name with no dot is its own group, not a hole in the list.
 const groupOf = (route: string): string => route.split(`.`)[0] ?? route;
 
-const nameOf = (key: string): { label: string; where: string } =>
-    AREAS[key] ?? { label: key.charAt(0).toUpperCase() + key.slice(1), where: `something newer than this page` };
+const nameOf = (key: string): AreaName =>
+    AREAS[key]?.() ?? { label: key.charAt(0).toUpperCase() + key.slice(1), where: t(`sandbox.driftReport.unknownWhere`) };
 
 // Folds three flat route lists into one row per area of the product. Pure, so the whole table above is testable
 // without a daemon.
@@ -133,16 +139,22 @@ export const driftedAreas = computed(() =>
 
 // What each kind COSTS, never what it is: the heading already says which disagreement this is, and a drawer that
 // restates it spends the one place there was room to say what actually goes wrong.
-export const KIND_IMPACT: Readonly<Record<DriftKind, string>> = {
-    missing: `Your sandbox doesn't have this part yet, so anything here that needs it won't work until the sandbox catches up.`,
-    drifted: `The two sides expect slightly different things here. You might see something come up empty, or a change that won't save.`,
-    extra: `Your sandbox has this and this page is too old to use it. Nothing is broken — you just don't get it yet.`,
+const KIND_IMPACT: Readonly<Record<DriftKind, () => string>> = {
+    missing: () => t(`sandbox.driftReport.impact.missing`),
+    drifted: () => t(`sandbox.driftReport.impact.drifted`),
+    extra: () => t(`sandbox.driftReport.impact.extra`),
 };
+export const kindImpact = (kind: DriftKind): string => KIND_IMPACT[kind]();
 
 // What the badge says, so the list can be read down its right edge without opening anything. Each stands for one of
 // the sentences above. Never a number: the number is how many internal endpoints are involved, which is a fact about
 // the code and not about the reader's day.
-export const KIND_TAG: Readonly<Record<DriftKind, string>> = { missing: `not available`, drifted: `may misbehave`, extra: `not used yet` };
+const KIND_TAG: Readonly<Record<DriftKind, () => string>> = {
+    missing: () => t(`sandbox.driftReport.tag.missing`),
+    drifted: () => t(`sandbox.driftReport.tag.drifted`),
+    extra: () => t(`sandbox.driftReport.tag.extra`),
+};
+export const kindTag = (kind: DriftKind): string => KIND_TAG[kind]();
 
 // `extra` is the one kind that costs nothing, so it is drawn as a remark rather than a warning; the other two are
 // both a feature not working, loudly or silently.
@@ -183,20 +195,18 @@ const ages = (): { app: DriftParty["age"]; sandbox: DriftParty["age"] } => {
 
 export const appParty = (): DriftParty => ({
     icon: `window-maximize`,
-    label: `This page`,
-    what: `the editor you're looking at, in this browser tab`,
+    label: t(`sandbox.driftReport.appLabel`),
+    what: t(`sandbox.driftReport.appWhat`),
     age: ages().app,
 });
 
 export const sandboxParty = (where: string | undefined): DriftParty => ({
     icon: `box`,
-    label: `Your sandbox`,
-    what: where === undefined ? `the machine running your code` : `the machine running your code, on ${where}`,
+    label: t(`sandbox.driftReport.sandboxLabel`),
+    what: where === undefined ? t(`sandbox.driftReport.sandboxWhat`) : t(`sandbox.driftReport.sandboxWhatOn`, { where }),
     age: ages().sandbox,
 });
 
 // The only reassuring thing on the card, and worth saying: most of what these two do together is fine, so this is a
 // few features misbehaving rather than a broken sandbox. Silent when the two sides never compared enough to know.
-export const agreementLine = computed<string | undefined>(() =>
-    comparedRouteCount.value === 0 ? undefined : `Everything else between them lines up.`,
-);
+export const agreementLine = computed<string | undefined>(() => (comparedRouteCount.value === 0 ? undefined : t(`sandbox.driftReport.agreement`)));

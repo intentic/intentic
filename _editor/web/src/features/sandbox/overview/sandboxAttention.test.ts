@@ -5,14 +5,21 @@ import "@intentic/testing/dom";
 import { TRIAL_PROVIDER } from "@intentic/sandbox-contract";
 import { accountsLoaded, providerAccounts, translatorAccounts } from "../../chat/accounts/providerAccounts";
 import { acpProviders, endpointProviders, endpointsLoaded, trialStatus } from "../../chat/accounts/providerCatalog";
+import { PUBLISH_ANCHOR } from "../access/publishAnchor";
+import { UPDATE_ACTION_ANCHOR } from "./version/updateAnchor";
 
 // The four seams this list reads besides the accounts: each is a live query elsewhere, and none of them decides
 // whether a turn can run, which is the only question these tests ask.
 jest.mock(`../../capabilities/connect/useSecrets`, () => ({ useMissingSecretCount: () => ({ missingRequiredCount: { value: 0 } }) }));
 jest.mock(`../devices/useDevices`, () => ({ useSyncHealth: () => ({ stoppedOn: { value: [] }, heldPorts: { value: [] } }) }));
 jest.mock(`../environment/useEnvironment`, () => ({ useEnvironment: () => ({ pending: { value: undefined }, proposal: { value: undefined } }) }));
+// No update unless a test offers one.
+const update = { available: false, staged: false };
+// Work held here alone, with no repository to push it to, only where a test says so.
+const unbacked = { value: false };
+jest.mock(`./backup/useUnbackedWork`, () => ({ useUnbackedWork: () => ({ unbacked }) }));
 jest.mock(`./version/useSandboxVersion`, () => ({
-    useSandboxVersion: () => ({ updateAvailable: { value: false }, updateStaged: { value: undefined } }),
+    useSandboxVersion: () => ({ updateAvailable: { value: update.available }, updateStaged: { value: update.staged } }),
 }));
 
 const TRIAL_ENDPOINT = { id: TRIAL_PROVIDER, label: `Free trial`, kind: `endpoint` } as const;
@@ -27,6 +34,9 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+    unbacked.value = false;
+    update.available = false;
+    update.staged = false;
     accountsLoaded.value = false;
     endpointsLoaded.value = false;
     acpProviders.value = [];
@@ -82,4 +92,24 @@ it(`stays quiet for a translator subscription`, async () => {
     const shown = await messages();
     translatorAccounts.value = { ...translatorAccounts.value, gemini: [] };
     expect(shown).not.toContain(NO_ACCOUNT);
+});
+
+// The switcher's update row clicked five times while already on /sandbox, going nowhere: both update notes point at
+// the update card's own button, which the switcher scrolls to and focuses once the page is there.
+it(`points both update notes at the update's own button rather than at the page`, async () => {
+    const { useSandboxAttention } = await import(`./sandboxAttention`);
+    update.available = true;
+    expect(useSandboxAttention().notes.value.map((item) => item.to)).toEqual([`/sandbox#${UPDATE_ACTION_ANCHOR}`]);
+    update.staged = true;
+    expect(useSandboxAttention().notes.value.map((item) => [item.to, item.badges])).toEqual([[`/sandbox#sandbox-update-action`, true]]);
+});
+
+// "No repository to push this work to" landed on Environment with nothing saying where the fix was, and its reader
+// clicked it twice: it points at the Publish row, which says what it needs and links to connecting it.
+it(`points the missing repository at the Publish row, not at the page`, async () => {
+    const { useSandboxAttention } = await import(`./sandboxAttention`);
+    unbacked.value = true;
+    expect(useSandboxAttention().needs.value.find((item) => item.message === `No repository to push this work to`)?.to).toBe(
+        `/sandbox/environment#${PUBLISH_ANCHOR}`,
+    );
 });

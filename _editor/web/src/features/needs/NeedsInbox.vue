@@ -55,7 +55,8 @@ const chatOf = (conversationId: string) => ({ path: `/`, query: { conversation: 
             <NeedCard v-for="need in group.needs" :key="need.id" :need-id="need.id" />
         </section>
 
-        <p v-if="groups.length === 0" class="mb-6 flex items-center gap-2 text-sm text-muted">
+        <!-- Only when nothing at all waits: a turn parked on a permission below is something that needs you too. -->
+        <p v-if="groups.length === 0 && parked.length === 0" class="mb-6 flex items-center gap-2 text-sm text-muted">
             <Icon name="check-circle" class="text-success" />{{ t(`needs.inbox.nothing`) }}
         </p>
 

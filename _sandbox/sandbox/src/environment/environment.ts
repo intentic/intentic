@@ -13,6 +13,7 @@ import type { Services } from "../composition.js";
 import type { Config } from "../env.config.js";
 import { AUTO_MARKER, autoDraftedTools, draftContent, draftFileName, named, stepFor } from "./auto-drafts.js";
 import { containerBornAtMs, installLive } from "./drift.js";
+import { type OverlayBlock, renderBlocks, splitBlocks, uniqueBlocks, withoutRepeats } from "./overlay-blocks.js";
 import { capabilityFragments, workspaceExtensionFragments } from "./fragment-sources.js";
 import { providerPackFragments } from "./provider-packs.js";
 import { statePath } from "../state-paths.js";
@@ -88,7 +89,8 @@ export const composeEnvironment = async (services: Services): Promise<string | u
         ]),
     ].toSorted();
     const fragments = services.config.sandbox.vm ? withoutRuntimeDirectives(contributed) : contributed;
-    const custom = ((await services.files.read(customPath(services))) ?? "").trim();
+    // Once per tool: a section an older release appended a repeat to builds that tool once, not once per copy.
+    const custom = withoutRepeats(((await services.files.read(customPath(services))) ?? "").trim());
     // The base this container was built from, so a rebuild is version-preserving rather than a silent rollback.
     const base = baseImageOf(services.config.sandbox.baseImage, services.config.sandbox.image);
     if (fragments.length === 0 && custom === "") {
@@ -111,29 +113,91 @@ export const composeEnvironment = async (services: Services): Promise<string | u
 // sharing one file would race, and naming by tool lets two agents needing the same thing converge on one entry.
 export const draftsDir = (services: Services): string => statePath(services.workspace.root, ".intentic/config/environment.d/");
 
-const readDrafts = async (services: Services): Promise<string> => {
+// The tool a draft file is named after, which is also the name of its block once composed.
+const draftTool = (file: string): string => file.slice(0, -".Dockerfile".length);
+
+// One pending draft file: the tool it is named after, its steps, and where it sits.
+interface DraftFile {
+    readonly tool: string;
+    readonly body: string;
+    readonly path: string;
+}
+
+// How a settled draft is remembered: its tool and the hash of its trimmed steps.
+const settledKey = (tool: string, body: string): string => `${tool}\u0000${sha256Hex(body.trim())}`;
+const settledKeys = async (services: Services): Promise<ReadonlySet<string>> =>
+    new Set(((await services.runtimeInstalls.read()).settled ?? []).map((entry) => `${entry.tool}\u0000${entry.hash}`));
+
+const listDrafts = async (services: Services): Promise<DraftFile[]> => {
     const dir = draftsDir(services);
     // A listing that failed throws: read as "no drafts", it would drop the standing proposal.
     const names = ((await readdir(dir).catch(undefinedIfMissing)) ?? []).filter((name) => name.endsWith(".Dockerfile")).toSorted();
     const drafts = await Promise.all(
-        names.map(async (name) => {
-            const content = ((await services.files.read(join(dir, name))) ?? "").trim();
-            return content === "" ? undefined : `# ---- ${name.slice(0, -".Dockerfile".length)} ----\n${content}`;
+        names.map(async (name): Promise<DraftFile> => {
+            const path = join(dir, name);
+            return { tool: draftTool(name), body: ((await services.files.read(path)) ?? "").trim(), path };
         }),
     );
-    return drafts.filter((draft) => draft !== undefined).join("\n\n");
+    return drafts.filter((draft) => draft.body !== "");
 };
 
+// The drafts still asking for something. One the owner already answered (approved, removed or declined, the same tool
+// with the same steps) is a copy an agent's branch carried back in with its land: it is deleted rather than proposed
+// again, since the removal the owner made would otherwise come back with every land.
+const pendingDrafts = async (services: Services): Promise<DraftFile[]> => {
+    const drafts = await listDrafts(services);
+    if (drafts.length === 0) {
+        return drafts;
+    }
+    const settled = await settledKeys(services);
+    const pending: DraftFile[] = [];
+    for (const draft of drafts) {
+        if (settled.has(settledKey(draft.tool, draft.body))) {
+            await services.files.remove(draft.path);
+            continue;
+        }
+        pending.push(draft);
+    }
+    return pending;
+};
+
+// Every draft that settles now, remembered so a copy returning with a land asks nothing.
+const settleDrafts = async (services: Services, drafts: readonly { readonly tool: string; readonly body: string }[]): Promise<void> => {
+    await services.runtimeInstalls.settle(
+        drafts.map((draft) => ({ tool: draft.tool, hash: sha256Hex(draft.body.trim()) })),
+        Date.now(),
+    );
+};
+
+const readDrafts = async (services: Services): Promise<string> =>
+    (await pendingDrafts(services)).map((draft) => `# ---- ${draft.tool} ----\n${draft.body}`).join("\n\n");
+
 // Composes the proposal from the approved custom section plus every pending draft; carrying custom forward matters
-// since approval replaces it wholesale. No drafts ⇒ proposal untouched.
+// since approval replaces it wholesale. A draft replaces its tool's block rather than appending a second one (a draft
+// file is named by its tool, uniqueBlocks), and drafts that change nothing propose nothing: an agent's branch carrying
+// an already-approved draft brings the file back with every land. No drafts ⇒ proposal untouched.
 const mergeProposalDrafts = async (services: Services): Promise<void> => {
     const drafts = await readDrafts(services);
     if (drafts === "") {
         return;
     }
     const custom = ((await services.files.read(customPath(services))) ?? "").trim();
-    await writeComposed(services, proposalPath(services), `${[...(custom === "" ? [] : [custom]), drafts].join("\n\n")}\n`);
+    const approved = uniqueBlocks(splitBlocks(custom));
+    // Block by block too: a draft file carrying several tools (a workspace or definition import) keeps one the owner
+    // already answered from asking again, though the file as a whole is new.
+    const settled = await settledKeys(services);
+    const asked = splitBlocks(drafts).filter((block) => !settled.has(settledKey(block.name, block.body)));
+    const merged = uniqueBlocks([...approved, ...asked]);
+    // An identical draft proposes nothing, even if a previous land brought its file back.
+    if (renderBlocks(merged) === renderBlocks(approved)) {
+        await services.files.remove(proposalPath(services));
+        return;
+    }
+    await writeComposed(services, proposalPath(services), `${renderBlocks(merged)}\n`);
 };
+
+// Two custom sections asking for the same steps, tool for tool, whatever their spacing or repeated blocks.
+const sameTools = (left: string, right: string): boolean => renderBlocks(uniqueBlocks(splitBlocks(left))) === renderBlocks(uniqueBlocks(splitBlocks(right)));
 
 const fileState = async (services: Services, path: string): Promise<{ content: string; hash: string } | undefined> => {
     const content = await services.files.read(path);
@@ -205,7 +269,8 @@ export const readEnvironment = async (services: Services): Promise<Environment> 
     // Approved contains custom by composition, so one string answers "already baked or already approved".
     const attention = await runtimeAttention(services, `${custom?.content ?? ""}\n${approved?.content ?? ""}`);
     return {
-        ...(proposal !== undefined ? { proposal } : {}),
+        // A proposal asking for nothing the approved section lacks is no decision: it raises no "Needs you".
+        ...(proposal !== undefined && !sameTools(proposal.content, custom?.content ?? "") ? { proposal } : {}),
         ...(custom !== undefined ? { custom } : {}),
         ...(approved !== undefined ? { approved } : {}),
         ...containerFacts(services.config.sandbox),
@@ -228,8 +293,11 @@ export const approveEnvironment = async (services: Services, hash: string): Prom
     if (invalidProposal(proposal.content)) {
         return "invalid";
     }
-    await services.files.write(customPath(services), proposal.content);
-    // Drafts are now in the custom section; leaving them would re-propose what the owner just approved, forever.
+    const accepted = renderBlocks(uniqueBlocks(splitBlocks(proposal.content)));
+    await services.files.write(customPath(services), accepted === "" ? "" : `${accepted}\n`);
+    // Drafts are now in the custom section; leaving them would re-propose what the owner just approved, forever, and
+    // remembering them keeps the copies an agent's branch still carries from proposing them again on its land.
+    await settleDrafts(services, await listDrafts(services));
     await services.files.remove(draftsDir(services));
     await composeEnvironment(services);
     return undefined;
@@ -301,6 +369,8 @@ export const proposeDraft = async (services: Services, tool: string, steps: stri
     if (problem !== undefined) {
         return { problem };
     }
+    // Asked for on purpose, so an earlier answer to these same steps no longer stands in their way.
+    await services.runtimeInstalls.unsettle(draftTool(file), sha256Hex(steps.trim()));
     await services.files.write(join(draftsDir(services), file), `${steps.trim()}\n`);
     return { file };
 };
@@ -321,7 +391,7 @@ export const approveDraft = async (services: Services, tool: string): Promise<{ 
     const file = draftFileName(tool);
     const path = file === undefined ? undefined : join(draftsDir(services), file);
     const draft = path === undefined ? undefined : (await services.files.read(path))?.trim();
-    if (path === undefined || draft === undefined || draft === "") {
+    if (file === undefined || path === undefined || draft === undefined || draft === "") {
         return { problem: `no draft is waiting for ${tool}` };
     }
     const problem = draftProblem(draft);
@@ -329,7 +399,11 @@ export const approveDraft = async (services: Services, tool: string): Promise<{ 
         return { problem };
     }
     const custom = ((await services.files.read(customPath(services))) ?? "").trim();
-    await services.files.write(customPath(services), `${[...(custom === "" ? [] : [custom]), `# ---- ${tool} ----\n${draft}`].join("\n\n")}\n`);
+    // Named as its file names it, as the proposal drew it (readDrafts): a raw spelling here ("ImageMagick") left the
+    // approved block and the settled record under different names, so a removed tool's copy came back with a land.
+    const merged = renderBlocks(uniqueBlocks([...splitBlocks(custom), { name: draftTool(file), body: draft }]));
+    await writeComposed(services, customPath(services), `${merged}\n`);
+    await settleDrafts(services, [{ tool: draftTool(file), body: draft }]);
     await services.files.remove(path);
     await recomposeProposal(services);
     return { hash: await composeEnvironment(services) };
@@ -341,8 +415,82 @@ export const rejectDraft = async (services: Services, tool: string): Promise<voi
     if (file === undefined) {
         return;
     }
-    await services.files.remove(join(draftsDir(services), file));
+    const path = join(draftsDir(services), file);
+    const draft = (await services.files.read(path))?.trim();
+    if (draft !== undefined && draft !== "") {
+        await settleDrafts(services, [{ tool: draftTool(file), body: draft }]);
+    }
+    await services.files.remove(path);
     await recomposeProposal(services);
+};
+
+// One tool's pending draft file, if it has one.
+const draftOf = async (services: Services, block: string): Promise<DraftFile | undefined> => {
+    const file = draftFileName(block);
+    if (file === undefined) {
+        return undefined;
+    }
+    const path = join(draftsDir(services), file);
+    const body = ((await services.files.read(path)) ?? "").trim();
+    return body === "" ? undefined : { tool: block, body, path };
+};
+
+// A tool the daemon drafted from runtime installs is declined as well, or the sweep would draft it again.
+const declineAutoDrafted = async (services: Services, blocks: readonly OverlayBlock[]): Promise<void> => {
+    const marked = blocks.find((entry) => entry.body.startsWith(`${AUTO_MARKER} `));
+    const tool = marked?.body.split("\n", 1)[0]?.slice(AUTO_MARKER.length).trim() ?? "";
+    if (tool !== "") {
+        await services.runtimeInstalls.decline([tool], Date.now());
+    }
+};
+
+// A standing proposal that still names the tool: what it asks beyond the section left behind stays up, and one asking
+// nothing more (or asking for an empty section, which approving would read as "remove everything") goes.
+const proposalWithout = async (services: Services, proposed: readonly OverlayBlock[], block: string, kept: string): Promise<void> => {
+    const rest = renderBlocks(proposed.filter((entry) => entry.name !== block));
+    if (rest === "" || sameTools(rest, kept)) {
+        await services.files.remove(proposalPath(services));
+        return;
+    }
+    await writeComposed(services, proposalPath(services), `${rest}\n`);
+};
+
+// Takes one tool out of the environment on the owner's say-so: its approved block, its pending draft and its line in a
+// standing proposal. Each is remembered as settled, so a copy an agent's branch still carries does not propose it again
+// on the next land. Taking out an approved block changes the overlay, so it waits for a rebuild like any other change;
+// the drafts that remain recompose the proposal after.
+export const removeFromEnvironment = async (services: Services, block: string): Promise<"missing" | undefined> => {
+    const custom = splitBlocks(((await services.files.read(customPath(services))) ?? "").trim());
+    const draft = await draftOf(services, block);
+    const proposal = await services.files.read(proposalPath(services));
+    const proposed = splitBlocks((proposal ?? "").trim());
+    const isBlock = (entry: OverlayBlock): boolean => entry.name === block;
+    const removed = [...custom.filter(isBlock), ...proposed.filter(isBlock), ...(draft === undefined ? [] : [{ name: block, body: draft.body }])];
+    if (removed.length === 0) {
+        return "missing";
+    }
+    // Under the name its draft file would carry too, which is what a copy returning with a land is read by: a block
+    // approved before approvals were named by their file keeps its raw spelling.
+    const fileNamed = (name: string): string => {
+        const file = draftFileName(name);
+        return file === undefined ? name : draftTool(file);
+    };
+    const settledAs = removed.flatMap((entry) => [...new Set([entry.name, fileNamed(entry.name)])].map((tool) => ({ tool, body: entry.body })));
+    await settleDrafts(services, settledAs);
+    await declineAutoDrafted(services, removed);
+    const kept = renderBlocks(uniqueBlocks(custom.filter((entry) => !isBlock(entry))));
+    if (custom.some(isBlock)) {
+        await services.files.write(customPath(services), kept === "" ? "" : `${kept}\n`);
+    }
+    if (draft !== undefined) {
+        await services.files.remove(draft.path);
+    }
+    if (proposal !== undefined) {
+        await proposalWithout(services, proposed, block, kept);
+    }
+    await mergeProposalDrafts(services);
+    await composeEnvironment(services);
+    return undefined;
 };
 
 // The overlay this container was built from, as the runner stamped it; empty for a container built with none.
@@ -356,6 +504,7 @@ export const rejectEnvironment = async (services: Services): Promise<void> => {
     if (auto.length > 0) {
         await services.runtimeInstalls.decline(auto, Date.now());
     }
+    await settleDrafts(services, await listDrafts(services));
     await services.files.remove(draftsDir(services));
     await services.files.remove(proposalPath(services));
 };
@@ -392,9 +541,11 @@ const adoptRuntimeInstall = async (services: Services, tool: string): Promise<"u
     }
     // Adopting a previously dismissed tool clears its tombstone, or the sweep would fight the requested draft.
     await services.runtimeInstalls.decline([tool], undefined);
+    const content = draftContent(entry, step);
+    await services.runtimeInstalls.unsettle(draftTool(file), sha256Hex(content.trim()));
     const path = join(draftsDir(services), file);
     if ((await services.files.read(path)) === undefined) {
-        await services.files.write(path, draftContent(entry, step));
+        await services.files.write(path, content);
     }
     return undefined;
 };

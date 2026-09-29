@@ -36,11 +36,15 @@ jest.mock(`./useGoogleIdentity`, () => ({ useGoogleIdentity: () => ({ getIdToken
 const desktopInstaller = jest.fn<() => { platform: string; label: string; href: string } | undefined>(() => undefined);
 // Partial, over the real module: the page reaches for whatever the desktop lane grows next, and a mock listing its
 // exports by hand fails the link the day one is added.
+// An ordinary browser unless a test says this is the installed app, whose sign-in is handed to the real browser.
+const desktopVersion = jest.fn<() => string | undefined>(() => undefined);
+const signInThroughBrowser = jest.fn();
 jest.mock(`../../app/environments/desktop`, () => ({
     ...actualDesktop,
     DESKTOP_SIGN_IN_LINK: ``,
-    desktopVersion: () => undefined,
+    desktopVersion: () => desktopVersion(),
     openDesktopLink: jest.fn(),
+    signInThroughBrowser: () => signInThroughBrowser(),
 }));
 jest.mock(`../../app/environments/desktopDownloads`, () => ({ desktopInstaller: () => desktopInstaller() }));
 
@@ -73,6 +77,8 @@ beforeEach(() => {
     renderButton.mockReset().mockResolvedValue(true);
     getIdToken.mockReset().mockResolvedValue(`google-id-token`);
     desktopInstaller.mockReset().mockReturnValue(undefined);
+    desktopVersion.mockReset().mockReturnValue(undefined);
+    signInThroughBrowser.mockReset();
 });
 
 afterEach(() => {
@@ -200,4 +206,49 @@ it(`leaves the page usable when the user dismisses Google`, async () => {
     expect(push).not.toHaveBeenCalled();
     // A dismissal says nothing; the button the user turned away from is still there.
     expect(el.textContent).not.toContain(`Continue with Google below instead`);
+});
+
+// Inside the installed app: Google's button can't work in its window, so the press hands the sign-in to the browser.
+describe(`in the installed app`, () => {
+    beforeEach(() => {
+        desktopVersion.mockReturnValue(`1.316.0`);
+        renderButton.mockResolvedValue(false);
+        desktopInstaller.mockReturnValue({ platform: `linux`, label: `Linux`, href: `https://intentic.dev/desktop/linux` });
+    });
+
+    const pressing = async (label: string): Promise<void> => {
+        [...document.querySelectorAll(`button`)].find((button) => button.textContent?.includes(label))?.click();
+        await nextTick();
+    };
+
+    // For the two minutes Google took in the browser the window did not change, and its reader came back to it five times.
+    it(`says the sign-in is waiting in the browser once pressed, and can open it again`, async () => {
+        const el = await mount();
+        await pressing(`Continue with Google in your browser`);
+
+        expect(signInThroughBrowser).toHaveBeenCalledTimes(1);
+        expect(el.textContent).toContain(`Finish signing in in your browser…`);
+        expect(el.textContent).not.toContain(`Continue with Google in your browser`);
+
+        await pressing(`Open it again`);
+        expect(signInThroughBrowser).toHaveBeenCalledTimes(2);
+    });
+
+    it(`goes back to the button on Cancel`, async () => {
+        const el = await mount();
+        await pressing(`Continue with Google in your browser`);
+        await pressing(`Cancel`);
+
+        expect(el.textContent).not.toContain(`Finish signing in in your browser…`);
+        expect(el.textContent).toContain(`Continue with Google in your browser`);
+    });
+
+    // Its reader is already in the app: "Install the app" as the step still to come sent them nowhere.
+    it(`does not offer installing the app as a step still to come`, async () => {
+        const el = await mount();
+
+        expect(el.textContent).not.toContain(`Install the app`);
+        expect(el.textContent).not.toContain(`Paste one command`);
+        expect(el.textContent).toContain(`Two steps to your first agent`);
+    });
 });

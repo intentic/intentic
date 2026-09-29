@@ -155,7 +155,7 @@ const pickable = computed(() => manual.value && refs.value !== undefined);
         </span>
         <span v-else-if="reading" class="flex items-center gap-1 text-2xs text-muted">
             <Icon name="spinner" spin class="text-2xs" />
-            {{ t(`capabilities.gitRefField.asking`) }} {{ host }} {{ t(`capabilities.gitRefField.whatOffers`) }}
+            {{ t(`capabilities.gitRefField.askingWhatOffers`, { host }) }}
         </span>
         <span v-else-if="failure" class="flex flex-wrap items-center gap-x-1.5 text-2xs text-warning">
             <Icon name="exclamation-triangle" class="text-2xs" />

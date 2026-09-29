@@ -14,6 +14,7 @@ jest.mock("../../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc
 
 const { CardReplies, SKIP_CALL, afterReply, planFeedback, refusalOf, requestIdOf } = await import("./cardReplies");
 const { TranscriptClock } = await import("../transcript/transcriptClock");
+const { onCardAnswered } = await import("./cardAnswered");
 type CardAnswer = Parameters<InstanceType<typeof CardReplies>["reply"]>[1];
 
 const PAYMENT = {
@@ -91,7 +92,7 @@ const parkedOn = (...events: AgentEvent[]) => {
     const transcript = new TranscriptClock(() => undefined);
     transcript.rebuild(fold.rows);
     const turn = { stop: jest.fn(), endedByReader: jest.fn() };
-    const host = { box: ref<string | undefined>(`box-2`), transcript, error: ref<string | null>(null), turn, peek: ref(true) };
+    const host = { conversationId: `cnv-parked`, box: ref<string | undefined>(`box-2`), transcript, error: ref<string | null>(null), turn, peek: ref(true) };
     const cardOf = (field: RequestField, requestId: string) => transcript.messages.value.find((row) => row[field]?.requestId === requestId)?.[field];
     return { host, turn, cardOf, replies: new CardReplies(host) };
 };
@@ -125,6 +126,27 @@ describe(`reply`, () => {
             expect(chat.turn.endedByReader).not.toHaveBeenCalled();
         });
     }
+
+    // The board and the rail stop saying the chat waits on you at the answer, not a roster frame later (B4).
+    it(`tells the board which ask an answer the daemon took has cleared, and says nothing of a refused one`, async () => {
+        const heard: [string, string | undefined][] = [];
+        const stop = onCardAnswered((id, park) => heard.push([id, park]));
+        try {
+            const chat = parkedOn({ kind: `permission`, requestId: `r1`, toolName: `Bash` }, { kind: `payment_offer`, requestId: `r2`, offer: PAYMENT });
+            replyRoute.mockImplementationOnce(async () => {
+                throw new SandboxHttpError(404, `Not found.`);
+            });
+            await chat.replies.reply(`r2`, { kind: `payment_offer`, approve: true });
+            await chat.replies.reply(`r1`, { kind: `permission`, decision: `once` });
+            await chat.replies.reply(`r2`, { kind: `payment_offer`, approve: true });
+            expect(heard).toEqual([
+                [`cnv-parked`, `permission`],
+                [`cnv-parked`, undefined],
+            ]);
+        } finally {
+            stop();
+        }
+    });
 
     it(`says a refusal on the error line in the card's own words, and leaves the card answerable`, async () => {
         const chat = parkedOn({ kind: `payment_offer`, requestId: `r1`, offer: PAYMENT });

@@ -144,6 +144,30 @@ case, since approving is followed by a rebuild. Once the container runs the appr
 continues this conversation by itself: do not poll, and do not propose the same tool twice (`needs` lists what
 is still waiting).
 
+The owner can also take a tool out again (**Remove from environment** on the Environment card). A draft the owner
+already answered (approved, removed or declined) is not proposed again when a copy of it lands with your work, so
+a removed tool stays removed. If the task truly needs it back, say why and run `environment propose` again: that
+is the only way to re-ask for the same steps.
+
+## A tool's own state (its login, its config) across rebuilds
+
+A rebuild keeps only the volumes: `/work`, `/history` and Docker's. Everything a tool writes under `/root`
+(`~/.zcode`, `~/.config/<tool>`, a CLI's login token) is in the container's own layer and is gone after every
+rebuild, so the owner signs that tool in again each time. Baking the tool into the image does not change this.
+
+To keep it, put the state on the `/history` volume and point the tool at it from the image:
+
+1. Move what the tool has now onto the volume, which survives: `mkdir -p /history/home && mv ~/.zcode
+   /history/home/.zcode` (or `mkdir -p /history/home/.zcode` when there is nothing yet).
+2. If the tool reads a variable for its config directory (check its docs: `ZCODE_HOME`, `XDG_CONFIG_HOME`,
+   `CODEX_HOME`...), propose an `ENV` step setting it: `ENV ZCODE_HOME=/history/home/.zcode`.
+3. Otherwise propose a symlink of the DIRECTORY: `RUN ln -sfn /history/home/.zcode /root/.zcode`. Link the
+   directory, never a single file: a tool that saves a file by renaming a temporary over it replaces a file
+   symlink with an ordinary file and silently stops persisting.
+
+`/history` is this sandbox's own volume: it is not in the workspace's git and does not travel in a bundle,
+which is right for a login. Tell the owner the tool keeps its sign-in from the next rebuild on.
+
 ## Meanwhile
 
 Keep going with the task: proposing is not a blocking handover. Use a workaround if one exists, and say

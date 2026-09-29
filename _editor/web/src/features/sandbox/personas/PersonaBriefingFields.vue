@@ -61,7 +61,7 @@ const showFixtures = ref(false);
                 @click="showFixtures = !showFixtures"
             >
                 <Icon :name="showFixtures ? `chevron-down` : `chevron-right`" class="text-2xs" />
-                {{ TURN_BRIEFING_FIXTURES.length }} {{ t(`sandbox.personaBriefingFields.moreAlwaysSent`) }}
+                {{ t(`sandbox.personaBriefingFields.countMoreAlwaysSent`, { count: TURN_BRIEFING_FIXTURES.length }, TURN_BRIEFING_FIXTURES.length) }}
             </button>
             <!-- Omitted notes are named so the visible briefing list is unambiguous. -->
             <dl v-if="showFixtures" class="flex flex-col gap-1 pl-5">

@@ -14,6 +14,7 @@ import { landsByDefault } from "../../../sandbox/environment/rules";
 import { useSandboxSettings } from "../../../sandbox/overview/useSandboxSettings";
 import { useT } from "@intentic/ui/i18n";
 import { formatClock } from "@intentic/ui/format";
+import { useVocabulary } from "../../../../core-views/vocabulary";
 import { keptWarm, warmOffer } from "../../fleet/prompt-cache/promptCache";
 
 // Session-level actions (refresh, rename, land, hold, archive, discard), as opposed to diff actions; once-per-session
@@ -23,6 +24,8 @@ import { keptWarm, warmOffer } from "../../fleet/prompt-cache/promptCache";
 // The session name is the header's chip on desktop and this menu's row on a phone, where the row holds little else.
 
 const t = useT();
+// The land press in the audience's own word, as the card beside this menu says it.
+const words = useVocabulary();
 
 const { changes, agentId, phone, renameable, sessionName } = defineProps<{
     agentId: string;
@@ -142,7 +145,8 @@ const pressLand = (land: () => void): void => {
 // header button never disagree.
 // Goes through `run`, like every other item, so the menu closes and the panel's own busy/error line owns the round
 // trip.
-const relandNow = (): void => pressLand(() => changes.land());
+// Puts back what left the workspace, whoever took it out: the whole output, never just the remainder.
+const relandNow = (): void => pressLand(() => changes.land(`check`, `cumulative`));
 
 const ITEM = `flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left transition-colors hover:bg-overlay disabled:opacity-40 disabled:hover:bg-transparent max-md:py-3`;
 </script>
@@ -154,7 +158,7 @@ const ITEM = `flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left t
             <AgentReactions :agent-id="agentId" :reactions="marked.reactions" :sandbox-id="marked.sandboxId" />
         </div>
         <button
-            v-if="phone && away === undefined && canShip"
+            v-if="phone && (away === undefined || !away.offerReland) && canShip"
             type="button"
             :class="ITEM"
             :disabled="changes.actionBusy.value || changes.pending.value.length === 0"
@@ -162,7 +166,7 @@ const ITEM = `flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left t
         >
             <Icon name="check" class="mt-0.5 text-xs text-success" />
             <span class="flex min-w-0 flex-col">
-                <span class="text-sm text-content md:text-xs">{{ t(`agents.words.landNow`) }}</span>
+                <span class="text-sm text-content md:text-xs">{{ words.land }}</span>
                 <span class="text-2xs text-subtle">
                     {{
                         writing

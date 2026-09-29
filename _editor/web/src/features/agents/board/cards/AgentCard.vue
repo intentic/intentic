@@ -35,7 +35,7 @@ import type { IdMatch } from "../idMatch";
 import {
     activityLine,
     agentDisplayTitle,
-    agentStatusMeta,
+    agentStandingMeta,
     attentionReason,
     conflictIsYours,
     contextPct,
@@ -43,9 +43,11 @@ import {
     type FleetLane,
     formatCost,
     landedAway,
+    landFailure,
     laneOf,
     limited,
     loopMeta,
+    memoryHeld,
     reviewAction,
     type StandingChip,
     standingChip,
@@ -55,6 +57,7 @@ import {
     unregistered,
 } from "../../fleet/agentStatus";
 import CardSeal from "./CardSeal.vue";
+import CardPermissionAsk from "./CardPermissionAsk.vue";
 import { cardProof, type ProofMark } from "./proofSeal";
 import KeepWarmPanel from "../../fleet/prompt-cache/KeepWarmPanel.vue";
 // Not an emit: the destination is the same for every host this card has, and the review panel's own ladder sends the
@@ -70,6 +73,7 @@ import { accountBadge } from "../session/accountChip";
 import { previewOf } from "../../../chat/panel/useChat-strip";
 import { providerAccounts } from "../../../chat/accounts/providerAccounts";
 import { markSegments } from "../../review/markSegments";
+import { settingsChip, useSettingsRefusal } from "../../review/settingsRefusal";
 import { useAgents } from "../../fleet/useAgents";
 import { canArchive, type FleetAgent } from "../../fleet/useAgents-fleet";
 import { relativeTime } from "../../../chat/models/catalog";
@@ -138,7 +142,7 @@ const provenance = computed(() => sessionMark(props.agent, user.value?.email, pr
 const parent = computed(() => parentOf(props.agent.startedBy));
 // Whether this card's archive or restore moves its children with it, as a run's takes its steps.
 const takesFamily = computed(() => (props.family ?? 0) > 0);
-const meta = computed(() => agentStatusMeta(props.agent.status));
+const meta = computed(() => agentStandingMeta(props.agent));
 // Identity tile's category, undefined for an unreadable title; read here too since the tooltip is this card's.
 const category = computed(() => sessionCategory(props.agent.title, props.agent.titleAction));
 const lane = computed(() => props.placed ?? laneOf(props.agent));
@@ -152,9 +156,12 @@ const box = computed(() =>
 // The corner's word and tint, from the projection the rails read too (agentStatus.standingChip): why it needs you,
 // else why the agents it started do (their mark rides along, so their ask never reads as this card's own), else that it
 // worked since you last looked, else nothing and the resting glyph keeps the corner.
-const chip = computed<(StandingChip & { readonly hint?: Tip; readonly family?: true }) | undefined>(() =>
-    props.call !== undefined && attentionReason(props.agent) === undefined ? { ...props.call, family: true } : standingChip(props.agent),
-);
+const chip = computed<(StandingChip & { readonly hint?: Tip; readonly family?: true }) | undefined>(() => {
+    const own = props.call !== undefined && attentionReason(props.agent) === undefined ? { ...props.call, family: true as const } : standingChip(props.agent);
+    // Files a Sandbox page wrote are not "Your edits": named as the review names them (settingsPages, below), as the
+    // rail's row names them too (settingsChip).
+    return settingsChip(own, props.agent, settingsPages.value);
+});
 // Shared with agentStatus.activityLine so the rail and board never narrate the same turn differently.
 const activityText = computed(() => activityLine(props.agent));
 // Archive appears wherever it means something (not just the Finished lane, see canArchive), including in Attention,
@@ -166,6 +173,8 @@ const activityText = computed(() => activityLine(props.agent));
 // Land, discard, and stop differ: those address the agent by id through the daemon directly, so they cross sandboxes
 // intact.
 const localOnly = computed(() => props.agent.sandboxId === undefined);
+// On a phone the header's presses fold behind one ⋯ (OverflowActions), so Archive is a deliberate second step there: its
+// icon's 44px target once reached into the card body, and one tap filed away an agent and its seven children.
 const archivable = computed(() => localOnly.value && canArchive(props.agent));
 // The only exit for a card with no daemon entry (a draft, a refused send, an unfiled turn): archive, discard, land, and
 // drop are all unavailable to it.
@@ -207,18 +216,24 @@ const resolvable = computed(() => props.agent.archivedAt === undefined && dropAc
 const yoursToClear = computed(
     () => props.agent.archivedAt === undefined && (props.agent.attention.conflict || props.agent.status === `conflict`) && conflictIsYours(props.agent),
 );
+// The Sandbox pages that wrote every file of such a refusal, when one did: then the sentence names them, as the review does.
+const settingsPages = useSettingsRefusal(() => props.agent, () => yoursToClear.value);
 // Work this agent landed that's no longer in the tree; excluded in the archive, like every other press here (restore
 // first).
 // Takes the Ready button's slot: Land now would leave the discarded half missing (the hardest wrong to notice), so Land
-// again replaces it when both apply.
-const away = computed(() => (props.agent.archivedAt === undefined ? landedAway(props.agent) : undefined));
+// again replaces it when both apply. Named by who took it out when the sandbox could tell, and offering no Land again
+// when that was an agent, whose doing it was on purpose (the card menu keeps it).
+const away = computed(() => (props.agent.archivedAt === undefined ? landedAway(props.agent, user.value?.email) : undefined));
+// Whether that line carries its press. One an agent took out carries none, so the card lands whatever is new as a Ready
+// card would, leaving out what was taken, and reads as a receipt once there is nothing new.
+const relandOffered = computed(() => away.value?.offerReland === true);
 // The Ready card's press, offered because auto-land is off; same wording and mechanics as the review panel's own
 // button.
 // Excluded in the archive, like `resolvable`: restore first.
-const landable = computed(() => props.agent.archivedAt === undefined && props.agent.status === `ready` && away.value === undefined);
+const landable = computed(() => props.agent.archivedAt === undefined && props.agent.status === `ready` && !relandOffered.value);
 // The same block held open while the land it started runs: `ready` flips to `landing` on the press, and a button that
 // vanishes under the click takes the card's only account of the land with it and shortens the card mid-press.
-const shipping = computed(() => props.agent.archivedAt === undefined && props.agent.status === `landing` && away.value === undefined);
+const shipping = computed(() => props.agent.archivedAt === undefined && props.agent.status === `landing` && !relandOffered.value);
 // A RECEIPT: a finished card that asks nothing of anyone. It keeps every fact it had and spends none of the board's
 // colour on them — the success green, the diff's red/green, the context tint all flatten to the row's own ink.
 // Finished is the only lane that fills by itself, so on an ordinary board it is forty painted rows beside two lanes
@@ -232,7 +247,7 @@ const shipping = computed(() => props.agent.archivedAt === undefined && props.ag
 const receipt = computed(
     () =>
         lane.value === `finished` &&
-        (props.agent.archivedAt !== undefined || (props.agent.status !== `ready` && props.agent.status !== `landing` && away.value === undefined)),
+        (props.agent.archivedAt !== undefined || (props.agent.status !== `ready` && props.agent.status !== `landing` && !relandOffered.value)),
 );
 // Statuses whose ink is already quiet (`idle`, `resumed`, `stopped`) keep it: flattening those to `muted` would make
 // a receipt LOUDER than it is today, which is the opposite of the errand.
@@ -284,7 +299,7 @@ const landAsk = computed(() => {
 });
 // Its own flag, not a wider `landing`, so each button names only its own press; on an `away` card the daemon's
 // `landing` is that press, whichever window made it.
-const relanding = computed(() => props.pending === `reland` || (away.value !== undefined && props.agent.status === `landing`));
+const relanding = computed(() => props.pending === `reland` || (relandOffered.value && props.agent.status === `landing`));
 // Gated on exactly what it renders, no more and no less: gating on a subset hides what should show, a superset opens an
 // empty strip.
 // The diff chip's own condition, not merely `diff exists`, since renames alone render nothing.
@@ -342,8 +357,20 @@ const loopLine = computed(() => (props.agent.loop === undefined ? undefined : lo
 // something else on this card (its activity, its clock) redraws none of the seal.
 let heldPrint = ``;
 let heldProof: ProofMark | undefined;
+// A land that broke wears no seal: a check mark on the card whose work is stuck read as finished.
+const landBroke = computed(() => landFailure(props.agent));
+const failureLine = computed(() => (landBroke.value === undefined ? props.agent.failure : t(`agents.agentStatus.couldntLand`, { reason: landBroke.value })));
+// The red line's raw sentence, for its hover: the land's own words where it broke, else the turn's. A land that broke
+// keeps the line after the next turn cleared the turn's failure, since its work is still stuck (landFailure).
+const failureRaw = computed(() =>
+    landBroke.value !== undefined
+        ? (props.agent.landFailure?.reason ?? props.agent.failure)
+        : limited(props.agent) || memoryHeld(props.agent)
+          ? undefined
+          : props.agent.failure,
+);
 const proof = computed(() => {
-    const next = cardProof(props.agent, turnInFlight(props.agent));
+    const next = landBroke.value === undefined ? cardProof(props.agent, turnInFlight(props.agent)) : undefined;
     const print = JSON.stringify(next ?? null);
     if (print !== heldPrint) {
         heldPrint = print;
@@ -432,7 +459,8 @@ const openCard = (event?: MouseEvent): void => {
     emit(`open`, event);
 };
 
-// Never a side effect of a plain click: the drill-in fires this; a double-click on the body is its accelerator.
+// Never a side effect of a plain click, nor of a double-click, which is two clicks and opens the chat as they do: the
+// drill-in fires this, and it goes where its label says (useCardFocus.drillIn).
 const reviewCard = (): void => {
     if (edit.editing || review.value === undefined) {
         return;
@@ -549,7 +577,6 @@ const grab = (event: PointerEvent): void => {
         @pointerdown="grab"
         @dragstart.prevent
         @click="openCard"
-        @dblclick="reviewCard"
         @keydown.enter.self.prevent="openCard()"
         @keydown.space.self.prevent="openCard()"
     >
@@ -661,9 +688,10 @@ const grab = (event: PointerEvent): void => {
             </p>
 
             <!-- `failure` is present only while the card reads as failed, so no extra status check is needed here. -->
-            <p v-if="agent.failure && !limited(agent)" class="flex min-w-0 items-start gap-2 text-2xs text-danger" v-tooltip.top="agent.failure">
+            <!-- A broken land in plain words; git's own sentence stays in the hover for whoever fixes it. -->
+            <p v-if="failureRaw" class="flex min-w-0 items-start gap-2 text-2xs text-danger" v-tooltip.top="failureRaw">
                 <Icon name="exclamation-circle" class="mt-px shrink-0 text-2xs" />
-                <span class="line-clamp-2 min-w-0 flex-1 leading-4">{{ agent.failure }}</span>
+                <span class="line-clamp-2 min-w-0 flex-1 leading-4">{{ failureLine }}</span>
             </p>
 
             <!-- Provenance, ahead of the model/branch line: for an agent the user didn't start, whose it is outranks what it runs on. -->
@@ -731,6 +759,8 @@ const grab = (event: PointerEvent): void => {
                 <span class="truncate">{{ loopLine?.text }}</span>
             </p>
 
+            <!-- A permission its turn waits on, answered here: the reply floor is a collaborator's, as in the chat. -->
+            <CardPermissionAsk v-if="canReview" :agent="agent" :disabled="busy" />
 
             <!-- The one board state that's a decision, not a report: the agent redoes the merge in its own worktree, so a wrong answer costs nothing. -->
             <div v-if="resolvable" class="flex min-w-0 flex-col gap-1">
@@ -743,12 +773,19 @@ const grab = (event: PointerEvent): void => {
 
             <!-- Same seat, the refusals the agent cannot touch: a fact, not a press. Nothing on the card can commit the edits in its way, a button that only changed the view read as one that did nothing, and the card leaves this seat by itself once they are committed. The footer's review link names the files. -->
             <p v-else-if="yoursToClear" class="flex min-w-0 items-start gap-1.5 text-2xs leading-snug text-muted">
-                <Icon name="file-edit" class="mt-0.5 shrink-0 text-2xs text-warning" /><span class="min-w-0">{{ words.clearYoursHint }}</span>
+                <Icon name="file-edit" class="mt-0.5 shrink-0 text-2xs text-warning" /><span class="min-w-0">{{
+                    settingsPages === undefined ? words.clearYoursHint : t(`agents.agentCard.settingsNotSaved`, { pages: settingsPages })
+                }}</span>
             </p>
 
             <!-- One row (fact left, press right), not a stack: this is a fact the card owes the reader regardless of action, unlike the decision blocks above. -->
             <div v-if="away !== undefined" class="flex min-w-0 flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
-                <span v-tooltip.top="away.tip" class="inline-flex shrink-0 items-start gap-1.5 text-2xs leading-snug text-warning">
+                <!-- Muted when an agent took it out: a fact about its own tidying, not a press this card owes anyone. -->
+                <span
+                    v-tooltip.top="away.tip"
+                    class="inline-flex shrink-0 items-start gap-1.5 text-2xs leading-snug"
+                    :class="away.offerReland ? `text-warning` : `text-muted`"
+                >
                     <Icon :name="away.icon" class="mt-0.5 shrink-0 text-2xs" /><span class="min-w-0"
                         >{{ away.text
                         }}<template v-if="away.hint !== undefined">
@@ -758,10 +795,12 @@ const grab = (event: PointerEvent): void => {
                 </span>
                 <!-- No resting glyph: the line above it already leads with this exact icon, and a repeat would read as a stutter. -->
                 <Button
+                    v-if="away.offerReland"
                     size="small"
                     severity="secondary"
                     :text="true"
                     :disabled="busy || relanding"
+                    v-tooltip.top="{ title: words.landAgain, note: t(`agents.agentCard.landAgainHint`) }"
                     class="shrink-0 whitespace-nowrap"
                     @click.stop="emit('reland')"
                 >

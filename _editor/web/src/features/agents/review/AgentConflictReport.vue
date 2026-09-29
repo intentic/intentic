@@ -3,7 +3,7 @@ import type { LandConflict } from "@intentic/sandbox-contract";
 import { Button, useDevice } from "@intentic/ui";
 import { useVocabulary } from "../../../core-views/vocabulary";
 import { computed } from "vue";
-import { agentBlockers, type Blocker, blockerLabel, blockersOf, reasonCopy, userBlockers } from "./conflictResolution";
+import { agentBlockers, type Blocker, blockerLabel, blockersOf, reasonCopy, settingsOrigin, settingsPageName, userBlockers } from "./conflictResolution";
 import { useT } from "@intentic/ui/i18n";
 
 // Shows what a refused land is blocking: counts blocked vs. clean, groups blockers by cause, and ends on an
@@ -26,7 +26,8 @@ const props = defineProps<{
     box?: string;
 }>();
 
-const emit = defineEmits<{ resolve: []; merge: []; commit: []; stop: []; chat: []; cross: []; select: [Blocker] }>();
+// `saveSettings`: the held paths, to save before landing again.
+const emit = defineEmits<{ resolve: []; merge: []; commit: []; saveSettings: [readonly string[]]; stop: []; chat: []; cross: []; select: [Blocker] }>();
 
 const { mobile } = useDevice();
 const words = useVocabulary();
@@ -35,16 +36,34 @@ const blockers = computed(() => blockersOf(props.conflicts));
 const blockedCount = computed(() => blockers.value.length);
 // What the atomic refusal holds hostage: how much would land cleanly if not for the blockers.
 const cleanCount = computed(() => props.conflicts.reduce((total, conflict) => total + conflict.clean, 0));
+// Ladder's two halves: `mine` is what asking the agent fixes; `theirs` needs a commit or stash regardless.
+const mine = computed(() => agentBlockers(blockers.value));
+const theirs = computed(() => userBlockers(blockers.value));
+// The user's half when a Sandbox page wrote all of it, not the user: named for where it came from, and saved in one press
+// rather than sent to Changes (conflictResolution's settingsOrigin).
+const settingsPages = computed(() => settingsOrigin(theirs.value)?.map(settingsPageName).join(`, `));
 // Grouped by cause; kept as {repo, path} since a bare path can't identify a row in a multi-repo composition.
 const groups = computed(() =>
     (Object.keys(reasonCopy()) as (keyof ReturnType<typeof reasonCopy>)[]).flatMap((reason) => {
         const blocked = blockers.value.filter((blocker) => blocker.reason === reason);
-        return blocked.length === 0 ? [] : [{ reason, blocked, ...reasonCopy()[reason] }];
+        if (blocked.length === 0) {
+            return [];
+        }
+        const copy = reasonCopy()[reason];
+        return reason === `workspace` && settingsPages.value !== undefined
+            ? [
+                  {
+                      reason,
+                      blocked,
+                      ...copy,
+                      title: t(`agents.conflictResolution.changedInSettings`, { pages: settingsPages.value }),
+                      fix: t(`agents.conflictResolution.appWroteThese`),
+                  },
+              ]
+            : [{ reason, blocked, ...copy }];
     }),
 );
-// Ladder's two halves: `mine` is what asking the agent fixes; `theirs` needs a commit or stash regardless.
-const mine = computed(() => agentBlockers(blockers.value));
-const theirs = computed(() => userBlockers(blockers.value));
+const saveSettings = (): void => emit(`saveSettings`, theirs.value.map((blocker) => blocker.path));
 // A three-way apply goes through the index, so git refuses it outright on any unstaged path.
 const mergeable = computed(() => blockedCount.value > 0 && theirs.value.length === 0);
 // `busy` covers the click's round trip so the button doesn't flicker back to armed before the turn starts.
@@ -131,14 +150,23 @@ const ROW = `mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1`;
                 </Button>
                 <span class="text-2xs text-subtle">
                     {{ words.resolveConflictHint
-                    }}<template v-if="theirs.length > 0">
+                    }}<template v-if="theirs.length > 0 && settingsPages === undefined">
                         {{ t(`agents.agentConflictReport.yourEditsStillNeedYou`, { count: theirs.length }, theirs.length) }}</template
                     >
                 </span>
             </div>
 
+            <!-- Written by a Sandbox page, not typed: one press saves exactly those files and lands again. With the agent's own part
+                 still unresolved, that land is refused on it alone (nothing applied), and the report narrows to it. -->
+            <div v-if="box === undefined && theirs.length > 0 && settingsPages !== undefined" :class="ROW">
+                <Button size="small" :severity="mine.length === 0 ? undefined : `secondary`" :class="INLINE" :disabled="busy" @click="saveSettings">
+                    <Icon name="check" />{{ t(`agents.agentConflictReport.saveThemAndLand`) }}
+                </Button>
+                <span class="text-2xs text-subtle">{{ t(`agents.agentConflictReport.savesThenLands`) }}</span>
+            </div>
+
             <!-- The user's own half, which nothing else here can do for them; primary only when it's the sole thing left blocking. -->
-            <div v-if="box === undefined && theirs.length > 0" :class="ROW">
+            <div v-if="box === undefined && theirs.length > 0 && settingsPages === undefined" :class="ROW">
                 <Button size="small" :severity="mine.length === 0 ? undefined : `secondary`" :class="INLINE" @click="emit('commit')">
                     <Icon name="file-edit" />{{ t(`agents.agentConflictReport.openChanges`) }}
                 </Button>

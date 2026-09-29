@@ -32,7 +32,7 @@ jest.mock(`../../overview/useSandboxSettings`, () => ({
         dropped: ref(undefined),
         error: ref(undefined),
         isLoading: ref(false),
-        save: { mutate: patch, isPending: ref(false) },
+        save: { mutate: patch, isPending: ref(false), error: ref(null) },
     }),
 }));
 
@@ -58,13 +58,15 @@ jest.mock(`../../../chat/accounts/providerCatalog`, () => ({
 
 // Stubbed rather than mounted: what's under test is the wiring between a row and its list, not the real catalog. Props
 // are handed over live, so a test can watch an entry change under the open panel.
-let opened: { readonly pin?: unknown; readonly knobs?: boolean; readonly taken?: unknown } | undefined;
+let opened:
+    | { readonly open?: boolean; readonly header?: string; readonly pin?: unknown; readonly current?: unknown; readonly knobs?: boolean; readonly taken?: unknown }
+    | undefined;
 let answer: { pick: (pin: unknown) => void; configure: (pin: unknown) => void } | undefined;
 jest.mock(`./ModelPinPicker.vue`, () => ({
     // `__esModule` so the SFC interop reads `.default` the way it would off the real component.
     __esModule: true,
     default: defineComponent({
-        props: { open: Boolean, anchor: Object, pin: Object, knobs: Boolean, taken: Array },
+        props: { open: Boolean, anchor: Object, header: String, pin: Object, current: Object, knobs: Boolean, taken: Array },
         emits: [`update:open`, `pick`, `configure`],
         setup(props, { emit }) {
             opened = props;
@@ -532,27 +534,42 @@ const verbs = (host: HTMLElement, block: string): string[] =>
 const HELPERS = MODEL_ROLE_BLOCKS[0]!;
 const PRESSED = MODEL_ROLE_BLOCKS[1]!;
 
-// The row is a `<label>`; only two regions are carved out of it (the Add button, the pinned list), and either could
-// regress silently if its click-stop ever came off.
+// Only the tick and the job's name select a row. The row was once a whole `<label>`, and a press on its description or
+// note ticked a checkbox nobody could see: nine presses on the safety judge's note toggled "1 selected" on and off.
 
-// The row's own element, by job name; asserted by tag, since becoming a `<label>` is the behaviour under test.
-const rowOf = (host: HTMLElement, label: string): HTMLElement =>
-    [...host.querySelectorAll<HTMLElement>(`[class*="font-medium"] > span > span`)]
-        .find((name) => name.textContent?.trim() === label)!
-        .closest(`.group`)!;
+// The job's name, by its text: the first element of the title.
+const nameOf = (host: HTMLElement, label: string): HTMLElement =>
+    [...host.querySelectorAll<HTMLElement>(`[class*="font-medium"] > span > :first-child`)].find((name) => name.textContent?.trim() === label)!;
+// The row's own element, by job name.
+const rowOf = (host: HTMLElement, label: string): HTMLElement => nameOf(host, label).closest(`.group`)!;
 
-test("the whole headline ticks the job, so the target is the row rather than an 18px box", async () => {
+// A press as the browser delivers it, default action included: a `<label>` forwards it to its control.
+const press = (target: Element): void => {
+    target.dispatchEvent(new MouseEvent(`click`, { bubbles: true, cancelable: true }));
+};
+
+test("a press on a job's description or note leaves it unticked; its name ticks it", async () => {
     const host = await mountJobs();
 
     const row = rowOf(host, `Commit messages`);
-    expect(row.tagName).toBe(`LABEL`);
+    expect(row.tagName).toBe(`DIV`);
+    expect(row.closest(`label`)).toBeNull();
 
     // The row's description: the point in the row furthest from the tick box.
-    row.querySelector(`p`)!.dispatchEvent(new MouseEvent(`click`, { bubbles: true }));
+    press(row.querySelector(`p`)!);
     await nextTick();
+    expect(tickBox(host, `Select commit messages`).checked).toBe(false);
+    expect(verbs(host, HELPERS.label)).toEqual([]);
 
-    expect(tickBox(host, `Select commit messages`).checked).toBe(true);
-    expect(verbs(host, HELPERS.label)).toEqual([`Set a model for all…`, `Clear models`]);
+    // The judge's note, the text actually pressed nine times.
+    const judge = rowOf(host, `Safety judge`);
+    press([...judge.querySelectorAll(`p`)].at(-1)!);
+    await nextTick();
+    expect(tickBox(host, `Select safety judge`).checked).toBe(false);
+
+    // The name is a label for the tick alone.
+    const name = nameOf(host, `Commit messages`);
+    expect([name.tagName, name.getAttribute(`for`)]).toEqual([`LABEL`, tickBox(host, `Select commit messages`).id]);
 });
 
 test("the Add button opens the picker without ticking the job it belongs to", async () => {
@@ -924,4 +941,59 @@ test("a job holding guidance says so on its row, and says nothing when it holds 
     expect(chipsOn(written, ROUTER_ROW)).toEqual([`off`, `guided`]);
     // The chip is this job's alone; a neighbour in the same block says nothing about guidance.
     expect(chipsOn(written, MODEL_ROLES.find((role) => role.id === COMMIT)!.label)).toEqual([`off`]);
+});
+
+// "Change in Models" on Safety names the judge's job: the page opens that job's own row, which only Advanced draws.
+test("a link naming a job opens that job's group in Advanced and drops the name from the address", async () => {
+    const scrolled: string[] = [];
+    Element.prototype.scrollIntoView = function (this: Element) {
+        scrolled.push(this.id);
+    };
+    await router.push({ name: `sandbox`, params: { tab: `agent` }, query: { job: JUDGE } });
+    const host = mount();
+    await flush();
+    await flush();
+
+    const judgeBlock = MODEL_ROLE_BLOCKS.find((block) => block.roles.some((role) => role.id === JUDGE))!;
+    expect(adders(group(host, judgeBlock.label))).toContain(`Add a model for safety judge`);
+    expect(scrolled).toEqual([`model-job-${JUDGE}`]);
+    expect(router.currentRoute.value.query).toEqual({});
+});
+
+test("a second press on the trigger that opened the picker closes it", async () => {
+    const host = await mountJobs();
+    const add = addButton(host, `Add a model for commit messages`);
+
+    add.click();
+    await flush();
+    expect(opened?.open).toBe(true);
+
+    add.click();
+    await flush();
+    expect(opened?.open).toBe(false);
+});
+
+// The picker once ticked the chat's own model as "current" on a job that did not run it, and it was picked as one.
+test("adding to a job ticks that job's own model and says the new one is a fallback", async () => {
+    settings.value = { ...settings.value, modelRoles: { [JUDGE]: [entry(`codex`, `gpt-5.6`)] } };
+    const host = await mountJobs();
+
+    addButton(host, `Add a model for safety judge`).click();
+    await flush();
+    expect([opened?.header, opened?.current, opened?.pin]).toEqual([`Add a fallback model`, entry(`codex`, `gpt-5.6`), undefined]);
+    expect(host.textContent).not.toContain(`Tried in order`);
+
+    answer?.pick(entry(`claude`, `claude-haiku-4-5`));
+    await flush();
+    // Two entries are an order, and the list says so.
+    expect(host.textContent).toContain(`Tried in order`);
+});
+
+test("adding to a job with no model ticks nothing", async () => {
+    const host = await mountJobs();
+
+    addButton(host, `Add a model for commit messages`).click();
+    await flush();
+
+    expect([opened?.header, opened?.current]).toEqual([`Add a model`, undefined]);
 });

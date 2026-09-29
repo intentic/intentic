@@ -2,7 +2,7 @@ import { clipboardOf } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, type Ref, ref } from "vue";
-import { reviewAction, unregistered, watching } from "../../fleet/agentStatus";
+import { drillTarget, reviewAction, unregistered, watching } from "../../fleet/agentStatus";
 import { boxNameOf, isRemote, openInSandbox } from "../../fleet/fleetScope";
 import { canArchive, type FleetAgent } from "../../fleet/useAgents-fleet";
 import { bareBranch } from "../session/sessionChip";
@@ -29,6 +29,8 @@ export interface MenuActions {
     readonly focusAgent: (agent: FleetAgent) => void;
     readonly keepAgent: (agent: FleetAgent) => void;
     readonly reviewAgent: (agent: FleetAgent) => void;
+    // The card's own drill-in (useCardFocus.drillIn): the chat for an ask, the review page otherwise.
+    readonly drillIn: (agent: FleetAgent) => void;
     readonly closeAgent: (agent: FleetAgent) => void;
     readonly copySessionName: (branch: string) => Promise<void>;
     readonly openInSandbox: (sandboxId: string, agentId: string) => void;
@@ -70,8 +72,13 @@ export const menuItemsFor = (agent: FleetAgent, facts: MenuFacts, act: MenuActio
             { label: t(`ui.action.open`), icon: `arrow-right`, command: () => act.focusAgent(agent) },
             // The press that stops a look going; the chat rail's menu carries the identical row for the identical state.
             ...(facts.peeked ? [{ label: t(`ui.action.keepOpen`), icon: `pin`, command: () => act.keepAgent(agent) }] : []),
-            // A link too, hoverable and Ctrl/Cmd-clickable into its own tab; a plain click still points the chat dock.
-            ...(review === undefined ? [] : [{ label: review, icon: `copy`, url: facts.href(), command: () => act.reviewAgent(agent) }]),
+            // A link too, hoverable and Ctrl/Cmd-clickable into its own tab; a plain click still points the chat dock. An
+            // ask answered in the chat is no link: the page it would name draws nothing to answer (drillTarget).
+            ...(review === undefined
+                ? []
+                : drillTarget(agent) === `chat` && facts.here
+                  ? [{ label: review, icon: `comments`, command: () => act.drillIn(agent) }]
+                  : [{ label: review, icon: `copy`, url: facts.href(), command: () => act.reviewAgent(agent) }]),
         ],
         // The bare name (`sleek-arrow-uzgj`) `agents show`, Quick Open and the worktree path take; `agent/` is git's spelling.
         branch === undefined
@@ -98,7 +105,7 @@ export interface MenuHost {
     readonly mobile: Readonly<Ref<boolean>>;
     readonly peeked: (id: string) => boolean;
     // What a press on a card does (useCardFocus), and where its page is.
-    readonly focus: Pick<MenuActions, `focusAgent` | `keepAgent` | `reviewAgent` | `closeAgent`> & {
+    readonly focus: Pick<MenuActions, `focusAgent` | `keepAgent` | `reviewAgent` | `drillIn` | `closeAgent`> & {
         readonly agentHref: (agent: FleetAgent) => string;
     };
     // The fleet store's writes.

@@ -15,6 +15,7 @@ import { branchSha, mainBranchOf } from "./agent-refs.js";
 import { reconcileLockfile } from "./lockfile-reconcile.js";
 import type { IsolatedAgent, RepoRecord } from "../registry/agents-store.js";
 import type { AgentWorktrees } from "../worktrees/worktrees.js";
+import { assertLinked, UnlinkedCheckoutError } from "../worktrees/checkout-link.js";
 
 // Lands a conversation's work into the main tree as uncommitted changes: preserves worktree state as a commit on
 // agent/<id>, then applies each repo's anchor..tip patch working-tree-only once every repo in the composition
@@ -39,6 +40,17 @@ export interface LockfileFailure {
     readonly repo: string;
     readonly reason: string;
 }
+
+// The longest a broken land's words run on the card's record; git's own message can carry a whole command line.
+const FAILURE_MAX_CHARS = 1_000;
+
+// A land that threw rather than refused, as the card keeps it (AgentSummary.landFailure): its words, and `unlinked` when
+// the checkout lost its link to the workspace, the one kind the board says in its own words.
+export const landFailureOf = (cause: unknown): { readonly reason: string; readonly code?: string } => {
+    const said = cause instanceof Error ? cause.message : String(cause);
+    const reason = said.length > FAILURE_MAX_CHARS ? `${said.slice(0, FAILURE_MAX_CHARS - 1)}…` : said;
+    return cause instanceof UnlinkedCheckoutError ? { reason, code: "unlinked" } : { reason };
+};
 
 // Said by every door a land goes through, since pnpm's reason is the only account of why the lockfile lags its manifest.
 export const reportLockfileFailures = (logger: Logger, id: string, outcome: LandOutcome): void => {
@@ -617,6 +629,8 @@ export const landAgent = async (
     into: string | undefined = undefined,
     git: GitRunner = defaultGit,
 ): Promise<LandOutcome> => {
+    // Before anything is read: a checkout that no longer shares main's objects stops here with a plain reason.
+    await assertLinked(worktrees, entry.id, entry.placement.repos);
     const run: LandRun = {
         worktrees,
         entry,

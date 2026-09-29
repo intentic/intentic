@@ -611,6 +611,19 @@ describe("command gate: what an answer remembers", () => {
         cards.resolve({ kind: "permission", requestId: cardOf(gate.events).requestId, decision: "once" });
         await pending;
     });
+
+    // The hard rule asks every time whatever the policy says, so a line added from its card could never take effect:
+    // each press only grew the policy by a line and the next such delete asked again.
+    test("nor on a card the hard rule raised, and an always answer there writes nothing", async () => {
+        const gate = harness({ judge: always("allow", `Removes an old worktree.`, `Removing agent worktrees is fine.`) });
+        const pending = gate.run("rm -rf /history");
+        await settled();
+        expect(cardOf(gate.events).alwaysLabel).toBeUndefined();
+        cards.resolve({ kind: "permission", requestId: cardOf(gate.events).requestId, decision: "always" });
+        await pending;
+        await settled();
+        expect(gate.remembered).toEqual([]);
+    });
 });
 
 // Makes a written policy editable. The entries that matter most are the allowed ones: commands nobody was

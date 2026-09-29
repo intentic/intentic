@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { gitInit } from "@intentic/scaffold";
 import { conversationsDbPath, openConversationsDb } from "../../store/conversations-db.js";
-import { beginTurn, fleetStoreOver, noIsolation } from "../../testing.js";
+import { beginTurn, fleetStoreOver, noIsolation, noPresences } from "../../testing.js";
 import { ensureRootRepo } from "../../git/remote/root-repo.js";
 import { repoGitDir } from "../../workspace/layout/git-layout.js";
 import { createLogger } from "../../logger.js";
@@ -37,7 +37,6 @@ const storeIn = (historyRoot: string): FleetStore & { saved: () => PersistedAgen
 };
 
 const noStandings = { of: () => "idle" as const, causesOf: () => [], refresh: async () => false, forget: () => {} };
-const noPresences = { of: () => undefined, refresh: async () => false, forget: () => {}, metrics: () => ({}) };
 
 // A production-shaped workspace: a root repo over /work, a nested repo, and two conversations spanning both, with real
 // checkouts on the history volume.
@@ -73,7 +72,7 @@ const setup = async (): Promise<{
         perf,
     });
     const store = storeIn(historyRoot);
-    const { agents, conversations } = createFleet(store, noStandings, noPresences);
+    const { agents, conversations } = createFleet(store, noStandings, noPresences());
     await agents.init();
     for (const id of ["c1", "c2"]) {
         await beginTurn(

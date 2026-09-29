@@ -30,9 +30,15 @@ export interface Addressing {
     readonly localHostname?: string | null;
 }
 
-// Cheap NO, not a definite yes: true unless the platform hosts the machine itself (known non-local, e.g. Fly),
-// since a probe here costs a Local Network Access prompt best not spent on an address that cannot answer.
-export const couldBeOnThisMachine = (sandbox: Pick<Addressing, "hosted">): boolean => sandbox.hosted === null;
+// A phone never runs a sandbox (a computer's Docker or the platform does). Android's "desktop site" mode and an iPad
+// reading as a Mac pass for computers, and just keep probing.
+export const phoneBrowser = (userAgent: string): boolean => /android|iphone|ipad|ipod/i.test(userAgent);
+
+// Cheap NO, not a definite yes: true unless the platform hosts the machine itself (known non-local, e.g. Fly) or this
+// browser is on a phone, since a probe here costs a Local Network Access prompt best not spent on an address that
+// cannot answer, and a phone that allowed it once would probe a dead loopback on every launch.
+export const couldBeOnThisMachine = (sandbox: Pick<Addressing, "hosted">, userAgent: string = globalThis.navigator?.userAgent ?? ``): boolean =>
+    sandbox.hosted === null && !phoneBrowser(userAgent);
 
 // 12-hex sandbox id from the connect token (WebCrypto twin of `sandboxIdFromToken`). Derived from the token, not
 // the daemon URL: on own-Cloudflare, the URL's subdomain need not match the token-derived port.
@@ -43,9 +49,10 @@ export const sandboxIdOf = async (connectToken: string): Promise<string> => (awa
 export const certifiedLoopbackUrl = (sandboxId: string, hostname: string | null | undefined): string | undefined =>
     hostname === null || hostname === undefined || hostname === `` ? undefined : `https://${hostname}:${localDaemonPort(sandboxId)}`;
 
-// Ranked by multiplexing, not distance: certified loopback and tunnel (both h2) outrank plain HTTP/1.1 (six
-// connections per origin), which is only worth it when DNS or the internet is down entirely. No token, or a non-local
-// machine, collapses to the tunnel alone.
+// Ranked by what usually multiplexes, not by distance: certified loopback and tunnel (h2 in most browsers) outrank plain
+// HTTP/1.1 (six connections per origin), which is only worth it when DNS or the internet is down entirely. What this
+// browser actually negotiated is measured apart (streamBudget.ts), since WebKitGTK speaks HTTP/1.1 even to the
+// certified name. No token, or a non-local machine, collapses to the tunnel alone.
 export const candidatesFor = async (sandbox: Addressing): Promise<Endpoint[]> => {
     const tunnel: Endpoint = { kind: `public`, base: sandbox.daemonUrl };
     if (sandbox.token === undefined || sandbox.token === `` || !couldBeOnThisMachine(sandbox)) {

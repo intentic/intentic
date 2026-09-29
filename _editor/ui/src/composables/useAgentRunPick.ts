@@ -61,7 +61,7 @@ export interface ModelPicking {
 
 export interface AgentRunPicker {
     // Names the job this button starts, the key the sandbox lists models by. A plain string, since an
-    // unknown role falls back to the composer's own model rather than crashing.
+    // unknown role falls back to the model a new chat would open on rather than crashing.
     readonly model: ComputedRef<AgentRunChoice>;
     // Whether that would start a DIFFERENT run from the sandbox's standing order. The button shows the model
     // only when it is: a control that names the standing setting on every row of a list is noise, and one that

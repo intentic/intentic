@@ -1,4 +1,5 @@
 import { DeviceReportSchema, type SyncEnrollmentAnswer, type SyncEnrollmentRequest, SyncEnrollmentRequestSchema } from "@intentic/sandbox-contract";
+import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import type { Context } from "hono";
 import { ownerDenied } from "../auth/owner-gates.js";
 import type { Services } from "../composition.js";
@@ -17,12 +18,46 @@ import {
     type SyncMode,
 } from "./desktop-sync.js";
 
-// Desktop sync's enrollment surface: a browser-minted pairing token is redeemed once at /system/authorized-key to land
-// an SSH key. The pairing carries the mode: owner gets sync, a member only ever mirror. Transport is desktop-sync-ssh.ts.
+// Desktop sync's enrollment surface: a browser-minted pairing token is redeemed at /system/authorized-key to land an SSH
+// key, once per machine key. The pairing carries the mode: owner gets sync, a member only ever mirror. Transport is
+// desktop-sync-ssh.ts.
+
+// How long a redeemed pairing stays good for the key that redeemed it: the pairing's own lifetime (enrollment.ts).
+const REENROLL_WINDOW_MS = 10 * 60 * 1000;
+
+// A MACHINE'S SETUP GOES ON PAST ITS ENROLLMENT (linking the folder, starting the sync engine, proving the SSH path), and
+// a failure there is retried by enrolling again with the same pairing. Spent on the first redemption, that retry could
+// only fail at enrollment: the desktop app's Try again did, every time. So a redeemed pairing stays good for the key
+// that redeemed it, for the pairing's lifetime, and for no other key. In memory and by digest, as pairings are.
+const reenrollments = () => {
+    const redeemed = new Map<string, { readonly mode: SyncMode; readonly key: string; readonly until: number }>();
+    return {
+        // The mode this pairing granted, when this same key redeemed it and its window is still open.
+        modeFor: (pair: string, key: string): SyncMode | undefined => {
+            const held = redeemed.get(sha256Hex(pair));
+            return held !== undefined && held.until >= Date.now() && held.key === key ? held.mode : undefined;
+        },
+        remember: (pair: string, key: string, mode: SyncMode): void => {
+            const now = Date.now();
+            for (const [digest, held] of redeemed) {
+                if (held.until < now) {
+                    redeemed.delete(digest);
+                }
+            }
+            redeemed.set(sha256Hex(pair), { mode, key, until: now + REENROLL_WINDOW_MS });
+        },
+        // A revoke ends every window: a machine cut off minutes after enrolling must not walk back in with the pairing it
+        // redeemed. Every one rather than the revoked machine's own, since a window knows its key and not its machine;
+        // a setup still retrying elsewhere asks for a new pairing, which is the rare cost.
+        forget: (): void => {
+            redeemed.clear();
+        },
+    };
+};
 
 // Whole Services, not a slice of it: revoking a machine reaches past desktop sync into the device door it may also
 // hold, and that teardown runs the capability handler.
-export const createSyncRoutes = (services: Services) => ({
+export const createSyncRoutes = (services: Services, redeemed = reenrollments()) => ({
     // Runs through the bearer middleware, so an unauthenticated caller is already 401'd; a caller the operating gate
     // refuses is narrowed to mirror, not refused.
     pair: async (c: Context<AppEnv>): Promise<Response> => {
@@ -35,7 +70,15 @@ export const createSyncRoutes = (services: Services) => ({
         // Authorized by a valid pairing token (the agent's path) or the owner's Google token (fallback).
         const pair = c.req.header("x-intentic-pair") ?? undefined;
         // Read once, before the awaits below, so a token that expires mid-request can't enroll under a different mode.
-        const paired = pair === undefined ? undefined : services.syncPairings.peek(pair);
+        const live = pair === undefined ? undefined : services.syncPairings.peek(pair);
+        const raw: unknown = await c.req.json().catch(() => undefined);
+        // Which computer and install is enrolling, when its agent is new enough to say; an identity that does not parse
+        // is left unsaid rather than refusing the key it came with.
+        const body: SyncEnrollmentRequest | undefined =
+            SyncEnrollmentRequestSchema.safeParse(raw).data ?? SyncEnrollmentRequestSchema.pick({ key: true }).safeParse(raw).data;
+        // Already redeemed, by this same key: the machine retrying a setup that failed after it enrolled.
+        const again = live === undefined && pair !== undefined && body !== undefined ? redeemed.modeFor(pair, body.key.trim()) : undefined;
+        const paired = live ?? again;
         const viaPair = paired !== undefined;
         if (!viaPair) {
             const denied = await ownerDenied(services, c);
@@ -43,11 +86,6 @@ export const createSyncRoutes = (services: Services) => ({
                 return denied;
             }
         }
-        const raw: unknown = await c.req.json().catch(() => undefined);
-        // Which computer and install is enrolling, when its agent is new enough to say; an identity that does not parse
-        // is left unsaid rather than refusing the key it came with.
-        const body: SyncEnrollmentRequest | undefined =
-            SyncEnrollmentRequestSchema.safeParse(raw).data ?? SyncEnrollmentRequestSchema.pick({ key: true }).safeParse(raw).data;
         if (body === undefined || !isValidAuthorizedKey(body.key)) {
             return c.json({ error: "invalid key" }, 400);
         }
@@ -60,9 +98,10 @@ export const createSyncRoutes = (services: Services) => ({
         if ("locked" in result) {
             return c.json({ error: "sync already active", machine: result.locked }, 423);
         }
-        // Burned only on success, so a transient failure leaves the token usable for a retry.
-        if (pair !== undefined) {
+        // Burned only on success, so a transient failure leaves the token usable for a retry; and still good for this key.
+        if (pair !== undefined && live !== undefined) {
             await services.syncPairings.consume(pair);
+            redeemed.remember(pair, key.trim(), mode);
         }
         // No address returned: the agent reaches sshd via this daemon's own sync-ssh route, at the URL it already uses.
         // The key that sshd presents rides along, so the agent pins it instead of trusting the first one it is shown;
@@ -103,10 +142,13 @@ export const createSyncRoutes = (services: Services) => ({
             : c.json({ error: "unknown enrollment" }, 403);
     },
     // Agent's own way out: drops only the enrollment its sync token belongs to; exempt from the bearer middleware.
-    revokeOwn: async (c: Context<AppEnv>): Promise<Response> =>
-        (await revokeEnrollmentByToken(services.config.historyRoot, c.req.header("x-intentic-sync") ?? ""))
-            ? c.json({ ok: true })
-            : c.json({ error: "unknown enrollment" }, 404),
+    revokeOwn: async (c: Context<AppEnv>): Promise<Response> => {
+        if (!(await revokeEnrollmentByToken(services.config.historyRoot, c.req.header("x-intentic-sync") ?? ""))) {
+            return c.json({ error: "unknown enrollment" }, 404);
+        }
+        redeemed.forget();
+        return c.json({ ok: true });
+    },
     // Owner's way out, one device at a time, matching DELETE /system/hosts/:id: no fleet-wide revoke, so cutting off
     // one laptop can't drop anyone else's mirror. Owner-only; not exempt from the bearer middleware.
     revokeMachine: async (c: Context<AppEnv>): Promise<Response> => {
@@ -119,6 +161,10 @@ export const createSyncRoutes = (services: Services) => ({
         // whose card is gone, which no screen lists. Both end here, or "revoked" would leave a live credential behind.
         const door = await revokeCardlessHost(services, machine);
         const key = await revokeEnrollmentByMachine(services.config.historyRoot, machine);
-        return key || door ? c.json({ ok: true }) : c.json({ error: "no device is enrolled under that name" }, 404);
+        if (!key && !door) {
+            return c.json({ error: "no device is enrolled under that name" }, 404);
+        }
+        redeemed.forget();
+        return c.json({ ok: true });
     },
 });

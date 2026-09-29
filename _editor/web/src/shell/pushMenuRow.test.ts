@@ -3,6 +3,7 @@ import { pushMenuRow } from "./pushMenuRow";
 describe(`pushMenuRow`, () => {
     it(`says nothing once this phone is registered`, () => {
         expect(pushMenuRow(`on`)).toBeUndefined();
+        expect(pushMenuRow(`checking`)).toBeUndefined();
     });
 
     it(`invites an unregistered phone in, and names the way back from a block`, () => {

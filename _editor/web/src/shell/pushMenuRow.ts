@@ -12,6 +12,7 @@ export interface PushMenuRow {
 
 export const pushMenuRow = (state: PushState): PushMenuRow | undefined => {
     switch (state) {
+        case `checking`:
         case `on`:
             return undefined;
         case `off`:

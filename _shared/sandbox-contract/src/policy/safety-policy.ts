@@ -131,6 +131,7 @@ Ask me before:
 
 - publishing or releasing anything (npm publish, a GitHub release, a container push);
 - force-pushing, hard-resetting or otherwise discarding commits that are not this turn's own work;
+- deleting a checkout's \`.git\` or running \`git init\` in a folder that already is one: in a worktree that cuts it off from my workspace's history, and its work can no longer come back to me;
 - moving a checkout onto another branch (\`git checkout <branch>\`, \`git switch\`) — you only ever see this for a tree that is mine as well as yours, never for a copy of your own, so the worktree paragraph above does not cover it;
 - sending a credential anywhere outside this container.
 

@@ -304,6 +304,28 @@ test("git setup (gitlab): host + https user derive from the instance url", async
     expect(readFileSync(join(home, ".git-credentials"), "utf8")).toContain("https://oauth2:gl-tok@gitlab.example.com");
 });
 
+// An agent's own `git commit` failed "Author identity unknown" and it then committed under a made-up name: a sandbox
+// with no identity takes the connected account's, and one the owner set is never written over.
+test("git setup gives a sandbox with no git identity the account's own, and keeps one the owner set", async () => {
+    gitHome();
+    const host = gitHostOf({ provider: "github", token: "ghp_x" });
+    const deps: GitAccessDeps = {
+        uploadKey: async () => {},
+        deleteKey: async () => {},
+        keyAuthenticates: async () => false,
+        accountIdentity: async () => ({ name: "Ada Lovelace", email: "42+ada@users.noreply.github.com" }),
+    };
+    const identity = async (key: string): Promise<string> => (await exec("git", ["config", "--global", "--get", key])).stdout.trim();
+    await setupGitAccess(host, directExec, deps);
+    expect([await identity("user.name"), await identity("user.email")]).toEqual(["Ada Lovelace", "42+ada@users.noreply.github.com"]);
+
+    gitHome();
+    await exec("git", ["config", "--global", "user.name", "Owner"]);
+    await exec("git", ["config", "--global", "user.email", "owner@example.com"]);
+    await setupGitAccess(host, directExec, deps);
+    expect([await identity("user.name"), await identity("user.email")]).toEqual(["Owner", "owner@example.com"]);
+});
+
 test("git teardown: deletes the account key and removes the local key, ssh alias and https line", async () => {
     const home = gitHome();
     let deleted = 0;

@@ -597,7 +597,6 @@
             "noPagesOpen": "Keine Seiten offen",
             "openAddressYourself": "Diese Adresse selbst öffnen",
             "openCount": "Offen",
-            "other": "andere",
             "pageSays": "Diese Seite meldet",
             "sendsYourInput": "Sendet Klicks und Tasten",
             "signedIn": "Angemeldet",
@@ -606,7 +605,6 @@
             "switchBrowser": "Browser wechseln",
             "takeControl": "Steuerung übernehmen",
             "takeControlFixStep": "Übernehmen Sie die Steuerung, reparieren Sie den Schritt und geben Sie zurück.",
-            "waiting": "wartet auf Sie",
             "youreDrivingHandBack": "Sie steuern · zurückgeben"
         }
     },
@@ -744,11 +742,9 @@
         },
         "gitRefField": {
             "addRepositoryAboveVersions": "Fügen Sie oben das Repository hinzu, dann erscheinen hier die Versionen, die es anbietet.",
-            "asking": "Fragt",
             "full40CharacterCommit": "Eine vollständige 40-stellige Commit-SHA",
             "pickBranchReleaseInstead": "Stattdessen einen Branch oder ein Release wählen",
-            "pickVersion": "Eine Version wählen…",
-            "whatOffers": "was es anbietet…"
+            "pickVersion": "Eine Version wählen…"
         },
         "hostConnectDialog": {
             "callsItself": "Dieser Rechner nennt sich",
@@ -765,10 +761,8 @@
             "run": "Führen Sie ihn aus in",
             "runInside": "Führen Sie ihn in {name} aus",
             "runInsideLinuxEnvironment": "Führen Sie ihn in der Linux-Umgebung selbst aus",
-            "runOn": "Führen Sie das aus auf",
             "runWindowsInsideDistro": "Führen Sie ihn von Windows aus, in der Distro, über wsl.exe",
-            "terminalInDistro": "Ein Terminal in der Distro",
-            "yourselfInstallsSmallAgent": ", als Sie selbst. Es installiert einen kleinen Agenten, der diese Sandbox anwählt und eine ausgehende Verbindung offen hält. In Ihrem Netzwerk werden keine Ports geöffnet, und an Ihrem Router ist nichts einzustellen."
+            "terminalInDistro": "Ein Terminal in der Distro"
         },
         "hostRecreate": {
             "actionHeader": "Diese Sandbox {action}?",
@@ -1118,6 +1112,7 @@
             "chatStaysPutInstead": "(dieser Chat bleibt liegen, statt sich selbst wieder aufzunehmen)",
             "collapseMessage": "Nachricht einklappen",
             "connect": "{name} verbinden",
+            "continueWithoutDeclined": "Fortfahren, ohne den Schritt, den ich abgelehnt habe.",
             "editMessageShort": "Nachricht bearbeiten",
             "expandMessage": "Nachricht ausklappen",
             "hideCheck": "Die Prüfung ausblenden",
@@ -1191,7 +1186,6 @@
             "loadEarlierTurns": "Frühere Züge laden",
             "loadingEarlierTurns": "Frühere Züge werden geladen…",
             "message": "Diese Nachricht",
-            "messageWhatEveryStep": "“: diese Nachricht ist das, was jeder Schritt tun soll. Modell, Aufwand, Modus und Schleife gehören jedem Schritt selbst.",
             "moreComposerSettings": "Weitere Composer-Einstellungen",
             "noReplyPressExit": "Keine Antwort; drücken beendet",
             "nothingChangedYet": "Noch nichts geändert",
@@ -1200,8 +1194,6 @@
             "replacedSend": "sie wird beim Senden ersetzt.",
             "runMessageThrough": "Diese Nachricht laufen lassen durch",
             "sandboxBusy": "Sandbox ausgelastet",
-            "sendLoopsMessageUntil": "Senden wiederholt diese Nachricht, bis sie erfüllt ist: endet bei",
-            "sendStarts": "Senden startet „",
             "shiftEnterNewLine": "Shift+Enter für eine neue Zeile",
             "startConversation": "Beginnen Sie eine Unterhaltung mit {providerName}.",
             "talkHandsFree": "Freihändig sprechen",
@@ -1316,15 +1308,13 @@
         },
         "chatRunThroughMenu": {
             "handToOtherSessions": "An andere Sessions übergeben",
-            "handsToDesignSeveral": "übergibt sie an einen Entwurf aus mehreren Sessions statt an diesen Chat.",
             "justChat": "Nur dieser Chat",
             "loop": "Schleife",
             "manageLoopsWorkflows": "Schleifen und Workflows verwalten",
-            "nothingSavedYet": "Noch nichts gesichert. Eine",
+            "nothingSavedExplained": "Noch nichts gesichert. Eine {loop} sendet Ihre Nachricht immer wieder: reparieren, prüfen, reparieren — bis etwas wahr ist, das Sie benennen können. Ein {workflow} übergibt sie an einen Entwurf aus mehreren Sessions statt an diesen Chat.",
             "onPinned": "auf {pinned}",
             "repeatHereUntilDone": "Hier wiederholen, bis es erledigt ist",
             "sendOnceOrdinaryMessage": "Einmal senden, als gewöhnliche Nachricht.",
-            "sendsMessageOverOver": "sendet Ihre Nachricht immer wieder: reparieren, prüfen, reparieren — bis etwas wahr ist, das Sie benennen können. Ein",
             "setOneUp": "Einen einrichten",
             "workflow": "Workflow"
         },
@@ -1478,11 +1468,10 @@
             "region": "Bilder aus diesem Zug"
         },
         "chatTurnStatus": {
-            "atCapacity": "an der Kapazitätsgrenze",
             "attemptNothingLost": "(Versuch {attempt}, nichts verloren)",
-            "modelProvider": "Der Modellanbieter ist",
-            "notResponding": "antwortet nicht",
-            "rateLimiting": "drosselt",
+            "providerAtCapacity": "Der Modellanbieter ist an der Kapazitätsgrenze: {retry}",
+            "providerNotResponding": "Der Modellanbieter antwortet nicht: {retry}",
+            "providerRateLimiting": "Der Modellanbieter drosselt: {retry}",
             "retrying": "versucht es erneut",
             "retryingAt": "versucht es am {when} erneut",
             "retryingIn": "versucht es erneut in {wait}",
@@ -1964,7 +1953,6 @@
             "custom": "Eigen",
             "editCopy": "Eine Kopie bearbeiten",
             "eitherWayAppsOwn": "So oder so wird die eigene Anleitung dieser App zu ihren Fragekarten, dem Checklisten-Panel und den Browser-Werkzeugen obendrauf gelegt; nur ein eigener Prompt lässt das weg.",
-            "includingWhatAppTells": ": einschließlich dessen, was diese App dem Assistenten über ihre eigenen Fragekarten, das Checklisten-Panel und die Browser-Werkzeuge sagt.",
             "intenticsOwnPromptDefault": "Intentics eigener Prompt: der Standard, und der, den wir für diese App abstimmen. Wählen Sie Intentic, und er wird mit der App weiter aktualisiert; forken Sie ihn, und er gehört von da an Ihnen.",
             "intenticsOwnPromptTuned": "Intentics eigener Prompt, auf diese App abgestimmt.",
             "leanGuidance": "Kurze Anleitung",
@@ -1976,7 +1964,6 @@
             "readingSandbox": "Wird aus Ihrer Sandbox gelesen…",
             "startClaudes": "Von Claudes ausgehen",
             "startIntentics": "Von Intentics ausgehen",
-            "textBecomesWholePrompt": "Ihr Text wird zum gesamten Prompt auf",
             "viewPrompt": "Prompt ansehen",
             "writeAssistantsSystemPrompt": "Schreiben Sie den Systemprompt des Assistenten, oder gehen Sie von einem der eingebauten Prompts unten aus."
         },
@@ -2198,17 +2185,19 @@
             "syncsSandboxNotConnected": "synchronisiert diese Sandbox, ist aber nicht als Gerät verbunden."
         },
         "connectFlow": {
-            "again": "erneut",
             "alreadyPasteHere": "Schon vorhanden? Fügen Sie es hier ein",
+            "comeBackWithAddress": "Melden Sie sich an und kommen Sie dann mit der Adresse hierher zurück, auf der {destination} landet — ihre letzte Seite {wontLoad}, und das ist zu erwarten.",
+            "comeBackWithCode": "Melden Sie sich an und kommen Sie dann mit dem Code hierher zurück.",
             "finish": "Fertigstellen",
             "finishesOn": "Melden Sie sich auf der Seite an, die sich öffnet: Die Anmeldung schließt sich auf {where} von selbst ab.",
-            "lastPage": "— ihre letzte Seite",
             "nameAccount": "Dieses Konto benennen…",
             "notThere": "Melden Sie sich woanders als auf {where} an? Fügen Sie die Adresse ein, auf der sie landet",
-            "paste": "{grantNoun} einfügen",
-            "signInComeBack": "Melden Sie sich an und kommen Sie dann hierher zurück mit",
+            "openAgain": "{destination} erneut öffnen",
+            "pasteAddress": "Adresse einfügen, auf der {destination} landet",
+            "pasteAddressPlaceholder": "Adresse einfügen…",
+            "pasteCode": "Code einfügen",
+            "pasteCodePlaceholder": "Code einfügen…",
             "siteCantReached": "Diese Seite ist nicht erreichbar",
-            "thatsExpected": ", und das ist zu erwarten",
             "waitingApproval": "Warten auf Genehmigung…",
             "waitingOn": "Warten, bis die Anmeldung auf {where} ankommt…",
             "whatPageLooksLike": "Wie diese Seite aussieht",
@@ -2220,7 +2209,6 @@
             "checkSetup": "Einrichtung prüfen",
             "connect": "„{name}“ verbinden",
             "connectingTo": "Verbindung zu „{name}“…",
-            "containerDeletedOnFiles": "Sein Container wurde auf {where} gelöscht, und seine Dateien gingen mit. Nichts ist unterwegs zurück — es erneut einzurichten startet diese Sandbox frisch, unter demselben Namen und derselben Adresse.",
             "extensionStoppedAnswering": "Die Erweiterung {extension} antwortet auf {path} nicht mehr, und darauf wartet die Sandbox — nicht auf die Maschine, die weiterhin läuft. Repariere oder stoppe diesen Handler, dann kommt der Arbeitsbereich von selbst zurück.",
             "finishSetup": "Einrichtung abschließen",
             "hostedSandboxesSwitchedOff": "Gehostete Sandboxes sind für Ihr Konto abgeschaltet",
@@ -2757,7 +2745,6 @@
             "copyCloneUrl": "Die Klon-URL kopieren",
             "copyUrl": "URL kopieren",
             "couldntListSandboxsBundles": "Die Bundles dieser Sandbox ließen sich nicht auflisten.",
-            "createsPrivateRepositoryOn": "Legt ein privates Repository an auf",
             "deleteExport": "Export löschen",
             "differences": "Unterschiede",
             "downloadExport": "Export herunterladen",
@@ -2766,7 +2753,6 @@
             "exportFailed": "Der Export ist fehlgeschlagen.",
             "exportRunning": "Export läuft…",
             "failed": "fehlgeschlagen",
-            "filesStayBehind": "Dateien bleiben zurück.",
             "inAgreement": "stimmen überein",
             "notInDocument": "Nicht im Dokument",
             "notPublished": "Nicht veröffentlicht",
@@ -2774,7 +2760,6 @@
             "openWorkspaceRepository": "Das Workspace-Repository öffnen",
             "packing": "wird gepackt",
             "packingFar": "Wird gepackt… {bytes} bisher",
-            "pushes": "und pusht",
             "secrets": "Geheimnisse"
         },
         "newExtensionDialog": {
@@ -2804,7 +2789,6 @@
             "unusedOneCodePlus": "{remaining} ungenutzt. Ein Code plus Ihre Google-Anmeldung öffnet die Sandbox, wenn alle Passkeys verloren sind; jeder funktioniert einmal."
         },
         "personaBriefingFields": {
-            "moreAlwaysSent": "weitere werden immer gesendet",
             "sandboxPutsInFront": "Die Sandbox stellt diese der Nachricht voran, bevor das Modell sie liest; der Chat zeigt sie unter „Mit Ihrer Nachricht gesendet“. Schalten Sie eines für eine Persona ab, deren Modell wenig Platz hat oder deren Arbeit es nie braucht.",
             "sentEveryMessage": "Mit jeder Nachricht gesendet",
             "turnedOffPersonaEvery": "{dropped} von {count} für diese Persona abgeschaltet. Jeder andere Chat in dieser Sandbox bekommt weiterhin alle."
@@ -3250,14 +3234,11 @@
             "againstHost": "gegen ihren Host.",
             "alreadyDownloadedBuiltOn": "Es ist auf dem Gerät, das diese Sandbox betreibt, bereits heruntergeladen und gebaut. Es anzuwenden startet Ihre Sandbox für etwa eine halbe Minute neu: Ihre Dateien (in /work) bleiben erhalten.",
             "alreadyDownloadedHereReleased": "{stagedBehind} ist hier bereits heruntergeladen, aber seither wurde {latest} veröffentlicht. Jetzt zu aktualisieren gibt Ihnen {stagedBehind2} — oder laden Sie zuerst das neuere herunter.",
-            "and": "…und",
             "applyRestartsSandbox": "Anwenden: das startet Ihre Sandbox neu:",
             "downloadCostsNothing": "Es jetzt herunterzuladen kostet nichts, und der Neustart kann warten. | Sie jetzt herunterzuladen kostet nichts, und der Neustart kann warten.",
             "downloaded": "heruntergeladen",
-            "iveReadWhatChanges": "Ich habe gelesen, was sich ändert: zeig mir das Update",
             "midTurnRestart": "Gerade ist ein Agent mitten im Zug, die Sandbox neu zu starten unterbricht seine Arbeit. | Gerade sind {count} Agenten mitten im Zug, die Sandbox neu zu starten unterbricht ihre Arbeit.",
             "midTurnRollback": "Gerade ist ein Agent mitten im Zug, ein Rollback unterbricht seine Arbeit. | Gerade sind {count} Agenten mitten im Zug, ein Rollback unterbricht ihre Arbeit.",
-            "more": "weitere:",
             "publishedNewerThanWhat": "Das veröffentlichte {latest} ist neuer als das, was diese Sandbox meldet, aber es zu nehmen verwirft das Image, das aus Ihrem Checkout gebaut wurde. Auf dem Gerät, das sie betreibt:",
             "readChangelog": "das Änderungsprotokoll lesen",
             "restartToUpdatePlatform": "Neustarten zum Aktualisieren: die Plattform bootet Ihre Sandbox auf dem neuen Image, Dateien bleiben.",
@@ -3274,7 +3255,8 @@
             "updateRemovesChangesThings": "Dieses Update entfernt oder ändert Dinge, auf die Sie sich verlassen könnten: lesen Sie unten, was sich ändert, bevor Sie es nehmen. Ihre Dateien (in /work) bleiben so oder so erhalten, und Sie können danach zurückrollen:",
             "waitFleetToSettle": "Warten Sie, bis sich die Flotte beruhigt hat, oder machen Sie weiter, wenn das in Ordnung ist.",
             "whatChanges": "Was sich ändert",
-            "whatUpdatesNeverBreak": "was Updates nie kaputt machen"
+            "whatUpdatesNeverBreak": "was Updates nie kaputt machen",
+            "andMore": "…und {count} weitere:"
         },
         "sandboxHours": {
             "awakeHours": "Wachstunden",
@@ -3877,7 +3859,6 @@
             "alreadyRunningSandboxContainer": "Sie betreiben den Sandbox-Container schon hinter einer eigenen Domain? Nennen Sie uns die Adresse, unter der er antwortet. Wir prüfen sie und öffnen dann Ihren Workspace. Nichts zu installieren, nichts bereitzustellen.",
             "alreadyRunningSandboxSomewhere": "Sie betreiben irgendwo schon eine Sandbox? Per Domain verbinden →",
             "alreadyUsingYours": "Sie benutzen bereits Ihre eigene",
-            "alsoToName": "muss außerdem benennen",
             "appSettingUp": "Die App richtet es ein.",
             "assignedMachineFreesUp": "Wird zugeteilt, sobald eine Maschine frei wird",
             "assignedMachineStarts": "Wird zugeteilt, während Ihre Maschine startet…",
@@ -3981,6 +3962,7 @@
             "waitingToClaimedConnection": "Sie wartet darauf, mit dem Verbindungs-Token beansprucht zu werden, mit dem sie gestartet wurde. Fügen Sie das ein",
             "waitingToRunCommand": "Wartet darauf, dass Sie den Befehl ausführen.",
             "waitingToStart": "Wartet darauf, dass Sie sie starten.",
+            "webOriginMustName": "Der {variable} des Daemons muss außerdem {origin} benennen. Sonst blockiert Ihr Browser den Aufruf, bevor er gesendet wird.",
             "wellConnectTo": "Wir verbinden uns mit",
             "wellNoticeMomentSandbox": "Wir merken es in dem Moment, in dem Ihre Sandbox startet.",
             "whereSandboxRuns": "Wo die Sandbox läuft"
@@ -4905,6 +4887,12 @@
             "discardAll": "Alles verwerfen",
             "discardAllChangesIn": "Alle Änderungen in diesem Repo verwerfen",
             "discardChanges": "Änderungen verwerfen",
+            "discardEveryChange": "Alle nicht committeten Änderungen in {repo} verwerfen?",
+            "discardEveryFileFrom": "Alle Dateien von {origin} in {repo} verwerfen?",
+            "discardEveryFileOfYours": "Alle von Ihnen geänderten Dateien in {repo} verwerfen?",
+            "discardFilesFrom": "{count} Datei von {origin} in {repo} verwerfen? | {count} Dateien von {origin} in {repo} verwerfen?",
+            "discardFilesOfYours": "Die {count} von Ihnen geänderte Datei in {repo} verwerfen? | Die {count} von Ihnen geänderten Dateien in {repo} verwerfen?",
+            "discardSelected": "{count} ausgewählte Datei verwerfen? | {count} ausgewählte Dateien verwerfen?",
             "dismissCommitError": "Commit-Fehler ausblenden",
             "dismissError": "Fehler für {repo} ausblenden",
             "fetch": "Fetch",
@@ -4928,7 +4916,6 @@
             "otherRepos": "die anderen {count} Repos",
             "rebasesNeverMerges": "Rebase, nie Merge",
             "repoLabel": "Repo | Repos",
-            "repos": "· {count} Repos",
             "resolveConflictsFirst": "Zuerst die Konflikte lösen",
             "resolveConflictsStageTo": "Lösen Sie die Konflikte und stagen Sie sie, um fortzufahren, oder brechen Sie ab, um dieses Repository dorthin zurückzubringen, wo der {operation} begann.",
             "restorePointFirst": "Vorher Wiederherstellungspunkt",
@@ -4985,7 +4972,6 @@
             "statusClashes": "kollidiert",
             "statusNew": "neu",
             "statusRenamed": "umbenannt",
-            "thisRepo": "dieses {repo}",
             "twoEditsToSame": "Zwei Änderungen an derselben Datei kollidieren. Bitten Sie Ihren {agent}, das zu klären, oder machen Sie die Änderungen unten rückgängig.",
             "versionCount": "{count} Fassung | {count} Fassungen",
             "versionHowThingsNow": "Zuerst wird eine Fassung des jetzigen Stands gesichert, unter",
@@ -5012,7 +4998,6 @@
             "dependencyInstallQueued": "Abhängigkeitsinstallation eingereiht",
             "installDependenciesAfterUpload": "Abhängigkeiten nach dem Hochladen installieren",
             "noDependencyInstallQueued": "Keine Abhängigkeitsinstallation eingereiht",
-            "scanning": "Wird durchsucht…",
             "startingInstall": "Installation wird gestartet…",
             "startsAfterActiveAgent": "Sie beginnt, wenn die laufenden Agentenzüge fertig sind, und erscheint dann in den Arbeits-Terminals; Prüfungen und Ergebnis erscheinen in der Aktivität."
         },

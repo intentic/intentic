@@ -40,6 +40,10 @@ export interface ArrivalInput {
     // Nothing else on this account: the app installing on this computer is the whole gesture of having just
     // installed the app. With a sandbox already somewhere, "add another" is a question only the reader can answer.
     readonly onlySandbox: boolean;
+    // This account removed a sandbox it can still restore (the platform's trash), or the trash could not be read. An
+    // empty account is then the aftermath of the reader's own removal, not a first run, and nothing is started for
+    // it: the app once installed a new sandbox by itself seconds after its reader removed the last one.
+    readonly removedRecently: boolean;
     // Row has history (redeemed, reported, checked in); an unfinished errand this page must not act on.
     readonly touched: boolean;
     // Row carries a machine of ours that nothing has ever run on: a browser's errand to resume, and in the app a
@@ -112,6 +116,10 @@ export const arrivalFor = (input: ArrivalInput): Arrival => {
     if (input.requestedMachine !== undefined) {
         return input.requestedMachine === `hosted` && startable ? `hosted` : `choose`;
     }
+    // After a removal the reader made, the picker waits for a click: neither surface's own answer applies.
+    if (input.removedRecently) {
+        return `choose`;
+    }
     // In the app, the first machine is this window's own; gated on minting addresses, since it redeems a setup code.
     // Every later one asks, because by then this computer is one of the places it could go rather than the only one.
     if (input.inApp) {
@@ -126,6 +134,13 @@ export const arrivalFor = (input: ArrivalInput): Arrival => {
 export const touched = (row: SandboxSummary): boolean =>
     // `?? null` on each: fields are optional as well as nullable on older rows, and `undefined !== null` touches every row.
     (row.lastSeenAt ?? null) !== null || (row.setupCodeClaimedAt ?? null) !== null || (row.setupReport ?? null) !== null;
+
+// What the page says about a row it resumes: nothing ran yet; its machine said it deleted the container (`removedAt`, the
+// one fact that licenses "cleaned up"); or it has run and was last seen at a time. The third used to read as the second,
+// "the cleanup only cleared its local container", under a sign-in wall on a sandbox that had answered a minute earlier.
+export type ResumedRow = `never-ran` | `removed` | `seen`;
+export const resumedRow = (row: Pick<SandboxSummary, `lastSeenAt` | `removedAt`>): ResumedRow =>
+    (row.removedAt ?? null) !== null ? `removed` : (row.lastSeenAt ?? null) === null ? `never-ran` : `seen`;
 
 // A machine of ours on a row nothing has ever run on (`ArrivalInput.hostedIdle`).
 export const hostedIdle = (row: SandboxSummary): boolean => (row.hosted ?? null) !== null && (row.lastSeenAt ?? null) === null;

@@ -5,6 +5,8 @@ import {
     type ChecklistDelta,
     type ChecklistView,
     checklistViewsOf,
+    CONTINUATIONS,
+    continuationKind,
     currentChecklist,
     liveBubbleOf,
     recordedRows,
@@ -228,4 +230,13 @@ it(`draws a failure once: the error line gives way to the notice that already sa
     expect(unsaidError(more, rows)).toBe(more);
     expect(unsaidError(said, rows.slice(0, 1))).toBe(said);
     expect(unsaidError(null, rows)).toBeUndefined();
+});
+
+// The press on Continue sends English the agent reads; the bubble shows it in the reader's language, so the transcript
+// has to know the app's own words exactly, and never mistake a person's for them.
+it(`names the app's own continuations word for word, and nothing a person typed`, () => {
+    expect(continuationKind(CONTINUATIONS.plain)).toBe(`plain`);
+    expect(continuationKind(CONTINUATIONS.afterDenial)).toBe(`afterDenial`);
+    expect(continuationKind(`continue`)).toBe(undefined);
+    expect(continuationKind(`Continue, but skip the tests`)).toBe(undefined);
 });

@@ -4,6 +4,7 @@ import { Button, type Tip, useDevice } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
+import { sandboxNow } from "../../fleet/sandboxClock";
 import { activityIcon, formatElapsed, limitClosed, limitCountdown, limitScheduled, turnInFlight, watching, watchLine } from "../../fleet/agentStatus";
 import { cacheCooling, cacheWarm, warmMark } from "../../fleet/prompt-cache/promptCache";
 import type { FleetAgent } from "../../fleet/useAgents-fleet";
@@ -28,7 +29,9 @@ const emit = defineEmits<{
 const t = useT();
 const { mobile } = useDevice();
 // Ticks only while needed (turn, watch, limit countdown, warm cache); a settled card shares the clock without re-ticking.
-const now = useNow(() => turnInFlight(props.agent) || watching(props.agent) || limitClosed(props.agent) || cacheWarm(props.agent));
+// On the sandbox's clock: every instant this corner counts to or from is one the sandbox stamped (sandboxClock.ts).
+const tick = useNow(() => turnInFlight(props.agent) || watching(props.agent) || limitClosed(props.agent) || cacheWarm(props.agent));
+const now = computed(() => sandboxNow(tick.value));
 // Recomputed against the ticking `now`, like the elapsed beside it, so the countdown moves without its own timer.
 // Suppressed while a turn is in flight: the running corner already answers "doing what, for how long", and reclaims it
 // the moment the turn ends.

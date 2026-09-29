@@ -33,6 +33,19 @@ const scopeHint = (project: CiProject): string =>
         ? `creating webhooks needs admin:repo_hook on a classic PAT (or the "Webhooks: write" repo permission on a fine-grained token)`
         : `creating webhooks needs the api scope and at least the Maintainer role on the project`;
 
+// Why the vendor refused, in words: its status, never its response body. A 404 or 403 on the hooks API is almost always
+// a token without admin rights on the repository (or a repository that is not yours), which the vendor will not say.
+const refusalOf = (error: unknown): string => {
+    const status = /\((\d{3})\)/.exec(errorMessage(error))?.[1];
+    if (status === "401") {
+        return "the connected token was refused";
+    }
+    if (status === "403" || status === "404") {
+        return "the connected token has no admin rights on it";
+    }
+    return status === undefined ? "the request did not go through" : `the request was refused (${status})`;
+};
+
 // reason (why the hook isn't live) is visible to any viewer; recipe carries the signing secret and is operator-only
 // (ci.routes.ts gates it), absent when there is no public URL to paste it into.
 export interface HookWarning {
@@ -81,8 +94,11 @@ export const createCiHookReconciler = (
             try {
                 await ciClientFor(project.account.provider, fetchFn).ensureHook(project, { url, secret });
             } catch (error) {
+                // The plain reason leads and the vendor's raw answer stays in the log: a JSON body in the page header
+                // read as a crash, with the one useful sentence after it.
+                services.logger.warn({ err: error, repo: project.repo }, "ci: webhook registration failed");
                 warnings.set(project.repo, {
-                    reason: `Pipeline webhook registration failed: ${errorMessage(error)}. ${scopeHint(project)}.`,
+                    reason: `Can't register a pipeline webhook on ${project.project}: ${refusalOf(error)}; ${scopeHint(project)}. Its runs are polled instead, so they show up a little later.`,
                     recipe: manualRecipe(project, url, secret),
                 });
             }

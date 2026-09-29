@@ -1,12 +1,13 @@
 import type { SandboxSummary } from "@intentic/api-contract";
 import { projectDirNameFor } from "@intentic/sandbox-contract";
 import { sandboxSummary } from "../../testing/sandboxSummary";
-import { arrivalFor, type ArrivalInput, hostedIdle, projectPrefersHosted, rowToOpen, setupProjectOf, touched } from "./setupArrival";
+import { arrivalFor, type ArrivalInput, hostedIdle, projectPrefersHosted, resumedRow, rowToOpen, setupProjectOf, touched } from "./setupArrival";
 
 // A blank first arrival on a platform offering everything; each test overrides the one field it is about.
 const arrival = (over: Partial<ArrivalInput> = {}): ArrivalInput => ({
     inApp: false,
     onlySandbox: true,
+    removedRecently: false,
     touched: false,
     hostedIdle: false,
     fresh: true,
@@ -49,6 +50,20 @@ describe(`a second sandbox asked for in the app`, () => {
     // The Billing page's own door: a subscriber's slot is a machine on the platform, never one more on this guest.
     it(`still starts the machine a link asked for by name`, () => {
         expect(arrivalFor(arrival({ inApp: true, onlySandbox: false, requestedMachine: `hosted` }))).toBe(`hosted`);
+    });
+});
+
+// The reader removed the account's last sandbox. The empty account that leaves is not a first run: the app once
+// installed a new sandbox by itself seconds after its reader removed the last one, folder sync ticked.
+describe(`the arrival after a removal the reader made`, () => {
+    it(`waits on the picker in the app and in a browser, starting nothing`, () => {
+        expect(arrivalFor(arrival({ inApp: true, removedRecently: true }))).toBe(`choose`);
+        expect(arrivalFor(arrival({ removedRecently: true }))).toBe(`choose`);
+    });
+
+    it(`still takes a rung the reader asked for by name, and a folder the app picked`, () => {
+        expect(arrivalFor(arrival({ removedRecently: true, requestedMachine: `hosted` }))).toBe(`hosted`);
+        expect(arrivalFor(arrival({ inApp: true, removedRecently: true, project: true }))).toBe(`local`);
     });
 });
 
@@ -233,5 +248,21 @@ describe(`a project where the platform's machines cannot hold one`, () => {
         );
         expect(olderPlatform.map(arrivalFor)).toEqual([`local`, `local`, `local`, `local`]);
         expect(olderPlatform.map(projectPrefersHosted)).toEqual([false, false, false, false]);
+    });
+});
+
+// The line over a resumed row said the cleanup had cleared its container whenever the row had ever run: N read it,
+// under a sign-in wall, about a sandbox that had answered a minute earlier.
+describe(`what a resumed row is said to be`, () => {
+    it(`is cleaned up only when its machine said it deleted the container`, () => {
+        expect(resumedRow({ lastSeenAt: `2026-09-28T09:24:00Z`, removedAt: `2026-09-28T09:30:00Z` })).toBe(`removed`);
+    });
+
+    it(`is a sandbox that ran and was last seen, otherwise`, () => {
+        expect(resumedRow({ lastSeenAt: `2026-09-28T09:24:00Z`, removedAt: null })).toBe(`seen`);
+    });
+
+    it(`is one that never ran when nothing ever reported`, () => {
+        expect(resumedRow({ lastSeenAt: null, removedAt: null })).toBe(`never-ran`);
     });
 });

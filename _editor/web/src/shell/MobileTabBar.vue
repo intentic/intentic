@@ -5,7 +5,7 @@ import { computed } from "vue";
 import { type RouteLocationNormalizedLoaded, RouterLink, useRoute } from "vue-router";
 import ViewBadgeChip from "../core-views/ViewBadgeChip.vue";
 import { agentsBadge, agentsScopeNote } from "../features/agents/board/agentsTile";
-import { useApprovalsTile } from "./mobileTabs";
+import { reviewBadgeFor, useApprovalsTile } from "./mobileTabs";
 import { mobileChatPath } from "./tabRoots";
 import { useChat } from "../features/chat/run/useChat";
 import RailIcon from "./rail/RailIcon.vue";
@@ -24,8 +24,8 @@ import { useT } from "@intentic/ui/i18n";
 const t = useT();
 const { isGuest } = useRole();
 
-// Four fixed tabs: Agents (fleet, "needs you" badge), Chat (the conversation you were last in), Review (drafts plus
-// uncommitted changes owed), Menu (what the sandbox needs, standing in for the desktop rail's chip); everything else,
+// Four fixed tabs: Agents (fleet, "needs you" badge), Chat (the conversation you were last in), Review (the count of
+// whichever page it opens), Menu (what the sandbox needs, standing in for the desktop rail's chip); everything else,
 // the file tree included, lives on the Menu page. Review's tab reads the approvals extension's registry entry by id,
 // for placement only.
 
@@ -83,8 +83,9 @@ const chatTab = computed<Tab>(() => ({
 // Matched by view id (detectActivations); tabBarIds() is the shared promotion list ShellMobile also reads.
 const approvalsTile = useApprovalsTile();
 
-// Falls back to the same push-owed glyph as the desktop rail when nothing else needs review.
-const reviewBadge = computed<ViewBadge | undefined>(() => {
+// What the Changes panel would say, for the tab when it opens that panel: the same push-owed glyph as the desktop rail
+// when nothing is uncommitted.
+const changesBadge = (): ViewBadge | undefined => {
     // Rides whatever the badge says rather than competing with it: the turning mark has its own corner, and the count
     // is still 0 until the land's patch is in the tree.
     const landing: Pick<ViewBadge, `running`> = changes.landing.value === undefined ? {} : { running: changes.landing.value };
@@ -93,7 +94,7 @@ const reviewBadge = computed<ViewBadge | undefined>(() => {
     if (push !== undefined) {
         return { ...push, ...landing };
     }
-    const count = (approvalsTile.value?.badge?.count ?? 0) + changes.count.value;
+    const count = changes.count.value;
     if (count > 0) {
         return { count, tooltip: t(`shell.mobileTabBar.toReview`, { count }), ...landing };
     }
@@ -102,7 +103,10 @@ const reviewBadge = computed<ViewBadge | undefined>(() => {
         return changes.landing.value === undefined ? undefined : landing;
     }
     return { mark: outgoingMark(work), tooltip: outgoingSummary(work), ...landing };
-});
+};
+const reviewBadge = computed<ViewBadge | undefined>(() =>
+    reviewBadgeFor(approvalsTile.value, approvalsTile.value === undefined ? changesBadge() : undefined),
+);
 
 const tabs = computed<readonly Tab[]>(() => [
     {

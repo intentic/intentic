@@ -23,6 +23,7 @@ import {
     readWorkspaceSession,
     readWorkspaceSessionTail,
     searchWorkspaceSessions,
+    sessionNaming,
     type SessionSummary,
     workspaceSessionExists,
 } from "./sessions.js";
@@ -84,11 +85,22 @@ export interface SessionsDeps {
     readonly workspaceRoot: string;
     readonly logger: Logger;
     readonly turnCheckpoints: TurnCheckpoints;
-    // Every conversation the phrase index backfills from, read when a backfill runs.
+    // Every conversation the phrase index backfills from, read when a backfill runs; also what names a history row.
     readonly roster: () => readonly PersistedAgent[];
     // What else a purged conversation leaves behind that must go with it.
     readonly forget: (conversationId: string) => void;
 }
+
+// Each conversation's current session, named as the conversation is: its title as the daemon keeps it, renames included.
+const titlesBySession = (roster: readonly PersistedAgent[]): ReadonlyMap<string, string> =>
+    new Map(roster.flatMap((entry) => (entry.sessionId === undefined || entry.social.title === undefined ? [] : [[entry.sessionId, entry.social.title.text] as const])));
+
+// The history list's two readers over one naming, so a history row reads as what the user asked however the SDK
+// flattened its first prompt, and an opening message read back for one listing is not read again for the next.
+const sessionListing = (deps: SessionsDeps) => {
+    const naming = sessionNaming(() => titlesBySession(deps.roster()));
+    return { recent: createRecentSessions(deps.workspaceRoot, naming), list: (dir: string) => listWorkspaceSessions(dir, naming) };
+};
 
 // Builds the sessions slice: the durable record, its blob sweeps, the phrase index and its backfill, and the purge.
 export const createSessionsSlice = (deps: SessionsDeps): { readonly slice: SessionsSlice; readonly saidIndexMetrics: () => unknown } => {
@@ -119,8 +131,9 @@ export const createSessionsSlice = (deps: SessionsDeps): { readonly slice: Sessi
     };
     // Phrase index on the history volume, daemon-private; a pure cache, deleted and rebuilt on a schema bump.
     const saidIndex = openSearchIndex(join(historyRoot, "said-index"));
+    const listing = sessionListing(deps);
     // One listing of the session window, shared by search and backfill, so a keystroke burst costs one stat pass.
-    const recentSessions = createRecentSessions(deps.workspaceRoot);
+    const recentSessions = listing.recent;
     // Version an indexed conversation is pinned to: its record's byte size; undefined (no record) is a version too.
     const recordVersion = async (id: string): Promise<string | undefined> => {
         const size = await transcriptDeps.record.size(id);
@@ -183,7 +196,7 @@ export const createSessionsSlice = (deps: SessionsDeps): { readonly slice: Sessi
         saidIndexMetrics: () => saidIndex.metrics(),
         slice: {
             sessions: {
-                list: listWorkspaceSessions,
+                list: listing.list,
                 read: readWorkspaceSession,
                 readTail: readWorkspaceSessionTail,
                 // Bound to this daemon's one index, so the history box and the fleet board answer from the same rows.

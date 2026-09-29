@@ -38,3 +38,22 @@ export const refusalSummary = (run: PushRun): string => {
     }
     return outcomeSummary(run);
 };
+
+// A push the remote turned away for want of a credential, and the git host that did: what connecting that account as a
+// capability fixes, so the card can lead there rather than only to the terminal. Undefined for every other refusal,
+// and for a host no capability signs in to.
+const CREDENTIAL_REFUSAL = /Authentication failed|could not read Username|terminal prompts disabled|Invalid username or (?:password|token)|returned error: 40[13]\b/i;
+
+export const credentialHostOf = (run: PushRun): `github` | `gitlab` | undefined => {
+    if (run.status !== `failed` || run.refusedBy === `hook`) {
+        return undefined;
+    }
+    const said = `${run.reason ?? ``}\n${run.output}`;
+    if (!CREDENTIAL_REFUSAL.test(said)) {
+        return undefined;
+    }
+    if (/github\.com/i.test(said)) {
+        return `github`;
+    }
+    return /gitlab\.com/i.test(said) ? `gitlab` : undefined;
+};

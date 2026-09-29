@@ -133,13 +133,13 @@ const stepRow = (step: LandedMessageStep, index: number, now: number): DraftRepo
               : seconds(step.ms);
     const detail =
         step.status === `asking`
-            ? `asking…`
+            ? t(`workspace.changeOrigins.askingNow`)
             : step.status === `answered`
-              ? `wrote the message`
+              ? t(`workspace.changeOrigins.wroteMessage`)
               : step.reason === undefined
                 ? step.status === `skipped`
-                    ? `skipped, refused a moment ago`
-                    : `refused`
+                    ? t(`workspace.changeOrigins.skippedRefused`)
+                    : t(`workspace.changeOrigins.refusedLower`)
                 : headline(step.reason);
     // The row already shows the model's name, the reason's headline and the time; the card adds the full model id.
     const phase =
@@ -175,7 +175,7 @@ export const draftReport = (draft: LandedMessageDraft | undefined, now: number):
     }
     const rows = draft.steps.map((step, index) => stepRow(step, index, now));
     if (draft.outcome === `failed` && draft.reason !== undefined && !draft.steps.some((step) => step.reason === draft.reason)) {
-        const closing = `No message written: ${draft.reason}`;
+        const closing = t(`workspace.changeOrigins.noMessageWritten`, { reason: draft.reason });
         return [...rows, { key: `failed`, status: `failed`, detail: closing, tip: draft.reason }];
     }
     return rows;
@@ -202,17 +202,17 @@ export const chipMessageNotice = (state: ChipMessageState): string | undefined =
         return undefined;
     }
     if (state.yours) {
-        return `Your changes -- name this commit yourself`;
+        return t(`workspace.changeOrigins.yourChangesNameIt`);
     }
     const running = draftRunning(state.draft);
     // Applies whether the message exists yet or is still being written; the box takes neither until cleared.
     if (state.boxIsYours && (state.message !== undefined || running)) {
-        return `Keeping your message. Clear the box to use ${state.label}'s.`;
+        return t(`workspace.changeOrigins.keepingYourMessage`, { origin: state.label });
     }
     // The wait only; the report row below covers how it's going.
     if (running) {
-        return `Writing a message for ${state.label}…`;
+        return t(`workspace.changeOrigins.writingMessageFor`, { origin: state.label });
     }
     // No message exists and none is coming; the draft's own report row, if any, explains why.
-    return state.message === undefined ? `No message written for ${state.label}` : undefined;
+    return state.message === undefined ? t(`workspace.changeOrigins.noMessageFor`, { origin: state.label }) : undefined;
 };

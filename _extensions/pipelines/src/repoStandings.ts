@@ -1,5 +1,6 @@
 import type { CiRepo, PipelineRun } from "@intentic/sandbox-contract";
 import { failureStreaks } from "./ciStreaks";
+import { t } from "./i18n.js";
 
 // Row order ranks how loudly a repository is asking, not discovery order:
 // 0 failing: a branch's last run failed.
@@ -60,14 +61,14 @@ export const repoStandings = (repos: readonly CiRepo[], runs: readonly PipelineR
 export const standingNote = (standing: RepoStanding): string =>
     [
         standing.runs.length === 0
-            ? `No runs yet`
+            ? t(`extension.noRunsYet`)
             : standing.failing === 0
-              ? `Nothing failing`
-              : `${standing.failing} branch${standing.failing === 1 ? `` : `es`} failing`,
-        standing.running === 0 ? undefined : `${standing.running} running`,
-        standing.queued === 0 ? undefined : `${standing.queued} queued`,
-        standing.runs.length === 0 ? undefined : `${standing.runs.length} run${standing.runs.length === 1 ? `` : `s`}`,
-        standing.repo.hookWarning === undefined ? undefined : `webhook not registered`,
+              ? t(`extension.nothingFailing`)
+              : t(`extension.branchCountFailing`, { count: standing.failing }, standing.failing),
+        standing.running === 0 ? undefined : t(`extension.running`, { count: standing.running }),
+        standing.queued === 0 ? undefined : t(`extension.queued`, { count: standing.queued }),
+        standing.runs.length === 0 ? undefined : t(`extension.runCount`, { count: standing.runs.length }, standing.runs.length),
+        standing.repo.hookWarning === undefined ? undefined : t(`extension.webhookNotRegistered`),
     ]
         .filter((clause) => clause !== undefined)
         .join(` · `);

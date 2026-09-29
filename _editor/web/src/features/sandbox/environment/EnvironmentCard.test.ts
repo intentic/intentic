@@ -3,6 +3,8 @@
 // where its one next step goes: first, above the contents and the runtime installs, never trailing them.
 import "@intentic/testing/dom";
 import type { Environment } from "@intentic/sandbox-contract";
+import type { ContentsGroup } from "./useEnvironmentContents";
+import PrimeVue from "primevue/config";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
@@ -24,10 +26,18 @@ const recurring = ref<NonNullable<Environment[`recurring`]>>([]);
 const localImage = ref<Environment[`localImage`]>(undefined);
 // A change an agent drafted, waiting for the owner's decision; undefined is the ordinary state.
 const proposal = ref<Environment[`proposal`]>(undefined);
+const contentsLoading = ref(false);
+const contentsFetching = ref(false);
+// When the rows on screen were read; 0 is before any read.
+const contentsReadAt = ref(0);
+// What the daemon answers for the environment; a test that changes the recipe under an open card swaps it.
+const state = ref<Environment>(environment);
+// What Contents lists; empty unless a test draws rows.
+const contentsGroups = ref<ContentsGroup[]>([]);
 jest.mock(`./useEnvironment`, () => ({
     ENVIRONMENT_KEY: [`environment`],
     useEnvironment: () => ({
-        state: ref(environment),
+        state,
         query: { refetch: () => {} },
         // The refresh spinner's flag; must be mocked or it reads as permanently fetching.
         isFetching: ref(false),
@@ -43,11 +53,13 @@ jest.mock(`./useEnvironment`, () => ({
 
 jest.mock(`./useEnvironmentContents`, () => ({
     useEnvironmentContents: () => ({
-        groups: ref([]),
+        groups: contentsGroups,
         awaiting: ref(0),
-        loading: ref(false),
+        loading: contentsLoading,
+        fetching: contentsFetching,
         error: ref(undefined),
         refresh: () => {},
+        readAt: contentsReadAt,
     }),
 }));
 // The active sandbox as the platform describes it; `hosted` selects the rebuild executor.
@@ -56,7 +68,7 @@ jest.mock(`../client/useSandbox`, () => ({
     useSandbox: () => ({ active, daemonUrl: ref(undefined), reachable: ref(true) }),
     sandboxKey: (name: string) => [name],
 }));
-jest.mock(`@tanstack/vue-query`, () => ({ useQueryClient: () => ({ setQueryData: () => {} }) }));
+jest.mock(`@tanstack/vue-query`, () => ({ useQueryClient: () => ({ setQueryData: () => {}, invalidateQueries: async () => {} }) }));
 // Every decision the card posts is refused, so a test can see where the refusal is said.
 const sandboxJson = jest.fn(async (..._request: unknown[]): Promise<never> => {
     throw new Error(`the daemon said no`);
@@ -91,6 +103,7 @@ const mount = (): HTMLElement => {
     app.directive(`tooltip`, {});
     // Renders an anchor so the Sandbox tab link doesn't need a router.
     app.component(`RouterLink`, defineComponent({ props: { to: { type: String, default: `` } }, setup: (props, { slots }) => () => h(`a`, { href: props.to }, slots.default?.()) }));
+    app.use(PrimeVue);
     app.mount(el);
     return el;
 };
@@ -98,6 +111,11 @@ const mount = (): HTMLElement => {
 afterEach(() => {
     pending.value = undefined;
     proposal.value = undefined;
+    contentsLoading.value = false;
+    contentsFetching.value = false;
+    contentsReadAt.value = 0;
+    state.value = environment;
+    contentsGroups.value = [];
     sandboxJson.mockClear();
     applied.value = environment.approved;
     recurring.value = [];
@@ -181,6 +199,76 @@ it(`asks for the decision before the build, and draws the build a tier down whil
     expect(rebuild?.getAttribute(`data-text`)).toBe(`true`);
 });
 
+it(`keeps Approve disabled until the proposed contents have loaded and names the decision`, async () => {
+    proposal.value = { content: `${OVERLAY}RUN apt-get install -y imagemagick\n`, hash: `proposed` };
+    contentsLoading.value = true;
+    const el = mount();
+    const approve = [...el.querySelectorAll(`button`)].find((button) => button.textContent?.includes(`Approve`))!;
+    expect(approve.disabled).toBe(true);
+    contentsLoading.value = false;
+    contentsFetching.value = true;
+    await nextTick();
+    expect(approve.disabled).toBe(true);
+    contentsFetching.value = false;
+    await nextTick();
+    await nextTick();
+    expect(approve.disabled).toBe(false);
+    expect(el.textContent).toContain(`Approve the proposed environment changes.`);
+});
+
+// A proposal that arrives while the card is open, over rows already settled: those rows were read before it and cannot
+// mark what it adds, so Approve waits for the re-read the change starts.
+it(`keeps Approve disabled for a proposal that arrives under settled rows until they are read again`, async () => {
+    contentsReadAt.value = Date.now() - 1_000;
+    const el = mount();
+    const next = { content: `${OVERLAY}RUN apt-get install -y imagemagick\n`, hash: `proposed` };
+    state.value = { ...environment, proposal: next };
+    proposal.value = next;
+    await nextTick();
+    await nextTick();
+    const approve = [...el.querySelectorAll(`button`)].find((button) => button.textContent?.includes(`Approve`))!;
+    expect(approve.disabled).toBe(true);
+
+    contentsFetching.value = true;
+    await nextTick();
+    contentsReadAt.value = Date.now() + 1;
+    contentsFetching.value = false;
+    await nextTick();
+    await nextTick();
+    expect(approve.disabled).toBe(false);
+});
+
+// The Recipe pill is the diff itself, drawn from the proposal the moment it is picked: nothing is left to load there.
+it(`lets the proposal be approved from its diff while Contents is still loading`, async () => {
+    proposal.value = { content: `${OVERLAY}RUN apt-get install -y imagemagick\n`, hash: `proposed` };
+    contentsLoading.value = true;
+    const el = mount();
+    const approve = [...el.querySelectorAll(`button`)].find((button) => button.textContent?.includes(`Approve`))!;
+    expect(approve.disabled).toBe(true);
+    [...el.querySelectorAll<HTMLElement>(`[role="tab"]`)].find((tab) => tab.textContent?.trim() === `Recipe`)?.click();
+    await nextTick();
+    await nextTick();
+    expect(approve.disabled).toBe(false);
+});
+
+// What the approval changes, said beside the button: the blocks Contents marks as awaiting it.
+it(`names what the proposal changes next to Approve`, async () => {
+    proposal.value = { content: `# ---- zcode ----\nRUN install zcode-v2\n`, hash: `proposed` };
+    contentsGroups.value = [
+        {
+            origin: `custom`,
+            label: `Added for this workspace`,
+            items: [
+                { id: `custom:zcode`, name: `Zcode`, origin: `custom`, state: `awaiting-approval`, tools: [] },
+                { id: `custom:ffmpeg`, name: `ffmpeg`, origin: `custom`, state: `active`, tools: [] },
+            ],
+        },
+    ];
+    const el = mount();
+    await nextTick();
+    expect(el.textContent).toContain(`Approve changes to Zcode.`);
+});
+
 // One card, two places a decision is pressed: the proposal's at the top, a runtime install's at the foot of its list.
 // A refusal is said beside whichever drew it, since the other one is a whole inventory away.
 it(`says a refusal beside the button that drew it`, async () => {
@@ -214,4 +302,68 @@ it(`stands down once the only runtime installs left are ones you dismissed`, () 
 
     recurring.value = [{ ...recurring.value[0]!, declined: true }];
     expect(mount().textContent).toBe(``);
+});
+
+// E1: a tool an agent added is the owner's to take out, one at a time, confirmed by its name first. A capability's cost
+// has no such button (it goes with the capability), nor does a row from a sandbox too old to name its block.
+it(`takes one agent-added tool out, after a confirmation that names it`, async () => {
+    contentsGroups.value = [
+        {
+            origin: `custom`,
+            label: `Added for this workspace`,
+            items: [{ id: `custom:zcode`, name: `Zcode`, origin: `custom`, state: `active`, tools: [], commands: `RUN install zcode`, block: `zcode` }],
+        },
+        {
+            origin: `capability`,
+            label: `Capabilities`,
+            items: [{ id: `capability:docker`, name: `Docker`, origin: `capability`, state: `active`, tools: [], commands: `RUN install docker` }],
+        },
+    ];
+    const el = mount();
+    await nextTick();
+    for (const row of el.querySelectorAll<HTMLElement>(`button[aria-expanded]`)) {
+        row.click();
+    }
+    await nextTick();
+    const removes = [...el.querySelectorAll(`button`)].filter((button) => button.textContent?.trim() === `Remove from environment`);
+    expect(removes).toHaveLength(1);
+
+    removes[0]?.click();
+    await nextTick();
+    expect(document.body.textContent).toContain(`Remove Zcode from the environment?`);
+    expect(document.body.textContent).toContain(`Zcode stays installed until this sandbox is next rebuilt, and is gone after that.`);
+    expect(sandboxJson).not.toHaveBeenCalled();
+
+    [...document.body.querySelectorAll(`button`)].findLast((button) => button.textContent?.trim() === `Remove`)?.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await nextTick();
+    expect(sandboxJson).toHaveBeenCalledWith(`/environment/remove`, expect.objectContaining({ method: `POST`, body: JSON.stringify({ block: `zcode` }) }));
+    // The refusal is said under the list it was pressed in, not at the card's first row.
+    expect([...el.querySelectorAll(`[role="alert"]`)].map((alert) => alert.textContent)).toEqual([expect.stringContaining(`the daemon said no`)]);
+});
+
+it(`says a request still waiting is only dropped, and offers no Remove to a reader who cannot decide`, async () => {
+    contentsGroups.value = [
+        {
+            origin: `custom`,
+            label: `Added for this workspace`,
+            items: [{ id: `custom:sox`, name: `sox`, origin: `custom`, state: `awaiting-approval`, tools: [], commands: `RUN install sox`, block: `sox` }],
+        },
+    ];
+    const el = mount();
+    await nextTick();
+    el.querySelector<HTMLElement>(`button[aria-expanded]`)?.click();
+    await nextTick();
+    [...el.querySelectorAll(`button`)].find((button) => button.textContent?.trim() === `Remove from environment`)?.click();
+    await nextTick();
+    expect(document.body.textContent).toContain(`The request to add sox is dropped. Nothing is installed or rebuilt.`);
+    app?.unmount();
+    document.body.innerHTML = ``;
+
+    active.value = { id: `sb1`, role: `viewer` };
+    const readOnly = mount();
+    await nextTick();
+    readOnly.querySelector<HTMLElement>(`button[aria-expanded]`)?.click();
+    await nextTick();
+    expect(readOnly.textContent).not.toContain(`Remove from environment`);
 });

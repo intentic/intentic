@@ -4,8 +4,10 @@ The `/setup` page: it makes the sandbox row a visit sets up, decides by itself w
 
 - **What an arrival does by itself** is decided in one place, `arrivalFor` in `setupArrival.ts`: the desktop app hands
   the setup code to itself (`local`), a browser starts a machine of ours (`hosted`), and the picker (`choose`) survives
-  only where the surface's own answer is unavailable or was asked for. `flow/useSetupArrival.ts` takes the answer; the
-  other flows are the lanes it takes it on.
+  only where the surface's own answer is unavailable or was asked for. An account that removed a sandbox it can still
+  restore (the platform's trash, or a trash that could not be read) starts nothing by itself: the picker waits for a
+  click, since the app once installed a new sandbox seconds after its reader removed the last one.
+  `flow/useSetupArrival.ts` takes the answer; the other flows are the lanes it takes it on.
 - **A project.** The desktop app's "Work on this with an agent" parks a folder and opens `/setup?project=<folder name>`,
   and `setupProjectOf` derives the folder's name in the sandbox (`/work/<dirName>`) once. Where the platform's machines
   can hold a project (`hostedOffer.projects`), a machine of ours is the project's rung: started for a row this visit

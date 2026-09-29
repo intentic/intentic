@@ -1,4 +1,4 @@
-import { RESUME_NOTES, resumeDisclosure, withResumeNote, withoutResumeNote } from "./resume.js";
+import { RESUME_NOTES, resumeDisclosure, resumeNoticeRow, withResumeNote, withoutResumeNote } from "./resume.js";
 
 // Wrapping then unwrapping a resume note must return the exact original prompt; a mismatch leaks machine narration into
 // the user's own words on screen.
@@ -46,7 +46,7 @@ test("the spent-allowance notes do not disclose as each other", () => {
 test("a turn the door turned away discloses as its own notice, apart from the allowance's refusal", () => {
     const door = resumeDisclosure(withResumeNote("ship the parser", RESUME_NOTES.door));
     const refused = resumeDisclosure(withResumeNote("ship the parser", RESUME_NOTES.refused));
-    expect(door).toEqual({ kind: "notice", text: expect.stringContaining("turned away") });
+    expect(door).toEqual({ kind: "notice", text: expect.stringContaining("turned away"), reason: "door" });
     expect(door).not.toEqual(refused);
 });
 
@@ -60,5 +60,16 @@ test("a re-run after the window overflowed discloses as its own notice", () => {
     expect(resumeDisclosure(withResumeNote("ship the parser", RESUME_NOTES.overflow))).toEqual({
         kind: "notice",
         text: "Sent again in a fresh session after the last one outgrew the model's context window.",
+        reason: "overflow",
+    });
+});
+
+// The row keeps the English line, and names the re-run so an app can say it in its reader's language.
+test("a re-run's notice row names its reason beside its words", () => {
+    const disclosure = resumeDisclosure(withResumeNote("ship the parser", RESUME_NOTES.restart));
+    expect(disclosure?.kind === "notice" ? resumeNoticeRow(disclosure) : undefined).toEqual({
+        role: "notice",
+        text: "The sandbox came back, this turn picked up where it left off.",
+        noticeCode: { code: "resumed", params: { reason: "restart" } },
     });
 });

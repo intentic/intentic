@@ -27,12 +27,15 @@ const t = useT();
 const emit = defineEmits<{ pick: [ModelPin]; configure: [ModelPin]; close: [] }>();
 const {
     pin,
+    current,
     knobs = false,
     taken = [],
     helperJobs = false,
 } = defineProps<{
     // Undefined while adding: nothing exists yet to configure until the entry's own row reopens this panel.
     pin?: ModelPin | undefined;
+    // While adding: the model the job itself runs on first, the one the list ticks. Undefined for a job with none.
+    current?: ModelPin | undefined;
     // Whether this list's entries carry their own run settings.
     knobs?: boolean;
     // Already-taken entries stay visible but unpickable, so the list doesn't shift under you as you use it.
@@ -42,10 +45,13 @@ const {
     helperJobs?: boolean;
 }>();
 
-// The model the owner's own chat is set to, so the picker anchors on a provider actually in use.
+// What the list ticks is the job's own model, never the chat's: ticking the chat's model on a job that does not run it
+// read as that job's current model, and it was picked as one. A job with no model ticks nothing, and the chat's
+// provider only decides which lane the list opens on.
 const chat = useChat();
-const provider = computed<AgentProvider>(() => pin?.provider ?? chat.provider.value);
-const model = computed(() => pin?.model ?? chat.model.value);
+const shown = computed<ModelPin | undefined>(() => pin ?? current);
+const provider = computed<AgentProvider>(() => shown.value?.provider ?? chat.provider.value);
+const model = computed(() => shown.value?.model ?? ``);
 const harness = computed<AgentHarness>(() => pin?.harness ?? `native`);
 
 const capabilities = computed(() => capabilitiesOf(provider.value, harness.value));

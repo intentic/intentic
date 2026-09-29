@@ -56,8 +56,9 @@ const judgeChain = computed<readonly string[]>(() => judge.chain.value.map(model
         <!-- Read-only here: a reader wants which model applies, not a way to change it; editing happens on Models. -->
         <Row icon="sparkles" :title="t(`sandbox.agentSafetyJudge.judgeModel`)" :description="t(`sandbox.agentSafetyJudge.modelReadsPolicy`)">
             <!-- `as` keeps native link behavior (hover preview, cmd-click new tab) while Button supplies the control styling. -->
+            <!-- Names the job, so Models opens on the judge's own row rather than on a Simple view that has none. -->
             <template #control>
-                <Button :as="RouterLink" :to="{ name: `sandbox`, params: { tab: `agent` }, query: {} }" size="small" :text="true">
+                <Button :as="RouterLink" :to="{ name: `sandbox`, params: { tab: `agent` }, query: { job: `safety-judge` } }" size="small" :text="true">
                     {{ t(`sandbox.agentSafetyJudge.changeInModels`) }}
                 </Button>
             </template>

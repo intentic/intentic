@@ -25,6 +25,11 @@ export interface PickUp {
     // the held turn got anywhere before it was refused, since a blanket "work kept" was wrong for the common case of a
     // turn refused before its first request.
     readonly held?: HeldTurn;
+    /**
+     * Until when (ms, this browser's clock) the press stays shut after a spent allowance refused a turn before it ran:
+     * pressing again at once is refused the same way, and seven presses in two minutes each came back "nothing ran".
+     */
+    readonly coolUntil?: number;
 }
 
 // The held turn as the daemon describes it, shared by the failure frame and the record's ending.
@@ -84,14 +89,30 @@ export const repointedPickUp = (pickUp: PickUp | undefined, state: AccountState 
     return { ...rest, ...clock, held: stays };
 };
 
+// How long Continue rests after a spent allowance refused a turn at the door (see PickUp.coolUntil). Short, since the
+// provider's reset guess is routinely early and the press is the way to find out; long enough that a second press is a
+// decision rather than a reflex.
+export const LIMIT_COOLDOWN_MS = 60_000;
+
+// The pick-up a limit refusal leaves, resting when nothing ran: the one refusal a press repeats exactly.
+export const cooledPickUp = (pickUp: PickUp, now: number = Date.now()): PickUp =>
+    pickUp.reason === `limit` && pickUp.held?.ran === false ? { ...pickUp, coolUntil: now + LIMIT_COOLDOWN_MS } : pickUp;
+
+// The same pick-up once its rest is over, so a view whose clock is not ticking reads it as pressable again.
+export const warmedPickUp = ({ coolUntil: _rest, ...pickUp }: PickUp): PickUp => pickUp;
+
+// Whether the press is resting after a refusal (cooledPickUp).
+export const pickUpCooling = (pickUp: PickUp, now: number = Date.now()): boolean => pickUp.coolUntil !== undefined && now < pickUp.coolUntil;
+
 // Past this, a wall-clock time reads better than a countdown nobody can act on; under it, the relative wait wins.
 const CLOCK_FROM_MS = 90 * 60 * 1_000;
 
 // A held turn is always pressable, whatever the reset says: disabling it protected against a re-fail that costs nothing
 // (the daemon's own fire is idempotent), while a dead button next to a countdown just pushed the user to type the word
 // by hand instead. Only endings with nothing held still gate on the reset, where a press really would append a message.
+// The one exception is the short rest after a refusal where nothing ran (cooledPickUp), which the status line explains.
 export const pickUpReady = (pickUp: PickUp, now: number = Date.now()): boolean =>
-    pickUp.held !== undefined || pickUp.readyAt === undefined || pickUp.readyAt <= now;
+    !pickUpCooling(pickUp, now) && (pickUp.held !== undefined || pickUp.readyAt === undefined || pickUp.readyAt <= now);
 
 /**
  * An instant as every surface says it: a countdown while close, the weekday and time plus the wait once far off. One
@@ -135,8 +156,15 @@ export const pickUpStatus = (pickUp: PickUp, now: number = Date.now()): string =
         // ("back", not "not before"): it's the provider's own guess and is routinely wrong in the useful direction,
         // which is why the press stays live ahead of it.
         const head = survived(pickUp) ? t(`chat.turnBreak.limitStatusKept`) : t(`chat.turnBreak.limitStatusRefused`);
-        const due = pickUp.readyAt === undefined || pickUp.readyAt <= now ? `` : ` · ${t(`chat.turnBreak.backWhen`, { when: pickUpWhen(pickUp.readyAt, now) })}`;
-        return `${head}${due}`;
+        // No instant published (Z.ai, Grok, Cursor) is said as such, rather than left for "shortly" to imply one.
+        const due =
+            pickUp.readyAt === undefined
+                ? ` · ${t(`chat.turnBreak.resetUnknown`)}`
+                : pickUp.readyAt <= now
+                  ? ``
+                  : ` · ${t(`chat.turnBreak.backWhen`, { when: pickUpWhen(pickUp.readyAt, now) })}`;
+        const resting = pickUpCooling(pickUp, now) ? ` · ${t(`chat.turnBreak.coolingDown`)}` : ``;
+        return `${head}${due}${resting}`;
     }
     return `${t(`chat.turnBreak.stoppedStatus`)}${retriedSoFar(pickUp)}`;
 };
@@ -158,6 +186,11 @@ export const pickUpNext = (pickUp: PickUp, policy: TurnBreakPolicy, now: number 
     // A laddered retry counts its tries; an allowance reopening is a one-shot appointment, with nothing to count.
     if (pickUp.retries !== undefined) {
         return ladderNext(pickUp.retries, at, now);
+    }
+    // An allowance with no published reset has nothing to book against (classify-failure.ts arms only a known instant),
+    // so nothing goes by itself: "shortly" there was a promise no clock kept.
+    if (pickUp.reason === `limit` && at === undefined) {
+        return t(`chat.turnBreak.goesNever`);
     }
     return at === undefined || at <= now ? t(`chat.turnBreak.goesSoon`) : t(`chat.turnBreak.goesAt`, { when: pickUpWhen(at, now) });
 };

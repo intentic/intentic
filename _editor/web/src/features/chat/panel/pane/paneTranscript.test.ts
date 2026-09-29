@@ -2,6 +2,7 @@ import { STATE_DIR } from "@intentic/constants";
 import type { TranscriptTool } from "@intentic/sandbox-contract";
 import { REVEAL_DELAY_MS } from "@intentic/ui/loading-reveal";
 import { nextTick, ref } from "vue";
+import type { TranscriptRefresh } from "../../session/transcriptView";
 import type { ChatMessage } from "../../transcript/transcript";
 import { usePaneTranscript } from "./paneTranscript";
 
@@ -32,6 +33,8 @@ const paneOf = (rows: readonly ChatMessage[] = ROWS) => {
         showToolCalls: ref(false),
         loading: ref(false),
         conversationId: ref(`c1`),
+        rowsOwed: ref(false),
+        refresh: ref<TranscriptRefresh | undefined>(),
     };
     return { state, pane: usePaneTranscript(state) };
 };
@@ -124,5 +127,43 @@ describe(`a transcript on its way`, () => {
         state.conversationId.value = `c2`;
         await nextTick();
         expect(pane.skeleton.value).toBe(false);
+    });
+});
+
+// A phone woke on two running agents whose chats opened on "Start a conversation" until the app was relaunched, and a PC
+// woke on a red "Could not open that conversation." under a transcript already painted.
+describe(`a chat whose rows have not arrived, or whose read has not answered`, () => {
+    it(`loads, rather than inviting a new conversation, while the agents list says rows are owed`, () => {
+        const { state, pane } = paneOf([]);
+        expect(pane.waiting.value).toBe(false);
+
+        state.rowsOwed.value = true;
+        expect(pane.waiting.value).toBe(true);
+        // The live turn's own working line stands in once it streams.
+        state.streaming.value = true;
+        expect(pane.waiting.value).toBe(false);
+        state.streaming.value = false;
+        // A read that failed for good says so instead, with its press.
+        state.refresh.value = { kind: `failed`, reason: `Your sandbox didn't answer in time.` };
+        expect(pane.waiting.value).toBe(false);
+        // A read in flight is loading whatever the list says.
+        state.loading.value = true;
+        expect(pane.waiting.value).toBe(true);
+    });
+
+    it(`says beside a painted chat that it is the saved copy, or reconnecting, and nothing over a live stream or no rows`, () => {
+        const { state, pane } = paneOf();
+        expect(pane.staleness.value).toBeUndefined();
+
+        state.refresh.value = { kind: `reconnecting` };
+        expect(pane.staleness.value).toEqual({ kind: `reconnecting` });
+        state.refresh.value = { kind: `failed`, reason: `Your sandbox didn't answer in time.` };
+        expect(pane.staleness.value).toEqual({ kind: `failed`, reason: `Your sandbox didn't answer in time.` });
+
+        state.streaming.value = true;
+        expect(pane.staleness.value).toBeUndefined();
+        state.streaming.value = false;
+        state.messages.value = [];
+        expect(pane.staleness.value).toBeUndefined();
     });
 });

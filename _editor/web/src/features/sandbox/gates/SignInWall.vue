@@ -5,11 +5,12 @@ import { noticeFrom } from "@intentic/ui/async";
 import { computed, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { useAuth } from "../../auth/useAuth";
+import { useBrowserHandoff } from "../../auth/browserHandoff";
 import { useGoogleIdentity } from "../../auth/useGoogleIdentity";
 import { browserSupportsPasskeys, recoverWithCode, registerPasskey, signInWithPasskey } from "../session/passkeySignIn";
 import { useSignInPrompt } from "../session/signInPrompt";
 import { useSandbox } from "../client/useSandbox";
-import { desktopVersion, signInThroughBrowser } from "../../../app/environments/desktop";
+import { desktopVersion } from "../../../app/environments/desktop";
 import { useT } from "@intentic/ui/i18n";
 
 // The sign-in overlay, in its three states. CHOOSE: useGoogleIdentity raised `needsSignIn`, so Google's button is
@@ -109,8 +110,25 @@ const recover = (): Promise<void> => {
 };
 
 // Opens the platform's sign-in page in the default browser; the deep-link return reloads this SPA, abandoning the
-// mint awaited here, and the adopted credential answers the call that follows instead.
-const signInOutside = (): void => signInThroughBrowser();
+// mint awaited here, and the adopted credential answers the call that follows instead. Until then the wall says the
+// sign-in is waiting in the browser (browserHandoff.ts).
+const handoff = useBrowserHandoff();
+const handoffWaiting = handoff.waiting;
+const signInOutside = (): void => handoff.start();
+
+// A sandbox that has answered before and was not removed: its reader is at work, not in a setup. "Back to setup" sent
+// them to /setup, where the same wall came up again over a line saying the container was cleaned up.
+const working = computed(() => {
+    const active = sandbox.active.value;
+    return active !== undefined && (active.lastSeenAt ?? null) !== null && (active.removedAt ?? null) === null;
+});
+
+// Settles the awaiting mint and stays where the reader is: the sandbox's own gate still offers to sign in.
+const notNow = (): void => {
+    handoff.cancel();
+    cancelSignIn();
+    dismissSignIn();
+};
 
 // Settles the awaiting mint and returns to setup instead of signing in; nothing needs severing.
 const backToSetup = async (): Promise<void> => {
@@ -200,9 +218,18 @@ const backToSetup = async (): Promise<void> => {
                         </template>
                     </p>
                     <Notice v-if="notice" :of="notice" class="w-full text-left" />
+                    <!-- After the press: the sign-in is in the browser now, and the wall says so until it returns. -->
+                    <div v-if="desktop && handoffWaiting" class="mt-2 flex w-full flex-col items-center gap-2" role="status">
+                        <p class="text-sm font-medium text-content">{{ t(`auth.words.finishInBrowser`) }}</p>
+                        <p class="text-xs text-muted">{{ t(`auth.words.finishInBrowserDetail`) }}</p>
+                        <Button :label="t(`auth.words.openBrowserAgain`)" severity="secondary" class="w-full justify-center" @click="handoff.start">
+                            <template #icon><Icon name="google" /></template>
+                        </Button>
+                        <button type="button" :class="ui.textAction(`text-subtle`)" @click="handoff.cancel">{{ t(`ui.action.cancel`) }}</button>
+                    </div>
                     <!-- Google's own button does nothing when clicked here, so the desktop app hands off to the real browser instead. -->
                     <Button
-                        v-if="desktop"
+                        v-else-if="desktop"
                         :label="t(`auth.words.continueGoogleInBrowser`)"
                         severity="secondary"
                         class="mt-2 w-full justify-center"
@@ -226,7 +253,11 @@ const backToSetup = async (): Promise<void> => {
                     </template>
                 </template>
 
-                <button type="button" :class="ui.textAction(`mt-1 text-subtle`)" v-action="backToSetup">
+                <!-- A working sandbox's reader stays where they are; only a setup has a setup to go back to. -->
+                <button v-if="working" type="button" :class="ui.textAction(`mt-1 text-subtle`)" @click="notNow">
+                    {{ t(`sandbox.signInWall.notNow`) }}
+                </button>
+                <button v-else type="button" :class="ui.textAction(`mt-1 text-subtle`)" v-action="backToSetup">
                     {{ t(`sandbox.signInWall.backToSetup`) }}
                 </button>
             </div>

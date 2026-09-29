@@ -61,7 +61,11 @@ test("a refusal degrades to a warning carrying the scope hint and the manual rec
     const reconciler = createCiHookReconciler(services, fetchFn);
     await reconciler.reconcile();
     const warning = reconciler.warnings().get("web");
-    expect(warning?.reason).toContain("admin:repo_hook");
+    // The plain reason leads and the vendor's JSON body stays out of it.
+    expect(warning?.reason).toBe(
+        `Can't register a pipeline webhook on acme/web: the connected token has no admin rights on it; creating webhooks needs admin:repo_hook ` +
+            `on a classic PAT (or the "Webhooks: write" repo permission on a fine-grained token). Its runs are polled instead, so they show up a little later.`,
+    );
     // The recipe, with the secret, is its own half: the route hands it to an operator and to nobody else.
     expect(warning?.recipe).toContain("https://github.com/acme/web/settings/hooks");
     expect(warning?.recipe).toContain(await services.ciStore.secret());

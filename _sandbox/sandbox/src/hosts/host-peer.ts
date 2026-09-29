@@ -13,6 +13,7 @@ import {
     type HostSummary,
     parseHostConnection,
 } from "@intentic/sandbox-contract";
+import { sandboxSlugOf } from "@intentic/sandbox-run";
 import type { ContractRouterClient } from "@orpc/contract";
 import { capabilityCtx } from "../capabilities/capability.js";
 import { deviceHandler } from "../capabilities/handlers/device.handler.js";
@@ -25,6 +26,7 @@ import { createPeerRoutes } from "../peers/peer-routes.js";
 import type { PeerStore } from "../peers/peer-store.js";
 import { bootstrapEnvironments } from "./environment-bootstrap.js";
 import { commandInCall, judgeHostCommand } from "./host-command-guard.js";
+import { DeviceToolCallSchema, judgeHostRestart, restartInCall } from "./host-restart-guard.js";
 
 // The user's own computer as a peer door: @intentic/machine dials in with an enrollment token and serves `deviceContract`
 // over that socket. The grant is the `host` capability's config; a `run_command` is judged against the owner's safety
@@ -207,6 +209,13 @@ export const hostPeerRoutes = (services: Services) =>
         // still be asked. The machine's own scopes remain the floor; a refusal here only stops what the machine might
         // otherwise have run.
         beforeCall: async (payload, call) => {
+            // An agent restarting the very sandbox the others run in is held for the owner while they are mid-turn. The
+            // slug is the one docker knows this container by (self-host.ts's ownSlug, not imported: it imports this).
+            const toolCall = DeviceToolCallSchema.safeParse(payload);
+            const restart = toolCall.success ? restartInCall(toolCall.data, sandboxSlugOf(services.config.sandbox.name)) : undefined;
+            if (restart !== undefined) {
+                return judgeHostRestart(services, { machine: call.id, call: restart, conversationId: call.conversationId });
+            }
             const command = commandInCall(payload);
             if (command === undefined) {
                 return undefined;

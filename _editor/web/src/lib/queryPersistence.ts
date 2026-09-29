@@ -41,16 +41,51 @@ let uninstall: (() => void) | undefined;
 // Every settle structured-clones and writes the whole cache; throttled to one write per window (latest wins). Dropped
 // on tab close costs nothing, the cache is only a stale-while-revalidate paint.
 const PERSIST_WINDOW_MS = 2000;
+// One write in flight at a time, and only the newest cache after it. Writes that each started on their own piled up
+// behind a frozen page's IndexedDB, and on wake-up all finished at once: 942 slow-write warnings in one second.
 let latestClient: PersistedClient | undefined;
-const flushPersist = throttleTrailing(() => {
-    if (latestClient === undefined) {
+let persisting: Promise<void> | undefined;
+// Bumped by clearPersistedQueries, so a write already queued for the account signing out stops there.
+let generation = 0;
+// The write is timed at most once a minute: enough to show the mirror has grown too big, without a warning per write.
+const TIMED_EVERY_MS = 60_000;
+let lastTimedAt = Number.NEGATIVE_INFINITY;
+
+const write = async (client: PersistedClient): Promise<void> => {
+    const now = Date.now();
+    if (now - lastTimedAt < TIMED_EVERY_MS) {
+        await set(IDB_KEY, client);
         return;
     }
+    lastTimedAt = now;
     // Timed since this write scales with everything cached; `queries` shows if the mirror has grown too big.
-    const client = latestClient;
-    // A refused write (a full or disabled IndexedDB) costs only the next reload's instant paint.
-    void trackPerf(`query.persist`, { queries: client.clientState.queries.length }, () => set(IDB_KEY, client)).catch(() => undefined);
-}, PERSIST_WINDOW_MS);
+    await trackPerf(`query.persist`, { queries: client.clientState.queries.length }, () => set(IDB_KEY, client));
+};
+
+const drainPersist = (): void => {
+    if (persisting !== undefined || latestClient === undefined) {
+        return;
+    }
+    const started = generation;
+    persisting = (async () => {
+        while (latestClient !== undefined) {
+            if (started !== generation) {
+                break;
+            }
+            const client = latestClient;
+            latestClient = undefined;
+            // A refused write (a full or disabled IndexedDB) costs only the next reload's instant paint.
+            await write(client).catch(() => undefined);
+        }
+    })().finally(() => {
+        persisting = undefined;
+        // A cache that arrived after the loop's last look, while this write was still counted as in flight.
+        if (started === generation) {
+            drainPersist();
+        }
+    });
+};
+const flushPersist = throttleTrailing(drainPersist, PERSIST_WINDOW_MS);
 
 // Called after auth resolves and before any route mounts, so hydration never races a fetch. `buster` combines the user
 // id and buildId(), so a different account or a new build starts from a clean cache.
@@ -84,6 +119,9 @@ export const restorePersistedQueries = async (userId: string): Promise<void> => 
 export const clearPersistedQueries = async (): Promise<void> => {
     uninstall?.();
     uninstall = undefined;
+    generation += 1;
+    latestClient = undefined;
+    await persisting;
     queryClient.clear();
     await del(IDB_KEY).catch(() => undefined);
 };

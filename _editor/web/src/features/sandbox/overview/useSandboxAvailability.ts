@@ -4,6 +4,7 @@ import { isBlocked } from "../live/connection";
 import { sandboxAvailability, type SandboxAvailability } from "./availability";
 import { useSandbox } from "../client/useSandbox";
 import { daemonReady } from "./useDaemonBoot";
+import { useVisibleOutage } from "../gates/useRecovery";
 
 /* Component-scoped because useNow registers disposal with the caller's Vue scope. */
 export const useSandboxAvailability = (established?: MaybeRefOrGetter<boolean>): ComputedRef<SandboxAvailability> => {
@@ -17,5 +18,7 @@ export const useSandboxAvailability = (established?: MaybeRefOrGetter<boolean>):
     const now = useNow(timing);
     // The removal the machine reported; a platform fact, not a transport one, so it arrives beside the connection.
     const removed = computed(() => (active.value?.removedAt ?? null) !== null);
-    return computed(() => sandboxAvailability(connection.value, daemonReady.value, hasEstablishedView.value, now.value, removed.value));
+    // A page woken from sleep spent none of its hidden time waiting, so that time never reads as "busy".
+    const { hidden } = useVisibleOutage();
+    return computed(() => sandboxAvailability(connection.value, daemonReady.value, hasEstablishedView.value, now.value, removed.value, hidden.value));
 };

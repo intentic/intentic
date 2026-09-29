@@ -432,6 +432,32 @@ export const AgentSummarySchema = z.object({
             "Since when somebody's composer has held a message for it that they have not sent yet, in milliseconds. While set, the sandbox never archives it on its own for being idle.",
         ),
     attention: AgentAttentionSchema.describe("Which kinds of waiting-for-you it is doing."),
+    // Beside `attention.permission`, which says only that one waits: the id an answer names and what it asks, so a card
+    // can offer the answer itself instead of a trip to the chat. The oldest one, while its turn runs.
+    permissionAsk: z
+        .object({
+            requestId: z.string().describe("Which request this is: the id an answer to it names."),
+            ask: z.string().describe("What it asks to do, on one line: the runtime's own sentence, else the tool's short name."),
+        })
+        .optional()
+        .describe(
+            "The oldest permission its running turn is waiting on, so it can be answered where the conversation is listed. Absent when none waits, and from a sandbox older than it.",
+        ),
+    // Kept on the record until a land goes through, unlike `failure`, which the next turn clears: a land that broke
+    // leaves the work stuck on its branch however many turns run after it.
+    landFailure: z
+        .object({
+            reason: z.string().describe("Why it failed, in the words it failed with."),
+            code: z
+                .string()
+                .optional()
+                .describe("Which kind of failure it was, when the sandbox could tell: unlinked when its copy lost its link to the workspace. Absent otherwise."),
+            at: z.number().describe("When it failed, in milliseconds."),
+        })
+        .optional()
+        .describe(
+            "The last attempt to bring its work into the workspace failed, and why. Cleared by the next land that goes through. Absent when nothing failed, and from a sandbox older than it.",
+        ),
     // Only the causes that still hold, re-read live (conversations/land/standing.ts), never the stored report's own list: a
     // blocker the user has since cleared is not something to offer them an action about.
     conflictCauses: z
@@ -479,6 +505,25 @@ export const AgentSummarySchema = z.object({
         .object({
             landed: z.number().describe("Paths this conversation merged in."),
             present: z.number().describe("How many of them are still there, either pending or committed."),
+            // Read off who acted on the tree between the land and the moment it was found missing; only a sole candidate
+            // is named, so an unattributed removal says nothing rather than guessing.
+            removedBy: z
+                .discriminatedUnion("kind", [
+                    z.object({
+                        kind: z.literal("agent"),
+                        id: z.string().describe("The conversation that took them out."),
+                        title: z.string().optional().describe("What that conversation is called."),
+                    }),
+                    z.object({
+                        kind: z.literal("person"),
+                        email: z.string().optional().describe("Who it was, as the sandbox verified them. Absent when the request carried no identity."),
+                        name: z.string().optional().describe("What to call them, when their sign-in carried a name."),
+                    }),
+                ])
+                .optional()
+                .describe(
+                    "Who took them out, when the sandbox could tell: an agent working in the workspace, or a person throwing the changes away. Absent when it could not tell, and from a sandbox older than it.",
+                ),
         })
         .optional()
         .describe(
@@ -593,6 +638,12 @@ export const awaitsWake = (agent: { readonly awaitingWake?: boolean | undefined 
 export type AgentWatch = NonNullable<AgentSummary["watches"]>[number];
 // One background job as a card carries it.
 export type AgentJob = NonNullable<AgentSummary["jobs"]>[number];
+// Who took landed work out of the workspace, as the card names them.
+export type LandedRemover = NonNullable<NonNullable<AgentSummary["landedPresence"]>["removedBy"]>;
+// A land that broke, kept on the card until one goes through.
+export type LandFailure = NonNullable<AgentSummary["landFailure"]>;
+// The permission a running turn waits on, as a card can answer it.
+export type WaitingPermission = NonNullable<AgentSummary["permissionAsk"]>;
 // AgentsListSchema is declared later, after AutomationApprovalSchema, since the fleet list carries held wakes and zod
 // needs that type declared first.
 export const AgentIdSchema = z.object({ id: z.string().min(1).describe("Which conversation.") });

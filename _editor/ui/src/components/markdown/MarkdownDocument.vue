@@ -66,13 +66,21 @@ const doc = defineModel<string>({ required: true });
 
 const { mobile } = useDevice();
 
+// Past the cap a write can only be refused downstream, so it is never sent: Save rests, Ctrl-S and `auto` write nothing,
+// and the foot says by how much to cut instead of letting a press fail with the text quietly put back.
+const over = computed(() => (maxChars === undefined ? 0 : Math.max(0, doc.value.length - maxChars)));
+
 // Save timing lives in markdownDocument.ts: none of its decisions require mounting a `contenteditable`.
 const { dirty, status, touched, commit, leave } = useSaveDraft({
     policy: () => policy,
     text: () => doc.value,
     stored: () => stored,
     saving: () => saving,
-    write: (text) => emit(`save`, text),
+    write: (text) => {
+        if (over.value === 0) {
+            emit(`save`, text);
+        }
+    },
 });
 
 const onChange = (value: string): void => {
@@ -87,10 +95,16 @@ const writing = computed(() => editable && !mobile.value);
 // Panel close, route change, unmount all arrive here as one thing, flushing the last sentence under `auto`.
 onBeforeUnmount(leave);
 
-// Count shown only near the ceiling, since an always-visible number goes unread; red once over the cap.
+// Count shown only near the ceiling, since an always-visible number goes unread; once over the cap it says how much.
 const NEAR = 0.95;
-const count = computed(() => (maxChars !== undefined && doc.value.length >= maxChars * NEAR ? `${doc.value.length} / ${maxChars}` : undefined));
-const over = computed(() => maxChars !== undefined && doc.value.length > maxChars);
+const count = computed(() => {
+    if (maxChars === undefined || doc.value.length < maxChars * NEAR) {
+        return undefined;
+    }
+    return over.value > 0
+        ? t(`ui.markdownDocument.overLimit`, { over: over.value, max: maxChars }, over.value)
+        : `${doc.value.length} / ${maxChars}`;
+});
 
 // Whether the foot row is shown at all; a read-only document has nothing to report and no button to press.
 const slots = useSlots();
@@ -159,7 +173,7 @@ defineExpose({ text, commit, focus: (): void => surface.value?.focus(), dirty, s
         >
             <span class="min-w-0 text-2xs text-subtle"><slot name="note" /></span>
             <span class="flex shrink-0 items-center gap-2">
-                <span v-if="count !== undefined" class="text-2xs tabular-nums" :class="over ? `text-danger` : `text-muted`">{{ count }}</span>
+                <span v-if="count !== undefined" class="text-2xs tabular-nums" :class="over > 0 ? `text-danger` : `text-muted`">{{ count }}</span>
                 <span class="text-2xs" :class="status === `Saved` ? `text-success` : `text-subtle`">{{ status }}</span>
                 <slot name="actions" />
                 <!-- Always on screen under `explicit`, not appearing on dirty, since a control that materializes gets pressed by accident; disabled instead. -->
@@ -167,7 +181,7 @@ defineExpose({ text, commit, focus: (): void => surface.value?.focus(), dirty, s
                     v-if="policy === `explicit`"
                     :label="t(`ui.action.save`)"
                     size="small"
-                    :disabled="!dirty || saving"
+                    :disabled="!dirty || saving || over > 0"
                     :loading="saving"
                     @mousedown.prevent
                     @click="commit"

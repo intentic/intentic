@@ -50,22 +50,25 @@ const hint = computed<string | undefined>(() => {
         return undefined;
     }
     if (kind === `routed`) {
-        return flow.value?.code ? `Sign in and approve: enter this code if the page asks for it.` : `Approve the sign-in on the page that opens.`;
+        return flow.value?.code ? t(`sandbox.connectFlow.approveEnterCode`) : t(`sandbox.connectFlow.approveOnPage`);
     }
     // Reassurance differs per no-paste flow (Grok: code's already there; others: nothing comes back; Meta: where to
     // type its shown code). Read off the flow's own fields, not the provider, so a new sign-in needs no new branch.
     if (provider === `grok`) {
-        return `Already filled in at x.ai: approve on any device.`;
+        return t(`sandbox.connectFlow.alreadyFilledIn`);
     }
-    return flow.value?.code
-        ? `Enter this code on the page that opens: this sandbox finishes the rest and the account appears here.`
-        : `Sign in on the page that opens: this sandbox finishes the rest and the account appears here.`;
+    return flow.value?.code ? t(`sandbox.connectFlow.enterCodeFinishesRest`) : t(`sandbox.connectFlow.signInFinishesRest`);
 });
 
 // What the reader has to come back holding, named the same way in the instruction, the field and its label, so
-// the three cannot describe different objects.
-const grantNoun = computed(() => (redirectFlow.value ? `the address ${destination.value} lands on` : `the code`));
-const pastePlaceholder = computed(() => (redirectFlow.value ? `Paste the address…` : `Paste the code…`));
+// the three cannot describe different objects. Whole messages per flow, since the noun alone would be English glued
+// into another language's sentence.
+const pasteLabel = computed(() =>
+    redirectFlow.value ? t(`sandbox.connectFlow.pasteAddress`, { destination: destination.value }) : t(`sandbox.connectFlow.pasteCode`),
+);
+const pastePlaceholder = computed(() =>
+    redirectFlow.value ? t(`sandbox.connectFlow.pasteAddressPlaceholder`) : t(`sandbox.connectFlow.pasteCodePlaceholder`),
+);
 
 // Fake dead-end address per flow, for the user to recognize against the real error page: the redirect the page was
 // actually sent to (`redirect_uri`, or BigModel's `redirect`), then a grant truncated like a real one since only the
@@ -123,7 +126,7 @@ const awaitingPaste = computed(() => flow.value !== undefined && !deviceFlow.val
 
 // Said in place of everything else while it runs; naming the provider distinguishes this wait from the sign-in
 // that already happened in the other tab.
-const submitNote = computed(() => `Finishing sign-in with ${destination.value}…`);
+const submitNote = computed(() => t(`sandbox.connectFlow.finishingWith`, { destination: destination.value }));
 
 // The redirect dead-ends on a loopback address the page can never load; handled two ways: the picture below
 // (recognize it) and this section, which grabs the grant from a paste anywhere or the clipboard so most people never
@@ -193,6 +196,27 @@ const openedProvider = (): void => {
     connectSent.value = true;
 };
 
+// A device sign-in's code goes with the press that opens its page, which asks for it: a reader who had to come back
+// for it pressed Open three times and copied it by hand. Written inside the press, the gesture a clipboard write
+// needs; the code stays on screen and copies on a press of its own for a browser that refuses.
+const codeCopied = ref(false);
+const copyCode = (): void => {
+    const code = flow.value?.code;
+    if (code === undefined || code === ``) {
+        return;
+    }
+    void navigator.clipboard?.writeText(code).then(
+        () => {
+            codeCopied.value = true;
+        },
+        () => undefined,
+    );
+};
+const openDevicePage = (): void => {
+    copyCode();
+    openedProvider();
+};
+
 // The field is the whole of step two, so arriving there puts the caret in it: coming back from the provider the
 // next keystroke is a paste, and on a phone the clipboard read below cannot run at all.
 const pasteFieldId = useId();
@@ -248,6 +272,7 @@ watch(flow, (live) => {
         pasteInstead.value = false;
         pasted.value = ``;
         wentToProvider.value = false;
+        codeCopied.value = false;
         showDeadEnd.value = roomy;
     }
 });
@@ -267,18 +292,27 @@ watch(flow, (live) => {
                 :href="flow.url"
                 target="_blank"
                 rel="noopener"
-                @click="openedProvider"
+                @click="openDevicePage"
             >
                 <ProviderLogo :provider="provider" />{{ t(`ui.action.open`) }} {{ destination }}<Icon name="external-link" />
             </Button>
             <!-- Placed above what it describes: an instruction read after the fact is read too late. -->
             <p v-if="hint" :class="[bodyText, `text-subtle`]">{{ hint }}</p>
-            <!-- Device code is read, not typed: sized for a second screen, with copy as an icon, not a competing chip. -->
+            <!-- Device code is read, not typed: sized for a second screen, and copied by a press on it as well as by the icon. -->
             <div v-if="flow.code" class="flex items-center justify-between gap-2 rounded-md border border-line bg-canvas px-3 py-1.5">
-                <span class="truncate font-mono text-base font-semibold tracking-[0.2em] text-content">{{ flow.code }}</span>
+                <button
+                    type="button"
+                    class="min-w-0 truncate text-left font-mono text-base font-semibold tracking-[0.2em] text-content"
+                    :title="t(`sandbox.connectFlow.copyCode`)"
+                    @click="copyCode"
+                >
+                    {{ flow.code }}
+                </button>
                 <CopyButton :text="flow.code" />
             </div>
-            <p v-else class="flex items-center gap-1.5 text-2xs text-subtle">
+            <p v-if="flow.code && codeCopied" :class="[bodyText, `text-subtle`]">{{ t(`sandbox.connectFlow.codeCopied`) }}</p>
+            <!-- Kept beside the copied note: the wait is still on after the code went to the clipboard. -->
+            <p class="flex items-center gap-1.5 text-2xs text-subtle">
                 <Icon name="spinner" spin />{{ t(`sandbox.connectFlow.waitingApproval`) }}
             </p>
         </template>
@@ -307,13 +341,13 @@ watch(flow, (live) => {
 
         <!-- Step one, and the only thing on the panel: what to come back with is said BEFORE the trip, since afterwards there are two tabs between the reader and this sentence. -->
         <template v-else-if="!broughtBack">
-            <p :class="[bodyText, `text-muted`]">
-                {{ t(`sandbox.connectFlow.signInComeBack`) }} {{ grantNoun
-                }}<template v-if="redirectFlow">
-                    {{ t(`sandbox.connectFlow.lastPage`) }} <span class="font-semibold text-content">{{ t(`sandbox.connectFlow.wontLoad`) }}</span
-                    >{{ t(`sandbox.connectFlow.thatsExpected`) }}</template
-                >.
-            </p>
+            <i18n-t v-if="redirectFlow" keypath="sandbox.connectFlow.comeBackWithAddress" tag="p" :class="[bodyText, `text-muted`]" scope="global">
+                <template #destination>{{ destination }}</template>
+                <template #wontLoad
+                    ><span class="font-semibold text-content">{{ t(`sandbox.connectFlow.wontLoad`) }}</span></template
+                >
+            </i18n-t>
+            <p v-else :class="[bodyText, `text-muted`]">{{ t(`sandbox.connectFlow.comeBackWithCode`) }}</p>
             <Button
                 as="a"
                 class="self-start touch-target"
@@ -333,7 +367,7 @@ watch(flow, (live) => {
 
         <!-- Step two: the field is the subject now, so nothing else on the panel competes for the press. -->
         <template v-else>
-            <label :for="pasteFieldId" :class="[bodyText, `text-muted`]">{{ t(`sandbox.connectFlow.paste`, { grantNoun }) }}</label>
+            <label :for="pasteFieldId" :class="[bodyText, `text-muted`]">{{ pasteLabel }}</label>
             <div class="flex gap-2">
                 <input
                     :id="pasteFieldId"
@@ -354,7 +388,7 @@ watch(flow, (live) => {
             </div>
             <div class="flex flex-wrap items-center gap-x-4">
                 <a :class="ui.linkButton(`text-2xs`)" :href="flow.url" target="_blank" rel="noopener" @click="openedProvider">
-                    {{ t(`ui.action.open`) }} {{ destination }} {{ t(`sandbox.connectFlow.again`) }}<Icon name="external-link" />
+                    {{ t(`sandbox.connectFlow.openAgain`, { destination }) }}<Icon name="external-link" />
                 </a>
                 <!-- The dead-end page as reference rather than instruction: folded, and inert, so a press on it can't be swallowed by a picture. -->
                 <button v-if="redirectFlow" type="button" :class="ui.textAction(`text-2xs`)" @click="showDeadEnd = !showDeadEnd">

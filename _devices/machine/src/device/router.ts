@@ -178,7 +178,7 @@ export const createHostRouter = (runtime: HostRuntime) => {
         // The agent's own update/restart, through the same adapter, and the one stream whose ending is not its answer:
         // both ops kill the process serving this socket. The work is detached first (tools/agent.ts); the reader
         // confirms by the version.
-        runAgentFlow: os.runAgentFlow.handler(({ input }) => streamFlow((onLine) => runAgentOp(input.op, runtime.scopes(), onLine))),
+        runAgentFlow: os.runAgentFlow.handler(({ input }) => streamFlow((onLine) => runAgentOp(input.op, onLine))),
         // A sign-in's loopback redirect, caught here for the sandbox that started it (loopback-catch.ts). Behind no
         // switch: only the sandbox's own sign-in arms it, never a tool, it binds loopback alone, and what it catches is
         // worthless without the verifier the sandbox keeps.

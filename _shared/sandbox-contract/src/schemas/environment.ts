@@ -40,10 +40,17 @@ export const RuntimeInstallSchema = z.object({
     declinedAt: z.number().optional(),
 });
 export type RuntimeInstall = z.infer<typeof RuntimeInstallSchema>;
+// A draft the owner already answered (approved, removed or declined), by its tool and the hash of its steps: the same
+// file coming back with an agent's land, which still carries it on its branch, proposes nothing. An agent asking again
+// (`environment propose`) clears its tool's entries.
+export const SettledDraftSchema = z.object({ tool: z.string(), hash: z.string(), at: z.number() });
+export type SettledDraft = z.infer<typeof SettledDraftSchema>;
 export const RuntimeInstallsFileSchema = z.object({
     installs: z.array(RuntimeInstallSchema),
     // The last drift snapshot, persisted so a daemon restart does not blank the card until the next sweep.
     drift: EnvironmentDriftSchema.optional(),
+    // Drafts already answered, newest last and capped; absent on a ledger written before removal existed.
+    settled: z.array(SettledDraftSchema).optional(),
 });
 export type RuntimeInstallsFile = z.infer<typeof RuntimeInstallsFileSchema>;
 // Ledger entry as the Environment card shows it: recurrence joined with whether it's present in the live container
@@ -74,6 +81,26 @@ export type EnvironmentRuntimeDecision = z.infer<typeof EnvironmentRuntimeDecisi
 // there (SANDBOX_DEV_ROOT), absent on a sandbox that was handed a local image without one.
 export const EnvironmentLocalImageSchema = z.object({ base: z.string(), root: z.string().optional() });
 export type EnvironmentLocalImage = z.infer<typeof EnvironmentLocalImageSchema>;
+// A rebuild the owner asked to start by itself once no agent is mid-turn, kept by the sandbox rather than the page that
+// asked, so a page closed or a phone locked meanwhile does not lose it. Held in the sandbox's memory: a restart of the
+// sandbox for any other reason drops it, and the card offers the rebuild again.
+export const EnvironmentRebuildWaitSchema = z.object({
+    // The approved overlay it builds, and the connected device that runs it.
+    hash: z.string(),
+    host: z.string(),
+    requestedAt: z.number(),
+    // waiting: until no agent is mid-turn. rebuilding: handed to the device, which restarts this sandbox at the end.
+    // failed: the device refused or could not be reached; said until the owner dismisses it or asks again.
+    phase: z.enum(["waiting", "rebuilding", "failed"]),
+    // Who it waits on, by the title the board shows them under; empty once it is no longer waiting.
+    waitingOn: z.array(z.string()),
+    // The device's own words for a failed one.
+    message: z.string().optional(),
+});
+export type EnvironmentRebuildWait = z.infer<typeof EnvironmentRebuildWaitSchema>;
+// Asks for that rebuild: the approved overlay's hash and the device that rebuilds this sandbox.
+export const EnvironmentRebuildWhenIdleSchema = z.object({ host: z.string().min(1), hash: z.string().min(1) });
+export type EnvironmentRebuildWhenIdle = z.infer<typeof EnvironmentRebuildWhenIdleSchema>;
 export const EnvironmentSchema = z.object({
     proposal: environmentFileSchema.optional(),
     // The owner-approved agent-written custom section (.intentic/config/environment.custom.Dockerfile).
@@ -89,6 +116,12 @@ export const EnvironmentSchema = z.object({
     recurring: z.array(EnvironmentRecurringSchema).optional(),
     // Absent on a sandbox running a published image, which is every sandbox but a dogfooding one.
     localImage: EnvironmentLocalImageSchema.optional(),
+    // A rebuild waiting for the agents to be idle, or started or refused once they were; absent when none is asked.
+    rebuildWhenIdle: EnvironmentRebuildWaitSchema.optional(),
+    // This sandbox can hold a rebuild until no agent is mid-turn (POST /environment/rebuild-when-idle), and resume the
+    // turns a restart the owner starts cuts when asked (a device swap's `resumeTurns`). Absent from one too old to,
+    // where the rebuild dialog offers only "Rebuild now" and the cut turns wait to be continued, as before.
+    waitsForAgents: z.literal(true).optional(),
 });
 export type Environment = z.infer<typeof EnvironmentSchema>;
 export const EnvironmentApproveSchema = z.object({ hash: z.string().min(1) });
@@ -127,8 +160,14 @@ export const EnvironmentItemSchema = z.object({
     detail: z.string().optional(),
     // The block's own instruction lines, for the reader who wants to see exactly what runs.
     commands: z.string().optional(),
+    // The custom-section block this row is, which the owner may take out (POST /environment/remove names it). Absent
+    // on capability and base rows, and from a sandbox that cannot remove one, so no Remove is offered there.
+    block: z.string().optional(),
 });
 export type EnvironmentItem = z.infer<typeof EnvironmentItemSchema>;
+// Takes one tool out of the environment: its approved block, its pending draft, or both.
+export const EnvironmentRemoveSchema = z.object({ block: z.string() });
+export type EnvironmentRemove = z.infer<typeof EnvironmentRemoveSchema>;
 export const EnvironmentContentsSchema = z.object({ items: z.array(EnvironmentItemSchema) });
 export type EnvironmentContents = z.infer<typeof EnvironmentContentsSchema>;
 // A sandbox is four stores: /work, /history, the container, and the AI-provider credential root. A bundle carries only

@@ -3,19 +3,24 @@ import { computed, onScopeDispose, ref, type Ref, watch } from "vue";
 import type { LocationQuery, Router } from "vue-router";
 import { clickIntent, rangeSelect } from "../../../../lib/multiSelect";
 import { uuid } from "../../../../lib/uuid";
+import { showParkedChat } from "../../../chat/panel/chatPanelLayout";
 import { agentTabOf } from "../../../chat/panel/useChat-reveal";
 import { showingRunGraph } from "../../../chat/run/chatRun";
 import { traceFocus } from "../../../chat/run/focusTrace";
 import type { Summons } from "../../../chat/run/summon";
 import type { Strip } from "../../../chat/tabs/tabFacts";
+import { drillTarget } from "../../fleet/agentStatus";
 import { isRemote } from "../../fleet/fleetScope";
 import { agentSeed } from "../../fleet/useAgents-actions";
 import type { FleetAgent } from "../../fleet/useAgents-fleet";
 import type { ViewEvent } from "./boardView";
 
 // Which card the board points at and what a press on one does: the ring follows the chat's own selection unless a link
-// just focused a card, a click is a look rather than a navigation, a modified click composes panes, and a link uncovers
-// its card. Every gesture is a summons, since the panel it composes may be another window's.
+// just focused a card, a click opens the chat as a look rather than navigating, a modified click composes panes, and a
+// link uncovers its card. Every gesture is a summons, since the panel it composes may be another window's.
+// A click must put the chat's turns on screen: with the chat's home on the rail, the look used to land in the quick
+// bar's pill, which named the agent and showed nothing, so readers clicked three and four times (showParkedChat).
+// A double-click is two clicks and nothing more; it used to open the review page, while the chat rail's renamed.
 
 // The keys that turn a click on a card into a pane gesture.
 export type PaneKeys = Pick<MouseEvent, `shiftKey` | `altKey` | `ctrlKey` | `metaKey`>;
@@ -125,7 +130,8 @@ export interface FocusHost {
 }
 
 // What a press on a card does, and what a link to one does. A click focuses rather than navigates: it points the chat at
-// the card and rings it, cheap and reversible, so clicking down a lane is skimming; a phone has no dock and navigates.
+// the card, shows its turns and rings it, cheap and reversible, so clicking down a lane is skimming; a phone has no dock
+// and navigates.
 export const useCardFocus = (host: FocusHost) => {
     const { ring, agents, filter, router, route, mobile, strip, summon } = host;
     // The card a Shift+click range runs from: the last one clicked here, else the chat's own.
@@ -200,7 +206,30 @@ export const useCardFocus = (host: FocusHost) => {
         agents.open(agent, `peek`);
         if (mobile.value) {
             void router.push(agentPath(agent));
+            return;
         }
+        showParkedChat();
+    };
+    // The chat itself, kept, for an ask answered on its card there (drillTarget): the card is drawn in the transcript
+    // and above the composer, where a phone's agent page opens too. Never the review page, which draws no such card.
+    const answerAgent = (agent: FleetAgent): void => {
+        ring.flashId.value = undefined;
+        selectedHere = agent.id;
+        agents.open(agent);
+        if (mobile.value) {
+            void router.push(agentPath(agent));
+            return;
+        }
+        showParkedChat();
+    };
+    // The card's drill-in, where its label says it goes: the chat for an ask or a spent allowance, the review otherwise.
+    // Another box's card has no chat this window can point at, so its page, where the crossing lives, as before.
+    const drillIn = (agent: FleetAgent): void => {
+        if (!isRemote(agent) && drillTarget(agent) === `chat`) {
+            answerAgent(agent);
+            return;
+        }
+        reviewAgent(agent);
     };
     // A tray row for a subagent the card's runtime ran in-process: it has no chat of its own, so its transcript is shown
     // in the card's chat, in the card's column, the way a spawned child's row opens that child's chat. A phone walks to
@@ -282,5 +311,5 @@ export const useCardFocus = (host: FocusHost) => {
         { immediate: true },
     );
 
-    return { focusAgent, focusSubagent, reviewAgent, keepAgent, closeAgent, agentHref, openSession };
+    return { focusAgent, focusSubagent, reviewAgent, drillIn, keepAgent, closeAgent, agentHref, openSession };
 };

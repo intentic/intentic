@@ -349,6 +349,8 @@ it(`offers to connect the machine already syncing this sandbox`, () => {
     const text = mount().textContent ?? ``;
     expect(text).toContain(`radarsu-rog`);
     expect(text).toContain(`syncs this sandbox but is not connected as a device`);
+    // What connecting buys, said by this card: the restart it cannot offer yet.
+    expect(text).toContain(`this becomes a button.`);
     // The command stays: connecting is an offer, not a precondition for getting out of this state now.
     expect(text).toContain(`dev-restart.sh sandbox-abc123`);
 });

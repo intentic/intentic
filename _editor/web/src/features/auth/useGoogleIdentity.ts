@@ -174,16 +174,20 @@ let mintMode: MintMode = "gate";
 // First attempt: FedCM One Tap / auto re-auth. On skip, dismissal, or guard timeout, act per mode and record the
 // reason. Returns the guard timer so `mint()` clears it once settled.
 const trySilent = (): ReturnType<typeof setTimeout> | undefined => {
+    // What the mode does once the silent attempt is over (the MintMode table above).
+    const giveUp = (): void => {
+        if (mintMode === `gate`) {
+            needsSignIn.value = true;
+        } else if (mintMode === `silent`) {
+            settle?.(undefined);
+        }
+    };
     const silentFailed = (reason: "skipped" | "dismissed" | "guard-timeout" | "webview"): void => {
         if (settle === undefined) {
             return;
         }
         reportGate({ reason, mode: mintMode });
-        if (mintMode === `gate`) {
-            needsSignIn.value = true;
-        } else if (mintMode === `silent`) {
-            settle(undefined);
-        }
+        giveUp();
     };
     // The desktop webview has no silent attempt to make; Google won't talk to it, so the guard's wait is certain
     // failure. Raise the gate now, offering the hand-off to the real browser.
@@ -198,6 +202,15 @@ const trySilent = (): ReturnType<typeof setTimeout> | undefined => {
         if (moment.isSkippedMoment()) {
             clearTimeout(guard);
             silentFailed(`skipped`);
+        } else if (moment.isDismissedMoment() && moment.getDismissedReason() === `flow_restarted`) {
+            // The reader pressed Google's own button, whose flow replaces this one: a sign-in under way, which the gate's
+            // funnel counted as an abandonment on every such press, so it is not reported. The mode still gives up as on
+            // any silent attempt that ended: the button's flow may be closed unanswered, and a warm-up left waiting on
+            // it would hold every later mint that joins it. A caller showing its own button waits for its answer.
+            clearTimeout(guard);
+            if (settle !== undefined) {
+                giveUp();
+            }
         } else if (moment.isDismissedMoment() && moment.getDismissedReason() !== `credential_returned`) {
             clearTimeout(guard);
             silentFailed(`dismissed`);

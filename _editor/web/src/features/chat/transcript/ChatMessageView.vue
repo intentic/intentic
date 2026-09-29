@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { MarkdownFigure, useDevice } from "@intentic/ui";
+import { browserOwnsClick, MarkdownFigure, parseLoopbackLink, useDevice } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { formatClock, formatDateTime } from "@intentic/ui/format";
 import { copyCodeFromEvent } from "@intentic/ui/markdown";
@@ -11,11 +11,12 @@ import { formatElapsed } from "../../agents/fleet/agentStatus";
 import { useAgents } from "../../agents/fleet/useAgents";
 import { errandOf } from "../run/errands";
 import { chatRouteWait } from "../routing/chatRoute";
-import { changedNothing, type ChatMessage, type ChecklistView, foldsIntoTurn } from "./transcript";
+import { changedNothing, type ChatMessage, type ChecklistView, continuationKind, foldsIntoTurn } from "./transcript";
 import { type CardAnswer, requestIdOf } from "../session/cardReplies";
 import { useMarkdown } from "../../../lib/markdown/useMarkdown";
 import { openFileRefFromEvent } from "../../workspace/files/refs/openFileRef";
 import { claimInText, openClaimed, openClaimedLinkFromEvent } from "../../../shell/side/sideLinks";
+import { openLoopbackPreview } from "../../terminal/portPreview";
 import { usePaneView } from "../panel/useChat-view";
 import ChatAttachmentStrip from "../composer/ChatAttachmentStrip.vue";
 import ChatBrowserHelpCard from "./cards/ChatBrowserHelpCard.vue";
@@ -39,6 +40,8 @@ import NoticeLandHold from "./notices/NoticeLandHold.vue";
 import NoticeMemory from "./notices/NoticeMemory.vue";
 import NoticeWatchStop from "./notices/NoticeWatchStop.vue";
 import { isMemoryHold } from "./held/heldQueue";
+import { noticeLine } from "./notices/sandboxNotice";
+import { useAudience } from "../../../app/useAudience";
 import { useT } from "@intentic/ui/i18n";
 
 // Renders one transcript entry (user bubble, notice line, or assistant turn stack). Card answers go through the pane's
@@ -122,6 +125,18 @@ const onMarkdownClick = (event: MouseEvent): void => {
     copyCodeFromEvent(event);
     openFileRefFromEvent(event);
     openClaimedLinkFromEvent(event);
+    // What no side view claimed, and no modified click (the browser's own), falls to the loopback rule below.
+    if (event.defaultPrevented || event.button !== 0 || browserOwnsClick(event)) {
+        return;
+    }
+    // A `localhost` link an agent wrote names the sandbox's own loopback, dead from here: opened through the sandbox's
+    // forwarded port instead, as the terminal does.
+    const link = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>(`a[href]`) : null;
+    const local = link === null ? undefined : parseLoopbackLink(link.href);
+    if (local !== undefined) {
+        event.preventDefault();
+        openLoopbackPreview(local);
+    }
 };
 
 // Status line shows for the whole live turn, not just before the first token, since the model can go quiet
@@ -173,6 +188,10 @@ const unspokenSent = computed(() => props.message.watchWake?.sent ?? props.messa
 const watchGaveUp = computed(
     () => (props.message.watchWake !== undefined && props.message.watchWake.outcome !== `met`) || props.message.agentWords?.failed === true,
 );
+// A notice in the reader's language and words where the row says which one it is (sandboxNotice.ts), else as it was
+// written: a sandbox older than this app sends no code, and a newer one may send a code this build does not know.
+const { audience } = useAudience();
+const noticeText = computed(() => noticeLine(props.message, audience.value) ?? props.message.text);
 // The board's own watch glyph, another conversation, or a child reporting back.
 const noticeIcon = computed(() => {
     if (props.message.watchWake !== undefined) {
@@ -242,10 +261,19 @@ const errandMarks = computed(() =>
 // What an errand is about, when its prompt names something a side view can show (a ci-fix errand's failing run): one
 // press on its line opens it beside the chat, so the conversation fixing it and the thing it fixes share a screen.
 const errandSubject = computed(() => (errand.value === undefined ? undefined : claimInText(props.message.text)));
+// A prompt as the reader sees it: the app's own "Continue" (sent in English, the words the agent reads) in the reader's
+// language, anything the user typed as typed.
+const promptText = (message: ChatMessage): string => {
+    const kind = message.role === `user` ? continuationKind(message.text) : undefined;
+    if (kind === `plain`) {
+        return t(`ui.action.continue`);
+    }
+    return kind === `afterDenial` ? t(`chat.chatMessageView.continueWithoutDeclined`) : message.text;
+};
 
 // Trailer naming the latest thing keeping this turn going, and how many said the same; shown in-flow so it can't shift
 // the pinned row's height.
-const foldedLabel = (message: ChatMessage): string => errandOf(message)?.label ?? message.text.trim();
+const foldedLabel = (message: ChatMessage): string => errandOf(message)?.label ?? promptText(message).trim();
 const trailer = computed(() => {
     const folded = props.folded ?? [];
     const last = folded.at(-1);
@@ -519,7 +547,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                         @scroll="onBubbleScroll"
                         @click="onBubbleClick"
                     >
-                        {{ message.text }}
+                        {{ promptText(message) }}
                     </div>
                     <!-- Shown only when the clamp cut the text. -->
                     <button
@@ -572,7 +600,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 <Icon v-if="pendingWait" name="spinner" spin class="shrink-0 text-xs text-info" />
                 <!-- The board's own watch glyph, so one conversation's watch reads the same in both places. -->
                 <Icon v-else :name="noticeIcon" class="shrink-0 text-xs" />
-                <span class="min-w-0">{{ message.text }}</span>
+                <span class="min-w-0">{{ noticeText }}</span>
                 <span v-if="waitClock" class="shrink-0 tabular-nums">{{ waitClock }}</span>
             </span>
             <!-- Nobody at the composer typed it, so what the model was told is one press away. -->

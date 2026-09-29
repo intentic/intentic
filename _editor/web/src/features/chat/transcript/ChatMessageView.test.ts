@@ -18,11 +18,15 @@ import {
 } from "@intentic/sandbox-contract";
 import { errandOf, errands, errandPrompt } from "../run/errands";
 import { changedNothing, type ChatMessage } from "./transcript";
+import { clockOffset, resetSandboxClock } from "../../agents/fleet/sandboxClock";
 import { IconStub } from "@intentic/ui/testing";
 import { shownText } from "../../../testing/shownText";
 import { agentStatusMeta, CLOCK_FROM_MS, type EndingByHand, formatElapsed } from "../../agents/fleet/agentStatus";
+import { setLocale } from "@intentic/ui/i18n";
+import { useAudience } from "../../../app/useAudience";
 
-const clock = { turnStartedAt: undefined as number | undefined };
+// `onSandbox`: the running turn's start was stamped on the sandbox's clock rather than this browser's.
+const clock = { turnStartedAt: undefined as number | undefined, onSandbox: false };
 const roster = {
     running: 0,
     watches: undefined as AgentWatch[] | undefined,
@@ -57,6 +61,7 @@ const reply = jest.fn(async () => true);
 const markdown = {
     parts: [] as { readonly kind: string; readonly html?: string; readonly figure?: { readonly kind: string } }[],
 };
+const openLoopbackPreview = jest.fn();
 
 // Every ResizeObserver a mounted row builds, with the boxes it watches. jsdom has no layout to fire one, so the pinned
 // band's suite fires the row's own by hand; the others are left alone and never fire, as before.
@@ -136,7 +141,10 @@ jest.mock("@intentic/ui", async () => {
         SandboxResourcesDialog: vue.defineComponent({ render: () => undefined }),
         browserOwnsClick: () => false,
         clipboardOf: () => undefined,
-        parseLoopbackLink: () => undefined,
+        parseLoopbackLink: (uri: string) => {
+            const url = new URL(uri);
+            return url.hostname === `localhost` ? { port: Number(url.port), path: `${url.pathname}${url.search}` } : undefined;
+        },
         openForwardedPort: () => {},
     };
 });
@@ -162,6 +170,7 @@ jest.mock("../../../lib/markdown/useMarkdown", () => {
     return { useMarkdown: () => computed(() => markdown.parts) };
 });
 jest.mock("../../workspace/files/refs/openFileRef", () => ({ openFileRefFromEvent: jest.fn(), openWorkspaceRef: jest.fn() }));
+jest.mock("../../terminal/portPreview", () => ({ openLoopbackPreview }));
 jest.mock("../../workspace/changes/history/useHistory", () => ({ restoreSnapshot: jest.fn(), invalidateWorkspace: jest.fn() }));
 jest.mock("../tools/toolGrouping", () => ({ groupConsecutiveTools: () => [] }));
 jest.mock("../composer/ChatAttachmentStrip.vue", () => ({ default: { render: () => undefined } }));
@@ -182,6 +191,11 @@ jest.mock("../panel/useChat-view", () => {
             turnStartedAt: {
                 get value(): number | undefined {
                     return clock.turnStartedAt;
+                },
+            },
+            turnOnSandboxClock: {
+                get value(): boolean {
+                    return clock.onSandbox;
                 },
             },
         },
@@ -266,6 +280,8 @@ beforeEach(() => {
     jest.useFakeTimers();
     jest.setSystemTime(1_000_000);
     clock.turnStartedAt = Date.now() - 35_000;
+    clock.onSandbox = false;
+    resetSandboxClock();
     roster.running = 0;
     roster.watches = undefined;
     roster.jobs = undefined;
@@ -349,6 +365,16 @@ describe(`ChatMessageView loader`, () => {
         app = undefined;
         clock.turnStartedAt = Date.now() - 3_960_000;
         expect(mount().textContent).toContain(`(1h 6m)`);
+    });
+
+    // M2's clock ran 96 s fast: a re-attached turn, stamped by the sandbox a second ago, read "1m 36s" on the browser's clock.
+    it(`counts a turn stamped on the sandbox's clock on that clock`, () => {
+        clockOffset.value = 96_000;
+        clock.onSandbox = true;
+        clock.turnStartedAt = Date.now() - 96_000 - 1_000;
+        const text = mount().textContent ?? ``;
+        expect(text).toContain(`(1s)`);
+        expect(text).not.toContain(`1m`);
     });
 
     it(`names the children it is waiting on instead of its own step`, () => {
@@ -806,6 +832,13 @@ describe(`ChatMessageView answer body`, () => {
         const element = mount(body);
         expect(element.querySelectorAll(`.chat-markdown > .md-part`)).toHaveLength(2);
         expect(element.querySelector(`.figure-stub`)).toBeNull();
+    });
+
+    it(`opens a localhost link through the sandbox's forwarded port`, () => {
+        markdown.parts = [{ kind: `html`, html: `<a href="http://localhost:4750/demo?x=1">Open preview</a>` }];
+        const element = mount(body);
+        element.querySelector<HTMLAnchorElement>(`a[href]`)!.click();
+        expect(openLoopbackPreview).toHaveBeenCalledWith({ port: 4750, path: `/demo?x=1` });
     });
 });
 
@@ -1546,5 +1579,42 @@ describe(`a low-memory hold`, () => {
         const running = remount(keptRow);
         expect(sendAnyway(running)).toBeUndefined();
         expect(raise(running)).toBeUndefined();
+    });
+});
+
+// The sandbox writes its notices in English with a code beside them (sandbox-notice.ts); the row draws the code in the
+// reader's language and words, and a row without one as it was written.
+describe(`a sandbox notice with a code`, () => {
+    const held: ChatMessage = {
+        id: 21,
+        role: `notice`,
+        text: `Finished: the work is on this agent's branch, ready to land from its review.`,
+        noticeCode: { code: `landHeld` },
+    };
+
+    afterEach(async () => {
+        useAudience().setAudience(`developer`);
+        await setLocale(`en`);
+    });
+
+    it(`draws it in the reader's language, and in a maker's words`, async () => {
+        expect(mount(held).textContent).toContain(`Finished: the work is on this agent's branch, ready to land from its review.`);
+        app?.unmount();
+
+        await setLocale(`pl`);
+        expect(mount(held).textContent).toContain(`Gotowe: praca jest na gałęzi tego agenta, gotowa do scalenia z jego przeglądu.`);
+        app?.unmount();
+
+        useAudience().setAudience(`maker`);
+        expect(mount(held).textContent).toContain(`Gotowe: praca jest w szkicu tego asystenta, gotowa do przyjęcia, gdy ją obejrzysz.`);
+    });
+
+    // An older sandbox sends no code, and a newer one may send a code this app has never heard of.
+    it(`draws a row with no code, or an unknown one, as the sandbox wrote it`, async () => {
+        await setLocale(`pl`);
+        const { noticeCode: _none, ...uncoded } = held;
+        expect(mount(uncoded).textContent).toContain(held.text);
+        app?.unmount();
+        expect(mount({ ...held, noticeCode: { code: `somethingNewer` } }).textContent).toContain(held.text);
     });
 });

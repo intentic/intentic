@@ -4,6 +4,7 @@
 import "@intentic/testing/dom";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
+import { installI18n } from "@intentic/ui/i18n";
 
 interface Flow {
     provider: string;
@@ -72,6 +73,8 @@ const mount = async (flow: Flow, kind: `native` | `routed` = `native`): Promise<
     app = createApp(defineComponent({ render: () => h(ConnectFlow, { kind, provider: flow.provider }) }));
     // Icon is registered globally by the app shell; not under test here.
     app.component(`Icon`, IconStub);
+    // The step-one sentence is one message with the bold phrase slotted in (`<i18n-t>`), which the plugin registers.
+    installI18n(app);
     app.mount(host);
     return host;
 };
@@ -98,6 +101,37 @@ it(`a minted device sign-in shows the vendor's code and asks for nothing back`, 
     expect(host.textContent).toContain(`WDJB-MJHT`);
     expect(host.querySelector(`input[name="connectCode"]`), `a device sign-in offered a field to paste into`).toBeNull();
     expect(host.querySelector(`a`)?.getAttribute(`href`)).toBe(`https://meta.example/device`);
+});
+
+// H6a: the ChatGPT sign-in took three presses of Open and a copy by hand, since the page that opens asks for the code
+// the panel was showing. The press that opens it now copies it too, and the code copies on a press of its own.
+it(`a device sign-in copies its code with the press that opens the page, and says so`, async () => {
+    const writes: string[] = [];
+    const held = Object.getOwnPropertyDescriptor(navigator, `clipboard`);
+    Object.defineProperty(navigator, `clipboard`, {
+        configurable: true,
+        value: { writeText: async (text: string) => void writes.push(text), readText: async () => `` },
+    });
+    try {
+        const host = await mount({ provider: `codex`, url: `https://auth.openai.com/codex/device`, code: `K7QX-2MPD`, flow: `device`, handshake: `h9` });
+        expect(host.textContent).not.toContain(`Code copied`);
+
+        host.querySelector<HTMLAnchorElement>(`a[href="https://auth.openai.com/codex/device"]`)!.click();
+        await nextTick();
+        await nextTick();
+
+        expect(writes).toEqual([`K7QX-2MPD`]);
+        expect(host.textContent).toContain(`Code copied: paste it on the page that opened.`);
+        expect(host.textContent, `the copied note replaced the wait, which is still on`).toContain(`Waiting`);
+        [...host.querySelectorAll(`button`)].find((button) => button.textContent?.trim() === `K7QX-2MPD`)!.click();
+        expect(writes).toEqual([`K7QX-2MPD`, `K7QX-2MPD`]);
+    } finally {
+        if (held === undefined) {
+            Reflect.deleteProperty(navigator, `clipboard`);
+        } else {
+            Object.defineProperty(navigator, `clipboard`, held);
+        }
+    }
 });
 
 it(`a minted device sign-in with no code waits rather than showing an empty code box`, async () => {

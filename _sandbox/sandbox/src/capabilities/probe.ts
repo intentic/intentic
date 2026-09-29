@@ -50,6 +50,10 @@ const transportReason = (error: unknown): string => {
     if (code?.includes("CERT") === true || code === "ERR_TLS_CERT_ALTNAME_INVALID") {
         return "its certificate was refused";
     }
+    // Refused by this sandbox before anything was sent: a pasted token carrying a line break or a stray character.
+    if (code === "ERR_INVALID_CHAR") {
+        return "the token contains a line break or a character a request cannot carry, so nothing was sent. Paste it again";
+    }
     return errorMessage(error);
 };
 
@@ -181,7 +185,7 @@ const coreProbe = (capability: Capability): CapabilityProbe | HttpProbe => {
     if (capability.kind === "endpoint") {
         const base = String(config["baseUrl"] ?? "").replace(/\/+$/u, "");
         const anthropic = config["protocol"] === "anthropic";
-        const key = String(config["apiKey"] ?? "");
+        const key = String(config["apiKey"] ?? "").trim();
         return {
             url: `${base}/models`,
             headers: key === "" ? {} : anthropic ? { "x-api-key": key, "anthropic-version": "2023-06-01" } : { authorization: `Bearer ${key}` },
@@ -189,7 +193,7 @@ const coreProbe = (capability: Capability): CapabilityProbe | HttpProbe => {
         };
     }
     if (capability.kind === "mcp") {
-        const token = String(config["token"] ?? "");
+        const token = String(config["token"] ?? "").trim();
         return {
             url: String(config["url"] ?? ""),
             method: "POST",

@@ -327,8 +327,8 @@ export interface IntenticApi {
     // Which model a run this extension starts will spend; the host owns the picker, a live read of every
     // connected provider's catalog. Covers provider, account, harness and model together.
     readonly models: {
-        // The sandbox's default model for a job `role` (e.g. "acceptance-run"), falling back to the owner's
-        // chat model; reactive in a computed.
+        // The sandbox's default model for a job `role` (e.g. "acceptance-run"), falling back to the model a new
+        // chat of the owner's would open on; reactive in a computed.
         agentRun(role: string): PickedModel;
         // Renders a stored pin (bare ids) back into a display-ready `PickedModel`, so a saved choice doesn't
         // need its own catalog. Reactive: reflects a renamed model or disconnected account.

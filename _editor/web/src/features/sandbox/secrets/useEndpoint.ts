@@ -1,7 +1,7 @@
 import { computed, ref } from "vue";
-import { couldBeOnThisMachine, type Endpoint, shortcutFailedAlone, sandboxIdOf, selectEndpoint, settledEndpoint } from "./endpoint";
+import { couldBeOnThisMachine, type Endpoint, probeEndpoint, shortcutFailedAlone, sandboxIdOf, selectEndpoint, settledEndpoint } from "./endpoint";
 import { shortcutAnswer, useLocalShortcut } from "../devices/loopback/localShortcut";
-import { setStreamCapacity, setStreamOverflow, setStreamScope, streamPermits } from "../client/streamBudget";
+import { measuredProtocol, setStreamCapacity, setStreamOverflow, setStreamScope, streamPermits } from "../client/streamBudget";
 import { useSandbox } from "../client/useSandbox";
 
 // Transport half of `useSandbox`: calls resolve through `daemonBase` here, while `daemonUrl` remains the sandbox's
@@ -62,21 +62,32 @@ const degradedTransport = computed(() => {
     return id !== undefined && endpoints.value[id]?.kind === `local-insecure`;
 });
 
-// Stream capacity depends on the transport (h2 multiplexes; http/1.1 spends one of six per-origin connections
-// each), read live since the endpoint can change mid-stream. All three stream hooks live here because this module alone
-// knows the transport.
-setStreamCapacity((stream) => {
+// Stream capacity depends on the protocol the browser negotiated with the address in use (streamBudget.ts), read live
+// since the endpoint can change mid-stream. All three stream hooks live here because this module alone knows the
+// transport.
+const activeKind = (): Endpoint[`kind`] => {
     const id = activeSandboxId.value;
-    return streamPermits(id === undefined ? undefined : endpoints.value[id]?.kind, stream);
-});
+    return (id === undefined ? undefined : endpoints.value[id]?.kind) ?? `public`;
+};
+setStreamCapacity((stream) => streamPermits(activeKind(), measuredProtocol(daemonBase.value), stream));
 setStreamScope(() => daemonBase.value ?? `unaddressed`);
-// On overflow, re-probes immediately instead of demoting: reaching this state means every multiplexed address
-// already failed, so demoting would spend a backoff on an address just proven dead.
+// A pool fills on the certified loopback name only where the browser is not known to multiplex there (WebKitGTK speaks
+// HTTP/1.1 to it): new streams move to the tunnel, which does. Plain HTTP loopback is chosen only when the tunnel failed
+// its probe, so it has nowhere to send them: it re-probes for a better address at once, and the stream waits its turn.
 setStreamOverflow(() => {
     const id = activeSandboxId.value;
-    if (id !== undefined) {
+    if (id === undefined) {
+        return false;
+    }
+    const kind = activeKind();
+    if (kind === `local`) {
+        demote(id);
+        return true;
+    }
+    if (kind === `local-insecure`) {
         resolvedAt.delete(id);
     }
+    return false;
 });
 
 // When each sandbox's endpoint resolved; `settledEndpoint` (endpoint.ts) ages a provisional one out with it.
@@ -145,6 +156,17 @@ const demote = (sandboxId: string): void => {
     endpoints.value = rest;
 };
 
+// Who hears that a loopback address stopped answering while the tunnel still does: the authenticated fetch drops the
+// calls still waiting on it (sandboxAuthFetch.ts), which would otherwise each sit out the full headers deadline.
+const routeLost = new Set<(base: string) => void>();
+
+const onRouteLost = (listener: (base: string) => void): (() => void) => {
+    routeLost.add(listener);
+    return () => {
+        routeLost.delete(listener);
+    };
+};
+
 // Demotes only when the tunnel answers and the shortcut does not: a broken stream or a missed deadline is as often a
 // busy daemon, which is no faster over the tunnel, and demoting then pins the window to the slow path for the whole
 // backoff. Returns whether it demoted, since the caller's retry differs either way.
@@ -161,8 +183,40 @@ const demoteIfUnreachable = async (sandboxId: string): Promise<boolean> => {
         return false;
     }
     demote(sandboxId);
+    for (const listener of routeLost) {
+        listener(endpoint.base);
+    }
     return true;
 };
+
+// The loopback address's re-check after the page slept, per sandbox. A machine waking from sleep can leave it dead for
+// minutes (a port forward re-binding) while the tunnel answers at once; calls aimed at it wait for this verdict
+// (sandboxAuthFetch.ts) instead of each sitting out the headers deadline before the fallback.
+const rechecking = new Map<string, Promise<void>>();
+
+// Asks the loopback address alone first, on its short budget, so a live one (the usual wake) holds nothing up; only a
+// silent one goes on to ask the tunnel too, which decides whether to leave it.
+const recheckAfterWake = (): void => {
+    const id = activeSandboxId.value;
+    const endpoint = id === undefined ? undefined : endpoints.value[id];
+    const token = active.value?.token ?? undefined;
+    if (id === undefined || endpoint === undefined || endpoint.kind === `public` || rechecking.has(id)) {
+        return;
+    }
+    const check = (async (): Promise<void> => {
+        if (token !== undefined && token !== `` && (await probeEndpoint(endpoint, await sandboxIdOf(token)))) {
+            return;
+        }
+        await demoteIfUnreachable(id);
+    })()
+        // allow(silent-catch): a re-check that could not run leaves the address as it was, which a missed deadline still demotes.
+        .catch(() => undefined)
+        .finally(() => rechecking.delete(id));
+    rechecking.set(id, check);
+};
+
+// The re-check a call to this sandbox should wait for, if one is running.
+const routeRechecked = (sandboxId: string): Promise<void> | undefined => rechecking.get(sandboxId);
 
 // Clears only the demotion, not any already-resolved endpoint, so switching sandboxes costs no probe or reconnect
 // unless one was pending.
@@ -171,5 +225,5 @@ const reset = (sandboxId: string): void => {
 };
 
 export function useEndpoint() {
-    return { daemonBase, usingLocal, degradedTransport, resolve, demote, demoteIfUnreachable, reset };
+    return { daemonBase, usingLocal, degradedTransport, resolve, demote, demoteIfUnreachable, reset, recheckAfterWake, routeRechecked, onRouteLost };
 }

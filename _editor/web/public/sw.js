@@ -31,6 +31,30 @@ self.addEventListener("push", (event) => {
     );
 });
 
+// Asks an open window to route itself to `path`; true once it says it will. A phone resuming a frozen page takes a
+// moment to answer, so the wait is generous; past it, the caller falls back to navigating.
+const ROUTE_ANSWER_MS = 2000;
+const routedInPlace = (client, path) =>
+    new Promise((resolve) => {
+        const channel = new MessageChannel();
+        const timeout = setTimeout(() => resolve(false), ROUTE_ANSWER_MS);
+        channel.port1.addEventListener(
+            "message",
+            () => {
+                clearTimeout(timeout);
+                resolve(true);
+            },
+            { once: true },
+        );
+        channel.port1.start();
+        try {
+            client.postMessage({ type: "intentic-notification-tap", url: path }, [channel.port2]);
+        } catch {
+            clearTimeout(timeout);
+            resolve(false);
+        }
+    });
+
 self.addEventListener("notificationclick", (event) => {
     event.notification.close();
     // An in-app route, passed whole: the router reads `?conversation=` and ignores what it does not know (a
@@ -41,8 +65,8 @@ self.addEventListener("notificationclick", (event) => {
         (async () => {
             const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
             // Prefer an existing tab on this origin: the app is a single-page shell holding live streams and
-            // open editors, so opening a second copy would be strictly worse than navigating the one that
-            // already exists. `navigate` may be unavailable in some browsers: focusing is still the win.
+            // open editors, so opening a second copy would be strictly worse than routing the one that already
+            // exists.
             for (const client of windows) {
                 const url = new URL(client.url);
                 if (url.origin !== self.location.origin) {
@@ -56,8 +80,13 @@ self.addEventListener("notificationclick", (event) => {
                 if (url.pathname === "/popout.html") {
                     continue;
                 }
-                await client.focus();
-                if (typeof client.navigate === "function") {
+                await client.focus().catch(() => undefined);
+                // The open app routes there itself (shell/notifications/notificationTaps.ts), keeping its streams and
+                // what it has painted; a navigation reloads the whole app. A window that does not answer (a page
+                // from before this worker) still gets the navigation, where the browser has `navigate`; where it
+                // does not, focusing is still the win.
+                const routed = await routedInPlace(client, `${target.pathname}${target.search}${target.hash}`);
+                if (!routed && typeof client.navigate === "function") {
                     await client.navigate(target.href).catch(() => undefined);
                 }
                 return;

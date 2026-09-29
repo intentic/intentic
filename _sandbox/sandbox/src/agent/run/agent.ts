@@ -53,6 +53,7 @@ import { mcpServersOf } from "../tools/agent-tools.js";
 import { agentShellBusy, bashTmuxHooks, tmuxRunEnabled } from "../tools/agent-terminals.js";
 import { terminalHelpServer } from "../../terminal/terminal-help.js";
 import { EventQueue } from "./event-queue.js";
+import { planRevision } from "../../runtimes/decorators/plan-mode.js";
 import { trialUnavailableFrame } from "./error-frames.js";
 import type { AgentRequest, HarnessCredential } from "../providers/agent-request.js";
 import { harnessEnv } from "../providers/harness-credentials.js";
@@ -66,6 +67,7 @@ import { settingsHookChangeHooks } from "./harness/settings-hook-gate.js";
 import { checklistSeedOf } from "./task-store.js";
 import { carriedCostOf } from "./carried-cost.js";
 import { promptInputOf, sdkSystemPrompt, terminalMounted } from "../prompt/system-prompt.js";
+import { storedPromptTitle } from "../prompt/turn-preamble.js";
 import { noteChildWork } from "../subagents/child-verification.js";
 import { closeSubagents, subagentInParentTree, subagentHooks, type SubagentTurn } from "../subagents/subagents.js";
 import { ASK_TOOL_NAMES, formatAnswers } from "../tools/question-answers.js";
@@ -195,6 +197,11 @@ const keepWarmOptions = (request: HarnessRequest): Partial<Options> => ({
     hooks: REFUSE_EVERY_TOOL,
     settings: { ...turnSettings(request), disableAllHooks: true },
 });
+
+// A new session is titled with the user's own words, since the SDK's list would otherwise title it by its first prompt
+// flattened and cut at 200 characters: the daemon's notes, with the words past the cut. A resumed one keeps its title.
+const sessionTitle = (request: HarnessRequest): Pick<Options, "title"> =>
+    request.spec.sessionId === undefined ? opt("title", storedPromptTitle(request.spec.prompt)) : {};
 
 // Concatenates hook matchers per event instead of spreading, so two producers of the same event (e.g. PreToolUse:Bash)
 // both fire.
@@ -462,6 +469,7 @@ const baseOptions = (
         ),
         ...opt("model", request.spec.model),
         ...opt("resume", request.spec.sessionId),
+        ...sessionTitle(request),
         ...opt(
             "plugins",
             request.tools.plugins?.map((path) => ({ type: "local" as const, path })),
@@ -683,7 +691,8 @@ const permissionGate = (
         const { reply, resolved } = await wait(request.signal);
         push(resolved);
         if (!reply.approve) {
-            return { behavior: "deny", message: reply.feedback?.trim() || "Keep refining the plan, do not exit plan mode yet." };
+            // Framed as a rejection, so notes that read like consent ("proceed…") are not taken as leave to execute.
+            return { behavior: "deny", message: planRevision(reply.feedback) };
         }
         // Setting the mode on the session is what actually moves the SDK out of plan mode.
         posture.mode = POST_PLAN_MODE;

@@ -89,7 +89,6 @@ onBeforeUnmount(actions.registerDrawn(() => drawnIds.value));
                 :attention="laneOfTab(c, agent) === 'attention'"
                 :closable="actions.closable.value"
                 @select="actions.click($event, c.conversationId)"
-                @rename="actions.beginRename(c.conversationId)"
                 @menu="actions.openMenu(c.conversationId, $event)"
                 @hover="actions.showPreview($event, { conversation: c, agent })"
                 @leave="actions.hidePreview()"

@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { Button } from "@intentic/ui";
-import { useNow } from "@intentic/ui/async";
 import GateCard from "./GateCard.vue";
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
@@ -10,7 +9,7 @@ import { useGoogleIdentity } from "../../auth/useGoogleIdentity";
 import { restartExpected } from "../live/sandboxRestart";
 import { connectionNotice } from "./connectionNotice";
 import SandboxRecovery from "./SandboxRecovery.vue";
-import { useRecoveryDue } from "./useRecovery";
+import { useRecoveryDue, useVisibleOutage } from "./useRecovery";
 import { stalledPaths } from "../../../app/perf";
 import { DEADLINE_MS } from "../client/sandboxAuthFetch";
 import { useT } from "@intentic/ui/i18n";
@@ -25,9 +24,8 @@ const { active, connection, activeWakeRefused } = useSandbox();
 const { clearCredential } = useGoogleIdentity();
 const { invalidateSession, getSessionToken } = useSandboxSession();
 
-// Runs only while an outage is ongoing; a connected workspace pays nothing for the clock.
-const timing = computed(() => connection.value.unavailableSince !== undefined);
-const now = useNow(timing);
+const outage = useVisibleOutage();
+const outageMs = outage.elapsed;
 // Why the platform refused the last wake, if it did: spent hours (the owner can buy the plan) or the owner's hosted
 // lane switched off (nothing here can lift it).
 const refusal = computed(() => activeWakeRefused.value?.kind);
@@ -43,6 +41,8 @@ const known = computed(() => {
         // The machine that deleted this sandbox's container reported it on the way out; nothing else can establish this.
         removed: (box?.removedAt ?? null) !== null,
         removedBy: box?.removedBy ?? null,
+        // A machine picked its setup up: a missing address is one on its way for a while (connectionNotice.ts).
+        claimed: (box?.setupCodeClaimedAt ?? null) !== null,
     };
 });
 
@@ -53,7 +53,7 @@ const restart = computed(() => restartExpected(active.value?.id)?.quiet);
 // Only spans that reached the client's own deadline count, and only from this outage: slowness is not a stall, and a
 // route that timed out before the sandbox went quiet explains nothing about why it is quiet now.
 const stalledPath = computed(() =>
-    connection.value.unavailableSince === undefined ? undefined : stalledPaths(DEADLINE_MS, now.value - connection.value.unavailableSince)[0],
+    connection.value.unavailableSince === undefined ? undefined : stalledPaths(DEADLINE_MS, outageMs.value)[0],
 );
 
 const notice = computed(() =>
@@ -61,7 +61,7 @@ const notice = computed(() =>
         ...known.value,
         restart: restart.value,
         failure: connection.value.failure,
-        outageMs: connection.value.unavailableSince === undefined ? 0 : now.value - connection.value.unavailableSince,
+        outageMs: outageMs.value,
         hoursSpent: refusal.value === `hours`,
         suspended: refusal.value === `suspended`,
         stalledPath: stalledPath.value,
@@ -69,7 +69,7 @@ const notice = computed(() =>
 );
 
 // A silence that has outlasted its patience gets the ways back that need nothing from the sandbox (SandboxRecovery).
-const recovering = useRecoveryDue();
+const recovering = useRecoveryDue(outage);
 
 // Carries the sandbox id so /setup resumes this sandbox rather than offering a blank create form.
 const setupTo = computed(() => ({ path: `/setup`, query: { sandbox: active.value?.id } }));

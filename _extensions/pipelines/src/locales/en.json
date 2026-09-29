@@ -3,7 +3,14 @@
         "branchesFailing": "{count} branches failing",
         "pipelines": "Pipelines",
         "streakOnCommit": "{repo} {branch} · {runs} failed · {sha}",
-        "streakOverCommits": "{repo} {branch} · {commits} commits · {runs} failed"
+        "streakOverCommits": "{repo} {branch} · {commits} commits · {runs} failed",
+        "running": "{count} running",
+        "queued": "{count} queued",
+        "noRunsYet": "No runs yet",
+        "nothingFailing": "Nothing failing",
+        "branchCountFailing": "{count} branch failing | {count} branches failing",
+        "runCount": "{count} run | {count} runs",
+        "webhookNotRegistered": "webhook not registered"
     },
     "mainFailure": {
         "continueFix": "Continue fix",

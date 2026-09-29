@@ -1,4 +1,13 @@
-import { endpointProvider, type ModelPin, type ModelRole, type ModelSource, NATIVE_PROVIDERS, readyChain } from "@intentic/sandbox-contract";
+import {
+    type AgentProvider,
+    DEFAULT_PROVIDER,
+    endpointProvider,
+    type ModelPin,
+    type ModelRole,
+    type ModelSource,
+    NATIVE_PROVIDERS,
+    readyChain,
+} from "@intentic/sandbox-contract";
 import type { Services } from "../../composition.js";
 import { failingStreak } from "./role-model-health.js";
 import { spentRung } from "./role-model-quota.js";
@@ -33,6 +42,19 @@ export const pinnedRunModel = async (services: Services, pinned: readonly ModelP
     }
     return headOf(services, readyChain(await readinessSources(services), pinned));
 };
+
+// What a run with no usable pin opens on. Its settings row reads "chat default", and a provider nobody connected is
+// no default: a fix pressed on a Z.ai-only sandbox once opened on Claude and failed at once. `preferred` is the chat
+// default a pressing browser sent (the daemon holds no chat pick of its own), taken while it can serve; else the
+// provider a turn naming none runs on (DEFAULT_PROVIDER) while it can, else the first this sandbox can serve, which on
+// most is the only one; undefined when none can, for the caller to refuse in words.
+export const unpinnedRunProvider = async (services: Services, preferred?: AgentProvider): Promise<AgentProvider | undefined> => {
+    const ready = (await readinessSources(services)).filter((source) => source.ready).map((source) => source.provider);
+    return [preferred, DEFAULT_PROVIDER].find((provider) => provider !== undefined && ready.includes(provider)) ?? ready[0];
+};
+
+// Said when a run role finds no model at all: no pin that can serve, and no provider connected to fall back to.
+export const NO_PROVIDER_CONNECTED = `No AI provider is connected to this sandbox, so there is no model to run this on. Connect one in Setup, then try again.`;
 
 // Pin from the persona's own ladder (schemas/personas.ts `models`), consulted before the role since it is more
 // specific; undefined when the card, its ladder, or every provider in it is unavailable.

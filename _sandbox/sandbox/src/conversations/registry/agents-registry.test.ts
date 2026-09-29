@@ -5,11 +5,11 @@ import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { AgentEvent, AgentSummary, LandConflictReason } from "@intentic/sandbox-contract";
 import { noteSubagentTask, resetSubagents, type SubagentTaskMessage, type SubagentTurn } from "../../agent/subagents/subagents.js";
 import { MAX_NOTE_LENGTH, MAX_SUBJECT_LENGTH } from "../../git/ops/commit-message.js";
-import { beginTurn, conversationEntry, fleetStoreOver, isolatedAgent } from "../../testing.js";
+import { beginTurn, conversationEntry, fleetStoreOver, isolatedAgent, noPresences } from "../../testing.js";
 import type { BeginOutcome, BeginTurn } from "../actor/conversation-decide.js";
 import { openConversationsDb } from "../../store/conversations-db.js";
 import { createFleet, type FleetStore } from "./agents-registry.js";
-import { type PersistedAgent, sqliteAgentsStore, worktreeOf } from "./agents-store.js";
+import { type PersistedAgent, type Remover, sqliteAgentsStore, worktreeOf } from "./agents-store.js";
 import { sqliteTurnCheckpoints } from "../../agent/checkpoints/turn-checkpoints.js";
 import { type JournalledTurn, sqliteTurnJournal } from "../../agent/run/turn/turn-journal.js";
 import type { LandedPresence, LandedPresences } from "../land/landed-presence.js";
@@ -35,18 +35,42 @@ const standings = (): LandStandings & { set: (id: string, standing: LandStanding
 
 // Hand-dialed stand-in for landed presence; real derivation needs a git repo per case
 // (landed-presence.integration.test.ts).
-const presences = (): LandedPresences & { set: (id: string, presence: LandedPresence) => void } => {
+// `set` with no reading is a probe that read the agent and found nothing of it missing.
+const presences = (): LandedPresences & {
+    set: (id: string, presence: LandedPresence | undefined) => void;
+    noted: () => Remover[];
+    // Who the last refresh was told was at work in the main tree.
+    active: () => readonly Remover[];
+} => {
     const readings = new Map<string, LandedPresence>();
+    const read = new Set<string>();
+    const noted: Remover[] = [];
+    let active: readonly Remover[] = [];
     return {
+        ...noPresences(),
+        refresh: async (_entries, working = []) => {
+            active = working;
+            return false;
+        },
+        active: () => active,
         of: (id) => readings.get(id),
-        refresh: async () => false,
+        measured: (id) => read.has(id),
+        note: (remover) => void noted.push(remover),
+        noted: () => noted,
         forget: (ids) => {
             for (const id of ids) {
                 readings.delete(id);
             }
         },
         metrics: () => ({}),
-        set: (id, presence) => readings.set(id, presence),
+        set: (id, presence) => {
+            read.add(id);
+            if (presence === undefined) {
+                readings.delete(id);
+            } else {
+                readings.set(id, presence);
+            }
+        },
     };
 };
 
@@ -1467,6 +1491,121 @@ describe("agents registry", () => {
             adjudicated: true,
         });
         expect(store.saved().find((entry) => entry.id === "c1")?.landing.conflicts).toBeUndefined();
+    });
+
+    // A land that broke (git refused, or the checkout lost its link) is not the turn's failure: the next turn clears that,
+    // and the card read Finished with a check mark while the work was still stuck on its branch.
+    it("a land that broke stays on the card through later turns, until a land runs to a verdict", async () => {
+        const store = memoryStore();
+        const { agents: registry, conversations } = createFleet(store, standings(), presences());
+        await registry.init();
+        await beginTurn(conversations, turn(), 1_000);
+        await registry.recordWorktree("c1", [{ repo: "root", base: "a".repeat(40) }]);
+        await registry.recordLandFailure("c1", { reason: "This agent's copy of the workspace lost its link", code: "unlinked" });
+        await conversations.send("c1", { kind: "settle" }, 2_000).settled;
+        await beginTurn(conversations, turn({ prompt: "Continue" }), 3_000);
+        await conversations.send("c1", { kind: "settle" }, 4_000).settled;
+        expect(registry.get("c1")?.landFailure).toEqual({ reason: "This agent's copy of the workspace lost its link", code: "unlinked", at: expect.any(Number) });
+
+        // A measure that holds the work on its branch says nothing of whether a land would now go through.
+        const repos = [{ repo: "root", base: "a".repeat(40) }];
+        await registry.recordLanded("c1", { landed: false, held: true, changed: true, repos, diff: { files: 1, insertions: 1, deletions: 0 }, adjudicated: false });
+        expect(store.saved().find((entry) => entry.id === "c1")?.landing.failure?.code).toBe("unlinked");
+
+        await registry.recordLanded("c1", {
+            landed: true,
+            changed: true,
+            repos: [{ repo: "root", base: "a".repeat(40), landedTip: "b".repeat(40) }],
+            diff: { files: 1, insertions: 1, deletions: 0 },
+            adjudicated: true,
+        });
+        expect(registry.get("c1")?.landFailure).toBeUndefined();
+        expect(store.saved().find((entry) => entry.id === "c1")?.landing.failure).toBeUndefined();
+    });
+
+    // The end-of-turn check measures held work without landing it: one that could not read the books once (an
+    // index.lock) stood on the card as a broken land until somebody landed by hand, though every later check read fine.
+    it("a check that broke is cleared by a later check that reads the books, and never outranks a land's own failure", async () => {
+        const store = memoryStore();
+        const { agents: registry, conversations } = createFleet(store, standings(), presences());
+        await registry.init();
+        await beginTurn(conversations, turn(), 1_000);
+        await registry.recordWorktree("c1", [{ repo: "root", base: "a".repeat(40) }]);
+
+        await registry.recordLandFailure("c1", { reason: "Unable to create '.git/index.lock': File exists.", check: true });
+        expect(registry.get("c1")?.landFailure).toEqual({ reason: "Unable to create '.git/index.lock': File exists.", at: expect.any(Number) });
+        await registry.clearCheckFailure("c1");
+        expect(registry.get("c1")?.landFailure).toBeUndefined();
+        expect(store.saved().find((entry) => entry.id === "c1")?.landing.failure).toBeUndefined();
+
+        // A land's own failure stands through a check that breaks after it, and through one that reads fine.
+        await registry.recordLandFailure("c1", { reason: "fatal: bad object 3e03077" });
+        await registry.recordLandFailure("c1", { reason: "Unable to create '.git/index.lock': File exists.", check: true });
+        await registry.clearCheckFailure("c1");
+        expect(registry.get("c1")?.landFailure).toEqual({ reason: "fatal: bad object 3e03077", at: expect.any(Number) });
+    });
+
+    it("a refused land retires the break before it: the refusal is its own report", async () => {
+        const store = memoryStore();
+        const { agents: registry, conversations } = createFleet(store, standings(), presences());
+        await registry.init();
+        await beginTurn(conversations, turn(), 1_000);
+        await registry.recordWorktree("c1", [{ repo: "root", base: "a".repeat(40) }]);
+        await registry.recordLandFailure("c1", { reason: "fatal: bad object 3e03077" });
+        await registry.recordLanded("c1", {
+            landed: false,
+            changed: true,
+            repos: [{ repo: "root", base: "a".repeat(40) }],
+            diff: { files: 1, insertions: 1, deletions: 0 },
+            adjudicated: true,
+            conflicts: [{ repo: "root", paths: [{ path: "app.ts", reason: "diverged" }], clean: 0 }],
+        });
+        expect(store.saved().find((entry) => entry.id === "c1")?.landing.failure).toBeUndefined();
+    });
+
+    it("the oldest permission a running turn waits on rides the card with its line, and leaves with its release", async () => {
+        const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
+        await registry.init();
+        await beginTurn(conversations, turn(), 1_000);
+        conversations.send("c1", { kind: "frame", frame: { kind: "question", requestId: "q1", questions: [] } });
+        expect(registry.get("c1")?.permissionAsk).toBeUndefined();
+        conversations.send("c1", { kind: "frame", frame: { kind: "permission", requestId: "perm1", toolName: "Bash", title: "Run `pnpm build`?" } });
+        conversations.send("c1", { kind: "frame", frame: { kind: "permission", requestId: "perm2", toolName: "WebFetch" } });
+        expect(registry.get("c1")?.permissionAsk).toEqual({ requestId: "perm1", ask: "Run `pnpm build`?" });
+        conversations.send("c1", { kind: "frame", frame: { kind: "resolved", requestId: "perm1" } });
+        expect(registry.get("c1")?.permissionAsk).toEqual({ requestId: "perm2", ask: "WebFetch" });
+        conversations.send("c1", { kind: "frame", frame: { kind: "resolved", requestId: "perm2" } });
+        expect(registry.get("c1")?.permissionAsk).toBeUndefined();
+    });
+
+    // The probe names who took landed work out (landed-presence.ts); the card names an agent by its title, and the
+    // record keeps the name across a restart until a reading finds nothing missing.
+    it("who took landed work out rides the card, an agent by its title, and is kept on the record while it stands", async () => {
+        const store = memoryStore();
+        const probe = presences();
+        const { agents: registry, conversations } = createFleet(store, standings(), probe);
+        await registry.init();
+        await beginTurn(conversations, turn({ conversationId: "orch", isolated: false, title: "Orchestrator" }), 500);
+        await beginTurn(conversations, turn(), 1_000);
+        await registry.recordWorktree("c1", [{ repo: "root", base: "a".repeat(40) }]);
+        probe.set("c1", { landed: 2, present: 0, removedBy: { kind: "agent", id: "orch" } });
+        await registry.refreshStandings();
+        // A main-tree conversation whose turn runs is who the probe may name; a worktree one never takes work out by hand.
+        expect(probe.active()).toEqual([{ kind: "agent", id: "orch" }]);
+        expect(registry.get("c1")?.landedPresence).toEqual({ landed: 2, present: 0, removedBy: { kind: "agent", id: "orch", title: "Orchestrator" } });
+        expect(store.saved().find((entry) => entry.id === "c1")?.landing.removedBy).toEqual({ kind: "agent", id: "orch" });
+
+        probe.set("c1", undefined);
+        await registry.refreshStandings();
+        expect(registry.get("c1")?.landedPresence).toBeUndefined();
+        expect(store.saved().find((entry) => entry.id === "c1")?.landing.removedBy).toBeUndefined();
+    });
+
+    it("a person throwing changes away is handed to the probe as it happens", () => {
+        const probe = presences();
+        const { agents: registry } = createFleet(memoryStore(), standings(), probe);
+        registry.noteRemover({ kind: "person", email: "me@example.com" });
+        expect(probe.noted()).toEqual([{ kind: "person", email: "me@example.com" }]);
     });
 
     // Every surface that explains a conflict (standing, review, the resolve action) reads off the stored report; a

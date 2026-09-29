@@ -19,7 +19,6 @@ import {
 } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { useWorkspaceTabs } from "../tabs/useWorkspaceTabs";
-import { plural } from "@intentic/base/format";
 import { computed, ref, watch } from "vue";
 import ProviderLogo from "../../chat/accounts/ProviderLogo.vue";
 import HoverCard from "../../../components/HoverCard.vue";
@@ -113,7 +112,7 @@ const { mobile } = useDevice();
 const layout = useLayout();
 
 // A phone keyboard has no Ctrl, so the shortcut hint moves to the button label instead.
-const commitPlaceholder = computed(() => (mobile.value ? `Message` : `Message (Ctrl+Enter to commit)`));
+const commitPlaceholder = computed(() => (mobile.value ? t(`workspace.reviewPanel.message`) : t(`workspace.reviewPanel.messageCtrlEnter`)));
 
 const legend = computed(() => summarizeOrigins(scannable.value));
 // Seeded from the standing ask (namedAfter), so reopening the panel restores the filter; "you" never travels,
@@ -143,7 +142,7 @@ const agentOf = (id: string) => fleet.value.find((agent) => agent.id === id);
 const originOf = (id: string) => changes.originAgents.value[id];
 // Undefined for the id-shaped fallback — readable, but not fit to use as a commit subject.
 const originTitle = (id: string): string | undefined => agentOf(id)?.title ?? originOf(id)?.title;
-const originLabel = (id: string): string => originTitle(id) ?? `Agent ${id.slice(0, 6)}`;
+const originLabel = (id: string): string => originTitle(id) ?? t(`workspace.reviewPanel.agentId`, { id: id.slice(0, 6) });
 const originProvider = (id: string): string | undefined => agentOf(id)?.provider ?? originOf(id)?.provider;
 
 // Whether a chip's count is a total (session stopped) or an instalment (still running), read from the fleet's
@@ -243,9 +242,25 @@ const showOrigins = (event: MouseEvent, ids: readonly string[]): void => {
 // The name rides the row only once the panel is wide enough to hold it without evicting the path (or on mobile).
 const wide = computed(() => mobile.value || layout.sidebarWidth.value >= 320);
 
+// An origin chip's spoken name: what a press does, whose files and how many, whether the session is still going, and
+// what the chip says about the commit message. Whole clauses, joined by punctuation, so none is a fragment of another.
+const originChipLabel = (id: string, files: number): string => {
+    const values = { origin: originLabel(id), count: files };
+    const press =
+        originFilter.value === id ? t(`workspace.reviewPanel.clearFilterOn`, values, files) : t(`workspace.reviewPanel.showOnly`, values, files);
+    const mark = originMark(id)?.label.toLowerCase();
+    const note = originDrafting(id)
+        ? t(`workspace.reviewPanel.messageBeingWritten`)
+        : originTitle(id) === undefined
+          ? undefined
+          : t(`workspace.reviewPanel.namesTheCommit`);
+    const head = mark === undefined ? press : `${press}, ${mark}`;
+    return note === undefined ? head : `${head}; ${note}`;
+};
+
 // The lit chip in words, for every sentence naming the filter's scope; undefined means no filter, not "nobody".
 const filterLabel = computed<string | undefined>(() =>
-    originFilter.value === undefined ? undefined : originFilter.value === YOURS ? `you` : originLabel(originFilter.value),
+    originFilter.value === undefined ? undefined : originFilter.value === YOURS ? t(`workspace.reviewPanel.you`) : originLabel(originFilter.value),
 );
 
 // States why the box didn't change after a click: still writing, none written, "you" has none, or the box
@@ -540,12 +555,14 @@ const commitReady = computed(
 // none.
 const commitLabel = computed(() =>
     commitAll.value
-        ? `Commit all`
+        ? t(`workspace.reviewPanel.commitAll`)
         : commitFiles.value === 0
-          ? `Commit`
+          ? t(`workspace.reviewPanel.commit`)
           : commitCountable.value
-            ? `Commit ${plural(commitFiles.value, `file`)}`
-            : `Commit everything from ${filterLabel.value ?? `this filter`}`,
+            ? t(`workspace.reviewPanel.commitFiles`, { count: commitFiles.value }, commitFiles.value)
+            : filterLabel.value === undefined
+              ? t(`workspace.reviewPanel.commitEverythingInFilter`)
+              : t(`workspace.reviewPanel.commitEverythingFrom`, { origin: filterLabel.value }),
 );
 
 // The commit button's hover: what the press will record, and the chord that presses it from the box. Nothing while it
@@ -629,20 +646,20 @@ const runCommit = async (target: readonly RepoTarget[]): Promise<void> => {
 // three reasons applied instead.
 const commitBlocker = computed<string | undefined>(() => {
     if (blockedByConflicts.value) {
-        return `Resolve the conflicts first: git cannot commit while a path is unmerged.`;
+        return t(`workspace.reviewPanel.blockedByConflicts`);
     }
     // Checked ahead of "nothing to commit": mid-commit the rows are still listed, so this is the honest reason, not a
     // count about to change.
     if (commitRunning.value) {
-        return `Still committing ${committingNow.value.join(`, `)}. This finishes on its own.`;
+        return t(`workspace.reviewPanel.stillCommitting`, { repos: committingNow.value.join(`, `) });
     }
     if (commitTarget.value.length === 0) {
-        return `Nothing to commit.`;
+        return t(`workspace.reviewPanel.nothingToCommit`);
     }
     if (commitMessage.value.trim().length === 0) {
-        return `Write a commit message first.`;
+        return t(`workspace.reviewPanel.writeMessageFirst`);
     }
-    return changes.actionBusy.value ? `Another git action is still running.` : undefined;
+    return changes.actionBusy.value ? t(`workspace.reviewPanel.anotherGitAction`) : undefined;
 });
 // Shown after a rejected Ctrl+Enter; cleared on the next edit, so it never outlives what it described.
 const blockerNotice = ref<string | undefined>(undefined);
@@ -681,29 +698,31 @@ const changesOn = (repo: RepoChanges, side: GitDiffSide): readonly GitChange[] =
 
 // What the inward/outward index move is called, per side: a conflict says "resolve", not "stage" — `git add`
 // on an unmerged path settles a merge, it doesn't put a change in the index.
-const INDEX_VERB: Record<GitDiffSide, { readonly one: string; readonly all: string; readonly icon: "plus" | "minus" | "check" }> = {
-    conflicted: { one: `Mark resolved`, all: `Resolve all`, icon: `check` },
-    unstaged: { one: `Stage`, all: `Stage all`, icon: `plus` },
-    staged: { one: `Unstage`, all: `Unstage all`, icon: `minus` },
-};
+const INDEX_VERB = computed<Record<GitDiffSide, { readonly one: string; readonly all: string; readonly icon: "plus" | "minus" | "check" }>>(() => ({
+    conflicted: { one: t(`workspace.reviewPanel.markResolved`), all: t(`workspace.reviewPanel.resolveAll`), icon: `check` },
+    unstaged: { one: t(`workspace.reviewPanel.stage`), all: t(`workspace.reviewPanel.stageAll`), icon: `plus` },
+    staged: { one: t(`workspace.reviewPanel.unstage`), all: t(`workspace.reviewPanel.unstageAll`), icon: `minus` },
+}));
 
 // Names whose files it moves, under a filter — the button no longer means "this whole side". Drops the
 // count wherever the daemon truncated, since a fraction is a worse promise than none.
 const sideVerbHint = (repo: RepoChanges, side: GitDiffSide): string => {
-    if (filterLabel.value === undefined) {
-        return INDEX_VERB[side].all;
+    const verb = INDEX_VERB.value[side].all;
+    const origin = filterLabel.value;
+    if (origin === undefined) {
+        return verb;
     }
-    const whose = `from ${filterLabel.value}`;
+    const count = changesOn(repo, side).length;
     return truncatedOn(repo, side) > 0
-        ? `${INDEX_VERB[side].all}, every file ${whose}`
-        : `${INDEX_VERB[side].all}, ${plural(changesOn(repo, side).length, `file`)} ${whose}`;
+        ? t(`workspace.reviewPanel.verbEveryFileFrom`, { verb, origin })
+        : t(`workspace.reviewPanel.verbFilesFrom`, { verb, count, origin }, count);
 };
 // The same verb on hover: the bare verb unfiltered, or a card naming whose files it moves and how many.
 const sideVerbTip = (repo: RepoChanges, side: GitDiffSide): TooltipValue =>
     filterLabel.value === undefined
-        ? INDEX_VERB[side].all
+        ? INDEX_VERB.value[side].all
         : {
-              title: INDEX_VERB[side].all,
+              title: INDEX_VERB.value[side].all,
               rows: [
                   { label: t(`workspace.reviewPanel.from`), value: filterLabel.value },
                   { label: t(`shared.files`), value: truncatedOn(repo, side) > 0 ? `` : changesOn(repo, side).length },
@@ -748,8 +767,8 @@ const rowMenuItems = computed<MenuItem[]>(() => {
         multi,
         paths: paths.length,
         sameSide: actingRows(row, true).length,
-        indexVerb: INDEX_VERB[row.side].one,
-        indexIcon: INDEX_VERB[row.side].icon,
+        indexVerb: INDEX_VERB.value[row.side].one,
+        indexIcon: INDEX_VERB.value[row.side].icon,
         deleted: change.status === `deleted`,
         // Any acting row in a nested repo: a root repo's paths are already workspace paths.
         nested: all.some((candidate) => candidate.repo !== `root`),
@@ -784,8 +803,9 @@ const openRowMenu = (event: MouseEvent, row: Row, change: GitChange): void => {
 // A modal confirm, like every other destructive git action here. The target is resolved when the user arms
 // it, so the prompt's wording and the action can never disagree with a poll landing in between.
 interface DiscardTarget {
-    // The heading's object: "every uncommitted change in intentic", "3 selected files", a single path.
-    readonly what: string;
+    // The whole heading, one message per scope ("Discard every uncommitted change in intentic?", "Discard 3 selected
+    // files?"), so a translation words each question itself instead of wrapping an English phrase.
+    readonly question: string;
     // Untracked paths are deleted, not reverted: git holds no copy of them, so this is the one part not recoverable
     // from git.
     readonly deletes: readonly string[];
@@ -816,13 +836,33 @@ const askDiscardRow = (row: Row, change: GitChange): void => {
     // `byRepo` already deduped a path selected on both sides, so this counts worktree paths, not rows.
     const paths = groups.reduce((total, group) => total + (group.paths?.length ?? 0), 0);
     pendingDiscard.value = {
-        what: paths > 1 ? `${paths} selected files` : changeLabel(row.repo, change),
+        question:
+            paths > 1
+                ? t(`workspace.reviewPanel.discardSelected`, { count: paths }, paths)
+                : t(`workspace.reviewPanel.discard3`, { what: changeLabel(row.repo, change) }),
         deletes,
         restores: paths - deletes.length,
         // A selection is exactly as long as the rows clicked, so it's never a floor.
         partial: false,
         groups,
     };
+};
+
+// A repo-wide discard's question: everything, or the filtered origin's files (yours, or an agent's), counted unless
+// truncation hides some.
+const discardRepoQuestion = (repo: string, files: number, partial: boolean): string => {
+    const origin = filterLabel.value;
+    if (origin === undefined) {
+        return t(`workspace.reviewPanel.discardEveryChange`, { repo });
+    }
+    if (originFilter.value === YOURS) {
+        return partial
+            ? t(`workspace.reviewPanel.discardEveryFileOfYours`, { repo })
+            : t(`workspace.reviewPanel.discardFilesOfYours`, { count: files, repo }, files);
+    }
+    return partial
+        ? t(`workspace.reviewPanel.discardEveryFileFrom`, { origin, repo })
+        : t(`workspace.reviewPanel.discardFilesFrom`, { count: files, origin, repo }, files);
 };
 
 // Narrows to the filtered origin's files under a filter — the row it hangs off is showing that subset only.
@@ -834,12 +874,7 @@ const askDiscardRepo = (repo: RepoChanges): void => {
     const deletes = repo.unstaged.filter((change) => change.status === `added` && paths.has(change.path)).map((change) => change.path);
     const partial = truncatedTotal(repo) > 0;
     pendingDiscard.value = {
-        what:
-            filterLabel.value === undefined
-                ? `every uncommitted change in ${repo.repo}`
-                : partial
-                  ? `every file from ${filterLabel.value} in ${repo.repo}`
-                  : `${plural(paths.size, `file`)} from ${filterLabel.value} in ${repo.repo}`,
+        question: discardRepoQuestion(repo.repo, paths.size, partial),
         deletes,
         restores: paths.size - deletes.length,
         partial,
@@ -881,41 +916,49 @@ const syncVerb = computed<"push" | "pull" | "sync" | "publish" | undefined>(() =
 });
 // Icons match the row pills (↑ push, ↓ pull), so the bar and the rows read as one language.
 // The button's hover (`syncTip`) adds what the label can't: which repos, and the replay caveat when pulling.
+// `running` is the word the status line says while the verb is in flight.
 const SYNC_VERB = computed<
     Record<
         "push" | "pull" | "sync" | "publish",
-        { readonly label: string; readonly icon: "arrow-up-right" | "arrow-down-left" | "sync" | "cloud-upload" }
+        { readonly label: string; readonly running: string; readonly icon: "arrow-up-right" | "arrow-down-left" | "sync" | "cloud-upload" }
     >
 >(() => ({
-    push: { label: words.value.push, icon: `arrow-up-right` },
-    pull: { label: t(`workspace.reviewPanel.pull`), icon: `arrow-down-left` },
-    sync: { label: words.value.sync, icon: `sync` },
-    publish: { label: words.value.publish, icon: `cloud-upload` },
+    push: { label: words.value.push, running: words.value.pushing, icon: `arrow-up-right` },
+    pull: { label: t(`workspace.reviewPanel.pull`), running: t(`workspace.reviewPanel.pulling`), icon: `arrow-down-left` },
+    sync: { label: words.value.sync, running: words.value.syncing, icon: `sync` },
+    publish: { label: words.value.publish, running: words.value.publishing, icon: `cloud-upload` },
 }));
 const syncMeta = computed(() => (syncVerb.value === undefined ? undefined : SYNC_VERB.value[syncVerb.value]));
 // Counts plus the repo spread when more than one is in play; a pure publish has nothing to count.
 const syncSummary = computed<string>(() => {
     const counts = [...(behindTotal.value > 0 ? [`↓${behindTotal.value}`] : []), ...(aheadTotal.value > 0 ? [`↑${aheadTotal.value}`] : [])];
-    const spread = syncRepos.value.length > 1 ? ` · ${plural(syncRepos.value.length, `repo`)}` : ``;
+    const spread = syncRepos.value.length > 1 ? t(`workspace.reviewPanel.repos`, { count: syncRepos.value.length }, syncRepos.value.length) : ``;
     return (counts.length > 0 ? counts.join(` `) : t(`workspace.reviewPanel.noUpstreamYet`)) + spread;
 });
-const syncRepoSpread = computed(() => (syncRepos.value.length > 1 ? plural(syncRepos.value.length, `repo`) : undefined));
+const syncRepoSpread = computed(() =>
+    syncRepos.value.length > 1 ? t(`workspace.reviewPanel.repoCount`, { count: syncRepos.value.length }, syncRepos.value.length) : undefined,
+);
 // Every push funnels through `pushFlow.askSync` (the bar and both row pills), the one place a refusal becomes a
 // question, which is also why useChanges exports no one-repo push.
 
 // One line, the width this ~270px panel can spend on status.
 const stageLine = computed<string | undefined>(() => {
     if (pushFlow.running.value) {
-        return `${pushFlow.pending.value?.verb ?? `Push`}ing · ${formatElapsed(pushFlow.since.value, now.value)}`;
+        // The run carries the label it was asked with; the verb that label belongs to says its running word.
+        const verb = pushFlow.pending.value?.verb;
+        const running = Object.values(SYNC_VERB.value).find((entry) => entry.label === verb)?.running ?? SYNC_VERB.value.push.running;
+        return t(`workspace.reviewPanel.runningFor`, { running, elapsed: formatElapsed(pushFlow.since.value, now.value) });
     }
     const sent = pushFlow.pushed.value;
-    return sent === undefined ? undefined : `Pushed ${sent.what}`;
+    return sent === undefined ? undefined : t(`workspace.reviewPanel.pushedWhat`, { what: sent.what });
 });
 
 // The one fact the line has no room for: what is going out, spelled out on a phone, which has no hover. Undefined once
 // nothing is in flight.
 const stageHint = computed<string | undefined>(() =>
-    pushFlow.running.value ? `Sending ${pushFlow.pending.value?.what ?? `your commits`} to the remote` : undefined,
+    pushFlow.running.value
+        ? t(`workspace.reviewPanel.sendingWhat`, { what: pushFlow.pending.value?.what ?? t(`workspace.reviewPanel.yourCommits`) })
+        : undefined,
 );
 
 /* Closing a card hides its question but does not change the verdict. */
@@ -993,11 +1036,20 @@ const fetchTip = computed((): Tip => ({
 // Deliberately no rules of its own: the view header above already draws the one line this column gets. Blocks
 // are told apart by their own padding; a control with its own edge (the field, the button) carries what a rule would
 // have.
+// What a sync sends, named in "Pushed …" and "Sending … to the remote": the commits (or the branch), and across how many
+// repos. A noun phrase, which each language's sentence around it takes whole.
+const syncWhat = (): string => {
+    const commits =
+        aheadTotal.value > 0 ? t(`workspace.reviewPanel.commitCount`, { count: aheadTotal.value }, aheadTotal.value) : t(`workspace.reviewPanel.thisBranch`);
+    const spread = syncRepos.value.length;
+    return spread > 1 ? t(`workspace.reviewPanel.whatAcrossRepos`, { what: commits, count: spread }, spread) : commits;
+};
+
 // One click, every repo with remote work: git can't span remotes, so this fans out into one real sync per repo.
 const doSync = (): void =>
     pushFlow.askSync(
-        syncMeta.value?.label ?? `Sync`,
-        `${aheadTotal.value > 0 ? plural(aheadTotal.value, `commit`) : `this branch`}${syncRepos.value.length > 1 ? ` across ${plural(syncRepos.value.length, `repo`)}` : ``}`,
+        syncMeta.value?.label ?? words.value.sync,
+        syncWhat(),
         syncRepos.value.map((repo) => ({ repo: repo.repo, pull: behind(repo) > 0, push: ahead(repo) > 0 || unpublished(repo) })),
     );
 
@@ -1128,7 +1180,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                 <span v-else class="min-w-0 flex-1 truncate whitespace-nowrap text-2xs text-muted">
                     <template v-if="changes.stagedCount.value > 0"
                         >{{ changes.stagedCount.value }} {{ t(`workspace.reviewPanel.staged`)
-                        }}<span v-if="stagedRepos.length > 1">{{ t(`workspace.reviewPanel.repos`, { count: stagedRepos.length }) }}</span></template
+                        }}<span v-if="stagedRepos.length > 1">{{ t(`workspace.reviewPanel.repos`, { count: stagedRepos.length }, stagedRepos.length) }}</span></template
                     >
                     <template v-else>{{ t(`workspace.reviewPanel.nothingStaged`) }}</template>
                 </span>
@@ -1352,9 +1404,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                 @click="toggleOrigin(entry.id)"
                 @mouseenter="showOrigins($event, [entry.id])"
                 @mouseleave="hoverCard?.hide()"
-                :aria-label="`${originFilter === entry.id ? `Clear the filter on` : `Show only`} ${originLabel(entry.id)}, ${plural(entry.files, `file`)}${
-                    originMark(entry.id) ? `, ${originMark(entry.id)!.label.toLowerCase()}` : ``
-                }${originDrafting(entry.id) ? `; its commit message is being written` : originTitle(entry.id) ? `; names the commit` : ``}`"
+                :aria-label="originChipLabel(entry.id, entry.files)"
             >
                 <!-- A dot before the logo means the session hasn't finished — its count above is an instalment, not a total. -->
                 <span v-if="originMark(entry.id)" class="h-1.5 w-1.5 shrink-0 rounded-full" :class="originMark(entry.id)!.dot"></span>
@@ -1688,7 +1738,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
             @update:open="pendingDiscard = undefined"
         >
             <template v-if="pendingDiscard">
-                <p class="break-words text-xs text-content">{{ t(`workspace.reviewPanel.discard3`, { what: pendingDiscard.what }) }}</p>
+                <p class="break-words text-xs text-content">{{ pendingDiscard.question }}</p>
                 <!-- The counts are a floor when daemon truncation hides additional files. -->
                 <p v-if="pendingDiscard.partial" class="mt-2 text-xs text-warning">
                     {{ t(`workspace.reviewPanel.moreFilesPendingHere`) }}

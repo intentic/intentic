@@ -8,6 +8,7 @@ import { presenceOf } from "./agent-changes.js";
 import { commitWorktreeRemainder } from "../../git/remote/root-repo.js";
 import type { Upstream } from "./land-target.js";
 import type { AgentWorktrees } from "../worktrees/worktrees.js";
+import { assertLinked } from "../worktrees/checkout-link.js";
 
 // Rebases a conversation's branch onto main's HEAD before each turn and again before land; a refused rebase retries
 // with `--onto main landedTip`, replaying only commits main does not already hold. Touches only this conversation's own
@@ -197,6 +198,8 @@ export const syncConversation = async (
     if (upstream.kind === "none") {
         return [];
     }
+    // A checkout that stopped sharing main's objects would make every range below a raw `bad object`.
+    await assertLinked(worktrees, id, repos);
     const results = await Promise.all(
         repos.map((composed) =>
             upstream.kind === "parent"

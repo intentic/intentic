@@ -1274,11 +1274,14 @@ test("environment: lower roles read state, maintainers approve/reject, and failu
     );
     const seen = await memberApp.request("/environment");
     expect(seen.status).toBe(200);
-    expect(await seen.json()).toEqual({ proposal: { content: proposal, hash } });
+    expect(await seen.json()).toEqual({ proposal: { content: proposal, hash }, waitsForAgents: true });
     const approveDenied = await postJson(memberApp, "/environment/approve", { hash });
     expect(approveDenied.status).toBe(403);
     expect(await approveDenied.json()).toEqual({ error: "maintainer access required", floor: "maintainer" });
     expect((await postJson(memberApp, "/environment/reject")).status).toBe(403);
+    expect((await postJson(memberApp, "/environment/remove", { block: "" })).status).toBe(403);
+    expect((await postJson(memberApp, "/environment/rebuild-when-idle", { host: "rog", hash })).status).toBe(403);
+    expect((await memberApp.request("/environment/rebuild-when-idle", { method: "DELETE" })).status).toBe(403);
 
     // Loopback (no auth) is the owner, like every other route.
     const ownerApp = createApp(services({ files: memoryFiles }));
@@ -1288,11 +1291,30 @@ test("environment: lower roles read state, maintainers approve/reject, and failu
     expect(approved.status).toBe(200);
     // Approve stores the custom section verbatim and returns the daemon-composed approved artifact.
     const state = (await approved.json()) as { proposal: unknown; custom: unknown; approved?: { content: string; hash: string } };
-    expect(state.proposal).toEqual({ content: proposal, hash });
+    // Once approved it proposes nothing the custom section lacks, so it no longer reads as a decision waiting.
+    expect(state.proposal).toBeUndefined();
     expect(state.custom).toEqual({ content: proposal, hash });
     expect(state.approved?.content).toContain("FROM ghcr.io/intentic/sandbox:stable");
     expect(state.approved?.content).toContain(proposal.trim());
     expect(state.approved?.hash).toBe(sha256Hex(state.approved?.content ?? ""));
+
+    // A rebuild waiting for idle agents names the device and the overlay; a sandbox no device knows by name has none to
+    // wait for, and withdrawing when nothing waits is a no-op.
+    expect((await postJson(ownerApp, "/environment/rebuild-when-idle", { host: "rog" })).status).toBe(400);
+    expect((await postJson(ownerApp, "/environment/rebuild-when-idle", { host: "rog", hash })).status).toBe(409);
+    const withdrawn = await ownerApp.request("/environment/rebuild-when-idle", { method: "DELETE" });
+    expect(withdrawn.status).toBe(200);
+    // SAFETY: every environment route answers the Environment schema; only the field under test is read.
+    expect(((await withdrawn.json()) as { rebuildWhenIdle?: unknown }).rebuildWhenIdle).toBeUndefined();
+
+    // Remove names the block it takes out; the unnamed section an older release wrote is the block "".
+    expect((await postJson(ownerApp, "/environment/remove")).status).toBe(400);
+    expect((await postJson(ownerApp, "/environment/remove", { block: "zcode" })).status).toBe(404);
+    const removed = await postJson(ownerApp, "/environment/remove", { block: "" });
+    expect(removed.status).toBe(200);
+    // SAFETY: every environment route answers the Environment schema; only the field under test is read.
+    expect(((await removed.json()) as { custom?: { content: string } }).custom?.content).toBe("");
+    disk.set(`${WORKSPACE_ROOT}/${STATE_DIR}/config/environment.Dockerfile`, proposal);
 
     // Reject deletes the proposal; approving with nothing proposed is a 404.
     expect((await postJson(ownerApp, "/environment/reject")).status).toBe(200);

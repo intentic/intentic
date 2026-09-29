@@ -16,7 +16,7 @@ import {
     useOsPreference,
 } from "@intentic/ui";
 import { sandboxSubdomain } from "@intentic/sandbox-contract";
-import { computed, onMounted, onUnmounted, ref, watch, type WatchStopHandle } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch, type WatchStopHandle } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import { SANDBOX } from "../../../shell/commands/categories";
 import { commandShortcut, registerCommand } from "../../../shell/commands/useCommands";
@@ -39,6 +39,9 @@ import { useWorkspaceTree } from "../../workspace/explorer/useWorkspaceTree";
 import { manageDeviceSandbox, useHostRunning } from "../devices/useDevices";
 import HostedRollbackDialog from "../overview/version/HostedRollbackDialog.vue";
 import { bashCommand, psCommand } from "../../../app/environments/scriptCommand";
+import { homeViewId, PROJECTS_VIEW_ID } from "../../../core-views/registry";
+import { useEndpoint } from "../secrets/useEndpoint";
+import { addChoices, removalTakes } from "./switcherRows";
 import { useT } from "@intentic/ui/i18n";
 
 // Rail control to switch between the user's sandboxes or add another; selecting one re-points every sandbox-backed
@@ -168,8 +171,31 @@ const dismiss = (event: MouseEvent): void => {
     }
 };
 
+// A row that points at a control rather than a page (`/sandbox#sandbox-update-action`, the update's own button) is an
+// action: its link alone does nothing while that page is already open, which is where the reader clicked it five times.
+// So once the page is there, the control is scrolled to and focused. Ctrl/⌘-click still just opens the tab.
+const followRow = async (event: MouseEvent, to: string): Promise<void> => {
+    dismiss(event);
+    const anchor = to.split(`#`)[1];
+    if (anchor === undefined || browserOwnsClick(event)) {
+        return;
+    }
+    await router.push(to);
+    await nextTick();
+    const target = document.getElementById(anchor);
+    target?.scrollIntoView({ block: `center`, behavior: `smooth` });
+    target?.querySelector<HTMLElement>(`button:not([disabled])`)?.focus({ preventScroll: true });
+};
+
 // Resumes this row's setup rather than offering a blank create form.
 const resumeSetup = (option: SandboxSummary) => ({ path: `/setup`, query: { sandbox: option.id } });
+
+// What "add" offers (switcherRows.ts): a project or folder first while the owner's active sandbox runs on this very
+// computer, which only the loopback shortcut proves; another sandbox is the quieter row under it.
+const { usingLocal } = useEndpoint();
+const adds = computed(() =>
+    addChoices({ runsHere: usingLocal.value && sandbox.active.value?.role === `owner`, projectsHome: homeViewId() === PROJECTS_VIEW_ID }),
+);
 
 // Alt+1…9 picks the Nth switchable sandbox; a digit past the end does nothing rather than clamping.
 const SWITCH_SLOTS = 9;
@@ -388,7 +414,7 @@ const confirmRemove = async (): Promise<void> => {
                     :key="item.message"
                     :to="item.to"
                     class="flex items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors hover:bg-content/5"
-                    @click="dismiss"
+                    @click="(event: MouseEvent) => followRow(event, item.to)"
                 >
                     <span class="flex h-5 w-5 shrink-0 items-center justify-center text-subtle">
                         <Icon :name="item.icon" class="text-xs" />
@@ -466,15 +492,22 @@ const confirmRemove = async (): Promise<void> => {
                 />
             </button>
 
+            <!-- One add, or two where this computer already runs the sandbox: the second is quieter and says why it differs. -->
             <RouterLink
-                to="/setup"
-                class="flex w-full items-center gap-2 rounded-md px-2 py-1 text-xs text-content transition-colors hover:bg-content/5"
+                v-for="add in adds"
+                :key="add.label"
+                :to="add.to"
+                class="flex w-full items-start gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors hover:bg-content/5"
+                :class="add.primary ? `text-content` : `text-muted`"
                 @click="dismiss"
             >
                 <span class="flex h-5 w-5 shrink-0 items-center justify-center">
-                    <Icon name="plus" class="text-base text-muted" />
+                    <Icon :name="add.primary ? `plus` : `server`" :class="add.primary ? `text-base text-muted` : `text-xs text-subtle`" />
                 </span>
-                {{ t(`sandbox.words.addSandbox`) }}
+                <span class="flex min-w-0 flex-1 flex-col self-center">
+                    <span>{{ add.label }}</span>
+                    <span v-if="add.note" class="text-2xs text-subtle">{{ add.note }}</span>
+                </span>
             </RouterLink>
 
             <!-- Setups that were never finished, as their own section below Add sandbox, since they're errands, not places to go. -->
@@ -539,6 +572,13 @@ const confirmRemove = async (): Promise<void> => {
                     : t(`sandbox.sandboxSwitcher.leaveLoseAccessSandbox`, { name: pending.name })
             }}
         </p>
+        <!-- What the reader set up lives in the sandbox, not the account, so it leaves with it (switcherRows.ts). -->
+        <template v-if="pending && removalTakes(pending.role).length > 0">
+            <p class="mt-2 text-sm text-content">{{ t(`sandbox.sandboxSwitcher.leavesWithIt`) }}</p>
+            <ul class="mt-1 list-disc pl-5 text-sm text-muted">
+                <li v-for="item in removalTakes(pending.role)" :key="item">{{ item }}</li>
+            </ul>
+        </template>
         <!-- The promise the deletion actually makes, on the owner's own rows only: a member leaving takes nothing
              with them, so there is nothing to bring back. The two lanes differ in what comes back — a hosted
              machine keeps its disk, an own-machine sandbox comes back as a name with a new address. -->

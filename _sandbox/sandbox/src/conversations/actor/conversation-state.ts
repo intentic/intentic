@@ -15,6 +15,8 @@ export type StopEnding = "stopped" | "dismissed";
 export interface ParkedCard {
     readonly requestId: string;
     readonly kind: ParkKind;
+    // A permission's one line, what the card can offer an answer to without the transcript (AgentSummary.permissionAsk).
+    readonly ask?: string;
 }
 
 // A live turn. Cards park only here, and each leaves by its own `resolved` frame, a stop, or the settle.

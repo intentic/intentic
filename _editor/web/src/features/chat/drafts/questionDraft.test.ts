@@ -2,7 +2,7 @@
 // card is settled or swept, and limited to what the live card would still accept.
 import "@intentic/testing/dom";
 import { freshImport } from "@intentic/testing/bun";
-import { clearQuestionDraft, type DraftQuestionShape, OTHER_LABEL, readQuestionDraft, writeQuestionDraft } from "./questionDraft";
+import { answerStarted, clearQuestionDraft, type DraftQuestionShape, OTHER_LABEL, readQuestionDraft, writeQuestionDraft } from "./questionDraft";
 
 beforeEach(() => {
     localStorage.clear();
@@ -61,4 +61,12 @@ it("forgets a pick whose option is no longer on the card", () => {
     writeQuestionDraft(`req-a`, { selections: { 0: [`MySQL`] }, otherTexts: {} });
 
     expect(readQuestionDraft(`req-a`, CARD)).toEqual({ selections: {}, otherTexts: {} });
+});
+
+// Dismiss asks first once an answer is under way: a pick, or words in a free-text row; an emptied row is no answer.
+it("counts a pick or typed words as an answer started, and nothing else", () => {
+    expect(answerStarted({ selections: {}, otherTexts: {} })).toBe(false);
+    expect(answerStarted({ selections: { 0: [] }, otherTexts: { 1: `  ` } })).toBe(false);
+    expect(answerStarted({ selections: { 1: [`Yes`] }, otherTexts: {} })).toBe(true);
+    expect(answerStarted({ selections: {}, otherTexts: { 0: `the MIT one` } })).toBe(true);
 });

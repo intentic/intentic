@@ -2,7 +2,7 @@ import type { AgentEvent, AgentJob, AgentWatch, TurnProof } from "@intentic/sand
 import { isolatedAgent } from "../../testing.js";
 import type { JournalledTurn } from "../../agent/run/turn/turn-journal.js";
 import type { PersistedAgent } from "../registry/agents-store.js";
-import { type BeginTurn, type ConversationEffect, type ConversationEvent, decide, type SettleFlush } from "./conversation-decide.js";
+import { ASK_MAX_CHARS, type BeginTurn, type ConversationEffect, type ConversationEvent, decide, type SettleFlush } from "./conversation-decide.js";
 import { hold, joined, NO_QUEUE } from "./conversation-queue.js";
 import { type ConversationState, freshRuntime, idleConversation, NO_USAGE, type ParkedCard, type StopEnding } from "./conversation-state.js";
 
@@ -265,6 +265,35 @@ const rows: readonly Row[] = [
         effects: BROADCAST,
     },
     {
+        name: "a permission parks with its one line, the runtime's sentence on one line",
+        from: running(),
+        event: frame({ kind: "permission", requestId: "p-1", toolName: "Bash", displayName: "Run command", title: "Run\n  `rm -rf dist`?" }),
+        to: running({ parked: [{ requestId: "p-1", kind: "permission", ask: "Run `rm -rf dist`?" }] }, { lastAt: NOW }),
+        effects: BROADCAST,
+    },
+    {
+        name: "a permission with no sentence parks under its short phrase, else its bare tool name",
+        from: running({ parked: [{ requestId: "p-1", kind: "permission", ask: "Read file" }] }),
+        event: frame({ kind: "permission", requestId: "p-2", toolName: "WebFetch" }),
+        to: running(
+            {
+                parked: [
+                    { requestId: "p-1", kind: "permission", ask: "Read file" },
+                    { requestId: "p-2", kind: "permission", ask: "WebFetch" },
+                ],
+            },
+            { lastAt: NOW },
+        ),
+        effects: BROADCAST,
+    },
+    {
+        name: "a permission's line is cut to the card's length",
+        from: running(),
+        event: frame({ kind: "permission", requestId: "p-1", toolName: "Bash", title: "x".repeat(ASK_MAX_CHARS + 50) }),
+        to: running({ parked: [{ requestId: "p-1", kind: "permission", ask: `${"x".repeat(ASK_MAX_CHARS - 1)}…` }] }, { lastAt: NOW }),
+        effects: BROADCAST,
+    },
+    {
         name: "a card raised again under the same id replaces itself rather than parking twice",
         from: running({
             parked: [
@@ -408,6 +437,13 @@ const rows: readonly Row[] = [
         event: frame({ kind: "error", code: "provider-outage", message: "down", autoResume: "scheduled" }),
         to: running({}, { lastAt: NOW, resuming: true }),
         effects: [],
+    },
+    {
+        name: "a later failure that schedules nothing withdraws a promised re-run",
+        from: running({}, { resuming: true }),
+        event: frame(FAILED),
+        to: running({}, { lastAt: NOW, failure: { kind: "failed", failure: "the runtime died" } }),
+        effects: PROGRESS,
     },
     {
         name: "a spent allowance is a failure even when scheduled, with every limit field from the one frame",

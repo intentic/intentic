@@ -138,6 +138,7 @@ test("offers no way to edit the model, only the address of the one that does", (
 
     const link = host.querySelector<HTMLAnchorElement>(`a[href]`);
     expect(link?.textContent?.trim()).toBe(`Change in Models`);
-    // Models is the tab's default category, so its address carries no section param.
-    expect(link?.getAttribute(`href`)).toBe(`/sandbox/agent`);
+    // Models is the tab's default category, so its address carries no section param; it names the judge's job, so
+    // Models opens on that row rather than on a Simple view with no row for it.
+    expect(link?.getAttribute(`href`)).toBe(`/sandbox/agent?job=safety-judge`);
 });

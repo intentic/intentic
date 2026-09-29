@@ -23,6 +23,7 @@ import { conversations, setConversations } from "../tabs/useChat-tabs";
 import { loadProviderModels } from "../models/useChat-catalog";
 import { accountsOf } from "../accounts/useChat-accounts";
 import { track } from "../../../app/analytics";
+import { waitKindOf } from "./pane/pendingDecision";
 
 // The board's card for a conversation (useAgents.agentById), handed to a view by its pane so the facade stays clear of
 // the fleet store; a view handed none reads only what its own window saw.
@@ -44,6 +45,16 @@ const failureView = (conversation: ComputedRef<Conversation>, cardOf: CardOf | u
         return card?.failureCode === undefined ? undefined : { code: card.failureCode, text: card.failure };
     }),
 });
+
+// What the board's card says this chat waits on a person for (a question, a plan, a permission), known before this
+// window has drawn the card: what keeps the composer and the pinned bar from reading idle over an agent waiting on you.
+const waitingView = (conversation: ComputedRef<Conversation>, cardOf: CardOf | undefined) => {
+    const waitsOn = computed(() => {
+        const card = cardOf?.(conversation.value.conversationId);
+        return card === undefined ? undefined : waitKindOf(card);
+    });
+    return { waitsOn, waitingOnYou: computed(() => waitsOn.value !== undefined) };
+};
 
 // One conversation, as a panel binds it: the facade every chat surface renders through. Built per pane rather than over
 // `active`, since the floating window shows several conversations at once.
@@ -81,6 +92,7 @@ export const conversationView = (conversation: ComputedRef<Conversation>, cardOf
     queued: computed<readonly QueuedMessage[]>(() => conversation.value.queue.value?.items ?? []),
     queuePaused: computed(() => conversation.value.queue.value?.paused),
     ...failureView(conversation, cardOf),
+    ...waitingView(conversation, cardOf),
     steerable: computed(() => conversation.value.selection.steerable.value),
     // What this conversation's runtime can do, from the contract's declared record.
     capabilities: computed(() => conversation.value.selection.capabilities.value),

@@ -19,6 +19,7 @@ import { reachablePersonas } from "../../personas/persona-reach.js";
 import { autoOffer } from "../models/auto-offer.js";
 import type { RoleAnswer } from "../models/role-answer.js";
 import { askRoleModel } from "../models/role-model.js";
+import { RoleModelUnsetError } from "../../seams/role-model-unset.js";
 
 // What a new chat opens on, read once from the message it opens with: which persona handles it, and which model,
 // effort and account it runs on. Two questions, one classification each over a list this sandbox supplies, and ONE
@@ -324,6 +325,13 @@ const unread = (asked: Asked, why: string): Partial<Pick<ChatRoute, "persona" | 
     ...(asked.offer === undefined ? {} : { model: { reason: `Couldn't choose a model: ${why}` } }),
 });
 
+// New chat routing has no model set, which is how it is turned off. A chat nobody asked to route onto a persona hears
+// nothing about personas; one set to Auto is told which job picks its model, since it asked for exactly that.
+const routingOff = (asked: Asked): Partial<Pick<ChatRoute, "persona" | "model">> =>
+    asked.offer === undefined
+        ? {}
+        : { model: { reason: `Auto picks a model only when "New chat routing" has one in Sandbox ▸ Agent ▸ Models, so this chat keeps the model it had.` } };
+
 // Each half's own answer and what it still owes a model, from the lists this ask paid to have read.
 const halves = (
     ask: ChatRouteAsk,
@@ -365,6 +373,11 @@ export const routeChat = async (services: Services, ask: ChatRouteAsk, held: rea
         // Named whether or not anything was chosen: the reading was paid for either way, and the chat says so.
         return { ...settled, ...verdicts(answer.value, asked), judge: modelPinKey(answer.choice) };
     } catch (error: unknown) {
+        // Routing simply switched off (no model for the job) is a setting, not a failure: nothing is said about the
+        // persona, and the model half, asked for only by a chat set to Auto, gets a plain note naming the job.
+        if (error instanceof RoleModelUnsetError) {
+            return { ...settled, ...routingOff(asked) };
+        }
         services.logger.warn({ err: error }, "chat router: no answer, the chat keeps what it had");
         return { ...settled, ...unread(asked, errorMessage(error)) };
     }

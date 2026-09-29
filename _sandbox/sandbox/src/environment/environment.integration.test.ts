@@ -25,6 +25,7 @@ import {
     readEnvironment,
     rejectDraft,
     rejectEnvironment,
+    removeFromEnvironment,
     withoutRuntimeDirectives,
 } from "./environment.js";
 import { PROVIDER_MODULES } from "../runtimes/runtime-table.js";
@@ -137,7 +138,7 @@ test("propose → approve stores the custom section and recomposes; applied deri
 
     expect(await approveEnvironment(services, hash)).toBeUndefined();
     const state = await readEnvironment(services);
-    expect(state.proposal).toEqual({ content: CUSTOM, hash });
+    expect(state.proposal).toBeUndefined();
     expect(state.custom).toEqual({ content: CUSTOM, hash });
     // The approved file is the daemon-composed artifact: pinned base + the custom section verbatim (trimmed).
     expect(state.approved).toEqual(expect.any(Object));
@@ -307,6 +308,39 @@ test("a draft carries the already-approved custom section forward", async () => 
     expect(proposal?.content).toContain("ffmpeg");
 });
 
+test("a draft replaces its approved tool and an identical draft asks for no approval", async () => {
+    const services = stubServices();
+    const original = "# ---- zcode ----\nRUN install zcode-v1\n";
+    await services.files.write(proposalPath(services), original);
+    expect(await approveEnvironment(services, sha256Hex(original))).toBeUndefined();
+
+    await services.files.write(join(draftsDir(services), "zcode.Dockerfile"), "RUN install zcode-v1\n");
+    expect((await readEnvironment(services)).proposal).toBeUndefined();
+
+    await services.files.write(join(draftsDir(services), "zcode.Dockerfile"), "RUN install zcode-v2\n");
+    const proposal = (await readEnvironment(services)).proposal!;
+    expect(proposal.content).toBe("# ---- zcode ----\nRUN install zcode-v2\n");
+    expect(await approveEnvironment(services, proposal.hash)).toBeUndefined();
+    expect((await readEnvironment(services)).custom?.content).toBe(proposal.content);
+});
+
+test("approving an older proposal collapses repeated named blocks", async () => {
+    const services = stubServices();
+    const repeated = "# ---- zcode ----\nRUN install zcode\n\n# ---- zcode ----\nRUN install zcode\n";
+    await services.files.write(proposalPath(services), repeated);
+    expect(await approveEnvironment(services, sha256Hex(repeated))).toBeUndefined();
+    expect((await readEnvironment(services)).custom?.content).toBe("# ---- zcode ----\nRUN install zcode\n");
+});
+
+test("a stored repeated block is read but composed only once", async () => {
+    const services = stubServices();
+    const repeated = "# ---- zcode ----\nRUN install zcode\n\n# ---- zcode ----\nRUN install zcode\n";
+    await services.files.write(customPath(services), repeated);
+    await composeEnvironment(services);
+    expect((await readEnvironment(services)).custom?.content).toBe(repeated);
+    expect((await services.files.read(approvedPath(services)))?.match(/RUN install zcode/g)).toHaveLength(1);
+});
+
 test("approving clears the drafts, so the same request is not proposed forever", async () => {
     const services = stubServices();
     await services.files.write(join(draftsDir(services), "ffmpeg.Dockerfile"), "RUN apt-get install -y ffmpeg\n");
@@ -315,7 +349,7 @@ test("approving clears the drafts, so the same request is not proposed forever",
 
     const after = await readEnvironment(services);
     expect(after.custom?.content).toContain("ffmpeg");
-    expect(after.proposal?.content).toBe(proposal!.content);
+    expect(after.proposal).toBeUndefined();
     // The drafts are gone: a second approve finds nothing new to fold in.
     await services.files.write(customPath(services), "RUN true\n");
     const reread = await readEnvironment(services);
@@ -467,6 +501,44 @@ test("a proposed tool is filed as its own draft, approved alone into the custom 
     expect("hash" in approved ? approved.hash : undefined).toBe(sha256Hex(overlay ?? ""));
 });
 
+test("approving one tool's revised draft replaces its previous block", async () => {
+    const services = stubServices();
+    await services.files.write(customPath(services), "# ---- zcode ----\nRUN install zcode-v1\n");
+    await services.files.write(join(draftsDir(services), "zcode.Dockerfile"), "RUN install zcode-v2\n");
+    expect(await approveDraft(services, "zcode")).toEqual({ hash: expect.any(String) });
+    expect(await services.files.read(customPath(services))).toBe("# ---- zcode ----\nRUN install zcode-v2\n");
+});
+
+// The card approves by the name the agent said ("Rust Toolchain"); the block is named as its file names it, the name a
+// copy returning with a land is read by, so taking the tool out keeps it out.
+test("a tool approved under its spoken name is filed under its draft's name, and stays out once removed", async () => {
+    const services = stubServices();
+    const RUST = "RUN curl -fsSL https://sh.rustup.rs | sh -s -- -y";
+    await proposeDraft(services, "Rust Toolchain", RUST);
+    expect(await approveDraft(services, "Rust Toolchain")).toEqual({ hash: expect.any(String) });
+    expect(await services.files.read(customPath(services))).toBe(`# ---- rust-toolchain ----\n${RUST}\n`);
+
+    expect(await removeFromEnvironment(services, "rust-toolchain")).toBeUndefined();
+    // The agent's branch still carries its draft; the land brings it back, and it asks nothing.
+    await services.files.write(join(draftsDir(services), "rust-toolchain.Dockerfile"), `${RUST}\n`);
+    await readEnvironment(services);
+    expect(await services.files.read(proposalPath(services))).toBeUndefined();
+    expect(await services.files.read(join(draftsDir(services), "rust-toolchain.Dockerfile"))).toBeUndefined();
+});
+
+// A block approved before approvals were named by their file keeps its raw spelling; removing it settles the file's
+// name too.
+test("removing a block approved under a raw spelling keeps its draft's copy from coming back", async () => {
+    const services = stubServices();
+    const RUST = "RUN curl -fsSL https://sh.rustup.rs | sh -s -- -y";
+    await services.files.write(customPath(services), `# ---- Rust Toolchain ----\n${RUST}\n`);
+
+    expect(await removeFromEnvironment(services, "Rust Toolchain")).toBeUndefined();
+    await services.files.write(join(draftsDir(services), "rust-toolchain.Dockerfile"), `${RUST}\n`);
+    await readEnvironment(services);
+    expect(await services.files.read(proposalPath(services))).toBeUndefined();
+});
+
 test("a dropped tool's draft goes, and with no drafts left there is no proposal asking for nothing", async () => {
     const services = stubServices();
     await proposeDraft(services, "ffmpeg", FFMPEG);
@@ -501,4 +573,126 @@ test("a proposed apt install carries both cache mounts and leaves the lists alon
     // A draft filed before the rule (by hand, or by an older daemon) is still the owner's to approve.
     await services.files.write(join(draftsDir(services), "sox.Dockerfile"), "RUN apt-get install -y sox\n");
     expect(await approveDraft(services, "sox")).toEqual({ hash: expect.any(String) });
+});
+
+// E1: an owner who takes a tool out must not see it come back. Agents commit their drafts on their own branch, so every
+// land can carry a copy of one the owner already answered back into environment.d.
+test("removing an approved tool takes it out of the overlay, which then waits for a rebuild", async () => {
+    const services = stubServices();
+    await services.files.write(customPath(services), "# ---- zcode ----\nRUN install zcode\n\n# ---- ffmpeg ----\nRUN install ffmpeg\n");
+    const before = await composeEnvironment(services);
+    // The proposal an earlier approve left behind names zcode too; it must not come back as a decision.
+    await services.files.write(proposalPath(services), "# ---- zcode ----\nRUN install zcode\n\n# ---- ffmpeg ----\nRUN install ffmpeg\n");
+
+    expect(await removeFromEnvironment(services, "zcode")).toBeUndefined();
+
+    expect(await services.files.read(customPath(services))).toBe("# ---- ffmpeg ----\nRUN install ffmpeg\n");
+    const state = await readEnvironment(services);
+    expect(state.proposal).toBeUndefined();
+    expect(await services.files.read(proposalPath(services))).toBeUndefined();
+    expect(state.approved?.content).not.toContain("zcode");
+    expect(state.approved?.hash).not.toBe(before);
+});
+
+test("a removed tool's draft coming back with a land proposes nothing and is cleared away", async () => {
+    const services = stubServices();
+    await proposeDraft(services, "zcode", "RUN install zcode\n");
+    expect(await approveDraft(services, "zcode")).toEqual({ hash: expect.any(String) });
+    expect(await removeFromEnvironment(services, "zcode")).toBeUndefined();
+
+    // The agent's branch still carries the file it wrote before proposing.
+    await services.files.write(join(draftsDir(services), "zcode.Dockerfile"), "RUN install zcode\n");
+    expect((await readEnvironment(services)).proposal).toBeUndefined();
+    expect(await services.files.read(join(draftsDir(services), "zcode.Dockerfile"))).toBeUndefined();
+    expect(await services.files.read(customPath(services))).toBe("");
+});
+
+test("an older version of an approved tool coming back with a land does not ask to replace the newer one", async () => {
+    const services = stubServices();
+    await proposeDraft(services, "zcode", "RUN install zcode-v1\n");
+    await approveDraft(services, "zcode");
+    await proposeDraft(services, "zcode", "RUN install zcode-v2\n");
+    await approveDraft(services, "zcode");
+
+    await services.files.write(join(draftsDir(services), "zcode.Dockerfile"), "RUN install zcode-v1\n");
+    expect((await readEnvironment(services)).proposal).toBeUndefined();
+    expect(await services.files.read(customPath(services))).toBe("# ---- zcode ----\nRUN install zcode-v2\n");
+});
+
+test("a declined draft coming back with a land is not proposed again", async () => {
+    const services = stubServices();
+    await proposeDraft(services, "cowsay", "RUN install cowsay\n");
+    await rejectDraft(services, "cowsay");
+    await services.files.write(join(draftsDir(services), "cowsay.Dockerfile"), "RUN install cowsay\n");
+    expect((await readEnvironment(services)).proposal).toBeUndefined();
+
+    // Rejecting the whole proposal answers each of its drafts the same way.
+    await services.files.write(join(draftsDir(services), "sox.Dockerfile"), "RUN install sox\n");
+    expect((await readEnvironment(services)).proposal?.content).toBe("# ---- sox ----\nRUN install sox\n");
+    await rejectEnvironment(services);
+    await services.files.write(join(draftsDir(services), "sox.Dockerfile"), "RUN install sox\n");
+    expect((await readEnvironment(services)).proposal).toBeUndefined();
+});
+
+test("an agent asking again on purpose is heard, and a new version of an answered tool still asks", async () => {
+    const services = stubServices();
+    await proposeDraft(services, "zcode", "RUN install zcode\n");
+    await approveDraft(services, "zcode");
+    await removeFromEnvironment(services, "zcode");
+
+    // A different step is a new question, whoever carried it in.
+    await services.files.write(join(draftsDir(services), "zcode.Dockerfile"), "RUN install zcode --fixed\n");
+    expect((await readEnvironment(services)).proposal?.content).toBe("# ---- zcode ----\nRUN install zcode --fixed\n");
+    await rejectDraft(services, "zcode");
+
+    // `environment propose` is the agent asking again, so the removal no longer stands in its way.
+    expect(await proposeDraft(services, "zcode", "RUN install zcode\n")).toEqual({ file: "zcode.Dockerfile" });
+    expect((await readEnvironment(services)).proposal?.content).toBe("# ---- zcode ----\nRUN install zcode\n");
+});
+
+test("removing a pending draft drops only that tool, and the rest of the proposal stays up", async () => {
+    const services = stubServices();
+    await services.files.write(customPath(services), "# ---- ffmpeg ----\nRUN install ffmpeg\n");
+    await services.files.write(join(draftsDir(services), "zcode.Dockerfile"), "RUN install zcode\n");
+    await services.files.write(join(draftsDir(services), "sox.Dockerfile"), "RUN install sox\n");
+    await composeEnvironment(services);
+    await readEnvironment(services);
+    const approvedBefore = await services.files.read(approvedPath(services));
+    expect(approvedBefore).toContain("RUN install ffmpeg");
+
+    expect(await removeFromEnvironment(services, "zcode")).toBeUndefined();
+    expect((await readEnvironment(services)).proposal?.content).toBe("# ---- ffmpeg ----\nRUN install ffmpeg\n\n# ---- sox ----\nRUN install sox\n");
+    expect(await services.files.read(join(draftsDir(services), "zcode.Dockerfile"))).toBeUndefined();
+    // Nothing approved changed, so nothing waits for a rebuild because of it.
+    expect(await services.files.read(customPath(services))).toBe("# ---- ffmpeg ----\nRUN install ffmpeg\n");
+    expect(await services.files.read(approvedPath(services))).toBe(approvedBefore);
+
+    // The last pending draft gone, there is no proposal left asking for nothing.
+    expect(await removeFromEnvironment(services, "sox")).toBeUndefined();
+    expect((await readEnvironment(services)).proposal).toBeUndefined();
+    expect(await services.files.read(proposalPath(services))).toBeUndefined();
+});
+
+test("removing a tool the daemon drafted from runtime installs declines it, so the sweep does not draft it again", async () => {
+    const services = stubServices();
+    await services.runtimeInstalls.record([{ tool: "nsis", kind: "apt" }], "apt-get install -y nsis", "s1", 1);
+    await services.files.write(join(draftsDir(services), "nsis.Dockerfile"), `${AUTO_MARKER} nsis\nRUN apt-get install -y nsis\n`);
+    expect(await removeFromEnvironment(services, "nsis")).toBeUndefined();
+    expect((await services.runtimeInstalls.read()).installs.find((entry) => entry.tool === "nsis")?.declinedAt).toEqual(expect.any(Number));
+});
+
+test("a tool removed from inside an imported draft carrying several does not come back with it", async () => {
+    const services = stubServices();
+    await services.files.write(join(draftsDir(services), "workspace.Dockerfile"), "# ---- zcode ----\nRUN install zcode\n\n# ---- sox ----\nRUN install sox\n");
+    expect((await readEnvironment(services)).proposal?.content).toBe("# ---- zcode ----\nRUN install zcode\n\n# ---- sox ----\nRUN install sox\n");
+    expect(await removeFromEnvironment(services, "zcode")).toBeUndefined();
+    expect((await readEnvironment(services)).proposal?.content).toBe("# ---- sox ----\nRUN install sox\n");
+});
+
+test("removing a tool that is neither approved nor waiting says so and changes nothing", async () => {
+    const services = stubServices();
+    await services.files.write(customPath(services), "# ---- ffmpeg ----\nRUN install ffmpeg\n");
+    expect(await removeFromEnvironment(services, "zcode")).toBe("missing");
+    expect(await services.files.read(customPath(services))).toBe("# ---- ffmpeg ----\nRUN install ffmpeg\n");
+    expect((await services.runtimeInstalls.read()).settled).toBeUndefined();
 });

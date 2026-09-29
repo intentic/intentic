@@ -2,6 +2,7 @@
 // clock lives here; how many refreshes a hold may spend is priced by the provider that serves it (runtimes/claude).
 
 import { z } from "zod";
+import type { SandboxNotice } from "../events/sandbox-notice.js";
 
 // A cache clock as the daemon publishes it: the last request that touched the entry, and the entry's lifetime.
 export interface CacheClock {
@@ -95,16 +96,28 @@ const spanLabel = (ms: number): string => {
     return hours === 0 ? `${minutes}m` : `${hours}h ${minutes % 60}m`;
 };
 
-/** The transcript's line for a turn that picked up a conversation kept warm for it; undefined for any other turn. */
-export const keptWarmLine = (opening: PromptCacheOpening): string | undefined => {
+/** The notice for a turn that picked up a conversation kept warm for it, by code and facts; undefined for any other turn. */
+export const keptWarmNotice = (opening: PromptCacheOpening): Extract<SandboxNotice, { code: "keptWarm" | "keptCold" }> | undefined => {
     const { kept } = opening;
     if (kept === undefined) {
         return undefined;
     }
-    const held = `kept warm for ${spanLabel(kept.forMs)} with ${kept.refreshes} ${kept.refreshes === 1 ? "refresh" : "refreshes"}`;
-    return opening.readTokens >= opening.writtenTokens
-        ? `Picked up warm: ${tokensLabel(opening.readTokens)} tokens read from the cache, ${held}.`
-        : `Picked up cold despite being ${held}: ${tokensLabel(opening.writtenTokens)} tokens sent again, because this turn's prompt no longer matched the cache.`;
+    const warm = opening.readTokens >= opening.writtenTokens;
+    const params = { tokens: tokensLabel(warm ? opening.readTokens : opening.writtenTokens), span: spanLabel(kept.forMs), refreshes: kept.refreshes };
+    return warm ? { code: "keptWarm", params } : { code: "keptCold", params };
+};
+
+/** The transcript's line for a turn that picked up a conversation kept warm for it; undefined for any other turn. */
+export const keptWarmLine = (opening: PromptCacheOpening): string | undefined => {
+    const notice = keptWarmNotice(opening);
+    if (notice === undefined) {
+        return undefined;
+    }
+    const { tokens, span, refreshes } = notice.params;
+    const held = `kept warm for ${span} with ${refreshes} ${refreshes === 1 ? "refresh" : "refreshes"}`;
+    return notice.code === "keptWarm"
+        ? `Picked up warm: ${tokens} tokens read from the cache, ${held}.`
+        : `Picked up cold despite being ${held}: ${tokens} tokens sent again, because this turn's prompt no longer matched the cache.`;
 };
 
 // A turn's prefix, part by part, so two turns that should share a cache can say which part stopped matching.

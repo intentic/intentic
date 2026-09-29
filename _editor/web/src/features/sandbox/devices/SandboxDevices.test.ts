@@ -1014,13 +1014,12 @@ const settled = () => {
     };
 };
 
-it(`offers the verbs on a connected device whose agent needs nothing, and says nothing beside them`, () => {
+it(`offers Restart alone on a connected device whose agent is current`, () => {
     const el = mount([settled()]);
     const text = el.textContent ?? ``;
-    expect(labels(el)).toContain(`Update agent`);
+    expect(labels(el)).not.toContain(`Update agent`);
     expect(labels(el)).toContain(`Restart agent`);
     expect(text).not.toContain(`Newest agent this sandbox knows of.`);
-    expect(hovers(el)).toContain(`Updates every side, Folders, ports untouched`);
 });
 
 // The agent is the row's own meta now — a build and a state badge beside the environment it runs on — rather
@@ -1755,6 +1754,7 @@ it(`draws a Windows PC and its distro as one card, with the container once and e
 });
 
 it(`opens the PC as one page: an environment row per side, the sandbox once, and the distros the Windows side lists`, async () => {
+    latest.value = `1.186.0`;
     bothDoors();
     const el = mount([distroSide(), windowsSide()]);
     await nextTick();
@@ -1804,6 +1804,7 @@ it(`sends a container verb through the Windows door and a folder verb through th
 
 // One Update for the computer, through its Windows side, which brings its distros level first and itself last.
 it(`updates the whole computer from one press, through its Windows side`, async () => {
+    latest.value = `1.186.0`;
     bothDoors();
     const el = mount([distroSide(), windowsSide()]);
     await nextTick();
@@ -1825,6 +1826,7 @@ it(`updates the whole computer from one press, through its Windows side`, async 
 
 // A distro hands a machine-wide update to its Windows side itself, so a sleeping Windows door is no reason to refuse.
 it(`sends the computer's update through the distro when its Windows side cannot hear it`, async () => {
+    latest.value = `1.186.0`;
     bothDoors();
     const sleepingWindows = { ...windowsSide(), online: false, gap: `offline` as const };
     const el = mount([distroSide(), sleepingWindows]);
@@ -1848,6 +1850,7 @@ it(`says so once when the sides of one computer run different agents`, async () 
 
 // A side that cannot be asked has no Restart of its own; the computer's one Update still goes through the side that can.
 it(`keeps the computer's one update while only one side can be asked`, async () => {
+    latest.value = `1.186.0`;
     bothDoors();
     const sleepingDistro = { ...distroSide(), online: false, gap: `offline` as const };
     const el = mount([sleepingDistro, windowsSide()]);

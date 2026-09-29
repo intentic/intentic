@@ -195,6 +195,11 @@ export const CiFixParamSchema = CiRunParamSchema.extend({
     pick: AgentRunPickSchema.describe(
         "Which model to open the conversation on, when somebody chose one. Leave it out for the sandbox's own choice, which is the ordinary path.",
     ),
+    // The browser's own chat pick, which the daemon never holds: without it an unpinned fix opened on a provider the
+    // owner never chose. Absent (an older app, or nobody pressed) keeps the sandbox's own fallback.
+    fallback: AgentRunPickSchema.describe(
+        "The model a new chat opens on for whoever pressed, for when nobody chose one and no model set for fixing pipelines can run. Used while this sandbox can serve its provider; left out, or not servable, the sandbox takes its default provider when connected, else the first one connected.",
+    ),
     // The verb the picker's bar was ended with, when an attempt already exists (state/fix-attempt-plan.ts). Left out,
     // an ended attempt is continued and a fresh press opens attempt 1; one still in play answers CONFLICT.
     mode: z

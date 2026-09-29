@@ -55,6 +55,7 @@ import ReviewPanel from "../changes/ReviewPanel.vue";
 import SaveActions from "../changes/save/SaveActions.vue";
 import SavePanel from "../changes/save/SavePanel.vue";
 import WorkspaceDirChip from "../explorer/WorkspaceDirChip.vue";
+import WorkspaceScopeNote from "../explorer/WorkspaceScopeNote.vue";
 import WorkspaceScopeChip from "../explorer/WorkspaceScopeChip.vue";
 import WorkspaceSearchResults from "../search/WorkspaceSearchResults.vue";
 import WorkspaceTree from "../explorer/WorkspaceTree.vue";
@@ -1093,7 +1094,9 @@ const includeTip = computed(
                         @pick="pickRow"
                         @clear="selected = undefined"
                         @cover="(name) => (cover = name)"
-                    />
+                    >
+                        <template #preamble><WorkspaceScopeNote /></template>
+                    </WorkspaceTree>
                 </div>
                 <!-- Root drop hint over the whole panel; files mode only, since review/history aren't drop targets. -->
                 <!-- A folder row shows its own inset ring instead of this one. -->

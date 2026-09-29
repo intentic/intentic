@@ -17,6 +17,7 @@ flowchart LR
 - Posts are editable in place before approval, with a length count against the platform's limit. Platform names and logos come from the enabled extensions' catalogs.
 - The rail badge counts proposals owing a decision, held wakes with no deadline and hook sets waiting for a yes. A background poll keeps it current while the view is closed, since hook sets live outside `/work` and no file write announces them.
 - Below the maintainer role the queue is read-only.
+- What an agent asks while it works (a permission, a question, a plan) is not this queue's: it is answered in the agent's own chat or on its board card. While any wait, the page says how many and links to Needs you ([src/useWaitingAgents.ts](src/useWaitingAgents.ts)), rather than reading "Nothing waiting".
 
 ## Key files
 

@@ -28,6 +28,43 @@ export const agentBlockers = (blockers: readonly Blocker[]): readonly Blocker[] 
 // The user's half: paths held by uncommitted edits, clearable only by a commit or stash.
 export const userBlockers = (blockers: readonly Blocker[]): readonly Blocker[] => blockers.filter((blocker) => blocker.reason === `workspace`);
 
+// The Sandbox pages that write a root-repo file themselves: what a refusal names as the origin of an "edit" nobody typed.
+// Every one of them commits its own writes now (the daemon's settings-versions.ts); one still uncommitted is older than
+// that, or was saved over edits already in the file, which the daemon leaves uncommitted. Refused as the owner's own
+// edits, one took three Accepts, a trip to Changes and a redo to get a land through.
+export type SettingsPage = `personas` | `capabilities` | `agent`;
+const SETTINGS_FILES: readonly (readonly [path: string, page: SettingsPage])[] = [
+    [`.intentic/config/personas.json`, `personas`],
+    [`.intentic/config/personas/`, `personas`],
+    [`.intentic/config/capabilities.json`, `capabilities`],
+    [`.intentic/config/settings.json`, `agent`],
+    [`.intentic/config/safety.md`, `agent`],
+];
+
+export const settingsPageOf = (blocker: Blocker): SettingsPage | undefined =>
+    blocker.repo === `root`
+        ? SETTINGS_FILES.find(([path]) => (path.endsWith(`/`) ? blocker.path.startsWith(path) : blocker.path === path))?.[1]
+        : undefined;
+
+// The pages the user's half came from, when every file in it was written by one: then saving them keeps nothing the
+// owner has not already chosen on that page. Undefined when any file is an edit of their own, which only they can judge.
+export const settingsOrigin = (blockers: readonly Blocker[]): readonly SettingsPage[] | undefined => {
+    const pages = blockers.map(settingsPageOf);
+    if (pages.length === 0 || pages.includes(undefined)) {
+        return undefined;
+    }
+    return [...new Set(pages.filter((page): page is SettingsPage => page !== undefined))];
+};
+
+// A page as the Sandbox view names it.
+export const settingsPageName = (page: SettingsPage): string =>
+    ({ personas: t(`shared.personas`), capabilities: t(`shared.capabilities`), agent: t(`shared.agent`) })[page];
+
+// The pages behind the owner's half of a land report, named and joined as the report's heading names them; undefined
+// unless a page wrote every file in it. The board card reads it too, so the two never name one refusal differently.
+export const settingsPagesOf = (conflicts: readonly LandConflict[] | undefined): string | undefined =>
+    settingsOrigin(userBlockers(blockersOf(conflicts)))?.map(settingsPageName).join(`, `);
+
 // Per-cause copy shared by the group heading and row mark; `icon` links them so they can't drift. Order below is
 // the report's group order (agent causes first, then the user's):
 // - mark: one word, beside a path and diffstat

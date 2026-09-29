@@ -178,6 +178,13 @@ describe(`which children ride under their parent`, () => {
         expect(standsAlone(child(`quiet`, `p`))).toBe(false);
         expect(standsAlone(child(`asks`, `p`, { status: `awaiting`, attention: permission }))).toBe(false);
     });
+
+    // Landed work taken back out stands alone for its Land again, unless an agent (its orchestrator) took it out on
+    // purpose, which offers no press to stand for.
+    it(`keeps a card of its own for landed work a person took out, not for work an agent took out`, () => {
+        expect(standsAlone(child(`discarded`, `p`, { landedPresence: { landed: 3, present: 0 } }))).toBe(true);
+        expect(standsAlone(child(`tidied`, `p`, { landedPresence: { landed: 3, present: 0, removedBy: { kind: `agent`, id: `p` } } }))).toBe(false);
+    });
 });
 
 describe(`a steady fold`, () => {

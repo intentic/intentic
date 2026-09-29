@@ -11,7 +11,7 @@ import { sessionsDir } from "../../sessions/session-store.js";
 import { fileTranscriptRecord } from "../../sessions/transcript-record.js";
 import { conversationUnits } from "../../store/conversation-units.js";
 import { type ConversationsDb, conversationsDbPath, openConversationsDb } from "../../store/conversations-db.js";
-import { beginTurn, fleetStoreOver } from "../../testing.js";
+import { beginTurn, fleetStoreOver, noPresences } from "../../testing.js";
 import type { AgentWorktrees } from "../worktrees/worktrees.js";
 import { createFleet } from "./agents-registry.js";
 import { sqliteAgentsStore } from "./agents-store.js";
@@ -23,7 +23,6 @@ import { forgetConversations, purgeArchived } from "./archive.js";
 
 const logger = createLogger({ logLevel: "silent", logPretty: false, historyRoot: "" });
 const noStandings = { of: () => "idle" as const, causesOf: () => [], refresh: async () => false, forget: () => {} };
-const noPresences = { of: () => undefined, refresh: async () => false, forget: () => {}, metrics: () => ({}) };
 
 const roots: string[] = [];
 afterEach(async () => {
@@ -56,7 +55,7 @@ const daemonOn = async () => {
     await mkdir(workspaceRoot, { recursive: true });
     const db = openConversationsDb(conversationsDbPath(historyRoot));
     const units = conversationUnits(historyRoot, { ...sqliteAgentsStore(db), recreated: false });
-    const { agents, conversations } = createFleet(fleetStoreOver(db, units), noStandings, noPresences);
+    const { agents, conversations } = createFleet(fleetStoreOver(db, units), noStandings, noPresences());
     await agents.init();
     const deps = {
         agents,

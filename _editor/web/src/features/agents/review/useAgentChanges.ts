@@ -1,5 +1,6 @@
 import type { AgentChange, AgentChangesResponse, AgentRepoChanges, FileDiffResponse } from "@intentic/api-contract";
 import { useAsyncAction } from "@intentic/ui/async";
+import { t } from "@intentic/ui/i18n";
 import {
     isTestPath,
     type AgentSpan,
@@ -50,6 +51,25 @@ export interface AgentReviewFile {
 }
 
 const reviewFileKey = (repo: string, path: string): string => JSON.stringify([repo, path]);
+
+// The conflict report's one press over files a Sandbox page wrote (conflictResolution's settingsOrigin): exactly those
+// root-repo paths, committed as they stand before the land runs again. Held as the owner's own edits, such a land once
+// took three Accepts, a trip to Changes and a redo. Nothing to do for none, which is every other land.
+// A commit records the whole index (git.routes.ts), so anything else already staged would ride along under this
+// commit's message: refused instead, before anything is staged, for the owner to commit or unstage first.
+const commitSettings = async (paths: readonly string[], at: string | undefined): Promise<void> => {
+    if (paths.length === 0) {
+        return;
+    }
+    const { repos } = await sandboxRpc.git.changes(undefined, { context: { at } });
+    const root = repos.find((repo) => repo.repo === `root`);
+    const wanted = new Set(paths);
+    const others = (root?.staged ?? []).filter((change) => !wanted.has(change.path)).length + (root?.truncated?.staged ?? 0);
+    if (others > 0) {
+        throw new Error(t(`agents.useAgentChanges.otherStaged`, { count: others }, others));
+    }
+    await sandboxRpc.git.commit({ repo: `root`, message: `Settings: saved before landing`, stage: { paths: [...paths] } }, { context: { at } });
+};
 
 // Named apart from the composable that reads it, so the background loader and the panel warm the same cache entry
 // rather than parallel ones.
@@ -218,11 +238,14 @@ export function useAgentChanges(agentId: Ref<string>, at?: Ref<string | undefine
     });
 
     // True when landedPresence shows landed work missing from the tree (e.g. discarded post-land), so `land` uses
-    // `cumulative` rather than an emptied `outstanding`.
-    const missing = computed(() => agent?.value !== undefined && landedAway(agent.value) !== undefined);
-    // `force` answers the mid-write warning prompt; a parked turn needs none.
-    const land = (mode: LandMode = `check`, span?: AgentSpan, force = false): Promise<void> =>
+    // `cumulative` rather than an emptied `outstanding`. Not when an agent took it out on purpose (offerReland): a plain
+    // land then carries only the new work, and putting the rest back is the explicit Land again.
+    const missing = computed(() => agent?.value !== undefined && landedAway(agent.value)?.offerReland === true);
+    // `force` answers the mid-write warning prompt; a parked turn needs none. `settings`: root-repo files a Sandbox page
+    // wrote that refused the last land, committed first in the same press (commitSettings).
+    const land = (mode: LandMode = `check`, span?: AgentSpan, force = false, settings: readonly string[] = []): Promise<void> =>
         run(async () => {
+            await commitSettings(settings, reach.value);
             const rung: AgentSpan = span ?? (missing.value ? `cumulative` : `outstanding`);
             const result = await landAgent(agentId.value, mode, rung, force, reach.value);
             resolving.value = result.resolving;
@@ -233,12 +256,12 @@ export function useAgentChanges(agentId: Ref<string>, at?: Ref<string | undefine
             if (result.landed && !result.changed) {
                 useNotifications().say(nothingLanded());
             }
-        }, `Land failed.`);
+        }, t(`agents.useAgentChanges.landFailed`));
 
     // This agent's auto-land override (null = inherit the sandbox setting); routed through `run` so a refusal surfaces
     // in the panel's error line.
     const setAutoLand = (autoLand: boolean | null): Promise<void> =>
-        run(() => useAgents().setAutoLand(agentId.value, autoLand), `Couldn't change when this agent lands.`);
+        run(() => useAgents().setAutoLand(agentId.value, autoLand), t(`agents.useAgentChanges.autoLandFailed`));
 
     // Hands the conflict to the agent, marked asked on the press and unmarked once the press turns out to start no turn;
     // a refusal (e.g. a stale report) surfaces through actionError like any other declined mutation.
@@ -262,30 +285,30 @@ export function useAgentChanges(agentId: Ref<string>, at?: Ref<string | undefine
             if (ask.kind === `refused`) {
                 throw new Error(ask.why);
             }
-        }, `Couldn't ask the agent to resolve it.`);
+        }, t(`agents.useAgentChanges.askResolveFailed`));
 
     const discard = (): Promise<void> =>
         run(async () => {
             await discardAgent(agentId.value, reach.value);
             resolving.value = undefined;
             await invalidateAgentAction(agentId.value, reach.value);
-        }, `Discard failed.`);
+        }, t(`agents.useAgentChanges.discardFailed`));
 
     // Scratch the review named: carried with the work from the next land on, or deleted from the copy.
     const includeScratch = (repo: string, paths: readonly string[]): Promise<void> =>
         run(async () => {
             await includeAgentScratch(agentId.value, repo, paths, reach.value);
             await invalidateAgentAction(agentId.value, reach.value);
-        }, `Couldn't add it to the work.`);
+        }, t(`agents.useAgentChanges.includeScratchFailed`));
     const deleteScratch = (repo: string, paths: readonly string[]): Promise<void> =>
         run(async () => {
             await deleteAgentScratch(agentId.value, repo, paths, reach.value);
             await invalidateAgentAction(agentId.value, reach.value);
-        }, `Couldn't delete it.`);
+        }, t(`agents.useAgentChanges.deleteScratchFailed`));
 
     // Finishing with an agent rather than its work, the panel's counterpart to the board's archive action; the diff
     // still renders after archiving (re-read from the branch).
-    const archive = (): Promise<void> => run(() => useAgents().archive([agentId.value]), `Archive failed.`);
+    const archive = (): Promise<void> => run(() => useAgents().archive([agentId.value]), t(`agents.useAgentChanges.archiveFailed`));
 
     return {
         repos,

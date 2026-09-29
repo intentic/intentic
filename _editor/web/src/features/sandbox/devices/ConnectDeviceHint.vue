@@ -2,6 +2,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { hostEntry } from "./deviceFacts";
+import { capabilityRoute } from "./deviceLinks";
 import { deviceSyncingSandbox } from "./deviceRows";
 import { useDevices } from "./useDevices";
 import { useT } from "@intentic/ui/i18n";
@@ -26,7 +27,7 @@ const card = computed(() => (machine.value === undefined ? undefined : hostEntry
         <!-- Use the device name because the user may have multiple machines. -->
         <span class="font-mono">{{ machine.label }}</span>
         {{ t(`sandbox.connectDeviceHint.syncsSandboxNotConnected`) }}
-        <RouterLink :to="{ name: `capabilities`, params: { card }, query: { device: machine.label } }" class="text-link hover:underline">
+        <RouterLink :to="capabilityRoute(card, { device: machine.label })" class="text-link hover:underline">
             {{ t(`sandbox.connectDeviceHint.connect`) }}
         </RouterLink>
         {{ t(`sandbox.connectDeviceHint.and`) }} {{ gains }}

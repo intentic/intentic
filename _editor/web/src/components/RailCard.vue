@@ -6,6 +6,7 @@ import { useNow } from "@intentic/ui/async";
 import { computed } from "vue";
 import { type RouteLocationRaw, RouterLink } from "vue-router";
 import { formatElapsed, type StandingChip, type TileRim } from "../features/agents/fleet/agentStatus";
+import { sandboxNow } from "../features/agents/fleet/sandboxClock";
 import { markSegments } from "../features/agents/review/markSegments";
 import { relativeTime } from "../features/chat/models/catalog";
 import IdentityTile from "../features/capabilities/connect/IdentityTile.vue";
@@ -55,7 +56,9 @@ const props = defineProps<{
 
 // The card reads the shared clock itself, armed only while it draws an elapsed readout, so a settled rail ticks
 // nothing and a running one redraws one card rather than the list around it.
-const now = useNow(() => props.live?.since !== undefined);
+// On the sandbox's clock, which stamped `since` (sandboxClock.ts): a browser clock running fast drew a fresh turn as minutes old.
+const tick = useNow(() => props.live?.since !== undefined);
+const now = computed(() => sandboxNow(tick.value));
 
 const titleRuns = computed(() => markSegments(props.title, props.needle ?? ``, props.matchCase === true));
 // Only the "Updated" chip earns a hover: "New" already says unopened, while this hides when you last looked.

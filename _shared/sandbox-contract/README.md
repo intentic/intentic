@@ -34,6 +34,12 @@ flowchart LR
   (`sandboxDocument`): guarded, pure conversions of raw JSON that settle on their own output, the passthrough that
   keeps what a build does not know on its writes, and `readDocument`, the one read every store makes of a file (JSON,
   conversions, parse, whole or one entry at a time), whose problems carry a `reason` a reader matches on.
+- The sandbox's own transcript notices (a land, a memory hold, a renewal, a stop) keep their English sentence in
+  `text`, which older editors, stored records and agents reading their own history go on reading, and carry
+  `noticeCode` beside it: which notice it is and the facts it was worded from (`src/events/sandbox-notice.ts`), so the
+  editor says it in the reader's language and audience. On the wire the code is any string; `SandboxNoticeSchema` is
+  the typed list a reader decodes with, and a code it does not know draws `text`. (2026-09-29: a closed enum was
+  rejected, since the editor parses every answer with its own schema and one newer code would fail the whole page.)
 - `StatePlanSchema` and `StateStatusSchema` are what `ic` reads by field name: the update pre-flight's line (embedded
   verbatim in the staged-update marker) and `/health`'s `state`. `golden/` holds their examples, which the contract's
   test keeps current and ic's Rust tests parse.

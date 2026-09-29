@@ -321,8 +321,11 @@ export const createCommandGuard = (options: CommandGuardOptions): CommandGuard =
                 program: programAsk(program, subject, matches, hard),
                 ...(hard === undefined ? {} : { explain: verdict.sentence }),
                 // Label is the exact line to add, so nobody accepts a rule unread; shown only when there is one to
-                // remember.
-                ...(verdict.policyLine !== undefined && options.remember !== undefined ? { alwaysLabel: `Always: ${verdict.policyLine}` } : {}),
+                // remember, and never under the hard rule, which no line can waive: pressing it would only write a
+                // line that changes nothing, and the next such command would ask again.
+                ...(hard === undefined && verdict.policyLine !== undefined && options.remember !== undefined
+                    ? { alwaysLabel: `Always: ${verdict.policyLine}` }
+                    : {}),
             };
             const { reply, resolved } = await wait(options.signal);
             // Every parked card owes the stream its resolution frame, for a replayed transcript and an honest wait
@@ -341,7 +344,7 @@ export const createCommandGuard = (options: CommandGuardOptions): CommandGuard =
             }
             options.answered?.(at, "allowed", "allowed");
             granted.add(program);
-            if (reply.decision === "always" && verdict.policyLine !== undefined) {
+            if (reply.decision === "always" && hard === undefined && verdict.policyLine !== undefined) {
                 // Not awaited and failures are swallowed: the command already ran, so a write failure shouldn't matter.
                 void options.remember?.(verdict.policyLine).catch(() => undefined);
             }

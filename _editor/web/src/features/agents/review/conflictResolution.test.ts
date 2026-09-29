@@ -1,6 +1,6 @@
 import type { LandConflict } from "@intentic/sandbox-contract";
 import { errands, errandOf } from "../../chat/run/errands";
-import { agentBlockers, blockerLabel, blockersOf, resolvePrompt, userBlockers } from "./conflictResolution";
+import { agentBlockers, blockerLabel, blockersOf, resolvePrompt, settingsOrigin, settingsPageName, userBlockers } from "./conflictResolution";
 
 // The prompt is what the panel's primary button sends; only the parts a turn fails without are pinned here: the
 // commit-first step, main-branch self-discovery, keeping both sides, and the fence around paths the agent cannot
@@ -44,6 +44,29 @@ describe(`blockers`, () => {
     it(`qualifies a nested repo's path and leaves the root repo's alone, like a review row's label`, () => {
         expect(blockerLabel({ repo: `root`, path: `src/a.ts`, reason: `diverged` })).toBe(`src/a.ts`);
         expect(blockerLabel({ repo: `docs`, path: `README.md`, reason: `diverged` })).toBe(`docs/README.md`);
+    });
+});
+
+// A land was refused over personas.json as "your uncommitted edits", although only the Personas page had written it.
+describe(`settingsOrigin`, () => {
+    const held = (repo: string, path: string) => ({ repo, path, reason: `workspace` as const });
+
+    it(`names the pages that wrote every held file, each once`, () => {
+        const pages = settingsOrigin([
+            held(`root`, `.intentic/config/personas.json`),
+            held(`root`, `.intentic/config/capabilities.json`),
+            held(`root`, `.intentic/config/personas/studio/PROMPT.md`),
+            held(`root`, `.intentic/config/settings.json`),
+        ]);
+
+        expect(pages).toEqual([`personas`, `capabilities`, `agent`]);
+        expect(pages?.map(settingsPageName)).toEqual([`Personas`, `Capabilities`, `Agent`]);
+    });
+
+    it(`names none once any held file is the owner's own, or the same path sits in a nested repo`, () => {
+        expect(settingsOrigin([held(`root`, `.intentic/config/personas.json`), held(`root`, `src/config.ts`)])).toBeUndefined();
+        expect(settingsOrigin([held(`api`, `.intentic/config/personas.json`)])).toBeUndefined();
+        expect(settingsOrigin([])).toBeUndefined();
     });
 });
 

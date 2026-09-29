@@ -397,6 +397,43 @@ test("ensure with a recorded composition repairs a deleted .git pointer", async 
     expect(await sh(repaired.cwd, "branch", "--show-current")).toBe("agent/c1");
 });
 
+test("ensure re-links a checkout a turn re-initialised as a standalone repo, keeping its files", async () => {
+    const { work, historyRoot, worktrees } = await setup();
+    const created = await worktrees.ensure("c1", []);
+    await writeFile(join(created.cwd, "agent-work.md"), "unsaved\n");
+    // What an agent's `rm .git && git init` at the checkout root leaves: a repository sharing nothing with main.
+    await rm(join(created.cwd, ".git"));
+    await exec("git", ["init", "-q", created.cwd]);
+
+    const repaired = await worktrees.ensure("c1", created.repos);
+    expect(await sh(repaired.cwd, "branch", "--show-current")).toBe("agent/c1");
+    expect(await sh(repaired.cwd, "rev-parse", "--path-format=absolute", "--git-common-dir")).toBe(
+        await sh(work, "rev-parse", "--path-format=absolute", "--git-common-dir"),
+    );
+    expect(await readFile(join(repaired.cwd, "agent-work.md"), "utf8")).toBe("unsaved\n");
+    expect(await sh(repaired.cwd, "status", "--porcelain")).toBe("?? agent-work.md");
+    // The standalone repository is trashed, never deleted.
+    expect((await readdir(join(historyRoot, "trash"))).filter((name) => name.startsWith("root-c1-git-"))).toHaveLength(1);
+});
+
+test("relink rebuilds a pointer main already pruned, and answers the repos it could not re-link", async () => {
+    const { work, worktrees } = await setup();
+    const created = await worktrees.ensure("c1", []);
+    await rm(join(created.cwd, "intent", ".git"));
+    await sh(join(work, "intent"), "worktree", "prune");
+
+    expect(await worktrees.relink("c1", created.repos)).toEqual([]);
+    expect(await sh(join(created.cwd, "intent"), "branch", "--show-current")).toBe("agent/c1");
+    expect(await sh(join(created.cwd, "intent"), "status", "--porcelain")).toBe("");
+
+    // No branch left to stand on: nothing to re-link to, so the repo is named and its checkout left as it was.
+    await rm(join(created.cwd, "intent", ".git"));
+    await sh(join(work, "intent"), "worktree", "prune");
+    await sh(join(work, "intent"), "branch", "-D", "agent/c1");
+    expect(await worktrees.relink("c1", created.repos)).toEqual(["intent"]);
+    expect(existsSync(join(created.cwd, "intent", ".git"))).toBe(false);
+});
+
 test("remove tears down worktrees and branches; prune leaves a checkout no record names", async () => {
     const { work, historyRoot, worktrees } = await setup();
     const conversation = await worktrees.ensure("c1", []);

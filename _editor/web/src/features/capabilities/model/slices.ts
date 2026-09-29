@@ -3,6 +3,7 @@ import { CAPABILITY_CATEGORIES, type CapabilityCatalogEntry, instancesOf } from 
 import type { IconName } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 import type { CapabilityScope } from "../connect/CapabilityRail.vue";
+import { categoryHint, categoryLabel } from "./catalogCopy";
 import { CATEGORY_ICONS } from "./tiles";
 
 // The catalog's slices: every tile with the facts the rail, the grid and the Connected slice read, the rail's rows,
@@ -49,7 +50,7 @@ export interface RailScopes {
 }
 
 export const railScopes = (tiles: readonly CatalogTile[]): RailScopes => {
-    const all = scopeOf(ALL, `All capabilities`, `bolt`, tiles);
+    const all = scopeOf(ALL, t(`capabilities.slices.all`), `bolt`, tiles);
     const connected = tiles.filter((tile) => tile.connected > 0);
     const recommended = tiles.filter((tile) => tile.recommendation !== undefined);
     // Counts connections, not tiles: one tile can hold several (two Reddit accounts, three SSH boxes).
@@ -67,11 +68,11 @@ export const railScopes = (tiles: readonly CatalogTile[]): RailScopes => {
         });
     }
     if (recommended.length > 0) {
-        pinned.push(scopeOf(RECOMMENDED, `Recommended`, `sparkles`, recommended));
+        pinned.push(scopeOf(RECOMMENDED, t(`capabilities.slices.recommended`), `sparkles`, recommended));
     }
     const categories = CAPABILITY_CATEGORIES.flatMap((category) => {
         const subset = tiles.filter((tile) => tile.entry.category === category.id);
-        return subset.length === 0 ? [] : [scopeOf(category.id, category.label, CATEGORY_ICONS[category.id], subset)];
+        return subset.length === 0 ? [] : [scopeOf(category.id, categoryLabel(category), CATEGORY_ICONS[category.id], subset)];
     });
     return { all, pinned, categories };
 };
@@ -104,15 +105,18 @@ export const matching = <T>(items: readonly T[], search: string, haystack: (item
 export const groupTiles = (tiles: readonly CatalogTile[]): { readonly label: string; readonly entries: readonly CatalogTile[] }[] =>
     CAPABILITY_CATEGORIES.flatMap((category) => {
         const entries = tiles.filter((tile) => tile.entry.category === category.id);
-        return entries.length === 0 ? [] : [{ label: category.label, entries }];
+        return entries.length === 0 ? [] : [{ label: categoryLabel(category), entries }];
     });
 
-const SLICE_DESCRIPTIONS: Readonly<Record<string, string>> = {
-    [CONNECTED]: `Every connection your agent can reach right now. Open one to change it, to add another of the same kind, or to take it away.`,
-    [RECOMMENDED]: `Suggested from what is checked out in your workspace, each one is something your own code already asks for.`,
-};
-const CATALOG_DESCRIPTION = `Grow your sandbox: each capability gives your agent new tools or connects your accounts. Everything is stored only in your sandbox.`;
+// Read when drawn, not at import, so a language switch reaches them.
+const sliceDescriptions = () => ({
+    [CONNECTED]: t(`capabilities.slices.connectedDescription`),
+    [RECOMMENDED]: t(`capabilities.slices.recommendedDescription`),
+});
 
 // The page's description follows the active slice, or the category's hint, or falls back to the catalog blurb.
-export const sliceDescription = (key: string): string =>
-    SLICE_DESCRIPTIONS[key] ?? CAPABILITY_CATEGORIES.find((category) => category.id === key)?.hint ?? CATALOG_DESCRIPTION;
+export const sliceDescription = (key: string): string => {
+    const category = CAPABILITY_CATEGORIES.find((candidate) => candidate.id === key);
+    const descriptions: Readonly<Record<string, string | undefined>> = sliceDescriptions();
+    return descriptions[key] ?? (category === undefined ? t(`capabilities.slices.catalogDescription`) : categoryHint(category));
+};

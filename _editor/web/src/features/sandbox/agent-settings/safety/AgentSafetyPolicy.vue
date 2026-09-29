@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { MarkdownDocument, Notice, RowGroup, RowNote } from "@intentic/ui";
+import { MarkdownDocument, Notice, type NoticeModel, RowGroup, RowNote } from "@intentic/ui";
+import { noticeFrom } from "@intentic/ui/async";
+import { computed } from "vue";
 import { useSafetyPolicy } from "../../environment/useSafetyPolicy";
 import { useDraft } from "../../../../lib/useDraft";
 import { useT } from "@intentic/ui/i18n";
@@ -11,9 +13,13 @@ import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
 
-const { text, custom, save, isSaving, isLoading, error } = useSafetyPolicy();
+const { text, custom, save, isSaving, saveError, isLoading, error } = useSafetyPolicy();
 
 const draft = useDraft(() => (isLoading.value ? undefined : text.value));
+// A refused save keeps the owner's text on screen as "Not saved yet"; said here, or the press reads as doing nothing.
+const refused = computed<NoticeModel | undefined>(() =>
+    saveError.value === null ? undefined : noticeFrom(saveError.value, t(`sandbox.agentSafetyPolicy.couldntSave`)),
+);
 </script>
 
 <template>
@@ -39,5 +45,6 @@ const draft = useDraft(() => (isLoading.value ? undefined : text.value));
         <RowNote v-if="error !== undefined" variant="block"
             ><Notice tone="danger" class="text-2xs">{{ error }}</Notice></RowNote
         >
+        <RowNote v-if="refused !== undefined" variant="block"><Notice :of="refused" /></RowNote>
     </RowGroup>
 </template>

@@ -1,3 +1,4 @@
+import { SANDBOX_RECOVERY_DAYS } from "@intentic/api-contract";
 import { DETACHED_AFTER_MS } from "../overview/availability";
 import type { ConnectionFailure } from "../live/connection";
 import { RESTART_PATIENCE_MS, type RestartQuiet } from "../live/sandboxRestart";
@@ -16,6 +17,10 @@ export const HOSTED_STUCK_AFTER_MS = 60_000;
 // The same patience for a sandbox on somebody's own computer. It had none before: no cause on that lane could ever be
 // named, so the gate spun until the tab was closed.
 export const OWN_STUCK_AFTER_MS = 60_000;
+// How long a sandbox whose setup a machine already claimed may lack an address before "finish setup" is said: the page
+// that watched it report in opens the workspace a moment before this browser's list carries its address, and "finish
+// setup" flashed there over a setup that had just finished.
+export const UNADDRESSED_PATIENCE_MS = 30_000;
 // A detached sandbox's verdict is held for DETACHED_AFTER_MS (availability.ts) before it is spoken: a container that
 // restarts is detached for a few seconds, and the gate's words and the switcher's dot change their mind together.
 
@@ -52,6 +57,8 @@ export interface ConnectionNoticeInput {
     // fact no amount of waiting can produce, and the only one that licenses the word "removed".
     readonly removed?: boolean;
     readonly removedBy?: string | null;
+    // A machine claimed this sandbox's setup code (`setupCodeClaimedAt`): an address missing now is one on its way.
+    readonly claimed?: boolean;
     // A restart this browser asked for (sandboxRestart.ts), still young enough to be what the silence is. The only
     // input here that explains a wait instead of ending one.
     readonly restart?: RestartQuiet | undefined;
@@ -88,7 +95,10 @@ const waitingNotice = (kind: "timeout" | "closed" | "network" | "detached", name
 };
 
 // The container was deleted, and the machine that deleted it said so on its way out. Addressed to someone who may not
-// have done it themselves, so it says what is gone rather than assuming they know.
+// have done it themselves, so it says what is gone rather than assuming they know. The farewell carries only who
+// removed it, not whether its files went to that machine's trash (`ic sandbox remove` keeps them a week unless `--now`),
+// so it names the restore that usually exists there instead of calling them gone: the sentence that once sent a reader
+// to set the sandbox up afresh while its files were still waiting on their own computer.
 const removedNotice = (input: ConnectionNoticeInput, name: string): ConnectionNotice | undefined => {
     if (input.removed !== true) {
         return undefined;
@@ -96,7 +106,7 @@ const removedNotice = (input: ConnectionNoticeInput, name: string): ConnectionNo
     const where = input.removedBy === undefined || input.removedBy === null || input.removedBy === `` ? `the computer it ran on` : input.removedBy;
     return {
         title: t(`sandbox.connectionNotice.removed`, { name }),
-        body: t(`sandbox.connectionNotice.containerDeletedOnFiles`, { where }),
+        body: t(`sandbox.connectionNotice.containerDeletedFilesKept`, { where, count: SANDBOX_RECOVERY_DAYS }, SANDBOX_RECOVERY_DAYS),
         action: { kind: `setup`, label: t(`sandbox.connectionNotice.setUpAgain`) },
         waiting: false,
     };
@@ -260,7 +270,8 @@ const isSettled = (kind: ConnectionFailure[`kind`]): kind is SettledKind => kind
 export const connectionNotice = (input: ConnectionNoticeInput): ConnectionNotice => {
     const { failure } = input;
     const name = input.sandboxName ?? `your sandbox`;
-    if (failure === undefined) {
+    const addressComing = failure?.kind === `unaddressed` && input.claimed === true && input.outageMs < UNADDRESSED_PATIENCE_MS;
+    if (failure === undefined || (addressComing && input.removed !== true)) {
         return {
             title: t(`sandbox.connectionNotice.connectingTo`, { name }),
             body: t(`sandbox.connectionNotice.sandboxReportedInOpening`),

@@ -147,14 +147,17 @@ const models = pinnedList<ModelPin>({
     detail: pinKnobSummary,
     knobs: true,
 });
-// One picker for the persona, over whichever entry raised it; `index` absent means adding (see AgentModels.vue).
+// One picker for the persona, over whichever entry raised it; `index` absent means adding (see AgentModels.vue). A second
+// press on the trigger that opened it closes it, as on Models.
 const editing = shallowRef<{ index: number | undefined; anchor: HTMLElement } | undefined>(undefined);
 const openPicker = (index: number | undefined, anchor: HTMLElement): void => {
-    editing.value = { index, anchor };
+    editing.value = editing.value?.anchor === anchor ? undefined : { index, anchor };
 };
 const editingPin = computed<ModelPin | undefined>(() =>
     editing.value?.index === undefined ? undefined : models.entries.value[editing.value.index]?.pin,
 );
+// While adding, the list ticks the persona's own first model, never the chat's.
+const editingCurrent = computed<ModelPin | undefined>(() => (editing.value !== undefined && editing.value.index === undefined ? models.entries.value[0]?.pin : undefined));
 const pick = (pin: ModelPin): void => models.apply(editing.value?.index, pin);
 const configure = (pin: ModelPin): void => {
     if (editing.value?.index !== undefined) {
@@ -391,6 +394,7 @@ const configure = (pin: ModelPin): void => {
                 :open="editing !== undefined"
                 :anchor="editing?.anchor"
                 :pin="editingPin"
+                :current="editingCurrent"
                 knobs
                 :taken="models.taken.value"
                 @update:open="editing = undefined"

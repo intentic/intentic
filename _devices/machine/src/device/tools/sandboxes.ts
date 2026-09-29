@@ -471,6 +471,17 @@ export const icFlow = async (
     }
 };
 
+export const swapResult = (swap: SandboxSwap, slug: string, output: string, to?: string): string => {
+    if (swap === "update" && output.includes("no newer sandbox image is available yet")) {
+        return `Sandbox "${slug}" is already up to date. Nothing was restarted.`;
+    }
+    if (swap === "prepare") {
+        return `The next update for "${slug}" is downloaded and built. Applying it is now a short restart.`;
+    }
+    const verb = { update: "Updated", rebuild: "Rebuilt", rollback: to === undefined ? "Rolled back" : `Rolled back to ${to}` }[swap];
+    return `${verb} sandbox "${slug}". Its files and its history were kept.`;
+};
+
 export const swapSandbox = async (
     swap: SandboxSwap,
     slug: string,
@@ -488,13 +499,7 @@ export const swapSandbox = async (
     if (code !== 0) {
         throw new Error(`That ${swap} failed on this device.\n\n${output}`);
     }
-    // `prepare` gets its own sentence because it did NOT move the sandbox: saying "files were kept" about a
-    // container that was never touched would describe a swap that hasn't happened yet.
-    if (swap === "prepare") {
-        return `The next update for "${slug}" is downloaded and built. Applying it is now a short restart.`;
-    }
-    const verb = { update: "Updated", rebuild: "Rebuilt", rollback: to === undefined ? "Rolled back" : `Rolled back to ${to}` }[swap];
-    return `${verb} sandbox "${slug}". Its files and its history were kept.`;
+    return swapResult(swap, slug, output, to);
 };
 
 // Set a sandbox's shape, now or for its next restart, over the same `ic` door as the swaps. Rides `sandboxes`, not the

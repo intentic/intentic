@@ -1,5 +1,5 @@
 import type { McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-sdk";
-import { classifyCommand, matchCommand, type TurnProfile } from "@intentic/sandbox-contract";
+import { classifyCommand, matchCommand, noticeCode, type TurnProfile } from "@intentic/sandbox-contract";
 import { toolAnnotations } from "@intentic/sandbox-contract/peer-mcp-server";
 import { briefDuration } from "@intentic/base/format";
 import { wrapOutsideContent } from "@intentic/base/outside-text";
@@ -150,6 +150,7 @@ export const watchServer = (deps: WatchServerDeps): McpSdkServerConfigWithInstan
                     turnRunOf(deps.conversations, deps.conversationId)?.note({
                         role: "notice",
                         text: `Watching for ${args.note}, checked every ${briefDuration(outcome.intervalSeconds)}.`,
+                        noticeCode: noticeCode({ code: "watching", params: { note: args.note, every: briefDuration(outcome.intervalSeconds) } }),
                         noticeWait: "watch",
                         noticeWaitId: outcome.id,
                         noticeAction: "watchStop",

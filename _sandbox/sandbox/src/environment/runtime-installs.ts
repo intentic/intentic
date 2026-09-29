@@ -25,6 +25,8 @@ const COMMANDS_KEPT = 3;
 const COMMAND_MAX_LENGTH = 240;
 // Max tools kept; the oldest entry is evicted past this, bounding a runaway classifier.
 const TOOLS_KEPT = 200;
+// Answered drafts remembered; the oldest is forgotten past this, far more than one workspace's tools.
+const SETTLED_KEPT = 200;
 
 export interface ClassifiedInstall {
     readonly tool: string;
@@ -39,6 +41,10 @@ export interface RuntimeInstallsStore {
     // Tombstones tools the owner declined so the sweep won't redraft them. `at: undefined` clears the tombstone: a
     // dismiss that can't be undone is a dismiss nobody presses.
     readonly decline: (tools: readonly string[], at: number | undefined) => Promise<void>;
+    // Remembers drafts the owner answered, by tool and the hash of their steps, so a copy an agent's land brings back
+    // proposes nothing; `unsettle` forgets one, for an agent asking for exactly those steps again on purpose.
+    readonly settle: (drafts: readonly { readonly tool: string; readonly hash: string }[], at: number) => Promise<void>;
+    readonly unsettle: (tool: string, hash: string) => Promise<void>;
 }
 
 const keyOf = (install: { readonly kind: RuntimeInstallKind; readonly tool: string }): string => `${install.kind}:${install.tool}`;
@@ -106,6 +112,26 @@ export const fileRuntimeInstallsStore = (path: string): RuntimeInstallsStore => 
                     return { ...entry, declinedAt: at };
                 }),
             }));
+        },
+        settle: async (drafts, at) => {
+            if (drafts.length === 0) {
+                return;
+            }
+            const keys = new Set(drafts.map((draft) => `${draft.tool}\u0000${draft.hash}`));
+            await file.update((current) => {
+                const kept = (current.settled ?? []).filter((entry) => !keys.has(`${entry.tool}\u0000${entry.hash}`));
+                const added = [
+                    ...new Map(drafts.map((draft) => [`${draft.tool}\u0000${draft.hash}`, { tool: draft.tool, hash: draft.hash, at }])).values(),
+                ];
+                return { ...current, settled: [...kept, ...added].slice(-SETTLED_KEPT) };
+            });
+        },
+        unsettle: async (tool, hash) => {
+            const answered = (entry: { readonly tool: string; readonly hash: string }): boolean => entry.tool === tool && entry.hash === hash;
+            if (!((await file.read()).settled ?? []).some(answered)) {
+                return;
+            }
+            await file.update((current) => ({ ...current, settled: (current.settled ?? []).filter((entry) => !answered(entry)) }));
         },
     };
 };

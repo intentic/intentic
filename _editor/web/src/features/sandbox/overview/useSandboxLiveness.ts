@@ -11,6 +11,7 @@ import { SandboxUnaddressedError } from "../client/sandboxAuthFetch";
 import { daemonErrorMessage, daemonErrorStatus, sandboxRpc } from "../client/sandboxRpc";
 import { useSandboxSession } from "../session/sandboxSession";
 import { acquireStreamSlot } from "../client/streamBudget";
+import { watchPageWake } from "../client/pageWake";
 import { applySystemEvent } from "../live/systemEvents";
 import { sandboxQueryPredicate } from "../live/systemEventRouting";
 import { useEndpoint } from "../secrets/useEndpoint";
@@ -27,7 +28,7 @@ import { t } from "@intentic/ui/i18n";
 const WATCHDOG_MS = 10_000;
 
 const { daemonUrl, connection, activeSandboxId, refresh } = useSandbox();
-const { daemonBase, usingLocal, resolve: resolveEndpoint, demoteIfUnreachable, reset: resetEndpoint } = useEndpoint();
+const { daemonBase, usingLocal, resolve: resolveEndpoint, demoteIfUnreachable, reset: resetEndpoint, recheckAfterWake } = useEndpoint();
 const { invalidateSession } = useSandboxSession();
 
 let running = false;
@@ -237,16 +238,22 @@ const loop = async (): Promise<void> => {
     }
 };
 
+// Set while running: a page that slept re-checks its loopback address before calls queue on it (useEndpoint.ts).
+let unwatchWake: (() => void) | undefined;
+
 const start = (): void => {
     if (running) {
         return;
     }
     running = true;
+    unwatchWake = watchPageWake(recheckAfterWake);
     void loop();
 };
 
 const stop = (): void => {
     running = false;
+    unwatchWake?.();
+    unwatchWake = undefined;
     signalConnection({ kind: `disconnect` });
     controller?.abort();
     clearWatchdog();

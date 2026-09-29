@@ -19,6 +19,9 @@ import { freshImport } from "@intentic/testing/bun";
 
 // An ordinary browser: the desktop webview's own posture is useGoogleIdentity.desktop.test.ts's subject.
 jest.mock(`../../app/environments/desktop`, () => ({ desktopVersion: () => undefined }));
+// The gate's funnel event, recorded rather than sent.
+const track = jest.fn();
+jest.mock(`../../app/analytics`, () => ({ track }));
 
 // The module is one instance holding one credential and one mint, so each test takes its own copy rather than the
 // state the last one left: a mint nothing settled is still in flight, and GIS still initialized for it.
@@ -60,6 +63,7 @@ beforeEach(() => {
     prompt.mockReset();
     cancel.mockReset();
     disableAutoSelect.mockReset();
+    track.mockReset();
     window.google = { accounts: { id: { initialize, renderButton: jest.fn(), prompt, cancel, disableAutoSelect } } };
 });
 
@@ -93,4 +97,50 @@ it(`answers with the account the reader picked, never the credential already hel
     expect(await switched).toBe(PICKED);
     expect(signedInEmail.value).toBe(`second@example.com`);
     expect(localStorage.getItem(STORAGE_KEY)).toBe(PICKED);
+});
+
+// What One Tap says when it closes, as GIS hands it to the prompt's listener.
+const moment = (closed: { readonly skipped?: boolean; readonly dismissed?: string }) => ({
+    isSkippedMoment: () => closed.skipped === true,
+    isDismissedMoment: () => closed.dismissed !== undefined,
+    getDismissedReason: () => closed.dismissed ?? ``,
+});
+
+// Pressing Google's own button on a page that shows one (sign-in, the desktop hand-off) restarts Google's flow, which
+// closes the silent attempt: the gate's funnel counted each of those presses, sign-ins included, as an abandonment.
+describe(`the sign-in gate's funnel`, () => {
+    it(`does not report a dismissal when the reader took Google's own button`, async () => {
+        prompt.mockImplementation((listener: (closed: ReturnType<typeof moment>) => void) => listener(moment({ dismissed: `flow_restarted` })));
+        const { getIdToken } = await fresh();
+
+        const minted = getIdToken({ gate: false });
+        await flush();
+        choose({ credential: PICKED });
+
+        expect(await minted).toBe(PICKED);
+        await flush();
+        expect(track).not.toHaveBeenCalled();
+    });
+
+    // A warm-up has no button of its own to wait on: left waiting on Google's, which may be closed unanswered, it held
+    // every later mint that joined it.
+    it(`lets a warm-up go with nothing, unreported, when the reader took Google's own button`, async () => {
+        prompt.mockImplementation((listener: (closed: ReturnType<typeof moment>) => void) => listener(moment({ dismissed: `flow_restarted` })));
+        const { getIdToken } = await fresh();
+
+        expect(await getIdToken({ silent: true })).toBeUndefined();
+        await flush();
+        expect(track).not.toHaveBeenCalled();
+    });
+
+    it(`still reports a silent attempt the reader waved away`, async () => {
+        prompt.mockImplementation((listener: (closed: ReturnType<typeof moment>) => void) => listener(moment({ skipped: true })));
+        const { getIdToken } = await fresh();
+
+        void getIdToken({ gate: false });
+        await flush();
+        await flush();
+
+        expect(track).toHaveBeenCalledWith(`sandbox_signin_gate`, { reason: `skipped`, mode: `button` });
+    });
 });

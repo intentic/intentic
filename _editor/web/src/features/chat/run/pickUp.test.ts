@@ -1,5 +1,17 @@
 import { formatClock, formatWeekdayTime } from "@intentic/ui/format";
-import { pickUpNext, pickUpOf, pickUpShort, pickUpStatus, pickUpWhen, pressCost, repointedPickUp } from "./pickUp";
+import {
+    cooledPickUp,
+    LIMIT_COOLDOWN_MS,
+    pickUpNext,
+    pickUpOf,
+    pickUpReady,
+    pickUpShort,
+    pickUpStatus,
+    pickUpWhen,
+    pressCost,
+    repointedPickUp,
+    warmedPickUp,
+} from "./pickUp";
 
 const NOW = 1_800_000_000_000;
 
@@ -84,7 +96,19 @@ describe(`pickUpStatus`, () => {
         expect(pickUpStatus({ reason: `limit`, held: { ran: true }, readyAt: NOW + 3_600_000 }, NOW)).toBe(
             `Limit reached · work kept · back about 60 min`,
         );
-        expect(pickUpStatus({ reason: `limit`, held: { ran: false } }, NOW)).toBe(`Limit reached · nothing ran`);
+        expect(pickUpStatus({ reason: `limit`, held: { ran: false } }, NOW)).toBe(`Limit reached · nothing ran · reset time unknown`);
+    });
+
+    // A provider that publishes no reset (Z.ai) is said as such rather than left for "shortly" to imply one.
+    it(`says the reset time is unknown only when nobody named one, and nothing once it has passed`, () => {
+        expect(pickUpStatus({ reason: `limit`, held: { ran: true } }, NOW)).toBe(`Limit reached · work kept · reset time unknown`);
+        expect(pickUpStatus({ reason: `limit`, held: { ran: true }, readyAt: NOW - 1 }, NOW)).toBe(`Limit reached · work kept`);
+    });
+
+    it(`says why Continue rests after a refusal where nothing ran`, () => {
+        expect(pickUpStatus(cooledPickUp({ reason: `limit`, held: { ran: false } }, NOW), NOW + 1_000)).toBe(
+            `Limit reached · nothing ran · reset time unknown · Continue opens again in a minute`,
+        );
     });
 
     it(`spends either ladder's tries out loud, and says nothing about what happens next`, () => {
@@ -130,6 +154,14 @@ describe(`pickUpNext`, () => {
         );
     });
 
+    // Nothing books a turn against an unknown reset (classify-failure.ts), so "shortly" was a promise no clock kept.
+    it(`promises nothing for a limit with no reset time, whatever the answer`, () => {
+        expect(pickUpNext({ reason: `limit`, held: { ran: false } }, `resend`, NOW)).toBe(
+            `Nothing resends it by itself: the provider gave no reset time. Continue tries again.`,
+        );
+        expect(pickUpNext({ reason: `limit`, readyAt: NOW - 1 }, `resend`, NOW)).toBe(`Goes by itself shortly`);
+    });
+
     it(`reports a booked move instead of an hour`, () => {
         expect(pickUpNext({ reason: `limit`, held: { ran: true, moving: `alice` } }, `wait`, NOW)).toBe(`Moving to alice now`);
     });
@@ -160,5 +192,23 @@ describe(`repointedPickUp`, () => {
         const stopped = { reason: `stopped` as const, nextAt: NOW + 60_000, held: { ran: true } };
         expect(repointedPickUp(stopped, { kind: `ready`, room: 60 })).toBe(stopped);
         expect(repointedPickUp(undefined, { kind: `ready`, room: 60 })).toBeUndefined();
+    });
+});
+
+// Seven presses in two minutes each came back "Limit reached · nothing ran": the press rests a minute after such a
+// refusal, then comes back by itself.
+describe(`the rest after a refusal`, () => {
+    it(`rests the press only when nothing ran`, () => {
+        const refused = cooledPickUp({ reason: `limit`, held: { ran: false } }, NOW);
+        expect(refused.coolUntil).toBe(NOW + LIMIT_COOLDOWN_MS);
+        expect([pickUpReady(refused, NOW + LIMIT_COOLDOWN_MS - 1), pickUpReady(refused, NOW + LIMIT_COOLDOWN_MS)]).toEqual([false, true]);
+        expect(cooledPickUp({ reason: `limit`, held: { ran: true } }, NOW).coolUntil).toBeUndefined();
+        expect(cooledPickUp({ reason: `stopped`, held: { ran: false } }, NOW).coolUntil).toBeUndefined();
+    });
+
+    it(`hands the press back whole once the rest is over, for a view whose clock is not ticking`, () => {
+        const refused = cooledPickUp({ reason: `limit`, held: { ran: false } }, NOW);
+        expect(warmedPickUp(refused)).toEqual({ reason: `limit`, held: { ran: false } });
+        expect(pickUpReady(warmedPickUp(refused), NOW)).toBe(true);
     });
 });

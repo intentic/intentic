@@ -408,3 +408,31 @@ test("is a no-op on a branch that is already current", async () => {
     expect(repos).toEqual(entryOf(base).placement.repos);
     expect(recorded).toEqual([]);
 });
+
+test("a checkout a turn re-initialised is re-linked before the sync, and its work lands", async () => {
+    const { work, worktree, worktrees } = await setup();
+    const base = await sh(work, "rev-parse", "HEAD");
+    await writeFile(join(worktree, "app.ts"), "one\ntwo\nthree\nfour\nfive\nagent\n");
+    await rm(join(worktree, ".git"));
+    await exec("git", ["init", "-q", worktree]);
+    await writeFile(join(work, "other.ts"), "main moved\n");
+    await sh(work, "add", "-A");
+    await commit(work, "main moves");
+
+    expect(await sync(worktrees)).toMatchObject([{ repo: "root", commits: 1 }]);
+    const landed = await landAgent(worktrees, entryOf(base));
+    expect(landed.landed).toBe(true);
+    expect(await readFile(join(work, "app.ts"), "utf8")).toBe("one\ntwo\nthree\nfour\nfive\nagent\n");
+});
+
+test("a checkout that cannot be re-linked stops the sync and the land with a plain reason, not a git error", async () => {
+    const { work, worktree, worktrees } = await setup();
+    const base = await sh(work, "rev-parse", "HEAD");
+    await rm(join(worktree, ".git"));
+    await sh(work, "worktree", "prune");
+    await sh(work, "branch", "-D", "agent/c1");
+    await exec("git", ["init", "-q", worktree]);
+
+    await expect(sync(worktrees)).rejects.toThrow("This agent's copy of the workspace lost its link to your workspace");
+    await expect(landAgent(worktrees, entryOf(base))).rejects.toThrow("Pressing Continue will stop here again.");
+});

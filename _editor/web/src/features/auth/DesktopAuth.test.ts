@@ -64,6 +64,8 @@ const mount = async (): Promise<HTMLElement> => {
 };
 
 beforeEach(() => {
+    // The hand-offs this browser finished, which a finished test would otherwise leave spent for the next one.
+    localStorage.clear();
     query.value = { state: `nonce-1`, challenge: `chal-1` };
     user.value = { email: `owner@example.com` };
     // Reset, not clear: a test that gave the mint an answer must not leave it answering for the next one. A reset
@@ -274,4 +276,40 @@ it(`asks Google for nothing when the link is missing its handoff values`, async 
     expect(getIdToken).not.toHaveBeenCalled();
     expect(renderButton).not.toHaveBeenCalled();
     expect(el.textContent).toContain(`missing the value that ties it to your app`);
+});
+
+// A browser restoring its tabs reopened a hand-off finished five hours earlier, and the page started it over ("The
+// app is waiting") for an app that had stopped waiting long ago.
+it(`says a restored tab's hand-off is done, and starts nothing again`, async () => {
+    googleIdToken.mockResolvedValue({ idToken: credential(60 * 60 * 1000) });
+    handoff.mockResolvedValue({ handoff: `row-1` });
+    await mount();
+    await nextTick();
+    expect(handoff).toHaveBeenCalledTimes(1);
+    app?.unmount();
+    document.body.innerHTML = ``;
+
+    const el = await mount();
+
+    expect(handoff).toHaveBeenCalledTimes(1);
+    expect(googleIdToken).toHaveBeenCalledTimes(1);
+    expect(getIdToken).not.toHaveBeenCalled();
+    expect(el.textContent).toContain(`Done: this sign-in already reached the app. You can close this tab.`);
+    expect(el.textContent).not.toContain(`Send it again`);
+});
+
+it(`still runs a hand-off the app asked for since`, async () => {
+    googleIdToken.mockResolvedValue({ idToken: credential(60 * 60 * 1000) });
+    handoff.mockResolvedValue({ handoff: `row-1` });
+    await mount();
+    await nextTick();
+    app?.unmount();
+    document.body.innerHTML = ``;
+
+    query.value = { state: `nonce-2`, challenge: `chal-2` };
+    await mount();
+    await nextTick();
+
+    expect(handoff).toHaveBeenLastCalledWith({ idToken: expect.any(String), challenge: `chal-2` });
+    expect(handoff).toHaveBeenCalledTimes(2);
 });

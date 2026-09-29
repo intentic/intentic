@@ -32,3 +32,18 @@ export const composerModelReading = (chat: ComposerModelChoice): ComposerModelRe
     // lands, and naming it would read as though pressing the Auto row had done nothing.
     return { label: chat.auto ? t(`chat.words.autoLabel`) : modelLabelFor(chat.provider, chat.model), unset: false };
 };
+
+/** A reply still running on the model it was sent with, while the pill already names the one picked for the next. */
+export interface RunningTurn {
+    readonly streaming: boolean;
+    /** The model the running turn was sent under (the selection's `sentModel`); undefined before any was sent. */
+    readonly sentModel: string | undefined;
+}
+
+// A model picked mid-turn applies from the next message: the reply in flight keeps the model it was sent under. Named
+// here so the pill can say both, rather than read as though the switch had reached the reply already. Undefined when
+// nothing is running, or the pick is still the model the reply runs on.
+export const stillRunningOn = (chat: ComposerModelChoice, turn: RunningTurn): string | undefined =>
+    turn.streaming && !chat.auto && turn.sentModel !== undefined && turn.sentModel !== `` && turn.sentModel !== chat.model
+        ? modelLabelFor(chat.provider, turn.sentModel)
+        : undefined;

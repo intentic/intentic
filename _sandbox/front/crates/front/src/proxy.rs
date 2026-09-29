@@ -474,10 +474,19 @@ fn from_far_side(
 ) -> Response<Body> {
     let (mut parts, incoming) = answer.into_parts();
     strip_hop_by_hop(&mut parts.headers);
+    timing_allowed(&mut parts.headers);
     if let Some(ancestors) = frame_ancestors {
         frameable(&mut parts.headers, ancestors);
     }
     Response::from_parts(parts, body::incoming(incoming))
+}
+
+// Expose Resource Timing's negotiated protocol to the same origin the daemon already allowed through CORS.
+// A foreign origin gets neither the response body nor its connection timing.
+fn timing_allowed(headers: &mut HeaderMap) {
+    if let Some(origin) = headers.get(header::ACCESS_CONTROL_ALLOW_ORIGIN).cloned() {
+        headers.insert("timing-allow-origin", origin);
+    }
 }
 
 // A preview may be framed by the editor's origins and by itself (an app framing its own pages is checked against the
@@ -628,6 +637,19 @@ mod tests {
             headers[header::CONTENT_SECURITY_POLICY],
             "frame-ancestors 'self' https://app.example"
         );
+    }
+
+    #[test]
+    fn timing_is_visible_only_to_an_origin_allowed_by_the_daemon() {
+        let mut headers = HeaderMap::new();
+        timing_allowed(&mut headers);
+        assert!(!headers.contains_key("timing-allow-origin"));
+        headers.insert(
+            header::ACCESS_CONTROL_ALLOW_ORIGIN,
+            HeaderValue::from_static("https://app.example"),
+        );
+        timing_allowed(&mut headers);
+        assert_eq!(headers["timing-allow-origin"], "https://app.example");
     }
 
     #[test]

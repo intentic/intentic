@@ -336,13 +336,17 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     serve("DELETE /members", members.remove);
     serve("DELETE /members/self", members.removeSelf);
 
-    // The agent-proposed overlay Dockerfile: members read, the owner approves, rejects, or runtime-installs a line.
+    // The agent-proposed overlay Dockerfile: members read, the owner approves, rejects, runtime-installs a line, takes
+    // one tool out, or has the rebuild wait until no agent is mid-turn.
     const environment = createEnvironmentRoutes(services);
     serve("GET /environment", environment.read);
     serve("GET /environment/contents", environment.contents);
     serve("POST /environment/approve", environment.approve);
     serve("POST /environment/reject", environment.reject);
     serve("POST /environment/runtime-install", environment.runtimeInstall);
+    serve("POST /environment/remove", environment.remove);
+    serve("POST /environment/rebuild-when-idle", environment.rebuildWhenIdle);
+    serve("DELETE /environment/rebuild-when-idle", environment.cancelRebuildWhenIdle);
 
     // Agent engines, beside /environment since both answer the same owner question: what is installed here.
     const engines = createEnginesRoutes(services);

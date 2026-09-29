@@ -1,4 +1,4 @@
-import type { LocationQueryValue, RouteLocationRaw } from "vue-router";
+import type { LocationQueryRaw, LocationQueryValue, RouteLocationRaw } from "vue-router";
 import type { DeviceCardFix } from "./health/deviceAttention";
 
 // The Devices tab's two addresses. Selection lives in the URL so a machine is deep-linkable and the back
@@ -17,9 +17,15 @@ export const deviceRoute = (key: string): RouteLocationRaw => ({ ...TAB, query: 
 export const selectedKey = (value: LocationQueryValue | LocationQueryValue[] | undefined): string | undefined =>
     typeof value === `string` && value !== `` ? value : undefined;
 
+// A capability's tile by its catalog entry, for every link from this tab: the route's one param is `entry`. It was
+// `card` until 21 Sep, and three callers kept passing that, which vue-router drops without a word, so "Connect this
+// device" opened the whole catalogue instead of its tile.
+export const capabilityRoute = (entry: string, query?: LocationQueryRaw): RouteLocationRaw => {
+    const tile = { name: `capabilities`, params: { entry } };
+    return query === undefined ? tile : { ...tile, query };
+};
+
 // Where a concern's `card` fix leads: the card that ADDS a device, or an existing connection's own form. Kept
 // here rather than in each surface that draws a concern, since a fix is an address and addresses live in one file.
-export const cardRoute = (fix: DeviceCardFix): RouteLocationRaw => {
-    const card = { name: `capabilities`, params: { card: fix.card } };
-    return fix.connection === undefined ? card : { ...card, query: { edit: fix.connection } };
-};
+export const cardRoute = (fix: DeviceCardFix): RouteLocationRaw =>
+    capabilityRoute(fix.card, fix.connection === undefined ? undefined : { edit: fix.connection });

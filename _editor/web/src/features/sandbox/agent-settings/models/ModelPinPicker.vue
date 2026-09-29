@@ -11,7 +11,7 @@ import { useT } from "@intentic/ui/i18n";
 const t = useT();
 
 const emit = defineEmits<{ "update:open": [boolean]; pick: [ModelPin]; configure: [ModelPin] }>();
-const { open, anchor, header, pin, knobs, taken, helperJobs } = defineProps<{
+const { open, anchor, header, pin, current, knobs, taken, helperJobs } = defineProps<{
     open: boolean;
     // The trigger the panel hangs off: the row being edited, or the list's own Add button.
     anchor?: HTMLElement | undefined;
@@ -19,6 +19,8 @@ const { open, anchor, header, pin, knobs, taken, helperJobs } = defineProps<{
     header?: string | undefined;
     // The entry being re-pointed, or undefined while adding one.
     pin?: ModelPin | undefined;
+    // While adding: the job's own first model, which the list ticks as current.
+    current?: ModelPin | undefined;
     // Whether this list's entries carry their own run settings.
     knobs?: boolean;
     // `${provider}:${model}` of every entry already in the list.
@@ -40,6 +42,7 @@ const { open, anchor, header, pin, knobs, taken, helperJobs } = defineProps<{
     >
         <ModelPinPickerBody
             :pin="pin"
+            :current="current"
             :knobs="knobs"
             :taken="taken"
             :helper-jobs="helperJobs"

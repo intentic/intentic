@@ -31,3 +31,22 @@ it(`drops a cache write the browser refuses instead of rejecting unhandled`, asy
         runtime.off(`unhandledRejection`, record);
     }
 });
+
+it(`keeps one write in flight and writes only the newest cache after it`, async () => {
+    await restorePersistedQueries(`user_1`);
+    set.mockReset();
+    let finishFirst: (() => void) | undefined;
+    set.mockImplementationOnce(() => new Promise<void>((resolve) => { finishFirst = resolve; }));
+    set.mockResolvedValue(undefined);
+    queryClient.setQueryData([`coalesce`, 1], `first`);
+    await waitFor(() => expect(set).toHaveBeenCalledTimes(1), { timeout: 3000 });
+    queryClient.setQueryData([`coalesce`, 2], `middle`);
+    queryClient.setQueryData([`coalesce`, 3], `latest`);
+    await new Promise((resolve) => setTimeout(resolve, 2100));
+    expect(set).toHaveBeenCalledTimes(1);
+    finishFirst?.();
+    await waitFor(() => expect(set).toHaveBeenCalledTimes(2));
+    // SAFETY: The persister calls this mock with a PersistedClient; the test only reads its query keys.
+    const saved = set.mock.calls[1]?.[1] as { clientState: { queries: { queryKey: unknown[] }[] } };
+    expect(saved.clientState.queries.map((query) => query.queryKey)).toContainEqual([`coalesce`, 3]);
+});

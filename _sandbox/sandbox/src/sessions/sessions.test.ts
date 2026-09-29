@@ -3,9 +3,17 @@ import { WORKSPACE_ROOT } from "@intentic/constants";
 import { RESUME_NOTES, withResumeNote } from "@intentic/sandbox-contract";
 import { withRuntimeHistory } from "../agent/providers/runtime-history.js";
 import { withAttachmentNote } from "../agent/prompt/attachment-note.js";
+import { LANDING_CHECKS_NOTE } from "../agent/prompt/checks-note.js";
 import { composeWirePrompt } from "../agent/prompt/turn-preamble.js";
 import { SPAWN_NOTE_HEADER, SPAWN_NOTE_TITLE } from "../agent/subagents/spawn-note.js";
-import { createRecentSessions, listWorkspaceSessions, readWorkspaceSession, readWorkspaceSessionTail, searchWorkspaceSessions } from "./sessions.js";
+import {
+    createRecentSessions,
+    listWorkspaceSessions,
+    readWorkspaceSession,
+    readWorkspaceSessionTail,
+    searchWorkspaceSessions,
+    sessionNaming,
+} from "./sessions.js";
 import { openSearchIndex } from "./search-index.js";
 import { readSessionLines } from "./transcript-search.js";
 
@@ -14,6 +22,14 @@ const listSessions = jest.fn();
 const getSessionMessages = jest.fn();
 const getSessionInfo = jest.fn();
 jest.mock("@anthropic-ai/claude-agent-sdk", () => ({ listSessions, getSessionMessages, getSessionInfo }));
+
+// A first prompt as the SDK's `listSessions` really hands it over (`firstPrompt`, and `summary` with no title): every
+// newline a space, trimmed, cut at 200 characters. A mock that kept the newlines let a title come out right for a
+// reason production never has.
+const listed = (prompt: string): string => {
+    const flat = prompt.replaceAll("\n", " ").trim();
+    return flat.length > 200 ? `${flat.slice(0, 200).trim()}…` : flat;
+};
 
 // Seeds `n` sessions newest-first as `<tag>0..<tag>{n-1}`, titled "chat N" and bodied "body <id>" so a query can target
 // one precisely. `tag` namespaces each test's session ids.
@@ -472,7 +488,11 @@ test("a switched re-run inside a handoff envelope restores as its notice, not as
         { type: "assistant", timestamp: at(6_000), message: { content: [{ type: "text", text: "Picking the port back up." }] } },
     ]);
     expect(await readWorkspaceSessionTail(WORKSPACE_ROOT, "s0", 4_000)).toEqual([
-        { role: "notice", text: "Sent again on the switched account after the allowance ran out mid-turn, in a fresh session." },
+        {
+            role: "notice",
+            text: "Sent again on the switched account after the allowance ran out mid-turn, in a fresh session.",
+            noticeCode: { code: "resumed", params: { reason: "switched" } },
+        },
         { role: "assistant", text: "Picking the port back up." },
     ]);
     expect((await readWorkspaceSession(WORKSPACE_ROOT, "s0")).map((message) => message.role)).toEqual(["user", "notice", "assistant"]);
@@ -516,7 +536,7 @@ test("a compacted chain's summary restores as the compaction notice the live tur
         { type: "assistant", message: { content: [{ type: "text", text: "reading it now" }] } },
     ]);
     expect(await readWorkspaceSession(WORKSPACE_ROOT, "s0")).toEqual([
-        { role: "notice", text: "Context compacted to free up space." },
+        { role: "notice", text: "Context compacted to free up space.", noticeCode: { code: "compacted" } },
         { role: "user", text: "audit the rail" },
         { role: "assistant", text: "reading it now" },
     ]);
@@ -582,24 +602,64 @@ test("restore takes an injected turn preamble off the user's words and keeps it 
 test("a history-list title falling back to firstPrompt names the chat, not the injected notice", async () => {
     const first = [
         "Dependencies are NOT installed for the following projects, so their type-checks, linters and tests cannot work yet",
-        "(a dropped project arrives without them on purpose):",
-        "- intentic: run `pnpm install` there first.",
         "",
         "---",
         "",
         "fix the config",
     ].join("\n");
-    // `summary` is required on SDKSessionInfo, and with no title to show the SDK fills it with this same raw prompt;
-    // a mock that omits it would let the title come out right for a reason production never has.
-    listSessions.mockResolvedValue([{ sessionId: "s0", summary: first, firstPrompt: first, lastModified: 1 }]);
+    // `summary` is required on SDKSessionInfo, and with no title to show the SDK fills it with this same raw prompt.
+    listSessions.mockResolvedValue([{ sessionId: "s0", summary: listed(first), firstPrompt: listed(first), lastModified: 1 }]);
     const sessions = await listWorkspaceSessions(WORKSPACE_ROOT);
     expect(sessions[0]?.title).toBe("fix the config");
+});
+
+// The checks note alone runs past the SDK's cut, so the listed first prompt holds none of the user's words: the row is
+// titled from the opening message as stored, and that file is read once however often the list is asked for.
+test("a first prompt whose notes ran past the SDK's cut is titled from the opening message, read once", async () => {
+    const sent = composeWirePrompt([LANDING_CHECKS_NOTE], "Map the pirate ship's decks");
+    expect(listed(sent)).not.toContain("pirate");
+    listSessions.mockResolvedValue([{ sessionId: "cut", summary: listed(sent), firstPrompt: listed(sent), lastModified: 1 }]);
+    getSessionMessages.mockReset();
+    getSessionMessages.mockResolvedValue([{ type: "user", message: { content: sent } }]);
+    const naming = sessionNaming();
+    expect((await listWorkspaceSessions(WORKSPACE_ROOT, naming))[0]?.title).toBe("Map the pirate ship's decks");
+    expect((await listWorkspaceSessions(WORKSPACE_ROOT, naming))[0]?.title).toBe("Map the pirate ship's decks");
+    expect(getSessionMessages).toHaveBeenCalledTimes(1);
+    expect(getSessionMessages).toHaveBeenCalledWith("cut", { dir: WORKSPACE_ROOT, limit: 4 });
+});
+
+test("a session whose opening message cannot be read is titled New chat, never by the daemon's notes", async () => {
+    const sent = composeWirePrompt([LANDING_CHECKS_NOTE], "Map the pirate ship's decks");
+    listSessions.mockResolvedValue([{ sessionId: "unread", summary: listed(sent), firstPrompt: listed(sent), lastModified: 1 }]);
+    getSessionMessages.mockRejectedValueOnce(new Error("EACCES"));
+    expect((await listWorkspaceSessions(WORKSPACE_ROOT))[0]?.title).toBe("New chat");
+});
+
+// The daemon's own record wins: the conversation this is the session of, as the board names it, renames included.
+test("a session a conversation runs on is titled as that conversation is", async () => {
+    const sent = composeWirePrompt([LANDING_CHECKS_NOTE], "Map the pirate ship's decks");
+    listSessions.mockResolvedValue([
+        { sessionId: "board", summary: "Old SDK title", customTitle: "Old SDK title", firstPrompt: listed(sent), lastModified: 2 },
+        { sessionId: "loose", summary: "Titled at open", customTitle: "Titled at open", firstPrompt: listed(sent), lastModified: 1 },
+    ]);
+    const naming = sessionNaming(() => new Map([["board", "Pirate deck map"]]));
+    getSessionMessages.mockReset();
+    expect((await listWorkspaceSessions(WORKSPACE_ROOT, naming)).map((session) => session.title)).toEqual(["Pirate deck map", "Titled at open"]);
+    // A row already named reads no session file for words it would not show.
+    expect(getSessionMessages).not.toHaveBeenCalled();
+});
+
+test("a flattened trailing attachment note is not part of the title", async () => {
+    const first = withAttachmentNote("what is wrong here?", [`${WORKSPACE_ROOT}/shots/before.png`]);
+    listSessions.mockResolvedValue([{ sessionId: "s0", summary: listed(first), firstPrompt: listed(first), lastModified: 1 }]);
+    expect((await listWorkspaceSessions(WORKSPACE_ROOT))[0]?.title).toBe("what is wrong here?");
 });
 
 // Sent again, an attachment-only message is its re-run note, then the attachment note: still nothing typed, only files.
 test("a session opened by a re-sent attachment-only message is titled by its files, not by the attachment note", async () => {
     const first = withAttachmentNote(withResumeNote("", RESUME_NOTES.door), [`${WORKSPACE_ROOT}/shots/before.png`]);
-    listSessions.mockResolvedValue([{ sessionId: "s0", summary: first, firstPrompt: first, lastModified: 1 }]);
+    listSessions.mockResolvedValue([{ sessionId: "s0", summary: listed(first), firstPrompt: listed(first), lastModified: 1 }]);
+    getSessionMessages.mockResolvedValue([{ type: "user", message: { content: first } }]);
     expect((await listWorkspaceSessions(WORKSPACE_ROOT))[0]?.title).toBe("before.png");
 });
 
@@ -609,12 +669,17 @@ test("a session row the SDK could not read is titled New chat, never left blank"
     expect((await listWorkspaceSessions(WORKSPACE_ROOT))[0]?.title).toBe("New chat");
 });
 
+// Flattened, a handoff's carried transcript can't be told from the words after it; the opening message still can.
 test("a replacement runtime session keeps the conversation's original user title", async () => {
-    const first = withRuntimeHistory("Continue.", [
-        { role: "user", text: "Investigate the blank chat." },
-        { role: "assistant", text: "I will trace hydration." },
-    ]);
-    listSessions.mockResolvedValue([{ sessionId: "replacement", summary: first, firstPrompt: first, lastModified: 1 }]);
+    const first = composeWirePrompt(
+        [LANDING_CHECKS_NOTE],
+        withRuntimeHistory("Continue.", [
+            { role: "user", text: "Investigate the blank chat." },
+            { role: "assistant", text: "I will trace hydration." },
+        ]),
+    );
+    listSessions.mockResolvedValue([{ sessionId: "replacement", summary: listed(first), firstPrompt: listed(first), lastModified: 1 }]);
+    getSessionMessages.mockResolvedValue([{ type: "user", message: { content: first } }]);
     expect((await listWorkspaceSessions("/work"))[0]?.title).toBe("Investigate the blank chat.");
 });
 
@@ -629,8 +694,10 @@ test("a re-run's prompt is searchable as its turn was queued, re-run note includ
 // With no user words in the carried transcript, a handoff's title falls back to its prompt as queued, a re-run note included.
 test("a handoff with no user words carried titles by its prompt as queued", async () => {
     const first = withRuntimeHistory(withResumeNote("Continue.", RESUME_NOTES.switched), [{ role: "assistant", text: "Ported the edge." }]);
-    listSessions.mockResolvedValue([{ sessionId: "carried", summary: first, firstPrompt: first, lastModified: 1 }]);
-    expect((await listWorkspaceSessions(WORKSPACE_ROOT))[0]?.title).toBe(withResumeNote("Continue.", RESUME_NOTES.switched));
+    listSessions.mockResolvedValue([{ sessionId: "carried", summary: listed(first), firstPrompt: listed(first), lastModified: 1 }]);
+    getSessionMessages.mockResolvedValue([{ type: "user", message: { content: first } }]);
+    // Cut where the SDK's own list would cut it, so a title from either side reads alike.
+    expect((await listWorkspaceSessions(WORKSPACE_ROOT))[0]?.title).toBe(listed(withResumeNote("Continue.", RESUME_NOTES.switched)));
 });
 
 test("runtime-handoff search indexes what both sides said before the switch, but not the protocol", async () => {

@@ -8,7 +8,8 @@ import { useRole } from "../features/sandbox/secrets/useRole";
 import { useT } from "@intentic/ui/i18n";
 
 // The one question the app asks about the person looking, put where a newcomer first stands (the empty workspace
-// pane) and asked once per browser. Either answer is one click from the other in Settings, and the card names
+// pane) and asked once: a browser opening a sandbox that already keeps an answer takes that one instead
+// (audienceSync.ts). Either answer is one click from the other in Settings, and the card names
 // exactly what the answer changes so nobody fears it changes their files. A maker's answer also proposes the two
 // sandbox rules their contract rests on (work applies on its own, and is versioned), when they may write rules at all.
 

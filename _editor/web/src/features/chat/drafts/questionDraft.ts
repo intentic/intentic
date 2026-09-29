@@ -104,3 +104,8 @@ const sweep = (): void => {
 };
 
 sweep();
+
+// Whether the reader has started answering: a pick, or words typed into a free-text row. Dismissing then would throw
+// that answer away and stop the turn, so the card asks before it does (a picked answer was lost to a Dismiss beside Send).
+export const answerStarted = (draft: QuestionDraft): boolean =>
+    Object.values(draft.selections).some((picks) => picks.length > 0) || Object.values(draft.otherTexts).some((text) => text.trim().length > 0);

@@ -1,7 +1,7 @@
 import type { AgentWatch } from "@intentic/sandbox-contract";
-import { awaitingWake, type ConversationState, idleConversation } from "./conversation-state.js";
+import { awaitingWake, type ConversationState, idleConversation, type ParkedCard } from "./conversation-state.js";
 import type { QueuedItem } from "./conversation-queue.js";
-import { conversationStatus } from "./conversation-status.js";
+import { conversationStatus, permissionAskOf } from "./conversation-status.js";
 
 // A settled conversation's status, read from its state and branch: `ready` claims the work is finished and awaits a
 // land, which a conversation that armed its own next turn has not. What wakes it is read from what it holds.
@@ -50,5 +50,29 @@ describe("awaiting a wake", () => {
     test("is not a person's waiting message, nor anything in a held queue", () => {
         expect(awaitingWake(waiting("person"))).toBe(false);
         expect(awaitingWake(waiting("sandbox", true))).toBe(false);
+    });
+});
+
+// What a card offers to answer: the oldest permission a live turn waits on, and nothing a stop is taking down with it.
+describe("the permission a card can answer", () => {
+    const parkedOn = (parked: readonly ParkedCard[], stopping?: "stopped"): ConversationState => ({
+        ...idleConversation(),
+        phase: { kind: "running", startedAt: 1, parked, stopping },
+    });
+
+    test("is the oldest permission parked, with its line", () => {
+        const state = parkedOn([
+            { requestId: "q-1", kind: "question" },
+            { requestId: "p-1", kind: "permission", ask: "Run `pnpm build`?" },
+            { requestId: "p-2", kind: "permission", ask: "Read file" },
+        ]);
+        expect(permissionAskOf(state)).toEqual({ requestId: "p-1", ask: "Run `pnpm build`?" });
+    });
+
+    test("is none while only other cards wait, nor once a stop is unwinding, nor with no turn", () => {
+        expect(permissionAskOf(parkedOn([{ requestId: "q-1", kind: "question" }]))).toBeUndefined();
+        expect(permissionAskOf(parkedOn([{ requestId: "p-1", kind: "permission", ask: "Read file" }], "stopped"))).toBeUndefined();
+        expect(permissionAskOf(idleConversation())).toBeUndefined();
+        expect(permissionAskOf(undefined)).toBeUndefined();
     });
 });

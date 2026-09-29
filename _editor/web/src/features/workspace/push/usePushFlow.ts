@@ -4,6 +4,7 @@ import { computed, watch } from "vue";
 import { type SyncTarget, useChanges } from "../changes/useChanges";
 import { workspaceChangedSince, workspaceChangeMark } from "../changes/live/useWorkspaceLive";
 import { usePushRun } from "./usePushRun";
+import { credentialHostOf } from "./refusalSummary";
 import { t } from "@intentic/ui/i18n";
 
 // The push flow, from click to answer, kept at module level (not in the panel) so it outlives the surface
@@ -243,6 +244,11 @@ export function usePushFlow() {
         // The terminal of whichever run the moment is about; absent on a sandbox with no tmux wrapper, where a button
         // would only open an empty panel.
         terminal: computed(() => currentTerminal()?.session),
+        // The git host whose sign-in refused the push, when connecting that account is what fixes it.
+        connectHost: computed(() => {
+            const refused = refusedRuns.value.length > 0 ? refusedRuns.value : (standing.value?.runs ?? []);
+            return refused.map(credentialHostOf).find((host) => host !== undefined);
+        }),
         showTerminal: (): void => currentTerminal()?.show(),
         askSync,
         retry,

@@ -43,8 +43,35 @@ export interface RunRenderer {
     entry(entry: AttachEntry, turn: TurnContext, replay: boolean): void;
 }
 
+// How a follow ended: the stream engaged (true), the daemon said nothing runs (false), or it could not be asked at all
+// (undefined): a network error before anything engaged, which is not "nothing is running". A first turn still running
+// has no settled record to fall back on, so a caller reading that as false drew an empty chat over a live turn.
+export type FollowEnd = boolean | undefined;
+
+// One attach's opening: its frames, the follow's end when there is nothing to follow, or a retry after a drop.
+type AttachOpening = { readonly frames: AsyncIterable<AttachFrame> } | { readonly end: FollowEnd } | { readonly retry: true };
+
+// The daemon refusing ends the follow (the run finished, stopped, or never started), as does a stop. A network drop
+// between attaches: an engaged stream backs off and retries; an unengaged probe gives up, saying it never reached the
+// daemon (its caller retries).
+const openAttach = async (
+    input: ProcedureInput<`agent.attach`>,
+    controller: AbortController,
+    at: string | undefined,
+    attached: boolean,
+): Promise<AttachOpening> => {
+    try {
+        return { frames: await sandboxRpc.agent.attach(input, { signal: controller.signal, context: { at } }) };
+    } catch (error) {
+        if (error instanceof SandboxHttpError || controller.signal.aborted) {
+            return { end: attached };
+        }
+        return attached ? { retry: true } : { end: undefined };
+    }
+};
+
 // Renders a run by attaching, re-attaching on drops, until the daemon sends `end` or the run 404s (finished,
-// stopped, or never started). Returns whether the stream ever engaged.
+// stopped, or never started). Returns whether the stream ever engaged (FollowEnd).
 export const followRun = async (
     conversationId: string,
     // Run to attach to, when known; undefined asks the daemon for whatever is running (reattach).
@@ -53,7 +80,7 @@ export const followRun = async (
     controller: AbortController,
     // Which daemon runs it (undefined=this box); reused every re-attach so a resumed stream stays on it.
     at: string | undefined,
-): Promise<boolean> => {
+): Promise<FollowEnd> => {
     let run = initialRun;
     let attached = false;
     const ladder = createBackoff({ floorMs: 500, capMs: 5_000 });
@@ -104,23 +131,17 @@ export const followRun = async (
             slot();
             return attached;
         }
-        let frames: AsyncIterable<AttachFrame>;
-        try {
-            frames = await sandboxRpc.agent.attach(
-                { conversationId, ...(run !== undefined ? { run } : {}) },
-                { signal: controller.signal, context: { at } },
-            );
-        } catch (error) {
-            // The daemon refusing ends the follow (the run finished, stopped, or never started). A network drop between
-            // attaches: an unengaged probe gives up (caller retries next reachability flip); an engaged stream backs off
-            // and retries. Slot releases before any of them.
+        const opening = await openAttach({ conversationId, ...(run !== undefined ? { run } : {}) }, controller, at, attached);
+        if (!(`frames` in opening)) {
+            // Slot releases before the follow ends or backs off.
             slot();
-            if (error instanceof SandboxHttpError || controller.signal.aborted || !attached) {
-                return attached;
+            if (`end` in opening) {
+                return opening.end;
             }
             await sleep(ladder.next());
             continue;
         }
+        const { frames } = opening;
         ladder.reset();
         const before = delivered;
         try {

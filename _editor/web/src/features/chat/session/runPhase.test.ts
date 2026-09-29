@@ -23,11 +23,13 @@ describe(`a run's phase`, () => {
 
     it(`adopts an attached run as already taken, from idle alone`, () => {
         const other = new AbortController();
+        // Its start is the daemon's own stamp, and says so: a count against it runs on the sandbox's clock.
         expect(advance(IDLE, { kind: `attached`, controller: other, startedAt: 9_000, run: `r7` })).toEqual({
             kind: `running`,
             controller: other,
             startedAt: 9_000,
             run: `r7`,
+            clock: `sandbox`,
         });
         // A send that opened first owns the stream; the probe's run is not adopted over it.
         expect(advance(live(`sending`), { kind: `attached`, controller: other, startedAt: 9_000, run: `r7` })).toEqual(live(`sending`));

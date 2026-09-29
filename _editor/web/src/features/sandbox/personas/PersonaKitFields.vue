@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import type { SkillDraft, SkillSummary, SystemPromptMode } from "@intentic/sandbox-contract";
+import { type SkillDraft, type SkillSummary, SYSTEM_PROMPT_MAX, type SystemPromptMode } from "@intentic/sandbox-contract";
 import { DisclosureRow, Icon, MarkdownDocument, Notice, Row, RowGroup, RowNote, SegmentedControl } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { computed, ref, watch } from "vue";
 import SkillForm from "../agent-settings/skills/SkillForm.vue";
 import SkillRow from "../agent-settings/skills/SkillRow.vue";
 import { usePersonaKit } from "./usePersonaKit";
-import { useDraft } from "../../../lib/useDraft";
+import { useTrimmedDraft } from "../../../lib/useDraft";
 import { useT } from "@intentic/ui/i18n";
 
 // What this persona is told: the prompt and its own skills, one tab since they're one folder and one decision. Skills
@@ -36,11 +36,11 @@ const MODES = computed(
 const picked = computed(() => mode ?? `inherit`);
 const setMode = (value: string): void => emit(`update:mode`, value === `inherit` ? undefined : (value as SystemPromptMode));
 
-const PROMPT_MAX = 20000; // The route's own cap; the daemon refuses more.
 const { kit, error: kitError, isLoading, savePrompt, saveSkill, removeSkill, readSkill } = usePersonaKit(() => personaId);
 
-// Seeded from storage and updated by other windows' saves, never overwritten by an edit in progress (useDraft).
-const prompt = useDraft(() => kit.value.prompt);
+// Seeded from storage and updated by other windows' saves, never overwritten by an edit in progress. Saved trimmed, so
+// measured trimmed (useTrimmedDraft), or a save that landed would still read "Not saved yet".
+const { draft: prompt, stored: storedPrompt } = useTrimmedDraft(() => (isLoading.value ? undefined : kit.value.prompt));
 const error = ref<string | undefined>(undefined);
 
 const commitPrompt = async (text: string): Promise<void> => {
@@ -161,11 +161,11 @@ watch(
                     v-model="prompt"
                     frame="section"
                     :editable="!isLoading"
-                    :stored="isLoading ? undefined : kit.prompt"
+                    :stored="storedPrompt"
                     :saving="savePrompt.isPending.value"
                     save="explicit"
                     :label="t(`sandbox.personaKitFields.personasSystemPrompt`)"
-                    :max-chars="PROMPT_MAX"
+                    :max-chars="SYSTEM_PROMPT_MAX"
                     :placeholder="t(`sandbox.personaKitFields.writeWhatPersonaWho`)"
                     @save="commitPrompt"
                 >

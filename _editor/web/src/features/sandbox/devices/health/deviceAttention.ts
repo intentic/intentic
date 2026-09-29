@@ -2,7 +2,7 @@ import type { Device, DeviceAgentOp } from "@intentic/sandbox-contract";
 import type { IconName, Tip } from "@intentic/ui";
 import type { NoticeTone } from "@intentic/ui/notice";
 import { timeAgo } from "@intentic/ui/format";
-import { deviceQuiet, deviceReconnecting, type ManageBlock } from "../deviceFacts";
+import { deviceQuiet, deviceReconnecting, hostEntry, type ManageBlock } from "../deviceFacts";
 import type { DeviceRow } from "../deviceRows";
 import { t } from "@intentic/ui/i18n";
 
@@ -167,6 +167,7 @@ const gapConcern = (device: Device, reconnectable: boolean): DeviceConcern | und
         return undefined;
     }
     const command = GAP_COMMAND[device.gap];
+    const card = device.gap === `scope-off` ? hostEntry(device.platform) : undefined;
     return {
         key: `gap`,
         tone: GAP_TONE[device.gap],
@@ -175,6 +176,9 @@ const gapConcern = (device: Device, reconnectable: boolean): DeviceConcern | und
         hint: gapHint(device.gap),
         ...(command === undefined ? {} : { command }),
         ...(device.gap === `offline` && reconnectable ? { fix: reconnect() } : {}),
+        ...(card !== undefined && device.hostId !== undefined
+            ? { fix: { kind: `card` as const, label: t(`sandbox.deviceAttention.openPermissions`), card, connection: device.card ?? device.hostId } }
+            : {}),
     };
 };
 
@@ -209,8 +213,8 @@ const forgetUnreachable = (): DeviceAgentFix => ({
 // cannot hear the drop, and its gap is the sentence above this one.
 const linksConcern = (device: Device, readAt: number): DeviceConcern | undefined => {
     const links = device.facts?.links;
-    // Same floor the agent's own verbs are drawn at (deviceAgent.ts): a machine holding no socket, or holding one with
-    // "Run commands" off, cannot be asked to do this, and a button that only ever refuses is worse than no button.
+    // Only on a machine that answers with no gap: one holding no socket cannot be asked to do this, and a button that
+    // only ever refuses is worse than no button; one with a gap has that gap's sentence to say first.
     if (links === undefined || links.unreachable === 0 || device.online !== true || device.gap !== undefined) {
         return undefined;
     }

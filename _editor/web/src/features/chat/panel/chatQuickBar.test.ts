@@ -7,7 +7,7 @@ import { VueQueryPlugin } from "@tanstack/vue-query";
 import { type App, computed, createApp, h, nextTick, ref } from "vue";
 import { useChat } from "../run/useChat";
 import { focusComposer } from "../tabs/useChat-tabs";
-import { quickBarTranscript } from "./chatPanelLayout";
+import { quickBarShowAsk, quickBarTranscript } from "./chatPanelLayout";
 import { draftConversation, reveal } from "./useChat-reveal";
 
 import { queryClient } from "../../../lib/queryPersistence";
@@ -353,6 +353,20 @@ it(`gives an overshot edge its transcript back when the pointer returns in time`
     hoverIn();
     await waitOutHover();
 
+    expect([quickBarTranscript.value, opened()]).toEqual([true, true]);
+});
+
+// A board card's click asks for the chat itself: before, the pill only changed its title and readers clicked again.
+it(`shows the chat's turns, kept, when a board card asks for them`, async () => {
+    said();
+    await mountBar();
+    quickBarShowAsk.value += 1;
+    await settle();
+    expect([quickBarTranscript.value, opened()]).toEqual([true, true]);
+
+    // A second card's click while it is open keeps it open, rather than folding what the first one opened.
+    quickBarShowAsk.value += 1;
+    await settle();
     expect([quickBarTranscript.value, opened()]).toEqual([true, true]);
 });
 

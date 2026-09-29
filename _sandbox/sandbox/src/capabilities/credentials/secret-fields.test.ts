@@ -1,5 +1,5 @@
 import { type Capability, type CapabilityKind, CapabilitySchema, VAULTED } from "@intentic/sandbox-contract";
-import { partitionSecretValues } from "./secret-fields.js";
+import { partitionSecretValues, pastedSecret } from "./secret-fields.js";
 import { generateSshKey } from "./ssh-keys.js";
 
 // Pins that a vaulted entry (secret fields replaced by VAULTED) still passes CapabilitySchema; a kind whose echo omits
@@ -206,4 +206,14 @@ test("an extension's registry stays in the manifest: it is a catalogue fact, not
     expect(sample).toEqual(expect.any(Object));
     const { values } = partitionSecretValues(sample as Capability, new Map());
     expect(Object.keys(values)).toEqual(["token"]);
+});
+
+// A token pasted with its trailing newline was refused by every HTTP client as a header value; a PEM key keeps the
+// final newline its format needs.
+test("a pasted one-line credential is vaulted without its surrounding whitespace, a multi-line one as given", () => {
+    expect(pastedSecret("  tok_65chars\n")).toBe("tok_65chars");
+    const pem = "-----BEGIN KEY-----\nabc\n-----END KEY-----\n";
+    expect(pastedSecret(pem)).toBe(pem);
+    const { values } = partitionSecretValues({ id: "fleet", kind: "fleet", config: { token: "itk_x\r\n" } } as Capability, new Map());
+    expect(values).toEqual({ token: "itk_x" });
 });

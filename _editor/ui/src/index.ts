@@ -31,6 +31,8 @@ export { type BarItem } from "./components/charts/barChart.js";
 export { default as BottomSheet } from "./components/layout/BottomSheet.vue";
 // A phone screen's one creating press, floating over its bottom-right corner.
 export { default as FloatingAction } from "./components/layout/FloatingAction.vue";
+// For the app's router: a pick that closes a sheet navigates only once the sheet's history entry is gone.
+export { overlayBackSettled } from "./composables/useBackDismiss.js";
 // <Avatar> for things rather than people: the logo, then glyph, then initials fallback ladder.
 export { default as BrandMark } from "./components/brand/BrandMark.vue";
 // PrimeVue's Button wrapped so a press whose handler returns a promise locks the button and shows a working state

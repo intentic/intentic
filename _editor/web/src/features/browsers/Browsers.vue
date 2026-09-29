@@ -718,8 +718,7 @@ watch(
                                 @click="queueOpen = !queueOpen"
                             >
                                 <Icon name="exclamation-triangle" class="shrink-0 text-3xs text-warning" />
-                                {{ queuedHelp.length }} {{ t(`browsers.browsers.other`) }} {{ queuedHelp.length === 1 ? "browser" : "browsers" }}
-                                {{ t(`browsers.browsers.waiting`) }}
+                                {{ t(`browsers.browsers.othersWaiting`, { count: queuedHelp.length }, queuedHelp.length) }}
                                 <Icon :name="queueOpen ? 'chevron-down' : 'chevron-up'" class="shrink-0 text-3xs text-muted" />
                             </button>
                         </div>

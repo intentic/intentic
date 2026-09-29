@@ -13,7 +13,9 @@ import { t } from "@intentic/ui/i18n";
 //    turns it away before any request, for free) with this conversation's limit answer set to resend, so it fires by
 //    itself when the allowance reopens. Never wrong: a reading that went stale just lets it run now.
 //  - `idle`, nothing is running: the ordinary send.
-//  - `parked`, a turn is live but stopped on a card: the message waits for the card to be answered.
+//  - `parked`, a turn is live but stopped on a card: the message waits for the card to be answered. Also a chat the
+//    agents list says waits on a person while this window has not drawn the card yet: the composer must not read as
+//    idle over an agent that has been waiting for an answer.
 //  - `steer`, a live turn takes mid-turn input: the message reaches the turn already running.
 //  - `queue`, a live turn that doesn't: the message waits for it to end.
 export type SendIntent = `place` | `edit` | `plan` | `scheduled` | `idle` | `parked` | `steer` | `queue`;
@@ -44,6 +46,8 @@ export interface ComposerSituation {
     readonly streaming: boolean;
     /** That live turn is parked on a card (plan, question, permission). */
     readonly awaitingDecision: boolean;
+    /** The agents list says this chat waits on a person, whether or not this window has drawn the card yet. */
+    readonly waitingOnYou: boolean;
     /** That live turn takes mid-turn input. */
     readonly steerable: boolean;
     /** The last turn stopped before it finished, as the pane reads it against the clock (see PickUpSituation). */
@@ -85,6 +89,9 @@ export const sendIntentOf = (situation: ComposerSituation): SendIntent => {
         return `plan`;
     }
     if (!situation.streaming) {
+        if (situation.waitingOnYou) {
+            return `parked`;
+        }
         return situation.spentUntil === undefined ? `idle` : `scheduled`;
     }
     if (situation.awaitingDecision) {
@@ -100,6 +107,7 @@ const PLACEHOLDER: Record<SendIntent, (words: ComposerWords) => string> = {
     place: (words) => t(`chat.composerIntent.placeholderPlace`, { provider: words.provider }),
     // Read only once the box is cleared, exactly when "what was I doing?" needs answering.
     edit: () => t(`chat.composerIntent.placeholderEdit`),
+    // Says what typing does here, since a reply that reads like consent ("go ahead") would otherwise look like approval.
     plan: () => t(`chat.composerIntent.placeholderPlan`),
     scheduled: (words) => t(`chat.composerIntent.placeholderScheduled`, { when: words.reopens ?? `` }),
     idle: (words) => (words.onTrial ? t(`chat.words.askAnything`) : t(`chat.composerIntent.placeholderIdle`, { provider: words.provider })),

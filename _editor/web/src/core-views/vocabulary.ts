@@ -10,12 +10,20 @@ import { t } from "@intentic/ui/i18n";
 export interface Vocabulary {
     readonly repo: string;
     readonly repos: string;
+    // "this repository" as one phrase rather than a noun dropped after "this": other languages pick the pointer word by
+    // the noun's gender (Polish "to repozytorium", "ten projekt").
+    readonly thisRepo: string;
     readonly agent: string;
     readonly Agent: string;
     readonly branch: string;
     readonly land: string;
     readonly landing: string;
     readonly landAgain: string;
+    // A card's standing and its drill-in around the same press: done, waiting for it, going to it, and refused.
+    readonly landed: string;
+    readonly readyToLand: string;
+    readonly reviewAndLand: string;
+    readonly couldntLand: string;
     readonly landRequested: string;
     readonly requestLand: string;
     readonly requestLandHint: string;
@@ -42,6 +50,11 @@ export interface Vocabulary {
     readonly push: string;
     readonly publish: string;
     readonly sync: string;
+    // The same three while one is in flight ("Pushing · 4s"): a word per verb, since English's "-ing" is not how any
+    // other language makes one.
+    readonly pushing: string;
+    readonly publishing: string;
+    readonly syncing: string;
     readonly diff: string;
     // The workspace sidebar's second mode, and the noun its badge counts with, either side of the number
     // ("3 unsaved changes"). Two rows rather than one, since English needs the singular spelled separately.
@@ -62,12 +75,17 @@ export interface Vocabulary {
 const developer = (): Vocabulary => ({
     repo: t(`views.vocabulary.repository`),
     repos: t(`views.vocabulary.repositories`),
+    thisRepo: t(`views.vocabulary.thisRepository`),
     agent: t(`views.vocabulary.agent2`),
     Agent: t(`shared.agent`),
     branch: t(`views.vocabulary.branch`),
     land: t(`agents.words.landNow`),
     landing: t(`agents.words.landing`),
     landAgain: t(`agents.words.landAgain`),
+    landed: t(`agents.agentStatus.landed`),
+    readyToLand: t(`agents.agentStatus.readyToLand`),
+    reviewAndLand: t(`agents.agentStatus.reviewLand`),
+    couldntLand: t(`agents.agentStatus.couldntLandChip`),
     landRequested: t(`views.vocabulary.landRequested`),
     requestLand: t(`views.vocabulary.requestLand`),
     requestLandHint: t(`views.vocabulary.landingNeedsMaintainerPuts`),
@@ -91,6 +109,9 @@ const developer = (): Vocabulary => ({
     push: t(`views.vocabulary.push`),
     publish: t(`ui.action.publish`),
     sync: t(`views.vocabulary.sync`),
+    pushing: t(`views.vocabulary.pushing`),
+    publishing: t(`views.vocabulary.publishing`),
+    syncing: t(`views.vocabulary.syncing`),
     diff: t(`views.vocabulary.diff`),
     changes: t(`shared.changes`),
     pendingChange: t(`views.vocabulary.uncommittedChange`),
@@ -108,12 +129,17 @@ const developer = (): Vocabulary => ({
 const maker = (): Vocabulary => ({
     repo: t(`views.vocabulary.project`),
     repos: t(`views.vocabulary.projects2`),
+    thisRepo: t(`views.vocabulary.thisProject`),
     agent: t(`views.vocabulary.assistant2`),
     Agent: t(`views.vocabulary.assistant`),
     branch: t(`views.vocabulary.draft`),
     land: t(`views.vocabulary.accept`),
     landing: t(`views.vocabulary.accepting`),
     landAgain: t(`views.vocabulary.acceptAgain`),
+    landed: t(`views.vocabulary.accepted`),
+    readyToLand: t(`views.vocabulary.readyToAccept`),
+    reviewAndLand: t(`views.vocabulary.lookAndAccept`),
+    couldntLand: t(`views.vocabulary.couldntAccept`),
     landRequested: t(`views.vocabulary.askedToAccept`),
     requestLand: t(`views.vocabulary.askToAccept`),
     requestLandHint: t(`views.vocabulary.acceptingNeedsMaintainerPuts`),
@@ -137,6 +163,9 @@ const maker = (): Vocabulary => ({
     push: t(`views.vocabulary.backUp`),
     publish: t(`views.vocabulary.backUp`),
     sync: t(`views.vocabulary.backUp`),
+    pushing: t(`views.vocabulary.backingUp`),
+    publishing: t(`views.vocabulary.backingUp`),
+    syncing: t(`views.vocabulary.backingUp`),
     diff: t(`views.vocabulary.whatChanged`),
     changes: t(`views.vocabulary.whatChanged`),
     pendingChange: t(`views.vocabulary.unsavedChange`),

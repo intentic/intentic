@@ -639,6 +639,11 @@ test(`keeps both ways back for the one gap that is silence`, () => {
     ]);
 });
 
+test(`a disabled command scope links to that device's permission form`, () => {
+    const concern = concernsOf({ gap: `scope-off`, platform: `linux`, card: `linked-device` }).find((entry) => entry.key === `gap`);
+    expect(concern?.fix).toEqual({ kind: `card`, label: `Open device settings`, card: `linux`, connection: `linked-device` });
+});
+
 // A machine dialling a sandbox that no longer exists, which its agent will keep doing forever. The counts ride the
 // connect-time facts, so they are what the machine itself last said, not what this sandbox can see of its siblings.
 const withLinks = (links: NonNullable<Device[`facts`]>[`links`], overrides: Partial<Device> = {}) =>

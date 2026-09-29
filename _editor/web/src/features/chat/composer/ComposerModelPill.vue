@@ -2,7 +2,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import type { Conversation } from "../session/conversation";
-import { composerModelReading } from "./composerModelLabel";
+import { composerModelReading, stillRunningOn } from "./composerModelLabel";
 import ProviderLogo from "../accounts/ProviderLogo.vue";
 import { useT } from "@intentic/ui/i18n";
 
@@ -28,8 +28,16 @@ const {
 const { provider, harness, model, auto } = conversation.selection;
 // The whole face of the control (composerModelLabel.ts): the model, `Auto`, or the press to choose one when this
 // chat has nothing that could answer.
-const reading = computed(() => composerModelReading({ provider: provider.value, harness: harness.value, model: model.value, auto: auto.value }));
+const choice = computed(() => ({ provider: provider.value, harness: harness.value, model: model.value, auto: auto.value }));
+const reading = computed(() => composerModelReading(choice.value));
 const modelLabelText = computed(() => reading.value.label);
+// A pick made while a reply runs is for the next message; the reply keeps the model it was sent under, so the pill says
+// so rather than read as though the switch had reached it (a person asked the agent which model it was, twice).
+const { streaming } = conversation.turn;
+const runningOn = computed(() => stillRunningOn(choice.value, { streaming: streaming.value, sentModel: conversation.selection.state.value.sentModel }));
+const nextHint = computed(() =>
+    runningOn.value === undefined ? undefined : t(`chat.composerModelPill.fromNextMessage`, { model: modelLabelText.value, running: runningOn.value }),
+);
 
 // The button itself: see the note above on why the anchor has to be this element and not a stand-in.
 const el = ref<HTMLButtonElement>();
@@ -44,6 +52,8 @@ defineExpose({ el, label: modelLabelText });
         :disabled="disabled"
         :aria-expanded="expanded"
         :aria-label="ariaLabel ?? t(`chat.composerModelPill.model`, { modelLabelText })"
+        :aria-description="nextHint"
+        v-tooltip.top="nextHint"
     >
         <!-- A vendor's mark over a chat that vendor cannot answer is the same lie as its name; the list's own mark stands there. -->
         <Icon v-if="reading.unset" name="th-large" class="shrink-0 text-2xs text-link" aria-hidden="true" />
@@ -51,6 +61,8 @@ defineExpose({ el, label: modelLabelText });
         <Icon v-else-if="auto" name="sparkles" class="shrink-0 text-2xs text-link" aria-hidden="true" />
         <ProviderLogo v-else :provider="provider" class="shrink-0 text-2xs text-link" />
         <span class="truncate" :class="labelClass">{{ modelLabelText }}</span>
+        <!-- Hides with the name: on a pill down to its logo it would be the one word left. -->
+        <span v-if="runningOn !== undefined" class="shrink-0 font-normal text-subtle" :class="labelClass">{{ t(`chat.composerModelPill.nextMessage`) }}</span>
         <!-- Goes with the name: a pill down to its logo is a glyph press like its neighbours, and the chevron was width it no longer
              had. The wrapper is what hides, since the icon's own display rule outranks a utility put on it. -->
         <span class="inline-flex shrink-0" :class="labelClass"><Icon name="chevron-down" class="text-2xs text-subtle" /></span>

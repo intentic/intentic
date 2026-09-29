@@ -9,9 +9,10 @@ import * as vueRouterOriginal from "vue-router";
 
 // Needs jsdom: ui reads matchMedia at module scope, and environment.ts reads window.env and throws without it.
 
+const push = jest.fn();
 jest.mock(`vue-router`, () => ({
     ...vueRouterOriginal,
-    useRouter: () => ({ push: jest.fn(), replace: jest.fn() }) as never,
+    useRouter: () => ({ push, replace: jest.fn() }) as never,
 }));
 
 // Google's gate is open unless a test closes it: that is the state the overlay exists in.
@@ -20,7 +21,8 @@ const renderButton = jest.fn<() => Promise<boolean>>().mockResolvedValue(true);
 const cancelSignIn = jest.fn();
 jest.mock(`../../auth/useGoogleIdentity`, () => ({ useGoogleIdentity: () => ({ needsSignIn, renderButton, cancelSignIn }) }));
 jest.mock(`../../auth/useAuth`, () => ({ useAuth: () => ({ user: ref({ email: `owner@example.com` }) }) }));
-const activeSandbox = ref<{ role: string } | undefined>({ role: `owner` });
+// A sandbox still being set up unless a test says it has answered before (`lastSeenAt`).
+const activeSandbox = ref<{ role: string; lastSeenAt?: string | null; removedAt?: string | null } | undefined>({ role: `owner` });
 jest.mock(`../client/useSandbox`, () => ({ useSandbox: () => ({ activeSandboxId: ref(undefined), active: activeSandbox }) }));
 
 const signInThroughBrowser = jest.fn();
@@ -71,6 +73,8 @@ const settle = async (): Promise<void> => {
 };
 
 beforeEach(() => {
+    push.mockReset();
+    cancelSignIn.mockReset();
     needsSignIn.value = true;
     activeSandbox.value = { role: `owner` };
     renderButton.mockClear().mockResolvedValue(true);
@@ -217,4 +221,44 @@ it(`back to setup settles both roads with nothing`, async () => {
 
     expect(cancelSignIn).toHaveBeenCalledTimes(1);
     await expect(outcome).resolves.toBeUndefined();
+});
+
+// A second wall on a sandbox at work: "Back to setup" led to /setup, where the same wall came up again over a line
+// saying its container was cleaned up. A working sandbox's reader is offered "Not now" and stays where they are.
+describe(`the way out of the wall`, () => {
+    it(`is "Not now" on a sandbox that has answered before, and goes nowhere`, async () => {
+        activeSandbox.value = { role: `owner`, lastSeenAt: `2026-09-28T08:44:00Z`, removedAt: null };
+        await mount();
+
+        expect(buttonSaying(`Back to setup`)).toBeUndefined();
+        buttonSaying(`Not now`)?.click();
+        await settle();
+
+        expect(cancelSignIn).toHaveBeenCalledTimes(1);
+        expect(push).not.toHaveBeenCalled();
+    });
+
+    it(`is "Back to setup" on a sandbox that never answered`, async () => {
+        activeSandbox.value = { role: `owner`, lastSeenAt: null, removedAt: null };
+        await mount();
+
+        expect(buttonSaying(`Not now`)).toBeUndefined();
+        buttonSaying(`Back to setup`)?.click();
+        await settle();
+
+        expect(push).toHaveBeenCalledTimes(1);
+    });
+});
+
+// The desktop window used to stay exactly as it was while the sign-in ran in the browser.
+it(`says the sign-in is waiting in the browser once handed off, and can open it again`, async () => {
+    desktopVersion.mockReturnValue(`1.2.3`);
+    await mount();
+
+    buttonSaying(`Continue with Google in your browser`)?.click();
+    await nextTick();
+
+    expect(document.body.textContent).toContain(`Finish signing in in your browser…`);
+    buttonSaying(`Open it again`)?.click();
+    expect(signInThroughBrowser).toHaveBeenCalledTimes(2);
 });

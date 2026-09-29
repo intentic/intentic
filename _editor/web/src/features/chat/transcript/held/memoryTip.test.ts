@@ -1,6 +1,6 @@
 import { judge, type MemoryReading } from "@intentic/constants/memory-room";
 import { memoryReading } from "./heldQueue";
-import { memoryTip } from "./memoryTip";
+import { memoryShare, memoryTip } from "./memoryTip";
 
 // The card is read out of the daemon's own sentence, so every case here asks the daemon's `judge` for that sentence
 // rather than typing one: a change to its wording fails this file instead of emptying the hover.
@@ -56,4 +56,12 @@ it(`names the stall when memory pressure is what refused it`, () => {
 it(`raises nothing for a sentence with no figures`, () => {
     expect(memoryTip(`Sandbox memory is low.`)).toBeUndefined();
     expect(memoryTip(undefined)).toBeUndefined();
+});
+
+// The notice over the composer says the hold in a few characters: in use against the limit, resident when swap is in play.
+it(`says in use against the limit in a few characters, and nothing where no ceiling is named`, () => {
+    expect(memoryShare(sentence({ usedBytes: 7.3 * GIB, swapBytes: 2.4 * GIB, limitBytes: 8 * GIB }))).toBe(`4.9/8.0 GiB`);
+    expect(memoryShare(sentence({ usedBytes: 17.6 * GIB }))).toBe(`17.6/18.0 GiB`);
+    expect(memoryShare(sentence({ usedBytes: 2 * GIB, stallPercent: 45 }))).toBeUndefined();
+    expect(memoryShare(undefined)).toBeUndefined();
 });

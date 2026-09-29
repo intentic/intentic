@@ -14,10 +14,12 @@ the daemon is running.
 What the daemon does around you:
 
 - **Conversations are agents on worktrees.** Each conversation works on its own git branch
-  (`agent/<conversation-id>`), checked out in a worktree that is mounted over `/work` for the turn. When a
-  turn ends cleanly its delta is **landed**: applied to the owner's main tree as UNCOMMITTED changes, so their
-  own commit is the review boundary. That is why you commit only when asked. A patch that will not apply
-  refuses the whole land and raises a conflict card naming the paths; every worktree keeps everything.
+  (`agent/<conversation-id>`), checked out in a worktree that is mounted over `/work` for the turn and rebased
+  onto the main tree's last commit before each turn. When a turn ends cleanly its delta waits as **Ready to
+  land** until the owner **lands** it (it lands by itself only with **Land finished work automatically** on):
+  applied to the owner's main tree as UNCOMMITTED changes, so their own commit is the review boundary. That is
+  why you commit only when asked. A patch that will not apply refuses the whole land and raises a conflict card
+  naming the paths; every worktree keeps everything.
   Untracked files shaped like scratch (a new hidden folder, logs and dumps, a checkout of its own) never ride a
   land: they stay in the conversation's copy, listed on its review, until the owner includes or deletes them.
 - **Nothing checks your work when you finish or after it lands.** You decide when the work is done:
@@ -37,12 +39,15 @@ What the daemon does around you:
   skill and its tools. A missing one is asked for with the `capabilities` skill, never set up by hand.
 - **Personas** are cards the owner writes that decide what a turn IS and MAY DO: which accounts it speaks
   through, which shelves of the toolbox are open (files, shell, web, browser, connectors, delegation…), which
-  folder it may touch, which system prompt it runs on. Enforcement is by absence: a withheld tool is not
-  mounted and a withheld credential is never injected, so a refusal you meet may be a card, not a fault.
+  folder it may touch, which model it opens on, which system prompt it runs on. Enforcement is by absence: a
+  withheld tool is not mounted and a withheld credential is never injected, so a refusal you meet may be a card,
+  not a fault. A persona is a card in `.intentic/config/personas.json` plus a kit folder,
+  `.intentic/config/personas/<id>/` (`PROMPT.md`, its own system prompt; `skills/`); the card has no prompt
+  field.
 - **Automations** are standing instructions that start a turn on their own (a cron expression, or a
   connector's listener); **workflows** are daemon-scheduled graphs of turns; **drafts** are posts held for the
   owner's approval. **Extensions** add connectors, channels (Slack, Discord, Telegram, WhatsApp…), viewers
-  and skills, installed from Sandbox ▸ Discover.
+  and skills, found and installed on Sandbox ▸ Extensions.
 - **Secrets** are stored by the owner (Sandbox ▸ Secrets) and reach you only as `{{secret:name}}`
   references, substituted at execution. You never see a value and never ask for one in chat: for one nobody
   has stored, `secrets ask NAME --why "…"` puts a masked field on a card in the chat, and the answer comes
@@ -80,7 +85,10 @@ description of the product, and it may describe a project that has nothing to do
 Memory is that `AGENTS.md`, at the workspace root, edited on `/sandbox/agent?section=instructions`. The daemon
 reads it and composes it into the turn's instructions itself, so every runtime gets the same rules however its
 own loop would have looked for them; a folder deeper in can carry its own, read on top of the root's by a
-conversation that starts there (a persona's `startIn`).
+conversation that starts there (a persona's `startIn`). It survives a custom system prompt. It is read from the
+turn's own tree, so the owner's uncommitted edit reaches isolated conversations only once committed (by them, or
+by **Save a version of accepted work**). Settings, personas and grants are read as each turn is planned: a change
+applies from every conversation's next turn, with no restart.
 
 ## Routing: what the owner wants → what to do
 
@@ -99,6 +107,12 @@ conversation that starts there (a persona's `startIn`).
 | to wait on a CI run, a deploy, anything outside this sandbox | `mcp__watch__start` with a cheap check command, then end the turn |
 | to wait on work started here: a background command, a subagent | the `wait` tool with the command's ID from its Bash call, or the subagent's id (its Agent call's id, or the id spawn returned); never `sleep`, and never detach a process yourself |
 | to know why something failed, died, hung or felt slow | the diagnostics playbook below |
+| to know how personas work, how to keep an agent inside one project, or which model runs what (an orchestrator on one model, subagents on cheaper ones; whether that is enforced) | read `/root/.claude/skills/intentic/references/personas-and-models.md` |
+| to reach the workspace from a phone or another computer, the app's link, or to let someone else in | read `/root/.claude/skills/intentic/references/remote-access.md` |
+| to rename agents, tell them apart at a glance, tag or filter them | read `/root/.claude/skills/intentic/references/agents-board.md` (there are no tags; it says what exists instead) |
+| to know where instructions live (`AGENTS.md`, the system prompt, a persona's prompt, skills) or whether a change needs a restart to reach running agents | read `/root/.claude/skills/intentic/references/instructions-and-settings.md` |
+| Land, Accept, Save changes, Back up, Approve, Rebuild explained, and in which order | read `/root/.claude/skills/intentic/references/land-save-rebuild.md` |
+| help with an editor error naming a route or field ("doesn't provide", "didn't keep", "answered in a shape"), a blank panel, a setting that snaps back | the sandbox is likely older than the app: read `/root/.claude/skills/intentic/references/sandbox-behind-app.md` and check the daemon's version before blaming the browser |
 | a secret or API key used | write `{{secret:name}}` in the command; an unknown name fails and lists the names that exist. One nobody has stored: `secrets ask NAME --why "…"` (`--link` where to get one, `--hint` what it looks like, `--replace` for a stored one being refused), never a request to paste it into chat. One the task can make itself (a session key, a webhook signing secret, a database password it sets up): `secrets generate NAME`, which needs nobody, never shows the value and never hardcodes one into a file. Some are gated: the card goes up for the people named on it and the turn waits |
 | a credential that says it needs approval, or an account that looks unconnected | `secrets gates`; then `secrets request <id> --why "…"` for an account or connector, or just write the secret's reference and let the card go up for that one use |
 | a secret refused or carded for where it was going | its host guard is on: `secrets hosts NAME` says where it may go, so aim one plain `curl`/`wget`/`git` command straight at those hosts. To let it go somewhere new for good, `secrets hosts NAME add HOST` asks the owner on a card, as does `secrets hosts NAME off`; `on` and `remove` need nobody |
@@ -114,9 +128,11 @@ conversation that starts there (a persona's `startIn`).
 /work                                the workspace (your worktree is mounted here during an isolated turn)
 /work/refs/                          reference shelf: read, cite by path, never edit
 /work/public/                        outbox: every file in it is on the public internet
-/work/.intentic/config/settings.json this sandbox's agent settings (systemPromptMode, skills,
-                                     stableSystemPrompt, iqSearch, hashlineEdits, subagent limits, rules…)
-/work/.intentic/config/              capabilities.json, personas/, automations.json, workflows.json,
+/work/AGENTS.md                      the owner's standing instructions (memory), composed into every turn
+/work/.intentic/config/settings.json this sandbox's agent settings (systemPromptMode, systemPrompt, modelRoles,
+                                     personaRouting, actionRules, skills, subagent limits, rules…)
+/work/.intentic/config/              capabilities.json, personas.json (the cards) and personas/<id>/ (each
+                                     one's kit: PROMPT.md, skills/), automations.json, workflows.json,
                                      environment.Dockerfile (the owner's overlay), skills/ (their own),
                                      drafts/, extension-enablement.json. TRACKED: in an isolated turn this is
                                      your branch's checkout, and a file you write here (an approval, an
@@ -134,6 +150,8 @@ conversation that starts there (a persona's `startIn`).
 /work/.intentic/local/               cache/, tmp/, environment.approved.Dockerfile (the composed overlay). Shared live
 /work/.agents/skills/                the loaded skills every runtime reads (Claude links them from .claude/skills/)
 /root/.claude/skills/                the image-baked skills: this one and the task skills routed above
+/root/.claude/skills/intentic/references/  this skill's longer answers, each named in the routing table
+/opt/sandbox/package.json            the daemon's own version ("0.0.0": an unreleased build, e.g. from a checkout)
 /history/logs/                       daemon.log, perf.jsonl, resource-metrics.jsonl, client.jsonl (what the
                                      editor reported about itself), filter-stats.jsonl (what the output filter
                                      cut from each Bash call), raw-output/ (a filtered call's whole output),
@@ -160,6 +178,9 @@ over a window you choose. They cannot write, and nothing in this playbook restar
 - Something errored in the daemon (an automation, a sync, a land, a refused provider) →
   `mcp__diagnostics__errors` (`sinceMinutes`; `contains` a conversation id, route or code; `level`).
 - The editor white-screened, stalled or felt slow → `mcp__diagnostics__errors` with `source: "browser"`.
+- The editor names a route or a field it lacks, or a panel is blank → the daemon may be older than the app:
+  compare `/opt/sandbox/package.json` with the newest release before suggesting a reload
+  (`/root/.claude/skills/intentic/references/sandbox-behind-app.md`).
 - Work felt slow → `mcp__diagnostics__slow` (`op: "git."`, `"http."`…), with the machine's load at the time,
   which is what separates a regression from a busy machine.
 - Out of memory, a killed process, a stalling event loop → `mcp__diagnostics__resources` with a field:
@@ -191,7 +212,8 @@ rebuild, a daemon restart from the host). Say plainly that nothing was changed.
   is read-only: a bar stands where the message box would, naming the parent and leading back to it, since the parent
   directs its subagents; a spawned one can still be written to directly from the bar. A spawned child's code goes
   back into its parent's checkout, as an in-process subagent's edits do, so the family lands once, with the parent.
-  **Land** applies a conversation's delta to the main tree; a conflict card names the paths. With geek metrics
+  **Land** (in plain words, **Accept**) applies a conversation's delta to the main tree; a conflict card names the
+  paths. Cards carry titles, reactions and a tint for the kind of work, never tags. With geek metrics
   on (Settings ▸ Appearance), the board's status bar carries the sandbox's CPU, memory and disk, and opens a
   panel with every figure, memory by kind of process, and memory and CPU by session; each card shows its own
   conversation's.
@@ -202,10 +224,14 @@ rebuild, a daemon restart from the host). Say plainly that nothing was changed.
   Repair switch is off. Nothing checks a push on its way out: what a push broke is CI's to say, and on main the
   fix agent takes it.
 - **Capabilities** (`/capabilities`): the connections; each card is a connector, account, device or service.
-- **Sandbox** (`/sandbox/<tab>`): Overview, Status (running turns), Usage, Environment, Secrets, Agent (the
-  settings above), Extensions, Discover, Access, Personas, Devices.
-- **Workspace** (`/workspace/<path>`): the file tree. **Browsers** (`/browsers`): watch a live browser
-  session. **Settings** (`/settings`): the owner's own preferences, not the sandbox's.
+- **Sandbox** (`/sandbox/<tab>`): Overview (version, update, Sandbox URL), Usage, Environment, Secrets, Agent
+  (`?section=` models, instructions, tools, safety, finishing), Extensions (finding and installing them too),
+  Access, Areas, Personas, Devices, Recently deleted.
+- **Workspace** (`/workspace/<path>`): the file tree, and the Changes panel where work is committed (**Commit**,
+  or **Save N changes** in plain words). **Browsers** (`/browsers`): watch a live browser session. **Settings**
+  (`/settings`): the owner's own preferences, not the sandbox's, except Appearance ▸ **How you work**, git's words
+  (**I write code**) or plain ones (**I don't**), which the sandbox keeps per person so all of their devices read the same words.
+- The app is **https://app.intentic.dev**, from any browser or phone (Add to Home Screen installs it).
 
 ## Hard invariants
 

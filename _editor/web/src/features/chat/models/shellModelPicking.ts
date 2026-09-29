@@ -5,7 +5,7 @@ import { effortLabelOf } from "./run-settings/effortScale";
 import { type RoleModel, useRoleModel } from "../accounts/roleModel";
 import { requestModelPick } from "./host/hostModelPicker";
 import { modelLabelFor } from "../accounts/providerCatalog";
-import { useChat } from "../run/useChat";
+import { rememberedModelFor, rememberedProviderFor } from "../run/turnDefaults";
 
 // The shell's implementation of the kit's `ModelPicking`, driving every <AgentRunButton>. `api.models` in
 // extension-host/apiImpl.ts is built on this, so a Fix button drawn by an extension and one drawn by the shell
@@ -54,15 +54,17 @@ const roleModel = (role: string): RoleModel => {
     return made;
 };
 
-// Standing model for one job; falls back to the chat's own composer model when the job's pin list is empty or its
-// role is unknown to this build. Effort follows the pin's own thinking via sendableEffort (turn-resume.ts): a Max
-// pin with thinking off reads as High, not Max.
+// Standing model for one job; falls back to the model a new chat would open on (the remembered pick, resolved against
+// what can run) when the job's pin list is empty or its role is unknown to this build: a run starts a conversation of
+// its own, so the open chat's model says nothing about it. A surface that sends this along with its press (Pipelines'
+// Fix) gets it run by a sandbox with no pin. Effort follows the pin's own thinking via sendableEffort
+// (turn-resume.ts): a Max pin with thinking off reads as High, not Max.
 export const agentRunChoice = (role: string): AgentRunChoice => {
     const head = roleModel(role).choice.value;
-    const chat = useChat();
-/* THE COMPOSER FLOOR CONTRIBUTES ITS MODEL AND NOTHING ELSE. */
+/* THE CHAT FLOOR CONTRIBUTES ITS MODEL AND NOTHING ELSE. */
     if (head === undefined) {
-        return namedChoice({ provider: chat.provider.value, model: chat.model.value });
+        const provider = rememberedProviderFor();
+        return namedChoice({ provider, model: rememberedModelFor(provider) });
     }
 /* The picker preserves the entry's configured run settings. */
     return namedChoice({

@@ -41,7 +41,7 @@ jest.mock("../fleet/agentActions", () => ({
     nothingLanded: () => stub.nothingLanded,
 }));
 
-const { askAgentToResolve } = await import("../fleet/agentActions");
+const { askAgentToResolve, landAgent } = await import("../fleet/agentActions");
 const { pendingOn } = await import("../fleet/useAgents-provisional");
 const { useAgentDrag } = await import("./useAgentDrag");
 
@@ -51,6 +51,7 @@ afterEach(() => {
     stub.said.length = 0;
     stub.notice.value = undefined;
     mocked(askAgentToResolve).mockClear();
+    mocked(landAgent).mockClear();
 });
 
 // TWO KINDS OF "the turn didn't go", ONE OF WHICH IS GOOD NEWS. The board's notice strip is a red bar that shifts the
@@ -118,4 +119,39 @@ it("refuses a second press on the same card while its action is still out", asyn
     stub.asks[0]?.({ kind: `sent` });
     await first;
     expect(pendingOn(`a`)).toBeUndefined();
+});
+
+// On a phone a card's land asks first, naming what goes where; the press itself goes only once confirmed, and never
+// after a cancel. A desktop press states itself and goes at once.
+describe("a land pressed on a card", () => {
+    const CARD = { id: `a`, sandboxId: undefined, title: `Lane E`, diff: { files: 12, insertions: 40, deletions: 3 } };
+
+    it("on a phone waits for the confirm, naming the card and its files, then lands the way it was pressed", async () => {
+        const { pressLand, pendingLand, confirmLand } = useAgentDrag();
+        await pressLand(CARD, `reland`, true);
+        expect(landAgent).not.toHaveBeenCalled();
+        expect(pendingLand.value).toEqual({ id: `a`, at: undefined, chosen: `reland`, title: `Lane E`, files: 12 });
+        confirmLand();
+        expect(pendingLand.value).toBeUndefined();
+        expect(landAgent).toHaveBeenCalledWith(`a`, `check`, `cumulative`, false, undefined);
+        stub.lands[0]?.({ landed: true, changed: true });
+    });
+
+    it("on a phone lands nothing once cancelled", async () => {
+        const { pressLand, pendingLand, cancelLand, confirmLand } = useAgentDrag();
+        await pressLand(CARD, `land`, true);
+        cancelLand();
+        confirmLand();
+        expect(pendingLand.value).toBeUndefined();
+        expect(landAgent).not.toHaveBeenCalled();
+    });
+
+    it("elsewhere goes at once", async () => {
+        const { pressLand, pendingLand } = useAgentDrag();
+        const pressed = pressLand(CARD, `land`, false);
+        expect(pendingLand.value).toBeUndefined();
+        expect(landAgent).toHaveBeenCalledWith(`a`, `check`, `outstanding`, false, undefined);
+        stub.lands[0]?.({ landed: true, changed: true });
+        await pressed;
+    });
 });

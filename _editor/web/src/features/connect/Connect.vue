@@ -14,10 +14,21 @@ import { refreshConnections } from "../chat/accounts/useChat-accounts";
 import { accessKnown, accessStateFor, providerReady } from "../chat/session/access";
 import { rememberPick } from "../chat/run/turnDefaults";
 import { useChat } from "../chat/run/useChat";
+import { useSandbox } from "../sandbox/client/useSandbox";
 import ConnectFlow from "../sandbox/secrets/ConnectFlow.vue";
 import EstatePicker from "../sandbox/secrets/EstatePicker.vue";
 import { localPrefetchStopped } from "./localPrefetch";
-import { arrivalLane, connectLane, type ConnectLaneKey, laneOfProvider, laneProviders } from "./connectLanes";
+import {
+    arrivalLane,
+    connectLane,
+    type ConnectLaneKey,
+    justLanded,
+    landedLine,
+    laneOfProvider,
+    laneProviders,
+    linkArrival,
+    type PickedStanding,
+} from "./connectLanes";
 import ConnectLane from "./ConnectLane.vue";
 import LocalModelLane from "./LocalModelLane.vue";
 import ProviderTile from "./ProviderTile.vue";
@@ -97,13 +108,11 @@ const settleLane = (): void => {
         return;
     }
     const asked = String(route.query[`provider`] ?? ``);
-    const lane = laneOfProvider(asked);
-    // A broken credential is asked for the same way a missing one is: the reader pressed "reconnect", and making them
-    // press a tile again would be asking twice. A provider that is simply already connected is a stale link, not a
-    // request, so it opens its lane without starting anything.
-    if (lane !== undefined) {
-        openLane.value = lane;
-        if (!providerReady(asked) || accessStateFor(asked).needsReauth) {
+    // Only a provider with nothing connected starts its sign-in here (linkArrival); a connected one waits for its tile.
+    const arrival = linkArrival(asked, providerReady);
+    if (arrival !== undefined) {
+        openLane.value = arrival.lane;
+        if (arrival.signIn) {
             void connect(asked as NativeProvider);
         }
         return;
@@ -155,12 +164,20 @@ const connectChosen = (): void => {
 
 // Landing on a connection is a state, not a redirect: the lane says who it signed in as and offers the one next move.
 const landed = ref<AgentProvider | undefined>(undefined);
-// A provider that became ready while this view was open is the thing that just happened, whichever lane did it.
+// Named with the sandbox it went to: a connection lives in that sandbox alone (landedLine).
+const { active: activeSandbox } = useSandbox();
+const landedText = computed(() =>
+    landed.value === undefined ? `` : landedLine(providerSpec(landed.value)?.accountLabel ?? landed.value, activeSandbox.value?.name),
+);
+// A provider that became ready while this view was open is the thing that just happened, whichever lane did it; one
+// picked while already connected is a sign-in starting, and "Connected" above it would contradict it (justLanded).
 watch(
-    () => (chosen.value === undefined ? false : providerReady(chosen.value)),
-    (ready) => {
-        if (ready && chosen.value !== undefined) {
-            landed.value = chosen.value;
+    (): PickedStanding | undefined =>
+        chosen.value === undefined ? undefined : { provider: chosen.value, settled: providerReady(chosen.value) && !accessStateFor(chosen.value).needsReauth },
+    (now, before) => {
+        const provider = justLanded(now, before);
+        if (provider !== undefined) {
+            landed.value = provider;
         }
     },
 );
@@ -220,7 +237,7 @@ watch([accessKnown, () => route.query[`provider`]], settleLane);
         <!-- The one thing that just happened, above the lanes that are still offering to do it again. -->
         <div v-if="landed" class="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-success/40 bg-success/10 px-4 py-3">
             <Icon name="check" class="shrink-0 text-success" />
-            <span class="min-w-0 flex-1 text-sm text-content">{{ t(`connect.connect.landed`) }}</span>
+            <span class="min-w-0 flex-1 text-sm text-content">{{ landedText }}</span>
             <Button :label="t(`connect.connect.startChatting`)" @click="startChatting" />
         </div>
 

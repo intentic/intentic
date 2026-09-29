@@ -14,7 +14,7 @@ import { useChatTrays } from "./chatTrays";
 import { CHILD_ROWS } from "../../agents/board/cards/childRows";
 import { closeSubagent } from "../panel/subagent/subagentView";
 import ChatRowList from "./ChatRowList.vue";
-import { laneOrdered } from "./laneOrder";
+import { laneOrdered, steadyLanes } from "./laneOrder";
 import { personaOfAgent, personaOfTab, tabsInLane, tabsOfPersona } from "./tabs";
 import { createChatRowActions, provideChatRowActions } from "./useChatRowActions";
 import ChatShareDialog from "../panel/ChatShareDialog.vue";
@@ -118,9 +118,13 @@ const trays = useChatTrays({
 });
 provide(CHILD_ROWS, trays.board);
 
+// While the pointer is over the list its order holds (steadyLanes): opening a chat moved its card, and the next press
+// on the same spot opened a different one. Leaving the list lets the fresh order in.
+const pointerOver = ref(false);
+
 // A run's steps live inside its row, not listed separately, though they're still open in the panes. Excluded
 // here only while the run is on the ledger (insideRun); once it rolls off, its chats reappear as normal rows.
-const lanes = computed<Record<FleetLane, OpenChat[]>>(() => {
+const lanes = computed<Record<FleetLane, OpenChat[]>>((drawn) => {
     const ledger = runIdsInLedger(workflowRuns.value);
     const listed: OpenChat[] = [];
     for (const conversation of conversations.value) {
@@ -134,7 +138,7 @@ const lanes = computed<Record<FleetLane, OpenChat[]>>(() => {
         }
         listed.push({ conversation, agent });
     }
-    return laneOrdered(listed);
+    return steadyLanes(laneOrdered(listed), pointerOver.value ? drawn : undefined);
 });
 // The lane's heading, and what becomes of its chats once Clear takes them out of this window.
 const LANES = computed((): readonly { key: FleetLane; label: string; dot: string; keeps: string }[] => [
@@ -258,7 +262,7 @@ defineExpose({ beginRename: actions.beginRename });
 </script>
 
 <template>
-    <div ref="root" class="flex min-h-0 flex-col gap-1.5">
+    <div ref="root" class="flex min-h-0 flex-col gap-1.5" @pointerenter="pointerOver = true" @pointerleave="pointerOver = false">
         <!-- Whom the lanes are scoped to, only once there is anyone to pick: without personas the lanes are the whole column. -->
         <ChatPersonaGrid v-if="personas.length > 0" ref="grid" :controls="listId" class="px-0.5 pt-1" />
         <!-- LANE BREAKS OUTRANK CARD BREAKS, and at 12px against 10px they barely did: the eye groups by proximity. -->

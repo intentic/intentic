@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import type { BuiltinPromptText, SystemPromptMode } from "@intentic/sandbox-contract";
-import { Button, CopyButton, MarkdownDocument, Modal, Notice, Row, RowGroup, SegmentedControl } from "@intentic/ui";
-import { useAsyncAction } from "@intentic/ui/async";
+import { type BuiltinPromptText, SYSTEM_PROMPT_MAX, type SystemPromptMode } from "@intentic/sandbox-contract";
+import { Button, ConfirmDialog, CopyButton, MarkdownDocument, Modal, Notice, type NoticeModel, Row, RowGroup, RowNote, SegmentedControl } from "@intentic/ui";
+import { noticeFrom, useAsyncAction } from "@intentic/ui/async";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref } from "vue";
 import { sandboxRpc } from "../../client/sandboxRpc";
@@ -10,7 +10,7 @@ import { useSavings } from "../../usage/useSavings";
 import MeasurementPanel, { type PanelReading } from "../models/MeasurementPanel.vue";
 import { readingsOf } from "../models/experimentReadings";
 import { asPercent } from "../models/numberInputs";
-import { useDraft } from "../../../../lib/useDraft";
+import { useTrimmedDraft } from "../../../../lib/useDraft";
 import { promptReach, spokenList } from "./promptReach";
 import { useT } from "@intentic/ui/i18n";
 
@@ -18,19 +18,23 @@ const t = useT();
 
 const { settings, patch, save } = useSandboxSettings();
 
-const PROMPT_MAX = 20000;
 const PROMPT_MODES = computed((): { label: string; value: SystemPromptMode }[] => [
     { label: `Intentic`, value: `intentic` },
     { label: `Claude`, value: `claude` },
     { label: t(`sandbox.agentInstructions.custom`), value: `custom` },
 ]);
 const promptMode = computed<SystemPromptMode>(() => settings.value?.systemPromptMode ?? `intentic`);
-const prompt = useDraft(() => settings.value?.systemPrompt);
-// What is on disk, handed to the document surface so IT decides what "unsaved" means. Undefined until the
-// settings arrive, which is what stops an empty draft looking like a prompt somebody deleted.
-const stored = computed(() => settings.value?.systemPrompt);
+// What is on disk is handed to the document surface so IT decides what "unsaved" means. Undefined until the settings
+// arrive, which is what stops an empty draft looking like a prompt somebody deleted. Saved trimmed, so measured trimmed
+// (useTrimmedDraft): measured raw, a save that landed still read "Not saved yet".
+const { draft: prompt, stored } = useTrimmedDraft(() => settings.value?.systemPrompt);
 
 const savePrompt = (text: string): void => patch({ systemPrompt: text.trim() });
+// A refused write has already been put back on screen (useSandboxSettings); without its reason here, the old value
+// simply reappears and the press looks like it did nothing.
+const saveError = computed<NoticeModel | undefined>(() =>
+    save.error.value === null ? undefined : noticeFrom(save.error.value, t(`sandbox.agentInstructions.couldntSave`)),
+);
 const setPromptMode = (mode: string): void => patch({ systemPromptMode: mode as SystemPromptMode });
 
 const builtinPrompts = ref<Partial<Record<string, BuiltinPromptText>>>({});
@@ -54,13 +58,31 @@ const VIEW_BASES = [
 ];
 const setViewingBase = (base: string): void => void viewBuiltin(base as `intentic` | `claude`);
 
+const fork = (text: string): void => {
+    prompt.value = text;
+    viewingBase.value = undefined;
+    setPromptMode(`custom`);
+};
+
+// Starting from a built-in prompt replaces the whole document, so text already in it is asked about first: the owner
+// had pasted their own and lost it to one press. An untouched copy of the same prompt has nothing to lose.
+const replacing = ref<string | undefined>(undefined);
 const forkBuiltin = async (base: `intentic` | `claude`): Promise<void> => {
     const fetched = await loadBuiltin(base);
-    if (fetched !== undefined) {
-        prompt.value = fetched.text;
-        viewingBase.value = undefined;
-        setPromptMode(`custom`);
+    if (fetched === undefined) {
+        return;
     }
+    if (prompt.value.trim() !== `` && prompt.value.trim() !== fetched.text.trim()) {
+        replacing.value = fetched.text;
+        return;
+    }
+    fork(fetched.text);
+};
+const confirmReplace = (): void => {
+    if (replacing.value !== undefined) {
+        fork(replacing.value);
+    }
+    replacing.value = undefined;
 };
 
 // The holdout keeps whole conversations on the long form, since the guidance rides the prompt for the whole session.
@@ -110,8 +132,7 @@ const reachLine =
                      is a region of this same card, below. -->
                 <template v-else>
                     <Notice tone="warning" class="text-2xs">
-                        {{ t(`sandbox.agentInstructions.textBecomesWholePrompt`) }} {{ spokenList(reach.replaces)
-                        }}{{ t(`sandbox.agentInstructions.includingWhatAppTells`) }}
+                        {{ t(`sandbox.agentInstructions.wholePromptOn`, { replaces: spokenList(reach.replaces) }) }}
                         <template v-if="reach.adds.length > 0">{{
                             t(`sandbox.agentInstructions.onAddedToPrompt`, { adds: spokenList(reach.adds) })
                         }}</template>
@@ -176,11 +197,22 @@ const reachLine =
             :saving="save.isPending.value"
             save="explicit"
             :label="t(`sandbox.words.systemPrompt`)"
-            :max-chars="PROMPT_MAX"
+            :max-chars="SYSTEM_PROMPT_MAX"
             :placeholder="t(`sandbox.agentInstructions.writeAssistantsSystemPrompt`)"
             @save="savePrompt"
         />
+        <RowNote v-if="saveError !== undefined" variant="block"><Notice :of="saveError" /></RowNote>
     </RowGroup>
+
+    <ConfirmDialog
+        :open="replacing !== undefined"
+        :header="t(`sandbox.agentInstructions.replaceYourText`)"
+        :confirm-label="t(`sandbox.agentInstructions.replace`)"
+        @cancel="replacing = undefined"
+        @confirm="confirmReplace"
+    >
+        <p class="text-sm text-muted">{{ t(`sandbox.agentInstructions.replaceYourTextDetail`) }}</p>
+    </ConfirmDialog>
 
     <Modal
         :open="viewingBase !== undefined"

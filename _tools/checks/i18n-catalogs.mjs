@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // A translation holds a subset of `en`'s keys (the rest fall back to `en`), with `en`'s placeholders and plural-ness; `--fix` drops keys `en` lacks.
+// A language in COMPLETE holds every key `en` has: its users are real, and a fallback puts English in front of them.
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { parseCatalog } from "./lib/catalog.mjs";
@@ -20,6 +21,10 @@ if (!locales.includes(BASE)) {
     cannotMeasure(`${LOCALES_FILE}: declares ${locales.join(", ") || "nothing"}, which does not include the source language \`${BASE}\``);
 }
 const translations = locales.filter((code) => code !== BASE);
+
+// Languages whose catalogs must hold every key English has. Polish has users (the 2026-09-28 session-replay review found
+// them meeting English on the stopped-turn strip, the discard dialog and /connect); the others may still fall back.
+const COMPLETE = new Set(["pl"]);
 
 // Undefined only for a file that is not there: `--fix` writes an empty catalog over whatever this could not read.
 const readText = (path) => {
@@ -65,6 +70,7 @@ const missingFiles = [];
 const orphanKeys = [];
 const wrongPlaceholders = [];
 const wrongPlurals = [];
+const incomplete = [];
 const vouched = [];
 const written = [];
 
@@ -103,7 +109,9 @@ for (const catalog of catalogs) {
         }
 
         let held = 0;
+        const translated = new Set();
         for (const [key, message] of leaves(tree)) {
+            translated.add(key);
             const original = english.get(key);
             if (original === undefined) {
                 orphanKeys.push(`${where}: ${key}`);
@@ -116,6 +124,9 @@ for (const catalog of catalogs) {
             if (isPlural(message) !== isPlural(original)) {
                 wrongPlurals.push(`${where}: ${key}`);
             }
+        }
+        if (COMPLETE.has(locale)) {
+            incomplete.push(...[...english.keys()].filter((key) => !translated.has(key)).map((key) => `${where}: ${key}`));
         }
         untranslated.push(`${locale} ${english.size - held}`);
     }
@@ -130,6 +141,7 @@ finish(
         [`Keys a translation has and ${BASE}.json does not (run with --fix to drop them)`, orphanKeys],
         [`Placeholders that differ from ${BASE}'s: a call passes ${BASE}'s names, so any other renders empty`, wrongPlaceholders],
         [`Plural in one language and not the other: \`|\` separates the forms a count picks between`, wrongPlurals],
+        [`Keys ${BASE}.json has and a language that must be complete (${[...COMPLETE].join(", ")}) lacks: its readers see these in English (write the translation; --fix cannot)`, incomplete],
     ],
     [...written.map((path) => `wrote ${path}`), ...vouched],
 );

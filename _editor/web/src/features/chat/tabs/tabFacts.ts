@@ -1,5 +1,6 @@
 import type { AgentHarness, AgentProvider } from "@intentic/sandbox-contract";
 import { type AgentStanding, type ClientAgentStatus, type EndingByHand, endingOf } from "../../agents/fleet/agentStatus";
+import { clockOffset } from "../../agents/fleet/sandboxClock";
 import { endingStanding } from "../session/runPhase";
 import type { Conversation } from "../session/conversation";
 import type { ChatRunView } from "../run/chatRun";
@@ -41,6 +42,9 @@ export interface TabFacts {
     // the press until the turn's stream closes. The daemon's own `stopping` is a round trip behind the press, and the
     // stream a few seconds behind that: this is what every card and this chat read in the press's own frame.
     readonly ending?: EndingByHand;
+    // The words of a failure that took back a resume the sandbox had promised in the same turn (TurnFailures
+    // .resumeWithdrawn): the chat shows that stop, while the roster keeps reading `resuming`. Until the next turn starts.
+    readonly resumeWithdrawn?: string;
 }
 
 // A sent turn the registry hasn't filed yet, replaced by the registry's own version once it lands. Zero
@@ -49,6 +53,7 @@ export interface TurnFacts {
     readonly effort: string;
     readonly thinking: boolean;
     readonly fast: boolean;
+    // On this browser's clock, which every reader puts on the sandbox's (useAgents-fleet.ts, sandboxClock.ts).
     readonly startedAt?: number;
     readonly inputTokens?: number;
     readonly outputTokens?: number;
@@ -100,11 +105,17 @@ export const endingOfTab = (conversation: Conversation, card: AgentStanding | un
     return card === undefined ? endedHere(conversation) : endingOf(card);
 };
 
+export const startedHere = (conversation: Pick<Conversation, "turn">): number | undefined => {
+    const startedAt = conversation.turn.turnStartedAt.value;
+    return startedAt !== undefined && conversation.turn.turnOnSandboxClock.value ? startedAt + clockOffset.value : startedAt;
+};
+
 const turnFacts = (conversation: Conversation): TurnFacts => ({
     effort: conversation.selection.effort.value,
     thinking: conversation.selection.thinking.value,
     fast: conversation.selection.fast.value,
-    startedAt: conversation.turn.turnStartedAt.value,
+    // A turn attached to started on the sandbox's clock: moved onto this browser's, so the reader's move back is exact.
+    startedAt: startedHere(conversation),
     ...(conversation.transcript.inputTokens.value > 0 ? { inputTokens: conversation.transcript.inputTokens.value, outputTokens: conversation.transcript.outputTokens.value } : {}),
     ...(conversation.transcript.costUsd.value > 0 ? { costUsd: conversation.transcript.costUsd.value } : {}),
 });
@@ -130,6 +141,7 @@ export const tabFacts = (conversation: Conversation): TabFacts => {
         leftAt: conversation.leftAt.value,
         turn: standing === `starting` ? turnFacts(conversation) : undefined,
         ending: endedHere(conversation),
+        resumeWithdrawn: conversation.failures.resumeWithdrawn.value,
     };
 };
 

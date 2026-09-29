@@ -13,6 +13,11 @@ export const SystemPromptModeSchema = z.enum(["intentic", "claude", "custom"]);
 export type SystemPromptMode = z.infer<typeof SystemPromptModeSchema>;
 // Excludes "custom": there is nothing to fetch, it's whatever the owner already typed into the settings field.
 export const BuiltinPromptSchema = z.object({ base: z.enum(["intentic", "claude"]) });
+// Longest an owner's own system prompt may be, the sandbox's or a persona's; named so an editor can refuse a save the
+// daemon would refuse, rather than copy the number.
+export const SYSTEM_PROMPT_MAX = 20_000;
+// Longest the guidance the New chat routing job reads may be (`autoModelGuidance` below).
+export const AUTO_MODEL_GUIDANCE_MAX = 2000;
 // Rules: "at this moment, if this is true, do this". The owner's rules decide (land, hold, version); every command a
 // moment runs is a repository's own check (`<repo>/.intentic/checks.json`), compiled into this same table by the daemon,
 // so no command lives in settings. Nothing verifies inside a turn, after a land or on the way to a push: CI checks what
@@ -226,6 +231,19 @@ export const KeepWarmSettingsSchema = z.object({
 });
 export type KeepWarmSettings = z.infer<typeof KeepWarmSettingsSchema>;
 
+// Who the editor's screens are written for: `developer` reads git's own words (branch, land, commit), `maker` plain ones
+// (draft, accept, save) over the same mechanisms. The editor's vocabulary, never anything an agent does. A person's own
+// answer, kept by the sandbox per member rather than in each browser, so the desktop app and a browser tab name one
+// button one way while two people on one sandbox can still read it in their own words.
+export const AudienceSchema = z.enum(["developer", "maker"]);
+export type Audience = z.infer<typeof AudienceSchema>;
+
+// The caller's own answer as the sandbox keeps it; absent until they have given one here.
+export const MemberAudienceSchema = z.object({
+    audience: AudienceSchema.optional().describe("developer for git's own words, maker for plain ones. Absent until this person has chosen here."),
+});
+export type MemberAudience = z.infer<typeof MemberAudienceSchema>;
+
 export const SandboxSettingsSchema = z.object({
     // The zone every WALL-CLOCK RULE in this sandbox is meant in — an automation's cron, and anything else that says
     // "at 09:00" instead of naming an instant. It is not a display preference: nothing formats through it, and an
@@ -276,7 +294,7 @@ export const SandboxSettingsSchema = z.object({
     // every turn pays for it.
     systemPrompt: z
         .string()
-        .max(20000)
+        .max(SYSTEM_PROMPT_MAX)
         .default("")
         .describe(
             "Your own instructions, used only when the mode above says custom. Then it is the whole of them: both built-in bases go, and so does everything this product would otherwise add, including the guidance the chat's own cards are driven by. That is the price of total control.",
@@ -385,7 +403,7 @@ export const SandboxSettingsSchema = z.object({
     // purpose: the reading runs under a 5s deadline, and this text is paid for on every chat that opens on Auto.
     autoModelGuidance: z
         .string()
-        .max(2000)
+        .max(AUTO_MODEL_GUIDANCE_MAX)
         .default("")
         .describe(
             "What you would tell somebody choosing the model for a new chat on your behalf: which model you want the cheap work on, which account to leave alone, when to reach for the strongest one. Read once per chat, alongside the models and allowances this sandbox can actually run, and it overrides the product's own advice where the two disagree. It cannot invent a model: the answer is still a choice from that list.",
@@ -544,6 +562,24 @@ export const SandboxSettingsWriteSchema = SandboxSettingsSchema.refine((settings
     message: "turn.ending is retired: nothing runs when a turn ends any more, so a rule cannot stand there",
     path: ["rules"],
 });
+
+// A browser's answer to who the screens are written for, for the person signed in to it. `offer` is the one that must
+// not overwrite: a browser handing over the answer it kept on its own, taken only while the sandbox keeps none for them.
+export const AudienceAnswerSchema = z.object({
+    audience: AudienceSchema.describe("developer for git's own words, maker for plain ones."),
+    offer: z
+        .boolean()
+        .optional()
+        .describe("Take it only while this person has no answer kept here yet. Absent or false replaces whatever is kept."),
+});
+export type AudienceAnswer = z.infer<typeof AudienceAnswerSchema>;
+
+// What the sandbox keeps for this person after the answer, and whether this call set it: false is an offer it declined.
+export const AudienceStateSchema = z.object({
+    audience: AudienceSchema.describe("The words this sandbox's editor now uses."),
+    adopted: z.boolean().describe("Whether this call set it. False means an offer met an answer already kept, which stands."),
+});
+export type AudienceState = z.infer<typeof AudienceStateSchema>;
 
 // A browser telling the sandbox which clock IT is on. An offer, not an instruction: see `adoptTimezone`.
 export const TimezoneOfferSchema = z.object({

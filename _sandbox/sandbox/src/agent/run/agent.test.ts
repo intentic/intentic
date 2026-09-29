@@ -11,6 +11,8 @@ import { SteeringQueue } from "../checkpoints/agent-steering.js";
 import { noteSubagentTask, resetSubagents } from "../subagents/subagents.js";
 import { backgroundJobOf, openBackgroundJob, settledBackgroundJobs } from "../tools/jobs/background-jobs.js";
 import { EDIT_TOOLS } from "../../rules/edit-tools.js";
+import { LANDING_CHECKS_NOTE } from "../prompt/checks-note.js";
+import { composeWirePrompt } from "../prompt/turn-preamble.js";
 import { parkedCards } from "../../conversations/actor/parked-cards.js";
 import { memoryFleet } from "../../testing.js";
 
@@ -275,6 +277,25 @@ test("the SDK env always marks the sandbox and carries the per-turn oauth token 
     await collect(request, capture);
     expect(captured.at(-1)?.env?.["IS_SANDBOX"]).toBe("1");
     expect(captured.at(-1)?.env?.["CLAUDE_CODE_OAUTH_TOKEN"]).toBeUndefined();
+});
+
+// The SDK's list would title a session by its first prompt flattened and cut at 200 characters, which the checks note
+// alone fills; a new session is opened titled with the user's words instead, and a resumed one keeps what it has.
+test("a new session is titled with the user's words, never the daemon's notes, and a resumed one is not retitled", async () => {
+    const captured: Options[] = [];
+    const capture: QueryFn = async function* (args) {
+        captured.push(args.options);
+        // SAFETY: a bare success result is all the stream reads to end the turn; its other fields are never consulted.
+        yield { type: "result", subtype: "success" } as SDKMessage;
+    };
+    const prompt = composeWirePrompt([LANDING_CHECKS_NOTE], "add a\n/ping route");
+
+    await collect({ ...request, spec: { ...request.spec, prompt } }, capture);
+    expect(captured.at(-1)?.title).toBe("add a /ping route");
+
+    await collect({ ...request, spec: { ...request.spec, prompt, sessionId: "sess-1" } }, capture);
+    expect(captured.at(-1)?.resume).toBe("sess-1");
+    expect(Object.keys(captured.at(-1) ?? {})).not.toContain("title");
 });
 
 // Compares against the ambient env, not undefined: a turn's env spreads `{...process.env, …}`.
@@ -2594,4 +2615,27 @@ test("a value that is already a path stays one, and the flag's values end at the
     // Past the next flag nothing is rewritten, whatever it looks like.
     expect(moved.args[4]).toBe("{not-a-value}");
     moved.dispose();
+});
+
+test("a rejected plan's notes reach the agent framed as a rejection, so words like 'proceed' are not leave to execute", async () => {
+    const { result } = await decide(
+        { ...request, policy: { ...request.policy, permissionMode: "plan" as const } },
+        { tool: "ExitPlanMode", prose: "# Plan" },
+        (event) => ({ kind: "plan", requestId: event.requestId, approve: false, feedback: "  Proceed, approved with these changes  " }),
+    );
+
+    expect(result).toEqual({
+        behavior: "deny",
+        message: "The user rejected the plan with this feedback:\nProceed, approved with these changes\n\nRevise the plan. Still do not execute it.",
+    });
+});
+
+test("a plan rejected without notes still says to keep planning", async () => {
+    const { result } = await decide(
+        { ...request, policy: { ...request.policy, permissionMode: "plan" as const } },
+        { tool: "ExitPlanMode", prose: "# Plan" },
+        (event) => ({ kind: "plan", requestId: event.requestId, approve: false }),
+    );
+
+    expect(result).toEqual({ behavior: "deny", message: "The user rejected the plan. Revise it. Still do not execute it." });
 });

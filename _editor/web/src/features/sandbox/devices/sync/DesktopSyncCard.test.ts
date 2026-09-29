@@ -10,11 +10,13 @@ const canOperate = ref(true);
 const pairToken = ref<string | undefined>(undefined);
 const pairMode = ref<`sync` | `mirror` | undefined>(undefined);
 const takeover = ref(false);
+// Whether the daemon has said this sandbox can sync; undefined while the one read of it is in flight.
+const available = ref<boolean | undefined>(true);
 const enable = jest.fn(async () => {});
 jest.mock(`./useDesktopSync`, () => ({
     useDesktopSync: () => ({
         canOperate,
-        available: ref(true),
+        available,
         folder: ref(`~/intentic/work`),
         defaultFolder: ref(`~/intentic/work`),
         pairToken,
@@ -75,6 +77,7 @@ afterEach(() => {
     pairToken.value = undefined;
     pairMode.value = undefined;
     takeover.value = false;
+    available.value = true;
     enable.mockClear();
     app?.unmount();
     app = undefined;
@@ -183,4 +186,21 @@ it(`points at the list for devices that are already paired`, () => {
     // And it holds none of the old singular claims itself.
     expect(shown()).not.toContain(`Syncing from`);
     expect(shown()).not.toContain(`Disable sync`);
+});
+
+// Every current daemon answers that it can sync, so the refusal shown while that answer was on its way was
+// contradicted a moment later by the offer: the first thing a reader saw was that sync was impossible here.
+it(`says it is checking, not that sync is impossible, until the sandbox answers`, () => {
+    available.value = undefined;
+    mount();
+    expect(shown()).toContain(`Checking whether this sandbox can sync with a device…`);
+    expect(shown()).not.toContain(`Desktop sync needs an SSH way into this sandbox`);
+    expect(shown()).not.toContain(`Enable desktop sync`);
+});
+
+it(`says sync is impossible only once the sandbox answered no`, () => {
+    available.value = false;
+    mount();
+    expect(shown()).toContain(`Desktop sync needs an SSH way into this sandbox`);
+    expect(shown()).not.toContain(`Checking whether`);
 });

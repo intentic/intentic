@@ -13,6 +13,12 @@ interface LiveRun {
     readonly startedAt: number;
 }
 
+// Whose clock a running phase's `startedAt` was read on: absent, this browser's (it opened the run); `sandbox` for a
+// run attached to, whose start is the daemon's own stamp. A count against it must use that clock (sandboxClock.ts).
+interface StartClock {
+    readonly clock?: `sandbox`;
+}
+
 // A live run a person has already ended, set by the first ending and kept through every later move until it settles.
 interface Ended {
     readonly ending?: TurnEnding;
@@ -26,7 +32,7 @@ export type RunPhase =
     // Its words have left and the daemon has not acknowledged them yet.
     | ({ readonly kind: `sending` } & LiveRun & Ended)
     // The daemon took it: acknowledged a send, or streamed a run at an attach; `run` is the name the daemon gave it.
-    | ({ readonly kind: `running`; readonly run: string } & LiveRun & Ended);
+    | ({ readonly kind: `running`; readonly run: string } & LiveRun & StartClock & Ended);
 
 export type RunEvent =
     | ({ readonly kind: `open`; readonly composing: boolean } & LiveRun)
@@ -46,7 +52,8 @@ const MOVES: Moves = {
         phase.kind === `idle` ? { kind: composing ? `composing` : `sending`, controller, startedAt } : phase,
     composed: (phase) => (phase.kind === `composing` ? { ...phase, kind: `sending` } : phase),
     accepted: (phase, { run }) => (phase.kind === `sending` ? { ...phase, kind: `running`, run } : phase),
-    attached: (phase, { controller, startedAt, run }) => (phase.kind === `idle` ? { kind: `running`, controller, startedAt, run } : phase),
+    attached: (phase, { controller, startedAt, run }) =>
+        phase.kind === `idle` ? { kind: `running`, controller, startedAt, run, clock: `sandbox` } : phase,
     // The first ending is the one that happened: a Stop pressed after a card was waved away does not rename it.
     ended: (phase, { by }) => (phase.kind === `idle` || phase.ending !== undefined ? phase : { ...phase, ending: by }),
     settled: (phase) => (phase.kind === `idle` ? phase : { kind: `idle`, accepted: phase.kind === `running` }),

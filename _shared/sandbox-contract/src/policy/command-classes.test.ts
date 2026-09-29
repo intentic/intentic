@@ -40,6 +40,22 @@ describe("git.destructive", () => {
     test("a -f belonging to the next command in a pipeline is not a force-push", () => {
         expect(classify("git push origin main | grep -f patterns.txt")).not.toContain("git.destructive");
     });
+
+    test("deleting a checkout's .git, or re-initialising the folder it stands in, cuts it off from its history", () => {
+        for (const command of ["rm .git", "rm -f .git", "rm -rf ./.git", "rm -rf tabularium/.git", "rm .git && git init -b main"]) {
+            expect(classify(command), command).toContain("git.destructive");
+        }
+        for (const command of ["git init", "git init .", "git init -b main", "git init --initial-branch main -q ."]) {
+            expect(classify(command), command).toContain("git.destructive");
+        }
+        expect(marked("cd /work && rm .git && git init -b main", "git.destructive")).toEqual(["rm .git", "git init -b main"]);
+    });
+
+    test("a new project's git init, and files that merely start with .git, are left alone", () => {
+        for (const command of ["git init new-project", "git init -b main tools/cli", "rm .gitignore", "rm -f .github/old.yml", "rm .gitmodules"]) {
+            expect(classify(command), command).not.toContain("git.destructive");
+        }
+    });
 });
 
 describe("files.destructive", () => {
@@ -69,6 +85,27 @@ describe("files.destructive", () => {
             'await rimraf("dist")',
         ]) {
             expect(classify(code), code).toContain("files.destructive");
+        }
+    });
+
+    test("find deleting what it walks, or handing it to rm, is the same delete as rm -rf", () => {
+        for (const command of [
+            "find /home/x/PROJECT/cerberus-worktrees/m1-a -depth -delete",
+            "find build -name '*.o' -delete",
+            "find . -type d -name node_modules -exec rm -rf {} +",
+            "find dist -exec /bin/rm -f {} \\;",
+            "find tmp -execdir rm {} \\;",
+            "find . -name '*.log' -print0 | xargs -0 rm -f",
+            "ls old | xargs rm",
+        ]) {
+            expect(classify(command), command).toContain("files.destructive");
+        }
+        expect(marked("find build -name '*.o' -delete; echo done", "files.destructive")).toEqual(["find build -name '*.o' -delete"]);
+    });
+
+    test("a find that only lists, and an xargs that runs something else, pass", () => {
+        for (const command of ["find . -name '*.ts'", "find . -newer deleted.txt -print", "find src -exec grep -l rm {} +", "ls | xargs wc -l"]) {
+            expect(classify(command), command).not.toContain("files.destructive");
         }
     });
 
@@ -113,6 +150,8 @@ describe("system.destructive", () => {
             "rm -rf C:\\",
             'fs.rmSync("/", { recursive: true, force: true })',
             'rimraf("/work")',
+            "find / -delete",
+            "find /home -type f -delete",
         ]) {
             expect(classify(command), command).toContain("system.destructive");
         }

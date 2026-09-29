@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { MEMORY_FILE } from "@intentic/constants";
 import { Button, MarkdownDocument, Notice, RowGroup, RowNote } from "@intentic/ui";
-import { onMounted } from "vue";
-import { RouterLink } from "vue-router";
+import { computed, onMounted } from "vue";
+import { RouterLink, useRouter } from "vue-router";
 import { useAgentMemory } from "./useAgentMemory";
 import { useT } from "@intentic/ui/i18n";
 
@@ -11,7 +11,18 @@ import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
 
-const { draft, onDisk, saving, editorError, load, commit } = useAgentMemory();
+const { draft, onDisk, present, saving, editorError, load, commit } = useAgentMemory();
+const router = useRouter();
+
+// Read, and not there: "Open file" on a file that doesn't exist landed on the workspace root with nothing open, so the
+// action makes it first, from what the editor holds, and then opens it.
+const missing = computed(() => onDisk.value !== undefined && !present.value);
+const createAndOpen = async (): Promise<void> => {
+    await commit(draft.value);
+    if (editorError.value === undefined) {
+        await router.push(`/workspace/${MEMORY_FILE}`);
+    }
+};
 
 onMounted(() => void load());
 </script>
@@ -20,8 +31,20 @@ onMounted(() => void load());
     <RowGroup :label="t(`sandbox.agentMemory.memory`)">
         <!-- The group's card IS the page: a document wrapped in a field shell reads as a hole punched in the section. -->
         <template #actions>
-            <!-- Where a long edit goes: the same file, in the editor that gives it the whole pane. -->
+            <!-- Where a long edit goes: the same file, in the editor that gives it the whole pane; made first when missing. -->
             <Button
+                v-if="missing"
+                :label="t(`sandbox.agentMemory.createFile`)"
+                size="small"
+                severity="secondary"
+                :text="true"
+                :loading="saving"
+                @click="createAndOpen"
+            >
+                <template #icon><Icon name="plus" /></template>
+            </Button>
+            <Button
+                v-else
                 :as="RouterLink"
                 :to="`/workspace/${MEMORY_FILE}`"
                 :label="t(`sandbox.agentMemory.openFile`)"
@@ -52,7 +75,7 @@ onMounted(() => void load());
         >
             <template #note
                 ><code>{{ MEMORY_FILE }}</code
-                >{{ t(`sandbox.agentMemory.atWorkspaceRoot`) }}</template
+                >{{ missing ? t(`sandbox.agentMemory.notCreatedYet`) : t(`sandbox.agentMemory.atWorkspaceRoot`) }}</template
             >
         </MarkdownDocument>
     </RowGroup>

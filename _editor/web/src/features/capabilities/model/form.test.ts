@@ -20,6 +20,7 @@ import {
     refusedInFold,
     seedValues,
     shownFields,
+    submitAnywayWord,
     submitWord,
 } from "./form";
 
@@ -342,4 +343,23 @@ test(`names the fold and the submit in the tile's own words`, () => {
     expect(submitWord(false, `devops`)).toBe(`Activate`);
     expect(submitWord(false, `vpn`)).toBe(`Add`);
     expect(submitWord(false, undefined)).toBe(`Add`);
+    // After a Test that failed, the same press in words that own it.
+    expect(submitAnywayWord(true, `mcp`)).toBe(`Save anyway`);
+    expect(submitAnywayWord(false, `devops`)).toBe(`Activate anyway`);
+    expect(submitAnywayWord(false, `mcp`)).toBe(`Add anyway`);
+});
+
+// A copied token can carry what no one sees: a header refuses it and the service never hears the request.
+test(`a credential or address is sent without invisible characters, and a label keeps its emoji joiner`, () => {
+    const entry = tile([
+        { key: `url`, label: `MCP URL` },
+        { key: `token`, label: `Token`, secret: true },
+        { key: `name`, label: `Label`, optional: true },
+    ]);
+
+    expect(buildConfig(entry, { url: `https://mcp.acme.dev/mcp\u200B`, token: `\uFEFFsk-abc\u2060`, name: `👩\u200D💻 team` })).toEqual({
+        url: `https://mcp.acme.dev/mcp`,
+        token: `sk-abc`,
+        name: `👩\u200D💻 team`,
+    });
 });

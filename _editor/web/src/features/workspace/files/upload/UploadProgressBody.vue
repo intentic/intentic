@@ -107,7 +107,7 @@ onBeforeUnmount(() => {
     <div v-if="drawn" v-bind="$attrs" class="text-xs text-content">
         <!-- Still scanning while files are already uploading; the headline belongs to the upload by then. -->
         <p v-if="scanning && files.length > 0" class="mb-2 truncate border-b border-line pb-2 text-2xs text-subtle">
-            {{ t(`workspace.uploadProgressBody.scanning`) }} {{ scannedCount }} {{ scannedCount === 1 ? `file` : `files`
+            {{ t(`workspace.uploadProgressBody.scanningFiles`, { count: scannedCount }, scannedCount)
             }}<template v-if="scanningName !== ``"> · {{ scanningName }}</template>
         </p>
         <!-- Nothing sent yet: the headline already carries the count; this just says where the walk has got to. -->

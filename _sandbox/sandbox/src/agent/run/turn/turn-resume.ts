@@ -19,11 +19,12 @@ import {
     withRuntimeDefaults,
 } from "@intentic/sandbox-contract";
 import { replaceRejectedToken } from "../../../runtimes/claude/claude-credentials.js";
+import { planRevision } from "../../../runtimes/decorators/plan-mode.js";
 import type { Services } from "../../../composition.js";
 import { openingRows, openTurnTranscript, recordInterruptedTurn, recordTurnTranscript } from "../../../sessions/turn-transcript.js";
 import { POST_PLAN_MODE } from "../agent.js";
 import { formatAnswers } from "../../tools/question-answers.js";
-import { personaRunModel, runRoleModel } from "../../models/run-role-model.js";
+import { personaRunModel, runRoleModel, unpinnedRunProvider } from "../../models/run-role-model.js";
 import { outageRetryDue, outageRetryFired } from "../../providers/provider-health.js";
 import { type Routing, routingFor } from "../../providers/accounts/routing.js";
 import { consumeEntry, type JournalEntry, type JournalledTurn, resumeBars, spendAttempt } from "./turn-journal.js";
@@ -231,7 +232,9 @@ const withRoleModel = async <T extends AgentTurn>(services: Services, turn: T): 
     const pinned =
         (await personaRunModel(services, turn.actsAs)) ?? (turn.runRole === undefined ? undefined : await runRoleModel(services, turn.runRole));
     if (pinned === undefined) {
-        return turn;
+        // A job the sandbox started with no pin runs on a provider that can serve it, never on one nobody connected.
+        const fallback = turn.runRole === undefined ? undefined : await unpinnedRunProvider(services);
+        return fallback === undefined ? turn : { ...turn, agent: fallback };
     }
     // The pin's provider must travel with its model: a model id is only meaningful to the provider that vends it.
     return { ...turn, agent: pinned.provider, model: pinned.model, ...pinnedKnobs(turn, pinned) };
@@ -527,10 +530,8 @@ const rehydrateParkedTurn = async (services: Services, entry: JournalledTurn): P
     const settlementOf = (request: ParkedRequest, reply: AgentReply): (AgentTurn & { conversationId: string }) | undefined => {
         if (request.kind === "plan" && reply.kind === "plan") {
             // Approval runs in POST_PLAN_MODE as a live approval would; rejection returns to plan mode with the
-            // feedback.
-            return reply.approve
-                ? resumed("The user approved the plan: proceed with it.", POST_PLAN_MODE)
-                : resumed(reply.feedback?.trim() || "Keep refining the plan, do not exit plan mode yet.", "plan");
+            // feedback, framed as the live gate frames it, so notes that read like consent are never leave to execute.
+            return reply.approve ? resumed("The user approved the plan: proceed with it.", POST_PLAN_MODE) : resumed(planRevision(reply.feedback), "plan");
         }
         if (request.kind === "question" && reply.kind === "question") {
             return reply.cancelled === true || reply.answers === undefined ? undefined : resumed(formatAnswers(request.questions, reply));
@@ -655,8 +656,10 @@ const rehydrateParkedTurn = async (services: Services, entry: JournalledTurn): P
 
 // Runs once at boot, before anything else starts a turn on these conversations. Surviving means never settled; each
 // entry is consumed (spent or deleted) before it restarts, so a turn that kills the daemon can't loop the boot. An
-// automation's interrupted fire is its scheduler's to re-fire (automations/fire-resume.ts).
-export const resumeInterruptedTurns = async (services: Services, now: number = Date.now()): Promise<void> => {
+// automation's interrupted fire is its scheduler's to re-fire (automations/fire-resume.ts). `ownerAsked`: the restart
+// this boot follows was one the owner started and asked to pick up after (restart-resume.ts), which resumes the turns
+// it cut as autoResumeOnRestart would, this once.
+export const resumeInterruptedTurns = async (services: Services, now: number = Date.now(), ownerAsked = false): Promise<void> => {
     const listed = await services.turnJournal.list().catch((error: unknown): JournalEntry[] => {
         services.logger.warn({ err: error }, "turn journal: unreadable at boot, no interrupted turn is resumed");
         return [];
@@ -665,7 +668,7 @@ export const resumeInterruptedTurns = async (services: Services, now: number = D
     if (interrupted.length === 0) {
         return;
     }
-    const { autoResumeOnRestart } = await services.sandboxSettings.get();
+    const autoResumeOnRestart = ownerAsked || (await services.sandboxSettings.get()).autoResumeOnRestart;
     for (const entry of interrupted) {
         // Skips every gate below: rehydration spends nothing and isn't an attempt, so autoResumeOnRestart, staleness
         // and the attempt cap don't apply. Not cleared here either; the placeholder re-journals it, so a second restart

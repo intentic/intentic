@@ -27,7 +27,9 @@ flowchart LR
 - The badge counts branches whose last commit failed, in the rail's danger tone. It never clears on viewing: a failing
   branch clears when a later commit passes. `startCiAttention` polls from activation, so the badge is live while the board is closed.
 - "Fix with agent" asks the daemon to start a fix conversation. Its id is derived from the run, so the board pairs
-  runs with their fixes without a store of its own (`src/fixes/ciFixes.ts`).
+  runs with their fixes without a store of its own (`src/fixes/ciFixes.ts`). A plain press sends the model the button
+  names (the job's pin in Models, else the model a new chat would open on) as `fallback`: the daemon holds no chat pick
+  of its own, so it runs that one when no pinned model can, while it can serve its provider (`src/usePipelines.ts`).
 
 ## Key files
 

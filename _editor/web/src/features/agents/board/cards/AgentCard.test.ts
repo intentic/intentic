@@ -24,6 +24,8 @@ const { default: AgentCard } = await import("./AgentCard.vue");
 const { router } = await import("../../../../router/index");
 // Connected accounts module state; the card reads it to turn a session's account id into a name.
 const { providerAccounts } = await import("../../../chat/accounts/providerAccounts");
+const { queryClient } = await import("../../../../lib/queryPersistence");
+const { rpcKey } = await import("../../../../lib/queryKeys");
 const NO_ACCOUNTS = providerAccounts.value;
 
 const NO_ATTENTION: AgentSummary[`attention`] = {
@@ -56,7 +58,7 @@ let app: App | undefined;
 const mount = (
     agent: FleetAgent,
     pending?: PendingAction,
-    handlers: { onOpen?: () => void; onClose?: () => void; onReland?: () => void; onUnwatch?: () => void } = {},
+    handlers: { onOpen?: () => void; onReview?: () => void; onClose?: () => void; onReland?: () => void; onUnwatch?: () => void } = {},
 ): HTMLElement => {
     const el = document.createElement(`div`);
     document.body.append(el);
@@ -358,6 +360,35 @@ it(`replaces the plain land rather than sitting beside it`, () => {
     expect(landButton(card)).toBeUndefined();
 });
 
+// An agent that took landed work out did so on purpose (an orchestrator tidying a reviewer's patches away): the card names
+// it and offers nothing to put it back, and what is new on the branch still lands the plain way.
+it(`names the agent that took landed work out, offering Land now for what is new and no Land again`, () => {
+    const card = mount({ ...discarded(0, 4, `ready`), landedPresence: { landed: 4, present: 0, removedBy: { kind: `agent`, id: `o`, title: `Orchestrator` } } });
+    expect(card.textContent).toContain(`Removed by Orchestrator`);
+    expect(relandButton(card)).toBeUndefined();
+    expect(landButton(card)?.textContent?.trim()).toBe(`Land now`);
+});
+
+// Kept by the sandbox until a land goes through, after the next turn cleared the turn's own failure.
+it(`says a land broke on a card whose turn since ended cleanly`, () => {
+    const card = mount({ ...ready(), landFailure: { reason: `This agent's copy of the workspace lost its link`, code: `unlinked`, at: 1 } });
+    expect(card.textContent).toContain(`Couldn't land: this agent's copy lost its link to your workspace's history`);
+});
+
+const textButton = (el: HTMLElement, text: string): HTMLButtonElement | undefined =>
+    [...el.querySelectorAll(`button`)].find((button) => button.textContent?.trim() === text);
+
+// A permission answered on the card itself: what it asks, then the two answers that let the turn go on.
+it(`offers the permission its turn waits on, with what it asks`, () => {
+    const asking = { ...ready(`awaiting`), attention: { ...NO_ATTENTION, permission: true } };
+    const card = mount({ ...asking, permissionAsk: { requestId: `p1`, ask: "Run `pnpm build`?" } });
+    expect(card.textContent).toContain("Run `pnpm build`?");
+    expect(textButton(card, `Allow once`)).not.toBeUndefined();
+    expect(textButton(card, `Skip`)).not.toBeUndefined();
+    // A sandbox too old to say which request waits leaves the drill-in to the chat as the one way.
+    expect(textButton(mount(asking), `Allow once`)).toBeUndefined();
+});
+
 // The steady state (nothing missing) says nothing; announcing it would cost a line on nearly every card.
 it(`stays quiet when the landed work is where it was left`, () => {
     const card = mount(ready(`landed`));
@@ -451,6 +482,19 @@ it(`says, without a press of its own, that a refusal is the user's own to clear`
     expect(el.textContent ?? ``).toContain(`Your edits`);
 });
 
+// G4: a refusal held only by files a Sandbox page wrote is not the owner's edits, and the card says so in the review's
+// own words, read off the same report the review shows.
+it(`names the Sandbox page when a page wrote every file holding the land`, () => {
+    const conflicts = [{ repo: `root`, clean: 3, paths: [{ path: `.intentic/config/personas.json`, reason: `workspace` as const }] }];
+    queryClient.setQueryData(rpcKey(`agents.diff`, { id: `a1` }), { repos: [], conflicts });
+    const el = mount(conflicted([`workspace`]));
+    queryClient.removeQueries({ queryKey: rpcKey(`agents.diff`, { id: `a1` }) });
+
+    expect(el.textContent ?? ``).toContain(`Changed on the Sandbox page Personas, not saved yet: open its review and press Save them and land.`);
+    expect(el.textContent ?? ``).toContain(`Unsaved settings`);
+    expect(el.textContent ?? ``).not.toContain(`Your edits`);
+});
+
 it(`keeps the agent's press while any cause is still one a rebase reaches`, () => {
     for (const agent of [conflicted([`workspace`, `diverged`]), conflicted()]) {
         const el = mount(agent);
@@ -480,4 +524,25 @@ it(`names an untitled draft by the words waiting in its composer, and marks them
 
     expect(el.textContent ?? ``).toContain(UNSENT_WORDS);
     expect(el.querySelector(`[aria-label^="Not sent"]`)?.getAttribute(`aria-label`)).toContain(UNSENT_WORDS);
+});
+
+// A double-click is two clicks: it opens the chat as a click does, and no longer walks to the review page (I1).
+it(`opens nothing more on a double-click than its two clicks do`, () => {
+    const onOpen = jest.fn();
+    const onReview = jest.fn();
+    const el = mount(ready(`error`), undefined, { onOpen, onReview });
+    const face = el.querySelector<HTMLElement>(`.session-card`)!;
+    face.click();
+    face.click();
+    face.dispatchEvent(new MouseEvent(`dblclick`, { bubbles: true }));
+    expect([onOpen.mock.calls.length, onReview.mock.calls.length]).toEqual([2, 0]);
+});
+
+// TABULARIUM's lands failed on a checkout git no longer recognised, and its card sat in Finished with a check mark (B6).
+it(`says a broken land in plain words, keeping git's own sentence for the hover`, () => {
+    const failure = `Command failed: git --no-optional-locks -C /work/tabularium diff c011c54 3e03077 fatal: bad object 3e03077`;
+    const el = mount({ ...ready(`error`), failure });
+    expect(el.textContent).toContain(`Couldn't land: this agent's copy lost its link to your workspace's history`);
+    expect(el.textContent).not.toContain(`Command failed`);
+    expect(el.querySelector(`.ui-status-pill`)?.textContent?.trim()).toBe(`Couldn't land`);
 });

@@ -5,6 +5,8 @@ import { computed } from "vue";
 import { usePushNotifications } from "../../push/usePushNotifications";
 import { type Chime, playChime } from "../../shell/browser-tab/chimes";
 import { chimeAsks, chimeFinished, tabStatus } from "../../shell/browser-tab/tabPreferences";
+import { desktopVersion } from "../../app/environments/desktop";
+import { pushUnsupportedReason } from "./pushAdvice";
 import { useT } from "@intentic/ui/i18n";
 
 // Whether this sandbox may reach you when you're not looking at it. Per-device: enabling here does not affect other
@@ -38,12 +40,25 @@ const chimeSwitch = (preference: typeof chimeAsks, chime: Chime) => (next: boole
 };
 const setChimeAsks = chimeSwitch(chimeAsks, `asks`);
 const setChimeFinished = chimeSwitch(chimeFinished, `finished`);
+// Why this window can't take push, in the words that fit it: the Home Screen only where adding the app there helps.
+const unsupportedLine = (): string => {
+    const reason = pushUnsupportedReason({
+        userAgent: globalThis.navigator?.userAgent ?? ``,
+        desktopApp: desktopVersion() !== undefined,
+        standalone: globalThis.matchMedia?.(`(display-mode: standalone)`).matches ?? false,
+        maxTouchPoints: globalThis.navigator?.maxTouchPoints ?? 0,
+    });
+    if (reason === `home-screen`) {
+        return t(`settings.settingsNotifications.unsupportedHomeScreen`);
+    }
+    return reason === `desktop-app` ? t(`settings.settingsNotifications.unsupportedDesktopApp`) : t(`settings.settingsNotifications.unsupportedBrowser`);
+};
 
 // One line per distinct state; `denied` matters since the page cannot re-prompt after a block.
 const status = computed(() => {
     switch (state.value) {
         case `unsupported`:
-            return `This browser can't receive push notifications. Safari needs the app added to your Home Screen first.`;
+            return unsupportedLine();
         case `denied`:
             return `Blocked for this app. Re-allow notifications in site settings, then reload.`;
         default:

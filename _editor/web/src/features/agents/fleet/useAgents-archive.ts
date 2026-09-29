@@ -1,5 +1,6 @@
 import type { AgentSummary } from "@intentic/sandbox-contract";
 import { errorMessage } from "@intentic/ui/async";
+import { t } from "@intentic/ui/i18n";
 import { sandboxRef, sandboxScopeGuard } from "@intentic/extension-api";
 import { computed, ref } from "vue";
 import { forgetClosedDraft } from "../../chat/drafts/closedDrafts";
@@ -28,7 +29,7 @@ const { say } = useNotifications();
 // What the Undo beside a sweep's receipt says on hover; Mod+Z does the same from anywhere on the board.
 const undoHint = (): string => {
     const shortcut = commandShortcut(`agents.undoArchive`);
-    return shortcut === undefined ? `Put them back on the board` : `Put them back on the board (${shortcut})`;
+    return shortcut === undefined ? t(`agents.useAgentsArchive.undoHint`) : t(`agents.useAgentsArchive.undoHintWithKey`, { shortcut });
 };
 
 // The ids an undo would put back; consecutive archives merge, since clicking down the Finished lane is one intent and a
@@ -78,8 +79,8 @@ export const dismissNotice = (): void => {
 const refusalNotice = (failed: ProcedureOutput<`agents.archive`>[`failed`]): string => {
     const reason = failed[0]?.reason;
     return failed.length === 1
-        ? `Couldn't archive that one: ${reason ?? `its working copy could not be released`}`
-        : `Couldn't archive ${failed.length} of them: ${reason ?? `their working copies could not be released`}`;
+        ? t(`agents.useAgentsArchive.refusedOne`, { reason: reason ?? t(`agents.useAgentsArchive.copyNotReleased`) })
+        : t(`agents.useAgentsArchive.refusedSome`, { count: failed.length, reason: reason ?? t(`agents.useAgentsArchive.copiesNotReleased`) });
 };
 
 // The cards the daemon moved, filed as the archive's newest and made undoable, taking their tabs with them.
@@ -123,7 +124,7 @@ const settleArchive = (
         // is exactly the case the optimistic removal guessed wrong about.
         restore();
         if (failed.length === 0) {
-            say(`Nothing to archive, every finished agent is already off the board.`);
+            say(t(`agents.useAgentsArchive.nothingToArchive`));
         }
         return;
     }
@@ -135,7 +136,7 @@ const settleArchive = (
     }
     if (sweep) {
         const count = undoable.value.length;
-        say(`${count} agent${count === 1 ? `` : `s`} archived`, undoArchive, undoHint());
+        say(t(`agents.useAgentsArchive.archivedCount`, { count }, count), undoArchive, undoHint());
     }
 };
 
@@ -144,16 +145,17 @@ const clearableIds = (): string[] => clearableOf(lanes.value).map((agent) => age
 
 // Archives the named agents, or with no ids every Finished card the board may archive (the lane header's "Clear"). The
 // daemon answers with what actually moved, since "everything finished" can't be re-derived once the lane is empty.
-export const archive = async (ids?: readonly string[]): Promise<void> => {
+// `receipt` draws the Undo receipt for a single card too, where the card leaving is not enough to see (a touch screen).
+export const archive = async (ids?: readonly string[], options?: { readonly receipt?: boolean }): Promise<void> => {
     // Clear names its cards, `ready` included: archiving commits and keeps the branch, so unlanded work is filed, not lost.
     const aimed = ids ?? clearableIds();
     if (aimed.length === 0) {
-        say(`Nothing to archive, every finished agent is already off the board.`);
+        say(t(`agents.useAgentsArchive.nothingToArchive`));
         return;
     }
     const release = claimBusy(aimed);
     // A sweep is the archive with no per-card animation to vouch for it, so it's the one that reports.
-    const sweep = ids === undefined || ids.length > 1;
+    const sweep = ids === undefined || ids.length > 1 || options?.receipt === true;
     // The cards leave here, not on the answer; see moveAhead for what `restore` puts back.
     const restore = moveAhead(aimed.map((id) => ({ id })));
     // An answer landing after a switch is about cards the board no longer holds; the next sandbox's strip is not its.
@@ -167,7 +169,7 @@ export const archive = async (ids?: readonly string[]): Promise<void> => {
         // The press failed, so the cards it took slide back into their lane, under the strip that says why.
         if (current()) {
             restore();
-            notice.value = errorMessage(error, `Couldn't archive that.`);
+            notice.value = errorMessage(error, t(`agents.useAgentsArchive.couldntArchive`));
         }
     } finally {
         release();
@@ -217,7 +219,7 @@ export const restore = async (ids: readonly string[]): Promise<void> => {
         // What's back on the board is no longer anyone's to undo, including a card-by-card restore from the archive
         // view.
         undoable.value = undoable.value.filter((id) => !back.has(id));
-        say(`${back.size} agent${back.size === 1 ? `` : `s`} back on the board`);
+        say(t(`agents.useAgentsArchive.backOnBoard`, { count: back.size }, back.size));
         notice.value = undefined;
     } catch (error) {
         if (!current()) {
@@ -225,7 +227,7 @@ export const restore = async (ids: readonly string[]): Promise<void> => {
         }
         unput();
         archived.value = withReturned(before, new Set(leaving.map((agent) => agent.id)));
-        notice.value = errorMessage(error, `Couldn't restore that.`);
+        notice.value = errorMessage(error, t(`agents.useAgentsArchive.couldntRestore`));
     } finally {
         release();
     }
@@ -254,13 +256,13 @@ export const purgeArchived = async (): Promise<void> => {
             forgetClosedDraft(id);
         }
         notice.value =
-            removed.length < aimedAt ? `Deleted ${removed.length} of ${aimedAt} archived agents, the rest are still in use and stayed.` : undefined;
-        say(`${removed.length} archived agent${removed.length === 1 ? `` : `s`} deleted`);
+            removed.length < aimedAt ? t(`agents.useAgentsArchive.deletedSome`, { removed: removed.length, total: aimedAt }) : undefined;
+        say(t(`agents.useAgentsArchive.deletedCount`, { count: removed.length }, removed.length));
     } catch (error) {
         if (!current()) {
             return;
         }
-        notice.value = errorMessage(error, `Couldn't delete the archive.`);
+        notice.value = errorMessage(error, t(`agents.useAgentsArchive.couldntDeleteArchive`));
     } finally {
         release();
     }

@@ -20,10 +20,7 @@ import { t } from "@intentic/ui/i18n";
 // reachable at all, and whether a newer agent has been published.
 // Pure, so every rule below is checkable without mounting anything (deviceAgent.test.ts).
 
-// Both verbs are offered whenever the machine can hear them, not only when this sandbox has decided
-// something is wrong. An update gated on a registry comparison is no update at all on a dev build, on a
-// sandbox that never reached the registry, or on an agent published since this sandbox last looked — and
-// each of those is a walk to the machine to type `intentic-machine upgrade` by hand.
+// When the registry knows this device is current, Restart stays available and Update does not offer a no-op.
 
 /** This tab's panel: every op the contract names, since a connected machine can hear all of them. */
 export type DeviceAgentPanel = AgentPanel<DeviceAgentOp>;
@@ -51,9 +48,13 @@ const RESTART_ONLY: readonly AgentAction<DeviceAgentOp>[] = [restartAgent()];
 // sentence without the controls. Wider than the container verbs' `commandable`, by one case: a device
 // holding a socket while sending no report is usually one whose agent predates machine reports, which is
 // exactly the machine an update fixes, and the one this view used to answer with a command to go and type.
-// An agent too old to have the flow at all refuses in its own words, which is an answer either way.
+// An agent too old to have the flow at all refuses in its own words, which is an answer either way. And wider by a
+// second: "Run commands" off stops the machine's report, not these, which are the owner's own maintenance and ride no
+// switch of the agents' (tools/agent.ts in the machine agent); one from before that refuses and names the switch.
 const reachable = (device: Device): boolean =>
-    device.hostId !== undefined && device.online === true && (device.gap === undefined || device.gap === `unreported`);
+    device.hostId !== undefined &&
+    device.online === true &&
+    (device.gap === undefined || device.gap === `unreported` || device.gap === `scope-off`);
 
 const syncOnly = (): AgentNote => ({
     text: `Enrolled for syncing only.`,
@@ -130,11 +131,12 @@ const notesOf = (row: DeviceRow, latest: string | undefined): AgentNote[] => {
 };
 
 // None on a side that cannot hear them; Restart alone where the machine owns the update.
-const actionsOf = (device: Device, update: boolean): readonly AgentAction<DeviceAgentOp>[] => {
+const actionsOf = (device: Device, update: boolean, latest: string | undefined): readonly AgentAction<DeviceAgentOp>[] => {
     if (!reachable(device)) {
         return [];
     }
-    return update ? ACTIONS : RESTART_ONLY;
+    const installed = device.report?.agent.installed;
+    return update && (latest === undefined || installed === undefined || agentBehind(device, latest)) ? ACTIONS : RESTART_ONLY;
 };
 
 // Nothing to say and nothing to do: a machine with no version from either door and no command door is one
@@ -157,7 +159,7 @@ export const deviceAgentPanel = (
         state: stateOf(row, readAt),
         facts: pid === undefined ? [] : [`pid ${pid}`],
         notes: notesOf(row, update ? latest : undefined),
-        actions: actionsOf(device, update),
+        actions: actionsOf(device, update, latest),
         blocked: blockedWhy(device, readAt),
     };
 };
@@ -167,6 +169,7 @@ export interface MachineAgent {
     // The Windows side when it can hear, since it updates its distros first and itself last; else any side that can.
     readonly door: DeviceRow | undefined;
     readonly action: AgentAction<DeviceAgentOp>;
+    readonly updateNeeded: boolean;
     readonly notes: readonly AgentNote[];
 }
 
@@ -221,6 +224,7 @@ export const machineAgent = (machine: MachineRow, latest: string | undefined): M
     return {
         door: hearing.find((row) => row.device.platform === `windows`) ?? hearing[0],
         action: upgrade(),
+        updateNeeded: latest === undefined || held.length < machine.environments.length || machine.environments.some((row) => agentBehind(row.device, latest)),
         notes: [splitNote(held), machinePublishedNote(machine.environments, held, latest)].filter((note) => note !== undefined),
     };
 };

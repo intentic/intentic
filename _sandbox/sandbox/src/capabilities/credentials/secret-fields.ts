@@ -11,6 +11,14 @@ export const secretFieldsOf = (capability: Capability, connectors: ReadonlyMap<s
     return Object.keys(config).filter((key) => !echoed.has(key));
 };
 
+// A pasted one-line credential without the whitespace a paste carries: a token copied with its trailing newline is
+// refused by every HTTP client as a header value ("Invalid character in header content"). A value that is several lines
+// (a PEM key) is kept exactly as given, since its final newline is part of the format.
+export const pastedSecret = (value: string): string => {
+    const trimmed = value.trim();
+    return trimmed.includes("\n") ? value : trimmed;
+};
+
 // Only string values are vaulted, since every credential shape today is stored as text. A non-string secret field is
 // returned as `unvaultable` rather than silently left in the manifest.
 export const partitionSecretValues = (
@@ -23,7 +31,7 @@ export const partitionSecretValues = (
     for (const key of secretFieldsOf(capability, connectors)) {
         const value = config[key];
         if (typeof value === "string") {
-            values[key] = value;
+            values[key] = pastedSecret(value);
         } else if (value !== undefined) {
             unvaultable.push(key);
         }

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Icon } from "@intentic/ui";
+import { Button, Icon } from "@intentic/ui";
 import { onScopeDispose, ref } from "vue";
 import { useT } from "@intentic/ui/i18n";
 
@@ -19,11 +19,28 @@ const TURNS = [
 // Repeated twice so the stack always reaches the top edge; turns that overflow are clipped and cost nothing.
 const OUTLINE = [...TURNS, ...TURNS];
 
-// Past this the placeholder looks stuck, not loading; the timer starts at mount, the whole visible wait.
+// Asks the sandbox again (the pane's hydration), offered once the wait is past what a read ever takes.
+const emit = defineEmits<{ retry: [] }>();
+
+// Past the first the placeholder looks stuck, not loading; past the second it has been stuck longer than any read takes
+// (one sat here for minutes over a subagent waiting on a permission), so it says so and offers to ask again. Timed from
+// mount, the whole visible wait, and from each Retry after it.
 const SLOW_AFTER_MS = 6_000;
+const STALLED_AFTER_MS = 18_000;
 const slow = ref(false);
-const timer = setTimeout(() => (slow.value = true), SLOW_AFTER_MS);
-onScopeDispose(() => clearTimeout(timer));
+const stalled = ref(false);
+let timers: ReturnType<typeof setTimeout>[] = [];
+const arm = (): void => {
+    timers.forEach(clearTimeout);
+    timers = [setTimeout(() => (slow.value = true), SLOW_AFTER_MS), setTimeout(() => (stalled.value = true), STALLED_AFTER_MS)];
+};
+arm();
+onScopeDispose(() => timers.forEach(clearTimeout));
+const retry = (): void => {
+    stalled.value = false;
+    arm();
+    emit(`retry`);
+};
 </script>
 
 <template>
@@ -51,7 +68,11 @@ onScopeDispose(() => clearTimeout(timer));
                     <span v-for="(line, lineIndex) in turn.answer" :key="lineIndex" class="h-3 rounded bg-content/10" :class="line" />
                 </div>
             </div>
-            <p v-if="slow" class="flex shrink-0 items-center justify-center gap-2 pt-2 text-2xs text-subtle">
+            <p v-if="stalled" class="flex shrink-0 flex-wrap items-center justify-center gap-x-3 gap-y-1 pt-2 text-2xs text-subtle" role="alert">
+                <span>{{ t(`chat.chatTranscriptSkeleton.takingLonger`) }}</span>
+                <Button size="small" severity="secondary" @click="retry">{{ t(`chat.chatTranscriptSkeleton.retry`) }}</Button>
+            </p>
+            <p v-else-if="slow" class="flex shrink-0 items-center justify-center gap-2 pt-2 text-2xs text-subtle">
                 <Icon name="spinner" spin class="text-2xs" />{{ t(`chat.chatTranscriptSkeleton.stillFetchingConversationSandbox`) }}
             </p>
         </div>

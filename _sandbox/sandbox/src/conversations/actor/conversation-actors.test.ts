@@ -37,7 +37,7 @@ import {
 import type { Services } from "../../composition.js";
 import { spawnServices } from "../../harness/spawn-services.testing.js";
 import type { TurnStarter } from "../../seams/turn-starter.js";
-import { drivenBy, fakeTurns, fleetStoreOver } from "../../testing.js";
+import { drivenBy, fakeTurns, fleetStoreOver, noPresences } from "../../testing.js";
 import type { LandedPresences } from "../land/landed-presence.js";
 import type { LandStanding, LandStandings } from "../land/standing.js";
 import { openConversationsDb } from "../../store/conversations-db.js";
@@ -200,7 +200,7 @@ const standingsOf = (models: ReadonlyMap<Id, Model>): LandStandings => ({
     forget: () => {},
 });
 
-const PRESENCES: LandedPresences = { of: () => undefined, refresh: async () => false, forget: () => {}, metrics: () => ({}) };
+const PRESENCES: LandedPresences = noPresences();
 
 const SILENT = pino({ level: "silent" });
 
@@ -523,7 +523,8 @@ const walk = async (seed: number, steps: number): Promise<number> => {
                 };
                 await frame(id, events[kind]);
                 const comingBack = kind === "outage-scheduled" || kind === "token-scheduled";
-                modelOf(id).resuming ||= comingBack;
+                // The turn's last failure decides: one that schedules nothing withdraws an earlier promise.
+                modelOf(id).resuming = comingBack;
                 modelOf(id).errored ||= !comingBack;
             },
         },

@@ -104,7 +104,7 @@ export function useSaveActions() {
             words.value.push,
             backupCommits.value > 0
                 ? t(`workspace.savePanel.versionCount`, { count: backupCommits.value }, backupCommits.value)
-                : t(`workspace.savePanel.thisRepo`, { repo: words.value.repo }),
+                : words.value.thisRepo,
             backupRepos.value.map((repo) => ({ repo: repo.repo, pull: behind(repo) > 0, push: ahead(repo) > 0 || unpublished(repo) })),
         );
 

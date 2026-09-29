@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
-import { blockCommands, blockProse, blockTools, detailOf, purposeOf, splitBlocks } from "./overlay-blocks.js";
+import { blockCommands, blockProse, blockTools, detailOf, purposeOf, renderBlocks, splitBlocks, uniqueBlocks, withoutRepeats } from "./overlay-blocks.js";
 import { parseVersion } from "./version-probe.js";
 
 const CURSOR = readFileSync(join(repoRoot(import.meta.url), "_sandbox/sandbox/image-packs/cursor.Dockerfile"), "utf8");
@@ -41,6 +41,23 @@ test("splits the custom section into the blocks the agent named", () => {
 test("keeps content that arrived before any marker rather than dropping it", () => {
     const blocks = splitBlocks(`RUN echo unnamed\n\n${FFMPEG}`);
     expect(blocks.map((block) => block.name)).toEqual([``, `ffmpeg`]);
+});
+
+// One block per tool: a later one replaces the earlier in its place, so approving a revised draft never appends a copy.
+test("keeps one block per tool, the latest body in the first one's place", () => {
+    const blocks = uniqueBlocks(splitBlocks(`# ---- zcode ----\nRUN v1\n\n${FFMPEG}\n\n# ---- zcode ----\nRUN v2`));
+    expect(blocks.map((block) => [block.name, block.body.split(`\n`)[0]])).toEqual([
+        [`zcode`, `RUN v2`],
+        [`ffmpeg`, `# ffmpeg, encoding screen recordings (Playwright records VP8/WebM; its bundled ffmpeg cannot encode H.264,`],
+    ]);
+    expect(renderBlocks(blocks)).toBe(`# ---- zcode ----\nRUN v2\n\n${FFMPEG}`);
+});
+
+// Byte for byte unless something repeats, so a sandbox with nothing repeated is not asked to rebuild over spacing.
+test("rewrites a custom section only when it names a tool twice", () => {
+    const spaced = `${FFMPEG}\n\n\n\n${RUST}`;
+    expect(withoutRepeats(spaced)).toBe(spaced);
+    expect(withoutRepeats(`${FFMPEG}\n\n${FFMPEG}`)).toBe(FFMPEG);
 });
 
 test("unwraps the leading comment into paragraphs and keeps its bullets on their own lines", () => {

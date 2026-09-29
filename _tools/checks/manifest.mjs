@@ -116,7 +116,7 @@ export const CHECKS = [
         file: "i18n-catalogs.mjs",
         needs: "checkout",
         gate: "code",
-        about: "every translation holds only keys English has, with English's placeholders and plural-ness (--fix drops the rest)",
+        about: "every translation holds only keys English has, with English's placeholders and plural-ness (--fix drops the rest), and Polish holds all of them",
     },
     {
         id: "i18n-literals",

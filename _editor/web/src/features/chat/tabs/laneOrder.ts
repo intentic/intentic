@@ -41,3 +41,19 @@ export const laneOrdered = (entries: Iterable<OpenChat>): ChatLanes => {
     }
     return grouped;
 };
+
+// The lanes as the reader last saw them, while they are reading (the pointer is over the list): each lane keeps the
+// order it was drawn in, a chat that left it goes, and one that joined it waits at the foot, so a press never lands on a
+// card that moved under it. With nothing held, the fresh order stands.
+export const steadyLanes = (fresh: ChatLanes, held: ChatLanes | undefined): ChatLanes => {
+    if (held === undefined) {
+        return fresh;
+    }
+    const steady = (lane: keyof ChatLanes): OpenChat[] => {
+        const now = new Map(fresh[lane].map((entry) => [entry.conversation.conversationId, entry]));
+        const kept = held[lane].flatMap((entry) => now.get(entry.conversation.conversationId) ?? []);
+        const seen = new Set(kept.map((entry) => entry.conversation.conversationId));
+        return [...kept, ...fresh[lane].filter((entry) => !seen.has(entry.conversation.conversationId))];
+    };
+    return { attention: steady(`attention`), active: steady(`active`), finished: steady(`finished`) };
+};

@@ -21,6 +21,7 @@ import {
     sandboxLogs,
     shapeSandbox,
     swapSandbox,
+    swapResult,
     tailSandboxLogs,
 } from "./sandboxes.js";
 import { featuresFrom, fetchIc, icCandidates, icNeedsFetch, icVersionFrom } from "./ic-binary.js";
@@ -368,6 +369,13 @@ test("a machine with no home still tries the rest", () => {
 
 test("swapping is refused by the sandboxes switch, like managing", async () => {
     await expect(swapSandbox("update", "work", undefined, scopes({ sandboxes: "off" }), () => {})).rejects.toThrow(/Manage sandboxes on this device/);
+});
+
+test("an update that found the current image reports no restart", () => {
+    expect(swapResult("update", "work", "intentic: no newer sandbox image is available yet — your sandbox is already on the latest :stable it can pull.")).toBe(
+        'Sandbox "work" is already up to date. Nothing was restarted.',
+    );
+    expect(swapResult("update", "work", "intentic: cutover complete")).toBe('Updated sandbox "work". Its files and its history were kept.');
 });
 
 // One switch for the whole lifecycle: a fleet the owner may manage is one the owner may clean up, and the refusal

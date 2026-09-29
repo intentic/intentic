@@ -134,12 +134,25 @@ const PosturesSchema = z.object({
 });
 export type Postures = z.infer<typeof PosturesSchema>;
 
+// Who took landed work back out of the main tree, as the presence probe read it (landed-presence.ts): the agent working
+// there, or the person who threw the changes away.
+export const RemoverSchema = z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("agent"), id: z.string() }),
+    z.object({ kind: z.literal("person"), email: z.string().optional(), name: z.string().optional() }),
+]);
+export type Remover = z.infer<typeof RemoverSchema>;
+
 // What the last land left: the commit message drafted the moment it landed (a claim on the main tree, retired only by a
 // commit), why it refused (evidence standing.ts reads, never state), and the base-to-tip diffstat across the composition.
+// `failure` is a land that broke rather than refused, standing until one goes through, or, marked `check`, the
+// end-of-turn check that measures held work, standing until a later check reads it; `removedBy` who took the landed
+// work back out, while some of it is still missing.
 const LandingSchema = z.object({
     message: LandedMessageSchema.optional(),
     conflicts: z.array(LandConflictSchema).optional(),
     diff: z.object({ files: z.number(), insertions: z.number(), deletions: z.number() }).optional(),
+    failure: z.object({ reason: z.string(), code: z.string().optional(), at: z.number(), check: z.boolean().optional() }).optional(),
+    removedBy: RemoverSchema.optional(),
 });
 export type Landing = z.infer<typeof LandingSchema>;
 

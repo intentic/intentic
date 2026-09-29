@@ -3,6 +3,7 @@ import type { Tip } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 import type { RouteLocationRaw } from "vue-router";
 import { deviceDoors, osLabel, osTitle } from "./deviceFacts";
+import { capabilityRoute } from "./deviceLinks";
 import type { DeviceRow, MachineRow } from "./deviceRows";
 
 // One environment of a many-sided machine as its row states it: the door its tools are named after, the shell
@@ -62,6 +63,6 @@ export const wslDistroRows = (machine: MachineRow): WslDistroRow[] => {
         .filter((name) => !machine.environments.some((environment) => distroOf(environment) === name))
         .map((name) => ({
             name,
-            connect: { name: `capabilities`, params: { card: `linux` }, query: { device: `${stem}-wsl-${name.toLowerCase()}` } },
+            connect: capabilityRoute(`linux`, { device: `${stem}-wsl-${name.toLowerCase()}` }),
         }));
 };

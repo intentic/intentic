@@ -26,6 +26,7 @@ import type { ChatMessage } from "../transcript/transcript";
 import type { ComposerSelection } from "./composerSelection";
 import { IDLE } from "./runPhase";
 import { setDaemonRoutes } from "../../sandbox/overview/useDaemonRoutes";
+import { setLocale } from "@intentic/ui/i18n";
 
 // One conversation's runs through their phases (runPhase.ts), and the doors into the daemon's queue they share, against
 // a host that is nothing but the refs a run reads and writes and a daemon that is the procedures a run calls. Whole
@@ -117,7 +118,7 @@ const clientOf = (settings: TurnSettings = SETTINGS) => {
             account: computed(() => undefined),
             harness: computed(() => `native` as const),
         }),
-        failures: unstubbed<TurnFailures>(`failures`, { cancelProbe: jest.fn(), clear: jest.fn(), armRenewalProbe: jest.fn() }),
+        failures: unstubbed<TurnFailures>(`failures`, { cancelProbe: jest.fn(), clear: jest.fn(), armRenewalProbe: jest.fn(), settled: jest.fn() }),
         title: ref<string | null>(null),
         isolated: ref(true),
         runner: ref<string | undefined>(),
@@ -197,8 +198,14 @@ describe(`a run's lifecycle`, () => {
         const { client, host, phases } = clientOf();
         answers({ delivered: `started`, run: `r1` });
         attach.mockImplementation(async () => attached(`r1`, 4_000, `tidy the docs`));
+        // Started by this window's own press, on this browser's clock: counted on it, never on the sandbox's.
+        const onSandbox: boolean[] = [];
+        watch(client.turnOnSandboxClock, (on) => void onSandbox.push(on), { flush: `sync` });
 
         await client.send(`tidy the docs`, SETTINGS);
+
+        expect(onSandbox).toEqual([]);
+        expect(client.turnOnSandboxClock.value).toBe(false);
 
         expect(phases).toEqual([`sending`, `running`, `idle`]);
         expect(client.phase.value).toEqual({ kind: `idle`, accepted: true });
@@ -221,6 +228,22 @@ describe(`a run's lifecycle`, () => {
         expect(host.attachments.value).toEqual([{ id: expect.any(String), name: FILE.name, path: FILE.path, status: `done`, progress: 100 }]);
         expect(host.transcript.messages.value).toEqual([]);
         expect(host.error.value).toBe(`${REFUSAL} Your message is back in the composer: send it again once that's sorted.`);
+    });
+
+    // An older sandbox refused a message to a busy conversation in English; the reader gets it in their own language.
+    it(`says a refusal it knows in the reader's language, and hands the words back all the same`, async () => {
+        run.mockImplementation(async () => {
+            throw new SandboxHttpError(409, `a turn is already running for this conversation`);
+        });
+        const { client, host } = clientOf();
+        await setLocale(`pl`);
+        try {
+            await client.send(`tidy the docs`, SETTINGS);
+            expect(host.draft.value).toBe(`tidy the docs`);
+            expect(host.error.value).toBe(`W tej rozmowie trwa już tura. Twoja wiadomość wróciła do pola wpisywania: wyślij ją ponownie, gdy to się wyjaśni.`);
+        } finally {
+            await setLocale(`en`);
+        }
     });
 
     it(`ends an errand stopped while its words are composed here, sending nothing and arming no way back`, async () => {
@@ -269,12 +292,16 @@ describe(`a run's lifecycle`, () => {
         const { client, phases } = clientOf();
         const startedAt: (number | undefined)[] = [];
         watch(client.turnStartedAt, (at) => void startedAt.push(at), { flush: `sync` });
+        // Its start is the daemon's own stamp: an elapsed count runs on the sandbox's clock, not this browser's.
+        const onSandbox: boolean[] = [];
+        watch(client.turnOnSandboxClock, (on) => void onSandbox.push(on), { flush: `sync` });
         attach.mockImplementation(async () => attached(`r7`, 9_000, `carry on`));
 
         expect(await client.reattach()).toBe(true);
 
         expect(phases).toEqual([`running`, `idle`]);
         expect(startedAt).toEqual([9_000, undefined]);
+        expect(onSandbox).toEqual([true, false]);
         expect(client.phase.value).toEqual({ kind: `idle`, accepted: true });
     });
 

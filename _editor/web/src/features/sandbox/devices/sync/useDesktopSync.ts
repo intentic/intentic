@@ -43,8 +43,9 @@ export function useDesktopSync() {
     const canOperate = computed(() => roleAtLeast(active.value?.role ?? `owner`, `maintainer`));
 
     // Whether this sandbox can do desktop sync at all; read from the daemon rather than assumed, since an old
-    // daemon that can't answer shouldn't offer sync.
-    const available = ref(false);
+    // daemon that can't answer shouldn't offer sync. Unknown until it answers: starting at "no" put the sentence that
+    // sync is impossible here on screen first, then offered sync a moment later.
+    const available = ref<boolean | undefined>(undefined);
     // The one-time pairing token from the last Enable click; undefined until minted or spent.
     const pairToken = ref<string | undefined>(undefined);
     // The mode the daemon granted for that token; what the one-liner will actually enroll.
@@ -128,7 +129,9 @@ export function useDesktopSync() {
     const refresh = async (): Promise<void> => {
         try {
             const response = await sandboxRequest(`/system/sync`);
+            // An answer that isn't one (an old daemon's 404) is a no; only silence leaves it unknown.
             if (!response.ok) {
+                available.value = false;
                 return;
             }
             available.value = ((await response.json()) as Partial<SyncStatus>).available === true;

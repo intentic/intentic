@@ -113,6 +113,7 @@ export * from "./events/agent-events.js";
 export * from "./events/agent-words.js";
 export * from "./events/requests.js";
 export * from "./events/resume.js";
+export * from "./events/sandbox-notice.js";
 export * from "./events/system-events.js";
 export * from "./events/transcript.js";
 export * from "./events/land-breakage.js";

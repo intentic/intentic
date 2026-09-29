@@ -1,17 +1,20 @@
 import type { AgentSummary } from "@intentic/sandbox-contract";
 import { computed, onBeforeUnmount, type Ref, watch } from "vue";
-import { turnInFlight } from "../../../agents/fleet/agentStatus";
+import { awaitingUser, turnInFlight } from "../../../agents/fleet/agentStatus";
 import { useAgents } from "../../../agents/fleet/useAgents";
 import type { FleetAgent } from "../../../agents/fleet/useAgents-fleet";
 import { registry } from "../../../agents/fleet/useAgents-registry";
 import { otherBoxes } from "../../../sandbox/live/fleetAcross";
-import { hydrateOnce } from "../../run/useChat-sessions";
+import { hydrateOnce, refreshAfterSleep } from "../../run/useChat-sessions";
 import type { Conversation } from "../../session/conversation";
 import { newerQueue } from "../../session/turnClient";
+import { onScreen } from "../../../../shell/window/onScreen";
 
 // What keeps a pane attached to the chat it shows: the typewriter runs in the focused pane alone; a chat the daemon hadn't
-// created when the pane first read it hydrates once the roster says it exists, or that its turn moved; and the chat's
-// queue, which is the daemon's, is read off its card for the composer to show.
+// created when the pane first read it hydrates once the roster says it exists, or that its turn moved; a chat the roster
+// says waits on a person attaches whenever it is shown without that card on screen; a page coming back from a sleep
+// re-attaches a running turn, or after a long one asks for the whole chat again; and the chat's queue, which is the
+// daemon's, is read off its card for the composer to show.
 
 export interface PaneAttachHost {
     readonly conversation: () => Conversation;
@@ -26,6 +29,12 @@ export interface PaneAttachHost {
 type CardTurn = string | boolean | undefined;
 
 const inFlight = (turn: CardTurn): boolean => turn !== undefined && turn !== false;
+
+// A hide this long (a laptop lid, a phone in a pocket) leaves what a shown chat painted stale and the reads queued before
+// it possibly dead; a shorter one only re-attaches a turn the card says is running.
+const LONG_SLEEP_MS = 5 * 60_000;
+// How often a shown page checks its own clock for a sleep visibility did not report.
+const BEAT_MS = 30_000;
 
 export const usePaneAttach = (pane: PaneAttachHost): void => {
     // An effect rather than a mount step, since a pane's conversation and focus both move: the chat it leaves must stop
@@ -104,4 +113,63 @@ export const usePaneAttach = (pane: PaneAttachHost): void => {
         chat.registered.value = true;
         hydrateOnce(chat);
     });
+    // The page coming back into view. A turn the card says is in flight while this pane streams nothing lost its stream to
+    // the sleep (a frozen phone page drops it), so it attaches again; after a long sleep the whole chat is asked again,
+    // past the cache, with "Reconnecting…" over what is painted (a woken PC's chats would not open for minutes). A page
+    // the back-forward cache restores may say nothing through visibility, so its `pageshow` counts the same.
+    let hiddenAt: number | undefined;
+    // When the last beat ran (below); a hide or a return starts it over, so one sleep is never counted twice.
+    let beatAt = Date.now();
+    const cameBack = (): void => {
+        const away = hiddenAt === undefined ? 0 : Date.now() - hiddenAt;
+        hiddenAt = undefined;
+        beatAt = Date.now();
+        const chat = pane.conversation();
+        if (away >= LONG_SLEEP_MS) {
+            refreshAfterSleep(chat);
+        } else if (!pane.streaming.value && inFlight(fleetTurn.value)) {
+            hydrateOnce(chat);
+        }
+    };
+    watch(onScreen, (shown) => {
+        if (shown) {
+            cameBack();
+        } else {
+            hiddenAt = Date.now();
+            beatAt = Date.now();
+        }
+    });
+    // A machine that slept with this page on screen (a PC left open overnight) may say nothing through visibility: its
+    // timers just stop. A beat that runs a long sleep later than it was set for is that sleep, told by the clock.
+    const beat = setInterval(() => {
+        const now = Date.now();
+        const late = now - beatAt;
+        beatAt = now;
+        if (late >= LONG_SLEEP_MS && hiddenAt === undefined && onScreen.value) {
+            refreshAfterSleep(pane.conversation());
+        }
+    }, BEAT_MS);
+    onBeforeUnmount(() => clearInterval(beat));
+    const restored = (event: PageTransitionEvent): void => {
+        if (event.persisted) {
+            cameBack();
+        }
+    };
+    window.addEventListener(`pageshow`, restored);
+    onBeforeUnmount(() => window.removeEventListener(`pageshow`, restored));
+    // Waiting on a person (a question, a plan, a permission) while this pane shows no such card: the tab was open when the
+    // turn parked and its attach stream is gone, so nothing would draw the card until a send forced a reattach (one
+    // question sat unseen for hours). Checked each time the chat is shown, the page comes back into view, or the roster
+    // starts saying it waits; a pane already holding the card, or streaming, has nothing to fetch.
+    const waitsOnYou = computed(() => card.value !== undefined && awaitingUser(card.value));
+    watch(
+        [pane.conversation, waitsOnYou, onScreen],
+        ([chat, waiting, shown]) => {
+            if (waiting && shown && !pane.streaming.value && !chat.transcript.awaitingDecision.value) {
+                chat.registered.value = true;
+                hydrateOnce(chat);
+            }
+        },
+        { immediate: true },
+    );
 };

@@ -2,7 +2,8 @@
 import { useT } from "@intentic/ui/i18n";
 import CardSeal from "../../agents/board/cards/CardSeal.vue";
 import { boxNameOf } from "../../agents/fleet/fleetScope";
-import { turnInFlight } from "../../agents/fleet/agentStatus";
+import { editsRefusal, turnInFlight } from "../../agents/fleet/agentStatus";
+import { settingsChip, useSettingsRefusal } from "../../agents/review/settingsRefusal";
 import type { FleetAgent } from "../../agents/fleet/useAgents-fleet";
 import OriginMark from "../../../components/OriginMark.vue";
 import RailCard from "../../../components/RailCard.vue";
@@ -13,8 +14,9 @@ import { viewersOfSession } from "../../../shell/presence/usePresence";
 import { relativeTime } from "../models/catalog";
 import { draftPreview } from "../drafts/draftPreview";
 import type { Conversation } from "../session/conversation";
-import type { CardView } from "./cardView";
-import { isArchived, originOf, tabLabel } from "./tabs";
+import { computed } from "vue";
+import { type CardView, modelOrProvider } from "./cardView";
+import { isArchived, originOf, tabLabel, twinTitles } from "./tabs";
 
 // One open chat as the rail draws it. A component rather than a block of ChatTabList's template because the card is
 // named by its own composer while nothing else has named it (tabLabel → draftPreview): read from the list, that one
@@ -40,9 +42,15 @@ const props = defineProps<{
     closable: boolean;
 }>();
 
+// Another open chat has this one's title (the same prompt, sent again on another provider): the facts line then names
+// the model or at least the provider, which a chat with no model recorded would otherwise leave out.
+const twin = computed(() => props.conversation.title.value !== undefined && twinTitles().has(props.conversation.title.value));
+const twinFact = computed(() => (twin.value && props.view.model === undefined ? modelOrProvider({ conversation: props.conversation, agent: props.agent }) : undefined));
+
+// No rename on a double-click: it is two clicks, which open the chat as a board card's do, and a title turning into a
+// field under a reader who only wanted the chat open was a surprise. Rename is F2, the header's pencil and the menu.
 const emit = defineEmits<{
     select: [event: MouseEvent];
-    rename: [];
     menu: [event: Event];
     hover: [event: MouseEvent];
     leave: [];
@@ -50,6 +58,14 @@ const emit = defineEmits<{
     keep: [];
     middleClose: [];
 }>();
+
+// A land refused only by files a Sandbox page wrote says so, as its board card does ("Unsaved settings", not "Your edits"):
+// the pages behind it are read only while the refusal is the reader's own, which is the one chip they rename.
+const settingsPages = useSettingsRefusal(
+    () => ({ id: props.agent?.id ?? props.conversation.conversationId, sandboxId: props.agent?.sandboxId }),
+    () => props.agent !== undefined && props.agent.archivedAt === undefined && editsRefusal(props.agent),
+);
+const chip = computed(() => (props.agent === undefined ? props.view.chip : settingsChip(props.view.chip, props.agent, settingsPages.value)));
 
 // The × and the pin sit inside the card's click target; stop propagation or the press also selects the row.
 // Spelled out per verb: `emit` is an overload set, and a union argument matches none of them.
@@ -72,7 +88,7 @@ const act = (event: Event, verb: "close" | "keep"): void => {
         :match-case="props.matchCase"
         :provider="props.agent?.provider ?? props.conversation.selection.provider.value"
         :status="props.view.status"
-        :chip="props.view.chip"
+        :chip="chip"
         :rim="props.view.rim"
         :live="props.view.live"
         tight
@@ -82,7 +98,6 @@ const act = (event: Event, verb: "close" | "keep"): void => {
         :snippet="props.view.snippet"
         v-middleclick="() => emit('middleClose')"
         @click="emit('select', $event)"
-        @dblclick.prevent.stop="emit('rename')"
         @contextmenu.prevent.stop="emit('menu', $event)"
         @mouseenter="emit('hover', $event)"
         @mouseleave="emit('leave')"
@@ -120,7 +135,7 @@ const act = (event: Event, verb: "close" | "keep"): void => {
             </span>
         </template>
         <!-- One line: where it came from, the model, and (settled only) its age, right-aligned. Why it needs you is the card's corner (see `chipOf`), where the board puts it too. -->
-        <template v-if="props.view.meta" #meta>
+        <template v-if="props.view.meta || twinFact !== undefined" #meta>
             <UnsentMark
                 v-if="props.conversation.unsent.value"
                 :preview="draftPreview(props.conversation.draft.value)"
@@ -167,6 +182,7 @@ const act = (event: Event, verb: "close" | "keep"): void => {
             </span>
             <!-- Spend, diff and turn count are deliberately absent here; they live on the board and Usage tab. -->
             <span v-if="props.view.model !== undefined" class="max-w-24 truncate">{{ props.view.model }}</span>
+            <span v-else-if="twinFact !== undefined" class="max-w-24 truncate">{{ twinFact }}</span>
             <!-- Age is shown only when settled; a running card's clock is the live line's elapsed readout instead. -->
             <span v-if="props.agent !== undefined && !turnInFlight(props.agent) && props.agent.updatedAt > 0" class="ml-auto shrink-0">{{
                 relativeTime(props.agent.updatedAt)

@@ -1,9 +1,10 @@
-import { ciFixConversationId, type PipelineRun } from "@intentic/sandbox-contract";
+import { type AgentRunPick, ciFixConversationId, type PipelineRun } from "@intentic/sandbox-contract";
 import { isInfraStep } from "@intentic/constants/ci-infra-steps";
 import type { Logger } from "pino";
 import type { Services } from "../composition.js";
 import type { TurnInput } from "../seams/turn-starter.js";
-import { daemonFixAttemptDeps, type FixAttemptOutcome, startFixAttempt } from "../conversations/fix/fix-attempts.js";
+import { AttemptRefused, daemonFixAttemptDeps, type FixAttemptOutcome, startFixAttempt } from "../conversations/fix/fix-attempts.js";
+import { NO_PROVIDER_CONNECTED, runRoleModel, unpinnedRunProvider } from "../agent/models/run-role-model.js";
 import type { CiProject } from "./projects.js";
 import { ciClientFor, type FailedStep, type FetchFn } from "./providers.js";
 
@@ -78,6 +79,9 @@ export interface CiFixRequest {
     readonly pressed?: boolean;
     // Whether a model was picked for this press, which outranks re-running a turn the door kept.
     readonly picked?: boolean;
+    // The model a new chat opens on in the browser that pressed: what the run opens on when nobody picked one and no
+    // model pinned for the job can run, while this sandbox can serve its provider. Never counts as `picked`.
+    readonly fallback?: AgentRunPick;
     readonly resume?: Parameters<typeof startFixAttempt>[1]["resume"];
     // Said first in the opening prompt, when whoever started it knows something the logs do not.
     readonly preface?: string;
@@ -111,6 +115,16 @@ export const runOf = async (services: Pick<Services, "ciRuns" | "logger">, proje
 // part of), so the board groups them.
 export const startCiFix = async (services: Services, request: CiFixRequest, fetchFn: FetchFn = fetch): Promise<FixAttemptOutcome> => {
     const { project, runId } = request;
+    // Nobody picked and no pin can serve: the pressing browser's chat default where this sandbox can run it, else the
+    // provider it falls back to. Refused before any conversation exists when there is none: an agent with nothing to
+    // run on would only fail at once on the board. A pin that can serve is left to fill the turn (turn-resume.ts).
+    const unpinned =
+        request.turn?.agent === undefined && request.turn?.model === undefined && (await runRoleModel(services, `pipeline-fix`)) === undefined;
+    const provider = unpinned ? await unpinnedRunProvider(services, request.fallback?.agent) : undefined;
+    if (unpinned && provider === undefined) {
+        throw new AttemptRefused(NO_PROVIDER_CONNECTED);
+    }
+    const chatDefault = request.fallback !== undefined && provider === request.fallback.agent ? request.fallback : undefined;
     const run = request.run ?? (await runOf(services, project, runId, fetchFn));
     const where = run !== undefined ? `on branch ${run.branch} (${run.url})` : `(run ${runId})`;
     // What a CONTINUED attempt is told: the failure is still open, the evidence is already in the conversation.
@@ -127,7 +141,7 @@ export const startCiFix = async (services: Services, request: CiFixRequest, fetc
             errands: { prompt: "ci-fix", nudge: "ci-fix-nudge" },
             title: `Fix CI: ${run?.title ?? project.repo}`.slice(0, TITLE_MAX),
             // `runRole` alone is what pins the model (turn-resume.ts); the pick and who pressed ride in `turn`.
-            turn: { isolated: true, runRole: `pipeline-fix`, ...request.turn },
+            turn: { isolated: true, runRole: `pipeline-fix`, ...chatDefault, ...request.turn },
             resume: request.resume,
         },
     );

@@ -5,7 +5,7 @@ import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
 import type { AgentSummary } from "@intentic/sandbox-contract";
 import { VueQueryPlugin } from "@tanstack/vue-query";
-import { type App, createApp, h, nextTick } from "vue";
+import { type App, createApp, h, nextTick, ref } from "vue";
 import { setAgents } from "../../agents/fleet/useAgents-registry";
 import { useChat } from "../run/useChat";
 import { openAgentConversation } from "../panel/useChat-reveal";
@@ -20,6 +20,8 @@ import { IconStub } from "@intentic/ui/testing";
 })();
 
 let app: App | undefined;
+// The list's own rename door, the one F2 reaches it by (ChatTabList.defineExpose).
+const list = ref<{ beginRename: (id: string) => void } | undefined>(undefined);
 
 const settle = async (): Promise<void> => {
     await nextTick();
@@ -32,7 +34,7 @@ const settle = async (): Promise<void> => {
 const mountList = async (): Promise<HTMLElement> => {
     const el = document.createElement(`div`);
     document.body.appendChild(el);
-    app = createApp({ render: () => h(ChatTabList, { onClose: (ids: ReadonlySet<string>) => useChat().closeTabs(ids) }) });
+    app = createApp({ render: () => h(ChatTabList, { ref: list, onClose: (ids: ReadonlySet<string>) => useChat().closeTabs(ids) }) });
     app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.use(router);
@@ -80,12 +82,13 @@ const cardOf = (el: HTMLElement, id: string): HTMLElement | null => el.querySele
 const fields = (el: HTMLElement): string[] =>
     [...el.querySelectorAll<HTMLInputElement>(`input[aria-label="Chat title"]`)].map((input) => input.placeholder);
 
-const renameRow = async (el: HTMLElement, id: string): Promise<void> => {
-    cardOf(el, id)?.dispatchEvent(new MouseEvent(`dblclick`, { bubbles: true }));
+// Rename is F2, the pencil and the menu; a double-click on a row is two clicks and nothing more.
+const renameRow = async (_el: HTMLElement, id: string): Promise<void> => {
+    list.value?.beginRename(id);
     await settle();
 };
 
-it(`opens a rename field on the row that was double-clicked`, async () => {
+it(`opens a rename field on the row it was asked for`, async () => {
     seed();
     const el = await mountList();
     openFromBoard(`working`);
@@ -95,6 +98,19 @@ it(`opens a rename field on the row that was double-clicked`, async () => {
 
     expect(fields(el)).toEqual([`New agent`]);
     expect(cardOf(el, `working`)).toBeNull();
+});
+
+it(`opens no rename field on a double-click`, async () => {
+    seed();
+    const el = await mountList();
+    openFromBoard(`working`);
+    await settle();
+
+    cardOf(el, `working`)?.dispatchEvent(new MouseEvent(`dblclick`, { bubbles: true }));
+    await settle();
+
+    expect(fields(el)).toEqual([]);
+    expect(cardOf(el, `working`)).not.toBeNull();
 });
 
 it(`draws a reopened chat as its card, not the rename field its row was closed in`, async () => {

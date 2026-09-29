@@ -6,6 +6,7 @@ import { waitFor, advanceTimersByTimeAsync, realYield } from "@intentic/testing/
 import PrimeVue from "primevue/config";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
+import { installI18n } from "@intentic/ui/i18n";
 import * as actualVueRouter from "vue-router";
 import { RouterLinkStub } from "../../testing/routerLinkStub";
 import * as actualUi from "@intentic/ui";
@@ -88,8 +89,10 @@ const hostedStatus = jest.fn().mockResolvedValue({ machine: `unknown` });
 const hostedRestart = jest.fn().mockResolvedValue({ ok: true });
 // The wait's own recovery: the platform is asked to start a machine the provider reports down.
 const wake = jest.fn().mockResolvedValue({ ok: true });
+// Nothing removed: an account whose trash holds a sandbox waits on the picker instead of starting anything.
+const trash = jest.fn().mockResolvedValue({ sandboxes: [] });
 jest.mock(`../../lib/useApi`, () => ({
-    apiClient: { sandbox: { setupCode, hostedOffer, addressOffer, hostedStatus, hostedRestart, wake, hostedProvision: platformProvision } },
+    apiClient: { sandbox: { setupCode, hostedOffer, addressOffer, hostedStatus, hostedRestart, wake, trash, hostedProvision: platformProvision } },
 }));
 // The Desktop sync card's pairing mint, which a hosted project's hand-over spends on a daemon this mount does not run.
 const mintSyncPairing = jest.fn<() => Promise<{ token: string; mode: `sync` | `mirror` }>>();
@@ -172,6 +175,8 @@ const mount = async (): Promise<HTMLElement> => {
     app = createApp({ render: () => h(Setup) });
     // The hand-back question is a PrimeVue dialog; the bare plugin, since the theme is not on trial here.
     app.use(PrimeVue);
+    // Sentences with markup inside them are one message each (`<i18n-t>`), which the plugin registers.
+    installI18n(app);
     app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.mount(el);
@@ -234,6 +239,7 @@ beforeEach(() => {
     openDesktopLink.mockReset();
     hostedOffer.mockReset().mockResolvedValue({ enabled: false, remaining: 0 });
     addressOffer.mockReset().mockResolvedValue({ enabled: true });
+    trash.mockReset().mockResolvedValue({ sandboxes: [] });
     create.mockReset().mockImplementation(async (name: string) => {
         const row = sandboxRow({ id: `new`, name });
         sandboxes.value = [...sandboxes.value, row];

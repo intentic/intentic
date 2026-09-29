@@ -29,6 +29,10 @@ const rewindRefusal = (status: number): string => {
         : `That message can no longer be gone back to.`;
 };
 
+// A read of the conversation still owed an answer: `reconnecting` while one sent after a long sleep is out, `failed`
+// once one did not answer.
+export type TranscriptRefresh = { readonly kind: `reconnecting` } | { readonly kind: `failed`; readonly reason?: string };
+
 // What an edit and a rewind need from the conversation around the transcript.
 export type TranscriptHost = Pick<Conversation, "conversationId" | "box" | "draft" | "attachments" | "error" | "session"> & {
     readonly turn: Pick<TurnClient, "streaming" | "say">;
@@ -37,6 +41,10 @@ export type TranscriptHost = Pick<Conversation, "conversationId" | "box" | "draf
 export class TranscriptView extends TranscriptClock {
     // True while a transcript read is in flight and nothing is painted, so the panel shows loading instead.
     readonly loading = ref(false);
+    // How the last read of this conversation from the sandbox went, said beside whatever is painted rather than as the
+    // error line: asked again after a long sleep and not answered yet, or not answered (with why, when known). Undefined
+    // once a read answers (useChat-sessions).
+    readonly refresh = ref<TranscriptRefresh | undefined>();
     // Position of the oldest drawn message, and whether more sits above it; passed back as `before` to page further.
     readonly historyFrom = ref(0);
     readonly historyMore = ref(false);

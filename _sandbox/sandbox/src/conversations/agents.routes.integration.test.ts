@@ -23,6 +23,7 @@ import { fakeHistory } from "../harness/route-fakes.testing.js";
 import { fakeServiceProcesses } from "../processes/processes-slice.testing.js";
 import { codexConnectedProxy, services, withTranslator } from "../harness/route-services.testing.js";
 import { runAgentTurn } from "../harness/route-turns.testing.js";
+import { unlinkedMessage } from "./worktrees/checkout-link.js";
 
 // Agents routes tests, driven over the daemon's HTTP surface as the browser drives it. Fakes and client are shared from
 // route-services.testing.ts and its siblings.
@@ -488,6 +489,28 @@ test("a turn parked on a question lands without a force: it is waiting for the u
     expect(await client.agents.land({ id: "conv1" })).toMatchObject({ landed: false });
     release?.();
     await collect(await client.agent.attach({ conversationId: "conv1" }));
+});
+
+// A pressed land that breaks answers the press with its error, as before, and now also stays on the card: before, the
+// card went on reading Ready (or Finished) as if nothing had been tried.
+test("a pressed land that breaks is kept on the card, not only answered to the press", async () => {
+    let broken = false;
+    const base = services();
+    const client = clientFor(
+        createApp(
+            services({
+                agentWorktrees: { ...base.agentWorktrees, relink: async (id, repos) => (broken ? ["root"] : base.agentWorktrees.relink(id, repos)) },
+                async *agent() {
+                    yield { kind: "done" };
+                },
+            }),
+        ),
+    );
+    await client.agent.run({ prompt: "an edit", conversationId: "conv1", isolated: true });
+    await collect(await client.agent.attach({ conversationId: "conv1" }));
+    broken = true;
+    expect(await errorCode(client.agents.land({ id: "conv1" }))).toBe("INTERNAL_SERVER_ERROR");
+    expect((await client.agents.get({ id: "conv1" })).landFailure).toEqual({ reason: unlinkedMessage(["root"]), code: "unlinked", at: expect.any(Number) });
 });
 
 // A forced land only reads; the turn still owns finishing itself (mutex release, ending write), so the card must keep

@@ -1,6 +1,9 @@
 <script setup lang="ts">
+import { Button, Icon } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, provide, ref } from "vue";
+import { awaitingUser, turnInFlight } from "../../../agents/fleet/agentStatus";
+import { useAgents } from "../../../agents/fleet/useAgents";
 import { CHAT_SURFACE, useChatSurface } from "../../tools/chatToolSurface";
 import { useToolCalls } from "../../tools/useToolCalls";
 import ChatForkCut from "../../transcript/ChatForkCut.vue";
@@ -20,6 +23,7 @@ import { usePaneTranscript } from "./paneTranscript";
 import { viewingIn } from "./paneSurface";
 import { usePaneView } from "../useChat-view";
 import FileRefPeek from "../../../workspace/files/refs/FileRefPeek.vue";
+import { retryHydrate } from "../../run/useChat-sessions";
 
 // A pane's turns: rows grouped by prompt, the marks between them, each turn's pictures and the one viewer walking them.
 
@@ -33,6 +37,9 @@ const props = defineProps<{
 
 const { conversation, messages, streaming, ending, awaitingDecision } = usePaneView();
 const { showToolCalls } = useToolCalls();
+const { agentById } = useAgents();
+// How the last read of this chat went, when it has not answered yet (TranscriptView.refresh).
+const refresh = computed(() => conversation.value.transcript.refresh.value);
 const {
     turns,
     turnShots,
@@ -46,6 +53,8 @@ const {
     forkCuts,
     cutsAbove,
     skeleton,
+    waiting,
+    staleness,
 } = usePaneTranscript({
     messages,
     streaming,
@@ -54,6 +63,11 @@ const {
     showToolCalls,
     loading: computed(() => conversation.value.transcript.loading.value),
     conversationId: computed(() => conversation.value.conversationId),
+    rowsOwed: computed(() => {
+        const card = agentById(conversation.value.conversationId);
+        return card !== undefined && (turnInFlight(card) || awaitingUser(card));
+    }),
+    refresh,
 });
 const doomed = computed(() => conversation.value.transcript.doomed.value);
 // The error line only where it adds to the transcript: the daemon's notice already says a turn's failure.
@@ -145,14 +159,37 @@ const column = ref<HTMLElement>();
             </template>
         </template>
         <!-- The transcript is on its way (a history open, an empty local mirror); without this it briefly reads as data loss, not loading. -->
-        <ChatTranscriptSkeleton v-else-if="skeleton" />
-        <!-- What an empty chat says, which is the composer's to word. -->
-        <slot v-else name="empty" />
+        <ChatTranscriptSkeleton v-else-if="skeleton" @retry="retryHydrate(conversation)" />
+        <!-- A read that did not answer, with nothing painted to fall back on: said, with the press that asks again, never the empty invitation to start a conversation. -->
+        <div
+            v-else-if="refresh?.kind === `failed`"
+            class="flex flex-1 flex-col items-center justify-center gap-2 px-4 text-center text-xs text-muted"
+            role="alert"
+        >
+            <span>{{ t(`chat.chatPaneTurns.couldntOpen`) }}</span>
+            <span v-if="refresh.reason" class="text-2xs text-subtle">{{ refresh.reason }}</span>
+            <Button size="small" severity="secondary" @click="retryHydrate(conversation)">{{ t(`chat.chatTranscriptSkeleton.retry`) }}</Button>
+        </div>
+        <!-- What an empty chat says, which is the composer's to word; not while it loads, whose outline is only held back a moment. -->
+        <slot v-else-if="!waiting" name="empty" />
         <!-- The live turn before it's written anything (showTurnStatus); outside the turn sections since it belongs to no message yet. -->
         <ChatTurnStatus v-if="showTurnStatus" />
         <!-- What the queue holds, where the message the reader just sent would have been: after everything that ran, above the error line a press on it may leave. -->
         <ChatHeldMessages />
         <p v-if="error !== undefined" class="text-xs text-danger">{{ error }}</p>
+        <!-- A read of a painted chat that has not answered: what is shown is the saved copy, said quietly, not as the error line. A live stream is fresher than either. -->
+        <p v-if="staleness" class="flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-subtle" role="status">
+            <template v-if="staleness.kind === `reconnecting`">
+                <Icon name="spinner" spin class="text-2xs" />
+                <span>{{ t(`chat.chatPaneTurns.reconnecting`) }}</span>
+            </template>
+            <template v-else>
+                <Icon name="exclamation-triangle" class="text-2xs text-warning" />
+                <span>{{ t(`chat.chatPaneTurns.couldntRefresh`) }}</span>
+                <span v-if="staleness.reason">{{ staleness.reason }}</span>
+                <Button size="small" severity="secondary" :text="true" @click="retryHydrate(conversation)">{{ t(`ui.action.retry`) }}</Button>
+            </template>
+        </p>
         <!-- Mounted only while open, so a chat nobody is looking through pictures in computes none of its filmstrip. -->
         <ChatShotViewer
             v-if="viewer.open.value"

@@ -12,7 +12,10 @@ import {
     type LandingDeps,
     type LandingHooks,
     landTurn,
+    settleLandBooks,
 } from "./turn-landing.js";
+import { unlinkedMessage } from "../../../conversations/worktrees/checkout-link.js";
+import type { AgentWorktrees } from "../../../conversations/worktrees/worktrees.js";
 
 const hold: Rule = {
     id: "hold-all",
@@ -162,5 +165,19 @@ describe("a turn that may not land", () => {
         const turn = { conversationId: "c", prompt: "p", autoLand: true, failed: false, aborted: false, awaitingWake: false, sync: async () => [] };
         expect(await drain(landTurn(await registered(false), hooks, turn, kept))).toStrictEqual([]);
         expect(kept).toStrictEqual(books());
+    });
+});
+
+// A land that breaks rather than refuses stays on the card until one goes through; before, the books an ended turn
+// settles only logged it, and the card rested on a standing read off the main repo's copy of a branch that never moved.
+describe("a land that breaks", () => {
+    test("while an ended turn's books settle is kept on the card, in the words it broke with", async () => {
+        const { agents, conversations, perf, logger } = services();
+        await beginTurn(conversations, { conversationId: "c", isolated: true, prompt: "p", profile: { agent: "claude", harness: "native" } }, 1);
+        await agents.recordWorktree("c", [{ repo: "root", base: "a".repeat(40) }]);
+        // The checkout lost its link and could not be re-linked: every land stops at its first step.
+        const agentWorktrees = unstubbed<AgentWorktrees>("worktrees", { relink: async () => ["root"] });
+        await settleLandBooks({ agents, conversations, perf, logger, agentWorktrees }, "c");
+        expect(agents.get("c")?.landFailure).toEqual({ reason: unlinkedMessage(["root"]), code: "unlinked", at: expect.any(Number) });
     });
 });

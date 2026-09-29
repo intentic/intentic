@@ -604,9 +604,11 @@ const settleSetup = async (args: SetupArgs, failure: string | undefined, started
         void setupProgress({ ...nameOf(args), state: `done`, percent: 100 });
         pending.value = undefined;
         setupOpen.value = false;
-        // Navigates to the app root rather than the page waiting on `/setup`: the sandbox already announced itself on
-        // boot, so there's nothing left to poll for.
-        await workspaceOpen(`/`);
+        // Brings the workspace back without navigating it: the page waiting on `/setup` opens the workspace by itself
+        // the moment the sandbox reports in (useRegistryWatch.ts), usually well before this run's last checks end.
+        // Navigating to `/` here reloaded a workspace already open, 35 s into its reader's work, and threw them back
+        // to its first page.
+        await workspaceOpen();
         return;
     }
     // This window is deliberately not topmost, so a run that stops while minimized or hidden would otherwise go
@@ -948,8 +950,9 @@ const drainSync = async (): Promise<void> => {
     await runSync(args, picked);
 };
 
-// Re-runs with the folder already chosen; the pairing token is single-use, so a run that failed after enrolling
-// needs a fresh one from the card's Regenerate.
+// Re-runs with the folder already chosen and the same pairing: a sandbox takes a redeemed pairing again from the machine
+// key that redeemed it, for the pairing's ten minutes (desktop-sync.routes.ts), so a run that failed after enrolling
+// enrolls again. An older sandbox spent it on first use, and one past its ten minutes needs the card's Regenerate.
 const retrySync = async (): Promise<void> => {
     const held = syncSetup.value;
     if (held === undefined || running.value) {
@@ -1405,7 +1408,7 @@ onUnmounted(() => {
                             :empty="t(`desktop.app.startingOnDevice`)"
                             :note="t(`desktop.app.installingSyncAgentStarting`)"
                         />
-                        <!-- The pairing is single-use, so a failed-after-enrolling run needs a fresh one from the sandbox's Desktop sync card. -->
+                        <!-- The same pairing again: good for this machine for ten minutes on a current sandbox; the note covers an older or late one. -->
                         <div v-if="syncSetup.error" class="flex flex-wrap items-center gap-3">
                             <Button :label="t(`ui.action.tryAgain`)" size="small" :disabled="running" @click="retrySync">
                                 <template #icon><Icon name="refresh" /></template>

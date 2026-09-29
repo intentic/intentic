@@ -32,6 +32,17 @@ export const chatParked = computed(() => floating.shows.value && chatOnRail.valu
 // allow(module-state): a pointer asking to read the strip's turns, layout
 export const quickBarTranscript = ref(false);
 
+// A surface outside the chat asking the parked chat to show its focused conversation's turns now (a board card's click,
+// which otherwise only swapped the pill's title): ChatQuickBar opens its box and transcript, kept. A counter, since the
+// same ask twice must act twice. Nothing happens where the chat has a column or a window of its own: it is on screen.
+// allow(module-state): a one-way ask across the teleport, like quickBarTranscript
+export const quickBarShowAsk = ref(0);
+export const showParkedChat = (): void => {
+    if (chatParked.value) {
+        quickBarShowAsk.value += 1;
+    }
+};
+
 // Last in-shell route before the chat, to return to; not router.back(), since history can start on /chat. It names one
 // sandbox's file or agent, so a switch starts it over.
 export const lastSectionPath = sandboxRef(() => `/agents`);

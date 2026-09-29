@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {
+    AUTO_MODEL_GUIDANCE_MAX,
     MODEL_ROLE_BLOCKS,
     MODEL_ROLES,
     type ModelPin,
@@ -8,12 +9,13 @@ import {
     type ModelRoleSpec,
     modelPinKey,
 } from "@intentic/sandbox-contract";
-import { Button, MarkdownDocument, Modal, RowGroup, SegmentedControl } from "@intentic/ui";
+import { Button, MarkdownDocument, Modal, Notice, type NoticeModel, RowGroup, SegmentedControl } from "@intentic/ui";
+import { noticeFrom } from "@intentic/ui/async";
 import Checkbox from "primevue/checkbox";
-import { computed, ref, shallowRef, watch } from "vue";
-import { RouterLink } from "vue-router";
+import { computed, nextTick, ref, shallowRef, watch } from "vue";
+import { RouterLink, useRoute, useRouter } from "vue-router";
 import { honoredPinKnobs } from "../../../chat/models/run-settings/pickerRunSettings";
-import { useDraft } from "../../../../lib/useDraft";
+import { useTrimmedDraft } from "../../../../lib/useDraft";
 import { useSandboxSettings } from "../../overview/useSandboxSettings";
 import ModelGroupRow from "./ModelGroupRow.vue";
 import { type PinnedList, pinKnobSummary, pinnedList } from "./modelPinList";
@@ -33,13 +35,16 @@ const loaded = computed(() => settings.value !== undefined);
 // The one job on this page that is not answered by a model list alone: Auto also reads what it is told to weigh. It
 // lives on that job's own row rather than in a section of its own, since the catalog's blocks are kind partitions
 // (model-roles.test.ts) and a job's settings belong where its models are.
-// Explicit save, and a cap matching the schema's (SandboxSettingsSchema.autoModelGuidance) — what the daemon refuses past.
+// Explicit save, and the schema's own cap (AUTO_MODEL_GUIDANCE_MAX), the one the daemon refuses past. Saved trimmed, so
+// measured trimmed (useTrimmedDraft), or a save that landed would still read "Not saved yet".
 const ROUTER = `model-router`;
-const GUIDANCE_MAX = 2000;
-const guidance = useDraft(() => settings.value?.autoModelGuidance);
-const storedGuidance = computed(() => settings.value?.autoModelGuidance);
+const { draft: guidance, stored: storedGuidance } = useTrimmedDraft(() => settings.value?.autoModelGuidance);
 const guidanceSet = computed(() => (storedGuidance.value ?? ``).trim() !== ``);
 const saveGuidance = (text: string): void => patch({ autoModelGuidance: text.trim() });
+// A refused write is put back on screen by useSandboxSettings; said here, or the press reads as having done nothing.
+const saveError = computed<NoticeModel | undefined>(() =>
+    save.error.value === null ? undefined : noticeFrom(save.error.value, t(`sandbox.agentModels.couldntSave`)),
+);
 // Written guidance is silent state: it steers every chat that opens on Auto and no model list on this page shows it.
 // The chip says the job's state, not the button's name — the two sit an inch apart and must not read as one word twice.
 const guidanceBadge = computed(() =>
@@ -178,6 +183,28 @@ watch(
 );
 const viewOf = (id: ModelRoleBlockId): ModelView => chosenView.value[id] ?? openedIn.value[id] ?? `simple`;
 
+// A link naming a job (`?job=safety-judge`, Safety's "Change in Models") lands on that job's own row: its group opens in
+// Advanced, the only view with a row per job, and the row is scrolled to. Landing on the Simple view's one row for five
+// jobs cost a reader 73 seconds to find the judge. Read once, then dropped, so Back and a later visit start plainly.
+const route = useRoute();
+const router = useRouter();
+const jobAnchor = (role: ModelRole): string => `model-job-${role}`;
+// Every job on this page with its group, for finding the one a link names; anything else it names is no job.
+const jobs = blocks.flatMap((block) => block.ids.map((role) => ({ role, block })));
+watch(
+    [loaded, () => jobs.find((job) => job.role === route.query[`job`])],
+    async ([isLoaded, job]) => {
+        if (!isLoaded || job === undefined) {
+            return;
+        }
+        chosenView.value = { ...chosenView.value, [job.block.id]: `advanced` };
+        await nextTick();
+        document.getElementById(jobAnchor(job.role))?.scrollIntoView({ block: `center` });
+        void router.replace({ query: { ...route.query, job: undefined } });
+    },
+    { immediate: true },
+);
+
 // Collapsing a group drops its ticks too, or the next Advanced visit would open with rows ticked that nobody chose.
 const setView = (block: { readonly id: ModelRoleBlockId; readonly ids: readonly ModelRole[] }, view: ModelView): void => {
     chosenView.value = { ...chosenView.value, [block.id]: view };
@@ -229,6 +256,8 @@ interface PickerTarget {
     // Whether every job the pick lands on is a one-shot helper, where a helper-only model may be picked.
     readonly helperJobs: boolean;
     readonly pin: () => ModelPin | undefined;
+    // While adding: the model the job runs on first, which the list ticks; undefined for a job with none, or a selection.
+    readonly current: () => ModelPin | undefined;
     readonly taken: () => readonly string[];
     // Answers the panel's question: a model row picked from the list.
     readonly apply: (pin: ModelPin) => void;
@@ -240,15 +269,34 @@ interface PickerTarget {
 
 const editing = shallowRef<PickerTarget | undefined>(undefined);
 const editingPin = computed<ModelPin | undefined>(() => editing.value?.pin());
+const editingCurrent = computed<ModelPin | undefined>(() => editing.value?.current());
 const editingTaken = computed<readonly string[]>(() => editing.value?.taken() ?? []);
 
+// A second press on the trigger that opened the picker closes it. The overlay ignores presses on its own anchor so that
+// this could happen, and nothing did: the picker stayed open under five presses on its trigger.
+const toggled = (anchor: HTMLElement): boolean => {
+    if (editing.value?.anchor !== anchor) {
+        return false;
+    }
+    editing.value = undefined;
+    bulkPin.value = undefined;
+    return true;
+};
+
+// Adding to a job that already has a model adds a fallback, tried only when the ones above it cannot answer; the header
+// says so, since the list otherwise reads as a set rather than an order.
 const openRowPicker = (list: PinnedList, index: number | undefined, anchor: HTMLElement): void => {
+    if (toggled(anchor)) {
+        return;
+    }
+    const adding = index === undefined;
     editing.value = {
         anchor,
-        header: index === undefined ? `Add a model` : `Model`,
+        header: !adding ? t(`shared.model`) : list.entries.value.length > 0 ? t(`sandbox.agentModels.addFallback`) : t(`sandbox.modelPinPicker.addModel`),
         knobs: list.knobs,
         helperJobs: list.helperJobs,
         pin: () => (index === undefined ? undefined : list.entries.value[index]?.pin),
+        current: () => (adding ? list.entries.value[0]?.pin : undefined),
         taken: () => list.taken.value,
         apply: (pin) => list.apply(index, pin),
         configure: (pin) => {
@@ -263,6 +311,9 @@ const openRowPicker = (list: PinnedList, index: number | undefined, anchor: HTML
 // The set is captured at open, not read live, so the header's count stays honest even if more gets ticked while it's
 // open; ticking more is answered by reopening the panel.
 const openBulkPicker = (anchor: HTMLElement, ids: readonly ModelRole[]): void => {
+    if (toggled(anchor)) {
+        return;
+    }
     bulkPin.value = undefined;
     const roles = selectedIn(ids);
     editing.value = {
@@ -272,6 +323,7 @@ const openBulkPicker = (anchor: HTMLElement, ids: readonly ModelRole[]): void =>
         knobs: true,
         helperJobs: roles.every(helperJob),
         pin: () => bulkPin.value,
+        current: () => undefined,
         taken: () => sharedTaken(roles),
         apply: (pin) => applyToRoles(roles, pin),
         configure: (pin) => applyToRoles(roles, pin),
@@ -388,6 +440,7 @@ const setPickerOpen = (open: boolean): void => {
             <template v-else>
                 <ModelRoleRow
                     v-for="row in block.rows"
+                    :id="jobAnchor(row.role.id)"
                     :key="row.role.id"
                     :role="row.role"
                     :icon="row.role.icon"
@@ -446,10 +499,11 @@ const setPickerOpen = (open: boolean): void => {
             :saving="save.isPending.value"
             save="explicit"
             :label="t(`sandbox.agentModels.howAutoChooses`)"
-            :max-chars="GUIDANCE_MAX"
+            :max-chars="AUTO_MODEL_GUIDANCE_MAX"
             :placeholder="t(`sandbox.agentModels.whatYoudTellSomebody`)"
             @save="saveGuidance"
         />
+        <Notice v-if="saveError !== undefined" :of="saveError" class="mt-3" />
     </Modal>
 
     <!-- Mount once so the picker can place itself on open. -->
@@ -458,6 +512,7 @@ const setPickerOpen = (open: boolean): void => {
         :anchor="editing?.anchor"
         :header="editing?.header"
         :pin="editingPin"
+        :current="editingCurrent"
         :knobs="editing?.knobs === true"
         :helper-jobs="editing?.helperJobs === true"
         :taken="editingTaken"

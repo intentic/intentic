@@ -102,8 +102,19 @@ test("a proposal's new blocks are marked as the decision the owner has not made 
     const { items } = await readEnvironmentContents(services);
     const awaiting = items.filter((item) => item.state === "awaiting-approval");
     expect(awaiting.map((item) => item.name)).toEqual(["Asked for"]);
+    // Every agent-asked row, approved or waiting, names the block the owner can take out; a staple names none.
+    expect(items.filter((item) => item.origin === "custom").map((item) => item.block)).toEqual(["node-tools", "absent-tool", "asked-for"]);
+    expect(items.filter((item) => item.origin !== "custom" && "block" in item)).toEqual([]);
     // Carried-forward blocks are not re-offered for approval; only the new ones are.
     expect(items.filter((item) => item.name === "Node tools").map((item) => item.state)).toEqual(["active"]);
+});
+
+test("a replacement is one pending row, even when an older file repeated its tool", async () => {
+    const services = stubServices();
+    await writeWorkspaceFile(customPath(services), "# ---- zcode ----\nRUN echo old\n\n# ---- zcode ----\nRUN echo old\n");
+    await writeWorkspaceFile(proposalPath(services), "# ---- zcode ----\nRUN echo new\n");
+    const { items } = await readEnvironmentContents(services);
+    expect(items.filter((item) => item.name === "Zcode").map((item) => item.state)).toEqual(["awaiting-approval"]);
 });
 
 test("a capability's fragment is attributed to the capability that pulled it in", async () => {
@@ -114,6 +125,8 @@ test("a capability's fragment is attributed to the capability that pulled it in"
     const fromCapability = items.filter((item) => item.origin === "capability");
     expect(fromCapability.length).toBeGreaterThan(0);
     expect(fromCapability.every((item) => item.originLabel === "postgres capability")).toBe(true);
+    // A capability's cost goes with the capability, never through Remove.
+    expect(fromCapability.some((item) => "block" in item)).toBe(false);
 });
 
 test("the staples every sandbox ships with are listed, and only where the command answers", async () => {

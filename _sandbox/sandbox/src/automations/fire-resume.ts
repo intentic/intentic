@@ -53,7 +53,8 @@ const resumeFire = async (services: Services, entry: JournalledFire, now: number
 
 // Runs once at boot, beside the engine's own pass over the turns it died under (agent/run/turn/turn-resume.ts). Each
 // entry is consumed or spent before it fires, so a fire that kills the daemon can't loop the boot.
-export const resumeInterruptedFires = async (services: Services, now: number = Date.now()): Promise<void> => {
+// `ownerAsked`: the restart was the owner's, asked to pick up after (agent/run/turn/restart-resume.ts).
+export const resumeInterruptedFires = async (services: Services, now: number = Date.now(), ownerAsked = false): Promise<void> => {
     const listed = await services.turnJournal.list().catch((error: unknown): JournalEntry[] => {
         services.logger.warn({ err: error }, "turn journal: unreadable at boot, no interrupted fire is re-fired");
         return [];
@@ -62,7 +63,7 @@ export const resumeInterruptedFires = async (services: Services, now: number = D
     if (interrupted.length === 0) {
         return;
     }
-    const { autoResumeOnRestart } = await services.sandboxSettings.get();
+    const autoResumeOnRestart = ownerAsked || (await services.sandboxSettings.get()).autoResumeOnRestart;
     for (const entry of interrupted) {
         await resumeFire(services, entry, now, autoResumeOnRestart);
     }

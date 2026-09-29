@@ -5,6 +5,7 @@
 // subsystem, in the boot wiring, on purpose: nothing under a subsystem imports bootstrap/.
 import type { DocumentSpec } from "../store/evolution/documents.js";
 import type { StructuralStep } from "../store/evolution/state-steps.js";
+import { restartResumeDocument } from "../agent/run/turn/restart-resume.js";
 import { approvalsDocument } from "../approvals/approvals-store.js";
 import { areasDocument } from "../areas/areas-store.js";
 import { membersDocument, ownerDocument } from "../auth/auth.js";
@@ -52,6 +53,7 @@ import { secretHostGuardsDocument } from "../secrets/host-guards.js";
 import { sandboxSecretsDocument } from "../secrets/sandbox-secrets.js";
 import { secretUsesDocument } from "../secrets/secret-uses.js";
 import { threadSessionsDocument } from "../sessions/thread-sessions.js";
+import { memberAudienceDocument } from "../settings/member-audience.js";
 import { settingsDocument } from "../settings/settings-store.js";
 import { sharesDocument } from "../share/share-store.js";
 import { conversationsSchemaStep } from "../store/conversations-db.js";
@@ -78,6 +80,7 @@ import { workflowGateTokensStep, workflowRunsDocument, workflowsDocument } from 
 import { dependencyRequestsDocument } from "../workspace/deps/reconcile-deps.js";
 
 export const stateDocuments = (): readonly DocumentSpec[] => [
+    restartResumeDocument,
     approvalsDocument,
     areasDocument,
     membersDocument,
@@ -137,6 +140,7 @@ export const stateDocuments = (): readonly DocumentSpec[] => [
     sandboxSecretsDocument,
     secretUsesDocument,
     threadSessionsDocument,
+    memberAudienceDocument,
     settingsDocument,
     sharesDocument,
     conversionsDocument,

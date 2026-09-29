@@ -12,17 +12,7 @@ import {
     missingRoutes,
     unknownDaemonRoutes,
 } from "../useDaemonRoutes";
-import {
-    agreementLine,
-    appParty,
-    driftAreas,
-    KIND_BADGE,
-    KIND_ICON,
-    KIND_IMPACT,
-    KIND_TAG,
-    KIND_TONE,
-    sandboxParty,
-} from "./driftReport";
+import { agreementLine, appParty, driftAreas, KIND_BADGE, KIND_ICON, KIND_TONE, kindImpact, kindTag, sandboxParty } from "./driftReport";
 import { contractUncompiled, readContractFreshness, uncompiledRoutes } from "../contractFreshness";
 import { useEnvironment } from "../../environment/useEnvironment";
 import { runSeveringDeviceCommand, useDevices, useHostHolding } from "../../devices/useDevices";
@@ -89,7 +79,7 @@ const restartOnDevice = async (): Promise<void> => {
     restarting.value = true;
     failed.value = undefined;
     restarted.value = false;
-    const endMark = hubWork.begin(`Restarting the sandbox`);
+    const endMark = hubWork.begin(t(`sandbox.sandboxBehindCard.restartingTheSandbox`));
     try {
         // Undefined is the expected ending: the container being restarted is the one answering this request.
         await runSeveringDeviceCommand(id, `dev-restart`);
@@ -119,37 +109,37 @@ const forked = computed(() => daemonBehind.value && appBehind.value);
 // about which side is older.
 const heading = computed(() => {
     if (contractUncompiled.value) {
-        return `Your sandbox hasn't picked up your latest changes`;
+        return t(`sandbox.sandboxBehindCard.headingUncompiled`);
     }
     if (forked.value) {
-        return `This page and your sandbox are from different versions`;
+        return t(`sandbox.sandboxBehindCard.headingForked`);
     }
     if (daemonBehind.value) {
-        return `Your sandbox is older than this page`;
+        return t(`sandbox.sandboxBehindCard.headingBehind`);
     }
-    return driftScope.value === `wholesale` ? `This page and your sandbox are far apart` : `Some parts of this page may not work`;
+    return driftScope.value === `wholesale` ? t(`sandbox.sandboxBehindCard.headingWholesale`) : t(`sandbox.sandboxBehindCard.headingPartial`);
 });
 
 // Named as its own clause rather than folded into the heading: a newer sandbox than tab is ordinary, and only worth
-// saying once something else has proved the two disagree. Never on a fork, which says it better already.
-const leaning = computed(() => (appBehind.value && !forked.value && !contractUncompiled.value ? ` This page is the older of the two.` : ``));
+// saying once something else has proved the two disagree. Never on a fork, which says it better already. A flag rather
+// than a sentence to append: the wholesale cause says it inside its own message, so no language has to be glued.
+const leaning = computed(() => appBehind.value && !forked.value && !contractUncompiled.value);
 
 // WHY, in one sentence and no numbers. Partial drift has no cause row: the heading and per-feature rows carry it.
 const cause = computed((): string | undefined => {
     if (contractUncompiled.value) {
-        return `You've changed code your sandbox hasn't rebuilt yet, so it's still running the old version. Refreshing this page won't help — the sandbox is the side that needs to catch up.`;
+        return t(`sandbox.sandboxBehindCard.causeUncompiled`);
     }
     if (forked.value) {
-        return `Each side has parts the other has never heard of, so neither one is simply newer. Restarting won't settle it on its own.`;
+        return t(`sandbox.sandboxBehindCard.causeForked`);
     }
     if (daemonBehind.value) {
-        return `Your sandbox was built before these parts existed, so it doesn't know about them.`;
+        return t(`sandbox.sandboxBehindCard.causeBehind`);
     }
     if (driftScope.value === `wholesale`) {
-        return `Almost nothing lines up — these are two quite different versions, not one small change.${leaning.value}`;
+        return leaning.value ? t(`sandbox.sandboxBehindCard.causeWholesaleAppOlder`) : t(`sandbox.sandboxBehindCard.causeWholesale`);
     }
-    const extra = leaning.value.trim();
-    return extra === `` ? undefined : extra;
+    return leaning.value ? t(`sandbox.sandboxBehindCard.appOlder`) : undefined;
 });
 
 // Which machine the sandbox is actually on, said only when this app is sure of it: the fallback `hostId` above is a
@@ -164,9 +154,7 @@ const listed = computed(() => (driftScope.value === `wholesale` ? [] : driftedRo
 const areas = computed(() =>
     driftAreas({ missing: missingRoutes.value, drifted: listed.value, extra: unknownDaemonRoutes.value }),
 );
-const wholesaleNote = computed(() =>
-    driftScope.value === `wholesale` ? `Nearly every part of the app is affected, so they aren't listed one by one.` : undefined,
-);
+const wholesaleNote = computed(() => (driftScope.value === `wholesale` ? t(`sandbox.sandboxBehindCard.wholesaleNote`) : undefined));
 
 // Closed on arrival: the card's job is to name what is affected, and the dotted route names behind a row are for
 // whoever is about to go and fix it.
@@ -217,11 +205,11 @@ const kindsOf = (area: (typeof areas.value)[number]) =>
             @update:open="toggle(area.key, $event)"
         >
             <template #meta>
-                <StatusBadge :variant="KIND_BADGE[area.kind]" size="xs" :label="KIND_TAG[area.kind]" />
+                <StatusBadge :variant="KIND_BADGE[area.kind]" size="xs" :label="kindTag(area.kind)" />
             </template>
             <template #below>
                 <div class="flex flex-col gap-2 pb-1">
-                    <p v-for="kind in kindsOf(area)" :key="kind" class="text-2xs text-muted">{{ KIND_IMPACT[kind] }}</p>
+                    <p v-for="kind in kindsOf(area)" :key="kind" class="text-2xs text-muted">{{ kindImpact(kind) }}</p>
                     <!-- The internal names, last and quietest: what a fix is written against, and what nobody else needs. -->
                     <ul class="flex flex-wrap gap-x-3 gap-y-1">
                         <li v-for="route in evidence(area)" :key="route" class="font-mono text-2xs text-subtle">{{ route }}</li>
@@ -270,7 +258,7 @@ const kindsOf = (area: (typeof areas.value)[number]) =>
                         </div>
                     </div>
                     <!-- Only where the button never had a chance: a refusal means the door is open and something else went wrong, which connecting a second time would not fix. -->
-                    <ConnectDeviceHint v-if="!hostId" :slug="slug" gains="this becomes a button." />
+                    <ConnectDeviceHint v-if="!hostId" :slug="slug" :gains="t(`sandbox.sandboxBehindCard.restartBecomesButton`)" />
                 </div>
                 <p v-else-if="daemonDrifted" class="text-2xs text-subtle">{{ t(`sandbox.sandboxBehindCard.staysUpdateSandboxImage`) }}</p>
                 <p v-else class="text-2xs text-subtle">{{ t(`sandbox.sandboxBehindCard.updateSandboxImage`) }}</p>

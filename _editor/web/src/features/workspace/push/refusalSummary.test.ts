@@ -1,5 +1,5 @@
 import type { CommandRun, PushRun } from "@intentic/sandbox-contract";
-import { outcomeSummary, refusalSummary } from "./refusalSummary";
+import { credentialHostOf, outcomeSummary, refusalSummary } from "./refusalSummary";
 
 const check: CommandRun = { status: `failed`, command: `pnpm check`, exitCode: 1, output: `FAIL src/a.test.ts\n  ✗ adds` };
 const push: PushRun = {
@@ -33,4 +33,21 @@ test(`a push's line says who refused it, in the words that decide what the owner
     // The rest is how any run ended, unchanged.
     expect(refusalSummary({ ...push, timedOut: true })).toBe(outcomeSummary({ ...push, timedOut: true }));
     expect(refusalSummary({ ...push, status: `cancelled` })).toBe(outcomeSummary({ ...push, status: `cancelled` }));
+});
+
+// A push refused for want of a sign-in names the host whose account fixes it; every other refusal names none.
+test(`a push the remote refused for its credential names the host to connect, and no other refusal does`, () => {
+    const refused: PushRun = {
+        ...push,
+        refusedBy: `transport`,
+        reason: `fatal: Authentication failed for 'https://github.com/x/tabularium.git/'`,
+        output: `remote: Invalid username or token.\nfatal: Authentication failed for 'https://github.com/x/tabularium.git/'`,
+    };
+    expect(credentialHostOf(refused)).toBe(`github`);
+    expect(credentialHostOf({ ...refused, reason: `fatal: could not read Username for 'https://gitlab.com': terminal prompts disabled`, output: `` })).toBe(
+        `gitlab`,
+    );
+    expect(credentialHostOf(push)).toBeUndefined();
+    expect(credentialHostOf({ ...refused, reason: `fatal: Could not read from remote repository.`, output: `` })).toBeUndefined();
+    expect(credentialHostOf({ ...refused, reason: `fatal: Authentication failed for 'https://git.example.com/x.git/'`, output: `` })).toBeUndefined();
 });

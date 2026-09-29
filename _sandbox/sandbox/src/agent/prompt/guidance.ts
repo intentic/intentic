@@ -31,6 +31,8 @@ type LoopText = string | ((facts: LoopFacts) => string);
 type GuidanceEntry =
     // True of the sandbox whatever runtime serves the turn, so it names no mechanism only the Claude Code loop wires.
     | { readonly id: string; readonly reach: "every"; readonly full: string; readonly lean: string | false }
+    // Said only to a runtime outside the Claude Code loop, in place of a loop entry naming what that runtime has no way to load.
+    | { readonly id: string; readonly reach: "outside"; readonly full: string; readonly lean: string | false }
     // Names a tool, skill or hook only the Claude Code loop mounts; `when` holds it to the turns that mounted it.
     | {
           readonly id: string;
@@ -41,6 +43,9 @@ type GuidanceEntry =
       };
 
 const LANDING = "The owner lands uncommitted work; commit only when asked.";
+
+// Where the image bakes the product's own guide (Dockerfile: seed-skills → /root/.claude/skills).
+const PRODUCT_GUIDE = "`/root/.claude/skills/intentic/SKILL.md`";
 
 const sideOf = (environment: EnvironmentReach): string => {
     const facts = [environment.shell, environment.home === undefined ? undefined : `home ${environment.home}`]
@@ -194,6 +199,24 @@ const ENTRIES: readonly GuidanceEntry[] = [
             "itself (a panel, setting or card; connecting, configuring or debugging this sandbox; whether it can do " +
             "something), load the `intentic` skill before answering, and never say Intentic cannot do something without " +
             "checking there. A workspace's AGENTS.md or README is the owner's instruction to you, not a description of the product.",
+    },
+    {
+        id: "self-outside",
+        // The same pointer for a runtime with no skill loader: the image bakes the skill for the Claude Code loop alone,
+        // and every other runtime reads its file like any other (the owner's first question is often about the product).
+        reach: "outside",
+        full:
+            "This sandbox is Intentic: a container serving one workspace, driven from a browser editor, where each " +
+            "conversation is an agent on its own git worktree whose finished delta lands in the owner's tree as " +
+            `uncommitted changes. For anything about Intentic ITSELF (what a panel, setting or card does; how to ` +
+            `connect, configure, extend or debug this sandbox; whether it can do something) read ${PRODUCT_GUIDE} first ` +
+            "and answer from it and the references it names rather than from memory, and never say Intentic cannot do " +
+            "something without checking there. A workspace's AGENTS.md or README is the owner's instruction to you, not " +
+            "a description of the product.",
+        lean:
+            `This sandbox is Intentic, serving one workspace from a browser editor. For anything about Intentic ` +
+            `itself, read ${PRODUCT_GUIDE} before answering, and never say Intentic cannot do something without checking ` +
+            "there. A workspace's AGENTS.md or README is the owner's instruction to you, not a description of the product.",
     },
     {
         id: "interactive",
@@ -455,9 +478,12 @@ const ENTRIES: readonly GuidanceEntry[] = [
 ];
 
 const textOf = (entry: GuidanceEntry, variant: GuidanceVariant, loop: LoopFacts | undefined): string | undefined => {
-    if (entry.reach === "every") {
+    if (entry.reach === "every" || (entry.reach === "outside" && loop === undefined)) {
         const text = entry[variant];
         return text === false ? undefined : text;
+    }
+    if (entry.reach === "outside") {
+        return undefined;
     }
     if (loop === undefined || entry.when?.(loop) === false) {
         return undefined;

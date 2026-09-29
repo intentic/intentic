@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { EnvironmentSchema } from "@intentic/api-contract";
-import { Button, Code, Notice, type NoticeModel, RowGroup, RowNote, SegmentedControl, StatusBadge, ui } from "@intentic/ui";
+import { EnvironmentSchema, type EnvironmentItem } from "@intentic/api-contract";
+import { Button, Code, ConfirmDialog, Notice, type NoticeModel, RowGroup, RowNote, SegmentedControl, StatusBadge, ui } from "@intentic/ui";
 import { useAsyncAction } from "@intentic/ui/async";
 import { useQueryClient } from "@tanstack/vue-query";
 import { computed, ref, watch } from "vue";
@@ -57,7 +57,36 @@ const VIEWS = computed(
 );
 
 // Runs only while Contents is selected (probing versions spawns processes).
-const { groups, loading, error: contentsError, refresh: reprobe } = useEnvironmentContents(() => view.value === `contents`);
+const { groups, loading, fetching, error: contentsError, refresh: reprobe, readAt } = useEnvironmentContents(() => view.value === `contents`);
+// When the recipe last changed under an open card (the watch below re-reads Contents then): rows read before it cannot
+// mark what the change proposes, so they do not count as its review.
+const recipeChangedAt = ref(0);
+// The proposal whose review is on screen: Approve answers what was shown, never a collapsed row a second old (on the
+// phone the owner approved 1 s after the row appeared). Contents counts once its read has settled; the Recipe pill is
+// the diff itself, drawn from the proposal the moment it is picked. Latched per proposal, so a background re-probe does
+// not take the button away again, while a new proposal (a new hash) waits for its own rows. Latched before the render
+// that draws the rows, so that render is the one that enables the button.
+const shownFully = (): boolean =>
+    view.value === `recipe` ||
+    (!loading.value && !fetching.value && contentsError.value === undefined && readAt.value >= recipeChangedAt.value);
+const reviewedHash = ref<string>();
+watch(
+    () => (shownFully() ? proposal.value?.hash : undefined),
+    (hash) => {
+        if (hash !== undefined) {
+            reviewedHash.value = hash;
+        }
+    },
+    { immediate: true },
+);
+const reviewed = computed(() => proposal.value !== undefined && reviewedHash.value === proposal.value.hash);
+// What approving changes, said beside the button: the blocks Contents marks as awaiting it.
+const proposedItems = computed(() => groups.value.flatMap((group) => group.items).filter((item) => item.state === `awaiting-approval`));
+const proposalSummary = computed(() =>
+    proposedItems.value.length > 0
+        ? t(`sandbox.environmentCard.proposalAdds`, { names: proposedItems.value.map((item) => item.name).join(`, `) })
+        : t(`sandbox.environmentCard.proposalChanges`),
+);
 
 // Each item's state (awaiting approval, arrives after rebuild) derives from the recipe, so a decision made here, or a
 // proposal an agent drafts, must re-read contents; otherwise it shows stale until the tab is toggled off and on.
@@ -65,9 +94,13 @@ watch(
     () => [state.value?.proposal?.hash, state.value?.approved?.hash, state.value?.appliedHash, state.value?.custom?.hash].join(`|`),
     (next, previous) => {
         if (previous !== undefined && next !== previous) {
+            recipeChangedAt.value = Date.now();
             void queryClient.invalidateQueries({ queryKey: ENVIRONMENT_CONTENTS.of() });
         }
     },
+    // Synchronous, ahead of the review latch above: a proposal arriving under settled rows must not be latched in the
+    // same flush it appears, before this has said those rows predate it.
+    { flush: `sync` },
 );
 
 // Refreshes both reads and forces a re-probe, so a newly installed tool doesn't need a restart to show up.
@@ -82,8 +115,8 @@ const awaiting = computed(() => recurring.value.filter((entry) => entry.declined
 // Where the last decision was pressed, so a refusal is said beside that button: the proposal's decision is on the
 // card's first row, a runtime install's at the foot of its own list, and one spot for both is far from one of them.
 // One action between them, still, so the two never race each other's write.
-const decidedAt = ref<`step` | `installs`>(`step`);
-const decide = (at: `step` | `installs`, path: string, body?: object): Promise<void> => {
+const decidedAt = ref<`step` | `installs` | `contents`>(`step`);
+const decide = (at: `step` | `installs` | `contents`, path: string, body?: object): Promise<void> => {
     decidedAt.value = at;
     return run(async () => {
         const next = EnvironmentSchema.parse(await sandboxJson(path, jsonBody(`POST`, body ?? {})));
@@ -92,6 +125,28 @@ const decide = (at: `step` | `installs`, path: string, body?: object): Promise<v
 };
 const approve = (): Promise<void> => decide(`step`, `/environment/approve`, { hash: proposal.value?.hash });
 const reject = (): Promise<void> => decide(`step`, `/environment/reject`);
+
+// TAKING ONE TOOL OUT, confirmed by name first. An approved one stays until the next rebuild, which the card then asks
+// for like any other change; one still waiting for approval is only a request, dropped with nothing to rebuild.
+const removing = ref<EnvironmentItem>();
+const removeWords = computed(() => {
+    const item = removing.value;
+    if (item === undefined) {
+        return undefined;
+    }
+    const { name } = item;
+    const bodies = {
+        active: () => t(`sandbox.environmentCard.removeApproved`, { name }),
+        "after-rebuild": () => t(`sandbox.environmentCard.removeUnbuilt`, { name }),
+        "awaiting-approval": () => t(`sandbox.environmentCard.removeRequest`, { name }),
+    };
+    return { header: t(`sandbox.environmentCard.removeHeader`, { name }), body: bodies[item.state]() };
+});
+const remove = (): Promise<void> => {
+    const block = removing.value?.block;
+    removing.value = undefined;
+    return block === undefined ? Promise.resolve() : decide(`contents`, `/environment/remove`, { block });
+};
 
 // A base compiled from a checkout rebuilds from that checkout, and that rebuild applies the approved recipe as well
 // (ic rebases the overlay onto the image it builds). That rebuild lives on the Sandbox tab only: the same button on two
@@ -140,8 +195,9 @@ const step = computed(
                  Spinning only for its own press: a runtime install dismissed at the foot of the card holds these too,
                  but a wait drawn up here would be pinned to the wrong button. -->
             <template v-if="proposal">
+                <p class="text-xs text-content">{{ proposalSummary }}</p>
                 <div v-if="canOperate" class="flex flex-wrap items-center gap-2">
-                    <Button :label="t(`ui.action.approve`)" size="small" :disabled="busy" :loading="busy && decidedAt === `step`" @click="approve">
+                    <Button :label="t(`ui.action.approve`)" size="small" :disabled="busy || !reviewed" :loading="busy && decidedAt === `step`" @click="approve">
                         <template #icon><Icon name="check" /></template>
                     </Button>
                     <Button
@@ -192,7 +248,15 @@ const step = computed(
         <!-- `gap-5` must match the section spacing in <EnvironmentContents>, so sections keep one rhythm. -->
         <RowNote variant="block" class="flex flex-col gap-5">
             <!-- Leads in every state, including a pending proposal (incoming entries show marked as awaiting approval). -->
-            <EnvironmentContents v-if="view === `contents`" :groups="groups" :loading="loading" :error="contentsError" />
+            <EnvironmentContents
+                v-if="view === `contents`"
+                :groups="groups"
+                :loading="loading"
+                :error="contentsError"
+                :removable="canOperate"
+                :busy="busy"
+                @remove="(item) => (removing = item)"
+            />
 
             <!-- A proposal awaiting the owner's decision, diffed against the approved custom section; capability fragments are daemon-owned and not up for review here. -->
             <template v-else-if="proposal">
@@ -214,6 +278,9 @@ const step = computed(
             <!-- The active overlay the running container was built from. -->
             <Code v-else-if="applied" :code="applied.content" lang="docker" :label="t(`sandbox.environmentCard.activeOverlay`)" />
 
+            <!-- A removal pressed in Contents is refused right under the list it was pressed in. -->
+            <Notice v-if="actionNotice && decidedAt === `contents`" :of="actionNotice" />
+
             <!-- Runtime installs sessions keep making, cross-session and drift-corroborated; fixable ones are usually already drafted into the proposal above.
                  The card ends on this list: its rows carry their own decisions, and nothing card-wide follows them. -->
             <RuntimeInstalls
@@ -226,5 +293,16 @@ const step = computed(
 
             <Notice v-if="actionNotice && decidedAt === `installs`" :of="actionNotice" />
         </RowNote>
+
+        <ConfirmDialog
+            :open="removeWords !== undefined"
+            :header="removeWords?.header ?? ``"
+            :confirm-label="t(`sandbox.environmentCard.remove`)"
+            confirm-icon="trash"
+            @cancel="removing = undefined"
+            @confirm="remove"
+        >
+            <p>{{ removeWords?.body }}</p>
+        </ConfirmDialog>
     </RowGroup>
 </template>

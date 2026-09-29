@@ -1,8 +1,8 @@
 import type { User } from "@intentic/api-contract";
-import { useDevice } from "@intentic/ui";
+import { overlayBackSettled, useDevice } from "@intentic/ui";
 import { isStaleChunkError, recoverStaleChunk } from "@intentic/ui/chunk";
 import { type FunctionalComponent, h } from "vue";
-import { createRouter, createWebHistory, type RouteLocationNormalized, type RouteLocationRaw, type RouteRecordRaw } from "vue-router";
+import { createRouter, createWebHistory, type RouteLocationNormalized, type RouteLocationRaw, type RouteRecordRaw, START_LOCATION } from "vue-router";
 import { asyncView } from "../components/asyncView";
 import { homeViewId, PROJECTS_VIEW_ID } from "../core-views/registry";
 import { conversationRedirect } from "./conversationLink";
@@ -11,6 +11,7 @@ import SplitViewOutline from "../components/SplitViewOutline.vue";
 import { restorePersistedQueries } from "../lib/queryPersistence";
 import { useAuth } from "../features/auth/useAuth";
 import { useGoogleIdentity } from "../features/auth/useGoogleIdentity";
+import { mintsOnArrival } from "../features/auth/handoffSpent";
 import { useSandbox } from "../features/sandbox/client/useSandbox";
 import { useRole } from "../features/sandbox/secrets/useRole";
 import { retryOnEntry } from "./platformRetry";
@@ -21,6 +22,7 @@ import { t } from "@intentic/ui/i18n";
 import { localFace } from "../app/environments/local";
 import { receiveHandoff } from "../features/chat/drafts/localHandoff";
 import { setPageTitle } from "../shell/browser-tab/tabTitle";
+import { coldStartAtRoot, installedApp, lastRoute, rememberRoute } from "./recentRoute";
 
 declare module "vue-router" {
     interface RouteMeta {
@@ -62,9 +64,10 @@ const requireAuth = async (to: RouteLocationNormalized): Promise<boolean | Route
 };
 
 // Google minting starts immediately, before the session round trip or this page's chunk, so the wait is not dead time
-// on a screen whose whole content is waiting for Google; only when the app's handoff params are present.
+// on a screen whose whole content is waiting for Google; only when the app's handoff params are present, and not on a
+// restored tab whose hand-off already finished (handoffSpent.ts).
 const startGoogleMint = (to: RouteLocationNormalized): true => {
-    if (typeof to.query[`state`] === `string` && typeof to.query[`challenge`] === `string`) {
+    if (mintsOnArrival(to.query)) {
         void useGoogleIdentity().getIdToken({ gate: false });
     }
     return true;
@@ -328,6 +331,19 @@ export const router = createRouter({
     // pushState navigations. `{ el }` finds whichever pane owns the scrollbar; no hash means no opinion.
     scrollBehavior: (to) => (to.hash === `` ? false : { el: to.hash, behavior: `smooth` }),
 });
+
+// The installed app's cold start at "/" goes back to the page it was on, if that was recent (recentRoute.ts). Only the
+// first navigation: "/" chosen inside a running app means home.
+router.beforeEach((to, from) => (coldStartAtRoot(to, from === START_LOCATION) && installedApp() ? (lastRoute(Date.now()) ?? true) : true));
+router.afterEach((to, _from, failure) => {
+    if (failure === undefined && to.path !== `/` && to.matched.some((match) => match.path === `/`) && installedApp()) {
+        rememberRoute(to.fullPath, Date.now());
+    }
+});
+
+// A pick in a bottom sheet closes it and navigates in one tap. The sheet gives its history entry back with a back
+// traversal, which must land before the pick's route is pushed, or it steps back off that route instead (useBackDismiss).
+router.beforeResolve(() => overlayBackSettled());
 
 // The desktop app's "Ask an agent about this" arrives as `?handoff=` on whatever route it lands: kept for the chat that
 // takes the file, and out of the address before any other guard reads it (features/chat/drafts/localHandoff.ts).

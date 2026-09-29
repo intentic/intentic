@@ -1,4 +1,5 @@
 import { type AgentProvider, type NativeProvider, PROVIDER_SPECS } from "@intentic/sandbox-contract";
+import { t } from "@intentic/ui/i18n";
 
 // Which way in a reader is choosing between, and which providers sit behind each. Pure: the view reads readiness and
 // hardware from elsewhere and hands them in, so the ordering rules here are testable without a sandbox.
@@ -44,3 +45,33 @@ export const laneProviders = (key: ConnectLaneKey, ready: (provider: AgentProvid
     const providers = connectLane(key).providers;
     return [...providers.filter((provider) => !ready(provider)), ...providers.filter((provider) => ready(provider))];
 };
+
+// What a link naming a provider (`?provider=`: the chat's Reconnect, a picker row) does on arrival: open that provider's
+// lane, and start its sign-in only while nothing of it is connected. One already connected, an account needing a
+// reconnect included, waits for the reader's press on its tile: a sign-in the page started by itself sat under
+// "Connected" and read as the page contradicting itself. Undefined for a provider no lane connects.
+export const linkArrival = (
+    provider: AgentProvider,
+    ready: (provider: AgentProvider) => boolean,
+): { readonly lane: ConnectLaneKey; readonly signIn: boolean } | undefined => {
+    const lane = laneOfProvider(provider);
+    return lane === undefined ? undefined : { lane, signIn: !ready(provider) };
+};
+
+// The picked provider's standing, as the view reads it on every change: connected with nothing left to reconnect.
+export interface PickedStanding {
+    readonly provider: AgentProvider;
+    readonly settled: boolean;
+}
+
+// The provider whose sign-in just landed: settled now and not before, for the same pick. Picking one that is already
+// settled (to add a second account) is a sign-in starting, not one that landed.
+export const justLanded = (now: PickedStanding | undefined, before: PickedStanding | undefined): AgentProvider | undefined =>
+    now?.settled === true && before?.provider === now.provider && !before.settled ? now.provider : undefined;
+
+// The banner once a sign-in lands: what was connected, and to which sandbox. What a reader connects lives in that one
+// sandbox, not on the account: a new user connected ChatGPT in a second sandbox, removed it, and lost the connection.
+export const landedLine = (label: string, sandboxName: string | undefined): string =>
+    sandboxName === undefined || sandboxName === ``
+        ? t(`connect.connect.landed`)
+        : t(`connect.connect.landedIn`, { provider: label, sandbox: sandboxName });

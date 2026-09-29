@@ -17,6 +17,8 @@ flowchart LR
 - Runs as the container's main process. `docker-entrypoint.sh` execs `intentic-front -- node … main.js`, and the
   front starts Node as its child. A crash restarts Node with backoff while every listener and connection stays open;
   a clean exit or a refused config ends the front, and with it the container.
+- Daemon replies expose Resource Timing to the origin their CORS response already permits, so the editor can read the
+  negotiated HTTP protocol and reserve browser connections when multiplexing is unavailable.
 - `route.rs` picks the target from the listener a request arrived on and the leftmost DNS label of its Host. On the
   preview port and the tunnel, `sandbox-<id>` is Node and every other label is a preview. The label rules are held to
   the contract's shared `hostnames.fixture.json`.

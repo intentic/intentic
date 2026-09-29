@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import {
     type AgentTurn,
     capabilitiesOf,
+    noticeCode,
+    resumeNoticeRow,
     type TranscriptRow,
     type TurnErrand,
     type TurnSpeaker,
@@ -42,7 +44,7 @@ export const openingRows = (
     const { spoken, attachments: noted, resume } = parseQueuedPrompt(turn.prompt);
     // A re-run's repeated words are nobody's new message: the interruption stands in for the user's bubble.
     if (resume?.kind === "notice") {
-        return [{ role: "notice", text: resume.text }];
+        return [resumeNoticeRow(resume)];
     }
     const attachments = rootRelative(turn.attachments ?? noted, root);
     if (spoken.length === 0 && attachments.length === 0) {
@@ -197,7 +199,10 @@ export const recordInterruptedTurn = async (
     const recovered = await interruptedTurnRows(services, turn, sessionId, sentAt);
     const written = recovered.length > 0 ? recovered : openingRows(turn, services.workspace.root, sentAt);
     try {
-        await services.transcripts.append(transcriptAgentOf(turn), [...written, { role: "notice", text: RESTART_INTERRUPTED }]);
+        await services.transcripts.append(transcriptAgentOf(turn), [
+            ...written,
+            { role: "notice", text: RESTART_INTERRUPTED, noticeCode: noticeCode({ code: "restartInterrupted" }) },
+        ]);
         return true;
     } catch (error) {
         services.logger.warn({ err: error, conversationId: turn.conversationId }, "interrupted turn: transcript append failed");

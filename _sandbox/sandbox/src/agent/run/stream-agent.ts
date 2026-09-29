@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { readableProviderText } from "../providers/provider-error-text.js";
 import {
     type AgentEvent,
     type AgentReply,
@@ -11,6 +12,7 @@ import {
     type TranscriptRow,
     type TurnNote,
     mentionPaths,
+    noticeCode,
     withRuntimeDefaults,
 } from "@intentic/sandbox-contract";
 import { userRow } from "@intentic/sandbox-contract/transcript-fold";
@@ -251,7 +253,11 @@ async function* runConversationTurn(
 // What a settled plan answer leaves in the transcript: the decision's notice, and a rejection's feedback, which stays
 // visible as the user's own row or vanishes though the agent still has it. Staged files ride as @-paths in the one field.
 export const notePlanAnswer = (run: LiveRun | undefined, answer: Extract<AgentReply, { kind: "plan" }>): void => {
-    run?.note({ role: "notice", text: answer.approve ? "Plan approved." : "Kept planning." });
+    run?.note(
+        answer.approve
+            ? { role: "notice", text: "Plan approved.", noticeCode: noticeCode({ code: "planApproved" }) }
+            : { role: "notice", text: "Kept planning.", noticeCode: noticeCode({ code: "keptPlanning" }) },
+    );
     if (!answer.approve && answer.feedback !== undefined && answer.feedback.trim().length > 0) {
         run?.note(userRow(answer.feedback, Date.now(), mentionPaths(answer.feedback)));
     }
@@ -701,8 +707,10 @@ const classified = async (services: Services, event: ErrorFrame, turn: TurnState
     services.logger[failure.log.level](failure.log.fields, failure.log.message);
     performFailureWrites(services, failure.writes);
     frames.hold(failure.held);
+    // Shown as words, after classification read the raw text: a vendor's JSON body is replaced by the message it carries.
+    const frame = { ...failure.frame, message: readableProviderText(failure.frame.message) };
     // The account that actually served (or was refused for) the turn rides on its frame, so no window guesses it.
-    return turn.account === undefined || failure.frame.account !== undefined ? failure.frame : { ...failure.frame, account: turn.account };
+    return turn.account === undefined || frame.account !== undefined ? frame : { ...frame, account: turn.account };
 };
 
 // What a turn holds for its life, released together once its frames end: the account, so a proactive refresh waits for

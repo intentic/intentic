@@ -167,7 +167,8 @@
         "allRepositories": "All repositories"
     },
     "markdownDocument": {
-        "document": "Document"
+        "document": "Document",
+        "overLimit": "{over} character over the {max}-character limit | {over} characters over the {max}-character limit"
     },
     "markdownDocumentSurface": {
         "document": "Document"

@@ -1,5 +1,6 @@
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { execFileSync } from "node:child_process";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import type { Persona } from "@intentic/sandbox-contract";
 import { createApp } from "../app.js";
 import { clientFor, errorCode } from "../harness/route-client.testing.js";
@@ -82,4 +83,43 @@ test("removing a persona takes its kit with it", async () => {
     await client.personas.remove({ id: "studio" });
 
     expect(await kitFile(root, "studio", "PROMPT.md")).toBeUndefined();
+});
+
+// The page's writes are committed as they land: left uncommitted they read as the owner's own edits, and a land touching
+// the same file was refused as work only the owner could move.
+test("a persona's prompt saved on its page is committed on its own, leaving nothing for the owner to save", async () => {
+    const workspace = tempWorkspace([]);
+    const git = (...args: string[]): string => execFileSync("git", args, { cwd: workspace.root, encoding: "utf8" }).trim();
+    git("init", "-q");
+    git("-c", "user.name=owner", "-c", "user.email=owner@example.com", "commit", "-q", "--allow-empty", "-m", "Initialize workspace");
+    const agentWorktrees = { ...services().agentWorktrees, mainDir: () => workspace.root };
+    const client = clientFor(createApp(services({ workspace, personas: memoryPersonasStore([studio]), agentWorktrees })));
+
+    await client.personas.savePrompt({ id: "studio", prompt: "You write release notes." });
+
+    expect(git("log", "-1", "--format=%s")).toBe("Settings: persona Studio prompt");
+    expect(git("status", "--porcelain")).toBe("");
+});
+
+// A skill an agent's land left in the kit folder, still waiting in Changes, is not the page's to commit: a prompt saved
+// over it stays uncommitted with it, for the owner to review.
+test("a persona's prompt saved over a kit holding someone else's uncommitted change is left uncommitted", async () => {
+    const workspace = tempWorkspace([]);
+    const git = (...args: string[]): string => execFileSync("git", args, { cwd: workspace.root, encoding: "utf8" }).trim();
+    git("init", "-q");
+    git("-c", "user.name=owner", "-c", "user.email=owner@example.com", "commit", "-q", "--allow-empty", "-m", "Initialize workspace");
+    const agentWorktrees = { ...services().agentWorktrees, mainDir: () => workspace.root };
+    const client = clientFor(createApp(services({ workspace, personas: memoryPersonasStore([studio]), agentWorktrees })));
+    const landed = join(workspace.root, ".intentic", "config", "personas", "studio", "skills", "notes", "SKILL.md");
+    await mkdir(dirname(landed), { recursive: true });
+    await writeFile(landed, "---\nname: notes\n---\nTake notes.\n");
+
+    await client.personas.savePrompt({ id: "studio", prompt: "You write release notes." });
+
+    expect(git("log", "-1", "--format=%s")).toBe("Initialize workspace");
+    expect(git("status", "--porcelain", "--untracked-files=all").split("\n").toSorted()).toEqual([
+        "?? .intentic/config/personas/studio/.claude-plugin/plugin.json",
+        "?? .intentic/config/personas/studio/PROMPT.md",
+        "?? .intentic/config/personas/studio/skills/notes/SKILL.md",
+    ]);
 });

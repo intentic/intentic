@@ -8,7 +8,8 @@
     },
     "activityView": {
         "noSpeakersYet": "jeszcze brak mówiących",
-        "transcribing": "transkrypcja"
+        "transcribing": "transkrypcja",
+        "voiceMinutes": "{minutes} min: {speakers}"
     },
     "episodeRow": {
         "failed": "nieudane",

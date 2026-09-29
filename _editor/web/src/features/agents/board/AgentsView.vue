@@ -15,6 +15,7 @@ import { useAuth } from "../../auth/useAuth";
 import { useSandboxSharedAccess } from "../../sandbox/access/useSandboxSharedAccess";
 import { useAgents } from "../fleet/useAgents";
 import { agentDisplayTitle } from "../fleet/agentStatus";
+import { useVocabulary } from "../../../core-views/vocabulary";
 import type { FleetAgent } from "../fleet/useAgents-fleet";
 import { pendingOn } from "../fleet/useAgents-provisional";
 import { fleetScope, scopeOffered } from "../fleet/fleetScope";
@@ -42,6 +43,9 @@ import { useBoardPresses } from "./view/boardPresses";
 import { followAcross, useBoardScope } from "./view/boardScope";
 import { useBoardView } from "./view/boardView";
 import { useCardMenu } from "./view/cardMenu";
+import { useFamilyArchive } from "./view/familyArchive";
+import { useResumeAll } from "./view/resumeAll";
+import { providerLabel } from "@intentic/sandbox-contract";
 import { useCardFocus, useCardRing } from "./view/cardSelection";
 import { useFoundCard } from "./view/foundCard";
 import { boardStarters } from "./view/firstScreen";
@@ -54,7 +58,7 @@ import { useWallpaper } from "../../../skins/useWallpaper";
 const t = useT();
 
 const router = useRouter();
-const { mobile } = useDevice();
+const { mobile, coarse } = useDevice();
 const agents = useAgents();
 const { archived, archiveLoading, archiveFailure, archive, restore, notice, dismissNotice } = agents;
 // Read only while this board is mounted and the reader opted in (liveMetrics.ts); the cards take theirs from here.
@@ -62,7 +66,10 @@ const liveMetrics = useLiveMetrics();
 provide(LIVE_METRICS_KEY, liveMetrics);
 const drag = useAgentDrag();
 const { dragged, dragging, draggedId, over, action, accepts, ghostStyle, pendingResolve, confirmResolve, cancelResolve } = drag;
-const { resolveNow, landNow, relandNow, unwatchNow } = drag;
+const { resolveNow, pressLand, pendingLand, confirmLand, cancelLand, unwatchNow } = drag;
+// The press a phone's land confirm ends in, in the reader's words for it, and the card it names.
+const words = useVocabulary();
+const landingName = computed(() => pendingLand.value?.title ?? t(`agents.agentsView.thisAgent`));
 // Resolved live, so a rename or a status change stays visible while the dialog asks.
 const resolveTarget = computed(() => (pendingResolve.value === undefined ? undefined : agents.agentById(pendingResolve.value)));
 const hint = computed(() => dropHint(action.value, dragged.value, over.value));
@@ -112,7 +119,7 @@ const focus = useCardFocus({
     strip: chatStrip,
     summon: summonChat,
 });
-const { focusAgent, focusSubagent, reviewAgent, keepAgent, closeAgent, openSession } = focus;
+const { focusAgent, focusSubagent, drillIn, keepAgent, closeAgent, openSession } = focus;
 // The card the filter names by its id: the lanes lead with it, it is scrolled to, and Enter in the field opens it as a
 // click would; with nothing named, Enter does what it always did, which is nothing.
 const { found, openFound } = useFoundCard({ filter, lanes, move, reveal: revealCard, open: (agent) => focusAgent(agent) });
@@ -129,8 +136,18 @@ const onFieldEnter = (event: KeyboardEvent): void => {
 const foundAnnouncement = computed(() =>
     found.value === undefined ? `` : t(`agents.agentsView.foundById`, { title: agentDisplayTitle(found.value) }),
 );
-// A card's archive and restore take the children riding under it (boardTrays.familyOf), from the card and its menu alike.
+// A card's archive and restore take the children riding under it (boardTrays.familyOf), from the card and its menu alike;
+// an archive that takes any asks first, with the count (familyArchive.ts).
 const withFamilies = (ids: readonly string[]): string[] => lanes.withFamilies(ids, agents.agentById);
+const familyArchive = useFamilyArchive({ archive, familyIds, agentById: agents.agentById, coarse });
+const { pending: pendingFamilyArchive } = familyArchive;
+// One press for the agents one provider's limit stopped together (resumeAll.ts).
+const { groups: limitStopped, busy: resumingAll, resume: resumeAll } = useResumeAll({
+    fleet: agents.fleet,
+    resumeHeldTurn: agents.resumeHeldTurn,
+    resendAtReset: (id) => agents.setBreakPolicy(id, `limit`, `resend`),
+    notice,
+});
 const { cardMenu, cardMenuItems, openCardMenu } = useCardMenu({
     mobile,
     peeked,
@@ -138,7 +155,7 @@ const { cardMenu, cardMenuItems, openCardMenu } = useCardMenu({
     agents: {
         stopWatching: agents.stopWatching,
         // No ids is the lane's Clear, which already names every finished card there is.
-        archive: (ids) => archive(ids === undefined ? undefined : withFamilies(ids)),
+        archive: familyArchive.requestIds,
         restore: (ids) => restore(withFamilies(ids)),
     },
 });
@@ -155,7 +172,7 @@ provide(CHILD_ROWS, {
     idMatchOf,
     open: (child, event) => focusAgent(child, event),
     openSubagent: focusSubagent,
-    review: reviewAgent,
+    review: drillIn,
     menu: openCardMenu,
     setRowEl: setCardEl,
 });
@@ -390,6 +407,35 @@ const starters = computed(() => boardStarters(workspaceRepos.value.length, works
                             @reject="releaseWake(entry.id, `reject`)"
                         />
                     </div>
+                    <!-- Agents one provider's usage limit stopped together get one press here, not one Continue each. -->
+                    <div v-if="lane.key === 'attention' && !view.archive && limitStopped.length > 0" class="flex flex-col gap-1.5 pb-2.5">
+                        <div
+                            v-for="group in limitStopped"
+                            :key="group.provider"
+                            class="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 rounded-lg border border-line px-3 py-2 text-2xs text-muted"
+                        >
+                            <span class="min-w-0">{{
+                                t(`agents.agentsView.limitStopped`, { count: group.ids.length, provider: providerLabel(group.provider) }, group.ids.length)
+                            }}</span>
+                            <Button
+                                size="small"
+                                severity="secondary"
+                                class="shrink-0 whitespace-nowrap"
+                                :disabled="resumingAll.has(group.provider)"
+                                v-tooltip.top="{
+                                    title: providerLabel(group.provider),
+                                    note: group.reopensAt === undefined ? t(`agents.agentsView.resumeAllNowHint`) : t(`agents.agentsView.resumeAllWhenBackHint`),
+                                }"
+                                @click="resumeAll(group)"
+                            >
+                                <Icon :name="resumingAll.has(group.provider) ? `spinner` : `play`" :spin="resumingAll.has(group.provider)" />{{
+                                    group.reopensAt === undefined
+                                        ? t(`agents.agentsView.resumeAllNow`)
+                                        : t(`agents.agentsView.resumeAllWhenBack`, { provider: providerLabel(group.provider) })
+                                }}
+                            </Button>
+                        </div>
+                    </div>
                     <!-- Runs sit above their lane's agent cards, since a run is a container of several of them and a container belongs above its contents, not among them. -->
                     <div v-if="runsFor(lane.key).length > 0" class="flex flex-col gap-2.5 pb-2.5">
                         <WorkflowRunCard
@@ -470,12 +516,12 @@ const starters = computed(() => boardStarters(workspaceRepos.value.length, works
                                     :call="callOf(agent)"
                                     @open="(event) => focusAgent(agent, event)"
                                     @keep="keepAgent(agent)"
-                                    @review="reviewAgent(agent)"
+                                    @review="drillIn(agent)"
                                     @resolve="resolveNow(agent.id, agent.sandboxId)"
-                                    @land="landNow(agent.id, agent.sandboxId)"
-                                    @reland="relandNow(agent.id, agent.sandboxId)"
+                                    @land="pressLand(agent, `land`, mobile)"
+                                    @reland="pressLand(agent, `reland`, mobile)"
                                     @unwatch="unwatchNow(agent.id, agent.sandboxId)"
-                                    @archive="archive(familyIds(agent))"
+                                    @archive="familyArchive.request(agent)"
                                     @restore="restore(familyIds(agent))"
                                     @close="closeAgent(agent)"
                                     @grab="(event, card) => grabCard(event, agent, card)"
@@ -553,7 +599,7 @@ const starters = computed(() => boardStarters(workspaceRepos.value.length, works
                             :query="needle"
                             :match-case="matchCase"
                             @open="(event) => focusAgent(agent, event)"
-                            @review="reviewAgent(agent)"
+                            @review="drillIn(agent)"
                             @restore="restore([agent.id])"
                             @unwatch="unwatchNow(agent.id)"
                             @contextmenu.prevent.stop="openCardMenu(agent, $event)"
@@ -610,6 +656,48 @@ const starters = computed(() => boardStarters(workspaceRepos.value.length, works
             <template #footer>
                 <Button size="small" severity="secondary" :text="true" :label="t(`ui.action.cancel`)" @click="cancelResolve" />
                 <Button size="small" :label="t(`agents.agentsView.askAgent`)" @click="confirmResolve" />
+            </template>
+        </Modal>
+        <!-- On a phone a card's land asks first (useAgentDrag.pressLand), saying what goes where: its press sits under the thumb that scrolls the board. -->
+        <Modal :open="pendingLand !== undefined" size="sm" :header="t(`agents.agentsView.landConfirmTitle`)" @update:open="cancelLand">
+            <p class="text-xs text-content">
+                {{
+                    pendingLand?.chosen === `reland`
+                        ? t(`agents.agentsView.relandConfirmBody`, { agent: landingName })
+                        : t(`agents.agentsView.landConfirmBody`, { agent: landingName })
+                }}
+            </p>
+            <p v-if="pendingLand?.chosen === `land` && pendingLand.files !== undefined" class="mt-2 text-xs text-muted">
+                {{ t(`agents.agentsView.landConfirmFiles`, { count: pendingLand.files }, pendingLand.files) }}
+            </p>
+            <template #footer>
+                <Button size="small" severity="secondary" :text="true" :label="t(`ui.action.cancel`)" @click="cancelLand" />
+                <Button size="small" severity="success" :label="pendingLand?.chosen === `reland` ? words.landAgain : words.land" @click="confirmLand" />
+            </template>
+        </Modal>
+        <!-- Archiving loses nothing, but one tap taking a whole family off the board is not something to do unasked. -->
+        <Modal
+            :open="pendingFamilyArchive !== undefined"
+            size="sm"
+            :header="
+                t(
+                    `agents.agentsView.archiveFamily`,
+                    { title: pendingFamilyArchive?.title ?? ``, count: pendingFamilyArchive?.children ?? 0 },
+                    pendingFamilyArchive?.children ?? 0,
+                )
+            "
+            @update:open="familyArchive.cancel"
+        >
+            <p class="text-xs text-muted">{{ t(`agents.agentsView.archiveFamilyKept`) }}</p>
+            <template #footer>
+                <Button size="small" severity="secondary" :text="true" :label="t(`ui.action.cancel`)" @click="familyArchive.cancel" />
+                <Button
+                    size="small"
+                    :label="
+                        t(`agents.agentsView.archiveWithSubagents`, { count: (pendingFamilyArchive?.children ?? 0) + 1 }, (pendingFamilyArchive?.children ?? 0) + 1)
+                    "
+                    @click="familyArchive.confirm"
+                />
             </template>
         </Modal>
         <!-- The one dialog guarding something unrecoverable: says what goes in the terms the archive has promised all along ("nothing is lost"). -->

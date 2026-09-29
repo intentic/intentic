@@ -26,6 +26,7 @@ const SETTLED: ComposerSituation = {
     pendingPlan: false,
     streaming: false,
     awaitingDecision: false,
+    waitingOnYou: false,
     steerable: false,
     pickUp: undefined,
     queued: 0,
@@ -48,6 +49,17 @@ it(`names the press by the most specific thing armed, in one order`, () => {
     expect(sendIntentOf(chat({ streaming: true, pendingPlan: true, editing: true }))).toBe(`edit`);
     // The agent's voice is not a turn at all, so nothing about a turn can outrank it.
     expect(sendIntentOf(chat({ streaming: true, pendingPlan: true, editing: true, voiceAgent: true }))).toBe(`place`);
+});
+
+// The agents list says the agent waits on you before this window has drawn its card (a tab left open for hours): the
+// composer reads as waiting on an answer, never idle, and a spent account does not turn that into a schedule.
+it(`reads a chat the agents list says waits on you as parked, before its card is drawn`, () => {
+    expect(sendIntentOf(chat({ waitingOnYou: true }))).toBe(`parked`);
+    expect(sendIntentOf(chat({ waitingOnYou: true, spentUntil: 5_000 }))).toBe(`parked`);
+    expect(placeholderFor(sendIntentOf(chat({ waitingOnYou: true })), WORDS)).toBe(`Answer above, or add a message for after…`);
+    // A plan waiting is still the revision field, and an armed edit still an edit.
+    expect(sendIntentOf(chat({ waitingOnYou: true, pendingPlan: true }))).toBe(`plan`);
+    expect(sendIntentOf(chat({ waitingOnYou: true, editing: true }))).toBe(`edit`);
 });
 
 it(`schedules only a send that would start a turn on a spent account`, () => {

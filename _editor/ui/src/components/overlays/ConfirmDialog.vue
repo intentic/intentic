@@ -78,6 +78,8 @@ const titleId = useId();
         <slot />
         <template #footer>
             <Button :label="t(`ui.action.cancel`)" severity="secondary" :text="true" @click="emit(`cancel`)" />
+            <!-- A second way to go ahead (do it later, say), drawn a tier below the confirm it sits beside. -->
+            <slot name="actions" />
             <!-- autofocus on the CONFIRM button is deliberate and is what the call sites already did: the dialog is dismissable by mask, Esc and Cancel. -->
             <Button :label="confirmLabel" :severity="destructive ? `danger` : undefined" autofocus :loading="loading" @click="emit(`confirm`)">
                 <template v-if="confirmIcon !== undefined" #icon><Icon :name="confirmIcon" /></template>

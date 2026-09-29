@@ -37,6 +37,8 @@ export function useSafetyPolicy() {
             save.mutate(text);
         },
         isSaving: computed<boolean>(() => save.isPending.value),
+        // A refused write, which the page must say: the document stays "Not saved yet" and nothing else tells why.
+        saveError: computed<Error | null>(() => save.error.value),
         isLoading: query.isLoading,
         error,
     };

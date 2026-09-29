@@ -298,6 +298,19 @@ const withParked = (running: RunningPhase, parked: RunningPhase["parked"]): Runn
 
 type ParkFrame = Extract<AgentEvent, { kind: ParkKind }>;
 
+// The longest a permission's line runs on the card list; the transcript keeps the whole of it.
+export const ASK_MAX_CHARS = 200;
+
+// What a permission asks, on one line, as the chat card heads it: the runtime's sentence, else its short phrase, else
+// the bare tool name. Nothing for any other card, whose words only the transcript carries.
+const askOf = (event: ParkFrame): string | undefined => {
+    if (event.kind !== "permission") {
+        return undefined;
+    }
+    const line = (event.title ?? event.displayName ?? event.toolName).replaceAll(/\s+/gu, " ").trim();
+    return line.length > ASK_MAX_CHARS ? `${line.slice(0, ASK_MAX_CHARS - 1)}…` : line;
+};
+
 // A card raised on a live turn parks it; one raised on a turn being torn down, or on no turn, has nowhere to go. A
 // plan's heading is offered as the title first, so a plan raised behind a stop still names the job.
 const onPark = (state: ConversationState, turn: TurnRuntime, event: ParkFrame): Decision<undefined> => {
@@ -306,7 +319,7 @@ const onPark = (state: ConversationState, turn: TurnRuntime, event: ParkFrame): 
     if (running === undefined || running.stopping !== undefined) {
         return { state: { ...state, turn }, effects: lead, reply: undefined };
     }
-    const card = { requestId: event.requestId, kind: event.kind };
+    const card = { requestId: event.requestId, kind: event.kind, ...opt("ask", askOf(event)) };
     const at = running.parked.findIndex((held) => held.requestId === card.requestId);
     const parked = at === -1 ? [...running.parked, card] : running.parked.map((held, index) => (index === at ? card : held));
     return { state: { ...state, phase: withParked(running, parked), turn }, effects: [...lead, { kind: "broadcast" }], reply: undefined };
@@ -362,10 +375,12 @@ const onTodos = (state: ConversationState, turn: TurnRuntime, frame: Extract<Age
 };
 
 // A scheduled resume is not how the turn ended; it still reads as work in progress, and says so without a broadcast.
+// A later failure that schedules nothing withdraws that promise: the turn's last failure replaces its hold, so nothing
+// is left to resume it, and the card reads the failure rather than "resuming" until the next turn.
 const onError = (state: ConversationState, turn: TurnRuntime, frame: Extract<AgentEvent, { kind: "error" }>): Decision<undefined> =>
     comingBackNow(frame)
         ? unchanged({ ...state, turn: { ...turn, resuming: true } }, undefined)
-        : shown(state, { ...turn, failure: failureOf(frame) });
+        : shown(state, { ...turn, resuming: false, failure: failureOf(frame) });
 
 type FrameHandler<K extends AgentEvent["kind"]> = (
     state: ConversationState,

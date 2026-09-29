@@ -4,6 +4,7 @@ import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { useRouter } from "vue-router";
 import { navigateInApp } from "../../../../shell/window/mainWindow";
+import { entryDescription } from "../../../capabilities/model/catalogCopy";
 import type { CardAnswer } from "../../session/cardReplies";
 import type { ChatMessage } from "../transcript";
 import ChatCard from "./ChatCard.vue";
@@ -23,8 +24,11 @@ const connect = async (): Promise<void> => {
     await props.reply({ kind: `capability_offer`, connect: true });
 };
 
-// The static catalog's description; absent for a contributed entry.
-const description = computed(() => CAPABILITY_CATALOG.find((entry) => entry.id === card.value.offer.entry)?.description);
+// The static catalog's description, in the reader's language; absent for a contributed entry.
+const description = computed(() => {
+    const entry = CAPABILITY_CATALOG.find((candidate) => candidate.id === card.value.offer.entry);
+    return entry === undefined ? undefined : entryDescription(entry);
+});
 
 // "Connected", then who as when setup named an account, then the clause saying what the agent did next. Joined here,
 // since the template compiler drops the space a `<template v-if>` opens with; the clause brings its own lead-in (": …",

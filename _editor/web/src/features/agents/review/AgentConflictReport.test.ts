@@ -19,6 +19,7 @@ interface ReportProps {
     readonly busy?: boolean;
     readonly asked?: boolean;
     readonly box?: string;
+    readonly onSaveSettings?: (paths: readonly string[]) => void;
 }
 
 const mount = async (props: ReportProps): Promise<HTMLElement> => {
@@ -113,4 +114,49 @@ it(`keeps the user's own rung on a local conflict held by their uncommitted edit
     expect(hasButton(el, `Have the agent resolve it`)).toBe(true);
     expect(hasButton(el, `Land with conflict markers`)).toBe(false);
     expect(hasButton(el, `Open in`)).toBe(false);
+});
+
+// A land refused over personas.json as "your uncommitted edits", although only the Personas page had written it: the
+// report names the page, and one press saves those files and lands.
+const settingsHeld: LandConflict[] = [
+    {
+        repo: `root`,
+        clean: 3,
+        mainBranch: `main`,
+        paths: [
+            { path: `.intentic/config/personas.json`, reason: `workspace` },
+            { path: `.intentic/config/capabilities.json`, reason: `workspace` },
+        ],
+    },
+];
+
+it(`names the Sandbox page behind settings files it holds, and saves them and lands in one press`, async () => {
+    const saved: (readonly string[])[] = [];
+    const el = await mount({ conflicts: settingsHeld, onSaveSettings: (paths) => saved.push(paths) });
+
+    expect(text(el)).toContain(`changed on the Sandbox page Personas, Capabilities, not saved yet`);
+    expect(text(el)).not.toContain(`you have uncommitted edits`);
+    expect(hasButton(el, `Open Changes`)).toBe(false);
+
+    [...el.querySelectorAll(`button`)].find((button) => button.textContent?.includes(`Save them and land`))!.click();
+    expect(saved).toEqual([[`.intentic/config/personas.json`, `.intentic/config/capabilities.json`]]);
+});
+
+// The agent's own part still blocks too: its rung comes first, and the settings files no longer read as the owner's.
+it(`offers the agent's rung first and the settings press beside it when both halves block`, async () => {
+    const conflicts: LandConflict[] = [{ ...settingsHeld[0]!, paths: [...settingsHeld[0]!.paths, { path: `src/server.ts`, reason: `diverged` }] }];
+    const el = await mount({ conflicts });
+
+    expect(hasButton(el, `Have the agent resolve it`)).toBe(true);
+    expect(hasButton(el, `Save them and land`)).toBe(true);
+    expect(text(el)).not.toContain(`still needs you`);
+});
+
+it(`keeps sending the owner to Changes once any held file is their own`, async () => {
+    const conflicts: LandConflict[] = [{ ...settingsHeld[0]!, paths: [...settingsHeld[0]!.paths, { path: `src/db/schema.ts`, reason: `workspace` }] }];
+    const el = await mount({ conflicts });
+
+    expect(hasButton(el, `Open Changes`)).toBe(true);
+    expect(hasButton(el, `Save them and land`)).toBe(false);
+    expect(text(el)).toContain(`you have uncommitted edits to these`);
 });

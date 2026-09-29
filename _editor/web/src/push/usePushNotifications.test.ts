@@ -7,7 +7,8 @@ import { usePushNotifications } from "./usePushNotifications";
 // never be reached again, or blaming the sandbox for a decision the browser made.
 
 const reachable = ref(true);
-jest.mock(`../features/sandbox/client/useSandbox`, () => ({ useSandbox: () => ({ reachable }) }));
+const activeSandboxId = ref<string | undefined>(`box`);
+jest.mock(`../features/sandbox/client/useSandbox`, () => ({ useSandbox: () => ({ reachable, activeSandboxId }) }));
 
 // The daemon's push routes: what a device needs to subscribe, and the registration writes.
 const config = jest.fn();
@@ -59,6 +60,52 @@ beforeEach(() => {
     config.mockResolvedValue({ publicKey: KEY_A, subscribed: false });
     subscribe.mockResolvedValue({ ok: true });
     unsubscribe.mockResolvedValue({ ok: true });
+});
+
+test(`does not call notifications off before checking the registration`, async () => {
+    stubBrowser(`granted`, false);
+    const live = subscription(`https://push.example/live`, KEY_A);
+    manager.getSubscription.mockResolvedValue(live);
+    config.mockResolvedValue({ publicKey: KEY_A, subscribed: true });
+    const push = usePushNotifications();
+    expect(push.state.value).toBe(`checking`);
+    await waitFor(() => expect(push.state.value).toBe(`on`));
+});
+
+// localStorage as the browser keeps it, for the one test that reads what an earlier visit confirmed.
+const memoryStorage = (): Storage => {
+    const items = new Map<string, string>();
+    return {
+        getItem: (key) => items.get(key) ?? null,
+        setItem: (key, value) => void items.set(key, value),
+        removeItem: (key) => void items.delete(key),
+        clear: () => items.clear(),
+        key: (index) => [...items.keys()][index] ?? null,
+        get length() {
+            return items.size;
+        },
+    };
+};
+
+test(`opens on what the daemon last confirmed for this device, so the Menu has no false "off" to take back`, async () => {
+    stubBrowser(`granted`, false);
+    stubGlobal(`localStorage`, memoryStorage());
+    try {
+        manager.getSubscription.mockResolvedValue(subscription(`https://push.example/live`, KEY_A));
+        config.mockResolvedValue({ publicKey: KEY_A, subscribed: true });
+        const first = usePushNotifications();
+        await waitFor(() => expect(first.state.value).toBe(`on`));
+
+        // The next open, before the daemon has answered it: already on.
+        reachable.value = false;
+        expect(usePushNotifications().state.value).toBe(`on`);
+        // Another sandbox has confirmed nothing on this device yet.
+        activeSandboxId.value = `other`;
+        expect(usePushNotifications().state.value).toBe(`checking`);
+    } finally {
+        activeSandboxId.value = `box`;
+        stubGlobal(`localStorage`, undefined);
+    }
 });
 
 test(`a subscription minted for a key the daemon no longer holds is replaced, not reused`, async () => {
@@ -122,7 +169,7 @@ test(`the state is read again once the daemon comes online, not only on mount`, 
 
     const push = usePushNotifications();
     await waitFor(() => expect(config).not.toHaveBeenCalled());
-    expect(push.state.value).toBe(`off`);
+    expect(push.state.value).toBe(`checking`);
 
     reachable.value = true;
 

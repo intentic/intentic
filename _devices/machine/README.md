@@ -74,7 +74,10 @@ flowchart LR
 - Scopes are enforced here and nowhere else: the sandbox only asks, and a refusal names the switch that is off.
   Files stay inside the configured roots, writes need their own switch, and every call is appended to
   `~/.intentic/machine/audit.jsonl`. While an agent drives input on Windows, a notice shows on screen and
-  `PAUSE_HOTKEY` pauses every link.
+  `PAUSE_HOTKEY` pauses every link. The one door behind no switch is this agent's own Update and Restart
+  (`runAgentFlow`, [`device/tools/agent.ts`](src/device/tools/agent.ts)): no agent tool reaches it, and the sandbox
+  admits only a maintainer to it, so the owner's maintenance does not wait on the agents' "Run commands" (2026-09-29;
+  it rode that switch before, and an owner had to widen what agents may do to update the agent).
 - Every connection dials out; the only listeners are on loopback. One of them is short-lived: while a sandbox's
   sign-in is open, [`device/loopback-catch.ts`](src/device/loopback-catch.ts) listens on the
   `http://localhost:<port>/…` address the provider redirects to, the one a CLI running here would have held, and

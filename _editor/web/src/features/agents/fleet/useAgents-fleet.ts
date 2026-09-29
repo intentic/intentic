@@ -10,9 +10,10 @@ import { useChat } from "../../chat/run/useChat";
 import { chatStrip } from "../../chat/panel/useChat-strip";
 import { sandboxRpc } from "../../sandbox/client/sandboxRpc";
 import { onScreen } from "../../../shell/window/onScreen";
-import { asStarted, endedHere, overlaid } from "./useAgents-provisional";
+import { asStarted, endedHere, overlaid, withdrawnHere } from "./useAgents-provisional";
 import { parentOf } from "../board/ownership";
 import { archived, heldWakes, markSeen, registry, sameEntries, snapshotFingerprint } from "./useAgents-registry";
+import { sandboxNow } from "./sandboxClock";
 
 // Fleet view: registry (authoritative status/branch/cost) merged with open tabs by conversationId (live state),
 // producing the lanes and counts the board draws. Derived only; the roster lives in useAgents-registry.
@@ -38,9 +39,12 @@ export interface FleetAgent extends Omit<AgentSummary, "status"> {
 // fold below it is one press away. The number is small on purpose — the lane is a ledger you skim, not the work.
 export const FINISHED_WINDOW = 6;
 
-// Landed work the workspace no longer holds; the card offers Land again, not a receipt.
+// Landed work the workspace no longer holds; the card offers Land again, not a receipt. Not when an agent took it out,
+// which was its doing on purpose, so the card offers nothing to put back (agentStatus.landedAway).
 export const finishedNeedsReland = (agent: Pick<FleetAgent, "landedPresence">): boolean =>
-    agent.landedPresence !== undefined && agent.landedPresence.present < agent.landedPresence.landed;
+    agent.landedPresence !== undefined &&
+    agent.landedPresence.present < agent.landedPresence.landed &&
+    agent.landedPresence.removedBy?.kind !== `agent`;
 
 // Every finished card that still owes a press or has words at risk; such a card is never done with (doneWith), so
 // the rail keeps its row without a press.
@@ -127,7 +131,10 @@ const draftCard = (tab: TabFacts, held: UnsentTab | undefined): FleetAgent => ({
     ...(tab.box === undefined ? {} : { sandboxId: tab.box }),
     ...(tab.title === undefined ? {} : { title: tab.title }),
     ...(tab.sessionId === undefined ? {} : { sessionId: tab.sessionId }),
-    ...(tab.turn === undefined ? {} : { model: tab.model, ...tab.turn }),
+    // The send's instant is this browser's; the card's clock counts on the sandbox's (sandboxClock.ts).
+    ...(tab.turn === undefined
+        ? {}
+        : { model: tab.model, ...tab.turn, startedAt: tab.turn.startedAt === undefined ? undefined : sandboxNow(tab.turn.startedAt) }),
     ...(tab.standing === `draft` && held !== undefined ? { model: tab.model } : {}),
 });
 
@@ -143,7 +150,8 @@ const sendingNow = (agent: AgentSummary, tab: TabFacts | undefined): number | un
     if (tab?.standing !== `starting` || turnInFlight(agent) || awaitingUser(agent)) {
         return undefined;
     }
-    const startedAt = tab.turn?.startedAt;
+    // Put on the sandbox's clock first: it is weighed against the sandbox's `updatedAt`, and drawn as the card's start.
+    const startedAt = tab.turn?.startedAt === undefined ? undefined : sandboxNow(tab.turn.startedAt);
     return startedAt !== undefined && startedAt > agent.updatedAt ? startedAt : undefined;
 };
 
@@ -218,7 +226,7 @@ export const fleet = computed<FleetAgent[]>(() => {
             const open = live.get(agent.id);
             const startedAt = sendingNow(agent, open);
             const shown = overlaid(startedAt === undefined ? card : asStarted(card, startedAt), agent, undefined);
-            return shown === undefined ? [] : [endedHere(shown, open)];
+            return shown === undefined ? [] : [endedHere(withdrawnHere(shown, open), open)];
         }),
         ...drafts,
         ...setAside,

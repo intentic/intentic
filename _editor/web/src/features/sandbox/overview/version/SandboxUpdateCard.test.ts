@@ -13,6 +13,7 @@ const LATEST = `1.54.0`;
 const info = ref<Info>({ version: `1.53.0`, latest: LATEST, updateAvailable: true, channel: `stable` });
 const localImage = ref<Environment[`localImage`]>(undefined);
 const stagedPlan = ref<StagedUpdate[`plan`]>(undefined);
+const breakingNotes = ref<string[]>([]);
 const skipServed = ref(true);
 const skipVersion = jest.fn(async (_version: string | null): Promise<void> => undefined);
 jest.mock(`./useSandboxVersion`, () => ({
@@ -23,7 +24,7 @@ jest.mock(`./useSandboxVersion`, () => ({
         updateAvailable: computed(() => info.value.updateAvailable === true),
         updateNotes: ref([]),
         moreUpdateNotes: ref(0),
-        breakingNotes: ref([]),
+        breakingNotes,
         updateStaged: computed(() => stagedPlan.value !== undefined),
         stagedBehind: ref(undefined),
         stagedPlan,
@@ -96,6 +97,7 @@ afterEach(() => {
     info.value = { version: `1.53.0`, latest: LATEST, updateAvailable: true, channel: `stable` };
     localImage.value = undefined;
     stagedPlan.value = undefined;
+    breakingNotes.value = [];
     skipServed.value = true;
     skipVersion.mockClear();
     active.value = { id: `sb1`, role: `owner` };
@@ -109,6 +111,17 @@ it(`offers the published update on a sandbox that follows the registry`, () => {
     const el = mount();
     expect(recreates(el)).toEqual([`Update`, `Download`]);
     expect(el.querySelector(`[data-executor="checkout"]`)).toBeNull();
+});
+
+it(`offers an update before developer notes and folds those notes away`, () => {
+    breakingNotes.value = [`A migration detail for developers.`];
+    const el = mount();
+    const action = el.querySelector(`[data-recreate="Update"]`)!;
+    const notes = el.querySelector(`details`)!;
+    expect(recreates(el)).toEqual([`Update`, `Download`]);
+    expect(notes.open).toBe(false);
+    expect(action.compareDocumentPosition(notes)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect([...el.querySelectorAll(`button`)].map((button) => button.textContent).join(` `)).not.toContain(`I've read what changes`);
 });
 
 it(`offers the checkout's rebuild instead of the pull on a sandbox built from one`, () => {

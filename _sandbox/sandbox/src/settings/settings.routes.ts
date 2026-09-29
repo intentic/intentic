@@ -1,6 +1,7 @@
+import { join } from "node:path";
 import { settingsContract } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
-import { intenticSystemPrompt } from "../agent/prompt/intentic-prompt.js";
+import { forkablePrompt, intenticSystemPrompt } from "../agent/prompt/intentic-prompt.js";
 import { presetSystemPrompt } from "../agent/prompt/preset-prompt.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
@@ -9,16 +10,31 @@ import { declaredRepoChecks, readRepoDeclaration, summariesOf } from "../rules/r
 import { ManifestUnreadableError } from "../store/json-file.js";
 import { readTurnExperiments } from "../usage/turn-experiments.js";
 import { fieldNotesStatus } from "./field-notes-status.js";
+import { fileMemberAudiences, memberAudienceDocument, type MemberAudiences } from "./member-audience.js";
+import { settingsDocument } from "./settings-store.js";
+import { versionedSettingsWrite } from "./settings-versions.js";
 import { reconcileBakedSkills } from "./skills.js";
 
 // `get` applies defaults when the manifest is absent, `set` overwrites it. `savings` reads whichever backend's ledger
 // is currently compressing: the setting picking the cleaner also picks the ledger read here.
+// Whose answer a call reads and writes: the verified address, and "" for the one person of a sandbox nobody signs in to.
+const memberOf = (context: OrpcContext): string => context.identity?.email.toLowerCase() ?? "";
+
 export const createSettingsRoutes = (services: Services) => {
     const i = implement(settingsContract).$context<OrpcContext>();
+    // Opened on first use, not here: most of these routes never touch it, and a route under test may carry no config.
+    let audiences: MemberAudiences | undefined;
+    const memberAudiences = (): MemberAudiences =>
+        (audiences ??= fileMemberAudiences(join(services.config.historyRoot, memberAudienceDocument.path)));
+    // Every settings.json write here is a page's own (the Agent tab, the checks list) or the app's (a browser's clock), so
+    // each is committed as it lands (settings-versions.ts): left uncommitted, a land touching the file was refused as the
+    // owner's edits. Not when the file already held uncommitted edits: those may be the owner's own, by hand.
+    const versioned = <T>(subject: string, write: () => Promise<T>): Promise<T> =>
+        versionedSettingsWrite(services, [settingsDocument.path], `Settings: ${subject}`, write);
     return {
         get: i.get.handler(() => services.sandboxSettings.get()),
         set: i.set.handler(async ({ input }) => {
-            await services.sandboxSettings.set(input).catch((error: unknown) => {
+            await versioned("agent settings", () => services.sandboxSettings.set(input)).catch((error: unknown) => {
                 // The owner's file to fix, not a server fault: the message names it and what this build could not read.
                 if (error instanceof ManifestUnreadableError) {
                     throw new ORPCError("CONFLICT", { message: error.message });
@@ -38,10 +54,18 @@ export const createSettingsRoutes = (services: Services) => {
             if (settings.timezone !== "") {
                 return { timezone: settings.timezone, adopted: false };
             }
-            await services.sandboxSettings.set({ ...settings, timezone: input.timezone });
+            await versioned(`timezone ${input.timezone}`, () => services.sandboxSettings.set({ ...settings, timezone: input.timezone }));
             services.logger.info({ timezone: input.timezone }, "sandbox timezone adopted from a browser");
             return { timezone: input.timezone, adopted: true };
         }),
+        // The caller's own words, by the address they signed in with. An answer replaces theirs; an offer (a browser
+        // handing over what it kept on its own) is taken only while they have none, so their second device adopts the
+        // first one's words instead of overwriting them.
+        audience: i.audience.handler(async ({ context }) => {
+            const audience = await memberAudiences().get(memberOf(context));
+            return audience === undefined ? {} : { audience };
+        }),
+        setAudience: i.setAudience.handler(({ input, context }) => memberAudiences().answer(memberOf(context), input.audience, input.offer === true)),
         savings: i.savings.handler(async ({ input }) => {
             const [inputSavings, experiments] = await Promise.all([
                 readInputSavings(services.config.historyRoot, input),
@@ -50,9 +74,12 @@ export const createSettingsRoutes = (services: Services) => {
             return { input: inputSavings, ...experiments };
         }),
         // Both are read from the installed CLI for its default model, Intentic's cut from Claude's; the workspace root only
-        // says where to spawn that probe, nothing is read from it.
-        builtinPrompt: i.builtinPrompt.handler(({ input }) =>
-            input.base === "intentic" ? intenticSystemPrompt(services.workspace.root) : presetSystemPrompt(services.workspace.root),
+        // says where to spawn that probe, nothing is read from it. Handed over as the copy a person reads and forks, so
+        // without the lines the CLI renders for its own run (forkablePrompt).
+        builtinPrompt: i.builtinPrompt.handler(async ({ input }) =>
+            forkablePrompt(
+                await (input.base === "intentic" ? intenticSystemPrompt(services.workspace.root) : presetSystemPrompt(services.workspace.root)),
+            ),
         ),
         // When each rule last fired, so the settings list can show a rule that's gone quiet as quiet rather than merely
         // present.
@@ -80,7 +107,7 @@ export const createSettingsRoutes = (services: Services) => {
             } else {
                 delete adopted[input.repo];
             }
-            await services.sandboxSettings.set({ ...settings, adoptedChecks: adopted });
+            await versioned(`checks ${input.on ? "on" : "off"} for ${input.repo}`, () => services.sandboxSettings.set({ ...settings, adoptedChecks: adopted }));
             services.logger.info({ repo: input.repo, on: input.on }, "repo checks: adoption changed");
             return { ok: true } as const;
         }),

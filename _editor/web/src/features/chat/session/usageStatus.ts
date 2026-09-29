@@ -308,19 +308,19 @@ export const formatReset = (epochSeconds: number, now: number = Date.now()): str
 export const formatWait = (epochSeconds: number, now: number = Date.now()): string => {
     const seconds = Math.max(0, Math.round((epochSeconds * 1000 - now) / 1000));
     if (seconds < 90) {
-        return `about ${Math.max(5, Math.round(seconds / 5) * 5)}s`;
+        return t(`chat.usageStatus.aboutSeconds`, { count: Math.max(5, Math.round(seconds / 5) * 5) });
     }
     const minutes = Math.round(seconds / 60);
     if (minutes < 90) {
-        return `about ${minutes} min`;
+        return t(`chat.usageStatus.aboutMinutes`, { count: minutes });
     }
     const hours = seconds / 3_600;
     // One decimal under ten hours, so 4h and 4.5h are different sentences; whole hours past that, where the half no
     // longer changes what anyone does.
     if (hours < 36) {
-        return `about ${hours < 10 ? Math.round(hours * 2) / 2 : Math.round(hours)}h`;
+        return t(`chat.usageStatus.aboutHours`, { count: hours < 10 ? Math.round(hours * 2) / 2 : Math.round(hours) });
     }
-    return `about ${Math.round(hours / 24)} days`;
+    return t(`chat.usageStatus.aboutDays`, { count: Math.round(hours / 24) });
 };
 
 // Age of a reading in the kit's day-based words, not an absolute date, so staleness reads the same at any

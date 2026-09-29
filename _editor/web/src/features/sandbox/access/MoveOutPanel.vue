@@ -12,10 +12,12 @@ import {
 import { Button, CopyButton, formatDateTime, type NoticeModel, NoticeStack, Row, RowGroup, StatusBadge, ui, vAction } from "@intentic/ui";
 import { useAsyncAction } from "@intentic/ui/async";
 import { computed, onMounted, ref } from "vue";
+import { RouterLink } from "vue-router";
 import { sandboxJson } from "../client/sandboxClient";
 import { bundleDownloadUrl, useBundleExports } from "./useBundleExports";
 import ExportBundleDialog from "./ExportBundleDialog.vue";
 import { workspaceRepoOf } from "../overview/workspaceRepo";
+import { PUBLISH_ANCHOR } from "./publishAnchor";
 import { sizeLabel } from "@intentic/base/format";
 import { useT } from "@intentic/ui/i18n";
 
@@ -150,9 +152,13 @@ const compare = (event: Event): Promise<void> =>
             </Row>
 
             <!-- The description is what blocks the button, so a greyed-out control never needs a press to explain itself. -->
-            <Row v-else icon="cloud-upload" :title="t(`sandbox.moveOutPanel.notPublished`)">
+            <!-- The anchor "No repository to push this work to" lands on; without an account the way to one is linked here. -->
+            <Row v-else :id="PUBLISH_ANCHOR" icon="cloud-upload" :title="t(`sandbox.moveOutPanel.notPublished`)">
                 <template #description>
-                    <template v-if="host === undefined">{{ t(`sandbox.moveOutPanel.connectGithubGitlabAccount`) }}</template>
+                    <template v-if="host === undefined">
+                        {{ t(`sandbox.moveOutPanel.connectGithubGitlabAccount`) }}
+                        <RouterLink to="/capabilities/github" :class="ui.linkButton()">{{ t(`sandbox.moveOutPanel.connectGithub`) }}</RouterLink>
+                    </template>
                     <template v-else>{{ t(`ui.action.publish`) }} <span class="font-mono">/work</span>.</template>
                 </template>
                 <template #control>
@@ -171,11 +177,11 @@ const compare = (event: Event): Promise<void> =>
                 </template>
                 <!-- Shown only at the confirm moment, not as standing prose. -->
                 <template v-if="confirmingPublish" #below>
-                    <p class="text-2xs text-subtle">
-                        {{ t(`sandbox.moveOutPanel.createsPrivateRepositoryOn`) }} {{ host }} {{ t(`sandbox.moveOutPanel.pushes`) }}
-                        <span class="font-mono">/work</span>. Secrets and <span class="font-mono">.env</span>
-                        {{ t(`sandbox.moveOutPanel.filesStayBehind`) }}
-                    </p>
+                    <i18n-t keypath="sandbox.moveOutPanel.createsPrivateRepository" tag="p" class="text-2xs text-subtle" scope="global">
+                        <template #host>{{ host }}</template>
+                        <template #work><span class="font-mono">/work</span></template>
+                        <template #env><span class="font-mono">.env</span></template>
+                    </i18n-t>
                 </template>
             </Row>
         </RowGroup>

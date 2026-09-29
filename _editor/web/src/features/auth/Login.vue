@@ -4,8 +4,9 @@ import { AppBrand, Button, vAction } from "@intentic/ui";
 import { computed, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useAuth } from "./useAuth";
+import { useBrowserHandoff } from "./browserHandoff";
 import { useGoogleIdentity } from "./useGoogleIdentity";
-import { desktopVersion, signInThroughBrowser } from "../../app/environments/desktop";
+import { desktopVersion } from "../../app/environments/desktop";
 import { desktopInstaller } from "../../app/environments/desktopDownloads";
 import { returnPath } from "../../router/signIn";
 import { useT } from "@intentic/ui/i18n";
@@ -26,9 +27,18 @@ const desktop = computed(() => desktopVersion() !== undefined);
 // Mirrors the site's 'Getting started' band, in order; the current step makes this a rail, not a list.
 // The third step must match `desktopInstaller()`, the same call the setup page uses, so the two screens agree.
 // Titles only: a station on a rail names where you are, and the sentences under them cost this screen the
-// height that put a scrollbar on the desktop window.
+// height that put a scrollbar on the desktop window. Inside the installed app the third is behind the reader already,
+// so it is not offered as the step still to come.
 const install = desktopInstaller();
-const steps: readonly string[] = [`Sign in with Google`, `Your sandbox is waiting`, install === undefined ? `Paste one command` : `Install the app`];
+const steps = computed<readonly string[]>(() =>
+    desktop.value
+        ? [t(`auth.login.stepSignIn`), t(`auth.login.stepSandboxWaiting`)]
+        : [
+              t(`auth.login.stepSignIn`),
+              t(`auth.login.stepSandboxWaiting`),
+              install === undefined ? t(`auth.login.stepPasteCommand`) : t(`auth.login.stepInstallApp`),
+          ],
+);
 
 // Mints one Google credential and spends it on both the platform and the sandbox, removing the second ask; the
 // credential the sandbox gets is unchanged. The escape link is unconditional because one failure mode (a button
@@ -38,9 +48,13 @@ const googleButton = ref<HTMLElement>();
 const googleReady = ref(true);
 const error = ref<string>();
 
+// The desktop window's wait for the browser (browserHandoff.ts), drawn in the button's place.
+const handoff = useBrowserHandoff();
+const handoffWaiting = handoff.waiting;
+
 const redirectSignIn = async (): Promise<void> => {
     if (desktop.value) {
-        signInThroughBrowser();
+        handoff.start();
         return;
     }
     await signInWithGoogle(destination.value);
@@ -68,7 +82,7 @@ const signInWithCredential = async (): Promise<void> => {
         // depend on it, so offer that instead of a dead end. The credential stays cached, since the sandbox may accept
         // what the platform just refused.
         googleReady.value = false;
-        error.value = `Couldn't finish that sign-in. Continue with Google below instead.`;
+        error.value = t(`auth.login.signInDidntFinish`);
     }
 };
 
@@ -131,9 +145,19 @@ watch(
                     <div ref="googleButton" class="entry-socket-slot"></div>
                 </div>
 
+                <!-- The desktop app after the press: the sign-in is in the browser now, and this window says so until it returns. -->
+                <div v-if="desktop && handoffWaiting" class="handoff" role="status">
+                    <p class="handoff-title">{{ t(`auth.words.finishInBrowser`) }}</p>
+                    <p class="handoff-detail">{{ t(`auth.words.finishInBrowserDetail`) }}</p>
+                    <Button :label="t(`auth.words.openBrowserAgain`)" severity="secondary" class="w-full justify-center" @click="handoff.start">
+                        <template #icon><Icon name="google" /></template>
+                    </Button>
+                    <button type="button" class="escape" @click="handoff.cancel">{{ t(`ui.action.cancel`) }}</button>
+                </div>
+
                 <!-- The site's primary button style (@intentic/entry-css), shown only when Google's embedded button could not render. -->
                 <Button
-                    v-if="!googleReady"
+                    v-else-if="!googleReady"
                     :label="desktop ? t(`auth.words.continueGoogleInBrowser`) : t(`auth.words.continueGoogle`)"
                     class="w-full justify-center"
                     @click="redirectSignIn"
@@ -158,8 +182,8 @@ watch(
             </section>
 
             <section class="rail">
-                <p class="entry-eyebrow eyebrow-bare">{{ t(`auth.login.threeStepsToFirst`) }}</p>
-                <ol class="steps">
+                <p class="entry-eyebrow eyebrow-bare">{{ desktop ? t(`auth.login.twoStepsToFirst`) : t(`auth.login.threeStepsToFirst`) }}</p>
+                <ol class="steps" :style="{ '--steps': steps.length }">
                     <li v-for="(step, index) in steps" :key="step" class="step" :aria-current="index === 0 ? `step` : undefined">
                         <span class="entry-lozenge"></span>
                         <h2>{{ step }}</h2>
@@ -230,6 +254,23 @@ watch(
     padding: 1.75rem 2rem 1.25rem;
 }
 
+/* The desktop window's wait for the browser: the gate's own words, then the two ways on. */
+.handoff {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+.handoff-title {
+    font-size: 1rem;
+    font-weight: var(--font-weight-semibold);
+    color: var(--ink);
+}
+.handoff-detail {
+    font-size: 0.8125rem;
+    line-height: 1.5;
+    color: var(--ink-subtle);
+}
+
 .gate-error {
     margin-bottom: 1.25rem;
     padding: 0.7rem 0.9rem;
@@ -280,7 +321,7 @@ watch(
 }
 .steps {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(var(--steps, 3), minmax(0, 1fr));
     gap: 1.75rem;
     margin-top: 1.25rem;
     padding-top: 1.25rem;

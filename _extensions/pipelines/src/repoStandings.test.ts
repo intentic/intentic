@@ -1,5 +1,12 @@
 import type { CiRepo, PipelineRun } from "@intentic/sandbox-contract";
+import { extensionIdOf } from "@intentic/extension-manifest";
+import { registerExtensionMessages } from "@intentic/extension-ui/i18n";
+import { messages } from "./i18n";
+import { manifest } from "./manifest";
 import { repoStandings, standingNote } from "./repoStandings";
+
+// The note's words are the extension's own catalog, which the host mounts before anything reads it.
+await registerExtensionMessages(extensionIdOf(manifest), messages);
 
 /* The board's running order. */
 

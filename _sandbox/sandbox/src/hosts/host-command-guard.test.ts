@@ -1,4 +1,4 @@
-import { DEFAULT_SAFETY_POLICY, type SafetyLogEntry, SandboxSettingsSchema } from "@intentic/sandbox-contract";
+import { type Capability, DEFAULT_SAFETY_POLICY, DeviceConfigSchema, type SafetyLogEntry, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import { startTurnRun } from "../agent/run/turn/turn-runs.js";
 import type { Services } from "../composition.js";
@@ -22,8 +22,19 @@ const cards = parkedCards(fleet.conversations);
 // What the gate wrote onto the safety log entry its card left, once the card settled.
 const answers: { readonly answer: SafetyLogEntry["answer"]; readonly outcome: SafetyLogEntry["outcome"] }[] = [];
 
+// The device's own "Run destructive commands" switch, on unless a test says otherwise: a card only goes up for a
+// command the device itself would then run.
+let destructive: "on" | "off" = "on";
+const deviceCard = (): Capability => ({
+    id: MACHINE,
+    kind: "device",
+    config: DeviceConfigSchema.parse({ platform: "linux", destructive }),
+});
+
 const services = unstubbed<Services>("services", {
     conversations: fleet.conversations,
+    hosts: unstubbed<Services["hosts"]>("hosts", { cardFor: (id: string) => id }),
+    capabilities: unstubbed<Services["capabilities"]>("capabilities", { list: async () => [deviceCard()] }),
     cards,
     events: createDomainEvents(() => {}),
     safetyPolicy: unstubbed<Services["safetyPolicy"]>("safetyPolicy", { text: async () => DEFAULT_SAFETY_POLICY }),
@@ -79,6 +90,7 @@ let timeout: ReturnType<typeof armDeadline> | undefined;
 
 beforeEach(() => {
     answers.length = 0;
+    destructive = "on";
     deadline = new AbortController();
     timeout = armDeadline();
     liveTurn();
@@ -149,5 +161,42 @@ describe("somebody answers the card", () => {
 
         expect(await judged).toBeUndefined();
         expect(answers).toEqual([{ answer: "allowed", outcome: "allowed" }]);
+    });
+});
+
+describe("the device would refuse it anyway", () => {
+    it("refuses at once, naming the switch, and raises no card", async () => {
+        destructive = "off";
+        expect(await judgeHostCommand(services, { ...ASKED, command: "find ~/old-builds -depth -delete" })).toEqual({
+            refusal:
+                'Refused: this command would delete files recursively on "rog", and its "Run destructive commands" switch is off, so the device ' +
+                'would refuse it even if the owner approved. Ask the owner to turn on "Run destructive commands" in rog\'s capability card, or run ' +
+                "a command that does not delete. Do not look for another spelling that gets past it.",
+        });
+        expect(turnRunOf(fleet.conversations, CONVERSATION)?.rows.filter((row) => row.permission !== undefined)).toEqual([]);
+        expect(answers).toEqual([]);
+    });
+});
+
+describe("the card outlives the call", () => {
+    it("answers the call before its client gives up, keeps the card, and runs the command once on the same call again", async () => {
+        const first = await judgeHostCommand(services, ASKED, 20);
+        expect(first).toEqual({
+            refusal:
+                'Still waiting for the owner: a card asks them to approve running this on "rog", and it has not run yet. Their answer is kept ' +
+                "for this exact command: call run_command again with exactly the same command to wait for it. Nothing is broken on the device. " +
+                "Do not run a different command to do the same thing.",
+        });
+        const requestId = await cardUp();
+        // The press after the call gave up is recorded, not refused.
+        expect(cards.resolve({ kind: "permission", requestId, decision: "once" })).toBe("settled");
+
+        expect(await judgeHostCommand(services, ASKED, 20)).toBeUndefined();
+        expect(answers).toEqual([{ answer: "allowed", outcome: "allowed" }]);
+        // Collected once: the same command after that is a new question with its own card.
+        const again = judgeHostCommand(services, ASKED);
+        expect(await cardUp()).not.toBe(requestId);
+        endTurn();
+        expect(await again).toEqual({ refusal: 'The turn ended before anyone answered, so it was not run on "rog". Do not retry it unasked.' });
     });
 });

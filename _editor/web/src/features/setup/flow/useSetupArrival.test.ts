@@ -1,5 +1,5 @@
 import "@intentic/testing/dom";
-import type { AddressOffer, HostedOffer, SandboxSummary, SetupCode } from "@intentic/api-contract";
+import type { AddressOffer, HostedOffer, SandboxSummary, SetupCode, TrashedSandbox } from "@intentic/api-contract";
 import { unstubbed } from "@intentic/testing";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { computed, type EffectScope, effectScope, ref } from "vue";
@@ -25,6 +25,8 @@ interface World {
     readonly query?: Record<string, string>;
     // `?project=`, which the page reads ahead of every lane and hands to each.
     readonly project?: string;
+    // What the platform's trash holds for this account: nothing unless a test removed a sandbox first.
+    readonly trash?: { readonly sandboxes: TrashedSandbox[] } | Error;
 }
 
 const scopes: EffectScope[] = [];
@@ -41,6 +43,7 @@ const stage = (world: World = {}) => {
     const platform = {
         hostedOffer: jest.fn(() => answer(world.hosted ?? { enabled: true, remaining: 1 })),
         addressOffer: jest.fn(() => answer(world.address ?? { enabled: true })),
+        trash: jest.fn(() => answer(world.trash ?? { sandboxes: [] })),
         // A project's machine, asked of the platform with its folder (the store's provision names none).
         hostedProvision: jest.fn(async ({ sandboxId }: { sandboxId: string; token: string; project?: string; profile?: string }) =>
             sandboxSummary({ id: sandboxId, token: `tok`, hosted: { region: `iad`, warm: false } }),
@@ -92,7 +95,11 @@ const stage = (world: World = {}) => {
         );
         const arrival = useSetupArrival({
             sandbox: unstubbed<SetupArrivalHost[`sandbox`]>(`sandbox`, { list, select }),
-            platform: unstubbed<SetupArrivalHost[`platform`]>(`platform`, { hostedOffer: platform.hostedOffer, addressOffer: platform.addressOffer }),
+            platform: unstubbed<SetupArrivalHost[`platform`]>(`platform`, {
+                hostedOffer: platform.hostedOffer,
+                addressOffer: platform.addressOffer,
+                trash: platform.trash,
+            }),
             row,
             hosted,
             command,
@@ -167,6 +174,33 @@ describe(`the app's arrival`, () => {
         command.remint();
         await advanceTimersByTimeAsync(0);
         expect(runHere).toHaveBeenCalledTimes(1);
+    });
+
+    // The reader just removed the account's last sandbox: the app once installed a new one by itself seconds later.
+    it(`waits on the picker after the reader removed a sandbox, handing nothing to the app`, async () => {
+        const removed: TrashedSandbox = {
+            id: `trash-1`,
+            name: `workspace`,
+            image: null,
+            deletedAt: `2026-09-28T08:59:12Z`,
+            purgeAfter: `2026-10-05T08:59:12Z`,
+            hosted: false,
+        };
+        const { runHere, create, arrival } = stage({ inApp: true, trash: { sandboxes: [removed] } });
+        await arrival.readArrival();
+        await advanceTimersByTimeAsync(500);
+        expect({ arrival: arrival.arrival.value, made: create.mock.calls.length, handedOff: runHere.mock.calls.length }).toEqual({
+            arrival: `choose`,
+            made: 1,
+            handedOff: 0,
+        });
+    });
+
+    it(`waits on the picker too when the trash could not be read`, async () => {
+        const { runHere, arrival } = stage({ inApp: true, trash: new Error(`network`) });
+        await arrival.readArrival();
+        await advanceTimersByTimeAsync(500);
+        expect({ arrival: arrival.arrival.value, handedOff: runHere.mock.calls.length }).toEqual({ arrival: `choose`, handedOff: 0 });
     });
 
     it(`keeps the machine and shows the picker when the platform will not take it back`, async () => {

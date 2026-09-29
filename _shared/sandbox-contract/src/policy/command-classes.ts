@@ -375,6 +375,66 @@ const recursiveForceRms = (command: string): CommandSpan[] =>
         .filter((invocation) => invocation.recursive && invocation.force)
         .map((invocation) => invocation.span);
 
+// The same tree delete spelled without `rm -rf`: `find` deleting what it walks, or handing each hit to `rm`, and a list
+// piped into `rm` through xargs. An agent told `rm -rf` needs a card reaches for exactly these.
+const FIND_INVOCATION = /\bfind\s+([^|;&\n]*)/g;
+const FIND_DELETES = /\s(?:-delete\b|-exec(?:dir)?\s+(?:[^\s|;&]*\/)?rm\b)/;
+const XARGS_RM = /\bxargs\b[^|;&\n]*?\s(?:[^\s|;&]*\/)?rm\b/g;
+
+interface FindDelete {
+    // The paths find starts walking from: the words before its first expression (`-name`, `(`, `!`).
+    readonly starts: readonly string[];
+    readonly span: CommandSpan;
+}
+
+const parseFindDeletes = (command: string): FindDelete[] =>
+    [...command.matchAll(FIND_INVOCATION)].flatMap((invocation) => {
+        const args = invocation[1] as string;
+        if (!FIND_DELETES.test(` ${args}`)) {
+            return [];
+        }
+        const words = args.trim().split(/\s+/);
+        const expression = words.findIndex((word) => /^[-(!]/.test(word));
+        const starts = (expression === -1 ? words : words.slice(0, expression)).filter((word) => word !== "").map(unquote);
+        return [{ starts, span: { start: invocation.index, end: invocation.index + invocation[0].trimEnd().length } }];
+    });
+
+const findAndXargsDeletes = (command: string): CommandSpan[] => [
+    ...parseFindDeletes(command).map((found) => found.span),
+    ...spansOf([XARGS_RM], command),
+];
+
+// What cuts a checkout off from its repository's history: deleting its `.git` (for a worktree, a one-line pointer
+// whose loss strands every commit the checkout was reading), or `git init` over the folder it stands in, which makes
+// a standalone repository sharing nothing with the one it came from. A `git init <new-dir>` for a new project is not
+// this, so only an init of the current folder counts.
+const GIT_POINTER = /(?:^|[/\\])\.git[/\\]?$/;
+const GIT_INIT = /\bgit\s+init\b([^|;&\n]*)/g;
+const GIT_INIT_VALUED = /^(?:-b|--initial-branch|--template|--separate-git-dir|--object-format|--ref-format)$/;
+
+const initsHere = (args: string): boolean => {
+    const words = args.trim().split(/\s+/).filter((word) => word !== "");
+    const operands: string[] = [];
+    for (let index = 0; index < words.length; index += 1) {
+        const word = words[index] as string;
+        if (GIT_INIT_VALUED.test(word)) {
+            index += 1;
+        } else if (!word.startsWith("-")) {
+            operands.push(unquote(word));
+        }
+    }
+    return operands.every((operand) => operand === "." || operand === "./");
+};
+
+const checkoutUnlinks = (command: string): CommandSpan[] => [
+    ...parseRm(command)
+        .filter((invocation) => invocation.operands.some((operand) => GIT_POINTER.test(operand)))
+        .map((invocation) => invocation.span),
+    ...[...command.matchAll(GIT_INIT)]
+        .filter((invocation) => initsHere(invocation[1] as string))
+        .map((invocation) => ({ start: invocation.index, end: invocation.index + invocation[0].trimEnd().length })),
+];
+
 // A recursive delete aimed at a root, in either spelling the gate is handed (shell or script). Which targets count as
 // roots is the locus's answer.
 const rootDeletes = (program: string, locus: CommandLocus): CommandSpan[] => [
@@ -384,6 +444,9 @@ const rootDeletes = (program: string, locus: CommandLocus): CommandSpan[] => [
     ...nodeDeleteTargets(program)
         .filter((delete_) => isRootTarget(delete_.target, locus))
         .map((delete_) => delete_.span),
+    ...parseFindDeletes(program)
+        .filter((found) => found.starts.some((start) => isRootTarget(start, locus)))
+        .map((found) => found.span),
 ];
 
 // The g twins, built once at load: a card is minted per command held, classify runs per command typed.
@@ -434,10 +497,10 @@ const credentialReads = (command: string, context: CommandContext): CommandSpan[
 
 // One function per class; empty means the command is not in it, so membership and evidence are the same walk.
 const MATCHES: Readonly<Record<CommandClass, (command: string, context: CommandContext) => CommandSpan[]>> = {
-    "git.destructive": (command) => spansOf(GIT_DESTRUCTIVE_G, command),
+    "git.destructive": (command) => [...spansOf(GIT_DESTRUCTIVE_G, command), ...checkoutUnlinks(command)],
     // The only class that can answer "not here": in its own copy a conversation's checkout is its own to move.
     "git.branch-switch": (command, context) => (context.ownCheckout === true ? [] : spansOf(GIT_BRANCH_SWITCH_G, command)),
-    "files.destructive": (command) => [...recursiveForceRms(command), ...recursiveDeletes(command)],
+    "files.destructive": (command) => [...recursiveForceRms(command), ...recursiveDeletes(command), ...findAndXargsDeletes(command)],
     "system.destructive": (command, context) => [...spansOf(BLOCK_DEVICE_G, command), ...rootDeletes(command, context.locus)],
     "container.state": (command) => spansOf(CONTAINER_STATE_G, command),
     "secrets.access": credentialReads,
@@ -489,6 +552,8 @@ export const COMMAND_CLASS_PATTERNS: Readonly<Record<CommandClass, readonly Comm
         { code: "git clean -f" },
         { code: "git branch -D" },
         { code: "git filter-branch" },
+        { code: "rm .git", qualifier: "any flags: a checkout's link to its history" },
+        { code: "git init", qualifier: "only in the current folder, which may already be a checkout" },
     ],
     "git.branch-switch": [
         { code: "git switch <branch>" },
@@ -498,6 +563,8 @@ export const COMMAND_CLASS_PATTERNS: Readonly<Record<CommandClass, readonly Comm
         { code: "rm -rf <path>" },
         { code: "fs.rm(<path>, { recursive: true })", qualifier: "also rmSync, rmdir, rmdirSync" },
         { code: "rimraf(<path>)" },
+        { code: "find <path> -delete", qualifier: "also -exec rm and -execdir rm" },
+        { code: "xargs rm" },
     ],
     "system.destructive": [
         { code: "mkfs" },
@@ -507,7 +574,7 @@ export const COMMAND_CLASS_PATTERNS: Readonly<Record<CommandClass, readonly Comm
         { code: "dd of=/dev/…" },
         { code: "shred /dev/…" },
         { code: "> /dev/sda" },
-        { code: "rm -rf /", qualifier: "only when the target is a root, listed below" },
+        { code: "rm -rf /", qualifier: "also find / -delete; only when the target is a root, listed below" },
     ],
     "container.state": [
         { code: "docker volume rm", qualifier: "also remove, prune, and podman for any of these" },

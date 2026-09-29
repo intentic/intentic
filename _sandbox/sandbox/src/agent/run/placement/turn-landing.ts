@@ -1,5 +1,5 @@
 import type { AgentEvent, Rule, WorkspaceEvent } from "@intentic/sandbox-contract";
-import { landAgent, type LandOutcome, reportLockfileFailures } from "../../../conversations/land/land.js";
+import { landAgent, landFailureOf, type LandOutcome, reportLockfileFailures } from "../../../conversations/land/land.js";
 import { intoOf, type LandTarget, landTargetOf, type Upstream, upstreamOf, underLeases } from "../../../conversations/land/land-target.js";
 import { landingPaths } from "../../../conversations/land/landing-paths.js";
 import { versionCommitsSettled } from "../../../conversations/land/version-landed.js";
@@ -98,6 +98,17 @@ export interface LandingTurn {
     // lease since the top-of-turn one is stale by now.
     readonly sync: (upstream: Upstream) => Promise<unknown>;
 }
+
+// Keeps a land that broke on the card (AgentSummary.landFailure). Never throws, so the error the land itself ended on
+// is still what its caller reports.
+// `check`: the end-of-turn check that measures held work broke, not a land (AgentsRegistry.recordLandFailure).
+export const keepLandFailure = async (deps: Pick<Services, "agents" | "logger">, conversationId: string, cause: unknown, check = false): Promise<void> => {
+    try {
+        await deps.agents.recordLandFailure(conversationId, { ...landFailureOf(cause), ...(check ? { check: true } : {}) });
+    } catch (recording) {
+        deps.logger.warn({ err: recording, id: conversationId }, "agents: keeping a broken land on its card failed");
+    }
+};
 
 const performLandingWrites = (deps: Pick<Services, "activity" | "ruleFirings" | "logger">, conversationId: string, writes: readonly LandingWrite[]): void => {
     for (const write of writes) {
@@ -231,8 +242,14 @@ export async function* landTurn(deps: LandingDeps, hooks: LandingHooks, turn: La
     const target = await landTargetOf(deps, finished);
     const decision = target.kind === "main" && target.ruled ? await ruledDecision(deps, turn, finished, books) : UNRULED;
     // Under the land lease, so a manual land pressed meanwhile queues rather than rebasing under this one; and under the
-    // parent's too where the work goes into its checkout.
-    const landed = await underLeases(deps.conversations, id, intoOf(target), () => landUnderLease(deps, turn, finished, decision.mode, target));
+    // parent's too where the work goes into its checkout. A land that breaks still fails the turn, and stays on the card
+    // after the next turn clears that failure, until a land goes through.
+    const landed = await underLeases(deps.conversations, id, intoOf(target), () => landUnderLease(deps, turn, finished, decision.mode, target)).catch(
+        async (cause: unknown) => {
+            await keepLandFailure(deps, id, cause);
+            throw cause;
+        },
+    );
     books.reconciled = true;
     performLandingWrites(deps, id, decision.writes);
     if (landed.changed) {
@@ -265,7 +282,12 @@ export const settleLandBooks = async (
         if (measured.changed) {
             await deps.agents.recordLanded(conversationId, measured);
         }
+        // Read this time: what an earlier check could not read (a passing index.lock) no longer stands on the card.
+        await deps.agents.clearCheckFailure(conversationId);
     } catch (error) {
         deps.logger.warn({ err: error, id: conversationId }, "agents: settling an ended turn's land books failed");
+        // A checkout its books cannot be read from is one no land can carry either: said on the card, not only in the log,
+        // or it rests on the standing git reads off the main repo, which is `landed` for a branch that never moved there.
+        await keepLandFailure(deps, conversationId, error, true);
     }
 };

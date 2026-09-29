@@ -7,6 +7,10 @@ const stub = {
     // The shared sentence both land presses take, held here so a test proves this one passes it through rather than
     // inventing its own wording.
     nothingLanded: `Nothing to land: this conversation's branch holds no work your workspace doesn't already have.`,
+    // What the review asked the daemon to commit, in order.
+    commits: new Array<unknown>(),
+    // What the root repo's index already holds when a press reads it.
+    staged: new Array<string>(),
 };
 
 jest.mock("@intentic/ui/async", () => ({
@@ -22,7 +26,26 @@ jest.mock("../../../shell/notifications/notifications", () => ({
     useNotifications: () => ({ say: (message: string) => stub.said.push(message) }),
 }));
 jest.mock("../../../lib/queryPersistence", () => ({ queryClient: { fetchQuery: jest.fn() }, UNPERSISTED: `unpersisted` }));
-jest.mock("../../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc() }));
+jest.mock("../../sandbox/client/sandboxRpc", () => ({
+    sandboxRpc: fakeSandboxRpc({
+        git: {
+            changes: async () => ({
+                repos: [
+                    {
+                        repo: `root`,
+                        conflicted: [],
+                        staged: stub.staged.map((path) => ({ path, status: `modified` as const, additions: 1, deletions: 0 })),
+                        unstaged: [],
+                    },
+                ],
+            }),
+            commit: async (input) => {
+                stub.commits.push(input);
+                return { committed: true };
+            },
+        },
+    }),
+}));
 jest.mock("../../sandbox/client/useSandboxQuery", () => ({
     useSandboxQuery: () => ({
         query: {
@@ -56,6 +79,8 @@ const none = { plan: false, question: false, permission: false, capability: fals
 
 afterEach(() => {
     stub.said.length = 0;
+    stub.commits.length = 0;
+    stub.staged.length = 0;
     cards.value = new Map();
 });
 
@@ -87,6 +112,48 @@ it("says so when a land carried nothing, and stays quiet when it carried work", 
     mocked(landAgent).mockResolvedValue({ landed: true, changed: false });
     await changes.land();
     expect(stub.said).toEqual([stub.nothingLanded]);
+});
+
+// A refusal held by files a Sandbox page wrote (AgentConflictReport's one press): exactly those are committed first, in
+// the same press as the land; every other land commits nothing.
+it("commits the settings files a refusal held before landing again, and nothing on an ordinary land", async () => {
+    const changes = useAgentChanges(ref(`c1`));
+    mocked(landAgent).mockClear();
+    mocked(landAgent).mockResolvedValue({ landed: true, changed: true });
+
+    await changes.land(`check`, undefined, false, [`.intentic/config/personas.json`]);
+    expect(stub.commits).toEqual([{ repo: `root`, message: `Settings: saved before landing`, stage: { paths: [`.intentic/config/personas.json`] } }]);
+    expect(mocked(landAgent)).toHaveBeenCalledTimes(1);
+
+    await changes.land();
+    expect(stub.commits).toHaveLength(1);
+    expect(mocked(landAgent)).toHaveBeenCalledTimes(2);
+});
+
+// Landed work that left the workspace goes back with the next land, unless an agent took it out on purpose: then a plain
+// land carries only the new work, and putting the rest back is the explicit Land again (cumulative).
+it("re-lands work taken out after landing, but not work an agent took out on purpose", async () => {
+    mocked(landAgent).mockClear();
+    mocked(landAgent).mockResolvedValue({ landed: true, changed: true });
+    const gone = ref({ landedPresence: { landed: 3, present: 0 } });
+    const taken = ref({ landedPresence: { landed: 3, present: 0, removedBy: { kind: `agent` as const, id: `tidy-1` } } });
+
+    await useAgentChanges(ref(`gone`), undefined, gone).land();
+    await useAgentChanges(ref(`taken`), undefined, taken).land();
+    await useAgentChanges(ref(`taken`), undefined, taken).land(`check`, `cumulative`);
+    expect(mocked(landAgent).mock.calls.map((call) => call[2])).toEqual([`cumulative`, `outstanding`, `cumulative`]);
+});
+
+// The commit takes the whole index, so the owner's own staged work would ride along under "Settings: saved before
+// landing": the press stops before staging anything and says why, and the land does not run.
+it("refuses to save the settings files while other work is staged, and lands nothing", async () => {
+    const changes = useAgentChanges(ref(`c1`));
+    mocked(landAgent).mockClear();
+    stub.staged.push(`.intentic/config/personas.json`, `src/app.ts`);
+
+    await expect(changes.land(`check`, undefined, false, [`.intentic/config/personas.json`])).rejects.toThrow(`1 other change staged`);
+    expect(stub.commits).toEqual([]);
+    expect(mocked(landAgent)).not.toHaveBeenCalled();
 });
 
 // The ask is the review's "the agent is on it" line, and it has to show on the press: the turn it starts is drawn at

@@ -1,17 +1,17 @@
 import { readFile } from "node:fs/promises";
 import { pollUntil } from "@intentic/base/async";
 import { isProcessAlive, spawnDetached } from "@intentic/local-agent";
-import type { DeviceAgentOp, DeviceScopes } from "@intentic/sandbox-contract";
+import type { DeviceAgentOp } from "@intentic/sandbox-contract";
 import { agentLogPath } from "../../config.js";
 import { installedBuild } from "../../installed.js";
 import { machineLauncher } from "../../supervision.js";
-import { assertScope } from "../policy.js";
 import { CUTOVER_HOLDS_MS } from "../sandbox-rounds/swap-records.js";
 import { icSwapsInFlight } from "./sandboxes.js";
 
 // Updates or restarts this device's own agent, asked for from the browser. Both operations stop the process
 // serving this socket, so the work is detached (spawnDetached) and tailed back rather than spawned inline,
-// which would die with an EPIPE mid-swap. Gated by "Run commands", not a sandbox switch: this touches no container.
+// which would die with an EPIPE mid-swap. The daemon admits only a maintainer to this dedicated flow; agents reach
+// this device through MCP instead, so their command scope has no say in this owner action.
 
 // `intentic-machine <verb…>`; the op is a closed enum in the contract and this is the whole mapping. Every one is a TASK:
 // it does its work and exits, often within spawnDetached's settle window, which must not read that as a crash.
@@ -70,8 +70,7 @@ const waitOutOwnSwaps = async (onLine: (line: string) => void): Promise<void> =>
     await pollUntil(() => icSwapsInFlight.size === 0, { intervalMs: 1_000, timeoutMs: CUTOVER_HOLDS_MS });
 };
 
-export const runAgentOp = async (op: DeviceAgentOp, scopes: DeviceScopes, onLine: (line: string) => void): Promise<string> => {
-    assertScope(scopes, "shell");
+export const runAgentOp = async (op: DeviceAgentOp, onLine: (line: string) => void): Promise<string> => {
     if (RESTARTS.has(op)) {
         await waitOutOwnSwaps(onLine);
     }

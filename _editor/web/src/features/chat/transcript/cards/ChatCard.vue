@@ -30,7 +30,8 @@ const {
 </script>
 
 <template>
-    <div class="chat-card w-full overflow-hidden">
+    <!-- `data-card-live` marks a card still waiting on its answer, for the bar above the composer to scroll to (ChatWaitingBar). -->
+    <div class="chat-card w-full overflow-hidden" :data-card-live="status === undefined ? `` : undefined">
         <!-- The icon rides in the mark column every option row under it also uses, so the title and the labels start on one edge. -->
         <div class="chat-card-header" :class="prose ? `items-start` : `items-center`">
             <Icon :name="icon" class="text-sm" :class="[iconClass, { 'mt-0.5': prose }]" />

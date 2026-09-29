@@ -10,7 +10,8 @@ export const mcpToolsOf = (capabilities: readonly Capability[]): AgentTool[] =>
                   {
                       name: capability.id,
                       url: capability.config.url,
-                      ...(capability.config.token !== undefined ? { token: capability.config.token } : {}),
+                      // Trimmed at use too: a token saved before pastes were trimmed still carries its newline.
+                      ...(capability.config.token !== undefined ? { token: capability.config.token.trim() } : {}),
                   },
               ]
             : [],

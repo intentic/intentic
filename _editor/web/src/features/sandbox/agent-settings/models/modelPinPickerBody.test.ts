@@ -13,6 +13,7 @@ jest.mock(`../../../chat/models/ModelPicker.vue`, () => ({
         emits: [`pick`, `close`],
         setup(props, { emit, slots }) {
             unpickable = props.unpickable as (entry: { provider: string; value: string }) => boolean;
+            ticked = props;
             return () =>
                 h(`div`, [
                     h(`button`, { class: `pick-claude`, onClick: () => emit(`pick`, { provider: `claude`, value: `claude-opus-5` }) }, `Claude`),
@@ -28,6 +29,8 @@ jest.mock(`../../../chat/models/ModelPicker.vue`, () => ({
     }),
 }));
 let unpickable: ((entry: { provider: string; value: string }) => boolean) | undefined;
+// The pair the list checkmarks, as handed over live.
+let ticked: { readonly provider?: string; readonly model?: string } | undefined;
 
 // Only used as the floor when adding, where there's no entry to read a provider off.
 jest.mock(`../../../chat/run/useChat`, () => ({ useChat: () => ({ provider: ref(`claude`), model: ref(`claude-haiku-4-5`) }) }));
@@ -71,6 +74,7 @@ afterEach(() => {
     written.length = 0;
     picked.length = 0;
     unpickable = undefined;
+    ticked = undefined;
 });
 
 // Every row the footer drew, by its label; asserted as a whole set, since what's offered is the claim under test.
@@ -105,6 +109,19 @@ test("adding draws no footer either: there is nothing to configure until the ent
     await nextTick();
 
     expect(knobRows(host)).toEqual([]);
+});
+
+// The chat's own model was once ticked as "current" on a job that did not run it, and it was picked as one.
+test("adding ticks the job's own first model, and nothing for a job with none, never the chat's", async () => {
+    mount({ current: { provider: `codex`, model: `gpt-5.6` } });
+    await nextTick();
+    expect([ticked?.provider, ticked?.model]).toEqual([`codex`, `gpt-5.6`]);
+    app?.unmount();
+
+    // The chat's provider only decides which lane the list opens on.
+    mount({});
+    await nextTick();
+    expect([ticked?.provider, ticked?.model]).toEqual([`claude`, ``]);
 });
 
 // A scale is a row and a switch is a chip: the effort meter keeps its label, thinking carries its own.

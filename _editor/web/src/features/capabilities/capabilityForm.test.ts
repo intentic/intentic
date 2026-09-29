@@ -225,13 +225,16 @@ describe(`a box's objections`, () => {
 });
 
 describe(`what a box can do for the reader`, () => {
+    // A paste as the form's handler reads it: the clipboard's text, the default it may cancel, and the box it lands in.
+    const pasteInto = (box: HTMLInputElement | undefined) => (text: string) => {
+        const preventDefault = jest.fn();
+        return { event: { clipboardData: { getData: () => text }, preventDefault, target: box } as unknown as ClipboardEvent, preventDefault };
+    };
+
     it(`unpacks a paste holding several answers and notes where they went, until the box is edited by hand`, () => {
         const { form } = formOn(SSH);
         const host = field(SSH, `host`);
-        const paste = (text: string) => {
-            const preventDefault = jest.fn();
-            return { event: { clipboardData: { getData: () => text }, preventDefault } as unknown as ClipboardEvent, preventDefault };
-        };
+        const paste = pasteInto(undefined);
 
         const command = paste(`ssh -p 2222 root@box.acme.dev`);
         form.onFieldPaste(host, command.event);
@@ -246,6 +249,43 @@ describe(`what a box can do for the reader`, () => {
         form.onFieldPaste(host, plain.event);
         expect(plain.preventDefault).toHaveBeenCalledTimes(0);
         expect(form.pasteNotes[`host`]).toBeUndefined();
+    });
+
+    // A token copied with a line break or an invisible character reached a Test as "Invalid character in header
+    // content": the box now holds what will be sent.
+    it(`lands a pasted token or URL cleaned at the caret, and leaves an ordinary paste to the browser`, () => {
+        const custom = catalogEntry(`custom`);
+        const { form } = formOn(custom);
+        const paste = pasteInto(Object.assign(document.createElement(`input`), { value: `` }));
+
+        const token = paste(`sk-live-abc123\u200B\n`);
+        form.onFieldPaste(field(custom, `token`), token.event);
+        expect(token.preventDefault).toHaveBeenCalledTimes(1);
+        expect(form.values[`token`]).toBe(`sk-live-abc123`);
+
+        const url = paste(`  https://mcp.acme.dev/mcp\n`);
+        form.onFieldPaste(field(custom, `url`), url.event);
+        expect(form.values[`url`]).toBe(`https://mcp.acme.dev/mcp`);
+
+        const clean = paste(`sk-live-abc123`);
+        form.onFieldPaste(field(custom, `token`), clean.event);
+        expect(clean.preventDefault).toHaveBeenCalledTimes(0);
+    });
+
+    it(`after a failed Test the press says it adds anyway, until an edit makes that answer stale`, () => {
+        const custom = catalogEntry(`custom`);
+        const { form } = formOn(custom);
+
+        form.probeResult.value = { checked: true, ok: false, message: `Could not reach 172.20.0.1:8323: nothing is listening there.` };
+        expect(form.submitLabel.value).toBe(`Add anyway`);
+
+        form.onFieldInput(field(custom, `url`));
+        expect([form.probeResult.value, form.submitLabel.value]).toEqual([undefined, `Add`]);
+
+        // No test existing is not a failure, and it is not outdated by an edit either: it retires the Test button.
+        form.probeResult.value = { checked: false, ok: false, message: `No test exists for this connection.` };
+        form.onFieldInput(field(custom, `url`));
+        expect([form.probeResult.value?.checked, form.submitLabel.value]).toEqual([false, `Add`]);
     });
 
     it(`offers the container-reachable address for a localhost URL, and reads a WireGuard config back`, () => {

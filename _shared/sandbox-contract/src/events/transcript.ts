@@ -5,6 +5,7 @@ import { TurnErrandSchema, TurnSpeakerSchema } from "../schemas/speaker.js";
 import { SubagentKindSchema, SubagentStatusSchema, SubagentVerificationSchema } from "../schemas/terminal.js";
 import { NeedSchema } from "../schemas/needs.js";
 import { RetryLadderSchema } from "../schemas/turn-break.js";
+import { NoticeCodeSchema } from "./sandbox-notice.js";
 import type { ToolCallContent, ToolCallLocation, ToolCallStatus, ToolKind} from "./requests.js";
 import { browserHelpRequest, capabilityOfferRequest, CapabilityOutcomeSchema, credentialOfferRequest, CredentialReceiptSchema, paymentOfferRequest, PaymentReceiptSchema, PermissionAskSchema, permissionRequest, planRequest, questionRequest, terminalHelpRequest, TodoItemSchema, ToolCallContentSchema, ToolCallLocationSchema, ToolCallStatusSchema, ToolKindSchema } from "./requests.js";
 
@@ -300,6 +301,11 @@ export const TranscriptRowSchema = z.object({
         .string()
         .optional()
         .describe("Which instance of the wait this notice names, for a kind that can have several running at once."),
+    // The sandbox's own notice by name, beside its English `text` (sandbox-notice.ts); absent on every other row, and
+    // on the notices written before rows carried it, which a reader draws from `text` as it always did.
+    noticeCode: NoticeCodeSchema.optional().describe(
+        "Which of the sandbox's own notices this row is, and the facts it was worded from, so a reader can say it in the reader's own language. The text stays the English sentence.",
+    ),
     // At most one card per row; a card closes its bubble. One field per kind, so a reader reaches it by name.
     plan: TranscriptPlanSchema.optional().describe("The plan this row asked approval for, and the answer."),
     question: TranscriptQuestionSchema.optional().describe("The questions this row asked, and the picks that answered them."),

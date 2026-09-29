@@ -3,7 +3,7 @@ import type { ModelRoleSpec } from "@intentic/sandbox-contract";
 import { type IconName, Row, StatusBadge, type Tip, useDevice } from "@intentic/ui";
 import { isIconName } from "@intentic/ui/icons";
 import Checkbox from "primevue/checkbox";
-import { computed } from "vue";
+import { computed, useId } from "vue";
 import AddModelButton from "./AddModelButton.vue";
 import type { PinnedList } from "./modelPinList";
 import ModelPinList from "./ModelPinList.vue";
@@ -11,7 +11,9 @@ import { useT } from "@intentic/ui/i18n";
 
 // One job's row (name, mark, tick, ordered model list), componentized since eighteen of these are drawn from the
 // catalog. The lead glyph and the selection tick share one slot, swapping on hover, focus or selection rather than
-// sitting side by side; the whole row is a `<label>`, so `#below` must stop clicks from ticking the job by accident.
+// sitting side by side. Only the tick and the job's name select the row: the row was once a whole `<label>`, and a
+// press on its description or note ticked a checkbox nobody could see ("1 selected" on and off under nine presses on
+// the safety judge's note). No `.stop` carves that out, since a label's activation is its default action.
 
 const t = useT();
 
@@ -38,6 +40,8 @@ const pinned = computed<boolean>(() => list.entries.value.length > 0);
 // models into a job whose own Add button is already refused.
 const { mobile } = useDevice();
 const selectable = computed<boolean>(() => !mobile.value && !disabled);
+// What the job's name, as a `<label>`, points at: the tick alone, never the row around it.
+const tickId = useId();
 
 // Two static class lists, not a reactive flag: pointer state is CSS-only, and Tailwind's scanner needs the classes
 // spelled out, not interpolated. Empty on phone, where there's no box to swap to.
@@ -68,7 +72,7 @@ const chip = computed<{ readonly label: string; readonly hint: Tip } | undefined
 
 <template>
     <!-- Spine follows what's below: a pinned list, or the note slot; neither means nothing draws. -->
-    <Row :as="selectable ? `label` : `div`" :selected="selected" :spine="pinned || $slots[`note`] !== undefined" :description="role.blurb">
+    <Row :selected="selected" :spine="pinned || $slots[`note`] !== undefined" :description="role.blurb">
         <!-- The lead size comes from the row tier so density stays consistent. -->
         <template #lead="{ mark, iconClass }">
             <span class="relative flex shrink-0 items-center justify-center" :style="{ width: `${mark}px`, height: `${mark}px` }">
@@ -76,6 +80,7 @@ const chip = computed<{ readonly label: string; readonly hint: Tip } | undefined
                 <Checkbox
                     v-if="selectable"
                     :model-value="selected"
+                    :input-id="tickId"
                     binary
                     size="small"
                     class="absolute transition-opacity"
@@ -89,7 +94,8 @@ const chip = computed<{ readonly label: string; readonly hint: Tip } | undefined
         <!-- flex-wrap: a long job label may push the chip to its own line before pushing off the row. -->
         <template #title>
             <span class="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                <span class="min-w-0">{{ role.label }}</span>
+                <label v-if="selectable" :for="tickId" class="min-w-0 cursor-pointer">{{ role.label }}</label>
+                <span v-else class="min-w-0">{{ role.label }}</span>
                 <StatusBadge v-if="chip !== undefined" v-tooltip.top="chip.hint" variant="neutral" size="xs" :label="chip.label" />
                 <StatusBadge v-if="badge !== undefined" v-tooltip.top="badge.hint" variant="neutral" size="xs" :label="badge.label" />
             </span>
@@ -107,9 +113,8 @@ const chip = computed<{ readonly label: string; readonly hint: Tip } | undefined
             </div>
         </template>
 
-        <!-- Controls inside the label must not toggle the role. -->
         <template v-if="pinned || $slots[`note`]" #below>
-            <div class="flex flex-col gap-2" @click.stop>
+            <div class="flex flex-col gap-2">
                 <!-- Each entry shows its tier beside the model; `noteThinking` flags one-shots, where reasoning adds latency. -->
                 <ModelPinList
                     v-if="pinned"

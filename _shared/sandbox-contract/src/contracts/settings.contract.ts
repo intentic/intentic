@@ -1,7 +1,10 @@
 import { FIELD_NOTES_FILE } from "@intentic/constants";
 import { procedure } from "../protocol/route-meta.js";
 import {
+    AudienceAnswerSchema,
+    AudienceStateSchema,
     BuiltinPromptSchema,
+    MemberAudienceSchema,
     BuiltinPromptTextSchema,
     FieldNotesStatusSchema,
     REPO_CHECKS_FILE,
@@ -103,6 +106,32 @@ export const settingsContract = {
         })
         .input(TimezoneOfferSchema)
         .output(TimezoneStateSchema),
+    // A person's own preference rather than a sandbox setting: kept per member, so every device a person opens this
+    // sandbox on reads it, and nobody's answer changes another member's screen. Anyone signed in may read and give their
+    // own, a guest included, since it changes nothing but the words they are shown.
+    audience: procedure
+        .route({
+            method: "GET",
+            path: "/settings/audience",
+            summary: "Which words the editor uses for you here",
+            description:
+                "Whether your editor speaks git's own words (developer) or plain ones (maker) on this sandbox, in every browser and on every device. Absent until you have chosen here.",
+        })
+        .meta({ guest: true })
+        .output(MemberAudienceSchema),
+    // A browser handing over the answer it kept on its own must not overwrite one the person already gave on another
+    // device, which is what `offer` says; a plain answer replaces it.
+    setAudience: procedure
+        .route({
+            method: "POST",
+            path: "/settings/audience",
+            summary: "Choose which words the editor uses for you here",
+            description:
+                "Sets whether your editor speaks git's own words (developer) or plain ones (maker) on this sandbox, for every browser and device you open it on. Other members keep their own. With `offer` it is taken only while you have none kept, and the kept answer comes back unchanged.",
+        })
+        .meta({ guest: true, floor: "viewer" })
+        .input(AudienceAnswerSchema)
+        .output(AudienceStateSchema),
     adoptRepoChecks: procedure
         .route({
             method: "POST",

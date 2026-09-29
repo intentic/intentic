@@ -7,6 +7,7 @@ import { createApp } from "vue";
 import App from "./App.vue";
 import { startAppI18n } from "./app/i18n";
 import { initAnalytics } from "./app/analytics";
+import { startAudienceSync } from "./app/audienceSync";
 import { dropOutdatedMirrors } from "./app/buildEpoch";
 import { describeError, installClientDiagnostics, reportClient } from "./app/clientDiagnostics";
 import { installDesktopLinks } from "./app/environments/desktop";
@@ -48,8 +49,11 @@ installPerfReporter((_op, _ms, fields, requestId) =>
     reportClient(`perf.slow`, `slow ${fields["op"]} ${fields["ms"]}ms`, { level: `warn`, fields, ...(requestId !== undefined ? { requestId } : {}) }),
 );
 
-// iOS shell only (no-op elsewhere); must precede mount so a launch tap isn't dropped before a listener exists.
+// Push taps and app launches, routed in the open page; before mount, so a launch tap is never dropped unheard.
 installNotificationTaps(router);
+
+// Every window reads which words to use (developer or maker) from the sandbox once it answers, so two devices agree.
+startAudienceSync();
 
 // The reader's language, fetched before a single component renders in the wrong one. On `en` this resolves in the
 // same tick; on any other language it is one chunk, and paying for it here is what buys a first paint that is

@@ -30,7 +30,7 @@ import type { ConversationUnits } from "../../store/conversation-units.js";
 import { type ConversationActors, type ConversationBooks, createConversationActors } from "../actor/conversation-actors.js";
 import type { BeginTurn, SettleFlush } from "../actor/conversation-decide.js";
 import { activityLive, awaitingWake, type ConversationState, NO_USAGE, type TurnUsage } from "../actor/conversation-state.js";
-import { conversationStatus, parkedKinds } from "../actor/conversation-status.js";
+import { conversationStatus, parkedKinds, permissionAskOf } from "../actor/conversation-status.js";
 import {
     type AgentsStore,
     type AgentTitleSource,
@@ -40,15 +40,17 @@ import {
     type Identity,
     type IsolatedAgent,
     isIsolated,
+    type Landing,
     type PersistedAgent,
     type Postures,
+    type Remover,
     type RepoRecord,
     type Social,
     type StoredProfile,
     type Totals,
 } from "./agents-store.js";
 import type { LandOutcome } from "../land/land.js";
-import type { LandedPresences } from "../land/landed-presence.js";
+import { type LandedPresence, type LandedPresences, removerKey } from "../land/landed-presence.js";
 import type { LandStandings } from "../land/standing.js";
 import { nextPromptDayAt } from "../../agent/run/prompt-fingerprint.js";
 
@@ -547,6 +549,18 @@ export interface AgentsRegistry {
     // Persists a land's outcome (advanced landedTips, diffstat, conflict report) as one write, so the report cannot
     // drift from the tips it belongs to; an outcome with no conflicts clears the stored one.
     readonly recordLanded: (id: string, outcome: LandOutcome) => Promise<void>;
+    // Keeps a land that broke (rather than refused) on the card until a land runs to a verdict, which `recordLanded`
+    // clears it on: unlike a turn's failure, the next turn does not, since the work stays stuck on its branch whatever
+    // runs after it (AgentSummary.landFailure).
+    // `check`: the end-of-turn check that measures held work broke rather than a land, which never replaces a land's own
+    // failure and which the next check that reads the books clears (clearCheckFailure).
+    readonly recordLandFailure: (id: string, failure: { readonly reason: string; readonly code?: string; readonly check?: boolean }) => Promise<void>;
+    // Clears a failure the end-of-turn check left, once a later check read the books: a passing index.lock is not a
+    // broken land, and saying so until somebody landed by hand was wrong. A land's own failure stays.
+    readonly clearCheckFailure: (id: string) => Promise<void>;
+    // Somebody about to take changes out of the main tree by hand (a discard in the Changes panel), for the presence
+    // probe to name if landed work goes with them (landed-presence.ts).
+    readonly noteRemover: (remover: Remover) => void;
     // Records once that a landing is fully absorbed, instead of re-deriving it from git on every scan; the (landedHead,
     // landedTip) pair guards it. No broadcast: nothing visible changes.
     readonly markLandingAbsorbed: (id: string, repo: string, landedHead: string, landedTip: string, size: number) => Promise<void>;
@@ -589,6 +603,95 @@ export const ROSTER_WINDOW_MS = 100;
 // How long a change the feed reports waits before a refusing card is re-probed: long enough for a commit's burst of
 // ref and file events to arrive as one, short enough that the card moves while the person is still looking.
 export const REFUSAL_RECHECK_MS = 1_000;
+
+// The agents that can take landed work out of the main tree by their own hand, the ones working in it: a main-tree
+// conversation whose turn runs now or that did something since `since`. What the presence probe reads a removal off,
+// beside the people noted as they discard (landed-presence.ts).
+const mainTreeWriters = (entries: readonly PersistedAgent[], conversations: Pick<ConversationActors, "state">, since: number): Remover[] =>
+    entries
+        .filter((entry) => entry.placement.kind === "main" && entry.archivedAt === undefined)
+        .filter((entry) => entry.updatedAt >= since || conversations.state(entry.id)?.phase.kind === "running")
+        .map((entry) => ({ kind: "agent", id: entry.id }));
+
+// The records a probe's names move: each agent it read whose record names someone else, or no one where the probe now
+// names nobody (a reading that found nothing missing). Read from the entry as it is now, since a land may have replaced
+// it mid-probe.
+const renamedRemovers = (
+    read: readonly IsolatedAgent[],
+    entryOf: (id: string) => PersistedAgent | undefined,
+    presences: Pick<LandedPresences, "of" | "measured">,
+): PersistedAgent[] =>
+    read.flatMap(({ id }) => {
+        const entry = entryOf(id);
+        const named = presences.of(id)?.removedBy;
+        if (entry === undefined || !isIsolated(entry) || !presences.measured(id) || removerKey(named) === removerKey(entry.landing.removedBy)) {
+            return [];
+        }
+        const { removedBy: _was, ...landing } = entry.landing;
+        return [{ ...entry, landing: { ...landing, ...opt("removedBy", named) } }];
+    });
+
+// A reading as a card names it: an agent by its title too, read off the record, archived ones included.
+const presenceOnCard = (presence: LandedPresence | undefined, entryOf: (id: string) => PersistedAgent | undefined): AgentSummary["landedPresence"] => {
+    if (presence === undefined) {
+        return undefined;
+    }
+    const { removedBy, ...counts } = presence;
+    if (removedBy?.kind !== "agent") {
+        return presence;
+    }
+    return { ...counts, removedBy: { ...removedBy, ...opt("title", entryOf(removedBy.id)?.social.title?.text) } };
+};
+
+// The failure as the card reads it: whether a check or a land broke is the record's to know, not the wire's.
+const landFailureOnCard = ({ reason, code, at }: NonNullable<Landing["failure"]>): NonNullable<AgentSummary["landFailure"]> => ({
+    reason,
+    ...opt("code", code),
+    at,
+});
+
+// AgentsRegistry.recordLandFailure over the registry's own books: the land that broke onto the record, published.
+const landFailureRecorder =
+    (books: {
+        readonly entryOf: (id: string) => PersistedAgent | undefined;
+        readonly replace: (next: PersistedAgent) => void;
+        readonly persist: () => Promise<void>;
+        readonly broadcast: () => void;
+    }): AgentsRegistry["recordLandFailure"] =>
+    async (id, failure) => {
+        const entry = books.entryOf(id);
+        if (entry === undefined || !isIsolated(entry)) {
+            return;
+        }
+        // A land's own failure outranks a check's: the check says less, and its success must not clear what a land said.
+        const standing = entry.landing.failure;
+        if (failure.check === true && standing !== undefined && standing.check !== true) {
+            return;
+        }
+        const kept = { reason: failure.reason, ...opt("code", failure.code), at: Date.now(), ...(failure.check === true ? { check: true } : {}) };
+        books.replace({ ...entry, landing: { ...entry.landing, failure: kept } });
+        await books.persist();
+        books.broadcast();
+    };
+
+// AgentsRegistry.clearCheckFailure over the registry's own books.
+const checkFailureClearer =
+    (books: {
+        readonly entryOf: (id: string) => PersistedAgent | undefined;
+        readonly replace: (next: PersistedAgent) => void;
+        readonly persist: () => Promise<void>;
+        readonly broadcast: () => void;
+    }): AgentsRegistry["clearCheckFailure"] =>
+    async (id) => {
+        const entry = books.entryOf(id);
+        if (entry === undefined || !isIsolated(entry) || entry.landing.failure?.check !== true) {
+            return;
+        }
+        const { failure: _cleared, ...landing } = entry.landing;
+        books.replace({ ...entry, landing });
+        await books.persist();
+        books.broadcast();
+    };
 
 export const createFleet = (
     store: FleetStore,
@@ -690,12 +793,25 @@ export const createFleet = (
         const live = entries.filter(isIsolated).filter((entry) => entry.archivedAt === undefined);
         probed.taken();
         probedInputs = landingInputs(live);
-        const probes = await Promise.allSettled([standings.refresh(live), presences.refresh(live)]);
+        // Who worked in the main tree since the last probe, read before this one moves the mark.
+        const writers = mainTreeWriters(entries, conversations, probedAt);
+        probedAt = Date.now();
+        const probes = await Promise.allSettled([standings.refresh(live), presences.refresh(live, writers)]);
         if (probes.some((probe) => probe.status === "rejected")) {
             probed.changed();
         }
+        // Who the probe named, onto each record it read, so a restart still says who took the work out.
+        const renamed = renamedRemovers(live, entryOf, presences);
+        for (const entry of renamed) {
+            replace(entry);
+        }
+        if (renamed.length > 0) {
+            void persist();
+        }
         return probes.some((probe) => probe.status === "fulfilled" && probe.value);
     };
+    // When the probe before this one ran: a main-tree conversation that did something since is a candidate remover.
+    let probedAt = 0;
     // One probe at a time, shared: a caller arriving mid-probe may be asking after a change that probe began too early
     // to see (a land's moved tips), so one more follows it, shared in turn by everyone who asked meanwhile.
     let probing: Promise<boolean> | undefined;
@@ -863,7 +979,9 @@ export const createFleet = (
             ...opt("landedMessage", entry.landing.message),
             ...opt("diff", entry.landing.diff),
             // Present only when some of what this agent landed is no longer in the tree; absence says nothing.
-            ...opt("landedPresence", presences.of(entry.id)),
+            ...opt("landedPresence", presenceOnCard(presences.of(entry.id), entryOf)),
+            // Stands until a land runs to a verdict, whatever turns run meanwhile.
+            ...opt("landFailure", entry.landing.failure === undefined ? undefined : landFailureOnCard(entry.landing.failure)),
         };
     };
 
@@ -893,6 +1011,8 @@ export const createFleet = (
                 // Stands while the turn is idle too: a need outlives the turn that raised it.
                 ...((state?.needs.length ?? 0) > 0 ? { need: true } : {}),
             },
+            // The oldest permission beside the flag, so the card can answer it where it is drawn.
+            ...opt("permissionAsk", permissionAskOf(state)),
             ...describedBy(entry),
             ...reportedUnfinished(entry, state),
             ...opt("proof", entry.proof),
@@ -1171,6 +1291,9 @@ export const createFleet = (
             // Only a verdict may replace a verdict: a measure land touches no conflict gate and reports none, so it
             // carries the stored report across rather than reading silence as resolved.
             const verdict = outcome.adjudicated ? outcome.conflicts : (outcome.conflicts ?? landing.conflicts);
+            // A land that ran to a verdict (through, or refused with its own report) retires the one that broke before
+            // it; a measure that held the work on its branch says nothing of whether a land would now go through.
+            const broke = outcome.landed || (outcome.conflicts?.length ?? 0) > 0 ? undefined : landing.failure;
             // The drafted message describes the claim at its landedTips; once one moves it describes the previous
             // landing, and left in place it would head the commit of work it never read.
             const moved = outcome.repos.some((row) => row.landedTip !== placement.repos.find((composed) => composed.repo === row.repo)?.landedTip);
@@ -1189,6 +1312,8 @@ export const createFleet = (
                     ...opt("message", moved ? undefined : landing.message),
                     ...opt("conflicts", verdict === undefined ? undefined : [...verdict]),
                     diff: outcome.diff,
+                    ...opt("failure", broke),
+                    ...opt("removedBy", landing.removedBy),
                 },
                 social,
             });
@@ -1197,6 +1322,9 @@ export const createFleet = (
             await reprobe();
             broadcast();
         },
+        recordLandFailure: landFailureRecorder({ entryOf, replace, persist, broadcast }),
+        clearCheckFailure: checkFailureClearer({ entryOf, replace, persist, broadcast }),
+        noteRemover: presences.note,
         markLandingAbsorbed: async (id, repo, landedHead, landedTip, size) => {
             const entry = entryOf(id);
             if (entry === undefined || !isIsolated(entry)) {

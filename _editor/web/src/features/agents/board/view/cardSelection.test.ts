@@ -4,7 +4,9 @@ import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import type { WorkflowRun } from "@intentic/sandbox-contract";
 import { type EffectScope, effectScope, nextTick, reactive, ref, shallowRef } from "vue";
 import type { LocationQuery, RouteLocationRaw, Router } from "vue-router";
+import { quickBarShowAsk } from "../../../chat/panel/chatPanelLayout";
 import { agentTabOf } from "../../../chat/panel/useChat-reveal";
+import { useLayout } from "../../../../shell/window/useLayout";
 import type { Summons } from "../../../chat/run/summon";
 import { EMPTY_STRIP, type Strip, type TabFacts } from "../../../chat/tabs/tabFacts";
 import { NO_ATTENTION } from "../../fleet/agentStatus";
@@ -220,6 +222,37 @@ describe(`a press on a card`, () => {
             [{ kind: `reveal`, verb: `panes`, entries: [tabOf(a1), tabOf(a2), tabOf(a3)], focus: `a1`, caret: false }],
             [{ kind: `reveal`, verb: `panes`, entries: [tabOf(a2), tabOf(a3)], focus: `a3`, caret: false }],
         ]);
+    });
+
+    // A plain click must put the chat's turns on screen: parked on the rail, it only swapped the pill's title (I1).
+    it(`asks the parked chat to show its turns on a plain click, and a docked chat nothing`, () => {
+        const board = boardOf([a1]);
+        const before = quickBarShowAsk.value;
+        useLayout().setChatHome(`rail`);
+        try {
+            board.focus.focusAgent(a1, new MouseEvent(`click`));
+            expect(quickBarShowAsk.value).toBe(before + 1);
+        } finally {
+            useLayout().setChatHome(`side`);
+        }
+        board.focus.focusAgent(a1, new MouseEvent(`click`));
+        expect(quickBarShowAsk.value).toBe(before + 1);
+    });
+
+    // "Approve →" opened the review page, which draws no card to approve (B4): an ask's drill-in opens the chat, kept.
+    it(`drills into the chat for an ask, and into the review for anything else`, () => {
+        const asking = card(`ask`, { status: `awaiting`, attention: { ...NO_ATTENTION, permission: true }, branch: `agent/ask` });
+        const board = boardOf([asking, a1]);
+        board.focus.drillIn(asking);
+        expect(board.agents.open.mock.calls).toEqual([[asking]]);
+        expect(board.push).not.toHaveBeenCalled();
+
+        board.focus.drillIn(a1);
+        expect(board.push.mock.calls).toEqual([[`/agents/a1`]]);
+
+        board.mobile.value = true;
+        board.focus.drillIn(asking);
+        expect(board.push.mock.calls).toEqual([[`/agents/a1`], [`/agents/ask`]]);
     });
 
     it(`keeps a look, ends a card everywhere, and walks to a review keeping its chat`, () => {

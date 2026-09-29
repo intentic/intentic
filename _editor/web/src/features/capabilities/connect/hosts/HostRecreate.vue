@@ -13,11 +13,17 @@ import {
     useOsPreference,
 } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
+import Checkbox from "primevue/checkbox";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
-import { manageDeviceSandbox, swapServingSandbox, useHostRunning } from "../../../sandbox/devices/useDevices";
+import { type DeviceSandboxPayload, manageDeviceSandbox, swapServingSandbox, useHostRunning } from "../../../sandbox/devices/useDevices";
 import { useSandbox } from "../../../sandbox/client/useSandbox";
 import { expectRestart, type RestartQuiet } from "../../../sandbox/live/sandboxRestart";
 import { useHubWork } from "../../../../shell/hub/hubWork";
+import { turnInFlight } from "../../../agents/fleet/agentStatus";
+import { useAgents } from "../../../agents/fleet/useAgents";
+import { useSandboxSettings } from "../../../sandbox/overview/useSandboxSettings";
+import { appliedHash, runningVersion } from "./swapLanding";
+import { useRebuildWhenIdle } from "./useRebuildWhenIdle";
 import ConnectDeviceHint from "../../../sandbox/devices/ConnectDeviceHint.vue";
 import { desktopRecreateLink, desktopVersion, openDesktopLink } from "../../../../app/environments/desktop";
 import { DESKTOP_DOWNLOADS } from "../../../../app/environments/desktopDownloads";
@@ -109,6 +115,56 @@ const workingWords = (): Record<Action, string> => ({
 });
 const hubWork = useHubWork();
 
+// WHO THE RESTART STOPS, counted when the owner is asked, as DevRebuild and the update card's rollback do: the download
+// and the build interrupt nothing, the cutover every turn in flight. A turn a restart killed is recorded rather than
+// held, so nothing afterwards can run it again with one press (agent.resume answers NOT_FOUND); instead the owner says so
+// here, before the restart, and the sandbox resumes what it cut on its next boot (resumeTurns). A rebuild can also wait
+// for them instead: the sandbox holds it until nobody is mid-turn (useRebuildWhenIdle).
+const agents = useAgents();
+const { fleet } = agents;
+const { settings } = useSandboxSettings();
+const autoResume = computed(() => settings.value?.autoResumeOnRestart === true);
+const activeAgents = computed(() => fleet.value.filter(turnInFlight));
+const idle = useRebuildWhenIdle();
+// Checked by default: the owner is restarting under agents they set working, and the box is right beside the names.
+const resumeAfter = ref(true);
+// Offered while someone is mid-turn, the owner's own setting does not already resume them, and the sandbox can.
+const offerResume = computed(() => activeAgents.value.length > 0 && !autoResume.value && idle.supported.value && props.action !== DOWNLOAD);
+const resumes = computed(() => autoResume.value || (offerResume.value && resumeAfter.value));
+const interruption = computed(() => {
+    const count = activeAgents.value.length;
+    if (count === 0) {
+        return undefined;
+    }
+    const key = resumes.value ? `capabilities.hostRecreate.resumesAgents` : `capabilities.hostRecreate.interruptsAgents`;
+    return t(key, { count, names: activeAgents.value.map((agent) => agent.title ?? agent.id).join(`, `) }, count);
+});
+
+// Only a rebuild of an approved overlay waits: an update or a rollback is timed by the owner, on its own card.
+const offerWait = computed(() => props.action === `Rebuild` && props.hash !== undefined && activeAgents.value.length > 0 && idle.supported.value);
+const idleWait = computed(() => (props.action === `Rebuild` ? idle.wait.value : undefined));
+const waitForIdle = async (): Promise<void> => {
+    confirming.value = false;
+    const id = hostId.value;
+    if (id === undefined || props.hash === undefined) {
+        return;
+    }
+    failure.value = undefined;
+    done.value = undefined;
+    try {
+        await idle.ask(id, props.hash);
+    } catch (error) {
+        failure.value = noticeFrom(error, t(`capabilities.hostRecreate.waitDidntGoThrough`));
+    }
+};
+const stopWaiting = async (): Promise<void> => {
+    try {
+        await idle.cancel();
+    } catch (error) {
+        failure.value = noticeFrom(error, t(`capabilities.hostRecreate.waitDidntGoThrough`));
+    }
+};
+
 const running = ref(false);
 const lines = ref<string[]>([]);
 const failure = ref<NoticeModel | undefined>(undefined);
@@ -164,46 +220,171 @@ const QUIET = computed((): Partial<Record<Action, RestartQuiet>> => ({
     },
 }));
 
-// FROM THE CUTOVER UNTIL THE SANDBOX ANSWERS AGAIN. The stream carrying the swap died with the daemon relaying it, so
-// the only sign the swap is over is this page's own connection coming back. A stream that died while the sandbox never
-// went quiet was not the cutover: said as lost contact once the grace below runs out, since nothing is coming back.
+// FROM THE PRESS UNTIL THE SANDBOX ANSWERS ON WHAT IT WAS SWAPPED ONTO. Every swap run from here is relayed by the
+// daemon it replaces, so its stream should die at the cutover; but a relayed stream can stay half-open (one did for
+// twelve minutes in WebKitGTK, with "Rebuilding" on screen all along), so its end is not what this waits for. The watch
+// is armed at the press and ends at whichever comes first: the device answering in words, the sandbox answering on the
+// approved overlay (a rebuild) or on another version (an update, a rollback), or a deadline below, which ends it with
+// the words for not knowing.
+// A stream that died while the sandbox never went quiet was not the cutover: lost contact, once this runs out.
 const CUTOVER_GRACE_MS = 60_000;
-const awaiting = ref(false);
-const wentDown = ref(false);
-let graceTimer: ReturnType<typeof setTimeout> | undefined;
+// How long the sandbox may stay out of reach once it went quiet; a swap's restart takes about half a minute.
+const DOWN_PATIENCE_MS = 3 * 60_000;
+// How long it may answer again with the swap not landed and the stream silent. A stream still printing is a swap still
+// running (the page's own connection blinked mid-download); a silent one past this will never end.
+const BACK_PATIENCE_MS = 3 * 60_000;
+// How often an answering sandbox is asked what it runs while the swap has not landed.
+const LANDED_POLL_MS = 5_000;
 
-const awaitReturn = (): void => {
-    awaiting.value = true;
-    wentDown.value = !reachable.value;
-    clearTimeout(graceTimer);
-    graceTimer = setTimeout(() => {
-        if (awaiting.value && !wentDown.value) {
-            awaiting.value = false;
-            failure.value = { tone: `warning`, title: t(`capabilities.hostRecreate.lostBeforeRestart`) };
+const watching = ref(false);
+const severed = ref(false);
+const wentDown = ref(false);
+// The spinner line is the cutover's, not the build's before it: once the stream has ended or the sandbox gone quiet.
+const awaiting = computed(() => watching.value && (severed.value || wentDown.value));
+// The version the press was made on, so an update or a rollback is seen landing as another one.
+let fromVersion: string | undefined;
+let deadline: ReturnType<typeof setTimeout> | undefined;
+let poll: ReturnType<typeof setInterval> | undefined;
+let settleWatch: (() => void) | undefined;
+let asking = false;
+// Hands a press's restart to the sandbox's own return (sandboxRestart.ts `untilAnswered`), once: at the press's end while
+// the watch still runs, or when the page is left mid-swap.
+let handOff: (() => void) | undefined;
+
+// Ends the watch however it ended. The swap's own promise races the watch's, so a stream that never ends lets go here.
+const stopWatching = (): void => {
+    watching.value = false;
+    clearTimeout(deadline);
+    clearInterval(poll);
+    settleWatch?.();
+    settleWatch = undefined;
+};
+
+type GiveUp = `capabilities.hostRecreate.lostBeforeRestart` | `capabilities.hostRecreate.returnTimedOut`;
+// One deadline at a time, each saying what not knowing means at that point.
+const giveUpIn = (ms: number, said: GiveUp): void => {
+    clearTimeout(deadline);
+    deadline = setTimeout(() => {
+        if (watching.value) {
+            failure.value = { tone: `warning`, title: t(said) };
+            stopWatching();
         }
-    }, CUTOVER_GRACE_MS);
+    }, ms);
+};
+
+// Whether what answers now is what the swap aimed at. With the starting version unknown, answering again after going
+// quiet is the only sign there is.
+const hasLanded = async (): Promise<boolean> => {
+    if (props.hash !== undefined) {
+        return (await appliedHash()) === props.hash;
+    }
+    return fromVersion === undefined ? wentDown.value : (await runningVersion()) !== fromVersion;
+};
+
+const checkLanded = async (): Promise<void> => {
+    if (!watching.value || !reachable.value || asking) {
+        return;
+    }
+    asking = true;
+    // allow(silent-catch): a sandbox still coming up refuses its reads; that is "not landed yet", and the next poll asks again
+    const landed = await hasLanded().catch(() => false);
+    asking = false;
+    if (!landed || !watching.value) {
+        return;
+    }
+    stopWatching();
+    // The log described a container that is gone; how the swap went is the answering sandbox's to say.
+    lines.value = [];
+    emit(`back`);
+    // The open page kept drawing the turns the restart stopped as running: the fleet as the new daemon has it.
+    void agents.refresh();
+};
+
+const armWatch = (): Promise<undefined> => {
+    stopWatching();
+    watching.value = true;
+    severed.value = false;
+    wentDown.value = !reachable.value;
+    if (wentDown.value) {
+        giveUpIn(DOWN_PATIENCE_MS, `capabilities.hostRecreate.returnTimedOut`);
+    }
+    poll = setInterval(() => void checkLanded(), LANDED_POLL_MS);
+    return new Promise((resolve) => {
+        settleWatch = () => resolve(undefined);
+    });
 };
 
 watch(reachable, (up) => {
-    if (!awaiting.value) {
+    if (!watching.value) {
         return;
     }
     if (!up) {
         wentDown.value = true;
+        giveUpIn(DOWN_PATIENCE_MS, `capabilities.hostRecreate.returnTimedOut`);
         return;
     }
-    if (wentDown.value) {
-        awaiting.value = false;
-        clearTimeout(graceTimer);
-        // The log described a container that is gone; how the swap went is the answering sandbox's to say.
-        lines.value = [];
-        emit(`back`);
-    }
+    // Back: landed, or only this page's connection blinked while the swap runs on, which its next line says (heard).
+    giveUpIn(BACK_PATIENCE_MS, `capabilities.hostRecreate.returnTimedOut`);
+    void checkLanded();
 });
-onBeforeUnmount(() => clearTimeout(graceTimer));
+// Leaving mid-swap is not the swap ending: the container is replaced all the same, so the restart is handed to the
+// sandbox's own return before the watch lets go, or every other surface would read the cutover's silence as an outage.
+onBeforeUnmount(() => {
+    if (watching.value) {
+        handOff?.();
+        handOff = undefined;
+    }
+    stopWatching();
+});
+
+// A line from the device is the swap still running, so the patience for a sandbox that is back but not landed restarts.
+const heard = (line: string): void => {
+    lines.value.push(line);
+    if (watching.value && wentDown.value && reachable.value) {
+        giveUpIn(BACK_PATIENCE_MS, `capabilities.hostRecreate.returnTimedOut`);
+    }
+};
+
+// The version this press is made on, read before the swap can move it; a rebuild is told by its hash instead.
+const noteStartingVersion = (swapping: boolean): void => {
+    fromVersion = undefined;
+    if (!swapping || props.hash !== undefined) {
+        return;
+    }
+    void runningVersion()
+        .then((version) => {
+            fromVersion = version;
+        })
+        // allow(silent-catch): unread, the landing is told by the sandbox answering again after going quiet (hasLanded)
+        .catch(() => undefined);
+};
+
+// The stream died with no answer. A download never touches the container, so that is lost contact like any other; a
+// swap's may be the cutover, which the watch armed at the press waits out.
+const streamDied = (): void => {
+    if (!watching.value) {
+        void armWatch();
+    }
+    severed.value = true;
+    if (!wentDown.value) {
+        giveUpIn(CUTOVER_GRACE_MS, `capabilities.hostRecreate.lostBeforeRestart`);
+    }
+};
 
 // What the lines under a waiting button say: the restart this is, and that the page picks it up by itself.
 const comingBack = computed(() => t(`capabilities.hostRecreate.comingBack`, { what: QUIET.value[props.action]?.title ?? verb.value }));
+
+// The press's restart as the sandbox's own return holds it, for when it outlives the press; nothing to hand where the
+// action restarts nothing or no sandbox is active.
+const handOffTo = (sandbox: string | undefined, quiet: RestartQuiet | undefined): (() => void) | undefined => {
+    if (sandbox === undefined || quiet === undefined) {
+        return undefined;
+    }
+    const what = workingWords()[props.action];
+    return () => {
+        expectRestart({ sandbox, id: `recreate`, what, quiet, untilAnswered: true });
+    };
+};
 
 const execute = async (): Promise<void> => {
     confirming.value = false;
@@ -215,38 +396,83 @@ const execute = async (): Promise<void> => {
     failure.value = undefined;
     done.value = undefined;
     lines.value = [];
+    const swapping = props.action !== DOWNLOAD;
+    noteStartingVersion(swapping);
     // Armed for the whole op, not just its restart: the machine gives no sign of which minute the swap falls in, and
     // an expectation costs nothing while the sandbox is still answering.
     const quiet = QUIET.value[props.action];
     const sandbox = activeSandboxId.value;
     const expecting = quiet !== undefined && sandbox !== undefined;
     const working = expecting ? expectRestart({ sandbox, id: `recreate`, what: workingWords()[props.action], quiet }) : undefined;
-    const payload = { ...(props.hash === undefined ? {} : { hash: props.hash }), onLine: (line: string) => void lines.value.push(line) };
-    let severed = false;
+    handOff = handOffTo(sandbox, quiet);
+    // Now, not later: a rebuild the sandbox was holding for idle agents is withdrawn first, or it would run again.
+    if (idleWait.value !== undefined && idleWait.value.phase !== `rebuilding`) {
+        // allow(silent-catch): a wait that could not be withdrawn is one this rebuild replaces anyway; its restart ends it
+        await idle.cancel().catch(() => undefined);
+    }
+    const payload: DeviceSandboxPayload = { ...(props.hash === undefined ? {} : { hash: props.hash }), onLine: heard };
+    if (offerResume.value && resumeAfter.value) {
+        payload.resumeTurns = true;
+    }
+    const watched = swapping ? armWatch() : undefined;
+    const endWork = hubWork.begin(workingWords()[props.action]);
     try {
-        // A download never touches the container, so its stream dying is lost contact like any other.
-        const said = await hubWork.track(workingWords()[props.action], () =>
-            props.action === DOWNLOAD
-                ? manageDeviceSandbox(id, props.slug, OP[props.action], payload)
-                : swapServingSandbox(id, props.slug, OP[props.action], payload),
-        );
-        severed = said === undefined;
-        done.value = said;
+        const stream = swapping
+            ? swapServingSandbox(id, props.slug, OP[props.action], payload)
+            : manageDeviceSandbox(id, props.slug, OP[props.action], payload);
+        const said = await (watched === undefined ? stream : Promise.race([stream, watched]));
+        if (said !== undefined) {
+            // The device answered in words: nothing was swapped out from under this page, or it says why not.
+            done.value = said;
+            stopWatching();
+        } else if (!swapping || watching.value) {
+            streamDied();
+        }
     } catch (error) {
         failure.value = noticeFrom(error, t(`capabilities.hostRecreate.didntGoThrough`, { action: verb.value }));
+        stopWatching();
     } finally {
         running.value = false;
+        endWork();
         working?.();
         // Handed to the sandbox's own return: this page cannot see the container come up, and the ledger's record is
         // what every other surface reads the silence by until it does.
-        if (severed && expecting) {
-            expectRestart({ sandbox, id: `recreate`, what: workingWords()[props.action], quiet, untilAnswered: true });
+        if (watching.value) {
+            handOff?.();
         }
-    }
-    if (severed) {
-        awaitReturn();
+        handOff = undefined;
     }
 };
+
+// The record a rebuild the sandbox started by itself holds, for as long as this page watches it.
+let idleClaim: (() => void) | undefined;
+
+// The sandbox started the rebuild it was holding: this page watches for it to land exactly as it does for its own
+// press, and every other surface reads the silence to come as that restart.
+watch(
+    () => idleWait.value?.phase,
+    (phase) => {
+        if (phase !== `rebuilding`) {
+            // Over without this page seeing the sandbox go quiet: the device refused it, failed, or answered in words.
+            // Nothing restarted, so the watch and its record end here rather than polling on and naming a restart
+            // everywhere until the next reconnect. A restart that did happen goes quiet first, which the watch sees.
+            if (idleClaim !== undefined && watching.value && !running.value && !wentDown.value) {
+                idleClaim();
+                idleClaim = undefined;
+                stopWatching();
+            }
+            return;
+        }
+        const sandbox = activeSandboxId.value;
+        const quiet = QUIET.value.Rebuild;
+        if (watching.value || running.value || sandbox === undefined || quiet === undefined) {
+            return;
+        }
+        void armWatch();
+        idleClaim = expectRestart({ sandbox, id: `recreate`, what: workingWords().Rebuild, quiet, untilAnswered: true });
+    },
+    { immediate: true },
+);
 
 // Rollback rides the update script with a flag, exactly as rebuild does with its hash (recreate.sh/recreate.ps1's
 // `-Rollback` switch).
@@ -291,7 +517,7 @@ const command = computed(() => {
                 class="self-start"
                 :severity="text || action === DOWNLOAD ? `secondary` : undefined"
                 :text="text"
-                :loading="running || awaiting"
+                :loading="running || awaiting || idleWait?.phase === `rebuilding`"
                 @click="runOnMachine"
             >
                 <template v-if="!text" #icon><Icon :name="action === DOWNLOAD ? `download` : `bolt`" /></template>
@@ -311,6 +537,25 @@ const command = computed(() => {
             <Notice v-else-if="failure" :of="failure" />
             <p v-else-if="done" class="text-2xs text-muted">{{ done }}</p>
 
+            <!-- A rebuild the sandbox holds until nobody is working: who it waits on, and the way out. The button above
+                 stays, as the way to rebuild now instead. -->
+            <div v-if="idleWait?.phase === `waiting`" class="flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-muted" role="status">
+                <Icon name="clock" class="shrink-0" aria-hidden="true" />
+                <span>{{
+                    idleWait.waitingOn.length > 0
+                        ? t(`capabilities.hostRecreate.waitingForAgents`, { names: idleWait.waitingOn.join(`, `) }, idleWait.waitingOn.length)
+                        : t(`capabilities.hostRecreate.startingOnceIdle`)
+                }}</span>
+                <Button :label="t(`capabilities.hostRecreate.stopWaiting`)" size="small" severity="secondary" :text="true" @click="stopWaiting" />
+            </div>
+            <p v-else-if="idleWait?.phase === `rebuilding` && !awaiting" class="flex items-center gap-1.5 text-2xs text-muted" role="status">
+                <Icon name="spinner" spin class="shrink-0" aria-hidden="true" />{{ t(`capabilities.hostRecreate.rebuildingNowIdle`) }}
+            </p>
+            <div v-else-if="idleWait?.phase === `failed`" class="flex flex-col gap-1">
+                <Notice :of="{ tone: `warning`, title: t(`capabilities.hostRecreate.idleRebuildFailed`), detail: idleWait.message }" />
+                <Button :label="t(`ui.action.dismiss`)" size="small" severity="secondary" :text="true" class="self-start" @click="stopWaiting" />
+            </div>
+
             <!-- Not destructive: every action here keeps the sandbox's files and just moves it to another image. -->
             <ConfirmDialog
                 :open="confirming"
@@ -322,9 +567,20 @@ const command = computed(() => {
                 @confirm="execute"
             >
                 <p>{{ confirmBody }}</p>
+                <p v-if="interruption" class="mt-3 text-xs text-warning">{{ interruption }}</p>
+                <!-- Said before the restart, since afterwards nothing can run a cut turn again with one press. -->
+                <label v-if="offerResume" class="mt-2 flex items-center gap-2 text-xs text-content">
+                    <Checkbox v-model="resumeAfter" binary size="small" />
+                    {{ t(`capabilities.hostRecreate.continueAfter`, {}, activeAgents.length) }}
+                </label>
                 <p class="mt-3 text-xs text-muted">
                     {{ t(`capabilities.hostRecreate.onlySandboxRestartsNothing`) }}
                 </p>
+                <template v-if="offerWait" #actions>
+                    <Button :label="t(`capabilities.hostRecreate.whenIdle`, {}, activeAgents.length)" severity="secondary" :text="true" @click="waitForIdle">
+                        <template #icon><Icon name="clock" /></template>
+                    </Button>
+                </template>
             </ConfirmDialog>
         </template>
 

@@ -4,6 +4,7 @@ import { contributionDiscriminator } from "@intentic/extension-manifest";
 import type { ExtensionSummary } from "@intentic/sandbox-contract";
 import type { IconName } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
+import { entryDescription, entryHint, entryName } from "./catalogCopy";
 import { cleanName } from "./form";
 
 // A tile's facts and which live connections came from it: the catalog and connected-inventory questions both join a
@@ -165,6 +166,9 @@ export const isDefaultName = (entryId: string, id: string): boolean =>
 
 // Kind is searched alongside visible words, since that's what typing "mcp" or "ssh" means and no tile's prose
 // repeats them. Hint is searched too, since a tile's one-line description drops identifying terms ("webauthn",
-// "botfather") that used to be visible.
+// "botfather") that used to be visible. A built-in tile answers to its English and to the reader's language both:
+// the words on screen, and the ones the agent and the docs use for it.
 export const entryHaystack = (entry: CapabilityCatalogEntry): string =>
-    `${entry.name} ${entry.description} ${entry.kind} ${entry.hint ?? ``}`.toLowerCase();
+    [entry.name, entry.description, entry.kind, entry.hint ?? ``, entryName(entry), entryDescription(entry), entryHint(entry) ?? ``]
+        .join(` `)
+        .toLowerCase();

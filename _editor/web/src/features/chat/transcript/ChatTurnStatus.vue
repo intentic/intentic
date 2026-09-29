@@ -4,6 +4,7 @@ import { useNow } from "@intentic/ui/async";
 import { computed } from "vue";
 import { formatWhen } from "@intentic/ui/format";
 import { agentStatusMeta, CLOCK_FROM_MS, currentAction, formatElapsed } from "../../agents/fleet/agentStatus";
+import { sandboxNow } from "../../agents/fleet/sandboxClock";
 import { useAgents } from "../../agents/fleet/useAgents";
 import { usePaneView } from "../panel/useChat-view";
 import ThinkingRosette from "./ThinkingRosette.vue";
@@ -25,11 +26,18 @@ const endingMeta = computed(() => (ending.value === undefined ? undefined : agen
 // Ticking clock behind elapsed/retry countdown, armed only while a turn is live and nobody has ended it.
 const now = useNow(() => streaming.value && ending.value === undefined);
 
-// Start instant comes from the conversation, so a view mounted mid-turn starts its counter midway too. The readout is
-// the shared elapsed format, so a turn that runs long reads "9m 12s" rather than "552s".
+// `now` on the sandbox's clock, for its own stamps (sandboxClock.ts): M2's clock ran 96 s fast, and a turn a second old
+// read "1m 36s" while a retry due in half a minute read "0s".
+const sandboxTime = computed(() => sandboxNow(now.value));
+
+// Start instant comes from the conversation, so a view mounted mid-turn starts its counter midway too; a turn attached
+// to started on the sandbox's clock and is counted on it, one this window sent on this browser's. The readout is the shared
+// elapsed format, so a turn that runs long reads "9m 12s" rather than "552s".
 const loaderElapsed = computed(() => {
     const startedAt = conversation.value.turn.turnStartedAt.value;
-    return startedAt === undefined ? undefined : formatElapsed(startedAt, now.value);
+    return startedAt === undefined
+        ? undefined
+        : formatElapsed(startedAt, conversation.value.turn.turnOnSandboxClock.value ? sandboxTime.value : now.value);
 });
 const agent = computed(() => agentById(conversation.value.conversationId));
 // Swaps to "Waiting on N subagents" once the turn is only waiting on children, matching the roster count.
@@ -51,17 +59,19 @@ const retryWait = computed(() => {
     if (nextAttemptAt === undefined) {
         return t(`chat.chatTurnStatus.retrying`);
     }
-    return nextAttemptAt - now.value >= CLOCK_FROM_MS
-        ? t(`chat.chatTurnStatus.retryingAt`, { when: formatWhen(nextAttemptAt, now.value) })
-        : t(`chat.chatTurnStatus.retryingIn`, { wait: formatElapsed(now.value, nextAttemptAt) });
+    // The sandbox stamped it, so it is counted down on the sandbox's clock.
+    return nextAttemptAt - sandboxTime.value >= CLOCK_FROM_MS
+        ? t(`chat.chatTurnStatus.retryingAt`, { when: formatWhen(nextAttemptAt, sandboxTime.value) })
+        : t(`chat.chatTurnStatus.retryingIn`, { wait: formatElapsed(sandboxTime.value, nextAttemptAt) });
 });
-// 529 is capacity, 429 is the account's rate limit, anything else is a fault; each implies a different fix.
-const retryReason = computed(() =>
+// 529 is capacity, 429 is the account's rate limit, anything else is a fault; each implies a different fix. One whole
+// sentence per cause, the countdown after its colon, since "the provider is" + a cause only joins up in English.
+const retryLine = computed(() =>
     providerRetry.value?.status === 529
-        ? t(`chat.chatTurnStatus.atCapacity`)
+        ? t(`chat.chatTurnStatus.providerAtCapacity`, { retry: retryWait.value })
         : providerRetry.value?.status === 429
-          ? t(`chat.chatTurnStatus.rateLimiting`)
-          : t(`chat.chatTurnStatus.notResponding`),
+          ? t(`chat.chatTurnStatus.providerRateLimiting`, { retry: retryWait.value })
+          : t(`chat.chatTurnStatus.providerNotResponding`, { retry: retryWait.value }),
 );
 </script>
 
@@ -75,7 +85,7 @@ const retryReason = computed(() =>
         <template v-else>
             <ThinkingRosette class="shrink-0 text-2xs text-link" />
             <span v-if="providerRetry"
-                >{{ t(`chat.chatTurnStatus.modelProvider`) }} {{ retryReason }}: {{ retryWait }}
+                >{{ retryLine }}
                 <span class="text-subtle">{{ t(`chat.chatTurnStatus.attemptNothingLost`, { attempt: providerRetry.attempt }) }}</span></span
             >
             <template v-else>

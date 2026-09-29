@@ -1,4 +1,4 @@
-import { intenticPromptOf, missedCuts } from "./intentic-prompt.js";
+import { forkablePrompt, intenticPromptOf, missedCuts } from "./intentic-prompt.js";
 
 // Shaped like the CLI's own variants: the identity line as its own block, a paragraph whose two IMPORTANT lines are two
 // rules, and sections whose subheadings do not end them.
@@ -46,4 +46,22 @@ test("a preset with nothing for a cut names that cut, and one with everything na
     expect(missedCuts(PRESET)).toEqual([]);
     const reworded = PRESET.replace("When you use a pronoun", "Use they/them").replace("# Environment", "# Setting");
     expect(missedCuts(reworded)).toEqual(["When you use a pronoun", "# Environment"]);
+});
+
+// A custom prompt forked from a built-in one goes to every runtime as written: the CLI's budget line would ride along.
+test("the copy offered to fork keeps every instruction and loses the CLI's budget line", () => {
+    const forked = forkablePrompt({ text: intenticPromptOf(PRESET), version: "2.1.0" });
+
+    expect(forked).toEqual({
+        text: [
+            "IMPORTANT: You must NEVER generate or guess URLs.",
+            "# Harness\n - Text you output outside of tool use is displayed as markdown.\n - Reference code as `file_path:line_number`.",
+            "For actions that are hard to reverse, confirm first.",
+            "# Context management\nWhen the conversation grows long, the context is summarized.",
+        ].join("\n\n"),
+        version: "2.1.0",
+    });
+    // Wherever it stands, it goes with its gap and nothing else.
+    expect(forkablePrompt({ text: "<total_tokens>1 tokens left</total_tokens>\n\nA\n\nB", version: "" }).text).toBe("A\n\nB");
+    expect(forkablePrompt({ text: "A\n\n<total_tokens>1 tokens left</total_tokens>\n\nB", version: "" }).text).toBe("A\n\nB");
 });

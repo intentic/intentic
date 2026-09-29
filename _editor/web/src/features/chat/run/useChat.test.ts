@@ -72,10 +72,11 @@ jest.mock("../../../app/analytics", () => ({ track: jest.fn() }));
 // Avoids the window.env chain; tab persistence only reads activeSandboxId + reachable. The id is the app's own one ref,
 // as in the app, since the run view restores from it too.
 activeSandboxId.value = `sb1`;
+// Whether the sandbox reads as reachable; false unless a test says otherwise.
+const sandboxReachable = ref(false);
 jest.mock("../../sandbox/client/useSandbox", () => {
-    const reachable = ref(false);
     // sandboxKey included: hydrate's transcript cache read is keyed by sandbox, and needs it defined.
-    return { useSandbox: () => ({ activeSandboxId, reachable }), sandboxKey: (...parts: unknown[]) => [...parts, activeSandboxId] };
+    return { useSandbox: () => ({ activeSandboxId, reachable: sandboxReachable }), sandboxKey: (...parts: unknown[]) => [...parts, activeSandboxId] };
 });
 
 // Node has neither storage; tab snapshots need both (session for a window's tabs, local as the seed for a fresh one).
@@ -151,7 +152,7 @@ const daemonAnswers = (own: (procedure: string, input?: unknown, options?: CallO
 };
 const { useChat } = await import("./useChat");
 const { agentTabOf, draftConversation, openAgentConversation, reveal } = await import("../panel/useChat-reveal");
-const { hydrateOnce } = await import("./useChat-sessions");
+const { hydrateOnce, refreshAfterSleep, retryHydrate } = await import("./useChat-sessions");
 const { addAccount, loadAccountStatus, refreshConnections } = await import("../accounts/useChat-accounts");
 // The store half of "New agent", as the summons applies it (agentActions.startAgent): the fixture these
 // suites open extra tabs with.
@@ -2144,6 +2145,59 @@ describe(`hydrating a conversation whose turn is still running`, () => {
         expect(reads).toBe(1);
     });
 
+    // "Still fetching this conversation…" stood for minutes over a read that never answered: Retry asks again rather
+    // than waiting on the hung pass, which a plain trigger would.
+    it(`asks again on Retry while the first read still hangs, and paints what the second answers`, async () => {
+        let reads = 0;
+        daemonAnswers((procedure) => {
+            if (procedure === `agents.transcript`) {
+                reads += 1;
+                return reads === 1 ? new Promise<never>(() => undefined) : Promise.resolve(RECORDED);
+            }
+            return undefined;
+        });
+
+        const conversation = openAgentConversation({ id: `hung-read`, provider: `claude`, harness: `native` });
+        hydrateOnce(conversation);
+        await waitFor(() => expect(reads).toBe(1));
+        hydrateOnce(conversation);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(reads).toBe(1);
+
+        retryHydrate(conversation);
+        await waitFor(() => expect(conversation.transcript.messages.value).toHaveLength(2));
+        expect(reads).toBe(2);
+    });
+
+    // The first read gives up only after Retry's answered: it speaks for a pass no longer the tab's, so it must not mark
+    // the transcript the second one painted as unreadable, which nothing would clear.
+    it(`lets a replaced read that fails late say nothing over what the retry painted`, async () => {
+        let reads = 0;
+        let giveUp = (): void => undefined;
+        daemonAnswers((procedure) => {
+            if (procedure === `agents.transcript`) {
+                reads += 1;
+                return reads === 1
+                    ? new Promise<never>((_resolve, reject) => {
+                          giveUp = () => reject(new Error(`Your sandbox didn't answer in time.`));
+                      })
+                    : Promise.resolve(RECORDED);
+            }
+            return undefined;
+        });
+
+        const conversation = openAgentConversation({ id: `late-failure`, provider: `claude`, harness: `native` });
+        hydrateOnce(conversation);
+        await waitFor(() => expect(reads).toBe(1));
+        retryHydrate(conversation);
+        await waitFor(() => expect(conversation.transcript.messages.value).toHaveLength(2));
+
+        giveUp();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(conversation.transcript.refresh.value).toBeUndefined();
+        expect(conversation.transcript.messages.value).toHaveLength(2);
+    });
+
     // A probe that finds the turn already owned elsewhere reports "not attached", not "nothing running"; the fallback
     // replay must not treat that as nothing running.
     it(`leaves a live turn alone when the stored replay lands after another stream engaged`, async () => {
@@ -2563,5 +2617,138 @@ describe(`unsent drafts keep their own picks`, () => {
         await refreshConnections(true);
         await nextTick();
         expect([born.selection.provider.value, born.selection.model.value]).toEqual([`claude`, `claude-opus-5`]);
+    });
+});
+
+// After a sleep the app's reads die in flight while it still believes the sandbox is reachable: a PC's chats would not
+// open for minutes ("Could not open that conversation." in red under a painted transcript), and a phone's running chats
+// opened on "Start a conversation" until a relaunch. What a read that did not answer leaves behind is pinned here.
+describe(`a read of a chat that does not answer`, () => {
+    const reachable = sandboxReachable;
+    const SAVED = [
+        { role: `user`, text: `map the bonus maps` },
+        { role: `assistant`, text: `Mapped three of five.` },
+    ] as const;
+    // A first turn still running: the settled record has nothing yet, and everything shown comes over the attach.
+    const EMPTY_RECORD = { messages: [], from: 0, more: false } as const;
+    const liveRun = (): ReadableStream<AttachFrame> =>
+        new ReadableStream<AttachFrame>({
+            start(controller) {
+                controller.enqueue({ kind: `attached`, run: `r1`, startedAt: 1000, seq: 0, rows: [{ role: `user`, text: `plan the migration`, sentAt: 1000 }] });
+            },
+        });
+    // The network giving way under a request, as a fetch reports it: no status, nothing the daemon said.
+    const dropped = (): Promise<never> => Promise.reject(new TypeError(`Failed to fetch`));
+
+    beforeEach(() => {
+        stubGlobal(`requestAnimationFrame`, (callback: FrameRequestCallback): number => {
+            callback(0);
+            return 0;
+        });
+        stubGlobal(`cancelAnimationFrame`, () => {});
+        storage.clear();
+        resetSandboxScope();
+    });
+    afterEach(() => {
+        reachable.value = false;
+        unstubAllGlobals();
+    });
+
+    it(`reads a running first turn it could not attach to as not loaded, never as an empty chat`, async () => {
+        let attaches = 0;
+        daemonAnswers((procedure) => {
+            if (procedure === `agents.transcript`) {
+                return Promise.resolve(EMPTY_RECORD);
+            }
+            if (procedure === `agent.attach`) {
+                attaches += 1;
+                return attaches === 1 ? dropped() : Promise.resolve(liveRun());
+            }
+            return undefined;
+        });
+        const conversation = openAgentConversation({ id: `first-turn`, provider: `claude`, harness: `native` });
+        hydrateOnce(conversation);
+
+        await waitFor(() => expect(conversation.transcript.refresh.value).toEqual({ kind: `failed` }));
+        expect(conversation.transcript.messages.value).toEqual([]);
+        expect(conversation.error.value).toBeNull();
+        // Offline as far as this window knows, so nothing asks again by itself: the pane says the read failed.
+        expect(conversation.transcript.loading.value).toBe(false);
+
+        retryHydrate(conversation);
+        await waitFor(() => expect(conversation.transcript.messages.value.map((message) => message.text)).toEqual([`plan the migration`]));
+        expect(conversation.transcript.refresh.value).toBeUndefined();
+        conversation.turn.abort();
+    });
+
+    it(`asks again by itself on a climbing wait, still loading meanwhile, when the sandbox reads as reachable`, async () => {
+        jest.useFakeTimers();
+        reachable.value = true;
+        let attaches = 0;
+        daemonAnswers((procedure) => {
+            if (procedure === `agents.transcript`) {
+                return Promise.resolve(EMPTY_RECORD);
+            }
+            if (procedure === `agent.attach`) {
+                attaches += 1;
+                return attaches === 1 ? dropped() : Promise.resolve(liveRun());
+            }
+            return undefined;
+        });
+        const conversation = openAgentConversation({ id: `first-turn-retried`, provider: `claude`, harness: `native` });
+        hydrateOnce(conversation);
+        await waitFor(() => expect(conversation.transcript.refresh.value).toEqual({ kind: `failed` }));
+        expect(conversation.transcript.loading.value).toBe(true);
+        expect(attaches).toBe(1);
+
+        await advanceTimersByTimeAsync(2_000);
+        await waitFor(() => expect(conversation.transcript.messages.value.map((message) => message.text)).toEqual([`plan the migration`]));
+        expect(attaches).toBe(2);
+        expect(conversation.transcript.refresh.value).toBeUndefined();
+        conversation.turn.abort();
+    });
+
+    it(`keeps a painted transcript and says it is the saved copy, with the read's own reason, not the red error line`, async () => {
+        let reads = 0;
+        daemonAnswers((procedure) => {
+            if (procedure === `agents.transcript`) {
+                reads += 1;
+                return reads === 1 ? Promise.reject(new Error(`Your sandbox didn't answer in time.`)) : Promise.resolve({ ...EMPTY_RECORD, messages: SAVED });
+            }
+            return undefined;
+        });
+        const conversation = openAgentConversation({ id: `painted`, provider: `claude`, harness: `native` });
+        conversation.transcript.restoreMessages([{ role: `user`, text: `map the bonus maps` }]);
+        hydrateOnce(conversation);
+
+        await waitFor(() => expect(conversation.transcript.refresh.value).toEqual({ kind: `failed`, reason: `Your sandbox didn't answer in time.` }));
+        expect(conversation.error.value).toBeNull();
+        expect(conversation.transcript.messages.value.map((message) => message.text)).toEqual([`map the bonus maps`]);
+
+        retryHydrate(conversation);
+        await waitFor(() => expect(conversation.transcript.messages.value.map((message) => message.text)).toEqual(SAVED.map((row) => row.text)));
+        expect(conversation.transcript.refresh.value).toBeUndefined();
+    });
+
+    it(`says it is reconnecting over what is painted after a long sleep, until the sandbox answers`, async () => {
+        let answer = (): void => undefined;
+        daemonAnswers((procedure) => {
+            if (procedure === `agents.transcript`) {
+                return new Promise((resolve) => {
+                    answer = () => resolve({ ...EMPTY_RECORD, messages: SAVED });
+                });
+            }
+            return undefined;
+        });
+        const conversation = openAgentConversation({ id: `slept`, provider: `claude`, harness: `native` });
+        conversation.transcript.restoreMessages([{ role: `user`, text: `map the bonus maps` }]);
+
+        refreshAfterSleep(conversation);
+        expect(conversation.transcript.refresh.value).toEqual({ kind: `reconnecting` });
+        await waitFor(() => expect(daemon.mock.calls.some(([procedure]) => procedure === `agents.transcript`)).toBe(true));
+        answer();
+
+        await waitFor(() => expect(conversation.transcript.refresh.value).toBeUndefined());
+        expect(conversation.transcript.messages.value.map((message) => message.text)).toEqual(SAVED.map((row) => row.text));
     });
 });

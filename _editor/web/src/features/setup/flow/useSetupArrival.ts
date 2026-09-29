@@ -19,7 +19,8 @@ type SandboxStore = ReturnType<typeof useSandbox>;
 
 export interface SetupArrivalHost {
     readonly sandbox: Pick<SandboxStore, `list` | `select`>;
-    readonly platform: Pick<Platform, `hostedOffer` | `addressOffer`>;
+    // `trash` says whether this account removed a sandbox it can still restore (`ArrivalInput.removedRecently`).
+    readonly platform: Pick<Platform, `hostedOffer` | `addressOffer` | `trash`>;
     readonly row: SetupRow;
     readonly hosted: Pick<
         HostedLaneApi,
@@ -135,10 +136,11 @@ export const useSetupArrival = ({
 
     const arrive = async (): Promise<void> => {
         // The offers land with the row list, so the ladder and the address line are right on the first frame.
-        const [rows, hostedRead, addressRead] = await Promise.all([
+        const [rows, hostedRead, addressRead, trashRead] = await Promise.all([
             sandbox.list(),
             readOffer(() => platform.hostedOffer(), { enabled: false, remaining: 0 }),
             readOffer(() => platform.addressOffer(), { enabled: false }),
+            readOffer(async () => (await platform.trash()).sandboxes.length > 0, false),
         ]);
         hosted.recordOffer(hostedRead);
         command.recordOffer(addressRead);
@@ -149,6 +151,8 @@ export const useSetupArrival = ({
             inApp: inApp.value,
             // Read before any create, so a row minted seconds ago is never counted as company for itself.
             onlySandbox: rows.every((entry) => entry.id === row.created.value?.id),
+            // An unread trash counts as a removal: one click on the picker is cheaper than an install nobody asked for.
+            removedRecently: trashRead.kind === `unreachable` || trashRead.value,
             touched: row.resuming.value,
             hostedIdle: idleMachine,
             // Only `autoCreate` sets it, so it means exactly that this visit minted the row.

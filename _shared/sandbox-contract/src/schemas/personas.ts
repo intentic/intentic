@@ -4,7 +4,7 @@ import { z } from "zod";
 import { type ModelSource, readyChain } from "../models/model-pins.js";
 import { type ModelPin, ModelPinSchema } from "./agent.js";
 import { entryId } from "./internal.js";
-import { SkillDraftSchema, SkillNameSchema, SystemPromptModeSchema } from "./settings.js";
+import { SkillDraftSchema, SkillNameSchema, SYSTEM_PROMPT_MAX, SystemPromptModeSchema } from "./settings.js";
 // A named face the sandbox shows outward: who it speaks as, what it may do, where it works, what it's told, what it
 // runs on. No credential lives on the card; accounts stay private, per-sandbox. Not a security boundary for a watched
 // chat — a real fence only for an unattended turn, whose resolver defaults to nothing.
@@ -176,7 +176,12 @@ export interface TurnBriefingFixture {
 export const TURN_BRIEFING_FIXTURES: readonly TurnBriefingFixture[] = [
     { label: "Where this turn's files live", why: "Without it a runtime that is only cwd'd into its branch writes into the shared checkout." },
     { label: "Who this turn is acting as", why: "The card's own identity, on the runtimes that have nowhere else to put it." },
-    { label: "Standing instructions for this workspace", why: "Your own AGENTS.md rules. Replace them by giving this card its own system prompt." },
+    // Kept under a card's own system prompt too (system-prompt.ts `ownPrompt`): writing a prompt withdraws this product's
+    // guidance, never the owner's own rules.
+    {
+        label: "Standing instructions for this workspace",
+        why: "Your own AGENTS.md rules, sent even when this card has its own system prompt. Change them in AGENTS.md.",
+    },
     {
         label: "Some connected accounts need a person's approval",
         why: "Names who to ask; without it a withheld account reads as simply not connected.",
@@ -307,7 +312,7 @@ export type PersonaKit = z.infer<typeof PersonaKitSchema>;
 export const PersonaPromptSchema = PersonaIdParamSchema.extend({
     prompt: z
         .string()
-        .max(20000)
+        .max(SYSTEM_PROMPT_MAX)
         .describe(
             "What to tell this persona. Sending an empty one removes it entirely rather than storing a blank, so the persona falls back to the sandbox's own instructions.",
         ),

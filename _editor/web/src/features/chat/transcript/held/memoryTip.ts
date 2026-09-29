@@ -48,3 +48,16 @@ export const memoryTip = (reading: string | undefined): Tip | undefined => {
 
 /** The "send anyway" press's hover: that it starts now, and the one risk that runs. */
 export const sendAnywayTip = (): Tip => ({ title: t(`chat.chatHeld.startsNow`), tone: `warn`, note: t(`chat.chatHeld.startsNowRisk`) });
+
+/**
+ * The hold's figures in a few characters, as the notice over the composer says them ("4.9/8.0 GiB"): what is in use
+ * against the limit, or undefined when the sentence names neither (a stall names no ceiling), and the line says "low" alone.
+ */
+export const memoryShare = (reading: string | undefined): string | undefined => {
+    if (reading === undefined) {
+        return undefined;
+    }
+    const [resident, , used, limit] = FIGURES.slice(0, 4).map(({ pattern }) => figureIn(reading, pattern));
+    const inUse = resident ?? used;
+    return inUse === undefined || limit === undefined ? undefined : `${formatFixed(inUse, 1)}/${formatFixed(limit, 1)} GiB`;
+};

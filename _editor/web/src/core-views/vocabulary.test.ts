@@ -24,6 +24,13 @@ describe(`the vocabulary table`, () => {
     it(`keeps git's own words for a developer and plain ones for a maker`, () => {
         expect(vocabularyFor(`developer`).land).toBe(`Land now`);
         expect(vocabularyFor(`maker`).land).toBe(`Accept`);
+        // The card's standing around the same press, which the desktop app and a browser tab once named two ways.
+        expect(vocabularyFor(`developer`).readyToLand).toBe(`Ready to land`);
+        expect(vocabularyFor(`maker`).readyToLand).toBe(`Ready to accept`);
+        expect(vocabularyFor(`developer`).reviewAndLand).toBe(`Review & land`);
+        expect(vocabularyFor(`maker`).reviewAndLand).toBe(`Look & accept`);
+        expect(vocabularyFor(`maker`).landed).toBe(`Accepted`);
+        expect(vocabularyFor(`maker`).couldntLand).toBe(`Couldn't accept`);
         expect(vocabularyFor(`maker`).publish).toBe(vocabularyFor(`maker`).push);
     });
 

@@ -45,4 +45,43 @@ describe(`useAudience`, () => {
         expect(useAudience().maker.value).toBe(true);
         expect(useAudience().chosen.value).toBe(true);
     });
+
+    it(`an answer given here reaches the sandbox's keeper`, async () => {
+        const { keepAudienceWith, useAudience } = await load();
+        const kept: string[] = [];
+        keepAudienceWith((value) => kept.push(value));
+
+        useAudience().setAudience(`maker`);
+
+        expect(kept).toEqual([`maker`]);
+    });
+
+    it(`adopting the sandbox's answer marks the question asked and is never sent back`, async () => {
+        const { adoptAudience, keepAudienceWith, useAudience } = await load();
+        const kept: string[] = [];
+        keepAudienceWith((value) => kept.push(value));
+
+        adoptAudience(`maker`);
+
+        expect(localStorage.getItem(`ui-audience`)).toBe(`maker`);
+        expect(useAudience().chosen.value).toBe(true);
+        expect(kept).toEqual([]);
+    });
+});
+
+describe(`audienceStep`, () => {
+    it(`takes a kept answer this browser does not hold, or holds without having answered`, async () => {
+        const { audienceStep } = await load();
+
+        expect(audienceStep(`maker`, `developer`, true)).toBe(`adopt`);
+        expect(audienceStep(`developer`, `developer`, false)).toBe(`adopt`);
+        expect(audienceStep(`maker`, `maker`, true)).toBe(`none`);
+    });
+
+    it(`hands its own answer to a sandbox that keeps none, and only an answer`, async () => {
+        const { audienceStep } = await load();
+
+        expect(audienceStep(undefined, `maker`, true)).toBe(`offer`);
+        expect(audienceStep(undefined, `developer`, false)).toBe(`none`);
+    });
 });

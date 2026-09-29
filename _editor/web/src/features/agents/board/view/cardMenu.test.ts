@@ -35,6 +35,7 @@ const actions = (): { [K in keyof MenuActions]: ReturnType<typeof jest.fn> & Men
     focusAgent: jest.fn(),
     keepAgent: jest.fn(),
     reviewAgent: jest.fn(),
+    drillIn: jest.fn(),
     closeAgent: jest.fn(),
     copySessionName: jest.fn(async () => undefined),
     openInSandbox: jest.fn(),
@@ -64,6 +65,16 @@ describe(`what a card's menu offers`, () => {
             t(`agents.agentsView.archive`),
         ]);
         expect(items[1]).toMatchObject({ icon: `copy`, url: `/agents/a1` });
+    });
+
+    // Its label is the ask's verb, so it goes where the ask is answered, the chat, and names no page that draws nothing.
+    it(`answers an ask in the chat, with no link to a review page`, () => {
+        const asking = card(`ask`, { status: `awaiting`, attention: { ...NO_ATTENTION, permission: true }, branch: `agent/ask` });
+        const act = actions();
+        const items = menuItemsFor(asking, facts(), act);
+        expect(items[1]).toEqual({ label: `Approve`, icon: `comments`, command: expect.any(Function) });
+        press(items, `Approve`);
+        expect([act.drillIn.mock.calls, act.reviewAgent.mock.calls]).toEqual([[[asking]], []]);
     });
 
     it(`keeps a look, and leaves the review to the card's own tap on a phone`, () => {
@@ -132,6 +143,7 @@ describe(`the one menu`, () => {
             focusAgent: jest.fn(),
             keepAgent: jest.fn(),
             reviewAgent: jest.fn(),
+            drillIn: jest.fn(),
             closeAgent: jest.fn(),
             agentHref: (agent: FleetAgent) => `/agents/${agent.id}`,
         };

@@ -27,6 +27,16 @@ import { capabilityRecommendations } from "./offers/recommend.js";
 import { registry } from "./registry.js";
 import { createStatusCache } from "./status/status-cache.js";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
+import { versionedSettingsWrite } from "../settings/settings-versions.js";
+import { personasDocument } from "../personas/personas-store.js";
+import { capabilitiesDocument } from "./capabilities-store.js";
+
+// The capability pages' own writes to the connection manifest, each committed as it lands (settings-versions.ts): left
+// uncommitted, they read as the owner's edits and a land touching the same file is refused. A rename also repoints the
+// personas that name the connection, so it commits that file with it. Only where the files held nothing uncommitted
+// before the write: an agent's landed change to them waiting in Changes is not the page's to commit unreviewed.
+const versionManifest = <T>(services: Services, subject: string, write: () => Promise<T>, paths: readonly string[] = [capabilitiesDocument.path]): Promise<T> =>
+    versionedSettingsWrite(services, paths, `Settings: ${subject}`, write);
 
 // Follows a capability id everywhere else it's stored by name: an account's identity, an identity's mailbox, a
 // persona's capabilities list. Kept out of the handlers, since none of these is a fact about the kind being renamed.
@@ -184,7 +194,7 @@ export const createCapabilitiesRoutes = (services: Services) => {
             adding.add(input.id);
             try {
                 yield* handler.apply(ctx, entry.id, entry.config);
-                await services.capabilities.upsert(entry);
+                await versionManifest(services, `connection ${entry.id}`, () => services.capabilities.upsert(entry));
                 // Stored for good: a generated key's token has done its one job and cannot install the key again.
                 spendStashed(stash, input.config);
                 // Brings the extension's declared autoStart processes up, the same post-apply seam composeEnvironment
@@ -262,9 +272,16 @@ export const createCapabilitiesRoutes = (services: Services) => {
             await handler.rename.carry?.(ctx, capability.id, input.to, capability.config);
             // Parsed, not spread: id is the only field a rename rewrites, and the schema confirms it's still valid.
             const renamed = CapabilitySchema.parse({ ...capability, id: input.to });
-            await services.capabilities.upsert(renamed);
-            await services.capabilities.remove(capability.id);
-            await repointCapabilityReferences(services, ctx, capability.id, input.to);
+            await versionManifest(
+                services,
+                `renamed connection ${capability.id} to ${input.to}`,
+                async () => {
+                    await services.capabilities.upsert(renamed);
+                    await services.capabilities.remove(capability.id);
+                    await repointCapabilityReferences(services, ctx, capability.id, input.to);
+                },
+                [capabilitiesDocument.path, personasDocument.path],
+            );
             if (handler.rename.reapply !== false) {
                 for await (const line of handler.apply(ctx, renamed.id, renamed.config)) {
                     void line;
@@ -302,7 +319,7 @@ export const createCapabilitiesRoutes = (services: Services) => {
             for await (const line of registry[updated.kind].apply(ctx, updated.id, updated.config)) {
                 void line;
             }
-            await services.capabilities.upsert(updated);
+            await versionManifest(services, `connection ${updated.id} credential`, () => services.capabilities.upsert(updated));
             void reconcileListenerProcesses(services);
             // A rotated key is a new upstream credential; the translator keeps the old one until told to sync.
             if (mintsEndpointProvider(updated.kind)) {
@@ -324,7 +341,7 @@ export const createCapabilitiesRoutes = (services: Services) => {
             if (capability.kind === "agent") {
                 services.acpConnections.drop(capability.id);
             }
-            await services.capabilities.remove(input.id);
+            await versionManifest(services, `removed connection ${input.id}`, () => services.capabilities.remove(input.id));
             // Removed only after the manifest drops it, so the rebuilt list can't put the endpoint straight back.
             if (mintsEndpointProvider(capability.kind)) {
                 await syncEndpointCompat(services);

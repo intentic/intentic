@@ -248,7 +248,7 @@ const selection = useSandboxSelection(() => machine, () => ownSlug, ops);
         -->
         <RowGroup v-if="many" :label="t(`sandbox.devicePage.environments`)">
             <!-- One press for the computer, which brings every side to one version itself; its log lands under the door's row. -->
-            <template v-if="shared.door" #actions>
+            <template v-if="shared.door && shared.updateNeeded" #actions>
                 <Button
                     size="small"
                     severity="secondary"

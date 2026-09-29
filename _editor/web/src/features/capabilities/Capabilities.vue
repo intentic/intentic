@@ -49,6 +49,7 @@ import WebExtConnectDialog from "./connect/WebExtConnectDialog.vue";
 import { useCapabilities } from "./connect/useCapabilities";
 import { useConnectionActions } from "./connectionActions";
 import { auditPrompt } from "./model/audit";
+import { entryDescription, entryName } from "./model/catalogCopy";
 import type { ConnectionSources } from "./model/connectionRows";
 import { deviceConnections } from "./model/deviceConnections";
 import { advancedLabel, inlineField } from "./model/form";
@@ -224,10 +225,10 @@ onBeforeUnmount(() => {
 
                         <!-- Tile heading plus, for a singleton tile, its state (which describes the whole screen, not one row) and its removal control. -->
                         <div class="mb-4 flex items-center gap-3">
-                            <BrandMark :size="32" :name="selected.name" :logo="selected.logo" :icon="entryIcon(selected)" />
+                            <BrandMark :size="32" :name="entryName(selected)" :logo="selected.logo" :icon="entryIcon(selected)" />
                             <div class="min-w-0 flex-1">
                                 <div class="flex flex-wrap items-center gap-2">
-                                    <span class="font-medium text-content">{{ selected.name }}</span>
+                                    <span class="font-medium text-content">{{ entryName(selected) }}</span>
                                     <StatusBadge
                                         v-if="soleInstance"
                                         size="xs"
@@ -236,7 +237,7 @@ onBeforeUnmount(() => {
                                         :label="rowState(selected, soleInstance).label"
                                     />
                                 </div>
-                                <div class="text-xs text-muted">{{ selected.description }}</div>
+                                <div class="text-xs text-muted">{{ entryDescription(selected) }}</div>
                             </div>
                             <Button
                                 v-if="soleInstance && selected.kind !== 'devops'"
@@ -661,14 +662,14 @@ onBeforeUnmount(() => {
                                         flush
                                         class="border-r border-line"
                                         :size="44"
-                                        :name="tile.entry.name"
+                                        :name="entryName(tile.entry)"
                                         :logo="tile.entry.logo"
                                         :icon="entryIcon(tile.entry)"
                                     />
                                     <div class="min-w-0 flex-1 px-2.5 py-2">
                                         <!-- One line only: a grid row is as tall as its tallest tile, so any growing line costs every tile beside it. -->
                                         <div class="flex items-center gap-x-1.5">
-                                            <span class="truncate text-xs font-semibold text-content">{{ tile.entry.name }}</span>
+                                            <span class="truncate text-xs font-semibold text-content">{{ entryName(tile.entry) }}</span>
                                             <!-- Count shown only above one: a lone tick already means connected. -->
                                             <span
                                                 v-if="tile.connected > 0"
@@ -696,7 +697,7 @@ onBeforeUnmount(() => {
                                             <CapabilityEffects :effects="badgeEffects(tile.entry)" :compact="true" />
                                         </div>
                                         <!-- Truncated, not just short: a derived tile's description comes from a manifest nobody here wrote and must not set row height. -->
-                                        <div class="truncate text-2xs text-muted">{{ tile.entry.description }}</div>
+                                        <div class="truncate text-2xs text-muted">{{ entryDescription(tile.entry) }}</div>
                                     </div>
                                 </button>
                             </div>

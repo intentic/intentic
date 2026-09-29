@@ -142,10 +142,10 @@ onBeforeUnmount(stop);
 <template>
     <Modal :open="visible" size="lg" :header="t(`capabilities.words.connect`, { id })" @update:open="emit(`update:visible`, $event)">
         <div class="flex flex-col gap-4">
-            <p class="text-sm text-content">
-                {{ t(`capabilities.hostConnectDialog.runOn`) }} <b>{{ id }}</b
-                >{{ t(`capabilities.hostConnectDialog.in`) }} {{ shell }}{{ t(`capabilities.hostConnectDialog.yourselfInstallsSmallAgent`) }}
-            </p>
+            <i18n-t keypath="capabilities.hostConnectDialog.runThisOn" tag="p" class="text-sm text-content" scope="global">
+                <template #id><b>{{ id }}</b></template>
+                <template #shell>{{ shell }}</template>
+            </i18n-t>
 
             <!-- Renamed stays up through the reconnect it causes: the old id goes offline for a moment, which is not a failed pairing. -->
             <div v-if="renamedTo !== undefined" class="rounded-md border border-success/40 bg-success/10 px-3 py-2 text-sm text-content">

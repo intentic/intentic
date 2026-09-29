@@ -259,6 +259,7 @@ describe(`turn runs`, () => {
         expect(turnRunOf(deps.conversations, `c-abort`)!.rows.at(-1)).toEqual({
             role: `notice`,
             text: `Stopped.`,
+            noticeCode: { code: `stopped` },
             run: turnRunOf(deps.conversations, `c-abort`)!.id,
         });
         expect((await collect(`c-abort`)).entries).toEqual([]);
@@ -274,7 +275,7 @@ describe(`turn runs`, () => {
         const parkStop = turnRunOf(deps.conversations, `c-park-stop`)!;
         expect(parkStop.rows.slice(1)).toEqual([
             { role: `assistant`, text: ``, question: { requestId: `q1`, questions: [], status: `cancelled` }, run: parkStop.id },
-            { role: `notice`, text: `Stopped.`, run: parkStop.id },
+            { role: `notice`, text: `Stopped.`, noticeCode: { code: `stopped` }, run: parkStop.id },
         ]);
     });
 

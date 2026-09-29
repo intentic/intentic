@@ -37,6 +37,7 @@ import ChatCommandPopover from "../composer/ChatCommandPopover.vue";
 import ChatContinueStrip from "./ChatContinueStrip.vue";
 import ChatLeftRunning from "./jobs/ChatLeftRunning.vue";
 import ChatQueue from "../composer/ChatQueue.vue";
+import ChatWaitingBar from "./pane/ChatWaitingBar.vue";
 import ChatHeldMessages from "../transcript/held/ChatHeldMessages.vue";
 import ChatAttachmentStrip from "../composer/ChatAttachmentStrip.vue";
 import ChatMentionPopover from "../composer/ChatMentionPopover.vue";
@@ -252,6 +253,8 @@ const {
     stopHint,
     submit,
     continueTurn,
+    approvePlan,
+    keepPlanning,
 } = useComposerSend({
         view: paneView,
         voiceAgent,
@@ -389,6 +392,8 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                         <ChatContinueStrip v-if="!subagentOf" :visible="continueStrip" :ready="continueOffer" @continue="continueTurn" />
                         <!-- The turn is over, but the chat is not: what it left running, and the watches it armed (ChatLeftRunning). -->
                         <ChatLeftRunning />
+                        <!-- What waits on the reader (a card the agent is parked on, a message held for memory), pinned where it cannot scroll away (ChatWaitingBar). A subagent's chat too: a permission there is the reader's. -->
+                        <ChatWaitingBar v-if="!bare" :can-drive="canDrive" @approve="approvePlan()" @keep-planning="keepPlanning()" />
                         <!-- A spawned subagent's chat: the bar in the composer's place, whose each press is the parent's or a stop. -->
                         <ChatSubagentBar
                             v-if="subagentOf"
@@ -714,13 +719,15 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                         <p v-else-if="loopFailure" class="px-1 text-2xs text-danger">{{ loopFailure }}</p>
                         <!-- What the badge changes about the press, said under the box about to do it: the message goes to a design, not this chat. -->
                         <p v-else-if="pickedWorkflow" class="flex items-center gap-1.5 px-1 text-2xs text-muted">
-                            <Icon name="sitemap" class="shrink-0 text-2xs text-link" />{{ t(`chat.chatPane.sendStarts`) }}{{ pickedWorkflow.name
-                            }}{{ t(`chat.chatPane.messageWhatEveryStep`) }}
+                            <Icon name="sitemap" class="shrink-0 text-2xs text-link" />{{
+                                t(`chat.chatPane.sendStartsWorkflow`, { name: pickedWorkflow.name })
+                            }}
                         </p>
                         <!-- The loop badge includes its stop condition. -->
                         <p v-else-if="runThroughState === 'loop' && pickedLoop" class="flex items-center gap-1.5 px-1 text-2xs text-muted">
-                            <Icon name="repeat" class="shrink-0 text-2xs text-link" />{{ t(`chat.chatPane.sendLoopsMessageUntil`) }}
-                            {{ loopDesignLine(pickedLoop) }}.
+                            <Icon name="repeat" class="shrink-0 text-2xs text-link" />{{
+                                t(`chat.chatPane.sendLoopsUntilEndsOn`, { design: loopDesignLine(pickedLoop) })
+                            }}
                         </p>
                         <!-- Persona capability text appears where the message is written. -->
                         <p v-else-if="personaNotice" class="flex items-center gap-1.5 px-1 text-2xs text-warning">

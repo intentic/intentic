@@ -3,7 +3,7 @@
 import { growTextarea, Icon, type IconName, useDevice } from "@intentic/ui";
 import type { AskQuestion } from "@intentic/sandbox-contract";
 import { type ComponentPublicInstance, computed, nextTick, ref, watch } from "vue";
-import { clearQuestionDraft, OTHER_LABEL, readQuestionDraft, writeQuestionDraft } from "../../drafts/questionDraft";
+import { answerStarted, clearQuestionDraft, OTHER_LABEL, readQuestionDraft, writeQuestionDraft } from "../../drafts/questionDraft";
 import ChatCard from "./ChatCard.vue";
 import ChatDecisionButton from "./ChatDecisionButton.vue";
 import ChatDocumentBody from "./ChatDocumentBody.vue";
@@ -126,6 +126,19 @@ const submitAnswers = async (): Promise<void> => {
         answers[question.question] = picksFor(index);
     });
     await props.reply({ kind: `question`, answers });
+};
+
+// Dismiss ends the turn and drops whatever was picked, so with an answer under way it asks once first; picking again
+// takes the question back off the table.
+const confirmingDismiss = ref(false);
+watch([selections, otherTexts], () => (confirmingDismiss.value = false));
+const dismiss = async (): Promise<void> => {
+    if (!confirmingDismiss.value && answerStarted({ selections: selections.value, otherTexts: otherTexts.value })) {
+        confirmingDismiss.value = true;
+        return;
+    }
+    confirmingDismiss.value = false;
+    await props.reply({ kind: `question`, cancelled: true });
 };
 
 // Enter submits, Shift+Enter breaks the line; mobile Enter always inserts a newline.
@@ -272,14 +285,17 @@ const decidedOptions = (question: AskQuestion): DecidedOption[] => {
             <ChatDecisionButton tone="primary" icon="check" :disabled="!canSubmit || settling" @click="submitAnswers">{{
                 t(`chat.chatQuestionCard.submit`)
             }}</ChatDecisionButton>
-            <!-- Dismiss ends the turn (CardReplies.reply, afterReply); the tooltip says so before the click. -->
-            <ChatDecisionButton
-                tone="secondary"
-                :disabled="settling"
-                v-tooltip.bottom="t(`chat.words.stopsTurn`)"
-                @click="reply({ kind: `question`, cancelled: true })"
-                >{{ t(`ui.action.dismiss`) }}</ChatDecisionButton
-            >
+            <!-- Dismiss ends the turn (CardReplies.reply, afterReply); the tooltip says so before the click, and with an answer picked it asks first. -->
+            <template v-if="confirmingDismiss">
+                <span class="text-2xs text-warning" role="alert">{{ t(`chat.chatQuestionCard.dismissDropsAnswer`) }}</span>
+                <ChatDecisionButton tone="secondary" :disabled="settling" @click="dismiss">{{ t(`chat.chatQuestionCard.dismissAnyway`) }}</ChatDecisionButton>
+                <ChatDecisionButton tone="secondary" :disabled="settling" @click="confirmingDismiss = false">{{
+                    t(`chat.chatQuestionCard.keepAnswer`)
+                }}</ChatDecisionButton>
+            </template>
+            <ChatDecisionButton v-else tone="secondary" :disabled="settling" v-tooltip.bottom="t(`chat.words.stopsTurn`)" @click="dismiss">{{
+                t(`ui.action.dismiss`)
+            }}</ChatDecisionButton>
         </template>
     </ChatCard>
 </template>

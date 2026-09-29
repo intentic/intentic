@@ -8,6 +8,8 @@ import {
     LOCAL_MODEL_WINDOW_MIN,
     VAULTED,
 } from "@intentic/sandbox-contract";
+import { t } from "@intentic/ui/i18n";
+import { submittedValue } from "./normalize";
 
 // A tile declares fields; this module decides which are shown, what an answer means, and what
 // reaches the daemon, as plain functions over the form's values. The only difference between add and
@@ -230,6 +232,14 @@ export const submitWord = (editing: boolean, kind: CapabilityKind | undefined): 
     return kind === `devops` ? `Activate` : `Add`;
 };
 
+// The same press after a Test that failed: it still saves, and says it does so over the Test's answer.
+export const submitAnywayWord = (editing: boolean, kind: CapabilityKind | undefined): string => {
+    if (editing) {
+        return t(`capabilities.words.saveAnyway`);
+    }
+    return kind === `devops` ? t(`capabilities.words.activateAnyway`) : t(`capabilities.words.addAnyway`);
+};
+
 // Booleans arrive from the daemon's echo as booleans and from the form as "on"/"off".
 const echoedAnswer = (value: string | number | boolean | undefined): string => {
     if (typeof value !== `boolean`) {
@@ -308,7 +318,7 @@ export const buildConfig = (entry: CapabilityCatalogEntry, values: FormValues, s
         if (keepsSecret(field, values[field.key], stored)) {
             return VAULTED;
         }
-        const value = (values[field.key] ?? ``).trim();
+        const value = submittedValue(field, values[field.key]);
         return value.length > 0 ? value : undefined;
     });
 

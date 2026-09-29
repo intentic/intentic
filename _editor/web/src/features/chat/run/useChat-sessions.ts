@@ -1,9 +1,11 @@
+import { type Backoff, createBackoff } from "@intentic/base/async";
 import type { MatchSnippet, TranscriptRow } from "@intentic/sandbox-contract";
 import { sandboxRef, sandboxValue } from "@intentic/extension-api";
 import { errorMessage } from "@intentic/ui/async";
+import { t } from "@intentic/ui/i18n";
 import { watch } from "vue";
 import { reloadOnHotUpdate } from "../../../app/hotReload";
-import { agentTranscript, type AgentTranscript } from "../transcript/agentTranscript";
+import { agentTranscript, type AgentTranscript, freshAgentTranscript } from "../transcript/agentTranscript";
 import type { Conversation } from "../session/conversation";
 import type { PickUp } from "./pickUp";
 import { activeId, conversations, scopedSandboxId, setConversations } from "../tabs/useChat-tabs";
@@ -48,31 +50,54 @@ export const loadSessions = async (query?: string): Promise<void> => {
     }
 };
 
-// Reads a session's transcript from the daemon's store (history menu and restore rehydration). Undefined
-// means the daemon had nothing; asks the conversation's own box, since a session lives on the runtime that minted it.
+// A session's transcript from the daemon's store; asks the conversation's own box, since a session lives on the runtime
+// that minted it.
+const readSession = async (conversation: Conversation, id: string): Promise<TranscriptRow[]> =>
+    (await sandboxRpc.sessions.get({ id }, { context: { at: conversation.box.value } })).messages;
+
+// What a read that did not answer says of itself when it says nothing (errorMessage's fallback).
+const noAnswer = (): string => t(`chat.chatSessions.noAnswer`);
+
+// Reads a session's transcript for the history menu, into a tab with nothing painted. Undefined means the read failed,
+// which the error line says with the read's own reason.
 export const fetchTranscript = async (conversation: Conversation, id: string): Promise<TranscriptRow[] | undefined> => {
     try {
-        return (await sandboxRpc.sessions.get({ id }, { context: { at: conversation.box.value } })).messages;
-    } catch {
-        conversation.error.value = `Could not open that conversation.`;
+        return await readSession(conversation, id);
+    } catch (error) {
+        conversation.error.value = `${t(`chat.chatPaneTurns.couldntOpen`)} ${errorMessage(error, noAnswer())}`;
         return undefined;
     }
 };
 
+// A hydrating read that did not answer: said beside the transcript (TranscriptView.refresh), never as the error line,
+// which put "Could not open that conversation." in red under a transcript already painted. `reason` is the read's own
+// words, when it had any. Undefined, for the caller.
+const readFailed = (conversation: Conversation, reason?: string): undefined => {
+    conversation.transcript.refresh.value = reason === undefined ? { kind: `failed` } : { kind: `failed`, reason };
+    return undefined;
+};
+
+// Tabs whose next transcript read skips the cache, which would hand back the read that hung (retryHydrate).
+const askFresh = new WeakSet<Conversation>();
+
 // Cached transcript read shared across a card being warmed and one just opened, archived agents included. A
-// failure surfaces on the conversation and returns undefined so the caller retries; `gone` passes through.
-const fetchAgentTranscript = async (conversation: Conversation): Promise<AgentTranscript | undefined> => {
+// failure surfaces on the conversation and returns undefined so the caller retries; `gone` passes through. Only the
+// tab's newest pass (`current`) may say it failed: a read a retry replaced while it hung would otherwise mark a
+// transcript the newer one already painted as unreadable, and nothing would clear it.
+const fetchAgentTranscript = async (conversation: Conversation, current: () => boolean): Promise<AgentTranscript | undefined> => {
+    const fresh = askFresh.has(conversation);
+    askFresh.delete(conversation);
     try {
-        return await agentTranscript(conversation.conversationId, conversation.box.value);
-    } catch {
-        conversation.error.value = `Could not open that conversation.`;
-        return undefined;
+        return await (fresh ? freshAgentTranscript : agentTranscript)(conversation.conversationId, conversation.box.value);
+    } catch (error) {
+        return current() ? readFailed(conversation, errorMessage(error, noAnswer())) : undefined;
     }
 };
 
 // Brings a tab with no visible transcript up to date: attaches to a running turn, or replays the stored
-// session. False means the round-trip failed; the caller retries on the next reachability flip.
-const hydrate = async (conversation: Conversation): Promise<boolean> => {
+// session. False means the round-trip failed; the caller retries (retryLater). `current` says whether this pass is still
+// the tab's newest, the only one whose ending may move its loading mark.
+const hydrate = async (conversation: Conversation, current: () => boolean): Promise<boolean> => {
     // Must run before attaching, or the live turn paints over an empty transcript and clobbers the mirror.
     await conversation.transcript.paintCached();
     // A draft the daemon never filed has no record or run to read; the roster registering it re-hydrates (paneAttach).
@@ -83,22 +108,48 @@ const hydrate = async (conversation: Conversation): Promise<boolean> => {
     const seeded = conversation.transcript.messages.value.length === 0;
     // Only case with nothing to show meanwhile: report loading rather than inviting a fresh start.
     conversation.transcript.loading.value = seeded;
+    let hydrated = false;
     try {
         // A failed seed still lets the attach run; the failure rides the return value so the caller retries.
-        const seededOk = seeded ? await replayStoredSession(conversation) : true;
-        if (await conversation.turn.reattach()) {
-            return seededOk;
+        const seededOk = seeded ? await replayStoredSession(conversation, current) : true;
+        const live = await conversation.turn.reattach();
+        if (live === undefined) {
+            // The daemon was never asked whether a turn runs, so this is not hydrated whatever the record said: a first
+            // turn still running has no record yet, and reading this as "nothing running" drew an empty chat over it.
+            if (current() && conversation.transcript.refresh.value?.kind !== `failed`) {
+                readFailed(conversation);
+            }
+            return false;
         }
         // With nothing running, reconcile the mirror against the daemon unless seeding just did.
-        return seeded ? seededOk : await replayStoredSession(conversation);
+        hydrated = live || seeded ? seededOk : await replayStoredSession(conversation, current);
+        return hydrated;
     } finally {
-        conversation.transcript.loading.value = false;
+        // Nothing painted and another try on its way is still loading, not the empty invitation to start a chat.
+        if (current()) {
+            conversation.transcript.loading.value = !hydrated && conversation.transcript.messages.value.length === 0 && retryComing(conversation);
+        }
+    }
+};
+
+// The rows of the tab's own SDK session, read from that separate store: `none` without one, undefined when the read
+// failed, which only the tab's newest pass says (fetchAgentTranscript).
+const sessionRows = async (conversation: Conversation, current: () => boolean): Promise<TranscriptRow[] | `none` | undefined> => {
+    const session = conversation.session.value;
+    if (session === undefined) {
+        return `none`;
+    }
+    try {
+        return await readSession(conversation, session.id);
+    } catch (error) {
+        return current() ? readFailed(conversation, errorMessage(error, noAnswer())) : undefined;
     }
 };
 
 // Redraws a conversation from the daemon's own record, the only copy surviving a device with no mirror. False
-// means the read failed, not that there's nothing to show. Asked for every provider now.
-const replayStoredSession = async (conversation: Conversation): Promise<boolean> => {
+// means the read failed, not that there's nothing to show. Asked for every provider now. A pass no longer the tab's
+// newest (`current`) never says the read failed; any answer still paints, since the sandbox answered.
+const replayStoredSession = async (conversation: Conversation, current: () => boolean): Promise<boolean> => {
     // Fleet conversations resolve by identity, not session id; adopt whatever session supplied it.
     let restored: TranscriptRow[] | undefined;
     // Position of these rows in the daemon's record; absent for the SDK-session fallback, which has none.
@@ -106,7 +157,7 @@ const replayStoredSession = async (conversation: Conversation): Promise<boolean>
     // How the last turn ended; applied once the transcript below is in place (see TurnFailures.adoptEnding).
     let ending: PickUp | undefined;
     if (conversation.registered.value) {
-        const transcript = await fetchAgentTranscript(conversation);
+        const transcript = await fetchAgentTranscript(conversation, current);
         if (transcript === undefined) {
             return false;
         }
@@ -128,15 +179,17 @@ const replayStoredSession = async (conversation: Conversation): Promise<boolean>
     }
     // Not an else: a tab that lost its agent may still have an SDK session readable in that separate store.
     if (restored === undefined) {
-        const session = conversation.session.value;
-        if (session === undefined) {
+        const fallback = await sessionRows(conversation, current);
+        if (fallback === `none`) {
             return true;
         }
-        restored = await fetchTranscript(conversation, session.id);
-        if (restored === undefined) {
+        if (fallback === undefined) {
             return false;
         }
+        restored = fallback;
     }
+    // The sandbox answered: whatever an earlier read left said beside the transcript no longer holds.
+    conversation.transcript.refresh.value = undefined;
     // A record read can only delete a live turn: the daemon writes it on settle, so a redraw skips while
     // streaming. An empty replay is absence, not a transcript, and must not blank an already-painted or cached one.
     if (restored.length > 0 && !conversation.turn.streaming.value) {
@@ -151,6 +204,9 @@ const replayStoredSession = async (conversation: Conversation): Promise<boolean>
 // The pass in flight, cleared once it ends either way (unlike `hydrating`, done for good), so it can be waited on.
 const hydrateInFlight = new WeakMap<Conversation, Promise<void>>();
 
+// Each tab's newest pass, by number: a retry may replace a pass while it hangs, and only the newest speaks for the tab.
+const passes = new WeakMap<Conversation, number>();
+
 // Hydrates a tab once, holding the in-flight mark while the daemon answers. Exported for the pane's fleet
 // watcher, which calls it whenever the fleet reports a change to a conversation this tab didn't stream itself.
 export const hydrateOnce = (conversation: Conversation): void => {
@@ -158,19 +214,96 @@ export const hydrateOnce = (conversation: Conversation): void => {
         return;
     }
     hydrating.add(conversation);
-    const pass = hydrate(conversation)
-        .then((current) => {
-            if (!current) {
-                hydrating.delete(conversation);
-            }
-        })
-        // Leaves the tab as-is for the next reachability flip to retry; logged, since a tab that never fills says nothing.
-        .catch((error: unknown) => {
-            hydrating.delete(conversation);
+    const mine = (passes.get(conversation) ?? 0) + 1;
+    passes.set(conversation, mine);
+    const current = (): boolean => passes.get(conversation) === mine;
+    const pass = (async (): Promise<void> => {
+        let hydrated = false;
+        try {
+            hydrated = await hydrate(conversation, current);
+        } catch (error) {
+            // Logged, since a tab that never fills says nothing; the pane says the read failed rather than going blank.
             console.warn(`hydrateOnce: ${conversation.conversationId} did not hydrate`, error);
-        })
-        .finally(() => hydrateInFlight.delete(conversation));
+            if (current()) {
+                readFailed(conversation, errorMessage(error, noAnswer()));
+            }
+        }
+        if (!current()) {
+            return;
+        }
+        if (hydrated) {
+            answered(conversation);
+            return;
+        }
+        hydrating.delete(conversation);
+        retryLater(conversation);
+    })().finally(() => {
+        // Only its own mark: a retry may have replaced it with a newer pass while this one hung.
+        if (hydrateInFlight.get(conversation) === pass) {
+            hydrateInFlight.delete(conversation);
+        }
+    });
     hydrateInFlight.set(conversation, pass);
+};
+
+// A tab's failed passes since the last one that answered, and the retry waiting to run. A failed pass is asked again on a
+// climbing wait rather than only on a reachability flip, which never comes when the app thinks the sandbox is reachable
+// all along (after a wake, every read on the dead route waited out its deadline while the footer said online).
+interface Retrying {
+    readonly ladder: Backoff;
+    tries: number;
+    timer?: ReturnType<typeof setTimeout>;
+}
+const retrying = new WeakMap<Conversation, Retrying>();
+// About a minute and a half of asking (2 s, doubling to 30 s), after which the pane's Retry is the reader's to press.
+const RETRY_TRIES = 6;
+
+// Whether a failed pass is asked again by itself: online (offline, the reachability flip asks) and tries left.
+const retryComing = (conversation: Conversation): boolean => reachable.value && (retrying.get(conversation)?.tries ?? 0) < RETRY_TRIES;
+
+const retryLater = (conversation: Conversation): void => {
+    if (!retryComing(conversation)) {
+        return;
+    }
+    const entry = retrying.get(conversation) ?? { ladder: createBackoff({ floorMs: 2_000, capMs: 30_000 }), tries: 0 };
+    retrying.set(conversation, entry);
+    entry.tries += 1;
+    clearTimeout(entry.timer);
+    entry.timer = setTimeout(() => {
+        // A tab since closed, or one a stream or another pass already took, is left alone.
+        if (conversations.value.includes(conversation) && !conversation.turn.streaming.value && !hydrating.has(conversation)) {
+            hydrateOnce(conversation);
+        }
+    }, entry.ladder.next());
+};
+
+// A pass that answered: the ladder starts over, and nothing is left to say beside the transcript.
+const answered = (conversation: Conversation): void => {
+    clearTimeout(retrying.get(conversation)?.timer);
+    retrying.delete(conversation);
+    conversation.transcript.refresh.value = undefined;
+};
+
+// The reader's Retry on a transcript that has been loading far too long: a new pass even while the old one still hangs
+// (a read stuck behind a queue of slow requests answers nothing, so waiting on it is what left "still fetching" up for
+// minutes). The old pass is left to finish or fail on its own; whichever answers paints. A press starts the ladder over.
+export const retryHydrate = (conversation: Conversation): void => {
+    clearTimeout(retrying.get(conversation)?.timer);
+    retrying.delete(conversation);
+    askFresh.add(conversation);
+    hydrateInFlight.delete(conversation);
+    hydrateOnce(conversation);
+};
+
+// A shown chat after the page slept a long while: what it shows may be minutes old and the reads queued before the
+// sleep may never answer, so it is asked again past the cache, saying "Reconnecting…" over what is painted until the
+// sandbox answers. A live stream is its own freshest copy, and recovers by itself.
+export const refreshAfterSleep = (conversation: Conversation): void => {
+    if (conversation.turn.streaming.value) {
+        return;
+    }
+    conversation.transcript.refresh.value = { kind: `reconnecting` };
+    retryHydrate(conversation);
 };
 
 // Resolves once a tab shows what it holds, painted or hydrated with nothing to paint: a turn opened sooner sits on a

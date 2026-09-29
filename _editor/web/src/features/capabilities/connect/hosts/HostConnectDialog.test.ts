@@ -7,6 +7,7 @@ import PrimeVue from "primevue/config";
 import { waitFor } from "@intentic/testing/bun";
 import { computed, createApp, h, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
+import { installI18n } from "@intentic/ui/i18n";
 
 // The composable reads only the sandbox's address and a minted pairing token; everything else in the command is
 // built here.
@@ -42,6 +43,8 @@ const mount = (id = `my-desktop`, unnamed = false): { open: () => void } => {
     // PrimeVue's config is required for the header to render; the bare plugin, not installUi, since theme/icons aren't
     // on trial here.
     app.use(PrimeVue);
+    // The lead sentence is an <i18n-t>, which needs the i18n plugin on the app.
+    installI18n(app);
     app.mount(el);
     return {
         open: () => {

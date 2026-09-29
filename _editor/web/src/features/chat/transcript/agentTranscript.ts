@@ -40,7 +40,8 @@ const read = async (conversationId: string, at: string | undefined, before?: num
         if (page.status === 404) {
             return `gone`;
         }
-        throw new Error(`Could not open that conversation.`);
+        // The refusal in its own words: the chat says it could not open or refresh, and this is why.
+        throw page;
     }
     const bound = boundSession(page);
     return {
@@ -68,6 +69,14 @@ export const agentTranscriptQuery = (conversationId: string, at?: string) => ({
 
 export const agentTranscript = (conversationId: string, at?: string): Promise<AgentTranscript> =>
     queryClient.fetchQuery(agentTranscriptQuery(conversationId, at));
+
+// A read past the cache, for a reader's Retry: the cached query hands back the read already in flight, which is the one
+// that hung. What it answers becomes the cached page, as any read's would.
+export const freshAgentTranscript = async (conversationId: string, at?: string): Promise<AgentTranscript> => {
+    const page = await read(conversationId, at);
+    queryClient.setQueryData(agentTranscriptKey(conversationId, at), page);
+    return page;
+};
 
 // Not a cached query, deliberately: this key holds the conversation's opening page, and filing older pages there would
 // paint the middle of a chat on next open. Appended to that conversation's own state instead.

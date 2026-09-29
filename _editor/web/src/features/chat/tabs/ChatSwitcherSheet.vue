@@ -2,11 +2,14 @@
 import { BottomSheet, SearchBar } from "@intentic/ui";
 import { onBeforeUnmount, ref, watch } from "vue";
 import { useAgents } from "../../agents/fleet/useAgents";
-import { statusIcon } from "../models/catalog";
+import { statusIcon,relativeTime } from "../models/catalog";
 import { useChat } from "../run/useChat";
 import { viewersOfSession } from "../../../shell/presence/usePresence";
 import PresenceAvatars from "../../../shell/presence/PresenceAvatars.vue";
 import PastChatList from "../panel/PastChatList.vue";
+import { modelOrProvider } from "./cardView";
+import { twinTitles } from "./tabs";
+import type { Conversation } from "../session/conversation";
 import { useT } from "@intentic/ui/i18n";
 
 // The phone's chat switcher: the open chats, a new one, and the stored sessions behind a search box. One sheet with
@@ -24,6 +27,17 @@ const { conversations, activeId, sessions, sessionsFailure, loadSessions } = use
 // off the board, so the sheet marks those: the host's own line only speaks for whichever chat is open.
 const { agentById } = useAgents();
 const isArchived = (conversationId: string): boolean => agentById(conversationId)?.archivedAt !== undefined;
+
+// A row whose title another open chat shares (the same prompt sent again on another provider) says what tells it
+// apart: the model it runs on, and when it last moved.
+const twinFact = (c: Conversation): string | undefined => {
+    if (c.title.value === undefined || !twinTitles().has(c.title.value)) {
+        return undefined;
+    }
+    const agent = agentById(c.conversationId);
+    const model = modelOrProvider({ conversation: c, agent });
+    return agent === undefined || agent.updatedAt === 0 ? model : `${model} · ${relativeTime(agent.updatedAt)}`;
+};
 
 // The history search box. Filters the list by chat title or content (content scanned server-side over recent
 // sessions). Debounced so a keystroke burst becomes one request; the list binds directly to `sessions`.
@@ -83,6 +97,7 @@ const startNew = (): void => {
                 <span class="min-w-0 flex-1 truncate text-sm" :class="activeId === c.conversationId ? 'text-link' : 'text-content'">{{
                     c.title.value ?? (c.isolated.value ? t(`chat.words.newAgent`) : t(`chat.words.newChat`))
                 }}</span>
+                <span v-if="twinFact(c) !== undefined" class="max-w-32 shrink-0 truncate text-2xs text-subtle">{{ twinFact(c) }}</span>
                 <!-- Archived: off the agents board, but the conversation is still open right here. -->
                 <Icon v-if="isArchived(c.conversationId)" name="box" class="shrink-0 text-2xs text-subtle" />
                 <PresenceAvatars v-if="c.session.value !== undefined" :members="viewersOfSession(c.session.value.id)" :label="t(`chat.words.inChat`)" />

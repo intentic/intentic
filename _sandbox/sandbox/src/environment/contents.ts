@@ -3,7 +3,7 @@ import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import type { Services } from "../composition.js";
 import { customPath, proposalPath } from "./environment.js";
 import { capabilityFragments, workspaceExtensionFragments } from "./fragment-sources.js";
-import { blockCommands, blockProse, blockTools, detailOf, type OverlayBlock, purposeOf, splitBlocks } from "./overlay-blocks.js";
+import { blockCommands, blockProse, blockTools, detailOf, type OverlayBlock, purposeOf, splitBlocks, uniqueBlocks } from "./overlay-blocks.js";
 import { listPacks } from "./packs.js";
 import { providerPackFragments } from "./provider-packs.js";
 import { probeAll, probeModules, probePackages } from "./version-probe.js";
@@ -44,6 +44,8 @@ interface Candidate {
     readonly origin: EnvironmentItem["origin"];
     readonly originLabel?: string;
     readonly state?: EnvironmentItem["state"];
+    // Only an agent-asked block is the owner's to take out; a capability's goes with its capability.
+    readonly removable?: Pick<EnvironmentItem, "block">;
 }
 
 // Every overlay fragment, attached to its contributor. Pack names are recovered by hashing the fragment's own content
@@ -67,15 +69,17 @@ const capabilityCandidates = async (services: Services): Promise<Candidate[]> =>
 };
 
 // Custom blocks plus what a proposal adds on top; a block that differs from its approved counterpart, or has none, is
-// exactly what the owner is being asked to decide on.
+// exactly what the owner is being asked to decide on. One row per tool: a revised block stands in for the one it
+// replaces, and a repeat an older release appended is not listed twice.
 const customCandidates = async (services: Services): Promise<Candidate[]> => {
-    const approved = splitBlocks(((await services.files.read(customPath(services))) ?? "").trim());
-    const proposed = splitBlocks(((await services.files.read(proposalPath(services))) ?? "").trim());
+    const approved = uniqueBlocks(splitBlocks(((await services.files.read(customPath(services))) ?? "").trim()));
+    const proposed = uniqueBlocks(splitBlocks(((await services.files.read(proposalPath(services))) ?? "").trim()));
     const settled = new Set(approved.map((block) => `${block.name}\u0000${block.body}`));
     const incoming = proposed.filter((block) => !settled.has(`${block.name}\u0000${block.body}`));
+    const replaced = new Set(incoming.map((block) => block.name));
     return [
-        ...approved.map((block): Candidate => ({ block, origin: "custom" })),
-        ...incoming.map((block): Candidate => ({ block, origin: "custom", state: "awaiting-approval" })),
+        ...approved.filter((block) => !replaced.has(block.name)).map((block): Candidate => ({ block, origin: "custom", removable: { block: block.name } })),
+        ...incoming.map((block): Candidate => ({ block, origin: "custom", state: "awaiting-approval", removable: { block: block.name } })),
     ];
 };
 
@@ -140,6 +144,7 @@ export const readEnvironmentContents = async (services: Services): Promise<Envir
             ...(purpose !== undefined ? { purpose } : {}),
             ...(detail !== undefined ? { detail } : {}),
             ...(commands !== "" ? { commands } : {}),
+            ...candidate.removable,
         });
     }
 

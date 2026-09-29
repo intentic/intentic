@@ -1,6 +1,7 @@
 import type { AgentStatus, AgentWatch } from "@intentic/sandbox-contract";
 import {
     type AgentStanding,
+    agentStandingMeta,
     agentStatusMeta,
     attentionCalls,
     attentionCards,
@@ -10,8 +11,14 @@ import {
     callsOwner,
     type ClientAgentStatus,
     conflictIsYours,
+    drillTarget,
+    landedAway,
+    landFailure,
     laneOf,
+    standingFrom,
     limitCountdown,
+    limitGroups,
+    memoryHeld,
     onlyOwnerCanAnswer,
     type RimAgent,
     reviewAction,
@@ -642,5 +649,179 @@ describe("attentionCards", () => {
             { id: `solo`, card: `solo` },
         ]);
         expect(attentionCards(fleet)).toBe(2);
+    });
+});
+
+// A land git refused is its own ending: the card says it could not land, in plain words, and never reads as finished.
+describe("a land that broke", () => {
+    const broke = (failure: string): AgentStanding => ({ status: `error`, attention: none, failure });
+
+    it("names a checkout that lost its history instead of quoting git", () => {
+        const card = broke(`Command failed: git --no-optional-locks -C /work/tabularium diff --output=/tmp/x c011c54 3e03077 fatal: bad object 3e03077`);
+        expect(landFailure(card)).toBe(`this agent's copy lost its link to your workspace's history`);
+        expect(attentionReason(card)).toBe(`Couldn't land`);
+        expect(laneOf(card)).toBe(`attention`);
+    });
+
+    it("falls back to git's own last line, and to a plain sentence when git said nothing", () => {
+        expect(landFailure(broke(`Command failed: git apply --check x.patch fatal: corrupt patch at line 12`))).toBe(`corrupt patch at line 12`);
+        expect(landFailure(broke(`Command failed: git apply --check x.patch`))).toBe(`git refused to carry its work into your files`);
+    });
+
+    // The sandbox keeps a broken land on the card until one goes through: the next turn clears the turn's failure, and the
+    // card used to go back to Finished with a check mark while the work stayed stuck.
+    it("stands on a card whose turn since ended cleanly, in plain words, until a turn or land is under way", () => {
+        const lost: AgentStanding = { status: `ready`, attention: none, landFailure: { reason: `This agent's copy of the workspace lost its link`, code: `unlinked`, at: 1 } };
+        expect(landFailure(lost)).toBe(`this agent's copy lost its link to your workspace's history`);
+        expect(attentionReason(lost)).toBe(`Couldn't land`);
+        expect(laneOf(lost)).toBe(`attention`);
+        expect(laneOf({ ...lost, status: `landed` })).toBe(`attention`);
+        // Git's own words go through the same reading as a turn's; anything else is said as it came.
+        expect(landFailure({ ...lost, landFailure: { reason: `Command failed: git apply x.patch fatal: corrupt patch at line 3`, at: 1 } })).toBe(`corrupt patch at line 3`);
+        expect(landFailure({ ...lost, landFailure: { reason: `ENOSPC: no space left on device`, at: 1 } })).toBe(`ENOSPC: no space left on device`);
+        // A turn or a land under way ends in a land of its own: nothing to say until it does.
+        expect(landFailure({ ...lost, status: `running` })).toBeUndefined();
+        expect(laneOf({ ...lost, status: `running` })).toBe(`active`);
+        expect(landFailure({ ...lost, status: `landing` })).toBeUndefined();
+        expect(laneOf({ ...lost, status: `landing` })).toBe(`finished`);
+        expect(standingFrom(lost).landFailure).toEqual(lost.landFailure);
+    });
+
+    it("leaves every other failure, and a spent allowance, to read as it did", () => {
+        expect(landFailure(broke(`The model is overloaded.`))).toBeUndefined();
+        expect(attentionReason(broke(`The model is overloaded.`))).toBe(`Error`);
+        expect(landFailure({ status: `idle`, attention: none, failure: `Command failed: git diff fatal: bad object 1` })).toBeUndefined();
+        expect(landFailure({ status: `error`, attention: none, failureCode: `rate_limit`, failure: `Command failed: git x` })).toBeUndefined();
+    });
+});
+
+// The drill-in goes where its label says: an ask answered on its card leads to the chat, never the review page.
+describe("drillTarget", () => {
+    it("sends every ask answered in the chat, and a spent allowance, to the chat", () => {
+        for (const park of [`plan`, `question`, `permission`, `capability`, `credential`, `need`] as const) {
+            expect(drillTarget({ status: `awaiting`, attention: { ...none, [park]: true } })).toBe(`chat`);
+        }
+        expect(drillTarget({ status: `awaiting`, attention: none })).toBe(`chat`);
+        expect(drillTarget({ status: `error`, attention: none, failureCode: `rate_limit` })).toBe(`chat`);
+    });
+
+    it("keeps a refused land, an error and a finished diff on the review page", () => {
+        expect(drillTarget({ status: `conflict`, attention: { ...none, conflict: true } })).toBe(`review`);
+        expect(drillTarget({ status: `error`, attention: none })).toBe(`review`);
+        expect(drillTarget({ status: `landed`, attention: none })).toBe(`review`);
+    });
+
+    it("agrees with the label: an Approve leads to the chat", () => {
+        const asking = { status: `awaiting` as const, attention: { ...none, permission: true }, branch: `agent/x` };
+        expect([reviewAction(asking), drillTarget(asking)]).toEqual([`Approve`, `chat`]);
+        // A bare park on a browser or terminal hand-off: named for the chat it opens, not "Review".
+        const parked = { status: `awaiting` as const, attention: none, branch: `agent/x` };
+        expect([reviewAction(parked), drillTarget(parked)]).toEqual([`Open chat`, `chat`]);
+    });
+});
+
+describe("landedAway", () => {
+    it("says the files may have been taken out on purpose, by the reader or another agent", () => {
+        const away = landedAway({ landedPresence: { landed: 4, present: 0 } });
+        expect(away?.offerReland).toBe(true);
+        expect(away?.tip).toEqual({
+            title: `Removed after it landed`,
+            rows: [{ label: `In workspace`, value: `0/4` }],
+            note: `Still on its branch. Taken out after it landed, by you or by another agent tidying up: Land again only if you want them back.`,
+        });
+        expect(landedAway({ landedPresence: { landed: 4, present: 1 } })?.tip.note).toBe(
+            `Rest on its branch. Taken out after it landed, by you or by another agent tidying up: Land again only if you want them back.`,
+        );
+    });
+});
+
+// Who took it out, when the sandbox could tell: an agent's own tidying offers no Land again, a person's does.
+describe("landedAway, named", () => {
+    const took = (removedBy: NonNullable<Parameters<typeof landedAway>[0]["landedPresence"]>["removedBy"], present = 0) =>
+        landedAway({ landedPresence: { landed: 4, present, removedBy } }, `me@example.com`);
+
+    it("names the agent that took them out, and offers nothing to put them back", () => {
+        const away = took({ kind: `agent`, id: `orch`, title: `Orchestrator` });
+        expect(away?.text).toBe(`Removed by Orchestrator`);
+        expect(away?.offerReland).toBe(false);
+        expect(away?.tip.note).toBe(`Still on its branch. Orchestrator took them out after it landed, so this card doesn't offer to put them back.`);
+        expect(took({ kind: `agent`, id: `gone` })?.text).toBe(`Removed by another agent`);
+        expect(took({ kind: `agent`, id: `orch`, title: `Orchestrator` }, 1)).toMatchObject({ text: `1/4`, offerReland: false });
+    });
+
+    it("names the reader as you, another person by name, and an unnamed discard by where it happened; each offers Land again", () => {
+        expect(took({ kind: `person`, email: `me@example.com` })).toMatchObject({ text: `Removed by you`, offerReland: true });
+        expect(took({ kind: `person`, email: `me@example.com` })?.tip.note).toBe(`Still on its branch. You took them out after it landed.`);
+        expect(took({ kind: `person`, email: `ana@example.com`, name: `Ana` })).toMatchObject({ text: `Removed by Ana`, offerReland: true });
+        expect(took({ kind: `person` })).toMatchObject({ text: `Removed`, offerReland: true });
+        expect(took({ kind: `person` })?.tip.note).toBe(`Still on its branch. Thrown away in the Changes panel after it landed.`);
+    });
+});
+
+// One press for the agents a provider's limit stopped together.
+describe("limitGroups", () => {
+    const stopped = (id: string, over: Partial<AgentStanding> & { provider?: `claude` | `zai` } = {}) => ({
+        id,
+        provider: `zai` as const,
+        status: `error` as const,
+        attention: none,
+        failureCode: `rate_limit`,
+        limitHeld: true,
+        ...over,
+    });
+
+    it("gathers two or more held turns of one provider, and books them when every reset is known and ahead", () => {
+        const at = (minutes: number): number => Math.round((NOW + minutes * 60_000) / 1_000);
+        expect(limitGroups([stopped(`a`, { limitResetsAt: at(10) }), stopped(`b`, { limitResetsAt: at(40) })], NOW)).toEqual([
+            { provider: `zai`, ids: [`a`, `b`], reopensAt: at(40) * 1_000 },
+        ]);
+    });
+
+    it("sends them now when any reset is unknown or already past", () => {
+        expect(limitGroups([stopped(`a`), stopped(`b`, { limitResetsAt: Math.round(NOW / 1_000) + 600 })], NOW)).toEqual([
+            { provider: `zai`, ids: [`a`, `b`] },
+        ]);
+        expect(limitGroups([stopped(`a`, { limitResetsAt: Math.round(NOW / 1_000) - 1 }), stopped(`b`)], NOW)).toEqual([
+            { provider: `zai`, ids: [`a`, `b`] },
+        ]);
+    });
+
+    it("leaves out a lone card, another provider, a booked resend, a turn not held, and another box's card", () => {
+        expect(
+            limitGroups(
+                [
+                    stopped(`a`),
+                    stopped(`b`, { provider: `claude` }),
+                    stopped(`c`, { limitScheduled: true }),
+                    stopped(`d`, { limitHeld: false }),
+                    { ...stopped(`e`), sandboxId: `box-2` },
+                ],
+                NOW,
+            ),
+        ).toEqual([]);
+    });
+});
+
+// A message held because the sandbox ran short of memory reached the board as a red "Error" with the daemon's English
+// sentence, and was rage-clicked: it is a hold waiting on "send anyway", in Attention, worded and tinted as held.
+describe("a message held for low memory", () => {
+    const held: AgentStanding = { status: `error`, attention: none, failureCode: `sandbox-memory-low`, failure: `Sandbox memory is low: 4.9 GiB resident` };
+
+    it("reads as held, not as an error, and still asks the reader in Attention", () => {
+        expect(memoryHeld(held)).toBe(true);
+        expect(attentionReason(held)).toBe(`Held`);
+        expect(agentStandingMeta(held)).toEqual({ icon: `pause`, label: `Held: sandbox memory is low`, class: `text-warning` });
+        expect(reviewAction({ ...held, branch: `agent/x` })).toBe(`Open chat`);
+        // ...and the label's promise is kept: "send anyway" is in the chat, which the review page does not draw.
+        expect(drillTarget(held)).toBe(`chat`);
+        expect(laneOf(held)).toBe(`attention`);
+    });
+
+    it("leaves every other error, and a card that is not an error, as it was", () => {
+        const broken: AgentStanding = { status: `error`, attention: none, failureCode: `harness-crash` };
+        expect(memoryHeld(broken)).toBe(false);
+        expect(attentionReason(broken)).toBe(`Error`);
+        expect(agentStandingMeta(broken)).toEqual(agentStatusMeta(`error`));
+        expect(memoryHeld({ status: `idle`, failureCode: `sandbox-memory-low` })).toBe(false);
     });
 });

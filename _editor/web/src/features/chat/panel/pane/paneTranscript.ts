@@ -1,6 +1,7 @@
 import { useLoadingReveal } from "@intentic/ui/loading-reveal";
 import { computed, type Ref } from "vue";
 import { type ChatDeliverable, deliverablesByTurn } from "../../transcript/deliverables/deliverables";
+import type { TranscriptRefresh } from "../../session/transcriptView";
 import { attachedPaths, type ChatShot, shotsByTurn } from "../../transcript/shots/shots";
 import {
     type ChatMessage,
@@ -30,6 +31,10 @@ export interface PaneTranscriptHost {
     // drops its skeleton at once.
     readonly loading: Ref<boolean>;
     readonly conversationId: Ref<string>;
+    // The agents list saying this chat is mid-turn or parked on a person: it owes rows even while none has arrived.
+    readonly rowsOwed: Readonly<Ref<boolean>>;
+    // How the last read of this chat went, when it has not answered (TranscriptView.refresh).
+    readonly refresh: Readonly<Ref<TranscriptRefresh | undefined>>;
 }
 
 export const usePaneTranscript = (pane: PaneTranscriptHost) => {
@@ -45,6 +50,14 @@ export const usePaneTranscript = (pane: PaneTranscriptHost) => {
     // The turn still being written, if any; a card it parked on is the reader's move, so that turn's pictures show.
     const writingTurn = computed(() => (streaming.value && ending.value === undefined && !awaitingDecision.value ? turns.value.at(-1)?.id : undefined));
     const repeatedChecklists = computed(() => repeatedChecklistIds(messages.value));
+    // Loading as the pane draws it: a read in flight over nothing painted, or rows the agents list says this chat owes that
+    // no failed read has given up on (a read that failed says so, with a press to ask again). Never the invitation to
+    // start a conversation: running chats opened on that after a phone woke, until the app was relaunched.
+    const waiting = computed(
+        () =>
+            pane.loading.value ||
+            (pane.rowsOwed.value && messages.value.length === 0 && !streaming.value && pane.refresh.value?.kind !== `failed`),
+    );
 
     return {
         turns,
@@ -77,6 +90,11 @@ export const usePaneTranscript = (pane: PaneTranscriptHost) => {
         // The boundaries that index doesn't cover, keyed by the message each sits above: folded messages, the first.
         cutsAbove: computed(() => cutsAboveOf(turns.value)),
         // Gated, so a warm daemon's fast answer paints no placeholder; without one a load reads as data loss.
-        skeleton: useLoadingReveal(pane.loading, pane.conversationId),
+        skeleton: useLoadingReveal(waiting, pane.conversationId),
+        // Whether anything is still on its way, the empty chat's words held back meanwhile.
+        waiting,
+        // What is said beside a painted chat about a read that has not answered: the saved copy is what shows. A live
+        // stream is fresher than either, so it says nothing then.
+        staleness: computed(() => (messages.value.length === 0 || streaming.value ? undefined : pane.refresh.value)),
     };
 };

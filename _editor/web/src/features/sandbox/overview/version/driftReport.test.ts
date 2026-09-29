@@ -1,7 +1,8 @@
 // What the card's list is built from: route names folded into areas of the product, ranked by consequence.
 // Pure, so this pins the naming and the order without a daemon or a mount.
 import { SANDBOX_ROUTE_NAMES } from "@intentic/sandbox-contract";
-import { driftAreas } from "./driftReport";
+import { setLocale } from "@intentic/ui/i18n";
+import { driftAreas, kindImpact, kindTag, sandboxParty } from "./driftReport";
 
 it(`names an area as the product names it, not as the contract does`, () => {
     const [area] = driftAreas({ missing: [], drifted: [`agent.send`, `agent.stop`], extra: [] });
@@ -51,4 +52,24 @@ it(`ranks by consequence, then by how much of the area is affected`, () => {
 it(`keeps all three kinds on one area and reports the worst`, () => {
     const [area] = driftAreas({ missing: [`git.blame`], drifted: [`git.status`], extra: [`git.future`] });
     expect(area).toMatchObject({ key: `git`, kind: `missing`, count: 3, missing: [`git.blame`], drifted: [`git.status`], extra: [`git.future`] });
+});
+
+// Read when asked, never at import: a reader who switches to Polish after the page loaded gets the areas, the badges,
+// the costs and the sides in Polish, while a group this build has never heard of keeps its own name.
+it(`names everything in the language the reader switched to after the page loaded`, async () => {
+    try {
+        await setLocale(`pl`);
+        const areas = driftAreas({ missing: [`vpn.status`], drifted: [], extra: [`teleport.engage`] });
+        expect(areas.map(({ label, where }) => [label, where])).toEqual([
+            [`VPN`, `połączenie VPN tego sandboxa`],
+            [`Teleport`, `coś nowszego niż ta strona`],
+        ]);
+        expect(kindTag(`drifted`)).toBe(`może działać źle`);
+        expect(kindImpact(`extra`)).toBe(
+            `Twój sandbox to ma, ale ta strona jest za stara, żeby z tego korzystać. Nic się nie zepsuło — po prostu jeszcze tego nie dostajesz.`,
+        );
+        expect(sandboxParty(`ada-laptop`)).toMatchObject({ label: `Twój sandbox`, what: `maszyna, na której działa Twój kod, na urządzeniu ada-laptop` });
+    } finally {
+        await setLocale(`en`);
+    }
 });

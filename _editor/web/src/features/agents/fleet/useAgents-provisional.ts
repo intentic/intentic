@@ -1,18 +1,20 @@
 import { sandboxShallowRef } from "@intentic/extension-api";
-import type { AgentSummary } from "@intentic/sandbox-contract";
+import type { AgentAttention, AgentSummary } from "@intentic/sandbox-contract";
 import { otherBoxes } from "../../sandbox/live/fleetAcross";
 import type { TabFacts } from "../../chat/tabs/tabFacts";
 import type { PendingAction } from "../board/laneDrop";
 import { awaitingUser, type EndingByHand, NO_ATTENTION, turnInFlight } from "./agentStatus";
 import type { FleetAgent } from "./useAgents-fleet";
 import { registry } from "./useAgents-registry";
+import { sandboxNow } from "./sandboxClock";
+import { onCardAnswered } from "../../chat/session/cardAnswered";
 
 // What this browser's presses draw over a card before the daemon says so, one store keyed per card: a standing a press
 // claims, fields a write sends, and the board action still out. Drawn by `overlaid` where the fleet is merged; nothing
 // here writes the roster except an answered write, which carries the daemon's own entry.
 
 // What the board can have a card doing before the daemon says so.
-export type ClaimKind = `turn` | `stop` | `land` | `discard`;
+export type ClaimKind = `turn` | `stop` | `land` | `discard` | `answer`;
 
 // The two fields every word the daemon says about a card's standing moves (agents-registry summaryOf), and the turn it
 // was on, which a Stop is measured against instead (see `moved`).
@@ -25,7 +27,7 @@ interface Baseline {
 // One press's layer; its identity is the press, so a settle or timer only ever lifts its own.
 interface Layer {
     // Drawn while the daemon's entry still reads `baseline`; `at` is the press on this browser's clock.
-    readonly claim?: { readonly kind: ClaimKind; readonly at: number; readonly baseline: Baseline };
+    readonly claim?: { readonly kind: ClaimKind; readonly at: number; readonly baseline: Baseline; readonly park?: keyof AgentAttention | undefined };
     readonly patch?: Partial<AgentSummary>;
     readonly action?: PendingAction;
 }
@@ -107,14 +109,15 @@ export interface Press {
 // A card the daemon has no entry for has nothing to claim against: its press draws nothing and is never replaced.
 const UNCLAIMED: Press = { settle: () => undefined, stands: () => true };
 
-// Draws `kind` over the card now, replacing whatever an earlier press claimed about it.
-export const claim = (id: string, at: string | undefined, kind: ClaimKind): Press => {
+// Draws `kind` over the card now, replacing whatever an earlier press claimed about it; `park` names the ask an answer
+// settled.
+export const claim = (id: string, at: string | undefined, kind: ClaimKind, park?: keyof AgentAttention): Press => {
     const entry = rosterEntry(id, at);
     if (entry === undefined) {
         return UNCLAIMED;
     }
     const layer: Layer = {
-        claim: { kind, at: Date.now(), baseline: { status: entry.status, updatedAt: entry.updatedAt, startedAt: entry.startedAt } },
+        claim: { kind, at: Date.now(), baseline: { status: entry.status, updatedAt: entry.updatedAt, startedAt: entry.startedAt }, park },
     };
     const lift = hold(id, at, layer);
     const ceiling = setTimeout(lift, CEILING_MS);
@@ -198,6 +201,13 @@ export const asEnded = <T extends FleetAgent>(card: T, ending: EndingByHand): T 
 export const endedHere = <T extends FleetAgent>(card: T, tab: TabFacts | undefined): T =>
     tab?.ending === undefined ? card : asEnded(card, tab.ending);
 
+// A resume the sandbox promised that a later failure in the same turn took back, as this browser's chat saw it
+// (TabFacts.resumeWithdrawn). The roster keeps reading `resuming` then, so the sidebar called a chat working for 41
+// minutes beside the chat's own "stopped short": drawn instead as the failure the sandbox now holds, as its card will
+// read once it stops saying resuming. Only over `resuming`: any later word from the roster is newer than this.
+export const withdrawnHere = <T extends FleetAgent>(card: T, tab: TabFacts | undefined): T =>
+    tab?.resumeWithdrawn === undefined || card.status !== `resuming` ? card : { ...card, status: `error`, failure: tab.resumeWithdrawn };
+
 // A land between turns: the conflict and failure a settled status carried go with it; only a running turn hides
 // `unfinished`, so it stays.
 const asLanding = <T extends FleetAgent>(card: T): T => ({
@@ -214,19 +224,41 @@ const asLanding = <T extends FleetAgent>(card: T): T => ({
     unread: false,
 });
 
+// A card answered here that the roster still shows parked: the ask it answered gone, and the turn back at work once
+// nothing else holds it, as the daemon will say once its un-park reaches this browser. Without it "Permission" and
+// "1 needs you" stood for as long as the next roster frame took, sixteen seconds on a phone, and the reader went back
+// to check whether the answer took. A park the attention block has no flag for (a payment, a hand-off) only moves
+// the status.
+const asAnswered = <T extends FleetAgent>(card: T, park: keyof AgentAttention | undefined): T => {
+    const attention = park === undefined ? card.attention : { ...card.attention, [park]: false };
+    const stillParked = attention.plan || attention.question || attention.permission || attention.capability || attention.credential;
+    return { ...card, attention, status: card.status === `awaiting` && !stillParked ? `running` : card.status };
+};
+
+// Draws an answer this browser just gave a card in `id`'s chat, until the roster says anything newer about the
+// conversation (`moved`) or the grace runs out; the chat's own reply (CardReplies) calls it once the daemon took it.
+export const answeredHere = (id: string, park: keyof AgentAttention | undefined): void => {
+    claim(id, undefined, `answer`, park).settle(true);
+};
+onCardAnswered(answeredHere);
+
 // A turn still going that nobody has ended yet: the only standings a Stop is pressed on.
 const STOPPABLE: ReadonlySet<FleetAgent[`status`]> = new Set([`running`, `awaiting`, `resuming`]);
 
 // Each claim only over a standing its press is made from, so it never draws a state the daemon could not reach: no
 // `landing` over a live turn (a turn's own land reads `running`), no `stopping` over a turn that already ended.
-const drawn = <T extends FleetAgent>(card: T, kind: ClaimKind, at: number): T | undefined => {
+const drawn = <T extends FleetAgent>(card: T, kind: ClaimKind, at: number, park?: keyof AgentAttention): T | undefined => {
     if (kind === `stop`) {
         return STOPPABLE.has(card.status) ? asEnded(card, `stopping`) : card;
+    }
+    if (kind === `answer`) {
+        return awaitingUser(card) ? asAnswered(card, park) : card;
     }
     if (turnInFlight(card) || awaitingUser(card)) {
         return card;
     }
-    return kind === `turn` ? asStarted(card, at) : kind === `land` ? asLanding(card) : undefined;
+    // The press's instant is this browser's; a started card's clock counts on the sandbox's (sandboxClock.ts).
+    return kind === `turn` ? asStarted(card, sandboxNow(at)) : kind === `land` ? asLanding(card) : undefined;
 };
 
 // The card under its layers: every write's fields, then the standing claim until the daemon's `entry` moves past it;
@@ -238,5 +270,7 @@ export const overlaid = <T extends FleetAgent>(card: T, entry: AgentSummary, at:
     }
     const patched: T = Object.assign({}, card, ...held.map((layer) => layer.patch));
     const standing = held.find((layer) => layer.claim !== undefined)?.claim;
-    return standing === undefined || moved(entry, standing.kind, standing.baseline) ? patched : drawn(patched, standing.kind, standing.at);
+    return standing === undefined || moved(entry, standing.kind, standing.baseline)
+        ? patched
+        : drawn(patched, standing.kind, standing.at, standing.park);
 };

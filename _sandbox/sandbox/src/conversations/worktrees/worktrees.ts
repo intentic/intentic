@@ -1,11 +1,12 @@
-import { lstat, mkdir, readdir, readFile, rename, rm, rmdir, symlink } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { lstat, mkdir, mkdtemp, readdir, readFile, realpath, rename, rm, rmdir, symlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { basename, dirname, join, resolve } from "node:path";
 import { pathExists, writeFileAtomic } from "@intentic/base/fs";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import { keyedLock } from "@intentic/base/async";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import type { Logger } from "pino";
-import { gitDirOf } from "../../git/git-dir.js";
+import { commonDirOf, gitDirOf } from "../../git/git-dir.js";
 import { commitWorktreeRemainder } from "../../git/remote/root-repo.js";
 import type { PerfTracker } from "../../system/resources/perf.js";
 import { textFile } from "../../store/text-file.js";
@@ -96,6 +97,11 @@ export interface AgentWorktrees {
     readonly withRepoLock: <T>(repo: string, task: () => Promise<T>) => Promise<T>;
     // Whether that chain is held or queued on right now; a read that would otherwise wait behind a land asks this.
     readonly repoBusy: (repo: string) => boolean;
+    // Brings each checkout of these repos that still stands on disk back to being one of its repository's own worktrees
+    // (a turn that deleted its `.git` pointer or ran `git init` over it), and answers the repos it could not. Every git
+    // command a sync or a land runs assumes the checkout shares main's objects; asked first, so a broken one stops with
+    // a plain reason instead of a raw `bad object`. Takes each repo's lock itself.
+    readonly relink: (id: string, repos: readonly { readonly repo: string }[]) => Promise<readonly string[]>;
 }
 
 // Root first or root last, then everything else concurrently: root's checkout creates the dir nested worktrees mount
@@ -291,9 +297,94 @@ export const createAgentWorktrees = (
         }
     };
 
+    // The common dir, symlinks resolved, behind a checkout's `.git`; undefined when nothing resolves.
+    const commonOf = async (checkout: string): Promise<string | undefined> => {
+        const gitDir = await gitDirOf(checkout);
+        if (gitDir === undefined) {
+            return undefined;
+        }
+        const common = await commonDirOf(gitDir);
+        return realpath(common).catch(() => common);
+    };
+
+    // Whether the checkout is still one of its repository's worktrees: its `.git` reaches main's own object store. A
+    // standalone repo (`git init` over the pointer) or a pointer to another repository shares no objects with main,
+    // so every range a sync or land names is `bad object` there. File reads only: asked before every sync and land.
+    const linked = async (id: string, repo: string): Promise<boolean> => {
+        const own = await commonOf(worktreeDir(id, repo));
+        return own !== undefined && own === (await commonOf(mainDir(repo)));
+    };
+
+    // The admin dir main keeps for a checkout at `target`, found by its back-pointer; undefined once pruned.
+    const adminOf = async (main: string, target: string): Promise<string | undefined> => {
+        const common = await commonOf(main);
+        if (common === undefined) {
+            return undefined;
+        }
+        const admins = join(common, "worktrees");
+        const wanted = join(target, ".git");
+        for (const name of await readdir(admins).catch(() => [])) {
+            const back = (await readFile(join(admins, name, "gitdir"), "utf8").catch(() => "")).trim();
+            if (back !== "" && resolve(admins, name, back) === wanted) {
+                return join(admins, name);
+            }
+        }
+        return undefined;
+    };
+
+    // A pointer for `target` that main does not yet know: `worktree add` into a scratch dir of the same name (never
+    // over the checkout, whose files are the agent's work), whose `.git` then moves in; `repair` points main's admin dir
+    // back at it. Throws when git refuses (the branch is checked out elsewhere), before the checkout is touched.
+    const freshPointer = async (main: string, target: string, branch: string): Promise<string> => {
+        await git(main, ["worktree", "prune"]).catch(() => undefined);
+        const scratch = await mkdtemp(join(tmpdir(), "intentic-relink-"));
+        try {
+            const staging = join(scratch, basename(target));
+            await git(main, ["worktree", "add", "--no-checkout", staging, branch]);
+            return await readFile(join(staging, ".git"), "utf8");
+        } finally {
+            await rm(scratch, { recursive: true, force: true });
+        }
+    };
+
+    // Re-links a checkout whose `.git` is missing or no longer reaches main: the agent's files stay exactly where they
+    // are, whatever stands at `.git` moves to the trash (never deleted: a standalone repo may hold commits someone
+    // wants), and a pointer onto `agent/<id>` takes its place. The index is rebuilt from the branch, so what the turn
+    // changed reads as uncommitted edits the next commit takes. Nothing is moved unless the new pointer is already in
+    // hand, so a refusal leaves the checkout as it found it. Answers whether the checkout is linked afterwards.
+    const relinkOne = async (id: string, repo: string): Promise<boolean> => {
+        const main = mainDir(repo);
+        const target = worktreeDir(id, repo);
+        const branch = `agent/${id}`;
+        try {
+            if (!(await branchExists(main, branch))) {
+                logger.warn({ id, repo }, "agents: checkout lost its link and its branch is gone, left as it is");
+                return false;
+            }
+            const admin = await adminOf(main, target);
+            const pointer = admin === undefined ? await freshPointer(main, target, branch) : `gitdir: ${admin}\n`;
+            const stray = join(target, ".git");
+            if ((await lstat(stray).catch(() => undefined)) !== undefined) {
+                const trashed = join(historyRoot, "trash", `${encodeURIComponent(repo)}-${id}-git-${Date.now()}`);
+                await mkdir(dirname(trashed), { recursive: true });
+                await rename(stray, trashed);
+                logger.warn({ id, repo, trashed }, "agents: a checkout's .git no longer reached its repository, moved to trash");
+            }
+            await writeFile(stray, pointer);
+            if (admin === undefined) {
+                await git(main, ["worktree", "repair", target]);
+                // Mixed reset: the index follows the branch, the working tree (the agent's files) is not touched.
+                await git(target, ["reset", "-q"]);
+            }
+        } catch (error) {
+            logger.warn({ err: error, id, repo }, "agents: could not re-link a checkout to its repository");
+        }
+        return linked(id, repo);
+    };
+
     const repairOne = async (id: string, repo: string): Promise<void> => {
         const target = worktreeDir(id, repo);
-        if (await pathExists(join(target, ".git"))) {
+        if (await linked(id, repo)) {
             return;
         }
         // Unparking comes first: `worktree add` on a parked name would check it out detached, losing resumed commits.
@@ -302,9 +393,7 @@ export const createAgentWorktrees = (
         }
         // Analogous to history's healGitPointer; a deleted worktree dir instead re-attaches from its surviving branch.
         if (await pathExists(target)) {
-            await git(mainDir(repo), ["worktree", "repair", target]).catch((error: unknown) =>
-                logger.warn({ err: error, repo }, "agents: worktree repair failed"),
-            );
+            await relinkOne(id, repo);
         } else {
             await git(mainDir(repo), ["worktree", "add", target, `agent/${id}`]).catch((error: unknown) =>
                 logger.warn({ err: error, repo }, "agents: worktree re-attach failed"),
@@ -691,5 +780,19 @@ export const createAgentWorktrees = (
         },
         withRepoLock,
         repoBusy: (repo) => (queued.get(repo) ?? 0) > 0,
+        relink: async (id, repos) => {
+            const broken: string[] = [];
+            await eachRepo(repos, "root-first", async (repo) => {
+                // A checkout not on disk is retired, not broken: its branch is what sync and land read then. A main
+                // repository git cannot read is its own fault, which sync and land already step around.
+                if (!(await pathExists(worktreeDir(id, repo))) || (await commonOf(mainDir(repo))) === undefined || (await linked(id, repo))) {
+                    return;
+                }
+                if (!(await withRepoLock(repo, async () => (await unparked(id, repo)) && (await relinkOne(id, repo))))) {
+                    broken.push(repo);
+                }
+            });
+            return broken;
+        },
     };
 };

@@ -1,7 +1,13 @@
 import { classifyFailure, type ConnectionFailure } from "../live/connection";
 import { DETACHED_AFTER_MS } from "../overview/availability";
 import { RESTART_PATIENCE_MS } from "../live/sandboxRestart";
-import { connectionNotice, type ConnectionNoticeInput, HOSTED_STUCK_AFTER_MS, OWN_STUCK_AFTER_MS } from "./connectionNotice";
+import {
+    connectionNotice,
+    type ConnectionNoticeInput,
+    HOSTED_STUCK_AFTER_MS,
+    OWN_STUCK_AFTER_MS,
+    UNADDRESSED_PATIENCE_MS,
+} from "./connectionNotice";
 
 // The ordinary case every test below varies one fact of: somebody's own computer, freshly unreachable.
 const notice = (failure: ConnectionFailure | undefined, over: Partial<ConnectionNoticeInput> = {}) =>
@@ -16,6 +22,20 @@ describe(`connectionNotice`, () => {
 
     it(`sends a never-announced sandbox to setup, not to a reconnect`, () => {
         expect(notice(classifyFailure({ unaddressed: true, message: `no address` })).action).toEqual({ kind: `setup`, label: `Finish setup` });
+    });
+
+    // The setup page opened the workspace the moment the sandbox reported in, a beat before this browser's list carried
+    // its address: "finish setup" flashed over a setup that had just finished.
+    it(`waits, rather than saying "finish setup", for the address of a sandbox a machine just picked up`, () => {
+        const unaddressed = classifyFailure({ unaddressed: true, message: `no address` });
+        const fresh = notice(unaddressed, { claimed: true, outageMs: UNADDRESSED_PATIENCE_MS - 1 });
+        const late = notice(unaddressed, { claimed: true, outageMs: UNADDRESSED_PATIENCE_MS });
+        expect({ title: fresh.title, waiting: fresh.waiting, action: fresh.action }).toEqual({
+            title: `Connecting to "laptop"…`,
+            waiting: true,
+            action: undefined,
+        });
+        expect(late.action).toEqual({ kind: `setup`, label: `Finish setup` });
     });
 
     it(`asks for a sign-in on 401 rather than blaming the sandbox`, () => {
@@ -220,6 +240,16 @@ describe(`a sandbox that is actually gone`, () => {
         expect(shown.body).toContain(`radarsu-rog`);
         expect(shown.waiting).toBe(false);
         expect(shown.action).toEqual({ kind: `setup`, label: `Set it up again` });
+    });
+
+    // The farewell says who removed it, not whether its files went to that machine's week-long trash: a reader was
+    // told they "went with it" and set the sandbox up afresh while they were still there to restore.
+    it(`does not call its files gone, and names the restore on the machine that removed it`, () => {
+        const shown = notice(classifyFailure({ unaddressed: true, message: `no address` }), { removed: true, removedBy: `radarsu-rog` });
+        expect(shown.body).toBe(
+            `Its container was deleted on radarsu-rog. Unless it was deleted for good, its files stay on that computer for 7 days: ` +
+                `run ic sandbox restore there to bring it back. Setting it up again here starts it fresh, under the same name and address.`,
+        );
     });
 
     it(`still says it when the remover could not name itself`, () => {

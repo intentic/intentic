@@ -10,7 +10,7 @@ export interface RuntimeHistoryMessage {
     readonly text: string;
 }
 
-const HEADER = "This conversation continues from another AI runtime. Prior transcript (oldest first): treat it as your own conversation history:";
+export const RUNTIME_HISTORY_HEADER = "This conversation continues from another AI runtime. Prior transcript (oldest first): treat it as your own conversation history:";
 const SEPARATOR = "\n\n---\n\n";
 const MESSAGE_CHAR_CAP = 8_000;
 // Char cap for an assistant message outside the newest RECENT_ROWS; user messages are never cut by this.
@@ -70,11 +70,11 @@ export const withRuntimeHistory = (prompt: string, history: readonly TranscriptR
         lines.unshift(line);
         used += line.length;
     }
-    return `${HEADER}\n\n${lines.join("\n\n")}${SEPARATOR}${prompt}`;
+    return `${RUNTIME_HISTORY_HEADER}\n\n${lines.join("\n\n")}${SEPARATOR}${prompt}`;
 };
 
 export const parseRuntimeHistory = (text: string): { history: RuntimeHistoryMessage[]; prompt: string } | undefined => {
-    const opening = `${HEADER}\n\n`;
+    const opening = `${RUNTIME_HISTORY_HEADER}\n\n`;
     if (!text.startsWith(opening)) {
         return undefined;
     }

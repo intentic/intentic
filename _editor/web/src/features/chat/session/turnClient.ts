@@ -13,6 +13,7 @@ import {
     type TurnFact,
 } from "@intentic/sandbox-contract";
 import { errorMessage } from "@intentic/ui/async";
+import { t } from "@intentic/ui/i18n";
 import { computed, ref, shallowRef } from "vue";
 import { uuid } from "../../../lib/uuid";
 import { orRefusal, SandboxHttpError } from "../../sandbox/client/sandboxHttpError";
@@ -21,9 +22,10 @@ import type { PendingAttachment } from "../drafts/useChatAttachments";
 import { accountIntent, type SessionRef, type TurnSettings, turnRequestBody } from "../run/turnRequest";
 import { accountsOutdated } from "../accounts/accountsOutdated";
 import { repointedPickUp } from "../run/pickUp";
-import { type AttachHead, followRun, type SentMessage, type TurnContext } from "../run/turnStream";
+import { type AttachHead, type FollowEnd, followRun, type SentMessage, type TurnContext } from "../run/turnStream";
 import { invalidateAgentTranscript } from "../transcript/agentTranscript";
 import { type ChatAttachment, continuationFor, isNudgeText } from "../transcript/transcript";
+import { refusalWords } from "../transcript/notices/sandboxNotice";
 import type { Conversation } from "./conversation";
 import { accepted, advance, IDLE, phaseEnding, type RunEvent, type RunPhase, type TurnEnding } from "./runPhase";
 
@@ -126,6 +128,9 @@ export class TurnClient {
     readonly streaming = computed(() => this.phase.value.kind !== `idle`);
     // Start of the in-flight turn (ms), for the card's elapsed readout; undefined while idle.
     readonly turnStartedAt = computed(() => (this.phase.value.kind === `idle` ? undefined : this.phase.value.startedAt));
+    // Whether that start is the sandbox's own stamp (a run attached to) rather than this browser's (one it opened): an
+    // elapsed count then runs against the sandbox's clock, `sandboxNow()`, or a clock that is off shows it as time.
+    readonly turnOnSandboxClock = computed(() => this.phase.value.kind === `running` && this.phase.value.clock === `sandbox`);
     // Posture the running turn is actually in (the agent's own mode frames); display-only, cleared at each send.
     readonly liveMode = ref<PermissionMode | undefined>();
     // Harness retrying inside the live turn; nothing has failed. Cleared once the turn produces anything or settles.
@@ -348,7 +353,8 @@ export class TurnClient {
             this.host.transcript.dropLocal(bubble);
         }
         this.giveBack(sent, messageId);
-        this.host.error.value = `${refusal.message} Your message is back in the composer: send it again once that's sorted.`;
+        // In the reader's language where the refusal is one this build knows (a turn already running), else as said.
+        this.host.error.value = t(`chat.sandboxNotice.refusedBack`, { reason: refusalWords(refusal.message) });
     }
 
     // Hands an opened turn's words to the daemon and follows it to its end. `taken` hears exactly once whether the daemon
@@ -552,6 +558,7 @@ export class TurnClient {
         // An in-turn retry belongs to the turn that was retrying; whatever it settled as, the wait is over.
         this.providerRetry.value = undefined;
         host.failures.armRenewalProbe();
+        host.failures.settled();
         // A switch made while this turn ran held its divider back; the turn's over, so it goes here. No-op otherwise.
         host.selection.apply({ kind: `settled` });
         host.transcript.persist();
@@ -863,9 +870,10 @@ export class TurnClient {
     }
 
     // Attach to a turn already running daemon-side (before a reload, from another window or device, or one the queue
-    // started). False when nothing is live, so the caller falls back to hydration; `passed` is a run this window has
-    // already seen to its end, which a head naming it stands down for.
-    async reattach(passed?: string): Promise<boolean> {
+    // started). False when nothing is live, so the caller falls back to hydration; undefined when the daemon could not be
+    // asked (FollowEnd), which is no answer at all. `passed` is a run this window has already seen to its end, which a
+    // head naming it stands down for.
+    async reattach(passed?: string): Promise<FollowEnd> {
         if (this.streaming.value) {
             return true;
         }

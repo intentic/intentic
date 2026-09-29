@@ -2,6 +2,7 @@
 import { Button, Code, Icon, timeAgo } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { computed } from "vue";
+import { useRouter } from "vue-router";
 import { usePushFlow } from "../../features/workspace/push/usePushFlow";
 import { useT } from "@intentic/ui/i18n";
 
@@ -10,6 +11,29 @@ const t = useT();
 /* WHAT THE PUSH QUESTION CARRIES THAT TWO STRINGS CANNOT: the command in monospace, and the way back to the terminal it all came out of. */
 
 const pushFlow = usePushFlow();
+const router = useRouter();
+
+/* A PUSH REFUSED FOR WANT OF A SIGN-IN LEADS TO THE ACCOUNT THAT FIXES IT: the terminal and a retry would only say it again. */
+const connectLabel = computed<string | undefined>(() =>
+    pushFlow.connectHost.value === `github`
+        ? t(`shell.pushQuestionBody.connectGithub`)
+        : pushFlow.connectHost.value === `gitlab`
+          ? t(`shell.pushQuestionBody.connectGitlab`)
+          : undefined,
+);
+const connectHint = computed<string | undefined>(() =>
+    pushFlow.connectHost.value === `github`
+        ? t(`shell.pushQuestionBody.signInRefusedGithub`)
+        : pushFlow.connectHost.value === `gitlab`
+          ? t(`shell.pushQuestionBody.signInRefusedGitlab`)
+          : undefined,
+);
+const connect = (): void => {
+    const host = pushFlow.connectHost.value;
+    if (host !== undefined) {
+        void router.push({ name: `capabilities`, params: { entry: host } });
+    }
+};
 
 /* A CARD THAT IS NOT NEWS SAYS SO: raised once when the push is refused, and again on every reopen. */
 const clock = useNow(() => pushFlow.fromMemory.value);
@@ -36,6 +60,7 @@ const memoryLine = computed<string | undefined>(() => {
             <p v-if="pushFlow.question.value.detail" class="break-words text-2xs text-muted">
                 {{ pushFlow.question.value.detail }}
             </p>
+            <p v-if="connectHint" class="break-words text-2xs text-content">{{ connectHint }}</p>
             <!-- Only on a reprint: a card reporting a run that just ended dates itself by being here. -->
             <p v-if="memoryLine" class="break-words text-2xs text-subtle">{{ memoryLine }}</p>
         </div>
@@ -55,8 +80,10 @@ const memoryLine = computed<string | undefined>(() => {
                 </button>
             </div>
 
+            <!-- The account whose sign-in refused the push, when connecting it is the fix. -->
+            <Button v-if="connectLabel" size="small" :label="connectLabel" @click="connect" />
             <!-- The same push again, hook and all. -->
-            <Button size="small" severity="warn" :label="t(`ui.action.tryAgain`)" @click="pushFlow.retry" />
+            <Button size="small" :severity="connectLabel ? `secondary` : `warn`" :label="t(`ui.action.tryAgain`)" @click="pushFlow.retry" />
         </div>
     </div>
 </template>

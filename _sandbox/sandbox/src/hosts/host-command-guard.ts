@@ -1,7 +1,10 @@
 import {
     COMMAND_CLASS_LABELS,
+    type CommandClass,
     type CommandJudgeMode,
     type CommandLocus,
+    DeviceScopesSchema,
+    hardRuleClasses,
     matchCommand,
     type SafetyVerdict,
 } from "@intentic/sandbox-contract";
@@ -22,6 +25,11 @@ import { conversationTaintSource, conversationUnattended } from "../guard/turn-t
 
 // How long a device-command card waits: long enough to return to, short of the hub's connection ceiling.
 const DEADLINE_MS = 10 * 60_000;
+
+// How long one call waits here before answering, measured from its arrival: under the minute an agent's MCP client
+// gives a call before it reports "The operation timed out." on its own, which an agent read as a broken \`rm\` and
+// routed around. The card itself stays up for DEADLINE_MS; an answer given after this is kept for the same call.
+const CALL_BUDGET_MS = 45_000;
 
 // The only call shape this gate judges: file, screen and input tools carry no program to classify.
 const RUN_COMMAND = "run_command";
@@ -44,6 +52,58 @@ const unanswered = (machine: string, turnEnded: boolean): string =>
         ? `The turn ended before anyone answered, so it was not run on "${machine}". Do not retry it unasked.`
         : `Nobody answered within ${DEADLINE_MS / 60_000} minutes, so it was not run on "${machine}". ` +
           `Do not retry it unasked: carry on without it and say what was left undone.`;
+
+// What the agent reads when its card is still open as its call must answer: nothing ran, the answer is kept, and the
+// way to collect it is the same call again, never a different spelling of the same work.
+const stillWaiting = (machine: string): string =>
+    `Still waiting for the owner: a card asks them to approve running this on "${machine}", and it has not run yet. ` +
+    `Their answer is kept for this exact command: call run_command again with exactly the same command to wait for it. ` +
+    `Nothing is broken on the device. Do not run a different command to do the same thing.`;
+
+// What the agent reads when the device's own "Run destructive commands" switch is off: the device would refuse the
+// command whatever the owner answered, so no card is raised for a yes that cannot work.
+const switchedOff = (machine: string, classes: readonly CommandClass[]): string =>
+    `Refused: this command would ${classes.map((commandClass) => COMMAND_CLASS_LABELS[commandClass]).join(" and ")} on "${machine}", ` +
+    `and its "Run destructive commands" switch is off, so the device would refuse it even if the owner approved. ` +
+    `Ask the owner to turn on "Run destructive commands" in ${machine}'s capability card, or run a command that does not delete. ` +
+    `Do not look for another spelling that gets past it.`;
+
+// The device's own grant, read off its capability card; undefined when no card names it (the device decides then).
+const deviceScopesOf = async (services: Services, machine: string) => {
+    const card = services.hosts.cardFor(machine);
+    const capability = (await services.capabilities.list()).find((entry) => entry.kind === "device" && entry.id === card);
+    if (capability === undefined) {
+        return undefined;
+    }
+    const parsed = DeviceScopesSchema.safeParse(capability.config);
+    return parsed.success ? parsed.data : undefined;
+};
+
+// Cards still open (or answered and not yet collected) by the exact call that raised them, so the agent calling again
+// with the same command waits on the same card, and a yes given after its first call gave up still runs it once.
+const openAsks = new Map<string, Promise<HostGateRefusal | undefined>>();
+const askKey = (conversationId: string, machine: string, command: string): string => `${conversationId}\u0000${machine}\u0000${command}`;
+
+// Waits on an open card for what is left of this call's budget: its answer (collected, so it is used once), or the
+// still-waiting note with the card left up.
+const awaitAnswer = async (key: string, asking: Promise<HostGateRefusal | undefined>, machine: string, budgetMs: number): Promise<HostGateRefusal | undefined> => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const waited = new Promise<"waiting">((resolve) => {
+        timer = setTimeout(() => resolve("waiting"), Math.max(0, budgetMs));
+    });
+    try {
+        const outcome = await Promise.race([asking, waited]);
+        if (outcome === "waiting") {
+            return refusal(stillWaiting(machine));
+        }
+        if (openAsks.get(key) === asking) {
+            openAsks.delete(key);
+        }
+        return outcome;
+    } finally {
+        clearTimeout(timer);
+    }
+};
 
 // The command inside a run_command tools/call, or undefined for anything else; a hostile or notification-shaped payload
 // is forwarded to the machine rather than gated, since there'd be nowhere to send a refusal.
@@ -165,7 +225,9 @@ const askOwner = async (services: Services, run: LiveRun, ask: DeviceAsk): Promi
 export const judgeHostCommand = async (
     services: Services,
     input: { readonly machine: string; readonly command: string; readonly conversationId: string | undefined },
+    budgetMs: number = CALL_BUDGET_MS,
 ): Promise<HostGateRefusal | undefined> => {
+    const at = Date.now();
     // At `device` locus, paths mean the owner's machine, not an image: /usr, /etc, a Docker volume are real here.
     const matches = matchCommand(input.command, { locus: DEVICE });
     const classes = matches.map((match) => match.commandClass);
@@ -173,8 +235,19 @@ export const judgeHostCommand = async (
     if (matches.length === 0) {
         return undefined;
     }
-    const at = Date.now();
     const conversationId = input.conversationId;
+    // The same call again, while its card is open or its answer uncollected: no second judge, no second card.
+    const key = conversationId === undefined ? undefined : askKey(conversationId, input.machine, input.command);
+    const open = key === undefined ? undefined : openAsks.get(key);
+    if (key !== undefined && open !== undefined) {
+        return awaitAnswer(key, open, input.machine, budgetMs - (Date.now() - at));
+    }
+    // What the device itself refuses without its destructive switch, the same live reading its own shell makes: asked
+    // first, since a card here could only end in "Allow once" followed by the device refusing anyway.
+    const gated = matches.filter((match) => match.live && hardRuleClasses(DEVICE).has(match.commandClass)).map((match) => match.commandClass);
+    if (gated.length > 0 && (await deviceScopesOf(services, input.machine))?.destructive === "off") {
+        return refusal(switchedOff(input.machine, gated));
+    }
     const run = conversationId === undefined ? undefined : turnRunOf(services.conversations, conversationId);
     // Same `live` discipline as the sandbox gate: a command merely mentioning a delete does not count as one.
     const hard = matches.find(
@@ -232,5 +305,14 @@ export const judgeHostCommand = async (
         );
     }
     record("asked");
-    return askOwner(services, run, { conversationId, machine: input.machine, command: input.command, sentence: verdict.sentence, at });
+    const asking = askOwner(services, run, { conversationId, machine: input.machine, command: input.command, sentence: verdict.sentence, at });
+    const ownKey = askKey(conversationId, input.machine, input.command);
+    openAsks.set(ownKey, asking);
+    // An answer nobody came back for is dropped with its turn: a later turn's same command is asked about afresh.
+    void run.waitUntilFinished().then(() => {
+        if (openAsks.get(ownKey) === asking) {
+            openAsks.delete(ownKey);
+        }
+    });
+    return awaitAnswer(ownKey, asking, input.machine, budgetMs - (Date.now() - at));
 };

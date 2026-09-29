@@ -1,4 +1,3 @@
-import { basename } from "node:path";
 import { sdk } from "../engines/claude-sdk.js";
 import {
     AskQuestionSchema,
@@ -9,16 +8,17 @@ import {
     type TranscriptQuestion,
     type TranscriptRow,
     type TranscriptTool,
+    resumeNoticeRow,
     unspokenPromptRow,
 } from "@intentic/sandbox-contract";
 import { z } from "zod";
-import { COMPACTED_NOTICE } from "@intentic/sandbox-contract/transcript-fold";
+import { compactedRow } from "@intentic/sandbox-contract/transcript-fold";
 import { ASK_TOOL_NAMES, parseAnswers } from "../agent/tools/question-answers.js";
 import { TaskChecklist } from "../agent/run/task-checklist.js";
 import { displayNameOf, toolCategoryOf, toolTarget } from "@intentic/agent-context/tool-calls";
 import { type CalledTool, editDiffContent, mayShowPicture, resultContent, resultText, toolLocations } from "../agent/tools/tool-calls.js";
 import { browserOutputDir } from "../browser/cast/browser-artifacts.js";
-import { parsePromptEnvelope } from "../agent/prompt/turn-preamble.js";
+import { flatSpokenWords, parsePromptEnvelope, storedPromptTitle } from "../agent/prompt/turn-preamble.js";
 import { rootRelative } from "./turn-transcript.js";
 import type { SearchIndex } from "./search-index.js";
 import { matchLines, sessionOverlay } from "./transcript-search.js";
@@ -27,8 +27,9 @@ import { matchLines, sessionOverlay } from "./transcript-search.js";
 // where the index lives.
 type SaidLookup = SearchIndex["search"];
 
-// A past conversation for the chat-history list. `title` is the SDK's resolved display summary; `updatedAt` is
-// last-modified ms; `snippet` is set only by a search, and only when the title doesn't already show the hit.
+// A past conversation for the chat-history list. `title` is what the user asked, never the daemon's notes (see
+// listWorkspaceSessions); `updatedAt` is last-modified ms; `snippet` is set only by a search, and only when the title
+// doesn't already show the hit.
 export interface SessionSummary {
     readonly id: string;
     readonly title: string;
@@ -53,27 +54,73 @@ interface AnthropicMessageLike {
     content?: string | StoredBlock[];
 }
 
-// Sessions are the SDK's per-dir history menu, not fleet board conversations. The title from a stored first prompt
-// strips daemon injections; an attachment-only opener titles by what was dropped in.
-const promptTitle = (firstPrompt: string | undefined): string | undefined => {
-    if (firstPrompt === undefined) {
+// Sessions are the SDK's per-dir history menu, not fleet board conversations. A row is titled by the daemon's own record
+// of the conversation it is the session of, else by the title the session was opened with, else by its first prompt
+// with the daemon's injections stripped; an attachment-only opener titles by what was dropped in.
+//
+// The first prompt is the SDK's flattened copy (storedPromptTitle, flatSpokenWords), and a preamble longer than its
+// 200-character cut leaves none of the user's words in it at all: that row is read back from its opening message once,
+// and kept, since a session's first message never changes.
+export interface SessionNaming {
+    // Session id to the title of the conversation it is the current session of, renames and the naming pass included.
+    readonly conversationTitles: () => ReadonlyMap<string, string>;
+    // Opening titles already read back from session files, by session id.
+    readonly openings: Map<string, string | undefined>;
+}
+
+export const sessionNaming = (conversationTitles: () => ReadonlyMap<string, string> = () => new Map()): SessionNaming => ({
+    conversationTitles,
+    openings: new Map(),
+});
+
+// A prompt that kept its newlines is a stored one, read whole; the SDK's list never keeps any.
+const firstPromptTitle = (firstPrompt: string): string | undefined =>
+    firstPrompt.includes("\n") ? storedPromptTitle(firstPrompt) : flatSpokenWords(firstPrompt);
+
+// The session's first user message as stored, newlines and all; undefined when the file holds none or cannot be read.
+const openingTitle = async (dir: string, id: string, openings: SessionNaming["openings"]): Promise<string | undefined> => {
+    if (openings.has(id)) {
+        return openings.get(id);
+    }
+    try {
+        const opening = (await sdk().getSessionMessages(id, { dir, limit: 4 })).find((message) => message.type === "user");
+        const text = opening === undefined ? "" : blocksOf(opening).flatMap((block) => (block.type === "text" && block.text !== undefined ? [block.text] : [])).join("\n\n");
+        const title = text === "" ? undefined : storedPromptTitle(text);
+        openings.set(id, title);
+        return title;
+    } catch {
+        // allow(silent-catch): an unreadable session keeps the fallback title, and the next listing tries again.
         return undefined;
     }
-    const { spoken, queued, attachments, handoff } = parsePromptEnvelope(firstPrompt);
-    // A handoff titles by the conversation's own opening words, else by its prompt as queued.
-    const title = handoff === undefined ? spoken : (handoff.history.find((message) => message.role === "user")?.text ?? queued);
-    return title.length > 0 ? title : attachments.map((path) => basename(path)).join(", ") || undefined;
 };
 
-export const listWorkspaceSessions = async (dir: string): Promise<SessionSummary[]> => {
+// What the session's own prompts name it: its first one, read back from the file when the list's copy holds only notes.
+// `summary` is never nullish: the SDK fills it from the raw prompt (notice and runtime wrapper included) when it has no
+// title, and with "" for a session row it could not read.
+const promptedTitle = async (
+    dir: string,
+    session: { readonly sessionId: string; readonly firstPrompt?: string; readonly summary: string },
+    openings: SessionNaming["openings"],
+): Promise<string | undefined> => {
+    if (session.firstPrompt !== undefined) {
+        const first = firstPromptTitle(session.firstPrompt) ?? (await openingTitle(dir, session.sessionId, openings));
+        if (first !== undefined) {
+            return first;
+        }
+    }
+    return session.summary === "" ? undefined : firstPromptTitle(session.summary);
+};
+
+export const listWorkspaceSessions = async (dir: string, naming: SessionNaming = sessionNaming()): Promise<SessionSummary[]> => {
     const sessions = await sdk().listSessions({ dir, limit: 50 });
-    return sessions.map((session) => ({
-        id: session.sessionId,
-        // `summary` is never nullish, so it cannot sit mid-`??`: the SDK fills it from the raw prompt (notice and
-        // runtime wrapper included) when it has no title, and with "" for a session row it could not read.
-        title: session.customTitle ?? promptTitle(session.firstPrompt) ?? (session.summary || "New chat"),
-        updatedAt: session.lastModified,
-    }));
+    const named = naming.conversationTitles();
+    return Promise.all(
+        sessions.map(async (session) => ({
+            id: session.sessionId,
+            title: named.get(session.sessionId) ?? session.customTitle ?? (await promptedTitle(dir, session, naming.openings)) ?? "New chat",
+            updatedAt: session.lastModified,
+        })),
+    );
 };
 
 // A short-TTL cache over the session list, so a burst of keystrokes shares one listing; never invalidated, since
@@ -83,14 +130,14 @@ export type RecentSessions = () => Promise<SessionSummary[]>;
 
 const LIST_TTL_MS = 400;
 
-export const createRecentSessions = (dir: string): RecentSessions => {
+export const createRecentSessions = (dir: string, naming: SessionNaming = sessionNaming()): RecentSessions => {
     let listed: { at: number; sessions: SessionSummary[] } | undefined;
     return async () => {
         const held = listed;
         if (held !== undefined && Date.now() - held.at < LIST_TTL_MS) {
             return held.sessions;
         }
-        const sessions = await listWorkspaceSessions(dir);
+        const sessions = await listWorkspaceSessions(dir, naming);
         listed = { at: Date.now(), sessions };
         return sessions;
     };
@@ -188,7 +235,7 @@ const storedPromptRows = (text: string, dir: string, options: RestoreOptions): T
     // A re-run's resumed prompt becomes a muted line, not a duplicate; its note rides separately on the card.
     const resume = envelope.resume;
     if (resume?.kind === "notice") {
-        return [{ role: "notice", text: resume.text }];
+        return [resumeNoticeRow(resume)];
     }
     const attachments = rootRelative(envelope.attachments, dir);
     // The stripped preamble rides along as a note, read the same way the daemon's own record keeps it.
@@ -202,7 +249,7 @@ const storedPromptRows = (text: string, dir: string, options: RestoreOptions): T
     const carried: TranscriptRow[] = options.carried === "bubbles" ? [...handoff.history] : [];
     // A re-run sent to a fresh session carries its note inside the handoff: the same notice the record shows (`openingRows`).
     if (handoff.resume?.kind === "notice") {
-        return [...carried, { role: "notice", text: handoff.resume.text }];
+        return [...carried, resumeNoticeRow(handoff.resume)];
     }
     const all = handoff.resume === undefined ? notes : [...notes, handoff.resume.note];
     return said ? [...carried, { role: "user", text: envelope.spoken, ...chips, ...(all.length > 0 ? { notes: all } : {}) }] : carried;
@@ -290,7 +337,7 @@ export const restoredSessionMessages = (
 
         if (message.type === "user" && CompactSummary.safeParse(message).success) {
             flush();
-            out.push({ role: "notice", text: COMPACTED_NOTICE });
+            out.push(compactedRow());
             continue;
         }
         if (message.type === "user") {

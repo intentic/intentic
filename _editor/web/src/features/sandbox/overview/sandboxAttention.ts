@@ -9,7 +9,9 @@ import { useRole } from "../secrets/useRole";
 import { useSyncHealth } from "../devices/useDevices";
 import { useEnvironment } from "../environment/useEnvironment";
 import { useSandboxVersion } from "./version/useSandboxVersion";
+import { UPDATE_ACTION_ANCHOR } from "./version/updateAnchor";
 import { useSandboxBackup } from "./backup/useSandboxBackup";
+import { PUBLISH_ANCHOR } from "../access/publishAnchor";
 import { useUnbackedWork } from "./backup/useUnbackedWork";
 import { t } from "@intentic/ui/i18n";
 
@@ -50,6 +52,9 @@ export interface SandboxAttentionItem {
     readonly badges?: boolean;
 }
 
+// Both update notes point at the update card's button rather than at the page (updateAnchor.ts).
+const UPDATE_ACTION = `/sandbox#${UPDATE_ACTION_ANCHOR}`;
+
 // An available update stays a quiet note (still downloading in the background); once staged it may badge the
 // chip (`badges`), since applying it is now one click and a half-minute restart.
 const updateItems = (available: boolean, staged: boolean): SandboxAttentionItem[] => {
@@ -62,14 +67,14 @@ const updateItems = (available: boolean, staged: boolean): SandboxAttentionItem[
                 icon: `arrow-circle-up`,
                 tone: `info`,
                 message: t(`sandbox.sandboxAttention.sandboxUpdateReadyTo`),
-                to: `/sandbox`,
+                to: UPDATE_ACTION,
                 kind: `note`,
                 badges: true,
             },
         ];
     }
     return [
-        { icon: `arrow-circle-up`, tone: `info`, message: t(`sandbox.sandboxAttention.newSandboxVersionAvailable`), to: `/sandbox`, kind: `note` },
+        { icon: `arrow-circle-up`, tone: `info`, message: t(`sandbox.sandboxAttention.newSandboxVersionAvailable`), to: UPDATE_ACTION, kind: `note` },
     ];
 };
 
@@ -167,7 +172,8 @@ export function useSandboxAttention() {
                     icon: `code`,
                     tone: `warning`,
                     message: t(`sandbox.sandboxAttention.noRepositoryToPushTo`),
-                    to: `/sandbox/environment`,
+                    // The Publish row itself, which says what it needs and links to connecting it (MoveOutPanel.vue).
+                    to: `/sandbox/environment#${PUBLISH_ANCHOR}`,
                     kind: `needs`,
                 },
             },

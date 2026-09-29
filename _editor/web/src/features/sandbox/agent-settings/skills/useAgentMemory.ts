@@ -2,6 +2,7 @@ import { sandboxRef, sandboxScopeGuard } from "@intentic/extension-api";
 import { MEMORY_FILE } from "@intentic/constants";
 import type { NoticeModel } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
+import { t } from "@intentic/ui/i18n";
 import { mergeMemory } from "../../../extensions/memoryImport";
 import { useWorkspaceTree } from "../../../workspace/explorer/useWorkspaceTree";
 
@@ -9,6 +10,8 @@ import { useWorkspaceTree } from "../../../workspace/explorer/useWorkspaceTree";
 // the file is one sandbox's, and a draft carried across a switch would be saved into the next one's.
 const draft = sandboxRef(() => ``);
 const onDisk = sandboxRef<string | undefined>(() => undefined);
+// Whether the file is there at all: a missing one reads as empty, and "Open file" on it landed on the workspace root.
+const present = sandboxRef(() => false);
 const saving = sandboxRef(() => false);
 const editorError = sandboxRef<NoticeModel | undefined>(() => undefined);
 const importError = sandboxRef<NoticeModel | undefined>(() => undefined);
@@ -23,14 +26,16 @@ export function useAgentMemory() {
         onDisk.value = undefined;
         const current = sandboxScopeGuard();
         try {
-            const text = (await readFile(MEMORY_FILE)) ?? ``;
+            const read = await readFile(MEMORY_FILE);
+            const text = read ?? ``;
             if (current()) {
+                present.value = read !== undefined;
                 onDisk.value = text;
                 draft.value = text;
             }
         } catch (caught) {
             if (current()) {
-                editorError.value = noticeFrom(caught, `Couldn't read ${MEMORY_FILE}.`);
+                editorError.value = noticeFrom(caught, t(`sandbox.useAgentMemory.couldntRead`, { file: MEMORY_FILE }));
             }
         }
     };
@@ -43,11 +48,12 @@ export function useAgentMemory() {
         try {
             await saveText(MEMORY_FILE, text);
             if (current()) {
+                present.value = true;
                 onDisk.value = text;
             }
         } catch (caught) {
             if (current()) {
-                editorError.value = noticeFrom(caught, `Couldn't save ${MEMORY_FILE}.`);
+                editorError.value = noticeFrom(caught, t(`sandbox.useAgentMemory.couldntSave`, { file: MEMORY_FILE }));
             }
         } finally {
             if (current()) {
@@ -74,7 +80,7 @@ export function useAgentMemory() {
             await load();
         } catch (caught) {
             if (current()) {
-                importError.value = noticeFrom(caught, `Couldn't save memory.`);
+                importError.value = noticeFrom(caught, t(`sandbox.useAgentMemory.couldntSaveMemory`));
             }
         } finally {
             if (current()) {
@@ -83,5 +89,5 @@ export function useAgentMemory() {
         }
     };
 
-    return { draft, onDisk, saving, editorError, importError, importText, importing, load, commit, importMemory };
+    return { draft, onDisk, present, saving, editorError, importError, importText, importing, load, commit, importMemory };
 }

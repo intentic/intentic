@@ -386,6 +386,18 @@ describe(`Conversation`, () => {
         expect(conversation.turn.streaming.value).toBe(false);
     });
 
+    // A read that failed before a turn began no longer speaks for what is on screen once the sandbox streams one: left
+    // standing, "Couldn't refresh" came back over the fresh transcript the moment the turn settled.
+    it(`drops a refresh that failed once a turn streams`, async () => {
+        const conversation = new Conversation(`c-refreshed`);
+        conversation.transcript.refresh.value = { kind: `failed`, reason: `Your sandbox didn't answer in time.` };
+        daemon.mockImplementation(turnDaemon([{ kind: `session`, sessionId: `s-1`, account: `with-room` }, { kind: `done` }]));
+
+        await conversation.turn.send(`hi`, settings);
+
+        expect(conversation.transcript.refresh.value).toBeUndefined();
+    });
+
     it(`adopts the account the daemon served an unpinned turn on, so the next send resumes the session`, async () => {
         const conversation = new Conversation(`c-unpinned`);
         expect(conversation.selection.account.value).toBeUndefined();
@@ -1840,11 +1852,13 @@ describe(`Conversation`, () => {
         );
         await conversation.turn.send(`hello`, settings);
 
+        // Nothing ran, so the press rests a minute first (pickUp.cooledPickUp).
         expect(conversation.pickUp.value).toEqual({
             reason: `limit`,
             readyAt: resetsAt * 1_000,
             nextAt: resetsAt * 1_000,
             held: { ran: false },
+            coolUntil: expect.any(Number),
         });
         // Still a notice rather than the error line: an armed wait is the least alarming state this failure has.
         expect(conversation.error.value).toBeNull();
@@ -1870,7 +1884,7 @@ describe(`Conversation`, () => {
         );
         await conversation.turn.send(`ship the parser`, settings);
 
-        expect(conversation.pickUp.value).toEqual({ reason: `limit`, held: { ran: false } });
+        expect(conversation.pickUp.value).toEqual({ reason: `limit`, held: { ran: false }, coolUntil: expect.any(Number) });
 
         // The re-run's own run: the same words, behind a note explaining why they're back.
         daemon.mockImplementation(
@@ -1905,8 +1919,9 @@ describe(`Conversation`, () => {
 
         expect(turnBodies()).toHaveLength(1);
         expect(conversation.transcript.messages.value.filter((message) => message.role === `user`)).toMatchObject([{ text: `ship the parser` }]);
-        // Still offering the press, because the turn is still held: a re-run refused is a re-run to make again.
-        expect(conversation.pickUp.value).toEqual({ reason: `limit`, held: { ran: false } });
+        // Still offering the press, after its minute's rest, because the turn is still held: a re-run refused is a re-run to
+        // make again.
+        expect(conversation.pickUp.value).toEqual({ reason: `limit`, held: { ran: false }, coolUntil: expect.any(Number) });
     });
 
     // If the daemon isn't actually holding the turn (a restart between refusal and press), the press must not become
@@ -2203,6 +2218,48 @@ describe(`Conversation`, () => {
         expect(notice.noticeWait).toBeUndefined();
         expect(conversation.failures.credentialRenewal.value).toBeUndefined();
         expect(providerAccounts.value[`claude`]?.[0]?.needsReauth).toBe(true);
+    });
+
+    // A 401 armed the renewal and a stop came a second later: the sandbox acts on the stop, so the chat stops promising a
+    // continuation, stops the renewal clock, and never blames the account for a resume that was not coming (a banner of
+    // this window's own making once sat on every chat for two hours while the account kept answering).
+    it(`takes back the renewal's promise when a stop follows it in the same turn`, async () => {
+        jest.useFakeTimers();
+        const account = { id: `acct-1`, label: `Claude`, connectedAt: 0 };
+        providerAccounts.value = { ...providerAccounts.value, claude: [account] };
+        try {
+            const conversation = new Conversation(`c1`);
+            daemon.mockImplementation(
+                turnDaemon([
+                    { kind: `error`, code: `claude-token-refused`, message: `401 revoked.`, autoResume: `scheduled` },
+                    { kind: `error`, message: `Claude Code returned an error result: 401` },
+                    { kind: `done` },
+                ]),
+            );
+            await conversation.turn.send(`hello`, settings);
+
+            const notices = (): { text: string; noticeWait: unknown }[] =>
+                conversation.transcript.messages.value
+                    .filter((message) => message.role === `notice`)
+                    .map(({ text, noticeWait }) => ({ text, noticeWait }));
+            expect(notices()).toEqual([
+                {
+                    text: `401 revoked. The credential was being renewed, but the turn stopped before it could continue: it will not carry on by itself, so press Continue to pick it back up.`,
+                    noticeWait: undefined,
+                },
+                { text: `Claude Code returned an error result: 401`, noticeWait: undefined },
+            ]);
+            expect(conversation.failures.credentialRenewal.value).toBeUndefined();
+            expect(conversation.failures.resumeWithdrawn.value).toBe(`Claude Code returned an error result: 401`);
+            expect(conversation.pickUp.value).toEqual({ reason: `stopped` });
+
+            // Nothing probes for the resumed run, so nothing gives up on it later and writes a line of its own.
+            await advanceTimersByTimeAsync(120_000);
+            expect(notices()).toHaveLength(2);
+            expect(providerAccounts.value[`claude`]).toEqual([account]);
+        } finally {
+            jest.useRealTimers();
+        }
     });
 
     it(`says so plainly once the retries are spent`, async () => {

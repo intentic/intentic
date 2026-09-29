@@ -12,6 +12,7 @@ import { queryClient, UNPERSISTED } from "../../../lib/queryPersistence";
 import { type ProcedureOutput, sandboxRpc } from "../../sandbox/client/sandboxRpc";
 import { useSandbox } from "../../sandbox/client/useSandbox";
 import type { FleetAgent } from "./useAgents-fleet";
+import { observeRoster } from "./sandboxClock";
 
 // Daemon's agent registry mirrored: the roster pushed by /events, the archived half pulled separately, ordered by
 // a revision line. Bottom of the fleet store's module graph; nothing here reads a module above it. All of it belongs
@@ -208,11 +209,15 @@ const invalidateStaleWork = (agents: readonly AgentSummary[]): void => {
 };
 
 // Applies a roster snapshot from the stream or an explicit read; dropped if it predates what's already held,
-// since an out-of-order answer is a regression, not news.
-export const setAgents = (agents: AgentSummary[], rev: number): void => {
+// since an out-of-order answer is a regression, not news. `live`: a frame of the events stream, as it happened.
+export const setAgents = (agents: AgentSummary[], rev: number, live = false): void => {
     if (rev < appliedRev.value) {
         return;
     }
+    // Only a frame of a stream already following the roster restamps as it happens. A connection's first snapshot, and a
+    // read, are compared against a roster that stood still for as long as the stream was gone (a sleep), which would
+    // read every restamp in between as that much clock skew.
+    const asItHappened = live && appliedRev.value >= 0;
     invalidateStaleWork(agents);
     // Ids that left the roster by another hand than this browser's (daemon sweep, another device); local moves are
     // excluded via `pending`. Triggers an archive-list refresh and closes their chat tabs.
@@ -223,6 +228,10 @@ export const setAgents = (agents: AgentSummary[], rev: number): void => {
         useChat().closeRetired(departed);
     }
     appliedRev.value = rev;
+    // Every conversation this frame restamped is a reading of the sandbox's clock (sandboxClock.ts).
+    if (asItHappened) {
+        observeRoster(registry.value, agents);
+    }
     applySnapshot(agents, rev);
     // Attaches a tab opened before its turn existed to the turn now running (workflow step, wake, another device).
     useChat().attachStarted(new Set(agents.filter((agent) => agent.status === `running`).map((agent) => agent.id)));

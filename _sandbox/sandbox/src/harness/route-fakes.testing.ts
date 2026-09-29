@@ -105,6 +105,8 @@ export const realCheckout = async (
             prune: async () => {},
             withRepoLock: (_repo, task) => task(),
             repoBusy: () => false,
+            // A real linked worktree: nothing to re-link.
+            relink: async () => [],
         },
     };
 };

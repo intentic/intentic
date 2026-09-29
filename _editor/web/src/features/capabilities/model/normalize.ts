@@ -33,6 +33,29 @@ export const normalizeFieldValue = (field: CapabilityField, raw: string): string
     return value;
 };
 
+// Characters a copy carries along without showing them: zero-width spaces and joiners, a word joiner, a byte-order mark.
+// Harmless in prose and fatal in a token: a request header refuses them, so the service never hears the request.
+const INVISIBLE_RE = /[\u200B-\u200D\u2060\uFEFF]/gu;
+
+// Fields where whitespace at the ends or an invisible character can never be meant: a single-line credential or address.
+// Not a multi-line key (its line breaks are the content), and not a label, where a joiner is part of an emoji.
+const takesCleaning = (field: CapabilityField): boolean => field.multiline !== true && (field.secret === true || isUrlField(field));
+
+/** The value as it is sent: trimmed, and for a credential or address, nothing invisible left in it. */
+export const submittedValue = (field: CapabilityField, raw: string | undefined): string =>
+    (takesCleaning(field) ? (raw ?? ``).replace(INVISIBLE_RE, ``) : (raw ?? ``)).trim();
+
+// A pasted token or URL, cleaned as it lands rather than only on the way out, so the box holds what will be sent: a
+// token pasted with a trailing line break once reached a Test as "Invalid character in header content". Undefined when
+// the paste needs no repair or the field is not one to clean.
+export const cleanedPaste = (field: CapabilityField, pasted: string): string | undefined => {
+    if (!takesCleaning(field)) {
+        return undefined;
+    }
+    const cleaned = submittedValue(field, pasted);
+    return cleaned === pasted ? undefined : cleaned;
+};
+
 // A capability's URL is dialled from inside the sandbox container, where `localhost` means the
 // container itself. Returns the rewritten URL, or undefined when there's nothing to fix.
 export const containerUrlFix = (field: CapabilityField, value: string | undefined): string | undefined => {

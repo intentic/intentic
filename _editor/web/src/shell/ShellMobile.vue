@@ -12,7 +12,7 @@ import SandboxGate from "../features/sandbox/gates/SandboxGate.vue";
 // bar yields to the on-screen keyboard. No rail, chat column, or docked terminal: chat and terminal are
 // full-screen routes, and the rail's tiles live on /menu.
 
-const { keyboardInset } = useDevice();
+const { keyboardOpen } = useDevice();
 
 // Undefined on a tab root or its own drill-down (mobileTabs.ts): those already carry their own back arrow.
 // Otherwise steps back when history.state.back shows one exists, else falls back to Menu.
@@ -51,6 +51,6 @@ const wallpapered = useWallpaperedRoute();
                 </div>
             </SandboxGate>
         </main>
-        <MobileTabBar v-show="keyboardInset === 0" />
+        <MobileTabBar v-show="!keyboardOpen" />
     </div>
 </template>

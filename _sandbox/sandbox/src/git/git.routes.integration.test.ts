@@ -7,6 +7,7 @@ import { clientFor, errorCode } from "../harness/route-client.testing.js";
 import { fakeHistory, tempWorkspace } from "../harness/route-fakes.testing.js";
 import { fakeFiles } from "../workspace/workspace-slice.testing.js";
 import { services } from "../harness/route-services.testing.js";
+import type { Remover } from "../conversations/registry/agents-store.js";
 
 // The git routes, driven over the daemon's HTTP surface exactly as the browser drives them; fakes and client are shared
 // via route-services.testing.ts and its siblings.
@@ -503,9 +504,13 @@ test("git writes serialize per repo, so a commit cannot interleave with an agent
 test("git.discard forwards paths and records the worktree change as a user write", async () => {
     const discards: (readonly string[] | undefined)[] = [];
     let notified = 0;
+    // Named to the landed-presence probe as a person's doing, before the tree moves.
+    const removers: Remover[] = [];
+    const base = services();
     const client = clientFor(
         createApp(
             services({
+                agents: { ...base.agents, noteRemover: (remover) => void removers.push(remover) },
                 history: fakeHistory({ notifyUserWrite: () => void notified++ }),
                 git: {
                     ...services().git,
@@ -520,6 +525,7 @@ test("git.discard forwards paths and records the worktree change as a user write
     expect(await client.git.discard({ repo: "root" })).toEqual({ ok: true });
     expect(discards).toEqual([["junk.txt"], undefined]);
     expect(notified).toBe(2);
+    expect(removers).toEqual([{ kind: "person" }, { kind: "person" }]);
 });
 
 test("git.fileDiff routes each side to its own diff and BAD_REQUESTs a path escape", async () => {

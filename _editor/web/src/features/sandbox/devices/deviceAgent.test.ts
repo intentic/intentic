@@ -57,11 +57,9 @@ const verbs = (overrides: Partial<Device> = {}, held: Partial<Report> = {}, late
 
 // ── the verbs are standing, not remedies ───────────────────────────────────
 
-// The whole point of the group: an update this sandbox has to notice first is no update at all on a dev
-// build, on a sandbox that never reached the registry, or on a release published since it last looked —
-// and each of those used to mean typing `intentic-machine upgrade` on the machine itself.
-test(`offers both verbs on an agent with nothing at all wrong with it`, () => {
-    expect(verbs({}, {}, `1.2.0`)).toEqual([`Update agent`, `Restart agent`]);
+// A known-current agent needs no Update button; where the registry has not answered, the device can check itself.
+test(`offers Restart alone when the installed agent is already current`, () => {
+    expect(verbs({}, {}, `1.2.0`)).toEqual([`Restart agent`]);
     expect(panelOf({}, {}, `1.2.0`)?.blocked).toBeUndefined();
 });
 
@@ -98,7 +96,7 @@ test(`says nothing at all about an agent with nothing to ask for`, () => {
     expect(hints({}, {}, `1.2.0`)).toBe(``);
     expect(panelOf({}, {}, `1.2.0`)?.notes).toEqual([]);
     expect(panelOf({}, {}, `1.2.0`)?.state).toEqual({ word: `running`, variant: `success` });
-    expect(verbs({}, {}, `1.2.0`)).toEqual([`Update agent`, `Restart agent`]);
+    expect(verbs({}, {}, `1.2.0`)).toEqual([`Restart agent`]);
 });
 
 // Whether this sandbox knows the newest release is a fact about this sandbox, not about the machine on screen,
@@ -123,7 +121,7 @@ test(`says a stopped process is why nothing reaches this device, and still offer
     const stopped = { agent: { running: false, build: `1.2.0`, installed: `1.2.0` } };
     expect(said({}, stopped, `1.2.0`)).toBe(`Agent stopped — nothing reaches its folders or ports.`);
     expect(panelOf({}, stopped, `1.2.0`)?.state).toEqual({ word: `stopped`, variant: `warning` });
-    expect(verbs({}, stopped, `1.2.0`)).toEqual([`Update agent`, `Restart agent`]);
+    expect(verbs({}, stopped, `1.2.0`)).toEqual([`Restart agent`]);
 });
 
 test(`distinguishes a process that has stopped making rounds from one that has stopped`, () => {
@@ -194,10 +192,16 @@ test(`hands the silence back to the concerns strip once the drop is older than t
 // errand. This panel used to restate all four in a few words each, directly beneath them.
 test(`leaves every gap to the concerns strip rather than restating it under the buttons it removed`, () => {
     for (const gap of [`scope-off`, `offline`] as const) {
-        expect(verbs({ gap })).toEqual([]);
         expect(panelOf({ gap })?.blocked).toBeUndefined();
         expect(said({ gap })).toBe(``);
     }
+    expect(verbs({ gap: `offline` })).toEqual([]);
+});
+
+// The owner's own maintenance rides no switch of the agents': with "Run commands" off the machine sends no report, but
+// it still hears Update and Restart over its socket. An owner once had to turn that switch on to update the agent.
+test(`keeps Update and Restart on a machine whose agents may not run commands`, () => {
+    expect(verbs({ gap: `scope-off`, report: undefined }, {}, `1.2.0`)).toEqual([`Update agent`, `Restart agent`]);
 });
 
 // Nothing to state and nothing to press: a heading over an empty card.
@@ -267,6 +271,8 @@ test(`sends it through a distro when the Windows side cannot hear it, and nowher
 
 test(`says nothing about a machine whose sides agree and are current`, () => {
     expect(machineAgent(pc([distroSide(), windowsSide()], `1.2.0`), `1.2.0`).notes).toEqual([]);
+    expect(machineAgent(pc([distroSide(), windowsSide()], `1.2.0`), `1.2.0`).updateNeeded).toBe(false);
+    expect(machineAgent(pc([distroSide({}, `1.1.0`), windowsSide()], `1.2.0`), `1.2.0`).updateNeeded).toBe(true);
 });
 
 // Sides on different builds is the state this design exists to end; it is named once, with each side's build.

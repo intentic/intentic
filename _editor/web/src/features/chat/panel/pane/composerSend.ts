@@ -25,7 +25,7 @@ import { pickUpReady, pickUpShort } from "../../run/pickUp";
 import { formatReset } from "../../session/usageStatus";
 import { planFeedback } from "../../session/cardReplies";
 import { invalidateAgentTranscript } from "../../transcript/agentTranscript";
-import type { ChatAttachment } from "../../transcript/transcript";
+import type { ChatAttachment, ChatMessage } from "../../transcript/transcript";
 import type { ConversationView } from "../useChat-view";
 
 // What one pane's Send means and does. The meaning is composerIntent.ts's ladder read against this composer's state
@@ -70,6 +70,62 @@ const composerTurn = ({ streaming, ending, awaitingDecision, pendingPlanMessage 
     planMessage: computed(() => (ending.value === undefined ? pendingPlanMessage.value : undefined)),
 });
 
+// The plan's Approve, from the bar pinned above the box (ChatWaitingBar). With notes in the box it is "approve with these
+// notes": the plan reply carries no words beside a yes (its feedback is a rejection's), so the approval goes first and
+// the notes follow as an ordinary message, which the running turn takes mid-turn or right after. The box empties at the
+// press and gets its words back if the approval did not land. And its "keep planning": the box's notes when it holds
+// any (what Send does here), else a bare no, which is what the card's own button sends.
+const planAnswers = (
+    host: SendHost,
+    planMessage: Readonly<Ref<ChatMessage | undefined>>,
+    composer: { readonly settle: () => void; readonly sendDraft: () => void },
+) => {
+    const { view, history, editorContext } = host;
+    const { draft, attachments, staged } = view;
+    const approvePlan = async (): Promise<void> => {
+        const plan = planMessage.value?.plan;
+        if (plan === undefined || !host.reachable.value) {
+            return;
+        }
+        const text = draft.value.trim();
+        const staging = attachments.value;
+        const files = host.staging.snapshot();
+        const context = editorContext.forSend();
+        const notes = text.length > 0 || files.length > 0;
+        if (notes) {
+            attachments.value = [];
+            editorContext.include.value = false;
+            composer.settle();
+        }
+        const approved = await view.conversation.value.requests.reply(plan.requestId, { kind: `plan`, approve: true });
+        if (!notes) {
+            return;
+        }
+        if (!approved) {
+            draft.value = text;
+            attachments.value = staging;
+            return;
+        }
+        void view.send(text, files, context);
+        if (text.length > 0) {
+            history.value?.record(text);
+        }
+        host.pin();
+    };
+    const keepPlanning = (): void => {
+        const plan = planMessage.value?.plan;
+        if (plan === undefined || !host.reachable.value) {
+            return;
+        }
+        if (staged.value) {
+            composer.sendDraft();
+            return;
+        }
+        void view.conversation.value.requests.reply(plan.requestId, { kind: `plan`, approve: false });
+    };
+    return { approvePlan, keepPlanning };
+};
+
 export const useComposerSend = (host: SendHost) => {
     const { view, voiceAgent, history, editorContext } = host;
     const { draft, attachments, editing, awaitingDecision, pickUp, queued, connected, staged } = view;
@@ -103,6 +159,7 @@ export const useComposerSend = (host: SendHost) => {
         pendingPlan: planMessage.value !== undefined,
         streaming: live.value,
         awaitingDecision: parked.value,
+        waitingOnYou: view.waitingOnYou.value,
         steerable: view.steerable.value,
         // Read against the clock here: the pure ladder (PickUpSituation) must not ask what time it is.
         pickUp: pickUp.value === undefined ? undefined : { ready: pickUpReady(pickUp.value, paneNow.value) },
@@ -199,6 +256,8 @@ export const useComposerSend = (host: SendHost) => {
         settleComposer();
     };
 
+    const { approvePlan, keepPlanning } = planAnswers(host, planMessage, { settle: settleComposer, sendDraft });
+
     // Place and edit intercept and always return, since falling through with an empty box would misfire as Continue or an
     // appended send; then the run-through badge, then `canSend` for what's left. `now` skips the scheduling, for a caller
     // that just made room itself (a reset claimed, an account switched).
@@ -281,5 +340,7 @@ export const useComposerSend = (host: SendHost) => {
             return host.mobile.value ? t(`ui.action.stop`) : { title: t(`ui.action.stop`), keys: t(`ui.keys.esc`) };
         }),
         submit,
+        approvePlan,
+        keepPlanning,
     };
 };

@@ -4,6 +4,7 @@ import { sandboxPoll } from "@intentic/extension-api";
 import { failureStreaks, streakTooltip } from "./ciStreaks";
 import { ciRunsQuery } from "./ciRunsQuery";
 import { host } from "./host";
+import { t } from "./i18n.js";
 
 // Module state owned by activate(), not the view, so the badge updates without Pipelines being open; reads through the
 // host's cache, doubling as the board's first paint. A timer, not a file watch: nothing local observes the CI provider,
@@ -28,7 +29,10 @@ export const ciRunsNow = (): CiRunsResponse => runs.value;
 export const inFlightNote = (all: readonly PipelineRun[]): string | undefined => {
     const running = all.filter((run) => run.status === `running`).length;
     const queued = all.filter((run) => run.status === `queued`).length;
-    const parts = [...(running > 0 ? [`${running} running`] : []), ...(queued > 0 ? [`${queued} queued`] : [])];
+    const parts = [
+        ...(running > 0 ? [t(`extension.running`, { count: running })] : []),
+        ...(queued > 0 ? [t(`extension.queued`, { count: queued })] : []),
+    ];
     return parts.length === 0 ? undefined : parts.join(`, `);
 };
 

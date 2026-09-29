@@ -39,12 +39,14 @@ const empty = computed(() => loops.value.length === 0 && workflows.value.length 
 <template>
     <div class="flex flex-col p-1">
         <!-- An empty workspace is ordinary, not an error, so the sentence says what a loop and workflow ARE rather than just reporting absence. -->
-        <p v-if="empty" class="px-2.5 py-3 text-2xs text-subtle">
-            {{ t(`chat.chatRunThroughMenu.nothingSavedYet`) }} <strong class="font-medium text-muted">{{ t(`chat.chatRunThroughMenu.loop`) }}</strong>
-            {{ t(`chat.chatRunThroughMenu.sendsMessageOverOver`) }}
-            <strong class="font-medium text-muted">{{ t(`chat.chatRunThroughMenu.workflow`) }}</strong>
-            {{ t(`chat.chatRunThroughMenu.handsToDesignSeveral`) }}
-        </p>
+        <i18n-t v-if="empty" keypath="chat.chatRunThroughMenu.nothingSavedExplained" tag="p" class="px-2.5 py-3 text-2xs text-subtle" scope="global">
+            <template #loop
+                ><strong class="font-medium text-muted">{{ t(`chat.chatRunThroughMenu.loop`) }}</strong></template
+            >
+            <template #workflow
+                ><strong class="font-medium text-muted">{{ t(`chat.chatRunThroughMenu.workflow`) }}</strong></template
+            >
+        </i18n-t>
 
         <!-- The way back to an ordinary message; must be a row in this list, since the pill itself is just a badge. -->
         <button

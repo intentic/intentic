@@ -668,6 +668,7 @@ const seamWidth = computed<number>({
             @resolve="changes.askResolve()"
             @merge="changes.land('merge')"
             @commit="openChanges"
+            @save-settings="(paths: readonly string[]) => changes.land(`check`, undefined, false, paths)"
             @stop="stopAgent(agentId, at)"
             @cross="cross"
             @chat="emit('chat')"

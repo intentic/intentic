@@ -38,7 +38,11 @@
             "sameTurn": "Ta sama tura",
             "steps": "Kroki",
             "temporary": ", tymczasowo",
-            "waitingMaintainer": "{landAsk}: czeka na opiekuna"
+            "waitingMaintainer": "{landAsk}: czeka na opiekuna",
+            "landAgainHint": "Mogły zostać usunięte celowo.",
+            "skip": "Pomiń",
+            "answerNotTaken": "Nie udało się tego wysłać: tura mogła się już skończyć.",
+            "settingsNotSaved": "Zmienione na stronie Sandbox {pages}, jeszcze niezapisane: otwórz przegląd i naciśnij „Zapisz je i scal”."
         },
         "agentConflictReport": {
             "agentWriting": "Agent pisze",
@@ -56,6 +60,8 @@
             "openChanges": "Otwórz Zmiany",
             "commitThereThenLand": "Zrób tam commit swoich zmian, potem scal ponownie: git nie przemerguje przez niezacommitowaną pracę.",
             "resolvingAgentBringingBranch": "Rozwiązywanie: agent aktualizuje swoją gałąź",
+            "savesThenLands": "Zapisuje te ustawienia takie, jakie są, a potem scala pracę agenta.",
+            "saveThemAndLand": "Zapisz je i scal",
             "showFile": "Pokaż plik",
             "watch": "Obserwuj",
             "yourEditsAreThere": "plik z Twoimi własnymi zmianami jest w tamtej przestrzeni roboczej | {count} pliki z Twoimi własnymi zmianami są w tamtej przestrzeni roboczej | {count} plików z Twoimi własnymi zmianami jest w tamtej przestrzeni roboczej",
@@ -183,6 +189,7 @@
             "draft": "Szkic",
             "earlierChat": "Wcześniejszy czat",
             "edits": "Twoje zmiany",
+            "unsavedSettings": "Niezapisane ustawienia",
             "email": "E-mail",
             "error": "Błąd",
             "finishing": "Kończenie…",
@@ -194,6 +201,7 @@
             "landConflict": "Konflikt przy scalaniu",
             "landed": "Scalone",
             "movingTo": "Przechodzi na {account}",
+            "newAgent": "Nowy agent",
             "onBranch": "na gałęzi",
             "openChat": "Otwórz czat",
             "openedByAutomationFirst": "Otwarte przez automatyzację „{automationId}”{where}, jej pierwszy prompt nie jest Twój",
@@ -201,6 +209,8 @@
             "permission": "Uprawnienie",
             "question": "Pytanie do Ciebie",
             "readyToLand": "Gotowe do scalenia",
+            "needsYou": "Potrzebuje Cię",
+            "seeWhatItNeeds": "Zobacz, czego potrzebuje",
             "releaseNeeded": "Potrzebne zwolnienie",
             "removed": "Usunięte",
             "restOnBranch": "Reszta na gałęzi",
@@ -217,6 +227,8 @@
             "stopped": "Zatrzymany",
             "stopping": "Zatrzymywanie…",
             "stopping2": "Zatrzymywanie",
+            "untitledAgent": "Agent bez nazwy",
+            "untitledChat": "Czat bez tytułu",
             "updated": "Zaktualizowany",
             "usageLimit": "Limit użycia",
             "viewError": "Zobacz błąd",
@@ -224,7 +236,23 @@
             "waitingOn": "Czeka na Ciebie",
             "waitingOnCondition": "Czeka na warunek",
             "wakesThisChat": "Budzi ten czat",
-            "watchPace": "co {interval} · zostało {left}"
+            "watchPace": "co {interval} · zostało {left}",
+            "webhook": "Webhook",
+            "couldntLandChip": "Nie scalono",
+            "couldntLand": "Nie udało się scalić: {reason}",
+            "lostLink": "kopia tego agenta straciła połączenie z historią Twojej przestrzeni roboczej",
+            "gitRefused": "git nie przeniósł jego pracy do Twoich plików",
+            "removedAfterLanding": "Usunięte po scaleniu",
+            "removedByWhom": "Usunięte po scaleniu, przez Ciebie albo przez innego agenta, który sprzątał: scal ponownie tylko wtedy, gdy chcesz je z powrotem.",
+            "removedBy": "Usunięte przez: {who}",
+            "removedByYou": "Usunięte przez Ciebie",
+            "anotherAgent": "inny agent",
+            "takenOutByAgent": "Usunięte po scaleniu przez: {who}, więc ta karta nie proponuje ich przywrócenia.",
+            "takenOutByYou": "Usunięte przez Ciebie po scaleniu.",
+            "takenOutBy": "Usunięte po scaleniu przez: {who}.",
+            "takenOutInChanges": "Odrzucone w panelu Zmiany po scaleniu.",
+            "held": "Wstrzymane",
+            "heldMemory": "Wstrzymane: w sandboxie kończy się pamięć"
         },
         "agentsView": {
             "agentResolveConflict": "Niech agent rozwiąże konflikt?",
@@ -243,6 +271,7 @@
             "deleteAll": "Usuń wszystkie",
             "deleteAllArchivedAgents": "Usuń trwale wszystkie zarchiwizowane agenty ({count})",
             "deleteEveryArchivedAgent": "Usunąć każdego zarchiwizowanego agenta?",
+            "everyone": "Wszyscy",
             "explainCodebase": "Wyjaśnij tę bazę kodu",
             "explainCodebaseWhatDoes": "Wyjaśnij tę bazę kodu, co robi, gdzie są punkty wejścia i które pliki powinienem przeczytać najpierw.",
             "filterAgentsByMessages": "Filtruj agenty po swoich wiadomościach lub id",
@@ -266,6 +295,7 @@
             "nothingNeedsRightNow": "W tej chwili nic Cię nie potrzebuje.",
             "nothingOnBoardStart": "Nic na tablicy. Zacznij rozmowę tutaj albo w przestrzeni roboczej; obie pojawią się na tej tablicy, a odizolowana praca zostaje do przejrzenia na własnej gałęzi.",
             "nothingWrittenToWorkspace": "Nic nie zostaje zapisane do Twojej przestrzeni roboczej, jeśli się nie uda. Turę możesz zatrzymać w dowolnym momencie.",
+            "onlyOwnedBy": "Tylko sesje, których właścicielem jest {name}, w każdej kolumnie",
             "openArchive": "Otwórz archiwum ({archiveSize})",
             "reviewMyChanges": "Przejrzyj moje zmiany",
             "reviewMyUncommittedChanges": "Przejrzyj moje niezacommitowane zmiany i oznacz wszystko ryzykowne, zanim zrobię commit.",
@@ -274,10 +304,22 @@
             "suggestThreeSmallSafe": "Zaproponuj trzy małe, bezpieczne ulepszenia tej bazy kodu. Poczekaj, aż wybiorę jedno, zanim cokolwiek zmienisz.",
             "synthesize": "Podsumuj",
             "thisAgent": "Ten agent",
+            "landConfirmTitle": "Wprowadzić tę pracę do Twoich plików?",
+            "landConfirmBody": "{agent}: wszystko, co zmienił, a czego jeszcze nie ma w Twoich plikach, trafi tam teraz.",
+            "landConfirmFiles": "Zmieniono łącznie {count} plik. | Zmieniono łącznie {count} pliki. | Zmieniono łącznie {count} plików.",
+            "relandConfirmBody": "{agent}: pliki usunięte po wprowadzeniu jego pracy wrócą, w wersji z jego gałęzi.",
             "thoseExactCapitals": "” dokładnie z taką wielkością liter.",
             "undoArchive": "Cofnij archiwizację",
             "willStartTurn": "{agent} zacznie turę: przerebasuje swoją gałąź na Twoją obecną przestrzeń roboczą, rozwiąże konflikt we własnym worktree i scali wynik, gdy skończy.",
-            "workTheyAlreadyLanded": "Praca, którą już scaliły, zostaje w Twojej przestrzeni roboczej. Przepada tylko to, co nigdy nie opuściło ich gałęzi. Agenty wciąż na tablicy pozostają nietknięte."
+            "workTheyAlreadyLanded": "Praca, którą już scaliły, zostaje w Twojej przestrzeni roboczej. Przepada tylko to, co nigdy nie opuściło ich gałęzi. Agenty wciąż na tablicy pozostają nietknięte.",
+            "archiveFamily": "Zarchiwizować {title} i jego {count} podagenta? | Zarchiwizować {title} i jego {count} podagenty? | Zarchiwizować {title} i jego {count} podagentów?",
+            "archiveFamilyKept": "Znikną z tablicy razem. Nic nie przepada: gałęzie, rozmowy i zmiany zostają, a Cofnij albo archiwum przywróci je z powrotem.",
+            "archiveWithSubagents": "Zarchiwizuj {count} agenta | Zarchiwizuj {count} agenty | Zarchiwizuj {count} agentów",
+            "limitStopped": "{count} agent zatrzymany przez limit użycia {provider} | {count} agenty zatrzymane przez limit użycia {provider} | {count} agentów zatrzymanych przez limit użycia {provider}",
+            "resumeAllNow": "Wznów wszystkie",
+            "resumeAllNowHint": "Brak czasu odnowienia: wysyła teraz.",
+            "resumeAllWhenBack": "Wznów wszystkie, gdy {provider} wróci",
+            "resumeAllWhenBackHint": "Każdy ruszy po odnowieniu."
         },
         "buildIdeas": {
             "pageMyBusiness": "Strona dla mojej firmy",
@@ -285,7 +327,9 @@
             "somethingPlayful": "Coś żartobliwego"
         },
         "conflictResolution": {
+            "appWroteThese": "Aplikacja zapisała je, gdy zmieniło się tam ustawienie; nikt nie edytował ich ręcznie.",
             "binaryFilesNoAutomatic": "pliki binarne, których nie da się scalić automatycznie",
+            "changedInSettings": "zmienione na stronie Sandbox {pages}, jeszcze niezapisane",
             "uncommittedEditsTo": "masz w nich niezacommitowane zmiany",
             "workspaceMovedOnSince": "Twoja przestrzeń robocza ruszyła do przodu, odkąd agent odbił gałąź",
             "rowTip": {
@@ -369,6 +413,7 @@
             "role": {
                 "agentRuntime": "środowiska agentów",
                 "browser": "przeglądarki",
+                "git": "git",
                 "container": "kontenery",
                 "extension": "rozszerzenia",
                 "languageServer": "serwery języka",
@@ -379,10 +424,16 @@
                 "toolchain": "budowanie i testy",
                 "translator": "tłumacze"
             },
+            "cpu": "{percent} CPU",
+            "sessionsLabel": "Według sesji",
+            "smallSessions": "jeszcze {count} sesja · {size} | jeszcze {count} sesje · {size} | jeszcze {count} sesji · {size}",
+            "smallSessionsHide": "Ukryj lżejsze sesje",
             "rolesLabel": "Pamięć według rodzaju",
             "rolesNote": "Wspólna liczona w każdym",
             "sandboxLabel": "Zasoby sandboxa",
+            "cpuLabel": "CPU",
             "sessionUsage": "Użycie sesji",
+            "swapLabel": "Swap",
             "smallRoles": "{count} mniejszy rodzaj · {size} | {count} mniejsze rodzaje · {size} | {count} mniejszych rodzajów · {size}",
             "smallRolesHide": "Ukryj mniejsze rodzaje",
             "swapNote": "Rośnie: brakuje pamięci",
@@ -450,6 +501,7 @@
             "sessionId": "Id sesji"
         },
         "suggestedSessionBox": {
+            "ctrlEnter": "Ctrl+Enter",
             "whatShouldAgentDo": "Co ma zrobić agent?"
         },
         "workflowRunCard": {
@@ -519,6 +571,7 @@
             "landNow": "Scal teraz",
             "landing": "Scalanie…",
             "landAgain": "Scal ponownie",
+            "link": "Link",
             "stopWatching": "Przestań obserwować",
             "filterByMessages": "Filtruj po swoich wiadomościach lub id…",
             "openIn": "Otwórz w",
@@ -528,6 +581,35 @@
             "agentTitle": "Tytuł agenta",
             "sessionName": "Nazwa sesji",
             "sendAgain": "Wyślij ponownie"
+        },
+        "useAgentsArchive": {
+            "undoHint": "Odłóż je z powrotem na tablicę",
+            "undoHintWithKey": "Odłóż je z powrotem na tablicę ({shortcut})",
+            "refusedOne": "Nie udało się zarchiwizować tego agenta: {reason}",
+            "refusedSome": "Nie udało się zarchiwizować {count} z nich: {reason}",
+            "copyNotReleased": "nie dało się zwolnić jego kopii roboczej",
+            "copiesNotReleased": "nie dało się zwolnić ich kopii roboczych",
+            "nothingToArchive": "Nie ma czego archiwizować, każdy skończony agent jest już poza tablicą.",
+            "archivedCount": "Zarchiwizowano {count} agenta | Zarchiwizowano {count} agenty | Zarchiwizowano {count} agentów",
+            "couldntArchive": "Nie udało się tego zarchiwizować.",
+            "backOnBoard": "{count} agent wrócił na tablicę | {count} agenty wróciły na tablicę | {count} agentów wróciło na tablicę",
+            "couldntRestore": "Nie udało się tego przywrócić.",
+            "deletedSome": "Usunięto {removed} z {total} zarchiwizowanych agentów, pozostałe są nadal w użyciu i zostały.",
+            "deletedCount": "Usunięto {count} zarchiwizowanego agenta | Usunięto {count} zarchiwizowane agenty | Usunięto {count} zarchiwizowanych agentów",
+            "couldntDeleteArchive": "Nie udało się usunąć archiwum."
+        },
+        "useAgentChanges": {
+            "landFailed": "Nie udało się scalić.",
+            "autoLandFailed": "Nie udało się zmienić, kiedy ten agent scala swoją pracę.",
+            "askResolveFailed": "Nie udało się poprosić agenta o rozwiązanie.",
+            "discardFailed": "Nie udało się odrzucić zmian.",
+            "includeScratchFailed": "Nie udało się dodać tego do pracy.",
+            "deleteScratchFailed": "Nie udało się tego usunąć.",
+            "archiveFailed": "Nie udało się zarchiwizować.",
+            "otherStaged": "Masz {count} inną zmianę przygotowaną do commita, a zapisanie tych ustawień zacommitowałoby ją razem z nimi. Najpierw zacommituj ją albo cofnij jej przygotowanie w Zmianach, potem spróbuj ponownie. | Masz {count} inne zmiany przygotowane do commita, a zapisanie tych ustawień zacommitowałoby je razem z nimi. Najpierw zacommituj je albo cofnij ich przygotowanie w Zmianach, potem spróbuj ponownie. | Masz {count} innych zmian przygotowanych do commita, a zapisanie tych ustawień zacommitowałoby je razem z nimi. Najpierw zacommituj je albo cofnij ich przygotowanie w Zmianach, potem spróbuj ponownie."
+        },
+        "resumeAll": {
+            "couldntResumeEvery": "Nie udało się wznowić wszystkich agentów."
         }
     },
     "app": {
@@ -537,25 +619,45 @@
     },
     "auth": {
         "desktopAuth": {
+            "alreadyHandedOver": "Gotowe: to logowanie już dotarło do aplikacji. Możesz zamknąć tę kartę.",
             "appCantShowGoogles": "Aplikacja nie może pokazać logowania Google we własnym oknie, więc otworzyła tę kartę.",
             "appDidntComeForward": "Jeśli aplikacja się nie odezwała, upewnij się, że Intentic działa, i wyślij to jeszcze raz.",
             "appWaiting": "Aplikacja czeka",
             "backToApp": "Wróć do aplikacji",
             "checkingWhatBrowserAlready": "Sprawdzanie, gdzie ta przeglądarka jest już zalogowana…",
             "closeTab": "Możesz zamknąć tę kartę.",
+            "continueAs": "Kontynuuj jako {email}",
             "continueGoogleAppTakes": "Kontynuuj przez Google. Dalej przejmuje aplikacja.",
             "desktopApp": "Aplikacja na komputer",
             "finishHere": "Zakończ tutaj",
+            "googleAccount": "Konto Google",
             "handingSignInTo": "Przekazywanie logowania do aplikacji…",
+            "intenticAccount": "Konto Intentic",
             "openInBrowser": "Otwórz to w przeglądarce",
             "pageToRunIn": "Ta strona musi działać w przeglądarce: Google nie zaloguje Cię w oknie aplikacji.",
+            "pickAccountForSandbox": "Wybierz konto Google, do którego należy Twój sandbox.",
+            "sandboxOpensForGoogle": "Sandbox otwiera się dla konta Google, więc oba konta muszą należeć do tej samej osoby.",
             "signedIn": "Zalogowano",
+            "signInAgainFromApp": "Żeby zalogować się ponownie, zacznij w aplikacji Intentic.",
             "signingIn": "Logowanie jako",
-            "useGooglesOwnPage": "Skorzystaj z własnej strony Google."
+            "twoAccountsHere": "Ta przeglądarka jest zalogowana do Google i do Intentic jako dwie różne osoby.",
+            "useDifferentGoogle": "Użyj innego konta Google",
+            "useGooglesOwnPage": "Skorzystaj z własnej strony Google.",
+            "beatCheckBrowser": "Sprawdź tę przeglądarkę",
+            "beatConfirmGoogle": "Potwierdź przez Google",
+            "beatHandOver": "Przekaż do aplikacji",
+            "googleAnswerUnreadable": "Nie udało się odczytać odpowiedzi Google. Spróbuj zalogować się ponownie.",
+            "linkMissingValue": "W tym linku brakuje wartości, która wiąże go z Twoją aplikacją: otwórz Intentic i zaloguj się stamtąd.",
+            "needsGoogleSignIn": "Intentic potrzebuje Twojego logowania Google, żeby dostać się do Twojego sandboxa.",
+            "couldntFinishInApp": "Nie udało się dokończyć logowania do aplikacji.",
+            "couldntSignInAs": "Nie udało się zalogować do Intentic jako {email}."
         },
         "desktopAuthComplete": {
             "backToSignIn": "Wróć do logowania",
-            "signingIn": "Logowanie…"
+            "signingIn": "Logowanie…",
+            "linkIncomplete": "Ten link logowania jest niekompletny.",
+            "expired": "To logowanie już wygasło. Zaloguj się ponownie z aplikacji.",
+            "couldntFinish": "Nie udało się dokończyć logowania."
         },
         "login": {
             "acceptableUsePolicy": "Zasady dopuszczalnego użytkowania",
@@ -564,11 +666,20 @@
             "privacyPolicy": "Polityka prywatności",
             "terms": "Regulamin",
             "threeStepsToFirst": "Trzy kroki do pierwszego agenta",
+            "twoStepsToFirst": "Dwa kroki do pierwszego agenta",
             "weKeepEmailAddress": "Przechowujemy Twój adres e-mail i adres Twojej przestrzeni roboczej — nic więcej. Kontynuując, akceptujesz nasz",
             "welcomeToIntentic": "Witamy w intentic",
-            "workspaceCodingAgents": "Przestrzeń robocza dla agentów programistycznych."
+            "workspaceCodingAgents": "Przestrzeń robocza dla agentów programistycznych.",
+            "stepSignIn": "Zaloguj się przez Google",
+            "stepSandboxWaiting": "Twój sandbox czeka",
+            "stepPasteCommand": "Wklej jedno polecenie",
+            "stepInstallApp": "Zainstaluj aplikację",
+            "signInDidntFinish": "Nie udało się dokończyć tego logowania. Zamiast tego kontynuuj przez Google poniżej."
         },
         "words": {
+            "finishInBrowser": "Dokończ logowanie w przeglądarce…",
+            "finishInBrowserDetail": "Logowanie Google otworzyło się tam w karcie. To okno samo ruszy dalej, gdy skończysz.",
+            "openBrowserAgain": "Otwórz ponownie",
             "sendItAgain": "Wyślij ponownie",
             "troubleSigningInUse": "Kłopot z logowaniem? Skorzystaj z własnej strony Google.",
             "continueGoogleInBrowser": "Kontynuuj przez Google w przeglądarce",
@@ -600,9 +711,9 @@
             "newTab": "Nowa karta",
             "noBrowsersOpen": "Brak otwartych przeglądarek",
             "noPagesOpen": "Brak otwartych stron",
+            "ok": "OK",
             "openAddressYourself": "Otwórz ten adres samodzielnie",
             "openCount": "Otwarte",
-            "other": "inne",
             "pageSays": "Ta strona mówi",
             "sendsYourInput": "Wysyła kliknięcia i klawisze",
             "signedIn": "Zalogowano",
@@ -611,8 +722,8 @@
             "switchBrowser": "Zmień przeglądarkę",
             "takeControl": "Przejmij sterowanie",
             "takeControlFixStep": "Przejmij sterowanie, napraw ten krok i oddaj.",
-            "waiting": "czeka na Ciebie",
-            "youreDrivingHandBack": "Sterujesz · oddaj"
+            "youreDrivingHandBack": "Sterujesz · oddaj",
+            "othersWaiting": "{count} inna przeglądarka czeka na Ciebie | {count} inne przeglądarki czekają na Ciebie | {count} innych przeglądarek czeka na Ciebie"
         }
     },
     "capabilities": {
@@ -734,7 +845,8 @@
         },
         "credentialGuide": {
             "howToGet": "Jak to zdobyć",
-            "needs": "Wymaga"
+            "needs": "Wymaga",
+            "createToken": "Utwórz token"
         },
         "deviceConnections": {
             "noCommandAccess": "brak dostępu do poleceń"
@@ -751,32 +863,30 @@
         },
         "gitRefField": {
             "addRepositoryAboveVersions": "Dodaj repozytorium powyżej, a wersje, które oferuje, pojawią się tutaj.",
-            "asking": "Pyta",
             "full40CharacterCommit": "Pełny, 40-znakowy sha commita",
             "pickBranchReleaseInstead": "Wybierz zamiast tego gałąź albo wydanie",
             "pickVersion": "Wybierz wersję…",
-            "whatOffers": "co oferuje…"
+            "askingWhatOffers": "Sprawdzanie, co oferuje {host}…"
         },
         "hostConnectDialog": {
             "callsItself": "Ta maszyna nazywa siebie",
             "codeInCommandWorks": "Kod w tym poleceniu działa raz i wygasa po mniej więcej dziesięciu minutach. To okno zaktualizuje się samo, gdy urządzenie się połączy.",
             "connectedAgentWorkOn": "jest podłączone. Agent może na nim pracować od następnej tury.",
             "couldNotRename": "Nie udało się przyjąć tej nazwy.",
-            "in": ": w",
             "inside": "wewnątrz",
             "nameIt": "Nazwij ją {name}",
             "nameItThatToo": ". Nazwać ją tak również tutaj? Narzędzia agenta przyjmą nową nazwę, a maszyna sama połączy się ponownie pod nią.",
             "named": "Nazwano",
             "nothingElseThoseSwitches": "— i nic poza tym. Te przełączniki żyją na tej karcie, urządzenie samo ich pilnuje, a „Odbierz” tutaj odcina je natychmiast.",
             "orKeep": "albo zostaw {id}",
+            "powershell": "PowerShell",
             "reconnectsUnderThatName": ". Sama połączy się ponownie pod tą nazwą; narzędzia agenta podążą za nią od jego następnej tury.",
             "run": "Uruchom to z",
             "runInside": "Uruchom to w {name}",
             "runInsideLinuxEnvironment": "Uruchom to w samym środowisku Linux",
-            "runOn": "Uruchom to na",
             "runWindowsInsideDistro": "Uruchom to z Windows, wewnątrz distro, przez wsl.exe",
             "terminalInDistro": "Terminal w distro",
-            "yourselfInstallsSmallAgent": ", jako Ty sam. Instaluje to małego agenta, który dzwoni do tego sandboxa i trzyma jedno połączenie wychodzące otwarte. W Twojej sieci nie są otwierane żadne porty i nie ma nic do ustawienia na routerze."
+            "runThisOn": "Uruchom to na {id}: w {shell}, na swoim koncie. Instaluje to małego agenta, który łączy się z tym sandboxem i trzyma otwarte jedno połączenie wychodzące. W Twojej sieci nie są otwierane żadne porty i nie ma nic do ustawienia na routerze."
         },
         "hostRecreate": {
             "actionHeader": "{action} ten sandbox?",
@@ -820,7 +930,24 @@
             "workingDownload": "Pobieranie aktualizacji",
             "workingRebuild": "Przebudowa tego sandboxa",
             "workingRollBack": "Cofanie tego sandboxa",
-            "workingUpdate": "Aktualizacja tego sandboxa"
+            "workingUpdate": "Aktualizacja tego sandboxa",
+            "comingBack": "{what}. Ta strona sama połączy się ponownie, gdy sandbox wróci.",
+            "lostBeforeRestart": "Kontakt z tamtym urządzeniem urwał się, zanim ten sandbox się zrestartował. Może się to jeszcze zakończyć: odśwież stronę za minutę, żeby zobaczyć, jak daleko doszło.",
+            "returnTimedOut": "Przestaliśmy czekać na powrót sandboxa. Restart może jeszcze trwać: odśwież stronę za minutę, aby zobaczyć, jak poszło.",
+            "interruptsAgents": "To zatrzyma agenta, który teraz pracuje: {names}. Jego praca zostanie zachowana, a po powrocie sandboxa poczeka, aż każesz mu kontynuować. | To zatrzyma {count} agentów, którzy teraz pracują: {names}. Ich praca zostanie zachowana, a po powrocie sandboxa każdy poczeka, aż każesz mu kontynuować. | To zatrzyma {count} agentów, którzy teraz pracują: {names}. Ich praca zostanie zachowana, a po powrocie sandboxa każdy poczeka, aż każesz mu kontynuować.",
+            "resumesAgents": "To zatrzyma agenta, który teraz pracuje: {names}. Po powrocie sandboxa sam wróci do pracy. | To zatrzyma {count} agentów, którzy teraz pracują: {names}. Po powrocie sandboxa sami wrócą do pracy. | To zatrzyma {count} agentów, którzy teraz pracują: {names}. Po powrocie sandboxa sami wrócą do pracy.",
+            "continueAfter": "Niech sam wróci do pracy, gdy sandbox się uruchomi | Niech sami wrócą do pracy, gdy sandbox się uruchomi | Niech sami wrócą do pracy, gdy sandbox się uruchomi",
+            "whenIdle": "Przebuduj, gdy skończy pracę | Przebuduj, gdy skończą pracę | Przebuduj, gdy skończą pracę",
+            "waitingForAgents": "Przebudowa ruszy sama, gdy {names} skończy pracę. | Przebudowa ruszy sama, gdy ci agenci skończą pracę: {names}. | Przebudowa ruszy sama, gdy ci agenci skończą pracę: {names}.",
+            "startingOnceIdle": "Żaden agent teraz nie pracuje, więc przebudowa się zaczyna.",
+            "stopWaiting": "Anuluj przebudowę",
+            "rebuildingNowIdle": "Przebudowa trwa, bo żaden agent już nie pracuje. Ta strona sama się połączy, gdy sandbox wróci.",
+            "idleRebuildFailed": "Przebudowa, która czekała na agentów, nie udała się na tym urządzeniu.",
+            "waitDidntGoThrough": "Nie udało się zmienić, kiedy ruszy przebudowa.",
+            "didntGoThrough": "Na tamtym urządzeniu nie udało się wykonać operacji: {action}.",
+            "costRollBack": "Restartuje Twój sandbox na wersji, na której działał wcześniej, co zajmuje jakieś pół minuty.",
+            "costRestartOnlyShort": "Jest już pobrana, więc zostaje tylko restart: jakieś pół minuty.",
+            "costBuildThenRestartShort": "Najpierw pobiera i buduje, co niczego nie przerywa, a potem restartuje Twój sandbox na jakieś pół minuty."
         },
         "normalize": {
             "sMailServer993": "Serwer pocztowy {domain} to {host}:993, wypełniliśmy to za Ciebie."
@@ -888,13 +1015,29 @@
             "typedOn": "wpisane na {detail}",
             "usedByAgent": "używane przez agenta",
             "value": "Wartość",
-            "whoRelease": "Kto może to zwolnić"
+            "whoRelease": "Kto może to zwolnić",
+            "fromNamedPerson": "Od wskazanej osoby",
+            "noNamedApprover": "Żadna wskazana osoba nie musi go zwalniać.",
+            "noNamedApproverOwnerOnly": "Żadna wskazana osoba nie musi go zwalniać. Zmienić to może tylko właściciel."
         },
         "secretField": {
             "as": "jako",
             "pasteValue": "Wklej wartość dla {secretKey}",
             "showValue": "Pokaż wartość",
             "storedInSandboxs": "Przechowywane w"
+        },
+        "sshKeyField": {
+            "authorizeAs": "Autoryzuj go: uruchom to na serwerze, zalogowany jako {user}",
+            "authorizeAsUserAbove": "Autoryzuj go: uruchom to na serwerze, zalogowany jako użytkownik podany wyżej",
+            "couldntGenerate": "Nie udało się wygenerować klucza.",
+            "generateFirst": "Przed zapisaniem wygeneruj klucz i autoryzuj go na serwerze.",
+            "generateKey": "Wygeneruj klucz",
+            "generateNewKey": "Wygeneruj nowy klucz",
+            "holdsKey": "To połączenie już loguje się kluczem.",
+            "privateHalfStays": "Część prywatna nigdy nie opuszcza sandboxa.",
+            "publicKey": "Klucz publiczny",
+            "replacesOldKey": "Zapisanie podmieni klucz, którego używało połączenie. Stary klucz pozostaje autoryzowany na serwerze, dopóki go tam nie usuniesz.",
+            "sandboxMakesPair": "Sandbox tworzy parę kluczy i zatrzymuje część prywatną. Ty widzisz tylko część publiczną."
         },
         "tiles": {
             "standalone": "Samodzielne"
@@ -910,11 +1053,241 @@
         },
         "words": {
             "access": "Dostęp",
+            "activateAnyway": "Aktywuj mimo to",
+            "addAnyway": "Dodaj mimo to",
             "needsSandboxRebuild": "Wymaga przebudowy sandboxa",
             "hideValue": "Ukryj wartość",
             "connect": "Podłącz {id}",
             "preparingOneTimeConnection": "Przygotowywanie jednorazowego kodu połączenia…",
-            "onceConnectedAgentMay": "Po podłączeniu agent może:"
+            "onceConnectedAgentMay": "Po podłączeniu agent może:",
+            "saveAnyway": "Zapisz mimo to"
+        },
+        "categories": {
+            "platform": {
+                "label": "Platforma",
+                "hint": "Twórz zarządzane repozytoria, które pojawiają się jako osobne panele operatora."
+            },
+            "code": {
+                "label": "Kod i zgłoszenia",
+                "hint": "Repozytoria, zgłoszenia i potoki CI jako narzędzia agenta."
+            },
+            "observability": {
+                "label": "Monitoring",
+                "hint": "Przeszukuj błędy, ślady, logi i metryki."
+            },
+            "data": {
+                "label": "Dane",
+                "hint": "Pozwól agentowi odpytywać Twoje bazy danych SQL."
+            },
+            "communication": {
+                "label": "Komunikacja",
+                "hint": "Pozwól agentowi czytać i wysyłać wiadomości."
+            },
+            "business": {
+                "label": "Biznes i dokumenty",
+                "hint": "Podłącz płatności i bazy wiedzy."
+            },
+            "devices": {
+                "label": "Twoje urządzenia",
+                "hint": "Pozwól agentowi pracować na Twoim własnym urządzeniu: uruchamiać polecenia, obsługiwać pliki, widzieć ekran."
+            },
+            "servers": {
+                "label": "Serwery",
+                "hint": "Daj agentowi zdalne maszyny przez SSH, prywatne sieci przez VPN i dyski, które w nich są."
+            },
+            "deploy": {
+                "label": "Wdrożenia i infrastruktura",
+                "hint": "Steruj wdrożeniami kontenerów, stosami, usługami i wydaniami."
+            },
+            "extend": {
+                "label": "Rozbudowa",
+                "hint": "Dodaj dowolny serwer MCP albo wtyczkę Claude Code."
+            }
+        },
+        "catalog": {
+            "devops": {
+                "description": "Załóż dwa repozytoria, na których opiera się hosting na własnych serwerach.",
+                "hint": "Tworzy repozytoria intencji i stanu docelowego, które otwierają się jako panele Infrastruktura i Status na żywo. Tam deklarujesz maszyny, usługi i aplikacje."
+            },
+            "monorepo": {
+                "name": "Monorepo pnpm + turbo",
+                "description": "Załóż puste monorepo pnpm + turbo.",
+                "hint": "Tu nadajesz repozytorium nazwę. Gdy powstanie, otwórz jego panel, żeby dodać API w Hono, aplikację webową w Vue albo landing page w Astro."
+            },
+            "docker": {
+                "description": "Uruchamiaj kontenery: własny Engine + Compose.",
+                "hint": "Jednorazowa przebudowa: sandbox dostaje własny, odizolowany Docker Engine."
+            },
+            "ssh": {
+                "description": "Obsługuj zdalną maszynę przez SSH.",
+                "hint": "Nazwa to alias, którego używa agent (ssh {'<'}nazwa> \"…\").",
+                "guide": {
+                    "steps": {
+                        "0": "Zostaw `Generate a key for me`: sandbox tworzy parę kluczy i zatrzymuje klucz prywatny u siebie. Pokazywany jest tylko klucz publiczny.",
+                        "1": "Na serwerze, zalogowany jako użytkownik podany wyżej, uruchom pokazane polecenie: doda ono klucz do jego `authorized_keys`.",
+                        "2": "Masz już klucz do tego serwera? Wybierz `Paste my own key` i wklej niezaszyfrowany klucz prywatny albo przełącz na `Password`."
+                    }
+                }
+            },
+            "vpn": {
+                "description": "WireGuard, FortiGate albo IPsec.",
+                "hint": "Łącz i rozłączaj tutaj, przy połączeniu, które dodałeś (agent też to potrafi).",
+                "guide": {
+                    "steps": {
+                        "0": "Masz plik z FortiClient? `Zaimportuj z FortiClient` wypełni ten formularz.",
+                        "1": "WireGuard: wklej cały plik `.conf` (`[Interface]` + `[Peer]`).",
+                        "2": "FortiGate: host i port bramy, z którą łączy się FortiClient.",
+                        "3": "IPsec: klucz współdzielony (pre-shared key), a do tego XAuth, jeśli brama o to prosi.",
+                        "4": "Brama z 2FA? Naciśnij `Połącz` w jej wierszu poniżej i wpisz tam kod."
+                    }
+                }
+            },
+            "netdisk": {
+                "name": "Dysk sieciowy",
+                "description": "Udział na NAS-ie lub serwerze plików, montowany tylko do odczytu albo z zapisem.",
+                "hint": "Montowany w /mnt/netdisk/{'<'}nazwa>. Montuj i odmontowuj tutaj, przy dodanym dysku (agent też to potrafi). Za VPN-em? Najpierw dodaj i połącz ten VPN.",
+                "guide": {
+                    "steps": {
+                        "0": "Pola Server i Share to dwie części ścieżki `\\\\\\\\server\\share`.",
+                        "1": "Tylko do odczytu: montowany jako `ro`; daj mu też na serwerze konto tylko do odczytu.",
+                        "2": "Za VPN-em: najpierw dodaj kafelek VPN; przy każdym restarcie dysk montuje się dopiero po zestawieniu tunelu.",
+                        "3": "Zamontuj go w jego wierszu poniżej; agent znajdzie pliki w `/mnt/netdisk/{'<'}nazwa>`."
+                    }
+                }
+            },
+            "exit": {
+                "name": "Wyjście w innym kraju",
+                "description": "Przeglądaj i pobieraj jakby z innego kraju.",
+                "hint": "Przez wyjście idzie tylko to, co sam tam skierujesz: własne połączenie sandboxa nigdy się nie zmienia.",
+                "guide": {
+                    "steps": {
+                        "0": "Tor i VPN Gate: nic do wypełniania. Wybierz kraj i dodaj.",
+                        "1": "Darmowy Proton VPN: `account.protonvpn.com` → `Downloads` → `WireGuard configuration`, jedna konfiguracja na kraj.",
+                        "2": "Mullvad: `mullvad.net/account` → `WireGuard configuration`.",
+                        "3": "Wklej kilka plików do jednego pola: staną się jedną pulą.",
+                        "4": "Kraj przełączysz później z tego kafelka albo przez `geo use {'<'}nazwa> DE`.",
+                        "5": "To adresy z centrów danych: strony, które to sprawdzają, zobaczą proxy."
+                    }
+                }
+            },
+            "custom": {
+                "name": "Własny serwer MCP",
+                "description": "Dowolny zdalny serwer MCP, przez URL i token.",
+                "guide": {
+                    "steps": {
+                        "0": "Wklej URL serwera (Streamable HTTP albo SSE).",
+                        "1": "Serwer wymaga uwierzytelnienia? Wklej token typu bearer.",
+                        "2": "Agent połączy się w następnej turze."
+                    }
+                }
+            },
+            "plugin": {
+                "name": "Wtyczka Claude",
+                "description": "Wtyczka Claude Code z repozytorium git.",
+                "hint": "Agent wczyta ją w następnej turze. Ponowne dodanie pod tą samą nazwą ją aktualizuje.",
+                "guide": {
+                    "scopes": "dostępu do odczytu przy prywatnych repozytoriach (np. GitHub `repo`)",
+                    "steps": {
+                        "0": "Wskaż repozytorium git z wtyczką Claude Code.",
+                        "1": "Prywatne repozytorium: dodaj token z dostępem do odczytu.",
+                        "2": "Albo przejrzyj rejestr powyżej, żeby wstępnie wypełnić ten formularz."
+                    }
+                }
+            },
+            "extension": {
+                "name": "Rozszerzenie",
+                "description": "Rozszerzenie intentic z repozytorium git.",
+                "guide": {
+                    "scopes": "dostępu do odczytu przy prywatnych repozytoriach (np. GitHub `repo`)",
+                    "steps": {
+                        "0": "Wskaż repozytorium z plikiem `intentic-extension.json`.",
+                        "1": "Wybierz gałąź albo wydanie: instalacja zostaje przypięta do jego obecnego commita i nie podąża za późniejszymi zmianami.",
+                        "2": "Po instalacji przeładuj aplikację, żeby wczytać interfejs rozszerzenia."
+                    }
+                }
+            },
+            "wallet": {
+                "name": "Portfel",
+                "description": "Pozwól agentowi płacić w USDC za API rozliczane za wywołanie.",
+                "hint": "Klucz zostaje u dostawcy, który przechowuje środki dla platformy: agent nigdy nie przeleje więcej, niż pozwalają Twoje limity. Zasil portfel, wysyłając USDC na adres pokazany po podłączeniu."
+            },
+            "fleet": {
+                "name": "Flota sandboxów",
+                "description": "Pozwól agentowi tworzyć sandboxy na Twoim koncie.",
+                "hint": "Agent uruchamia `sandboxes create`, a każde utworzenie najpierw pyta Cię na czacie i podaje maszynę, na której sandbox by działał. Nowe sandboxy trafiają na komputer, który podłączyłeś jako urządzenie — to nigdy nie zamawia maszyn hostowanych, więc nie może zużyć Twojego planu.",
+                "guide": {
+                    "scopes": "`provision`: tworzenie sandboxów na tym koncie i wystawianie ich kodów konfiguracyjnych, nic więcej",
+                    "steps": {
+                        "0": "Menu Twojego konta → `Ustawienia` → `Tokeny` → `Utwórz token`.",
+                        "1": "Skopiuj go od razu, bo pokazuje się tylko raz. Jest przechowywany jako skrót, więc zgubionego nie da się odzyskać, tylko zastąpić nowym.",
+                        "2": "Wklej go tutaj. Zostaje przy demonie tego sandboxa i nigdy nie trafia do środowiska agenta.",
+                        "3": "Unieważnij go na tej samej stronie; tworzenie sandboxów ustaje w tej samej chwili."
+                    }
+                }
+            },
+            "identity": {
+                "name": "Tożsamość",
+                "description": "Jeden e-mail, z którego wyrastają wszystkie konta.",
+                "hint": "Logujesz się raz do poczty; agent loguje się do wszystkiego, co z niej wyrasta.",
+                "guide": {
+                    "steps": {
+                        "0": "Osobny adres jest lepszy niż Twój prywatny.",
+                        "1": "Po dodaniu kliknij `Zaloguj się` i sam wejdź na konto u dostawcy poczty.",
+                        "2": "Dodawaj pod nią konta na platformach albo pozwól agentowi je zakładać."
+                    }
+                }
+            },
+            "endpoint": {
+                "name": "Serwer modeli",
+                "description": "Twoje własne modele: Ollama, vLLM, bramka API.",
+                "hint": "Nie masz jeszcze serwera? Kafelek „Model lokalny” uruchomi go dla Ciebie wewnątrz sandboxa.",
+                "guide": {
+                    "steps": {
+                        "0": "Zanotuj URL, pod którym działa API Twojego serwera (Ollama: port `11434`).",
+                        "1": "Na TEJ maszynie to `http://host.docker.internal:11434/v1`.",
+                        "2": "Po dodaniu jego modele pojawią się w wyborze modelu na czacie."
+                    }
+                }
+            },
+            "localmodel": {
+                "name": "Model lokalny",
+                "description": "Model działający wewnątrz sandboxa: prywatnie i za darmo.",
+                "hint": "Nic nie opuszcza tej maszyny i działa to bez internetu. Masz już uruchomioną Ollamę albo vLLM? Wtedy wskaże ją kafelek „Serwer modeli”.",
+                "guide": {
+                    "steps": {
+                        "0": "Wybierz model i okno, na które ta maszyna ma wolną pamięć RAM; suma liczy się pod formularzem.",
+                        "1": "Pobiera się i od razu zaczyna działać; przebudowy wymaga tylko przełącznik GPU.",
+                        "2": "Brakuje pamięci? Okno 16k przypięte jako szybki model sprawia, że wiadomości commitów nic nie kosztują."
+                    }
+                }
+            }
+        },
+        "slices": {
+            "all": "Wszystkie możliwości",
+            "recommended": "Polecane",
+            "connectedDescription": "Każde połączenie, z którego Twój agent może teraz korzystać. Otwórz je, żeby je zmienić, dodać kolejne tego samego rodzaju albo je usunąć.",
+            "recommendedDescription": "Podpowiedzi na podstawie tego, co masz w przestrzeni roboczej: o każdą z nich prosi już Twój własny kod.",
+            "catalogDescription": "Rozbuduj swój sandbox: każda możliwość daje agentowi nowe narzędzia albo łączy Twoje konta. Wszystko jest przechowywane tylko w Twoim sandboxie."
+        },
+        "secretHosts": {
+            "addHost": "Dodaj host",
+            "couldNotSave": "Nie udało się zapisać ochrony hostów.",
+            "everyUseAsks": "Nie podano żadnego hosta, więc każde użycie pyta o zgodę.",
+            "everyUseReadOnly": "Włączona: każde użycie najpierw pyta o zgodę. Zmienić to może tylko właściciel.",
+            "explain": "Bez pytania trafia tylko do tych hostów. Gdziekolwiek indziej, albo tam, gdzie polecenie nie pokazuje tego wprost, najpierw czeka na kliknięcie w czacie, niezależnie od oceny strażnika bezpieczeństwa.",
+            "fromConnector": "Hosty, których jego konektor używa dla swojej usługi. Zmień je tutaj albo wyłącz ochronę, żeby mógł trafiać wszędzie.",
+            "keeps": "Po ponownym włączeniu znów trafia bez pytania do: {hosts}.",
+            "notAHost": "To nie jest host. Wpisz go na przykład jako api.example.com albo *.example.com dla każdego hosta pod tą domeną.",
+            "off": "Wyłączona: nigdy nie jest wstrzymywany ze względu na miejsce docelowe, a decyduje wyłącznie strażnik bezpieczeństwa.",
+            "offReadOnly": "Wyłączona: nigdy nie jest wstrzymywany ze względu na miejsce docelowe. Zmienić to może tylko właściciel.",
+            "onlyToReadOnly": "Włączona: bez pytania trafia tylko do: {hosts}, a gdziekolwiek indziej najpierw pyta. Zmienić to może tylko właściciel.",
+            "placeholder": "api.example.com lub *.example.com",
+            "removeHost": "Usuń {host}",
+            "title": "Ochrona hostów",
+            "turnOff": "Wyłącz ochronę hostów",
+            "turnOffNote": "Nigdy nie zapyta, dokąd to trafia",
+            "turnOn": "Włącz",
+            "turnOnNote": "Poza swoimi hostami najpierw pyta"
         }
     },
     "chat": {
@@ -944,12 +1317,16 @@
             "auto": "Automatycznie",
             "fast": "Szybko",
             "manual": "Ręcznie",
+            "plan": "Plan",
             "proposePlanWaitApproval": "Zaproponuj plan i poczekaj na Twoją zgodę przed uruchomieniem.",
             "reasoning": "Rozumowanie",
             "runEverythingWithoutAsking": "Rób wszystko bez pytania."
         },
         "chatAccountPanel": {
-            "isntConnectedInSandbox": "{providerName} nie jest podłączony w tym sandboxie."
+            "finishSignIn": "Dokończ logowanie",
+            "isntConnectedInSandbox": "{providerName} nie jest podłączony w tym sandboxie.",
+            "noModelYet": "W tym sandboxie nie podłączono jeszcze żadnego modelu.",
+            "signInWaiting": "Logowanie do {provider} czeka na Ciebie."
         },
         "chatArea": {
             "bringBackHere": "Przywróć tutaj",
@@ -1010,7 +1387,11 @@
             "continueOn": "Kontynuuj na {model}",
             "continueOnFresh": "Kontynuuj na {model}, w świeżej sesji",
             "continueOnKeepingSession": "Kontynuuj na {fallback}, zachowując tę sesję",
+            "freshSessionShortHandoff": "Świeża sesja na limicie tamtego konta, zaczęta od krótkiego przekazania zapisu i zmierzonego stanu; szczegóły, których nie ma w zapisie, przepadają.",
+            "freshSessionSizedHandoff": "Świeża sesja na limicie tamtego konta, zaczęta od przekazania zapisu i zmierzonego stanu (~{tokens} tokenów); szczegóły, których nie ma w zapisie, przepadają.",
             "handoff": "Przekazanie",
+            "keepsSessionRereading": "Zachowuje tę sesję: model pamięta wszystko i raz odczytuje ponownie ~{tokens} tokenów na limicie tamtego konta.",
+            "keepsSessionUnmeasured": "Zachowuje tę sesję: model pamięta wszystko i raz odczytuje całość ponownie na limicie tamtego konta.",
             "mayBeatReset": "Może zadziałać przed resetem",
             "oneWeeklyReset": "1 reset tygodniowy",
             "otherAccounts": "Inne konta",
@@ -1072,6 +1453,87 @@
                 "used": "Użyta"
             }
         },
+        "sandboxNotice": {
+            "compacted": "Kontekst został skrócony, żeby zwolnić miejsce.",
+            "stopped": "Zatrzymano.",
+            "questionDismissed": "Pytanie odrzucone.",
+            "planApproved": "Plan zatwierdzony.",
+            "keptPlanning": "Planowanie trwa dalej.",
+            "watching": "Wypatruje: {note}, sprawdza co {every}.",
+            "restartInterrupted": "Sandbox uruchomił się ponownie, zanim ta tura się skończyła. Wyślij kolejną wiadomość, żeby kontynuować od zapisanego stanu pracy.",
+            "depsInstalling": "Trwa instalacja {count} zależności, którą agent dodał lub zmienił; sprawdzenia projektu ruszą, gdy to się skończy, a wynik pojawi się w Aktywności. | Trwa instalacja {count} zależności, które agent dodał lub zmienił; sprawdzenia projektu ruszą, gdy to się skończy, a wynik pojawi się w Aktywności. | Trwa instalacja {count} zależności, które agent dodał lub zmienił; sprawdzenia projektu ruszą, gdy to się skończy, a wynik pojawi się w Aktywności.",
+            "depsQueued": "{count} zależność, którą agent dodał lub zmienił, jest instalowana w Twoim drzewie: instalacja czeka, aż skończy się każda inna instalacja, pojawi się w Terminalach roboczych, a jej wynik trafi do Aktywności. | {count} zależności, które agent dodał lub zmienił, są instalowane w Twoim drzewie: instalacja czeka, aż skończy się każda inna instalacja, pojawi się w Terminalach roboczych, a jej wynik trafi do Aktywności. | {count} zależności, które agent dodał lub zmienił, jest instalowanych w Twoim drzewie: instalacja czeka, aż skończy się każda inna instalacja, pojawi się w Terminalach roboczych, a jej wynik trafi do Aktywności.",
+            "retrying": "{message} Ponawia sam: próba {attempt} z {of}.",
+            "retried": "{message} Ponowiono samoczynnie {made} z {of} razy; nic więcej nie zostanie wysłane automatycznie.",
+            "outageWaiting": "{message} Nic tego nie ponawia, więc tura czeka tutaj.",
+            "renewing": "{message} Dane logowania są odnawiane, a ta tura wznowi się automatycznie.",
+            "renewalWithdrawn": "{message} Dane logowania były odnawiane, ale tura zatrzymała się, zanim mogła ruszyć dalej: sama się nie wznowi, więc naciśnij Kontynuuj, żeby ją podjąć.",
+            "reconnect": "{message} Połącz konto ponownie, żeby wrócić do tej rozmowy.",
+            "undelivered": "{message} Twoja wiadomość nie została dostarczona: czeka, aż wyślesz ją ponownie.",
+            "undeliveredUnattended": "{message} Nic się nie uruchomiło i nic nie czeka: ten przebieg ruszył sam, więc nie ma wiadomości do ponownego wysłania.",
+            "kept": "{message} Nic jeszcze nie ruszyło: wiadomość powyżej czeka tutaj, żeby wysłać ją ponownie, gdy to się wyjaśni.",
+            "keptMemory": "{message} Nic jeszcze nie ruszyło: wiadomość powyżej czeka tutaj, a wysłanie jej mimo to ją uruchomi.",
+            "memoryHeld": "{message} Twoja wiadomość czeka: wyślij ją ponownie, żeby mimo to zacząć.",
+            "agentBusy": "Ten agent już wykonuje turę, poczekaj, aż skończy.",
+            "memoryLow": "Pamięć sandboxa się kończy.",
+            "memoryLowShare": "Pamięć sandboxa się kończy ({share}).",
+            "turnRunning": "W tej rozmowie trwa już tura.",
+            "refusedBack": "{reason} Twoja wiadomość wróciła do pola wpisywania: wyślij ją ponownie, gdy to się wyjaśni.",
+            "resumed": {
+                "auth": "Logowanie do Claude odnowione, ta tura wróciła tam, gdzie przerwała.",
+                "outage": "Dostawca modelu znów działa, ta tura wróciła tam, gdzie przerwała.",
+                "restart": "Sandbox znów działa, ta tura wróciła tam, gdzie przerwała.",
+                "stopped": "Wysłano ponownie po tym, jak tura urwała się w połowie; wraca tam, gdzie przerwała.",
+                "limit": "Wysłano ponownie po tym, jak limit skończył się w trakcie tury; wraca tam, gdzie przerwała.",
+                "switched": "Wysłano ponownie na innym koncie po tym, jak limit skończył się w trakcie tury, w nowej sesji.",
+                "carried": "Wysłano ponownie na innym koncie po tym, jak limit skończył się w trakcie tury, razem z dotychczasową sesją.",
+                "refused": "Wysłano ponownie po tym, jak limit ją odrzucił: nic się wcześniej nie wykonało.",
+                "door": "Wysłano ponownie: pierwsza próba została odrzucona, zanim cokolwiek się wykonało.",
+                "overflow": "Wysłano ponownie w nowej sesji, bo poprzednia przerosła okno kontekstu modelu."
+            },
+            "watchWake": {
+                "met": "{note} — obserwacja zadziałała po {elapsed}.",
+                "timeout": "{note} — obserwacja poddała się po {elapsed}.",
+                "broken": "{note} — obserwacja zatrzymała się po {elapsed}: jej sprawdzenie nie może się już uruchomić.",
+                "restartExpired": "{note} — obserwacja zatrzymała się po {elapsed}, gdy sandbox uruchomił się ponownie."
+            },
+            "needWake": {
+                "met": "{title}: zrobione, agent działa dalej.",
+                "declined": "{title}: odmówiono, agent już o tym wie."
+            },
+            "agentWords": {
+                "peer": "Wiadomość z innej rozmowy: {from}.",
+                "peerTitled": "Wiadomość z innej rozmowy: „{title}” ({from}).",
+                "childFinished": "Podagent {from} skończył.",
+                "childFinishedTitled": "Podagent „{title}” ({from}) skończył.",
+                "childFailed": "Podagent {from} zakończył się błędem.",
+                "childFailedTitled": "Podagent „{title}” ({from}) zakończył się błędem."
+            },
+            "developer": {
+                "landed": "Zmiany zostały scalone z Twoją przestrzenią roboczą: przejrzyj je w panelu Zmiany.",
+                "landHeld": "Gotowe: praca jest na gałęzi tego agenta, gotowa do scalenia z jego przeglądu.",
+                "landConflict": "Nie udało się automatycznie scalić {count} pliku w {repos}. Otwórz przegląd agenta, żeby zobaczyć, co go zablokowało, i scal stamtąd. | Nie udało się automatycznie scalić {count} plików w {repos}. Otwórz przegląd agenta, żeby zobaczyć, co je zablokowało, i scal stamtąd. | Nie udało się automatycznie scalić {count} plików w {repos}. Otwórz przegląd agenta, żeby zobaczyć, co je zablokowało, i scal stamtąd.",
+                "intoParent": "Zmiany trafiły do kopii agenta nadrzędnego, tak jak zmiany jego wewnętrznych podagentów: dotrą do Twojej przestrzeni roboczej, gdy jego praca zostanie scalona.",
+                "intoParentClash": "{count} plik koliduje z własnymi zmianami agenta nadrzędnego, więc nic nie zostało zapisane w jego kopii. Agent nadrzędny o tym wie i może przenieść zmiany do siebie, żeby rozwiązać konflikt. | {count} pliki kolidują z własnymi zmianami agenta nadrzędnego, więc nic nie zostało zapisane w jego kopii. Agent nadrzędny o tym wie i może przenieść zmiany do siebie, żeby rozwiązać konflikt. | {count} plików koliduje z własnymi zmianami agenta nadrzędnego, więc nic nie zostało zapisane w jego kopii. Agent nadrzędny o tym wie i może przenieść zmiany do siebie, żeby rozwiązać konflikt.",
+                "rebased": "Twoja przestrzeń robocza poszła naprzód, gdy ten agent czekał; jego gałąź przeniesiono na Twój ostatni {count} commit. | Twoja przestrzeń robocza poszła naprzód, gdy ten agent czekał; jego gałąź przeniesiono na Twoje ostatnie {count} commity. | Twoja przestrzeń robocza poszła naprzód, gdy ten agent czekał; jego gałąź przeniesiono na Twoje ostatnie {count} commitów.",
+                "rebaseBlocked": "Nie udało się przenieść gałęzi na Twoją przestrzeń roboczą w {repos}: tura działa na starszej bazie, więc jej scalenie może wymagać rozwiązania konfliktów."
+            },
+            "maker": {
+                "landed": "Zmiany zostały przyjęte do Twoich plików: zobacz je w „Co się zmieniło”.",
+                "landHeld": "Gotowe: praca jest w szkicu tego asystenta, gotowa do przyjęcia, gdy ją obejrzysz.",
+                "landConflict": "Nie udało się automatycznie przyjąć {count} pliku w {repos}. Otwórz zmiany asystenta, żeby zobaczyć, co go zablokowało, i przyjmij stamtąd. | Nie udało się automatycznie przyjąć {count} plików w {repos}. Otwórz zmiany asystenta, żeby zobaczyć, co je zablokowało, i przyjmij stamtąd. | Nie udało się automatycznie przyjąć {count} plików w {repos}. Otwórz zmiany asystenta, żeby zobaczyć, co je zablokowało, i przyjmij stamtąd.",
+                "intoParent": "Zmiany trafiły do szkicu asystenta nadrzędnego, tak jak zmiany jego pomocników: dotrą do Twoich plików, gdy przyjmiesz pracę tego asystenta.",
+                "intoParentClash": "{count} plik koliduje z własnymi zmianami asystenta nadrzędnego, więc nic nie zostało zapisane w jego szkicu. Asystent nadrzędny o tym wie i może przenieść zmiany do siebie, żeby to rozwiązać. | {count} pliki kolidują z własnymi zmianami asystenta nadrzędnego, więc nic nie zostało zapisane w jego szkicu. Asystent nadrzędny o tym wie i może przenieść zmiany do siebie, żeby to rozwiązać. | {count} plików koliduje z własnymi zmianami asystenta nadrzędnego, więc nic nie zostało zapisane w jego szkicu. Asystent nadrzędny o tym wie i może przenieść zmiany do siebie, żeby to rozwiązać.",
+                "rebased": "Twoje pliki zmieniły się, gdy ten asystent czekał, więc jego szkic uzupełniono o Twoją ostatnią {count} zmianę. | Twoje pliki zmieniły się, gdy ten asystent czekał, więc jego szkic uzupełniono o Twoje ostatnie {count} zmiany. | Twoje pliki zmieniły się, gdy ten asystent czekał, więc jego szkic uzupełniono o Twoje ostatnie {count} zmian.",
+                "rebaseBlocked": "Nie udało się uzupełnić szkicu o Twoje pliki w {repos}: asystent pracuje na starszej wersji, więc przyjęcie jego pracy może najpierw wymagać poprawki."
+            },
+            "keptWarm": "Wznowiono na ciepło: {tokens} tokenów odczytanych z pamięci podręcznej, podtrzymywanej przez {span} ({refreshes} odświeżenie). | Wznowiono na ciepło: {tokens} tokenów odczytanych z pamięci podręcznej, podtrzymywanej przez {span} ({refreshes} odświeżenia). | Wznowiono na ciepło: {tokens} tokenów odczytanych z pamięci podręcznej, podtrzymywanej przez {span} ({refreshes} odświeżeń).",
+            "keptCold": "Wznowiono na zimno, choć pamięć podręczną podtrzymywano przez {span} ({refreshes} odświeżenie): {tokens} tokenów wysłano ponownie, bo prompt tej tury nie pasował już do pamięci podręcznej. | Wznowiono na zimno, choć pamięć podręczną podtrzymywano przez {span} ({refreshes} odświeżenia): {tokens} tokenów wysłano ponownie, bo prompt tej tury nie pasował już do pamięci podręcznej. | Wznowiono na zimno, choć pamięć podręczną podtrzymywano przez {span} ({refreshes} odświeżeń): {tokens} tokenów wysłano ponownie, bo prompt tej tury nie pasował już do pamięci podręcznej.",
+            "contextTrim": "Wysłano w wersji odchudzonej, bo okno tego modelu ma {window}.",
+            "contextTrimOmitted": "Wysłano w wersji odchudzonej, bo okno tego modelu ma {window}. Pominięto: {omitted}.",
+            "contextTrimBase": "Podstawowe instrukcje samego agenta też zastąpiono krótkim akapitem.",
+            "contextTrimKept": "Reguły Twojej przestrzeni roboczej, persona tej tury i miejsce jej plików i tak zostały wysłane."
+        },
         "chatJobRow": {
             "ended": "Zakończone po {elapsed}",
             "failed": "Błąd (kod {code}) po {elapsed}",
@@ -1129,6 +1591,7 @@
             "chatStaysPutInstead": "(ten czat zostaje na miejscu zamiast sam się podejmować)",
             "collapseMessage": "Zwiń wiadomość",
             "connect": "Podłącz {name}",
+            "continueWithoutDeclined": "Kontynuuj bez odrzuconego kroku.",
             "editMessageShort": "Edytuj wiadomość",
             "expandMessage": "Rozwiń wiadomość",
             "hideCheck": "Ukryj sprawdzenie",
@@ -1170,7 +1633,9 @@
             "watchInstall": "Obejrzyj instalację"
         },
         "chatModelPicker": {
-            "autoDescription": "Let a model choose from what's connected and still has allowance"
+            "autoArmed": "Twoja pierwsza wiadomość wybierze, na czym działa ten czat; możesz to zmienić w każdej chwili.",
+            "autoDescription": "Niech model przeczyta Twoją pierwszą wiadomość i wybierze, na czym działa ten czat",
+            "chooseWhichModelReads": "Wybierz model, który czyta pierwszą wiadomość"
         },
         "chatNotes": {
             "addedContext": "Dodany kontekst",
@@ -1202,7 +1667,6 @@
             "loadEarlierTurns": "Wczytaj wcześniejsze tury",
             "loadingEarlierTurns": "Wczytywanie wcześniejszych tur…",
             "message": "Ta wiadomość",
-            "messageWhatEveryStep": "”: ta wiadomość to to, o co proszony jest każdy krok. Model, wysiłek, tryb i pętla należą do każdego kroku z osobna.",
             "moreComposerSettings": "Więcej ustawień kompozytora",
             "noReplyPressExit": "Bez odpowiedzi; naciśnij, by wyjść",
             "nothingChangedYet": "Nic jeszcze nie zmieniono",
@@ -1211,16 +1675,17 @@
             "replacedSend": "zostanie zastąpiona przy wysyłce.",
             "runMessageThrough": "Przepuść tę wiadomość przez",
             "sandboxBusy": "Sandbox zajęty",
-            "sendLoopsMessageUntil": "Wyślij powtarza tę wiadomość, aż warunek będzie spełniony: kończy się na",
-            "sendStarts": "Wyślij uruchamia „",
             "shiftEnterNewLine": "Shift+Enter – nowa linia",
             "startConversation": "Zacznij rozmowę z {providerName}.",
+            "startConversationAny": "Zacznij rozmowę.",
             "talkHandsFree": "Mów bez rąk",
             "thisChatUnchanged": "Ten czat bez zmian",
             "uncappedLink": "Podłącz go i pozbądź się dziennego limitu",
             "uncappedQuestion": "Płacisz już za plan AI albo masz model na tym komputerze?",
             "upForPreviousMessage": "↑ – poprzednia wiadomość",
-            "writingAgent": "Piszesz jako agent"
+            "writingAgent": "Piszesz jako agent",
+            "sendStartsWorkflow": "Wyślij uruchamia „{name}”: ta wiadomość to to, o co proszony jest każdy krok. Model, wysiłek, tryb i pętla należą do każdego kroku z osobna.",
+            "sendLoopsUntilEndsOn": "Wyślij powtarza tę wiadomość, aż warunek będzie spełniony: kończy się na {design}."
         },
         "chatPaneNotices": {
             "accountNeedsToReconnected": "To konto trzeba podłączyć ponownie.",
@@ -1230,6 +1695,14 @@
             "connectWays": "Google, lokalnie lub abonament",
             "resumesIfAnswers": "Wznawia, gdy odpowie",
             "retryTrial": "Ponów wersję próbną"
+        },
+        "chatPaneTurns": {
+            "couldntOpen": "Nie udało się otworzyć tej rozmowy.",
+            "couldntRefresh": "Nie udało się odświeżyć tej rozmowy, pokazujemy zapisaną kopię.",
+            "reconnecting": "Ponownie łączymy się z Twoim sandboxem…"
+        },
+        "chatSessions": {
+            "noAnswer": "Twój sandbox nie odpowiedział."
         },
         "chatPaneStatus": {
             "clickToExtend": "Kliknij, by przedłużyć",
@@ -1289,7 +1762,10 @@
             "selected": "Zaznaczono: {index}",
             "submit": "Wyślij",
             "typeAnswer": "Wpisz swoją odpowiedź…",
-            "writeAnswerToSubmit": "Napisz odpowiedź, żeby ją wysłać."
+            "writeAnswerToSubmit": "Napisz odpowiedź, żeby ją wysłać.",
+            "dismissDropsAnswer": "Odrzucenie usunie wybraną odpowiedź i zatrzyma turę.",
+            "dismissAnyway": "Odrzuć mimo to",
+            "keepAnswer": "Zostaw odpowiedź"
         },
         "chatQueue": {
             "fromAgent": "Od innego agenta",
@@ -1327,16 +1803,15 @@
         },
         "chatRunThroughMenu": {
             "handToOtherSessions": "Przekaż to innym sesjom",
-            "handsToDesignSeveral": "przekazuje to układowi kilku sesji zamiast temu czatowi.",
             "justChat": "Tylko ten czat",
-            "loop": "pętla",
+            "loop": "Pętla",
             "manageLoopsWorkflows": "Zarządzaj pętlami i workflow",
-            "nothingSavedYet": "Nic jeszcze nie zapisano.",
+            "nothingSavedExplained": "Nic jeszcze nie zapisano. {loop} wysyła Twoją wiadomość w kółko: naprawianie, sprawdzanie, naprawianie — aż coś, co potrafisz nazwać, będzie prawdą. {workflow} przekazuje ją układowi kilku sesji zamiast temu czatowi.",
             "onPinned": "na {pinned}",
             "repeatHereUntilDone": "Powtarzaj to tutaj, aż będzie zrobione",
             "sendOnceOrdinaryMessage": "Wyślij raz, jako zwykłą wiadomość.",
-            "sendsMessageOverOver": "wysyła Twoją wiadomość w kółko: naprawianie, sprawdzanie, naprawianie — aż coś, co potrafisz nazwać, będzie prawdą.",
-            "setOneUp": "Utwórz jeden"
+            "setOneUp": "Utwórz jeden",
+            "workflow": "Workflow"
         },
         "chatShareDialog": {
             "addsWorkAgentDid": "Dodaje pracę, którą wykonał agent, pliki, które przeczytał i zmienił, to, co uruchomił, i jego rozumowanie. To publikuje kod i wyjścia poleceń, które pojawiają się w tych blokach.",
@@ -1470,7 +1945,9 @@
         },
         "chatTranscriptSkeleton": {
             "loadingConversation": "Wczytywanie rozmowy…",
-            "stillFetchingConversationSandbox": "Wciąż pobieramy tę rozmowę z Twojego sandboxa…"
+            "stillFetchingConversationSandbox": "Wciąż pobieramy tę rozmowę z Twojego sandboxa…",
+            "takingLonger": "Trwa to dłużej niż zwykle.",
+            "retry": "Spróbuj ponownie"
         },
         "chatTurnAsides": {
             "showSteps": "Pokaż kroki",
@@ -1486,16 +1963,16 @@
             "word": "Dokument Word"
         },
         "chatTurnShots": {
+            "more": "+{count}",
             "open": "Otwórz {name}",
             "openAll": "Otwórz wszystkie obrazy ({count})",
             "region": "Obrazy z tej tury"
         },
         "chatTurnStatus": {
-            "atCapacity": "na granicy przepustowości",
             "attemptNothingLost": "(próba {attempt}, nic nie przepadło)",
-            "modelProvider": "Dostawcą modelu jest",
-            "notResponding": "nie odpowiada",
-            "rateLimiting": "ogranicza tempo",
+            "providerAtCapacity": "Dostawca modelu jest przeciążony: {retry}",
+            "providerNotResponding": "Dostawca modelu nie odpowiada: {retry}",
+            "providerRateLimiting": "Dostawca modelu ogranicza liczbę zapytań: {retry}",
             "retrying": "ponawia",
             "retryingAt": "ponawia {when}",
             "retryingIn": "ponawia za {wait}",
@@ -1510,7 +1987,7 @@
             "hintParked": "Po prośbie powyżej",
             "hintPlace": "Wstaw jako {provider}",
             "hintPlan": "Wyślij uwagi",
-            "hintPlanNote": "Planuje dalej",
+            "hintPlanNote": "Planuje dalej. Żeby ruszył, zatwierdź plan.",
             "hintQueue": "Po tej turze",
             "hintScheduled": "Zaplanowana wysyłka",
             "hintScheduledReplaces": "Zastępuje oczekującą wiadomość",
@@ -1522,7 +1999,7 @@
             "placeholderIdle": "Zapytaj {provider}…",
             "placeholderParked": "Odpowiedz powyżej albo dodaj wiadomość na później…",
             "placeholderPlace": "Pisz jako {provider}, wkładane do zapisu rozmowy, bez odpowiedzi…",
-            "placeholderPlan": "Odpowiedz, żeby poprawić plan…",
+            "placeholderPlan": "Napisz uwagi, żeby planował dalej, albo zatwierdź powyżej…",
             "placeholderQueue": "Dodaj wiadomość na koniec tej tury…",
             "placeholderScheduled": "Limit wyczerpany do {when}. Napisz teraz, wyślę wtedy…",
             "placeholderSteer": "Steruj {provider} w połowie tury…",
@@ -1547,7 +2024,14 @@
             "stopTurn": "Zatrzymaj turę",
             "triesNowFirst": "Najpierw próbuje teraz",
             "unconnectedHint": "Wybierz model",
+            "unconnectedPlaceholder": "Co ma zrobić ten agent? Wysłanie najpierw wybierze model…",
             "viewerPlaceholder": "Tylko patrzysz: poproś właściciela o rolę współpracownika, żeby sterować agentami"
+        },
+        "composerModelPill": {
+            "chooseModel": "Wybierz model",
+            "fromNextMessage": "{model} odpowie od twojej następnej wiadomości. Ta odpowiedź nadal działa na {running}.",
+            "model": "Model: {modelLabelText}",
+            "nextMessage": "od następnej wiadomości"
         },
         "composerMore": {
             "howMuchMayDo": "Ile może zrobić, zanim zapyta.",
@@ -1592,6 +2076,10 @@
         "limitReset": {
             "sandboxDidntAnswer": "Twój sandbox nie odpowiedział."
         },
+        "localHandoff": {
+            "attached": "Dołączono {name} z Twojego komputera",
+            "failed": "Nie udało się pobrać {name} z Twojego komputera. Otwórz ten plik tam i poproś ponownie."
+        },
         "modelPicker": {
             "access": "Dostęp",
             "allAiAccounts": "Wszystkie konta AI",
@@ -1609,7 +2097,9 @@
             "showFewerModels": "Pokaż mniej modeli {label}",
             "showOlder": "Pokaż starsze ({hidden})",
             "showOlderModels": "Pokaż starsze modele {label} ({hidden})",
-            "unavailable": "Niedostępne"
+            "unavailable": "Niedostępne",
+            "helperOnlyNoTools": "Tylko zadania pomocnicze: jego serwer mówi, że nie potrafi wywoływać narzędzi",
+            "helperOnlyQuickJobs": "Tylko zadania pomocnicze: za mały, żeby prowadzić czat"
         },
         "modelPickerState": {
             "useCustomModelId": "użyj jako własnego id modelu"
@@ -1646,9 +2136,17 @@
             "unread": "bez odczytu"
         },
         "usageStatus": {
+            "aboutDays": "za około {count} dni",
+            "aboutHours": "za około {count} godz.",
+            "aboutMinutes": "za około {count} min",
+            "aboutSeconds": "za około {count} s",
             "percentLeft": "zostało {percent}"
         },
+        "turnFailures": {
+            "renewalDidNotResume": "Ta tura nie wznowiła się sama po odrzuceniu logowania, więc zatrzymała się tam, gdzie była. Wyślij wiadomość ponownie, a rozmowa potoczy się dalej."
+        },
         "words": {
+            "connectAModel": "Podłącz model",
             "keepOpen": "Zostaw otwarty",
             "nextChatReplaces": "Następny czat go zastąpi",
             "openFile": "Otwórz plik",
@@ -1686,6 +2184,7 @@
             "anyone": "Ktokolwiek",
             "managePersonas": "Zarządzaj personami",
             "gone": "Już niedostępny",
+            "autoLabel": "Auto",
             "editMessage": "Edytuj tę wiadomość",
             "reasoningEffort": "Wysiłek rozumowania",
             "cantHelpNow": "Teraz nie pomogę",
@@ -1731,11 +2230,58 @@
             "stopVoice": "Zatrzymaj głos"
         },
         "turnBreak": {
+            "anotherAccount": "inne konto",
+            "backWhen": "odnawia się {when}",
+            "goesAt": "Ruszy sama {when}",
+            "goesSoon": "Ruszy sama za chwilę",
+            "ladderSpent": "Przerwano po {max} próbach bez postępu · Kontynuuj wyśle turę ponownie",
+            "limitEnding": "Limit użycia wyczerpany",
+            "limitStatusKept": "Limit osiągnięty · praca zachowana",
+            "limitStatusRefused": "Limit osiągnięty · nic się nie wykonało",
+            "move": "Przenieś na {account}",
             "moveBrief": "Przenosi teraz, ten sam dostawca",
+            "moveNote": "Od razu przenosi tę turę na inne konto tego samego dostawcy, które ma jeszcze wolny limit, a odnowienie limitu zostaje w odwodzie.",
+            "movingNow": "Przenosi teraz na {account}",
+            "next": "Potem",
+            "nextQuestion": "Co dalej",
+            "nextTry": "Próba {attempt} z {max} {when}",
+            "nextTrySoon": "Próba {attempt} z {max} za chwilę",
+            "outageEnding": "Awaria dostawcy",
+            "outageStatus": "Dostawca zawiódł · praca zachowana",
+            "resend": "Wyślij ponownie",
             "resendBrief": "Wyśle po odnowieniu limitu",
+            "resendNote": "Sama wyśle tę turę ponownie, gdy limit się odnowi.",
+            "retriedOf": "ponowiono {made} z {max}",
+            "retry": "Próbuj dalej",
             "retryOutageBrief": "Ponawia podczas awarii",
+            "retryOutageNote": "Ponawia tę turę, dopóki dostawca nie działa, z coraz dłuższymi przerwami między próbami.",
             "retryStoppedBrief": "Przestaje po 3 próbach",
-            "waitBrief": "Nic nie zostanie wysłane"
+            "retryStoppedNote": "Ponawia tę turę kilka razy i odpuszcza po trzech próbach bez postępu.",
+            "stoppedEnding": "Tura przerwana",
+            "stoppedStatus": "Tura przerwana · praca zachowana",
+            "wait": "Czekaj na mnie",
+            "waitBrief": "Nic nie zostanie wysłane",
+            "waitNote": "Nic nie zostanie wysłane za Ciebie. Tura zostaje tutaj, a jedno kliknięcie ją dokończy.",
+            "whenFar": "{clock}, {wait}",
+            "whenNear": "{wait}",
+            "resetUnknown": "czas odnowienia nieznany",
+            "goesNever": "Nic nie wyśle tego samo: dostawca nie podał czasu odnowienia. Kontynuuj próbuje ponownie.",
+            "coolingDown": "Kontynuuj będzie dostępne za minutę"
+        },
+        "chatWaitingBar": {
+            "planWaiting": "Plan czeka na Twoją zgodę",
+            "questionForYou": "Pytanie do Ciebie",
+            "permissionNeeded": "Potrzebna zgoda",
+            "waitingOnYou": "Agent czeka na Ciebie",
+            "fetching": "pobieramy to z Twojego sandboxa…",
+            "showIt": "Pokaż",
+            "readPlan": "Przeczytaj plan",
+            "approveWithNotes": "Zatwierdź z tymi uwagami",
+            "keepPlanning": "Planuj dalej",
+            "heldMemory": "Wstrzymane: w sandboxie kończy się pamięć",
+            "heldMemoryShare": "Wstrzymane: w sandboxie kończy się pamięć ({share})",
+            "wait": "Poczekaj",
+            "waitHint": "Wiadomość zostaje wstrzymana. Wyślesz ją z czatu, gdy zwolni się pamięć."
         }
     },
     "common": {
@@ -1749,6 +2295,7 @@
             "picksWordsAppUses": "Decyduje, jakich słów używa aplikacja i co jest jej stroną główną. Nic w Twoich plikach ani agentach się nie zmienia, a przełączysz to w Ustawieniach w każdej chwili."
         },
         "matchLine": {
+            "agent": "Agent:",
             "you": "Ty:"
         },
         "netdiskMounts": {
@@ -1756,8 +2303,12 @@
             "agentCanWriteCaption": "dysk podłączony do zapisu przyjmuje zapisy agenta prosto na Twoim serwerze",
             "couldntReadWhatDisks": "Nie udało się odczytać, co robią Twoje dyski.",
             "disks": "Twoje dyski",
+            "mount": "Zamontuj",
             "mountedWritableThoughReadOnly": "Podłączony do zapisu, choć jego ustawienia tutaj mówią tylko do odczytu: odłącz go i podłącz ponownie.",
-            "mountsAutomaticallyAfterSandbox": "Podłącza się automatycznie po restarcie sandboksa, gdy wróci jego VPN."
+            "mountsAutomaticallyAfterSandbox": "Podłącza się automatycznie po restarcie sandboksa, gdy wróci jego VPN.",
+            "readOnly": "tylko do odczytu",
+            "readWrite": "odczyt i zapis",
+            "unmount": "Odmontuj"
         },
         "reviewStat": {
             "codeOnly": "Tylko kod",
@@ -1802,10 +2353,61 @@
         }
     },
     "connect": {
+        "connect": {
+            "allAccounts": "Zarządzaj kontami, które ten sandbox już ma",
+            "connecting": "Podłączanie: {provider}",
+            "description": "Dane logowania są przechowywane w Twoim sandboxie, nigdy na platformie. Wybierz to, co już masz.",
+            "free": "Za darmo",
+            "freeSubtitle": "Wystarczy się zalogować: bez karty, bez subskrypcji",
+            "freeTitle": "Za darmo, z kontem Google",
+            "landed": "Połączono. Ta przestrzeń robocza może już uruchamiać tury.",
+            "landedIn": "Połączono {provider} z sandboxem „{sandbox}”. Czaty w tym sandboxie mogą już z tego korzystać.",
+            "localSubtitle": "Za darmo na zawsze, prywatnie, działa offline",
+            "localTitle": "Na tej maszynie",
+            "ownServer": "Masz już Ollamę albo vLLM? Wskaż swój serwer",
+            "startChatting": "Zacznij rozmowę",
+            "subscriptionSubtitle": "Claude, ChatGPT, Kimi, Grok, Cursor, Z.ai, Muse",
+            "subscriptionTitle": "Subskrypcja, za którą już płacisz",
+            "title": "Daj tej przestrzeni roboczej model",
+            "whichPlan": "Na jakim planie jest to konto?"
+        },
+        "connectLane": {
+            "collapse": "Zwiń",
+            "expand": "Rozwiń"
+        },
         "localModelLane": {
+            "alreadyDownloadedNeeds": "Już pobrany; podczas działania zajmuje około {total}.",
+            "bestHere": "najlepszy tutaj",
+            "bestPitch": "Największy, jaki zmieści ta maszyna, z oknem rozmowy {window}k.",
+            "downloadNeeds": "Pobiera {download}, a podczas działania zajmuje około {total}.",
+            "gettingReady": "Przygotowywanie — {received} z {total}",
+            "gettingReadyPlain": "Przygotowywanie…",
+            "gpuGranted": "GPU NVIDIA tej maszyny jest dostępne, z {vram} VRAM.",
             "gpuOffered": "Na razie tylko CPU; wpis modelu w katalogu może poprosić o GPU NVIDIA.",
+            "gpuUnsupported": "Brak GPU: Docker na tym hoście nie ma środowiska uruchomieniowego nvidia.",
+            "measuring": "Sprawdzanie, co ta maszyna może uruchomić…",
+            "memoryCapped": "Ten sandbox może użyć {memory}.",
+            "memoryMachine": "Ta maszyna ma {memory}.",
+            "moreModels": "Inne modele, własny GGUF albo przełącznik GPU",
             "needsRebuild": "Ten obraz nie zawiera jeszcze llama-server. Przebuduj sandbox z sekcji Środowisko na stronie Sandbox i wróć tutaj.",
-            "ready": "Gotowy"
+            "nothingFits": "Nic z wybranej listy nie mieści się w {memory}. Daj sandboxowi więcej pamięci albo zamiast tego podłącz konto.",
+            "quickJobsOnly": "tylko szybkie zadania",
+            "ready": "Gotowy",
+            "runIt": "Uruchom",
+            "startNow": "Uruchom teraz",
+            "stop": "Zatrzymaj",
+            "windowUnderFloor": "To okno jest mniejsze niż koszt jednej tury agenta, więc ten szczebel też nadaje się tylko do szybkich zadań. Więcej pamięci by je powiększyło.",
+            "nothingRunsWhole": "Nic z wybranej listy nie działa tu z pełną prędkością przy {free} wolnej pamięci. Zwolnij trochę pamięci, daj sandboxowi więcej albo zamiast tego połącz konto.",
+            "quickJobsPitch": "Gotowy w około minutę. Za darmo pisze opisy commitów i tytuły sesji; jest za mały, żeby z nim rozmawiać albo prowadzić turę agenta.",
+            "readyForQuickJobs": "Gotowy do szybkich zadań",
+            "sizedForGpu": "Propozycje są dobrane tak, żeby w całości działały na GPU, w {free}, które model może tam dostać.",
+            "sizedForMemory": "Propozycje są dobrane tak, żeby działały z pełną prędkością przy {free} wolnej teraz pamięci.",
+            "useForQuickJobs": "Wybierz go do opisów commitów i tytułów"
+        },
+        "providerTile": {
+            "connected": "Połączono",
+            "needsReconnect": "Wymaga ponownego połączenia",
+            "runs": "Uruchamia: {runs}"
         }
     },
     "extension-host": {
@@ -1834,6 +2436,7 @@
             "turnBackOnIn": "Włącz je z powrotem w Sandbox → Rozszerzenia"
         },
         "extensionState": {
+            "backend": "backend: {state}",
             "backendFailed": "backend zawiódł",
             "backendNotInImage": "backendu nie ma w tym obrazie",
             "declarationRefused": "deklaracja odrzucona",
@@ -1847,12 +2450,23 @@
         }
     },
     "preview": {
+        "phoneModels": {
+            "galaxyS24": "Galaxy S24",
+            "galaxyS24Ultra": "Galaxy S24 Ultra",
+            "iphone13Mini": "iPhone 13 mini",
+            "iphone15": "iPhone 15",
+            "iphone15ProMax": "iPhone 15 Pro Max",
+            "iphoneSe": "iPhone SE",
+            "pixel7": "Pixel 7",
+            "pixel8Pro": "Pixel 8 Pro"
+        },
         "previewArea": {
             "bringBackHere": "Przywróć tutaj",
             "bringBackToFill": "Przywróć go, żeby wypełnił to miejsce, albo zostaw aplikację obok kodu na drugim ekranie.",
             "previewInOwnWindow": "Twój podgląd jest w osobnym oknie"
         },
         "previewModel": {
+            "port": "Port {port}",
             "publicSite": "Witryna publiczna"
         },
         "previewPanel": {
@@ -1934,13 +2548,25 @@
             "yourOwnClockIs": "Co znaczy „09:00” w automatyzacji. Twój komputer jest w strefie {zone}, więc te godziny nie będą się zgadzać z tym, co na nim widzisz."
         },
         "agentCodeSearch": {
+            "automationOff": "Jej comiesięczne przepisywanie jest wyłączone.",
+            "briefUnreadable": "Notatka jest na miejscu, ale nie da się jej wysłać: {why}",
+            "budget": "Budżet",
             "codeSearch": "Wyszukiwanie kodu",
             "documentShadows": "Cienie dokumentów",
+            "fieldNotes": "Notatki z terenu",
             "iqCodeSearch": "Wyszukiwanie kodu iq",
             "keepDocumentsImagesAudio": "Trzymaj dokumenty, obrazy, audio i archiwa wstępnie wyrenderowane jako tekst, aktualizowane w miarę zmian plików. Otwórz dowolne z nich w przestrzeni roboczej, żeby przeczytać to, co czyta agent.",
+            "noBriefYet": "Nie ma jeszcze notatki. Skonfiguruj comiesięczną automatyzację Notatki z terenu, a napisze pierwszą.",
+            "ofConversationsOpenWithout": "rozmów zaczyna się bez mapy, jako grupa kontrolna.",
+            "ofConversationsRunWithout": "rozmów działa bez iq, jako grupa kontrolna.",
+            "ofConversationsRunWithoutNotes": "rozmów działa bez notatki, jako grupa kontrolna.",
+            "openTheBrief": "Otwórz notatkę",
             "projectMap": "Mapa projektu",
             "provideProjectStructureOverview": "Dawaj nowym rozmowom przegląd struktury projektu.",
-            "useIqSearchCli": "Używaj CLI wyszukiwania iq zamiast grep/find/glob."
+            "sendingRanks": "Wysyłane pozycje 1–{sent} z {total} · znaków: {chars}",
+            "setUpTheAutomation": "Skonfiguruj automatyzację",
+            "useIqSearchCli": "Używaj CLI wyszukiwania iq zamiast grep/find/glob.",
+            "whatSessionsLearned": "To, czego sesje tutaj musiały nauczyć się na własnej skórze, uszeregowane i przepisywane co miesiąc, dołączane do każdej tury."
         },
         "agentCommandOutput": {
             "cleanCommandOutput": "Czyść wyjście poleceń",
@@ -1948,6 +2574,7 @@
             "cleaners": "Czyściciele",
             "commandOutput": "Wyjście poleceń",
             "ledgerFillsAssistantRuns": "Rejestr zapełnia się, gdy asystent uruchamia polecenia powłoki — jeden wiersz na polecenie.",
+            "ofCommandsRunUncleaned": "poleceń działa bez czyszczenia, jako grupa kontrolna.",
             "outputSavings": "Oszczędność wyjścia",
             "tokensSavedAllTime": "zaoszczędzonych tokenów, łącznie",
             "tokensStillReachingAssistant": "tokenów wciąż docierających do asystenta",
@@ -1970,10 +2597,10 @@
             "builtInSystemPrompts": "Wbudowane prompty systemowe",
             "claudeCodesOwnPrompt": "Własny prompt Claude Code, tak jak jest dostarczany w CLI Twojego sandboxa.",
             "claudeCodesOwnPrompt2": "Własny prompt Claude Code, odczytany z CLI w Twoim sandboxie",
+            "couldntSave": "Nie udało się zapisać zmiany",
             "custom": "Własny",
             "editCopy": "Edytuj kopię",
             "eitherWayAppsOwn": "Tak czy inaczej własne wskazówki tej aplikacji o jej pytaniach, panelu listy zadań i narzędziach przeglądarki są dokładane na wierzch; tylko własny prompt to pomija.",
-            "includingWhatAppTells": ": łącznie z tym, co ta aplikacja mówi asystentowi o swoich pytaniach, panelu listy zadań i narzędziach przeglądarki.",
             "intenticsOwnPromptDefault": "Własny prompt Intentic: domyślny i ten, który dostrajamy do tej aplikacji. Wybierz Intentic, a będzie dalej aktualizowany razem z aplikacją; rozgałęź go, a od tej chwili należy do Ciebie.",
             "intenticsOwnPromptTuned": "Własny prompt Intentic, dostrojony do tej aplikacji.",
             "leanGuidance": "Krótkie wskazówki",
@@ -1983,11 +2610,32 @@
             "onAddedToPrompt": "Przy {adds} jest zamiast tego dokładany do ich promptu.",
             "ownPromptAgentRuns": "Twój własny prompt: agent działa wyłącznie na tym tekście.",
             "readingSandbox": "Odczytywanie go z Twojego sandboxa…",
+            "replace": "Zastąp",
+            "replaceYourText": "Zastąpić twój tekst?",
+            "replaceYourTextDetail": "Wbudowany prompt zajmie miejsce wszystkiego, co jest tu teraz napisane. Jeśli chcesz zachować swój tekst, najpierw go skopiuj.",
             "startClaudes": "Wyjdź od Claude'a",
             "startIntentics": "Wyjdź od Intentic",
-            "textBecomesWholePrompt": "Twój tekst staje się całym promptem na",
             "viewPrompt": "Zobacz prompt",
-            "writeAssistantsSystemPrompt": "Napisz prompt systemowy asystenta albo wyjdź od jednego z wbudowanych promptów poniżej."
+            "writeAssistantsSystemPrompt": "Napisz prompt systemowy asystenta albo wyjdź od jednego z wbudowanych promptów poniżej.",
+            "wholePromptOn": "Twój tekst staje się całym promptem na {replaces}: łącznie z tym, co ta aplikacja mówi asystentowi o swoich pytaniach, panelu listy zadań i narzędziach przeglądarki."
+        },
+        "agentRun": {
+            "comingBack": "Czekam, aż jego agent wróci…",
+            "forgetFailed": "Nie udało się zapomnieć niedostępnych powiązań",
+            "forgetting": "Zapominanie {count} niedostępnego powiązania… | Zapominanie {count} niedostępnych powiązań… | Zapominanie {count} niedostępnych powiązań…",
+            "forgettingSome": "Zapominanie niedostępnych powiązań…",
+            "forgot": "Zapomniano {count} niedostępne powiązanie | Zapomniano {count} niedostępne powiązania | Zapomniano {count} niedostępnych powiązań",
+            "forgotSome": "Zapomniano niedostępne powiązania",
+            "hideOutput": "Ukryj wyjście",
+            "noLinksLeft": "To urządzenie nie jest już połączone z żadnym sandboxem.",
+            "restartFailed": "Nie udało się zrestartować jego agenta",
+            "restarted": "Agent zrestartowany",
+            "restarting": "Restartowanie jego agenta…",
+            "showOutput": "Pokaż wyjście",
+            "stillConnected": "Wciąż połączone z {count} sandboxem. | Wciąż połączone z {count} sandboxami. | Wciąż połączone z {count} sandboxami.",
+            "updateFailed": "Nie udało się zaktualizować jego agenta",
+            "updated": "Aktualizacja zakończona",
+            "updating": "Aktualizowanie jego agenta…"
         },
         "agentMemory": {
             "addToMemory": "Dodaj do pamięci",
@@ -1995,16 +2643,21 @@
             "bringMemoryOverAnother": "Przenieś pamięć od innego asystenta",
             "copyPrompt": "Kopiuj prompt",
             "copyPromptIntoChat": "Skopiuj ten prompt do czatu ze swoim innym dostawcą AI",
+            "createFile": "Utwórz plik",
             "memory": "Pamięć",
+            "notCreatedYet": " jeszcze nie istnieje. Zapisanie tutaj albo Utwórz plik tworzy go w katalogu głównym przestrzeni roboczej.",
             "nothingHereYetWhat": "Nic tu jeszcze nie ma. To, co każda tura w tej przestrzeni roboczej powinna wiedzieć.",
+            "openFile": "Otwórz plik",
             "pasteMemoryDetailsHere": "Wklej tutaj zawartość swojej pamięci",
             "pasteResultBelowTo": "Wklej wynik poniżej, żeby scalić go z oboma plikami",
             "reading": "Odczytywanie {memory_file}…"
         },
         "agentModels": {
+            "addFallback": "Dodaj model zapasowy",
             "advanced": "Zaawansowane",
             "autoReadsIt": "Auto je czyta",
             "clearModels": "Wyczyść modele",
+            "couldntSave": "Nie udało się zapisać zmiany",
             "guidance": "Wskazówki",
             "guidanceSet": "Wskazówki ustawione",
             "guided": "kierowany",
@@ -2026,9 +2679,12 @@
             "consecutiveFailuresBeforeAutomation": "Kolejne niepowodzenia, zanim automatyzacja zostanie wyłączona",
             "contextSizeInTokens": "Rozmiar kontekstu w tokenach, poniżej którego przeniesiona tura zachowuje swoją sesję",
             "disableAutomationAfterConsecutive": "Wyłącz automatyzację po kolejnych niepowodzeniach (0 nigdy nie wyłącza).",
+            "limitPolicyNote": "Co się dzieje z turą, którą odrzucił wyczerpany limit użycia. Domyślne dla każdej rozmowy; własne ustawienie czatu decyduje tylko o tym czacie.",
+            "outagePolicyNote": "Co się dzieje z turą, którą zabiła awaria samego dostawcy modelu (błąd 500, brak przepustowości, zerwane połączenie).",
             "pickUpInFlight": "Podejmij tury w locie, gdy sandbox się restartuje.",
             "resumeTurnsAfterRestart": "Wznawiaj tury po restarcie",
             "stopFailingAutomation": "Zatrzymaj automatyzację, która zawodzi",
+            "stopPolicyNote": "Co się dzieje z turą, która przerwała się bez niczego do naprawienia: zawieszone środowisko uruchomieniowe, awaria harnessu.",
             "tokensUnderMoveKeeps": "Tokeny. Poniżej tego przeniesienie zachowuje sesję (odczytuje ją raz, na zimno); od tej wartości w górę startuje świeża sesja z odmierzonego briefu. 0 zawsze startuje od zera.",
             "turnBreaks": "Gdy tura się załamie",
             "keepWarmGroup": "Bezczynne czaty",
@@ -2109,6 +2765,7 @@
             "triage": "Segregacja:"
         },
         "agentSafetyPolicy": {
+            "couldntSave": "Nie udało się zapisać polityki bezpieczeństwa",
             "ownTextIn": "Twój własny tekst, w",
             "safetyPolicy": "Polityka bezpieczeństwa",
             "textProductShipsDescribes": "Tekst, z którym ten produkt jest dostarczany. Opisuje to, co świeży sandbox i tak robi.",
@@ -2177,7 +2834,9 @@
             "didntLand": "Nie dotarło",
             "finishArrival": "Zakończ przybycie",
             "foundSetupOn": "Znaleziono instalację {kind} na {host}",
+            "hermes": "Hermes",
             "itemsApplied": "{count} element. | {count} elementy. | {count} elementów.",
+            "openclaw": "OpenClaw",
             "pack": "Paczka z",
             "refused": "Odrzucono: {count}.",
             "runOn": "Uruchom na {label}:",
@@ -2196,7 +2855,8 @@
         },
         "availability": {
             "busyCatchingUp": "zajęty, nadrabia",
-            "needsAttention": "wymaga uwagi"
+            "needsAttention": "wymaga uwagi",
+            "online": "online"
         },
         "conflictAsk": {
             "conflicts": "Konflikty",
@@ -2209,21 +2869,31 @@
             "syncsSandboxNotConnected": "synchronizuje ten sandbox, ale nie jest podłączone jako urządzenie."
         },
         "connectFlow": {
-            "again": "ponownie",
             "alreadyPasteHere": "Już to masz? Wklej tutaj",
+            "comeBackWithAddress": "Zaloguj się, a potem wróć tutaj z adresem, na który przekieruje Cię {destination}. Ta ostatnia strona {wontLoad} i tak ma być.",
+            "comeBackWithCode": "Zaloguj się, a potem wróć tutaj z kodem.",
+            "codeCopied": "Kod skopiowany: wklej go na stronie, która się otworzyła.",
+            "copyCode": "Skopiuj kod",
             "finish": "Zakończ",
             "finishesOn": "Zaloguj się na stronie, która się otworzy: logowanie zakończy się samo na {where}.",
-            "lastPage": "— jej ostatnia strona",
             "nameAccount": "Nazwij to konto…",
             "notThere": "Logujesz się gdzie indziej niż na {where}? Wklej adres, na który trafisz",
-            "paste": "Wklej {grantNoun}",
-            "signInComeBack": "Zaloguj się, a potem wróć tutaj z",
+            "openAgain": "Otwórz {destination} ponownie",
+            "pasteAddress": "Wklej adres, na który przekierował Cię {destination}",
+            "pasteAddressPlaceholder": "Wklej adres…",
+            "pasteCode": "Wklej kod",
+            "pasteCodePlaceholder": "Wklej kod…",
             "siteCantReached": "Nie można połączyć się z tą stroną",
-            "thatsExpected": ", i tak ma być",
             "waitingApproval": "Czekamy na zatwierdzenie…",
             "waitingOn": "Czekam, aż logowanie dotrze do {where}…",
             "whatPageLooksLike": "Jak wygląda ta strona",
-            "wontLoad": "się nie wczyta"
+            "wontLoad": "się nie wczyta",
+            "approveEnterCode": "Zaloguj się i zatwierdź: wpisz ten kod, jeśli strona o niego poprosi.",
+            "approveOnPage": "Zatwierdź logowanie na stronie, która się otworzy.",
+            "alreadyFilledIn": "Na x.ai kod jest już wpisany: zatwierdź na dowolnym urządzeniu.",
+            "enterCodeFinishesRest": "Wpisz ten kod na stronie, która się otworzy: resztę dokończy ten sandbox, a konto pojawi się tutaj.",
+            "signInFinishesRest": "Zaloguj się na stronie, która się otworzy: resztę dokończy ten sandbox, a konto pojawi się tutaj.",
+            "finishingWith": "Kończenie logowania w {destination}…"
         },
         "connectionNotice": {
             "cantStartedRightNow": "„{name}” nie da się teraz uruchomić",
@@ -2231,7 +2901,7 @@
             "checkSetup": "Sprawdź konfigurację",
             "connect": "Podłącz „{name}”",
             "connectingTo": "Łączenie z „{name}”…",
-            "containerDeletedOnFiles": "Jego kontener został usunięty na {where}, a jego pliki poszły razem z nim. Nic nie wraca — ponowna konfiguracja startuje ten sandbox od zera, pod tą samą nazwą i tym samym adresem.",
+            "containerDeletedFilesKept": "Jego kontener został usunięty na {where}. Jeśli nie usunięto go na stałe, jego pliki zostają na tamtym komputerze przez {count} dzień: uruchom tam ic sandbox restore, żeby go przywrócić. Ponowna konfiguracja tutaj startuje go od zera, pod tą samą nazwą i tym samym adresem. | Jego kontener został usunięty na {where}. Jeśli nie usunięto go na stałe, jego pliki zostają na tamtym komputerze przez {count} dni: uruchom tam ic sandbox restore, żeby go przywrócić. Ponowna konfiguracja tutaj startuje go od zera, pod tą samą nazwą i tym samym adresem.",
             "extensionStoppedAnswering": "Rozszerzenie {extension} przestało odpowiadać na {path} i to na nie czeka sandbox — nie na maszynę, która nadal działa. Napraw albo zatrzymaj ten handler, a obszar roboczy wróci sam.",
             "finishSetup": "Dokończ konfigurację",
             "hostedSandboxesSwitchedOff": "Hostowane sandboxy są wyłączone dla Twojego konta",
@@ -2303,6 +2973,7 @@
             "backgroundPortMirrorWatcher": "Działający w tle obserwator odbijania portów, zarejestrowany do wznowienia przy logowaniu (launchd / klucz Run w Windows / autostart XDG), żeby porty na localhoście przeżywały restarty.",
             "boardFolderPortsSwitches": ", razem z jego folderem, portami i przełącznikami.",
             "buttonAsksToDo": "prosi go, żeby zrobił dokładnie to.",
+            "checkingSync": "Sprawdzam, czy ten sandbox może synchronizować się z urządzeniem…",
             "chooseFolderOnDevice": "Wybierz folder na tym urządzeniu",
             "collaboratorMirrorSandboxsDev": "Jako współpracownik możesz odbijać serwery deweloperskie sandboxa na własny localhost, żeby mieć podglądy na żywo. Żadne pliki nie są synchronizowane ponad to, co przestrzeń robocza już pokazuje.",
             "commandSingleUseExpires": "To polecenie jest jednorazowe i wygasa po ~10 minutach.",
@@ -2330,7 +3001,8 @@
             "takesOverFrom": "To przejmuje od {device}. Jego synchronizacja plików zatrzyma się, gdy uruchomisz polecenie poniżej.",
             "that": "tego",
             "theOtherDevice": "drugie urządzenie",
-            "whatStaysOnDevice": "Co zostaje na Twoim urządzeniu?"
+            "whatStaysOnDevice": "Co zostaje na Twoim urządzeniu?",
+            "windowsPowershell": "Windows (PowerShell)"
         },
         "devRebuild": {
             "approvedRecipeAppliedPart": "Twój zatwierdzony przepis jest stosowany przy okazji, więc oczekująca przebudowa zniknie, gdy sandbox wróci.",
@@ -2382,6 +3054,7 @@
             "mayBeOutdated": "Poniżej może być nieaktualne",
             "noContainersViaSync": "Sync bez kontenerów",
             "noSelfReport": "Brak raportu",
+            "openPermissions": "Otwórz ustawienia urządzenia",
             "notAnswering": "Nie odpowiada",
             "reenrollsAgent": "Rejestruje agenta ponownie",
             "restartsAgent": "Restartuje agenta",
@@ -2424,12 +3097,18 @@
             "actsOn": "Obejmuje",
             "allDevices": "Wszystkie urządzenia",
             "backOnLocalhost": "Z powrotem na localhost",
+            "batchRemoving": "Usuwanie {at} z {total}…",
+            "batchRestarting": "Restartowanie {at} z {total}…",
+            "batchStarting": "Uruchamianie {at} z {total}…",
+            "batchStopping": "Zatrzymywanie {at} z {total}…",
+            "batchUpdating": "Aktualizowanie {at} z {total}…",
             "cantBatch": "Nie w partii",
             "clearBuildOutput": "Wyczyść wyniki budowania",
             "connect": "Podłącz",
             "dangerZone": "Strefa zagrożenia",
             "deviceAloneLosesAccess": "Dostęp traci tylko to jedno urządzenie — każde inne sparowane urządzenie synchronizuje dalej. Jego synchronizacja plików się zatrzymuje, a odbite porty znikają z jego localhosta w ciągu minuty.",
             "dontMirrorPort": "Nie odbijaj go",
+            "environments": "Środowiska",
             "fixAgent": "Napraw agentem",
             "ifPortFree": "Jeśli port jest wolny",
             "leftAsIs": "Bez zmian",
@@ -2448,8 +3127,11 @@
             "revokeSAccess2": "Odebrać dostęp: {label}?",
             "revokingStopsDeviceReaching": "Odebranie dostępu sprawia, że to urządzenie w ogóle nie sięgnie do sandboxa. Nic na nim nie zostaje usunięte, a jego agent pozostaje zainstalowany.",
             "runsOnDeviceKeeps": "Działa na tamtym urządzeniu i idzie dalej, jeśli opuścisz tę stronę albo połączenie padnie.",
+            "sandboxes": "Sandboxy",
             "sandboxUsingRightNow": "To jest sandbox, którego właśnie używasz — ta strona go straci.",
+            "selectAll": "Zaznacz wszystko",
             "selected": "Wybrano: {count}",
+            "selectEverySandbox": "Zaznacz każdy sandbox",
             "startMirroring": "Zacznij odbijać",
             "startingOnDevice": "Uruchamianie na tamtym urządzeniu…",
             "stopMirroring": "Przestań odbijać",
@@ -2477,8 +3159,10 @@
         "deviceRunners": {
             "addRunner": "Dodaj runnera",
             "nameEGRog": "nazwa, np. rog",
+            "offline": "offline",
             "outdated": "nieaktualny",
             "runnerComesOffWork": "Runner schodzi z {label}. Jego praca żyje w gicie tego sandboxa, więc nic z nim nie przepada — a nowego możesz tu zrobić w każdej chwili.",
+            "runners": "Runnery",
             "sandboxKeepsNoRunner": "Ten sandbox nie trzyma żadnego runnera na {label}. Dodaj jednego, żeby przekazywać mu rozmowy do uruchomienia tam.",
             "startingOnDevice": "Uruchamianie na tamtym urządzeniu…",
             "syncSettings": "Ustawienia synchronizacji",
@@ -2580,6 +3264,8 @@
             "contents": "Zawartość",
             "onlySandboxMaintainerDecide": "Tylko opiekun sandboxa może decydować o zmianach środowiska.",
             "onlySandboxOwnerApprove": "Tylko właściciel sandboxa może zatwierdzić albo odrzucić tę zmianę.",
+            "proposalAdds": "Zatwierdź zmiany dotyczące: {names}.",
+            "proposalChanges": "Zatwierdź proponowane zmiany środowiska.",
             "onlySandboxOwnerRebuild": "Tylko właściciel sandboxa może go przebudować.",
             "overlayDockerfileBuilt": "Dockerfile nakładki, z którego jest budowane",
             "pendingRebuild": "oczekuje na przebudowę",
@@ -2587,7 +3273,12 @@
             "reject": "Odrzuć",
             "whatSandboxInstalled": "Co ten sandbox ma zainstalowane",
             "buildsWithCheckoutRebuild": "Zbuduje się przy następnej przebudowie z checkoutu, w karcie",
-            "sandboxTab": "Sandbox ›"
+            "sandboxTab": "Sandbox ›",
+            "remove": "Usuń",
+            "removeHeader": "Usunąć {name} ze środowiska?",
+            "removeApproved": "{name} zostaje zainstalowane do najbliższej przebudowy tego sandboxa, a po niej znika. Jeśli agent znów będzie tego potrzebować, będzie musiał poprosić o to ponownie.",
+            "removeRequest": "Prośba o dodanie {name} zostaje odrzucona. Nic nie jest instalowane ani przebudowywane.",
+            "removeUnbuilt": "{name} nie jest jeszcze zainstalowane, a najbliższa przebudowa to pominie. Jeśli agent będzie tego potrzebować, będzie musiał poprosić o to ponownie."
         },
         "environmentContents": {
             "arrivesAfterRebuild": "pojawi się po przebudowie",
@@ -2596,6 +3287,7 @@
             "nothingAddedOnTop": "Nic jeszcze nie dołożono ponad standardowy obraz i nic w nim nie odpowiedziało, co zwykle znaczy, że sandbox wciąż startuje.",
             "plusLibrariesHeadersCommands": "Plus {extras} bibliotek i nagłówków, których te polecenia potrzebują, a których nikt nie uruchamia bezpośrednio.",
             "readFrom": "Odczyt z",
+            "removeFromEnvironment": "Usuń ze środowiska",
             "showMore": "Pokaż więcej",
             "waitingApproval": "czeka na Twoje zatwierdzenie",
             "whatInstalls": "Co to instaluje"
@@ -2733,7 +3425,8 @@
             "rename": "Zmień nazwę"
         },
         "measurementPanel": {
-            "controlGroupPercentage": "Grupa kontrolna, w procentach"
+            "controlGroupPercentage": "Grupa kontrolna, w procentach",
+            "nothingMeasuredYet": "Jeszcze nic nie zmierzono."
         },
         "modelGroupRow": {
             "addModelEveryJob": "Dodaj model do każdego zadania: {toLowerCase}",
@@ -2750,7 +3443,8 @@
             "reasonsFirst": "Najpierw myśli",
             "remove": "Usuń {label}",
             "slowerSharper": "Wolniej, ale trafniej",
-            "thinks": "Myśli"
+            "thinks": "Myśli",
+            "triedInOrder": "Używane po kolei: każdy następny tylko wtedy, gdy poprzednie nie mogą odpowiedzieć."
         },
         "modelPinPicker": {
             "addModel": "Dodaj model"
@@ -2765,11 +3459,11 @@
         },
         "moveOutPanel": {
             "compareSandboxToml": "Porównaj sandbox.toml",
+            "connectGithub": "Połącz GitHub",
             "connectGithubGitlabAccount": "Najpierw podłącz konto GitHub albo GitLab.",
             "copyCloneUrl": "Kopiuj adres do klonowania",
             "copyUrl": "Kopiuj URL",
             "couldntListSandboxsBundles": "Nie udało się wypisać paczek tego sandboxa.",
-            "createsPrivateRepositoryOn": "Tworzy prywatne repozytorium na",
             "deleteExport": "Usuń eksport",
             "differences": "Różnice",
             "downloadExport": "Pobierz eksport",
@@ -2778,7 +3472,6 @@
             "exportFailed": "Eksport się nie powiódł.",
             "exportRunning": "Eksport w toku…",
             "failed": "nieudany",
-            "filesStayBehind": "plików zostaje.",
             "inAgreement": "zgodne",
             "notInDocument": "Nie ma tego w dokumencie",
             "notPublished": "Nieopublikowane",
@@ -2786,8 +3479,8 @@
             "openWorkspaceRepository": "Otwórz repozytorium przestrzeni roboczej",
             "packing": "pakowanie",
             "packingFar": "Pakowanie… dotąd {bytes}",
-            "pushes": "i wypycha",
-            "secrets": "sekrety"
+            "secrets": "sekrety",
+            "createsPrivateRepository": "Tworzy prywatne repozytorium w serwisie {host} i wypycha {work}. Sekrety i pliki {env} zostają."
         },
         "newExtensionDialog": {
             "createStart": "Utwórz i uruchom",
@@ -2817,10 +3510,10 @@
             "unusedOneCodePlus": "Niewykorzystanych: {remaining}. Jeden kod plus Twoje logowanie Google otwiera sandbox, jeśli wszystkie klucze dostępu przepadną; każdy działa raz."
         },
         "personaBriefingFields": {
-            "moreAlwaysSent": "więcej jest wysyłanych zawsze",
             "sandboxPutsInFront": "Sandbox stawia to przed wiadomością, zanim model ją przeczyta; czat pokazuje je pod „Wysłane razem z Twoją wiadomością”. Wyłącz któreś dla persony, której model ma mało miejsca albo której praca nigdy tego nie potrzebuje.",
             "sentEveryMessage": "Wysyłane z każdą wiadomością",
-            "turnedOffPersonaEvery": "Wyłączono {dropped} z {count} dla tej persony. Każdy inny czat w tym sandboxie wciąż dostaje wszystkie."
+            "turnedOffPersonaEvery": "Wyłączono {dropped} z {count} dla tej persony. Każdy inny czat w tym sandboxie wciąż dostaje wszystkie.",
+            "countMoreAlwaysSent": "{count} kolejna jest wysyłana zawsze | {count} kolejne są wysyłane zawsze | {count} kolejnych jest wysyłanych zawsze"
         },
         "personaForm": {
             "addAnother": "Dodaj kolejny",
@@ -2970,9 +3663,9 @@
             "fenceHoldsNoAssistant": "W tych folderach nie pracuje żaden asystent, więc nie mają z kim rozmawiać.",
             "guest": "Gość",
             "guestNeedsArea": "Wybierz co najmniej jeden obszar. Gość rozmawia z asystentami, którzy tam pracują, więc nie zostanie przyznany, dopóki nie ma żadnego.",
+            "guestTalksToAssistants": "Rozmawia z asystentami, którzy pracują we wskazanych przez Ciebie obszarach, i tylko przez nich. Czyta te foldery, nie widzi innych rozmów ani niczego innego w maszynie.",
             "guestReaches": "Rozmawia z {names}",
             "guestReachesNobody": "W obszarach, które mają, nie pracuje żaden asystent, więc nie mają z kim rozmawiać",
-            "guestTalksToAssistants": "Talks to the assistants you pick, and only through them. Sees no files, no other conversations, nothing of the box.",
             "idle": "bezczynny",
             "invite": "Zaproś jako",
             "invite2": "Zaproś",
@@ -3059,15 +3752,32 @@
         },
         "sandboxBehindCard": {
             "copyRestartCommand": "Kopiuj polecenie restartu",
+            "newerSide": "nowsza wersja",
+            "olderSide": "starsza wersja",
             "rebuildsYourCodeOn": "Przebudowuje Twój kod na {hostId} i restartuje sandbox — około minuty.",
             "rebuiltOnReloadPage": "Przebudowane na {hostId} — przeładuj tę stronę, żeby to wziąć.",
-            "restartIsQuicker": "This takes about a minute and keeps your files and running work. The full rebuild takes several minutes, and you don't need it for this.",
+            "restarting": "Restartowanie…",
             "restartSandbox": "Uruchom sandbox ponownie",
             "restartingOn": "Przebudowa na {hostId} i restart. Ta strona na chwilę zamilknie i wróci sama.",
+            "restartIsQuicker": "Zachowuje Twoje pliki i wszystko, co działa. Pełna przebudowa trwa kilka minut, a do tego nie jest potrzebna.",
             "run": "Uruchom",
             "staysUpdateSandboxImage": "Jeśli to zostaje, zaktualizuj obraz sandboxa.",
             "stillHereRun": "Wciąż tutaj? Uruchom",
-            "updateSandboxImage": "Zaktualizuj obraz sandboxa."
+            "updateSandboxImage": "Zaktualizuj obraz sandboxa.",
+            "headingUncompiled": "Twój sandbox nie wczytał jeszcze Twoich ostatnich zmian",
+            "headingForked": "Ta strona i Twój sandbox pochodzą z różnych wersji",
+            "headingBehind": "Twój sandbox jest starszy niż ta strona",
+            "headingWholesale": "Ta strona i Twój sandbox bardzo się od siebie różnią",
+            "headingPartial": "Niektóre części tej strony mogą nie działać",
+            "causeUncompiled": "W Twoim kodzie są zmiany, których sandbox jeszcze nie przebudował, więc wciąż działa na starej wersji. Odświeżenie tej strony nie pomoże — to sandbox musi nadrobić zaległości.",
+            "causeForked": "Każda strona ma części, o których druga nigdy nie słyszała, więc żadna nie jest po prostu nowsza. Sam restart tego nie rozwiąże.",
+            "causeBehind": "Twój sandbox powstał, zanim te części istniały, więc nic o nich nie wie.",
+            "causeWholesale": "Prawie nic się nie zgadza — to dwie całkiem różne wersje, a nie jedna drobna zmiana.",
+            "causeWholesaleAppOlder": "Prawie nic się nie zgadza — to dwie całkiem różne wersje, a nie jedna drobna zmiana. Starsza z nich jest ta strona.",
+            "appOlder": "Starsza z nich jest ta strona.",
+            "wholesaleNote": "Dotyczy to prawie każdej części aplikacji, więc nie wymieniamy ich po kolei.",
+            "restartBecomesButton": "restart stanie się tutaj przyciskiem.",
+            "restartingTheSandbox": "Restart sandboxa"
         },
         "sandboxDeleted": {
             "comesBackAsName": "Wraca z nowym adresem, więc maszynę, na której działało, trzeba połączyć ponownie",
@@ -3148,6 +3858,22 @@
             "sandboxUrl": "Adres sandboxa",
             "setUp": "Skonfiguruj go tam →"
         },
+        "sandboxRecovery": {
+            "title": "{name} nie wrócił",
+            "detail": "Od kilku minut jest nieosiągalny.",
+            "gateHeading": "Uruchom go ponownie",
+            "lead": "Jego pliki i rozmowy są zachowane. Na maszynie, na której działa, zwykle wystarcza jedno z tych poleceń, żeby znów ruszył:",
+            "remoteLead": "Do tego potrzebny jest komputer, na którym działa sandbox. Twoje pliki i rozmowy są na nim zachowane.",
+            "showCommands": "Pokaż polecenia dla tego komputera",
+            "hostedLead": "Jego pliki i rozmowy są zachowane. Jeśli zatrzymała go ostatnia aktualizacja, powrót do poprzedniej wersji zwykle przywraca go do działania.",
+            "restartInApp": "Zrestartuj go w aplikacji",
+            "rollBackCommand": "Wróć do wersji sprzed ostatniej aktualizacji",
+            "restartCommand": "Zrestartuj go",
+            "doctorCommand": "Sprawdź, co jest nie tak (niczego nie zmienia)",
+            "siblingReaches": "{name} też ma dostęp do {machine}:",
+            "openItsDevices": "zarządzaj tym sandboxem z jego strony Urządzenia",
+            "yourSandbox": "Twój sandbox"
+        },
         "sandboxPersonas": {
             "accountsSpeaksThroughStay": "Konta, przez które mówi, pozostają podłączone i zalogowane. Każda automatyzacja przypięta do tej persony przestaje publikować, dopóki nie dasz jej innej.",
             "addPersona": "Dodaj personę",
@@ -3172,6 +3898,8 @@
         },
         "sandboxSecrets": {
             "addSecret": "Dodaj sekret",
+            "generateRandom": "Wygeneruj losowy",
+            "couldNotGenerate": "Nie udało się wygenerować sekretu.",
             "capabilityCredentials": "Poświadczenia możliwości",
             "ciInSync": "CI zsynchronizowane",
             "generatedByIntentic": "Wygenerowane przez intentic",
@@ -3219,12 +3947,16 @@
             "fewer": "Pokaż mniej"
         },
         "sandboxSwitcher": {
+            "addAnotherSandbox": "Dodaj kolejny sandbox",
+            "addProjectOrFolder": "Dodaj projekt lub folder",
             "alsoDelete": "Usuń go także z",
+            "anotherSandboxSeparate": "Osobna maszyna z własnymi plikami, kontami i czatami.",
             "cleanupCommand": "Polecenie sprzątające",
             "containerFilesHistoryGone": "— tamtejszy kontener zostanie zatrzymany, a jego pliki i historia będą przechowywane przez tydzień, zanim zostaną usunięte.",
             "inProgress": "W toku",
             "leaveLoseAccessSandbox": "Opuścić „{name}”? Tracisz dostęp; sandbox działa dalej.",
             "leaveSandbox": "Opuścić sandbox?",
+            "leavesWithIt": "Odchodzi razem z nim, a nowy sandbox zacznie bez tego:",
             "needsYou": "Czeka na ciebie",
             "notAnswering": "Nie odpowiada",
             "ready": "Gotowa",
@@ -3240,6 +3972,9 @@
             "sandboxSettings": "Ustawienia sandboxa",
             "status": "Stan",
             "switchSandbox": "Przełącz sandbox: {switcherLabel}",
+            "takesAccounts": "Połączone z nim konta, np. ChatGPT, Claude czy GitHub",
+            "takesChats": "Jego czaty i pliki",
+            "takesSettings": "Jego ustawienia, instrukcje dla agentów i możliwości",
             "toAlsoRemoveMachine": "Żeby usunąć go też z maszyny, która go gości — razem z jego plikami — uruchom tam:",
             "undoLastUpdate": "Cofa ostatnią aktualizację",
             "update": "Aktualizacja",
@@ -3265,14 +4000,11 @@
             "againstHost": "wobec jego hosta.",
             "alreadyDownloadedBuiltOn": "Jest już pobrana i zbudowana na urządzeniu, które uruchamia ten sandbox. Zastosowanie jej restartuje Twój sandbox na jakieś pół minuty: Twoje pliki (w /work) zostają.",
             "alreadyDownloadedHereReleased": "{stagedBehind} jest już tutaj pobrana, ale od tego czasu wydano {latest}. Aktualizacja teraz daje Ci {stagedBehind2} — albo najpierw pobierz nowszą.",
-            "and": "…i",
             "applyRestartsSandbox": "Zastosuj to: restartuje to Twój sandbox:",
             "downloadCostsNothing": "Pobranie jej teraz nic nie kosztuje, a restart może poczekać. | Pobranie ich teraz nic nie kosztuje, a restart może poczekać.",
             "downloaded": "pobrane",
-            "iveReadWhatChanges": "Przeczytałem, co się zmienia: pokaż mi aktualizację",
             "midTurnRestart": "Właśnie teraz agent jest w połowie tury, restart sandboxa przerywa jego pracę. | Właśnie teraz {count} agenty są w połowie tury, restart sandboxa przerywa ich pracę. | Właśnie teraz {count} agentów jest w połowie tury, restart sandboxa przerywa ich pracę.",
             "midTurnRollback": "Właśnie teraz agent jest w połowie tury, cofnięcie przerywa jego pracę. | Właśnie teraz {count} agenty są w połowie tury, cofnięcie przerywa ich pracę. | Właśnie teraz {count} agentów jest w połowie tury, cofnięcie przerywa ich pracę.",
-            "more": "więcej:",
             "publishedNewerThanWhat": "Opublikowana {latest} jest nowsza niż to, co zgłasza ten sandbox, ale wzięcie jej odrzuca obraz zbudowany z Twojego checkoutu. Na urządzeniu, które go uruchamia:",
             "readChangelog": "przeczytaj dziennik zmian",
             "restartToUpdatePlatform": "Zrestartuj, żeby zaktualizować: platforma podnosi Twój sandbox na nowym obrazie, pliki zostają.",
@@ -3289,7 +4021,31 @@
             "updateRemovesChangesThings": "Ta aktualizacja usuwa albo zmienia rzeczy, na których możesz polegać: przeczytaj poniżej, co się zmienia, zanim ją weźmiesz. Twoje pliki (w /work) i tak zostają, a potem możesz się cofnąć:",
             "waitFleetToSettle": "Poczekaj, aż flota się uspokoi, albo kontynuuj, jeśli to akceptowalne.",
             "whatChanges": "Co się zmienia",
-            "whatUpdatesNeverBreak": "czego aktualizacje nigdy nie psują"
+            "whatUpdatesNeverBreak": "czego aktualizacje nigdy nie psują",
+            "updateConvertsStoredFiles": "Przy pierwszym uruchomieniu ta aktualizacja przekształci jeden zapisany plik: | Przy pierwszym uruchomieniu ta aktualizacja przekształci {count} zapisane pliki: | Przy pierwszym uruchomieniu ta aktualizacja przekształci {count} zapisanych plików:",
+            "convertedFilesKeptAside": "Każdy z nich jest najpierw odkładany na bok i przywracany, jeśli nowa wersja się nie uruchomi; potem zmianę widać na osi czasu przestrzeni roboczej.",
+            "updateWouldStopBeforeTouching": "Ta aktualizacja zatrzymałaby się, zanim cokolwiek zmieni: przekształcenie plików tego sandboxa się nie udaje.",
+            "newerVersionConvertedTheseFiles": "Nowsza wersja już przekształciła część tych plików; ta otwiera je tylko do odczytu.",
+            "couldntShowAgain": "Nie udało się ponownie zaproponować tej wersji.",
+            "couldntSkip": "Nie udało się pominąć tej wersji.",
+            "skipThisVersion": "Pomiń tę wersję",
+            "updateHeldBack": "Aktualizacja wstrzymana",
+            "withdrawnBadge": "wycofana",
+            "skippedBadge": "pominięta",
+            "fullLogOnMachine": "Pełny log, na tamtej maszynie:",
+            "skippedLine": "Pominąłeś wersję {version}, więc nie jest proponowana.",
+            "showItAgain": "Pokaż ją ponownie",
+            "filesStay": "Twoje pliki i rozmowy zostają.",
+            "tryAgain": "Spróbuj ponownie",
+            "notOfferedUntilFixed": "Dlatego nie jest tu proponowana. Wydanie, które potrafi przekształcić te pliki, zostanie zaproponowane jak zwykle.",
+            "previousStaysReady": "Poprzednia wersja pozostaje potem gotowa na tej maszynie przez 24 godziny, więc powrót zajmuje sekundy.",
+            "couldntRestart": "Nie udało się zrestartować sandboxa.",
+            "builtFromCheckout": "Zbudowany z Twojego checkoutu",
+            "updateAvailableBreaking": "Dostępna aktualizacja: zmienia sposób działania",
+            "updateReady": "Aktualizacja gotowa do zastosowania",
+            "updateAvailable": "Dostępna aktualizacja",
+            "sandboxImage": "Obraz sandboxa",
+            "andMore": "…i jeszcze {count}:"
         },
         "sandboxHours": {
             "awakeHours": "Godziny czuwania",
@@ -3375,6 +4131,7 @@
             "continueGoogleToSecurely": "Kontynuuj przez Google, żeby bezpiecznie połączyć przeglądarkę wprost z Twoim sandboxem.",
             "intenticSignsInThrough": "Intentic loguje Cię przez przeglądarkę, a potem wraca z Tobą prosto tutaj.",
             "lostPasskeysUseOne": "Zgubiłeś klucze dostępu? Użyj jednego ze swoich kodów odzyskiwania.",
+            "notNow": "Nie teraz",
             "or": "albo",
             "ownerSandboxRequiresPasskey": "Właściciel tego sandboxa wymaga klucza dostępu. Dodaj jeden teraz: od tej chwili to własna blokada Twojego urządzenia (odcisk palca, twarz albo PIN) otwiera ten sandbox.",
             "sandboxOnlyOpensPasskey": "Ten sandbox otwiera się wyłącznie kluczem dostępu. Użyj tego, którym go zarejestrowałeś.",
@@ -3443,6 +4200,7 @@
                 "reason": "Transkrypcje, załączniki i zapisy każdej rozmowy, także zarchiwizowanych. Usunięcie rozmowy z archiwum zwalnia jej część."
             },
             "docker": {
+                "label": "Docker",
                 "reason": "Obrazy, kontenery i woluminy własnego Dockera sandboxa. Polecenie docker system prune w terminalu usuwa to, czego nic nie używa."
             },
             "engines": {
@@ -3509,6 +4267,34 @@
                 "label": "Pliki przestrzeni roboczej",
                 "reason": "Twoje repozytoria, ich zależności i wszystko inne w przestrzeni roboczej. Usuń to, czego już nie potrzebujesz, w Plikach albo w terminalu."
             }
+        },
+        "agentOffload": {
+            "here": "Ten sandbox",
+            "intro": "Testy, sprawdzanie typów i pełne kontrole mogą działać na runnerze na jednej z Twoich maszyn zamiast tutaj, obok każdej rozmowy. Kod jedzie w obecnym stanie, wyjście spływa z powrotem, a każdy plik zmieniony przez polecenie wraca razem z nim. Maszyna, która śpi albo jest zajęta, oddaje pracę temu sandboxowi.",
+            "kindBunTest": "Testy (bun test)",
+            "kindBunTestDetail": "bun test oraz własny runner testów każdego pakietu.",
+            "kindCustomDetail": "Polecenia pasujące do {pattern}",
+            "kindPackageScript": "Skrypty pakietów (test, typecheck, build…)",
+            "kindPackageScriptDetail": "Menedżer pakietów uruchamiający skrypt test, typecheck, verify, check lub build.",
+            "kindTurbo": "Uruchomienia turbo w całym repozytorium",
+            "kindTurboDetail": "turbo run dla build, test, typecheck lub check.",
+            "kindTypecheck": "Sprawdzanie typów",
+            "kindTypecheckDetail": "tsc, tsgo i vue-tsc.",
+            "kindVerify": "Pełne kontrole (verify)",
+            "kindVerifyDetail": "pnpm verify i jego warianty, najcięższe, co tu działa.",
+            "kindVitest": "Uruchomienia Vitest",
+            "kindVitestDetail": "uruchomienia vitest.",
+            "lastRunFailed": "Ostatnio: {command}, kod wyjścia {code}",
+            "lastRunGoing": "Teraz działa: {command}",
+            "lastRunPassed": "Ostatnio: {command}, przeszło",
+            "noRunners": "Żadna z Twoich maszyn nie ma jeszcze runnera: dodaj go przez {devices} → maszyna → Runnery.",
+            "runnerGone": "Runner „{runner}” nie jest już skonfigurowany, więc to działa tutaj.",
+            "runnerOffline": "Teraz offline: praca wysłana tutaj działa w tym sandboxie, dopóki nie wróci",
+            "runnerOnline": "Połączony",
+            "runsHereUntilBack": "{machine} jest offline, więc to działa tutaj, dopóki nie wróci.",
+            "runsOn": "Działa na",
+            "sentHere": "Działa tutaj: {kinds}",
+            "title": "Gdzie działa ciężka praca"
         },
         "usageChart": {
             "n7Days": "7 dni"
@@ -3612,10 +4398,235 @@
             "chatDefault": "domyślny czatu",
             "youreHere": "Jesteś tutaj"
         },
+        "updateOutcome": {
+            "wentBackFromTo": "Cofnięto z {from} do {to}.",
+            "wentBack": "Przywrócono poprzednią wersję.",
+            "updatedFromTo": "Zaktualizowano z {from} do {to}.",
+            "updated": "Ten sandbox został zaktualizowany.",
+            "previousReadyUntil": "Tamta wersja pozostaje gotowa na tej maszynie do {when}, więc powrót zajmuje sekundy.",
+            "newDidntStart": "Nowa wersja się nie uruchomiła, więc przywrócono poprzednią.",
+            "updateDidntStart": "Aktualizacja do {to} się nie uruchomiła, więc przywrócono poprzednią wersję.",
+            "versionDidntStart": "{to} się nie uruchomiła, więc przywrócono poprzednią wersję.",
+            "keptFailingWentBackTo": "{to} ciągle zawodziła, więc ta maszyna sama wróciła do {from}.",
+            "newKeptFailing": "Nowa wersja ciągle zawodziła, więc ta maszyna sama wróciła do poprzedniej.",
+            "keptFailingWentBack": "{to} ciągle zawodziła, więc ta maszyna sama wróciła do poprzedniej wersji.",
+            "withdrawn": "Wersja {version} została wycofana.",
+            "withdrawnBecause": "Wersja {version} została wycofana: {reason}"
+        },
+        "hostedRollback": {
+            "header": "Cofnąć {name}?",
+            "body": "Restartuje się na wersji, na której działał przed ostatnią aktualizacją, co zajmuje jakieś pół minuty. Jego pliki i rozmowy zostają.",
+            "couldntRollBack": "Nie udało się cofnąć tego sandboxa."
+        },
         "placement": {
+            "cloudDetail": "Działa w chmurze Intentic",
+            "cloudDetailRegion": "Działa w chmurze Intentic, w regionie {region}",
+            "cloudLabel": "Chmura Intentic",
             "device": "Urządzenie",
+            "deviceDetail": "Działa na {device}, Twojej własnej maszynie",
             "host": "Host",
-            "region": "Region"
+            "ownDetail": "Działa na Twojej własnej maszynie, nie w chmurze Intentic",
+            "ownDetailHost": "Działa na Twojej własnej maszynie, osiągalnej pod {host}",
+            "ownLabel": "Twoja własna maszyna",
+            "region": "Region",
+            "sharedDetail": "Działa na maszynie kogoś innego, udostępnionej Tobie",
+            "sharedLabel": "Maszyna kogoś innego",
+            "thisComputerDetail": "Działa na tym komputerze",
+            "thisComputerLabel": "Ten komputer"
+        },
+        "driftReport": {
+            "areas": {
+                "accounts": {
+                    "label": "Konta",
+                    "where": "konta, na które loguje się ten sandbox"
+                },
+                "activity": {
+                    "label": "Dziennik aktywności",
+                    "where": "zapis tego, co zrobił agent"
+                },
+                "agent": {
+                    "label": "Przebieg tury",
+                    "where": "wysyłanie, zatrzymywanie i śledzenie tury"
+                },
+                "agents": {
+                    "label": "Flota agentów",
+                    "where": "tablica agentów i stan każdego z nich"
+                },
+                "approvals": {
+                    "label": "Zatwierdzenia",
+                    "where": "to, co agent przygotował do Twojej zgody"
+                },
+                "areas": {
+                    "label": "Obszary przestrzeni roboczej",
+                    "where": "kto może widzieć które części przestrzeni roboczej"
+                },
+                "automations": {
+                    "label": "Automatyzacje",
+                    "where": "zaplanowane wybudzenia i ich zatwierdzenia"
+                },
+                "capabilities": {
+                    "label": "Możliwości",
+                    "where": "konektory, konta i karty, które je przyznają"
+                },
+                "chores": {
+                    "label": "Prace porządkowe",
+                    "where": "przebiegi konserwacji i ich wyniki"
+                },
+                "ci": {
+                    "label": "CI",
+                    "where": "przebiegi sprawdzeń i ich wyniki"
+                },
+                "diff": {
+                    "label": "Zmiany",
+                    "where": "panel zmian i przegląd plik po pliku"
+                },
+                "endpoints": {
+                    "label": "Modele AI",
+                    "where": "modele, z których ten sandbox może korzystać"
+                },
+                "exit": {
+                    "label": "Węzły wyjściowe",
+                    "where": "z którego kraju wychodzi ruch tego sandboxa"
+                },
+                "extensions": {
+                    "label": "Rozszerzenia",
+                    "where": "zainstalowane rozszerzenia i ich widoki"
+                },
+                "git": {
+                    "label": "Git",
+                    "where": "gałęzie, commity i to, co jest w indeksie"
+                },
+                "history": {
+                    "label": "Historia",
+                    "where": "zapis dawnych rozmów i tur"
+                },
+                "intentic": {
+                    "label": "Wdrożenia",
+                    "where": "plany wdrożeń i przebiegi, które je wykonują"
+                },
+                "inventory": {
+                    "label": "Spis wdrożeń",
+                    "where": "co ta przestrzeń robocza ma i co chce wdrożyć"
+                },
+                "issues": {
+                    "label": "Zgłoszenia",
+                    "where": "zgłoszone problemy i ich raporty"
+                },
+                "logs": {
+                    "label": "Logi",
+                    "where": "własne pliki logów sandboxa"
+                },
+                "loops": {
+                    "label": "Pętle",
+                    "where": "działające i zapisane pętle agentów"
+                },
+                "needs": {
+                    "label": "Prośby",
+                    "where": "to, o co agent poprosił: coś do podłączenia lub podania"
+                },
+                "netdisk": {
+                    "label": "Dyski sieciowe",
+                    "where": "podłączone dyski sieciowe"
+                },
+                "offload": {
+                    "label": "Praca przeniesiona",
+                    "where": "ciężkie polecenia wysłane do runnera na jednym z Twoich komputerów"
+                },
+                "panels": {
+                    "label": "Panele",
+                    "where": "panele operatora na pasku bocznym"
+                },
+                "personas": {
+                    "label": "Persony",
+                    "where": "tożsamości, w imieniu których mówi agent"
+                },
+                "ports": {
+                    "label": "Porty",
+                    "where": "na czym nasłuchuje ten sandbox oraz podglądy"
+                },
+                "providers": {
+                    "label": "Konta AI",
+                    "where": "konta, na których działają Twoi agenci"
+                },
+                "public": {
+                    "label": "Skrzynka nadawcza",
+                    "where": "pliki opublikowane pod publicznym adresem sandboxa"
+                },
+                "push": {
+                    "label": "Wypychanie",
+                    "where": "wysyłanie pracy do repozytorium"
+                },
+                "safety": {
+                    "label": "Polityka bezpieczeństwa",
+                    "where": "dokument polityki i to, o czym zdecydowała"
+                },
+                "secrets": {
+                    "label": "Sekrety",
+                    "where": "zapisane dane logowania i to, których brakuje"
+                },
+                "sessions": {
+                    "label": "Rozmowy",
+                    "where": "lista rozmów i ich wiadomości"
+                },
+                "settings": {
+                    "label": "Ustawienia sandboxa",
+                    "where": "wszystko na kartach Sandbox"
+                },
+                "share": {
+                    "label": "Udostępnione strony",
+                    "where": "rozmowy opublikowane jako strony tylko do odczytu"
+                },
+                "skills": {
+                    "label": "Umiejętności",
+                    "where": "co agent umie i co jest włączone"
+                },
+                "system": {
+                    "label": "Terminale i urządzenia",
+                    "where": "terminale, restarty, urządzenia i synchronizacja"
+                },
+                "translator": {
+                    "label": "Subskrypcje",
+                    "where": "plany AI, na które się logujesz zamiast płacić za tokeny"
+                },
+                "usage": {
+                    "label": "Zużycie",
+                    "where": "ile wydało każde konto i ile zostało"
+                },
+                "vpn": {
+                    "label": "VPN",
+                    "where": "połączenie VPN tego sandboxa"
+                },
+                "workflows": {
+                    "label": "Przepływy pracy",
+                    "where": "przebiegi przepływów pracy z wieloma agentami"
+                },
+                "workspace": {
+                    "label": "Pliki",
+                    "where": "drzewo plików, edytor i wyszukiwanie"
+                }
+            },
+            "unknownWhere": "coś nowszego niż ta strona",
+            "impact": {
+                "missing": "Twój sandbox jeszcze tego nie ma, więc nic, co tego tutaj potrzebuje, nie zadziała, dopóki sandbox nie nadrobi zaległości.",
+                "drifted": "Obie strony oczekują tu trochę innych rzeczy. Coś może się pokazać puste albo zmiana może się nie zapisać.",
+                "extra": "Twój sandbox to ma, ale ta strona jest za stara, żeby z tego korzystać. Nic się nie zepsuło — po prostu jeszcze tego nie dostajesz."
+            },
+            "tag": {
+                "missing": "niedostępne",
+                "drifted": "może działać źle",
+                "extra": "jeszcze nieużywane"
+            },
+            "appLabel": "Ta strona",
+            "appWhat": "edytor, który właśnie oglądasz, w tej karcie przeglądarki",
+            "sandboxLabel": "Twój sandbox",
+            "sandboxWhat": "maszyna, na której działa Twój kod",
+            "sandboxWhatOn": "maszyna, na której działa Twój kod, na urządzeniu {where}",
+            "agreement": "Cała reszta między nimi się zgadza."
+        },
+        "useAgentMemory": {
+            "couldntRead": "Nie udało się odczytać pliku {file}.",
+            "couldntSave": "Nie udało się zapisać pliku {file}.",
+            "couldntSaveMemory": "Nie udało się zapisać pamięci."
         }
     },
     "settings": {
@@ -3672,6 +4683,7 @@
             "theme": {
                 "dark": "Ciemny",
                 "light": "Jasny",
+                "sanctum": "Sanctum",
                 "sanctumHint": "Wygląd intentic.dev: popielaty kamień, złota linia wokół każdego panelu, ryte i odlewane tablice oraz własny krój pisma strony.",
                 "system": "Systemowy",
                 "systemHint": "Podąża za systemem operacyjnym: Sanctum, gdy jest ciemny, jasny wygląd, gdy nie."
@@ -3746,15 +4758,20 @@
         },
         "settingsBilling": {
             "activating": "Aktywowanie…",
+            "addSlotAt": "Dodaj slot · +${price}/mies.",
             "afterThatFreeHours": "Potem Twój hostowany sandbox zużywa darmowe godziny konta, a maszyna nieotwierana przez kilka tygodni znika. Do tego czasu pliki zostają. Wznowienie zostawia wszystko tak, jak jest. | Potem Twoje hostowane sandboxy zużywają darmowe godziny konta, a maszyna nieotwierana przez kilka tygodni znika. Do tego czasu pliki zostają. Wznowienie zostawia wszystko tak, jak jest. | Potem Twoje hostowane sandboxy zużywają darmowe godziny konta, a maszyna nieotwierana przez kilka tygodni znika. Do tego czasu pliki zostają. Wznowienie zostawia wszystko tak, jak jest.",
             "awakeHours": "Godziny czuwania",
+            "awakeHoursMonth": "{hours} h aktywności miesięcznie",
             "awakeHoursTerms": "Liczone tylko wtedy, gdy maszyna czuwa, a maszyna zasypia, gdy nikt jej nie używa. Resetują się 1. dnia miesiąca (UTC).",
             "billing": "Rozliczenia",
             "cancelOnStripe": "Anuluj w Stripe",
             "cardInvoicesCancellingOn": "Karta, faktury i anulowanie — na własnej stronie Stripe.",
             "chargedRestMonthStripe": "Naliczone za resztę miesiąca; Stripe rozlicza proporcjonalnie.",
+            "checkoutOpenInBrowser": "Płatność jest otwarta w Twojej przeglądarce",
             "compedOnTheHouse": "Twoje hostowane sandboxy są na koszt firmy: ich godziny nie liczą się do żadnego limitu i nigdy nie znikają z powodu nieotwierania. Nie ma czego płacić ani czego anulować.",
             "complimentary": "Gratis",
+            "didntPayAfterAll": "Jednak nie płacę",
+            "finishPayingThereNothing": "Dokończ płatność tam, a potem wróć — Twój plan sam się tu pojawi. Nic nie zostanie pobrane, dopóki nie skończysz.",
             "freeHoursLeftEmpty": "Darmowe godziny pozostałe w tym miesiącu: {left} z {allowance}.",
             "freeHoursSpentEmpty": "Darmowe godziny na ten miesiąc są wyczerpane; wracają {resetsOn}.",
             "freeInSeconds": ", za darmo, w kilka sekund.",
@@ -3765,6 +4782,8 @@
             "hoursFootnote": "Godziny liczą się tylko wtedy, gdy maszyna czuwa, i resetują się {resetsOn}. Sandboxy na Twoich własnych komputerach nigdy nie są mierzone.",
             "howHostingWorks": "Jak działa hosting",
             "manageOnStripe": "Zarządzaj w Stripe",
+            "moveToRung": "Przejdź na {name}",
+            "noCard": "bez karty",
             "noneYet": "Jeszcze żadnych.",
             "onHostedPlan": "Jesteś na planie hostowanym",
             "onPlan": "Na planie",
@@ -3777,6 +4796,7 @@
             "planEnds": "Twój plan kończy się {periodEnd}",
             "planNeedsWorkingCard": "Twój plan potrzebuje działającej karty",
             "platformDoesntSellHosted": "Ta platforma nie sprzedaje planu hostowanego.",
+            "ranOutOfMemory": "W tym tygodniu raz zabrakło pamięci przy {memory} GB | W tym tygodniu {count} razy zabrakło pamięci przy {memory} GB | W tym tygodniu {count} razy zabrakło pamięci przy {memory} GB",
             "readingPlan": "Odczytywanie Twojego planu…",
             "removeSandboxFirst": "Najpierw usuń sandbox",
             "removeSlot": "Usuń miejsce",
@@ -3784,12 +4804,17 @@
             "sharedSandboxSpendsOwners": "Współdzielony sandbox zużywa godziny swojego właściciela; członkowie zespołu nie wydają nic swojego.",
             "slotsInUse": "Miejsca zajęte",
             "slotTerms": "Większa maszyna dla jednego hostowanego sandboxa, z miesięcznymi godzinami swojego rozmiaru tylko dla siebie, nigdy nieusuwana.",
+            "slotsHeld": "{standing} z {held} w użyciu",
             "slotsOnPlan": "{count} miejsce w planie. Sandbox na miejscu ma miesięczne godziny swojej maszyny tylko dla siebie i nigdy nie znika z powodu nieotwierania; nic więcej w produkcie się nie zmienia. | {count} miejsca w planie. Sandbox na miejscu ma miesięczne godziny swojej maszyny tylko dla siebie i nigdy nie znika z powodu nieotwierania; nic więcej w produkcie się nie zmienia. | {count} miejsc w planie. Sandbox na miejscu ma miesięczne godziny swojej maszyny tylko dla siebie i nigdy nie znika z powodu nieotwierania; nic więcej w produkcie się nie zmienia.",
             "startHostedSandbox": "Uruchom hostowany sandbox",
             "startOne": "Uruchom jeden",
+            "stripeOpenInBrowser": "Stripe jest otwarty w Twojej przeglądarce",
             "stripeReportsPlan": "Stripe raportuje ten plan jako „{lapsed}”.",
             "teams": "Zespoły",
+            "theMachines": "Maszyny",
             "updatePaymentOnStripe": "Zaktualizuj płatność w Stripe",
+            "waitingForStripe": "Czekam na Stripe…",
+            "whateverChangeThereShows": "Cokolwiek tam zmienisz, pojawi się tutaj, gdy wrócisz do aplikacji.",
             "youreOnTrial": "Jesteś w okresie próbnym"
         },
         "settingsData": {
@@ -3822,7 +4847,19 @@
             "notifyDevice": "Powiadamiaj to urządzenie",
             "pushNotifications": "Powiadomienia push",
             "sendTest": "Wyślij test",
-            "sendTest2": "Wyślij test"
+            "sendTest2": "Wyślij test",
+            "unsupportedBrowser": "Ta przeglądarka nie odbiera powiadomień push.",
+            "unsupportedDesktopApp": "Okno aplikacji desktopowej nie odbiera powiadomień push. Włącz je zamiast tego w przeglądarce albo na telefonie.",
+            "unsupportedHomeScreen": "Ta przeglądarka nie odbierze powiadomień push, dopóki nie dodasz aplikacji do ekranu początkowego: Udostępnij ▸ Do ekranu początkowego, a potem otwórz ją stamtąd.",
+            "browserTab": "Karta przeglądarki",
+            "chimeAsks": "Gdy coś Cię potrzebuje",
+            "chimeAsksHint": "Pytanie, prośba o pozwolenie albo plan do zatwierdzenia, tura, która się nie powiodła.",
+            "chimeFinished": "Gdy tura się skończy",
+            "chimeFinishedHint": "Tury rozpoczęte przez człowieka, nie przez automatyzacje ani podagentów.",
+            "chimesWhen": "Dźwięki grają tylko wtedy, gdy jesteś w innej karcie albo aplikacji, z jednej karty naraz, w tej przeglądarce. Włączenie dźwięku od razu go odtwarza.",
+            "sounds": "Dźwięki",
+            "tabStatus": "Pokazuj stan agentów na karcie",
+            "tabStatusHint": "Tytuł liczy, co Cię potrzebuje, i oznacza turę, która skończyła się pod Twoją nieobecność. Ikona pokazuje też, kiedy agenci pracują."
         },
         "settingsProfile": {
             "changeAvatar": "Zmień awatar",
@@ -3834,7 +4871,7 @@
             "labelEGStorefrontSandbox": "Etykieta (np. piaskownica sklepu)",
             "mintToken": "Utwórz token",
             "shownOnceCopyNow": "Pokazywany raz. Skopiuj go teraz: przechowywany jest tylko jego skrót.",
-            "whatProvisioningTokensAre": "Token provisioningowy pozwala jednej z Twoich piaskownic tworzyć piaskownice na tym koncie. Wklej go w zdolność „Flota piaskownic” tej piaskownicy; każda piaskownica tworzona przez jej agenta i tak najpierw zapyta Cię na czacie.",
+            "whatProvisioningTokensAre": "Token provisioningowy pozwala jednemu z Twoich sandboxów tworzyć sandboxy na tym koncie. Wklej go w możliwość „Flota sandboxów” tego sandboxa; każdy sandbox tworzony przez jego agenta i tak najpierw zapyta Cię na czacie.",
             "whereItGoes": "Gdzie go wkleić"
         },
         "words": {
@@ -3892,7 +4929,6 @@
             "alreadyRunningSandboxContainer": "Masz już kontener sandboxa za własną domeną? Podaj adres, pod którym odpowiada. Sprawdzimy go i otworzymy Twoją przestrzeń roboczą. Nic do instalowania, nic do zaprowiantowania.",
             "alreadyRunningSandboxSomewhere": "Masz już gdzieś działający sandbox? Podłącz go przez domenę →",
             "alreadyUsingYours": "Używasz już swojego",
-            "alsoToName": "musi też nazwać",
             "appSettingUp": "Aplikacja to konfiguruje.",
             "assignedMachineFreesUp": "Przydzielone, gdy zwolni się maszyna",
             "assignedMachineStarts": "Przydzielane, gdy Twoja maszyna startuje…",
@@ -3910,12 +4946,15 @@
             "copied": "Skopiowano.",
             "copyCommand": "Kopiuj polecenie",
             "copyPasteIntoTerminal": "Skopiuj je, a potem wklej w terminalu na maszynie, która ma gościć Twój sandbox.",
+            "couldNotCreateSandbox": "Nie udało się utworzyć Twojego sandboxa.",
             "domainAlreadyAnswersOn": "domenę, pod którą już odpowiada",
             "download": "Pobierz dla {label}",
             "failedOnYourMachine": "Konfiguracja nie powiodła się na Twoim komputerze. Oto, co wykryła:",
             "fix": "Naprawa: {remedy}",
             "fixAbovePressAgain": "Napraw powyższe, a potem naciśnij „{button}” jeszcze raz.",
             "fixAboveRunSame": "Napraw powyższe, a potem uruchom to samo polecenie jeszcze raz. Pozostaje ważne.",
+            "folderCopiedIntoSandbox": "Twój folder jest kopiowany do sandboxa, gdzie agenty pracują na kopii. Ich zmiany wracają, gdy naciśniesz „Przenieś zmiany z powrotem” w oknie folderu.",
+            "folderNotHandedToApp": "Nie udało się jeszcze przekazać folderu do aplikacji. Próbuję ponownie…",
             "followInIntenticWindow": "Śledź to w oknie Intentic. Ta strona otworzy Twoją przestrzeń roboczą, gdy tylko odpowie.",
             "getDomainIntenticInstead": "← Zamiast tego weź domenę od intentic",
             "getDomainIntenticRun": "albo weź domenę od intentic i uruchom zamiast tego polecenie instalacyjne",
@@ -3962,9 +5001,11 @@
             "runsNo": "Działa jako Ty, bez",
             "runsOnComputerYours": "Działa na Twoim komputerze. Za minutę albo dwie będziesz w nim pracować.",
             "runsOnOurServers": "Działa na naszych serwerach",
+            "sandbox": "sandbox",
             "sandboxReachableAt": "✓ Twój sandbox będzie dostępny pod",
             "sandboxesHereReachedAt": "Do sandboxów tutaj dociera się pod adresem, który już masz. Masz już jeden uruchomiony?",
             "setOneUpMe": "← Zamiast tego postaw mi jeden",
+            "setUpBeforeLastSeen": "Ten sandbox był już skonfigurowany, ostatnio odpowiedział {when}.",
             "setUpNow": "Skonfiguruj teraz",
             "setUpOnMy": "Skonfiguruj na moim własnym komputerze",
             "setUpWorkspace": "Skonfiguruj swoją przestrzeń roboczą",
@@ -3995,6 +5036,7 @@
             "waitingToClaimedConnection": "Czeka, aż ktoś zgłosi go tokenem połączenia, z którym został uruchomiony. Wklej to",
             "waitingToRunCommand": "Czekamy, aż uruchomisz polecenie.",
             "waitingToStart": "Czekamy, aż go uruchomisz.",
+            "webOriginMustName": "{variable} demona musi też wskazywać {origin}. Inaczej przeglądarka zablokuje wywołanie, zanim zostanie wysłane.",
             "wellConnectTo": "Połączymy się z",
             "wellNoticeMomentSandbox": "Zauważymy to w chwili, gdy Twój sandbox wystartuje.",
             "whereSandboxRuns": "Gdzie działa sandbox"
@@ -4050,6 +5092,12 @@
         },
         "words": {
             "useLettersNumbersHyphens": "Używaj tylko liter, cyfr i myślników."
+        },
+        "useHostedLane": {
+            "startFailed": "Nie udało się teraz uruchomić dla ciebie maszyny.",
+            "outOfMachines": "Właśnie skończyły nam się maszyny, więc w tej chwili nie zbudujemy ci kolejnej.",
+            "restartFailed": "Nie udało się uruchomić jej od nowa. Spróbuj ponownie za chwilę.",
+            "removeFailed": "Nie udało się usunąć uruchomionej przez nas maszyny. Spróbuj ponownie za chwilę."
         }
     },
     "shared": {
@@ -4058,6 +5106,7 @@
         "account": "Konto",
         "active": "Aktywne",
         "address": "Adres",
+        "agent": "Agent",
         "agents": "Agenty",
         "allProviders": "Wszyscy dostawcy",
         "apiTokens": "Tokeny API",
@@ -4069,13 +5118,16 @@
         "category": "Kategoria",
         "changes": "Zmiany",
         "chat": "Czat",
+        "claudeCode": "Claude Code",
         "connected": "Podłączone",
         "connections": "Twoje połączenia",
         "domain": "Domena",
         "files": "Pliki",
         "finished": "Skończone",
         "folders": "Foldery",
+        "harness": "Harness",
         "hereNow": "Teraz tutaj",
+        "menu": "Menu",
         "models": "Modele",
         "name": "Nazwa",
         "needs": "Potrzebuje Cię",
@@ -4086,14 +5138,17 @@
         "removed": "usunięte",
         "review": "Przegląd",
         "running": "Działa",
+        "sandboxHub": "Sandbox",
         "sandboxes": "Sandboxy",
         "secret": "sekret",
         "settings": "Ustawienia",
         "shared": "Udostępnione",
         "subagent": "Podagent",
         "subagents": "Podagenty",
+        "terminal": "Terminal",
         "thisMachine": "ta maszyna",
         "thisSandbox": "Ten sandbox",
+        "token": "Token",
         "unfinishedSetup": "Niedokończona konfiguracja",
         "upToDate": "aktualne",
         "workspace": "Przestrzeń robocza",
@@ -4150,21 +5205,35 @@
             "reAllowInBrowsers": "Zezwól na nie ponownie w ustawieniach witryn swojej przeglądarki"
         },
         "pushQuestionBody": {
-            "showTerminal": "Pokaż terminal"
+            "showTerminal": "Pokaż terminal",
+            "connectGithub": "Połącz GitHub",
+            "connectGitlab": "Połącz GitLab",
+            "signInRefusedGithub": "GitHub nie przyjął logowania tej piaskownicy. Połącz swoje konto GitHub, a potem spróbuj wysłać jeszcze raz.",
+            "signInRefusedGitlab": "GitLab nie przyjął logowania tej piaskownicy. Połącz swoje konto GitLab, a potem spróbuj wysłać jeszcze raz."
         },
         "quickOpen": {
+            "agents": "Agenty",
             "allCommands": "Wszystkie polecenia",
             "commands": "Polecenia",
+            "everything": "Wszystko",
+            "jumpTo": "Przejdź do czegokolwiek",
+            "jumpToPaste": "Przejdź do agenta, pliku, terminala albo polecenia… (albo wklej id sesji)",
+            "narrowTo": "Zawęź do jednego rodzaju",
+            "noMatches": "Nic nie pasuje.",
             "openAgent": "Otwórz tego agenta",
+            "recentCommands": "Ostatnie polecenia",
             "recentlyOpened": "Ostatnio otwierane",
             "recentlyUsed": "Ostatnio używane",
             "showingFirstMatchesOnly": "Pokazujemy tylko pierwsze trafienia.",
-            "typeAtLeastCharacters": "Wpisz co najmniej {floor} znaki, żeby szukać plików."
+            "terminals": "Terminale",
+            "typeAtLeastCharacters": "Wpisz co najmniej {floor} znaki, żeby szukać plików.",
+            "typeToSearch": "Pisz, żeby szukać, albo wybierz rodzaj powyżej."
         },
         "shellDesktop": {
             "agentNeedsHelp": "Potrzebuje pomocy",
             "dockChatBackTo": "Zadokuj czat z powrotem z boku",
             "everySectionOnRail": "Każdy obszar jest na pasku",
+            "howToUnpin": "Żeby któryś zdjąć, kliknij go prawym przyciskiem na pasku i odznacz Zostaw na pasku.",
             "keepOnRail": "Zostaw {label} na pasku",
             "keepOnRail2": "Zostaw na pasku",
             "moreSections": "Więcej obszarów",
@@ -4202,6 +5271,7 @@
             "add": "Dodaj…"
         },
         "useShellCommands": {
+            "anything": "Cokolwiek…",
             "commandPalette": "Paleta poleceń…",
             "togglePanel": "Przełącz panel"
         },
@@ -4216,6 +5286,9 @@
             "account": "Konto",
             "switchAccount": "Przełącz konto",
             "new": "Nowy"
+        },
+        "browserTab": {
+            "offline": "Offline"
         }
     },
     "terminal": {
@@ -4233,10 +5306,12 @@
             "copyAll": "Kopiuj wszystko",
             "couldntReachSandbox": "Nie udało się połączyć z tym sandboxem.",
             "couldntReadTerminalsScrollback": "Nie udało się odczytać historii tego terminala: sesja mogła się skończyć.",
+            "ctrl": "Ctrl",
             "default": "Domyślny",
             "defaultColor": "Kolor domyślny",
             "defaultIcon": "Ikona domyślna",
             "dockBack": "Przypnij z powrotem",
+            "esc": "Esc",
             "find": "Szukaj",
             "findInTerminal": "Szukaj w terminalu",
             "fullScrollback": "Pełna historia…",
@@ -4280,6 +5355,10 @@
             "alwaysShowTabs": "Zawsze pokazuj jako karty",
             "finished": "Zakończone",
             "giveEveryAgentShell": "Daj każdej powłoce i każdemu zadaniu agenta własną kartę w tym panelu."
+        },
+        "terminalStrip": {
+            "terminalColor": "Kolor terminala",
+            "terminalIcon": "Ikona terminala"
         },
         "words": {
             "workTerminals": "Terminale robocze"
@@ -4397,13 +5476,16 @@
             "devopsReposLiveOn": "Twoje repozytoria DevOps żyją na GitHubie: nie ma Forgejo do uruchamiania.",
             "devopsReposLiveOn2": "Twoje repozytoria DevOps żyją na GitLabie: nie ma Forgejo do uruchamiania.",
             "everythingAlreadyDeployedKeeps": "wszystko już wdrożone działa na nim dalej",
+            "forgejo": "Forgejo",
             "forgets": "To zapomina",
             "fromMonorepos": "Z Twoich monorepo",
+            "ghp": "ghp_…",
             "githubPersonalAccessToken": "Osobisty token dostępu GitHub",
             "githubSourceControlDoesnt": "Kontrola źródeł GitHub nie obsługuje jeszcze zarządzanych baz danych i pamięci podręcznych. Użyj domyślnego hostowania samodzielnego, jeśli Twoja aplikacja takiej potrzebuje.",
             "gitlabPersonalAccessToken": "Osobisty token dostępu GitLab",
             "gitlabSourceControlDoesnt": "Kontrola źródeł GitLab nie obsługuje jeszcze zarządzanych baz danych i pamięci podręcznych. Użyj domyślnego hostowania samodzielnego, jeśli Twoja aplikacja takiej potrzebuje.",
             "gitlabUrl": "Adres GitLab",
+            "glpat": "glpat-…",
             "includingOnHostBackup": "łącznie z repozytorium kopii zapasowej na hoście",
             "installsKomodo": "Instaluje Komodo na Twoim serwerze, żeby wykonywać wdrożenia, a potem wdraża to, co skonfigurowałeś. Trwa kilka minut.",
             "installsKomodoAndForgejo": "Instaluje Komodo i Forgejo na Twoim serwerze, żeby wykonywać wdrożenia, a potem wdraża to, co skonfigurowałeś. Trwa kilka minut.",
@@ -4429,6 +5511,7 @@
             "servicesLike": "Outline, SigNoz, …",
             "servicesPutOnDomain": "Twoje usługi można wystawić w domenie, dostępne przez tunel Cloudflare.",
             "setUpDeploy": "Skonfiguruj i wdróż",
+            "sk": "sk_…",
             "sourceControl": "Kontrola źródeł",
             "storedInSandboxsEnv": "Zapisane w .env Twojego sandboxa jako",
             "stripeApiKey": "Klucz API Stripe",
@@ -4461,6 +5544,7 @@
             "readingLiveInfrastructure": "Odczytywanie infrastruktury na żywo…",
             "refreshToReadLive": "Odśwież, żeby odczytać stan swojej infrastruktury na żywo.",
             "revealPassword": "Pokaż hasło",
+            "status": "Status",
             "user": "użytkownik:",
             "yourConfig": "Twoja konfiguracja",
             "yourServer": "Twój serwer"
@@ -4483,8 +5567,10 @@
             "acceptAgain": "Przyjmij ponownie",
             "acceptAnyway": "Przyjmij mimo to",
             "acceptWhileAssistantStill": "Przyjąć, kiedy asystent jeszcze pracuje?",
+            "accepted": "Przyjęte",
             "accepting": "Przyjmowanie…",
             "acceptingNeedsMaintainerPuts": "Przyjęcie wymaga opiekuna: to kładzie prośbę na jego tablicy",
+            "agent2": "agent",
             "agentResolve": "Niech agent to rozwiąże",
             "agentStillWritingLanding": "Agent wciąż pisze. Scalenie teraz bierze jego pracę dokładnie taką, jaka jest, a to może oznaczać zmiany w pół drogi: jedną stronę zmiany nazwy, wywołanie funkcji, której jeszcze nie ma.",
             "agentTurn": "Tura agenta",
@@ -4499,8 +5585,10 @@
             "backUp": "Zrób kopię",
             "branch": "gałąź",
             "changesOwnOnFiles": "Masz własne zmiany w plikach, których potrzebuje: tylko Ty możesz je ruszyć, a wtedy będzie mógł iść dalej.",
+            "couldntAccept": "Nie przyjęto",
             "conversationsIsolatedHistoryGo": "i odizolowana historia rozmowy idą razem z nimi.",
             "deleteAgentsBranchWorktree": "Usunąć gałąź i worktree agenta?",
+            "diff": "Diff",
             "discardAgentsWork": "Odrzuć pracę tego agenta",
             "draft": "szkic",
             "go": "idą razem z tym.",
@@ -4511,6 +5599,7 @@
             "landWhileAgentWorking": "Scalić, kiedy agent pracuje?",
             "landingNeedsMaintainerPuts": "Scalenie wymaga opiekuna: to kładzie prośbę na jego tablicy",
             "look": "Zobacz",
+            "lookAndAccept": "Zobacz i przyjmij",
             "memory": "pamięć",
             "mergesInOwnWorktree": "Scala w swoim własnym worktree: nic nie dociera do Twojej przestrzeni roboczej, jeśli się nie uda.",
             "noRestorePointsYet": "Nie ma jeszcze punktów przywracania: historia plików zapisuje się sama, kiedy Ty i Twoje agenty pracujecie.",
@@ -4520,7 +5609,9 @@
             "projects": "Projekty",
             "projects2": "projekty",
             "public": "publiczne",
+            "push": "Wypchnij",
             "putEveryFileBack": "Przywrócić każdy plik do stanu z tej wersji? Wszystko, co powstało po niej, znika; nic więcej się nie zmienia. Otwarte czaty pracujące tutaj dostaną znać, że pliki się ruszyły.",
+            "readyToAccept": "Gotowe do przyjęcia",
             "reference": "odniesienie",
             "referenceMaterial": "materiał źródłowy",
             "repositories": "repozytoria",
@@ -4545,7 +5636,13 @@
             "unsavedChanges": "niezapisane zmiany",
             "versions": "Wersje",
             "versionsEveryChangeWay": "Każda zmiana zachowana",
-            "whatChanged": "Co się zmieniło"
+            "whatChanged": "Co się zmieniło",
+            "pushing": "Wypychanie",
+            "publishing": "Publikowanie",
+            "syncing": "Synchronizowanie",
+            "backingUp": "Tworzenie kopii",
+            "thisRepository": "to repozytorium",
+            "thisProject": "ten projekt"
         },
         "words": {
             "creates": "Tworzy",
@@ -4559,6 +5656,7 @@
             "planned": "Zaplanowane",
             "runningNow": "Działa teraz",
             "live": "Na żywo",
+            "komodo": "Komodo",
             "access": "Dostęp",
             "infrastructure": "Infrastruktura",
             "selfHostedServices": "Usługi hostowane samodzielnie",
@@ -4596,7 +5694,16 @@
             "answered": "Odpowiedział",
             "asking": "Pyta",
             "readingLandedDiff": "Odczytywanie scalonego diffa…",
-            "refused": "Odmówił"
+            "refused": "Odmówił",
+            "askingNow": "pyta…",
+            "wroteMessage": "napisał wiadomość",
+            "skippedRefused": "pominięty, odmówił przed chwilą",
+            "refusedLower": "odmówił",
+            "noMessageWritten": "Nie napisano wiadomości: {reason}",
+            "yourChangesNameIt": "Twoje zmiany — nazwij ten commit samodzielnie",
+            "keepingYourMessage": "Zostaje Twoja wiadomość. Wyczyść pole, żeby użyć wiadomości od „{origin}”.",
+            "writingMessageFor": "Trwa pisanie wiadomości dla „{origin}”…",
+            "noMessageFor": "Brak wiadomości dla „{origin}”"
         },
         "changeRowMenu": {
             "openChanges": "Otwórz zmiany",
@@ -4793,6 +5900,7 @@
             "hideComments": "Ukryj komentarze",
             "insideArchive": "W archiwum",
             "notInItsCopy": "Brak w jego kopii",
+            "notUtf8ReadOnly": "Ten plik nie jest tekstem UTF-8, więc otwiera się tutaj tylko do odczytu.",
             "noWriteAccess": "Brak prawa zapisu",
             "pageSealed": "Odizolowana: bez sieci i logowań",
             "preview": "Podgląd",
@@ -4806,7 +5914,8 @@
             "showComments": "Pokaż komentarze",
             "showFile": "Pokaż plik",
             "showPage": "Pokaż stronę",
-            "showSource": "Pokaż kod"
+            "showSource": "Pokaż kod",
+            "soleDocumentOnly": "To okno otwarto tylko dla {name}, więc pozostałe pliki w jego folderze otwierają się tylko do odczytu."
         },
         "healthCodebaseHealth": {
             "all": "Wszystko",
@@ -4914,6 +6023,7 @@
             "agentEditing": "Agent właśnie edytuje {paths}. „{action}” zapisuje to w trakcie pisania. | Agent właśnie edytuje {paths}. „{action}” zapisuje je w trakcie pisania. | Agent właśnie edytuje {paths}. „{action}” zapisuje je w trakcie pisania.",
             "alsoTerminalChats": "Też terminal i czaty główne",
             "command": "Polecenie",
+            "commit": "Commit",
             "commitsLabel": "Commity",
             "commitsRepos": "Commity {repos}",
             "committing": "Commitowanie…",
@@ -4926,6 +6036,12 @@
             "discardAll": "Odrzuć wszystko",
             "discardAllChangesIn": "Odrzuć wszystkie zmiany w tym repozytorium",
             "discardChanges": "Odrzuć zmiany",
+            "discardEveryChange": "Odrzucić wszystkie niezacommitowane zmiany w {repo}?",
+            "discardEveryFileFrom": "Odrzucić wszystkie pliki od „{origin}” w {repo}?",
+            "discardEveryFileOfYours": "Odrzucić wszystkie pliki zmienione przez Ciebie w {repo}?",
+            "discardFilesFrom": "Odrzucić {count} plik od „{origin}” w {repo}? | Odrzucić {count} pliki od „{origin}” w {repo}? | Odrzucić {count} plików od „{origin}” w {repo}?",
+            "discardFilesOfYours": "Odrzucić {count} plik zmieniony przez Ciebie w {repo}? | Odrzucić {count} pliki zmienione przez Ciebie w {repo}? | Odrzucić {count} plików zmienionych przez Ciebie w {repo}?",
+            "discardSelected": "Odrzucić {count} zaznaczony plik? | Odrzucić {count} zaznaczone pliki? | Odrzucić {count} zaznaczonych plików?",
             "dismissCommitError": "Zamknij błąd commita",
             "dismissError": "Zamknij błąd dla {repo}",
             "fetch": "Fetch",
@@ -4949,9 +6065,10 @@
             "nothingStaged": "nic w indeksie",
             "onePerRepo": "Jeden na repozytorium",
             "otherRepos": "pozostałe repozytoria ({count})",
+            "pull": "Ściągnij",
             "rebasesNeverMerges": "Rebase, nigdy merge",
             "repoLabel": "Repozytorium | Repozytoria | Repozytoria",
-            "repos": "· {count} repozytoriów",
+            "repos": "· {count} repozytorium | · {count} repozytoria | · {count} repozytoriów",
             "resolveConflictsFirst": "Najpierw rozwiąż konflikty",
             "resolveConflictsStageTo": "Rozwiąż konflikty i dodaj je do indeksu, żeby kontynuować, albo przerwij, żeby cofnąć to repozytorium tam, gdzie {operation} się zaczął.",
             "restorePointFirst": "Najpierw punkt przywracania",
@@ -4971,7 +6088,40 @@
             "untrackedLeave": "{count} nieśledzony plik znika z dysku: nigdy nie był zacommitowany, więc git nie ma kopii: | {count} nieśledzone pliki znikają z dysku: nigdy nie były zacommitowane, więc git nie ma kopii: | {count} nieśledzonych plików znika z dysku: nigdy nie były zacommitowane, więc git nie ma kopii:",
             "watchRun": "Pokaż terminal",
             "whatHappened": "Co się stało",
-            "you": "Ty"
+            "you": "Ty",
+            "message": "Wiadomość",
+            "messageCtrlEnter": "Wiadomość (Ctrl+Enter, żeby zacommitować)",
+            "agentId": "Agent {id}",
+            "commitAll": "Zacommituj wszystko",
+            "commitFiles": "Zacommituj {count} plik | Zacommituj {count} pliki | Zacommituj {count} plików",
+            "commitEverythingInFilter": "Zacommituj wszystko z tego filtra",
+            "commitEverythingFrom": "Zacommituj wszystko od „{origin}”",
+            "blockedByConflicts": "Najpierw rozwiąż konflikty: git nie zrobi commita, dopóki któraś ścieżka jest niescalona.",
+            "stillCommitting": "Commit w {repos} wciąż trwa. Skończy się sam.",
+            "nothingToCommit": "Nie ma czego commitować.",
+            "writeMessageFirst": "Najpierw napisz wiadomość commita.",
+            "anotherGitAction": "Inna operacja git wciąż trwa.",
+            "markResolved": "Oznacz jako rozwiązane",
+            "resolveAll": "Rozwiąż wszystkie",
+            "stage": "Dodaj do indeksu",
+            "stageAll": "Dodaj wszystko do indeksu",
+            "unstage": "Usuń z indeksu",
+            "unstageAll": "Usuń wszystko z indeksu",
+            "verbEveryFileFrom": "{verb}: wszystkie pliki od „{origin}”",
+            "verbFilesFrom": "{verb}: {count} plik od „{origin}” | {verb}: {count} pliki od „{origin}” | {verb}: {count} plików od „{origin}”",
+            "pulling": "Ściąganie",
+            "runningFor": "{running} · {elapsed}",
+            "pushedWhat": "Wypchnięto: {what}",
+            "sendingWhat": "Wysyłanie do zdalnego: {what}",
+            "yourCommits": "Twoje commity",
+            "commitCount": "{count} commit | {count} commity | {count} commitów",
+            "thisBranch": "ta gałąź",
+            "whatAcrossRepos": "{what} w {count} repozytorium | {what} w {count} repozytoriach | {what} w {count} repozytoriach",
+            "repoCount": "{count} repozytorium | {count} repozytoria | {count} repozytoriów",
+            "clearFilterOn": "Wyłącz filtr „{origin}”, {count} plik | Wyłącz filtr „{origin}”, {count} pliki | Wyłącz filtr „{origin}”, {count} plików",
+            "showOnly": "Pokaż tylko „{origin}”, {count} plik | Pokaż tylko „{origin}”, {count} pliki | Pokaż tylko „{origin}”, {count} plików",
+            "messageBeingWritten": "wiadomość commita jest w trakcie pisania",
+            "namesTheCommit": "nadaje nazwę commitowi"
         },
         "rowActions": {
             "changedSinceOn": "Zmienione od włączenia",
@@ -5008,8 +6158,7 @@
             "statusClashes": "koliduje",
             "statusNew": "nowe",
             "statusRenamed": "zmieniono nazwę",
-            "thisRepo": "to {repo}",
-            "twoEditsToSame": "Dwie zmiany w tym samym pliku kolidują. Poproś swojego {agent}, żeby to uporządkował, albo cofnij zmiany poniżej.",
+            "twoEditsToSame": "Dwie zmiany w tym samym pliku kolidują. Niech {agent} to uporządkuje albo cofnij zmiany poniżej.",
             "versionCount": "{count} wersja | {count} wersje | {count} wersji",
             "versionHowThingsNow": "Najpierw zapisujemy wersję obecnego stanu, pod",
             "willBeCalled": "Będzie się nazywać „",
@@ -5035,9 +6184,9 @@
             "dependencyInstallQueued": "Instalacja zależności w kolejce",
             "installDependenciesAfterUpload": "Zainstaluj zależności po wgraniu",
             "noDependencyInstallQueued": "Brak instalacji zależności w kolejce",
-            "scanning": "Skanowanie…",
             "startingInstall": "Uruchamianie instalacji…",
-            "startsAfterActiveAgent": "Zaczyna się, gdy skończą się aktywne tury agentów, a potem pojawia się w Terminalach roboczych; sprawdzenia i wynik pojawiają się w Aktywności."
+            "startsAfterActiveAgent": "Zaczyna się, gdy skończą się aktywne tury agentów, a potem pojawia się w Terminalach roboczych; sprawdzenia i wynik pojawiają się w Aktywności.",
+            "scanningFiles": "Skanowanie… {count} plik | Skanowanie… {count} pliki | Skanowanie… {count} plików"
         },
         "useChanges": {
             "accessToSandboxRead": "Twój dostęp do tego sandboxa jest tylko do odczytu: to wymaga dostępu opiekuna."
@@ -5050,6 +6199,7 @@
             "pushing": "Push: {repo}"
         },
         "useSearchOptions": {
+            "aa": "Aa",
             "matchCase": "Uwzględniaj wielkość liter",
             "matchWholeWord": "Całe słowo",
             "useRegularExpression": "Wyrażenie regularne"
@@ -5113,7 +6263,8 @@
             "toggleExplorer2": "Przełącz eksplorator",
             "toggleIgnoredFiles": "Przełącz ignorowane pliki",
             "toggleTestFiles": "Przełącz pliki testowe",
-            "viewing": "Widok jako"
+            "viewing": "Widok jako",
+            "clearEsc": "Wyczyść (Esc)"
         },
         "workspaceEmptyState": {
             "askAgentToFetch": "Poproś agenta, żeby to pobrał",
@@ -5161,6 +6312,10 @@
             "backToSharedWorkspace": "Wróć do współdzielonej przestrzeni roboczej",
             "noWorkingCopyTo": "{title} nie ma kopii roboczej do przeglądania"
         },
+        "workspaceScopeNote": {
+            "showEverything": "Pokaż wszystkie projekty",
+            "showingOnly": "Widać tylko {project}: jego pliki, agentów i sprawdzenia."
+        },
         "workspaceSearchResults": {
             "noMatchesInFile": "Brak trafień w treści plików.",
             "searchResults": "Wyniki wyszukiwania",
@@ -5190,6 +6345,7 @@
             "privateCopy": "Prywatna kopia",
             "renderedText": "Wygenerowany tekst",
             "sharedFolder": "Udostępnione",
+            "symlink": "Dowiązanie",
             "code": "Kod",
             "readOnly": "Tylko do odczytu",
             "newFolderName": "Nazwa nowego folderu",
@@ -5213,13 +6369,63 @@
             "comments": "Komentarze",
             "text": "Tekst"
         },
+        "fileVerbs": {
+            "invalidName": "Nieprawidłowa nazwa.",
+            "alreadyExists": "„{name}” już istnieje.",
+            "deleted": "Usunięto {name}",
+            "deletedMany": "Usunięte elementy: {count}",
+            "restored": "Przywrócono {name}",
+            "restoredAs": "Przywrócono jako {name}",
+            "restoredMany": "Przywrócone elementy: {count}",
+            "someGone": "{said}; już nie ma ich w koszu: {count}",
+            "noLongerInTrash": "Tego już nie ma w koszu | Tych elementów już nie ma w koszu | Tych elementów już nie ma w koszu",
+            "emptyFoldersRemoved": "Usunięte puste foldery: {count}",
+            "branchRemoved": "Usunięto {path}",
+            "folderKept": "Folder zachowany",
+            "extractedTo": "Wypakowano do {name}",
+            "renamedTo": "Zmieniono nazwę na {name}",
+            "pathCopied": "Skopiowano ścieżkę",
+            "archiveReadOnly": "Zawartość archiwum jest tylko do odczytu. Wypakuj je, żeby ją zmienić.",
+            "needsWriter": "Zmienianie plików wymaga uprawnień do zapisu. Twoje są tutaj tylko do odczytu.",
+            "couldntRestore": "Nie udało się tego przywrócić.",
+            "couldntDelete": "Nie udało się tego usunąć.",
+            "couldntKeepFolder": "Nie udało się zachować tego folderu.",
+            "couldntRename": "Nie udało się zmienić nazwy.",
+            "couldntCreateFolder": "Nie udało się utworzyć tego folderu.",
+            "couldntCreateFile": "Nie udało się utworzyć tego pliku.",
+            "couldntPaste": "Nie udało się wkleić tych elementów.",
+            "couldntMove": "Nie udało się przenieść tych elementów.",
+            "couldntCopyOut": "Nie udało się skopiować tych elementów na zewnątrz.",
+            "couldntExtract": "Nie udało się tego wypakować.",
+            "couldntDownload": "Nie udało się pobrać tego pliku.",
+            "downloadingArchive": "Pobieranie {name}",
+            "couldntDownloadThese": "Nie udało się pobrać tych elementów."
+        },
         "homeCover": {
+            "allFiles": "Wszystkie pliki",
+            "asTyped": "jak wpisano",
+            "choose": "Pokaż jeden plik z każdego folderu",
+            "couldNotRead": "Nie udało się odczytać {name}.",
+            "cut": "Pokazano pierwsze {size} z {name}.",
+            "document": "{name} w {here}",
+            "empty": "{name} jest pusty.",
             "file": "Plik",
+            "foundBelow": "Ma go {count} folder w środku: | Ma go {count} foldery w środku: | Ma go {count} folderów w środku:",
             "fromEveryFolder": "Z każdego folderu",
             "holds": "Ma {name}",
             "inEveryFolder": "W każdym folderze",
+            "inFolders": "{count} folder | {count} foldery | {count} folderów",
+            "inside": "{count} w środku",
             "insideTitle": "{name} w środku",
-            "showAFile": "Pokaż plik"
+            "noChoices": "Żadna nazwa pliku nie powtarza się w dotąd wczytanych folderach. Wpisz ją zamiast tego.",
+            "noneIn": "Brak {name} w {here}.",
+            "notText": "{name} otwiera się w osobnej karcie.",
+            "openWhole": "Otwórz cały plik",
+            "showAFile": "Pokaż plik",
+            "showAllFiles": "Pokaż wszystkie pliki",
+            "showInEveryFolder": "Pokaż {name} w każdym folderze",
+            "showing": "Pokazuje {name} w każdym folderze",
+            "typeName": "Nazwa pliku, np. README.md"
         },
         "treeRows": {
             "awaitingListing": "Czeka na listę",
@@ -5256,21 +6462,165 @@
     },
     "needs": {
         "inbox": {
-            "waiting": "Oczekuje: {count}"
+            "title": "Potrzebuje Cię",
+            "description": "Wszystko, na co agenty czekają od człowieka: połączenie, sekret, dostęp, narzędzie. Odpowiedz tutaj, a rozmowa sama potoczy się dalej.",
+            "waiting": "Oczekuje: {count}",
+            "openChat": "Otwórz czat",
+            "untitled": "Rozmowa",
+            "nothing": "Nic na Ciebie nie czeka.",
+            "parked": "Czekają w swoich czatach",
+            "parkedHint": "Tura jest teraz na nich wstrzymana: plan, pytanie, uprawnienie, płatność albo przekazanie. Odpowiada się na nie w ich własnym czacie.",
+            "showAnswered": "Pokaż {count} ostatnio rozstrzygniętych",
+            "hideAnswered": "Ukryj rozstrzygnięte"
+        },
+        "strip": {
+            "waiting": "Czeka na Ciebie jedna sprawa: | Czekają na Ciebie {count} sprawy: | Czeka na Ciebie {count} spraw:"
+        },
+        "plan": {
+            "alsoWaiting": "Ten plan potrzebuje od Ciebie jeszcze jednej rzeczy: | Ten plan potrzebuje od Ciebie jeszcze {count} rzeczy: | Ten plan potrzebuje od Ciebie jeszcze {count} rzeczy:",
+            "answerThere": "Odpowiedz na nie na ich kartach przypiętych nad polem wiadomości: kroki, które ich potrzebują, poczekają, a reszta może ruszyć już teraz."
+        },
+        "status": {
+            "met": "Gotowe",
+            "declined": "Odrzucone",
+            "withdrawn": "Wycofane"
+        },
+        "card": {
+            "agentsCase": "Uzasadnienie agenta: {why}",
+            "unattended": "Zapytał o to przebieg, którego nikt nie obserwował, więc poczekał na Ciebie.",
+            "settingUp": "Czekam na koniec konfiguracji…",
+            "approvedRebuild": "Zatwierdzone. Pojawi się po przebudowie sandboxa.",
+            "toldCall": "Agent od razu dostał odpowiedź.",
+            "toldTurn": "Agent dostał informację i pracuje dalej.",
+            "toldQueued": "Agent dowie się o tym, gdy tylko skończy bieżącą pracę.",
+            "toldNot": "Agent jeszcze o tym nie wie: dowie się przy następnym uruchomieniu tej rozmowy.",
+            "answeredBy": "Odpowiedź: {who}",
+            "notNow": "Nie teraz",
+            "declineNote": "Coś, co agent powinien wiedzieć (opcjonalnie)",
+            "declineSend": "Odmów",
+            "couldNotAnswer": "Nie udało się zapisać Twojej odpowiedzi."
+        },
+        "capability": {
+            "name": "Nazwa",
+            "howToGet": "Jak to zdobyć",
+            "createToken": "Utwórz token",
+            "connect": "Podłącz {name}",
+            "fullForm": "Pełny formularz",
+            "setUpOnPage": "Tę możliwość konfiguruje się na osobnej stronie, a to, co agent już wypełnił, zostanie tam przeniesione.",
+            "setUp": "Skonfiguruj {name}",
+            "newCredential": "Jej dane uwierzytelniające przestały działać. Wklej nowe dla „{id}”:",
+            "itWorks": "Już działa",
+            "editConnection": "Edytuj połączenie",
+            "apply": "Zastosuj zmianę",
+            "effectRebuild": "Zanim zacznie działać, potrzebna jest jednorazowa przebudowa sandboxa.",
+            "effectRestart": "Restartuje {process}, co zatrzyma wszystko, co właśnie wykonuje.",
+            "effectGpu": "Zajmuje każde GPU na maszynie, na której działa sandbox.",
+            "effectPrivileged": "Działa w sandboxie z podwyższonymi uprawnieniami.",
+            "couldNotConnect": "Nie udało się tego podłączyć.",
+            "couldNotApply": "Nie udało się zastosować zmiany.",
+            "notWorkingYet": "To jeszcze nie działa: dokończ konfigurację i naciśnij ponownie."
+        },
+        "secret": {
+            "where": "Używany do: {where}",
+            "hint": "Jak wygląda: {hint}",
+            "replace": "Wartość zapisana jako {name} jest odrzucana. Wklej nową:",
+            "getOne": "Skąd go wziąć",
+            "stored": "Zapisany w tym sandboxie jako {name}. Agent widzi tylko jego nazwę, nigdy wartość.",
+            "save": "Zapisz",
+            "addedElsewhere": "Dodałem go gdzie indziej",
+            "couldNotSave": "Nie udało się zapisać sekretu.",
+            "notStoredYet": "Jeszcze nie jest zapisany: wklej go tutaj albo dodaj w widoku Sekrety."
+        },
+        "grant": {
+            "withheld": "Ta rozmowa nie ma dostępu do {label}.",
+            "withheldBy": "Persona {persona} nie obejmuje {label}.",
+            "nextTurn": "Jeśli pozwolisz teraz, rozmowa dostanie to od następnej tury, a agent będzie z tym pracował dalej.",
+            "forConversation": "Pozwól w tej rozmowie",
+            "onPersona": "Dodaj do {persona}",
+            "site": "Czekam, aż pozwolisz na {site} w rozszerzeniu Intentic w swojej przeglądarce."
         },
         "release": {
-            "approversOnly": "Tylko zatwierdzający"
+            "approversOnly": "Tylko zatwierdzający",
+            "whole": "Zwolnienie obejmuje resztę tej rozmowy, od jej następnej tury.",
+            "approvers": "Zatwierdzający: {approvers}",
+            "release": "Zwolnij"
+        },
+        "grants": {
+            "title": "Na co pozwoliłeś",
+            "hint": "Dostęp dany rozmowom poza ich personą lub obszarem oraz zwolnione im dane uwierzytelniające. Odebranie działa od następnej tury rozmowy.",
+            "capability": "{what}, choć jej persona tego nie obejmuje",
+            "folder": "Pliki w {what}",
+            "shelf": "Narzędzia: {what}",
+            "release": "{what}, zwolnione dla niej",
+            "releasedBy": "przez {who}, {when}",
+            "allowedBy": "zezwolenie od {who}, {when}",
+            "takeBack": "Odbierz",
+            "couldNotTakeBack": "Nie udało się tego odebrać."
+        },
+        "environment": {
+            "approveOne": "Zatwierdzenie dodaje te kroki tylko dla {tool}; wszystko inne, co czeka, zostaje na swojej karcie.",
+            "approve": "Zatwierdź",
+            "rebuildToFinish": "Zatwierdzone. {tool} pojawi się po przebudowie sandboxa.",
+            "openRebuild": "Przebuduj"
         }
     },
     "local": {
+        "bringBackReview": {
+            "header": "Przenieś z powrotem z sandboxa",
+            "intro": "Wybierz zmiany do skopiowania do tego folderu. Cofnij przywraca folder do poprzedniego stanu.",
+            "all": "Ta jedna zmiana | Wszystkie {count} zmiany | Wszystkie {count} zmian",
+            "truncated": "Sandbox zmienił więcej plików, niż tu wypisano. Wrócą tylko te wybrane tutaj; po resztę sprawdź ponownie.",
+            "conflict": "zmieniony po obu stronach: zachowano Twoją wersję",
+            "tooMany": "To więcej niż {max} zmian naraz. Odznacz część, a resztę przenieś później.",
+            "bring": "Przenieś {count} zmianę | Przenieś {count} zmiany | Przenieś {count} zmian"
+        },
+        "entryMenu": {
+            "askAgent": "Zapytaj o to agenta"
+        },
+        "localBringBack": {
+            "title": "Przenieś zmiany z powrotem",
+            "copyFirst": "Agenty pracują na kopii tego folderu.",
+            "bothWays": "Ten folder i jego sandbox synchronizują się w obie strony.",
+            "check": "Sprawdź zmiany",
+            "checkAgain": "Sprawdź ponownie",
+            "changes": "{count} zmiana w sandboxie | {count} zmiany w sandboxie | {count} zmian w sandboxie",
+            "noChanges": "Brak zmian",
+            "review": "Przejrzyj",
+            "bringing": "Przenoszenie {count} pliku… | Przenoszenie {count} plików… | Przenoszenie {count} plików…",
+            "brought": "Przeniesiono {count} plik | Przeniesiono {count} pliki | Przeniesiono {count} plików",
+            "broughtSkipped": "Przeniesiono {count} plik, pominięto: {skipped} | Przeniesiono {count} pliki, pominięto: {skipped} | Przeniesiono {count} plików, pominięto: {skipped}",
+            "restoring": "Przywracanie folderu…",
+            "restored": "Przywrócono {count} plik | Przywrócono {count} pliki | Przywrócono {count} plików",
+            "switchToCopyFirst": "Przełącz na pracę na kopii",
+            "copyFirstHint": "Zmiany agentów zostają wtedy w sandboxie, dopóki ich nie przeniesiesz",
+            "syncBothWays": "Synchronizuj w obie strony…",
+            "bothWaysHeader": "Synchronizować w obie strony?",
+            "bothWaysConfirm": "Synchronizuj w obie strony",
+            "bothWaysWarning": "Zmiany i usunięcia agentów trafią wtedy do tego folderu od razu, bez możliwości wcześniejszego przejrzenia."
+        },
         "localFiles": {
             "keepsFolderSynced": "Synchronizuje ten folder",
             "newSandbox": "Nowy sandbox",
             "openFolder": "Otwórz folder",
             "reveal": "Pokaż plik",
+            "withAgent": "Popracuj nad tym z agentem",
+            "openSandbox": "Otwórz sandbox tego folderu",
+            "askAgent": "Zapytaj agenta",
+            "askAgentHint": "Zaczyna rozmowę z agentem o tym pliku",
+            "closingDiscardsUnsaved": "Zamknięcie tego okna odrzuci ich niezapisane zmiany. Tego nie można cofnąć.",
+            "closingTabDiscardsUnsaved": "Zamknięcie tej karty odrzuci jej niezapisane zmiany. Tego nie można cofnąć.",
             "startsIfStopped": "Uruchamia, gdy zatrzymany",
             "syncedSandbox": "Sandbox zsynchronizowany",
             "toggleFolder": "Przełącz folder"
+        },
+        "quickOpen": {
+            "goToFile": "Przejdź do pliku",
+            "fileName": "Przejdź do pliku po nazwie…",
+            "typeFileName": "Wpisz fragment nazwy pliku."
+        },
+        "trash": {
+            "recycleBin": "Przeniesiono do Kosza",
+            "trash": "Przeniesiono do Kosza"
         }
     }
 }

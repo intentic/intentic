@@ -72,3 +72,14 @@ export const intenticSystemPrompt = async (cwd: string, model?: string): Promise
     const preset = await presetSystemPrompt(cwd, model);
     return { text: intenticPromptOf(preset.text), version: preset.version };
 };
+
+// A line the CLI renders into its preset from the run it renders it for, not an instruction: the budget line
+// (`<total_tokens>15000000 tokens left</total_tokens>`). Kept in what a turn is sent, where the CLI means it; cut from the
+// copy the settings page shows and forks, since a custom prompt goes to every runtime as written and would carry a
+// frozen figure from one probe to all of them. Taken with the blank line before it, so no gap is left where it stood.
+const RUNTIME_LINE_RE = /(?:^|\n+)<total_tokens>[^\n]*<\/total_tokens>(?=\n|$)/gu;
+
+export const forkablePrompt = (prompt: BuiltinPromptText): BuiltinPromptText => ({
+    ...prompt,
+    text: prompt.text.replace(RUNTIME_LINE_RE, "").replace(/^\n+/u, ""),
+});

@@ -174,3 +174,73 @@ test("a cumulative land re-applies only what is missing, leaving committed work 
     expect(await readFile(join(work, "app.ts"), "utf8")).toBe(edited(1));
     expect(await sh(work, "status", "--porcelain", "other.ts")).toBe("");
 });
+
+// Who took it out: read off who acted on the tree between two readings, named only when that is one party.
+describe("who took landed work out", () => {
+    const ORCHESTRATOR = { kind: "agent", id: "orchestrator" } as const;
+    const ME = { kind: "person", email: "me@example.com", name: "Me" } as const;
+
+    // A land read once while whole, so the reading after it is a removal this process watched happen.
+    const landedAndRead = async () => {
+        const { work, worktrees, conversation } = await setup();
+        await writeFile(join(conversation.cwd, "app.ts"), edited(1));
+        await writeFile(join(conversation.cwd, "other.ts"), edited(1));
+        const landed = await landAgent(worktrees, isolatedAgent(conversation.repos));
+        const entry = isolatedAgent(landed.repos);
+        const presences = createLandedPresences(worktrees, logger, createExpiryTracker());
+        await presences.refresh([entry]);
+        return { work, worktrees, entry, presences };
+    };
+
+    test("an agent at work in the tree while it went is named, and stays named while nothing more goes", async () => {
+        const { work, entry, presences } = await landedAndRead();
+        await discardPaths(work, ["app.ts"]);
+        expect(await presences.refresh([entry], [ORCHESTRATOR])).toBe(true);
+        expect(presences.of("c1")).toEqual({ landed: 2, present: 1, removedBy: ORCHESTRATOR });
+        // A later reading with somebody else at work, and nothing more missing, keeps the name it had.
+        expect(await presences.refresh([entry], [ME])).toBe(false);
+        expect(presences.of("c1")).toEqual({ landed: 2, present: 1, removedBy: ORCHESTRATOR });
+    });
+
+    // A read git could not answer (a sha it cannot resolve, a repo mid-write) says nothing: counted as 0/0 it read as
+    // "nothing missing" and wiped the name, which no later reading could recover.
+    test("a reading git could not answer keeps the last one, name included", async () => {
+        const { work, entry, presences } = await landedAndRead();
+        await discardPaths(work, ["app.ts"]);
+        await presences.refresh([entry], [ORCHESTRATOR]);
+        const unreadable = { ...entry, placement: { ...entry.placement, repos: entry.placement.repos.map((repo) => ({ ...repo, landedTip: "f".repeat(40) })) } };
+        expect(await presences.refresh([unreadable], [ME])).toBe(false);
+        expect(presences.of("c1")).toEqual({ landed: 2, present: 1, removedBy: ORCHESTRATOR });
+    });
+
+    test("a person noted throwing changes away is named", async () => {
+        const { work, entry, presences } = await landedAndRead();
+        presences.note(ME);
+        await discardPaths(work, undefined);
+        await presences.refresh([entry]);
+        expect(presences.of("c1")).toEqual({ landed: 2, present: 0, removedBy: ME });
+    });
+
+    test("two candidates, or none, name nobody", async () => {
+        const { work, entry, presences } = await landedAndRead();
+        presences.note(ME);
+        await discardPaths(work, ["app.ts"]);
+        await presences.refresh([entry], [ORCHESTRATOR]);
+        expect(presences.of("c1")).toEqual({ landed: 2, present: 1 });
+        // The window closed with that reading: the next removal is read off nobody.
+        await discardPaths(work, ["other.ts"]);
+        await presences.refresh([entry]);
+        expect(presences.of("c1")).toEqual({ landed: 2, present: 0 });
+    });
+
+    test("a first reading in a fresh process takes the record's name, never the window's", async () => {
+        const { work, worktrees, entry } = await landedAndRead();
+        await discardPaths(work, undefined);
+        const restarted = createLandedPresences(worktrees, logger, createExpiryTracker());
+        expect(restarted.measured("c1")).toBe(false);
+        const recorded = { ...entry, landing: { ...entry.landing, removedBy: ORCHESTRATOR } };
+        await restarted.refresh([recorded], [ME]);
+        expect(restarted.measured("c1")).toBe(true);
+        expect(restarted.of("c1")?.removedBy).toEqual(ORCHESTRATOR);
+    });
+});
