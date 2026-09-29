@@ -1,44 +1,36 @@
 <script setup lang="ts">
-import { Button, ui, ContextMenu, SearchBar, SegmentedControl } from "@intentic/ui";
-import { computed, nextTick, provide, ref, watch } from "vue";
-import { type ChatGrouping, useChatGrouping } from "../transcript/chatGrouping";
-import ChatPersonaRail from "../personas/ChatPersonaRail.vue";
-import { agentDisplayTitle, type FleetLane } from "../../agents/fleet/agentStatus";
-import { useAgentFilter } from "../../agents/board/useAgentFilter";
+import { Button, ui, ContextMenu } from "@intentic/ui";
+import { computed, nextTick, provide, ref, useId, watch } from "vue";
+import ChatPersonaGrid from "../personas/ChatPersonaGrid.vue";
+import { usePersonaScope } from "../personas/usePersonaScope";
+import { activityIcon, activityLine, agentDisplayTitle, type FleetLane, laneOf, standingChip, turnInFlight } from "../../agents/fleet/agentStatus";
 import { useAgents } from "../../agents/fleet/useAgents";
 import { FINISHED_WINDOW, type FleetAgent, windowFinished } from "../../agents/fleet/useAgents-fleet";
 import HoverCard from "../../../components/HoverCard.vue";
 import RailCard from "../../../components/RailCard.vue";
 import RailLane from "../../../components/RailLane.vue";
-import { relativeTime } from "../models/catalog";
 import type { OpenChat } from "./cardView";
 import { useChatTrays } from "./chatTrays";
 import { CHILD_ROWS } from "../../agents/board/cards/childRows";
 import { closeSubagent } from "../panel/subagent/subagentView";
 import ChatRowList from "./ChatRowList.vue";
 import { laneOrdered } from "./laneOrder";
-import { tabsInLane } from "./tabs";
+import { personaOfAgent, personaOfTab, tabsInLane, tabsOfPersona } from "./tabs";
 import { createChatRowActions, provideChatRowActions } from "./useChatRowActions";
 import ChatShareDialog from "../panel/ChatShareDialog.vue";
 import { useChat } from "../run/useChat";
 import { previewOf } from "../panel/useChat-strip";
 import { chatRun, showingRunGraph } from "../run/chatRun";
 import { openRunInChat } from "../run/openRun";
-import {
-    insideRun,
-    runIdsInLedger,
-    runMatches,
-    runsInLane,
-    runningTitles,
-    runsNeedingYou,
-    useWorkflowRuns,
-} from "../../agents/fleet/useWorkflowRuns";
+import { insideRun, runIdsInLedger, runsInLane, runningTitles, runsNeedingYou, useWorkflowRuns } from "../../agents/fleet/useWorkflowRuns";
 import type { WorkflowRun } from "@intentic/sandbox-contract";
+import { startAgent } from "../../agents/fleet/agentActions";
 import { useT } from "@intentic/ui/i18n";
 
 // Switcher for every open conversation, hosted by both the docked ChatTabs sheet and the floating rail. Card and
 // lane shell come from RailCard/RailLane; this file only decides which lanes exist, what goes in them, and what
-// each card shows, and emits verbs rather than writing state directly.
+// each card shows, and emits verbs rather than writing state directly. With personas on file, a grid above the lanes
+// scopes them to one persona (usePersonaScope); without, the lanes are all there is.
 
 const t = useT();
 
@@ -50,9 +42,9 @@ const emit = defineEmits<{
 }>();
 
 const { conversations, activeId, tabReveal, panes } = useChat();
-const { agentById, fleet, loadArchived } = useAgents();
+const { agentById, fleet, loadArchived, open: openAgent } = useAgents();
 
-// One set of row verbs for both cuts; this list draws only their menu, hover card, share dialog and rename error.
+// One set of row verbs; this list draws only their menu, hover card, share dialog and rename error.
 const root = ref<HTMLElement | null>(null);
 const actions = createChatRowActions({
     // A press on a card means that chat: one showing a subagent in its column steps back out of it (subagentView.ts).
@@ -61,72 +53,64 @@ const actions = createChatRowActions({
         emit(`select`, id);
     },
     close: (ids) => emit(`close`, ids),
-    // Reading order is whatever the open cut draws, top to bottom.
+    // Reading order is whatever the list draws, top to bottom.
     rowOrder: () => [...(root.value?.querySelectorAll(`[data-chat-tab]`) ?? [])].map((row) => row.getAttribute(`data-chat-tab`) ?? ``),
 });
 provideChatRowActions(actions);
 const { edit, hoverCard, menu: tabMenu, menuId, menuItems: tabMenuItems, shareTarget } = actions;
-// Switches between open chats (lanes) and personas (ChatPersonaRail); swaps the whole list, not a regroup.
-const { grouping, set: setGrouping } = useChatGrouping();
-// Labelled "Agents", matching the fleet board's cards and how the product names them elsewhere.
-const GROUPINGS = computed((): readonly { label: string; value: ChatGrouping; title: string }[] => [
-    { label: t(`shared.agents`), value: `lane`, title: t(`chat.chatTabList.everyConversationWindowHolds`) },
-    { label: t(`shared.personas`), value: `persona`, title: t(`chat.chatTabList.peopleSandboxPickOne`) },
-]);
+// Whom the lanes are scoped to: undefined is Anyone, every chat this window holds.
+const { personas, known, scope, pick, inScope, liveNotOpenOf } = usePersonaScope();
+const scoped = computed(() => scope.value?.id);
+const listedIds = computed(
+    () => new Set(conversations.value.filter((conversation) => inScope(conversation)).map((conversation) => conversation.conversationId)),
+);
 
-// The chat the Agents list was showing, parked while Personas is up and restored on return if it still exists.
-let parked: string | undefined;
-watch(grouping, (next, previous) => {
-    if (next === `persona`) {
-        parked = activeId.value;
-        return;
-    }
-    const restore = previous === `persona` && parked !== undefined && parked !== activeId.value;
-    if (restore && conversations.value.some((conversation) => conversation.conversationId === parked)) {
-        emit(`select`, parked!);
-    }
-    parked = undefined;
+// The list always holds the chat on screen: focus landing on a chat the scope leaves out (a chat started as someone
+// else, one opened from the board, the composer switching whom it speaks as) moves the scope to that chat's persona.
+// Focus inside the scope moves nothing, so a press in the list never reshapes the list under the pointer.
+const focusedPersona = computed(() => {
+    const focused = conversations.value.find((conversation) => conversation.conversationId === activeId.value);
+    return focused === undefined ? undefined : { conversation: focused, persona: personaOfTab(focused, known.value) };
 });
-
-// Same match rule as the board's filter (useAgentFilter); state is per-window, not shared.
-const {
-    query: filterQuery,
-    needle,
-    matchCase,
-    active: filtering,
-    matches: agentMatches,
-    snippetOf,
-    idMatchOf,
-    archivedMatches,
-    sessionMatches,
-    searching,
-} = useAgentFilter();
+watch(
+    [activeId, tabReveal, () => focusedPersona.value?.persona],
+    () => {
+        const focused = focusedPersona.value;
+        if (focused !== undefined && !inScope(focused.conversation)) {
+            pick(focused.persona);
+        }
+    },
+    { immediate: true },
+);
 
 // Runs are grouped by lane as long as the ledger holds them; chatRun marks only which row is selected.
 const { runs: workflowRuns } = useWorkflowRuns();
-// Finished lane's cap; runs obey it too. Lifted by a filter or the row's own expand.
+// Finished lane's cap; runs obey it too. Lifted by the row's own expand.
 const showAllFinished = ref(false);
-const windowed = computed(() => !filtering.value && !showAllFinished.value);
-// Same lane rule as the board, including a step's question putting the run in Attention. A query narrows runs
-// (via runMatches) rather than dropping them; an archived run is excluded entirely.
+const windowed = computed(() => !showAllFinished.value);
+// A scoped list shows a run once any of its steps speaks as the persona, as a search reached a run through its steps.
+// An archived run is excluded entirely.
+const listedRuns = computed(() =>
+    workflowRuns.value.filter(
+        (run) =>
+            run.archivedAt === undefined &&
+            (scoped.value === undefined || fleet.value.some((agent) => agent.workflow?.runId === run.runId && personaOfAgent(agent) === scoped.value)),
+    ),
+);
+// Same lane rule as the board, including a step's question putting the run in Attention.
 const runsIn = (lane: FleetLane): WorkflowRun[] =>
-    runsInLane(
-        workflowRuns.value.filter(
-            (run) => run.archivedAt === undefined && (!filtering.value || runMatches(run, needle.value, fleet.value, agentMatches)),
-        ),
-        lane,
-        windowed.value ? FINISHED_WINDOW : Number.POSITIVE_INFINITY,
-        runsNeedingYou(fleet.value),
-    );
+    runsInLane(listedRuns.value, lane, windowed.value ? FINISHED_WINDOW : Number.POSITIVE_INFINITY, runsNeedingYou(fleet.value));
 // Selected only while the run's diagram is the thing on screen; a followed run keeps drawing its diagram with
 // nothing live in the panes.
 const runOnScreen = (run: WorkflowRun): boolean => chatRun.value?.runId === run.runId && showingRunGraph(run, chatRun.value, panes.value);
 
 // The board's trays under the list's cards: every agent a chat's conversation started, riding under its card (chatTrays.ts).
 const openIds = computed(() => new Set(conversations.value.map((conversation) => conversation.conversationId)));
+// The list has no filter of its own: finding a chat by what was said in it is Past chats' search.
+const NO_FILTER = { active: ref(false), needle: ref(``), matchCase: ref(false), matches: (): boolean => true };
 const trays = useChatTrays({
-    filter: { active: filtering, needle, matchCase, matches: agentMatches },
-    idMatchOf,
+    filter: NO_FILTER,
+    idMatchOf: () => undefined,
     activeId,
     showing: actions.isSelected,
     isOpen: (id) => openIds.value.has(id),
@@ -134,31 +118,18 @@ const trays = useChatTrays({
 });
 provide(CHILD_ROWS, trays.board);
 
-// A chat with no fleet entry matches on its title and messages (both roles), the same rule as useAgentFilter; a
-// notice-role message never counts. A card also stands for what rides under it, as on the board (boardTrays.answers).
-const tabMatches = (entry: OpenChat): boolean => {
-    if (!filtering.value) {
-        return true;
-    }
-    if (entry.agent !== undefined) {
-        return trays.answers(entry.agent);
-    }
-    const title = entry.conversation.title.value;
-    return (
-        title?.toLowerCase().includes(needle.value) === true ||
-        entry.conversation.transcript.messages.value.some((message) => message.role !== `notice` && message.text.toLowerCase().includes(needle.value))
-    );
-};
-
 // A run's steps live inside its row, not listed separately, though they're still open in the panes. Excluded
 // here only while the run is on the ledger (insideRun); once it rolls off, its chats reappear as normal rows.
 const lanes = computed<Record<FleetLane, OpenChat[]>>(() => {
     const ledger = runIdsInLedger(workflowRuns.value);
     const listed: OpenChat[] = [];
     for (const conversation of conversations.value) {
+        if (!listedIds.value.has(conversation.conversationId)) {
+            continue;
+        }
         const agent = agentById(conversation.conversationId);
         // A run's step rides in the run's row, and a child's own chat in its parent's tray while the parent is listed.
-        if ((agent !== undefined && insideRun(agent, ledger)) || trays.ridesUnder(agent)) {
+        if ((agent !== undefined && insideRun(agent, ledger)) || trays.ridesUnder(agent, (id) => listedIds.value.has(id))) {
             continue;
         }
         listed.push({ conversation, agent });
@@ -173,10 +144,12 @@ const LANES = computed((): readonly { key: FleetLane; label: string; dot: string
 ]);
 // What Clear closes per lane, counted off the very set the press sends, so the button can't name a number it
 // doesn't close. Includes the chats a run's row folds away: they lane here too, and the lane is the target.
+// Scoped, it closes only the persona's own.
+const sweepOf = (lane: FleetLane): ReadonlySet<string> => (scoped.value === undefined ? tabsInLane(lane) : tabsOfPersona(scoped.value, known.value, lane));
 const clearing = computed<Record<FleetLane, ReadonlySet<string>>>(() => ({
-    attention: tabsInLane(`attention`),
-    active: tabsInLane(`active`),
-    finished: tabsInLane(`finished`),
+    attention: sweepOf(`attention`),
+    active: sweepOf(`active`),
+    finished: sweepOf(`finished`),
 }));
 // "1 working chat", never "1 working chats": a lane holding one is the common case here.
 const CLEAR_LABEL: Record<FleetLane, (count: number) => string> = {
@@ -188,8 +161,10 @@ const clearLabel = (lane: (typeof LANES.value)[number]): string => CLEAR_LABEL[l
 
 // Lane visibility is filtered in JS, not `v-show`: `LANES` is compile-time so `v-for` yields a stable fragment,
 // and `v-show` (set only on mount) would freeze stale in a long-lived floating window.
-// A lane holding only a run still counts as occupied, or it's filtered into a section that's never drawn.
-const occupiedLanes = computed(() => LANES.value.filter((lane) => lanes.value[lane.key].length > 0 || runsIn(lane.key).length > 0));
+// A lane holding only a run, or only a persona's work not open here, still counts as occupied.
+const occupiedLanes = computed(() =>
+    LANES.value.filter((lane) => lanes.value[lane.key].length > 0 || runsIn(lane.key).length > 0 || notOpenIn(lane.key).length > 0),
+);
 
 // The board's Finished cap as a browsing limit, not a close: the active chat rides in, pinned chats stand outside it,
 // and a filter or the row's own expand lifts it.
@@ -204,13 +179,7 @@ const finishedWindow = computed(() => {
 });
 // Includes hidden runs: hiding a run also hides its chats, so the count must cover the whole workflow.
 const hiddenRuns = computed(
-    () =>
-        runsInLane(
-            workflowRuns.value.filter((run) => run.archivedAt === undefined),
-            `finished`,
-            Number.POSITIVE_INFINITY,
-            runsNeedingYou(fleet.value),
-        ).length - runsIn(`finished`).length,
+    () => runsInLane(listedRuns.value, `finished`, Number.POSITIVE_INFINITY, runsNeedingYou(fleet.value)).length - runsIn(`finished`).length,
 );
 const hiddenFinished = computed(() => finishedWindow.value.hidden + hiddenRuns.value);
 
@@ -218,26 +187,26 @@ const hiddenFinished = computed(() => finishedWindow.value.hidden + hiddenRuns.v
 const laneCards = computed<Record<FleetLane, OpenChat[]>>(() => {
     const next: Record<FleetLane, OpenChat[]> = { attention: [], active: [], finished: [] };
     for (const lane of [`attention`, `active`, `finished`] as const) {
-        const source = lane === `finished` && windowed.value ? finishedWindow.value.shown : lanes.value[lane];
-        next[lane] = source.filter(tabMatches);
+        next[lane] = lane === `finished` && windowed.value ? finishedWindow.value.shown : lanes.value[lane];
     }
     return next;
 });
-// A lane's visible chats after the message filter and (for Finished) the browsing window.
+// A lane's visible chats after (for Finished) the browsing window.
 const cardsIn = (lane: FleetLane): OpenChat[] => laneCards.value[lane];
 
-// Matches outside this window: fleet agents, then archived agents, then agent-less conversations
-// (sessionMatches); each opens the conversation. Archive loads lazily on first query, not at mount.
-const notOpen = computed<FleetAgent[]>(() => {
-    if (!filtering.value) {
-        return [];
-    }
-    // A child riding under an open chat's card is found in that card's tray, not a second time here.
-    return [...fleet.value.filter((agent) => agentMatches(agent)), ...archivedMatches.value].filter(
-        (agent) => !openIds.value.has(agent.id) && !trays.ridesUnder(agent),
+// The scoped persona's work this window has not opened, in the lane it stands in: what waits on the reader and what
+// works (liveNotOpenOf). A run's step rides in its run's row and a child in its listed parent's tray, as open ones do.
+const notOpenIn = (lane: FleetLane): readonly FleetAgent[] => {
+    const ledger = runIdsInLedger(workflowRuns.value);
+    return liveNotOpenOf(scoped.value).filter(
+        (agent) => laneOf(agent) === lane && !insideRun(agent, ledger) && !trays.ridesUnder(agent, (id) => listedIds.value.has(id)),
     );
+};
+const liveOf = (agent: FleetAgent) => ({
+    icon: (agent.subagents?.running ?? 0) > 0 ? (`users` as const) : activityIcon(agent.activity?.tool),
+    text: activityLine(agent) ?? t(`ui.status.working`),
+    since: agent.startedAt,
 });
-const notOpenCount = computed(() => notOpen.value.length + sessionMatches.value.length);
 
 // Re-fetches the archive when a registered conversation has no agent; `probed` skips ones already confirmed gone.
 const probed = new Set<string>();
@@ -255,16 +224,18 @@ watch(
     },
     { immediate: true },
 );
-// Also probes the archive when a search starts, since the query reaches into it (`archivedMatches`) too.
-watch(filtering, (on) => {
-    if (on) {
-        void loadArchived();
-    }
-});
-
 // Scrolls the active card into view (`nearest`) on activeId or tabReveal changes, and immediately at mount for
-// the docked sheet.
+// the docked sheet; a scope just picked starts at the top of its lanes.
 const scroller = ref<HTMLElement | null>(null);
+watch(scoped, async () => {
+    await nextTick();
+    if (scroller.value !== null) {
+        scroller.value.scrollTop = 0;
+    }
+    scroller.value?.querySelector(`[data-chat-tab="${activeId.value}"]`)?.scrollIntoView({ block: `nearest` });
+});
+const listId = useId();
+const grid = ref<{ selectedTabId: string } | null>(null);
 watch(
     [activeId, tabReveal],
     async () => {
@@ -288,40 +259,22 @@ defineExpose({ beginRename: actions.beginRename });
 
 <template>
     <div ref="root" class="flex min-h-0 flex-col gap-1.5">
-        <!-- Reading order top to bottom: narrow with the filter, pick a lane, and when the query reaches past what's open, the "Not open" group at the foot. -->
-        <!-- The `Aa` case toggle mirrors the board's: a mode only one of the two search boxes could see or undo would be confusing. -->
-        <!-- Tabs, not a pill track: this switch decides what the column IS, so it reads as the column's own header — and a bordered track here stacked a second box directly above the filter field's, which made the header two grey boxes rather than a heading over a control. -->
-        <!-- Centred over the column: with no track to give them an edge to sit on, flush left read as the first row of the list rather than its title. -->
-        <SegmentedControl
-            :model-value="grouping"
-            :options="GROUPINGS"
-            size="xs"
-            variant="underline"
-            class="shrink-0 justify-center"
-            @update:model-value="(next: ChatGrouping) => setGrouping(next)"
-        />
-        <!-- Shown only for the chats grouping: the filter searches messages, which personas don't have. -->
-        <SearchBar
-            v-if="grouping === `lane`"
-            v-model="filterQuery"
-            v-model:match-case="matchCase"
-            variant="field"
-            clearable
-            :busy="searching"
-            :aria-label="t(`chat.chatTabList.filterChatsByMessages`)"
-            :placeholder="t(`agents.words.filterByMessages`)"
-            class="shrink-0"
-        />
-        <!-- A different list, not this one regrouped — its own component (see ChatPersonaRail). -->
-        <ChatPersonaRail v-if="grouping === `persona`" />
+        <!-- Whom the lanes are scoped to, only once there is anyone to pick: without personas the lanes are the whole column. -->
+        <ChatPersonaGrid v-if="personas.length > 0" ref="grid" :controls="listId" class="px-0.5 pt-1" />
         <!-- LANE BREAKS OUTRANK CARD BREAKS, and at 12px against 10px they barely did: the eye groups by proximity. -->
-        <div v-else ref="scroller" class="flex min-h-0 flex-1 flex-col items-stretch gap-4 overflow-y-auto">
-            <!-- An empty lane isn't drawn at all (see occupiedLanes); one emptied only by the filter keeps its header. -->
+        <div
+            :id="listId"
+            ref="scroller"
+            :role="personas.length > 0 ? `tabpanel` : undefined"
+            :aria-labelledby="personas.length > 0 ? grid?.selectedTabId : undefined"
+            class="flex min-h-0 flex-1 flex-col items-stretch gap-4 overflow-y-auto"
+        >
+            <!-- An empty lane isn't drawn at all (see occupiedLanes). -->
             <RailLane v-for="lane in occupiedLanes" :key="lane.key" :label="lane.label" :dot="lane.dot">
                 <!-- Closing a chat is lossless in every lane. -->
                 <template #actions>
                     <Button
-                        v-if="clearing[lane.key].size > 0 && !filtering"
+                        v-if="clearing[lane.key].size > 0"
                         size="small"
                         severity="secondary"
                         :text="true"
@@ -357,19 +310,23 @@ defineExpose({ beginRename: actions.beginRename });
                         </template>
                     </RailCard>
                 </div>
-                <p v-if="cardsIn(lane.key).length === 0 && runsIn(lane.key).length === 0" class="px-1 text-2xs text-subtle">
-                    {{ t(`chat.chatTabList.noMatches`) }}
-                </p>
-                <ChatRowList
-                    v-else-if="cardsIn(lane.key).length > 0"
-                    :entries="cardsIn(lane.key)"
-                    :needle="needle"
-                    :match-case="matchCase"
-                    :snippet-of="snippetOf"
+                <ChatRowList v-if="cardsIn(lane.key).length > 0" :entries="cardsIn(lane.key)" />
+                <!-- The persona's work not open in this window, quiet so it reads as a look rather than a chat of this window's. Attention's are never folded: a question can't be answered unseen. -->
+                <RailCard
+                    v-for="agent in notOpenIn(lane.key)"
+                    :key="agent.id"
+                    :title="agentDisplayTitle(agent, previewOf(agent.id))"
+                    :title-action="agent.titleAction"
+                    :provider="agent.provider"
+                    :chip="standingChip(agent)"
+                    :live="turnInFlight(agent) ? liveOf(agent) : undefined"
+                    :attention="lane.key === `attention`"
+                    quiet
+                    @click="openAgent(agent, `peek`)"
                 />
                 <!-- Not a pager — the count itself is the point ("12 more open"), one press away rather than gone. -->
                 <button
-                    v-if="lane.key === 'finished' && !filtering && hiddenFinished > 0"
+                    v-if="lane.key === 'finished' && hiddenFinished > 0"
                     type="button"
                     :class="ui.addTile(`gap-1 rounded-lg py-1.5 text-2xs`)"
                     @click="showAllFinished = !showAllFinished"
@@ -379,48 +336,16 @@ defineExpose({ beginRename: actions.beginRename });
                 </button>
             </RailLane>
 
-            <!-- Query hits outside this window's open chats (fleet, archive, agent-less conversations); a row opens the conversation, same as History. -->
-            <RailLane v-if="filtering && notOpenCount > 0" :label="t(`chat.chatTabList.notOpen`)" icon="search">
-                <div class="flex min-w-0 flex-col gap-2.5">
-                    <!-- Same identity tile as the lanes above; the category tint still signals what kind of work this is. -->
-                    <!-- The only place this list reads composer words, and it is inside `filtering`: a lane the reader
-                         opened by typing here already redraws per character. Open chats name themselves in ChatTabRow. -->
-                    <RailCard
-                        v-for="agent in notOpen"
-                        :key="agent.id"
-                        :title="agentDisplayTitle(agent, previewOf(agent.id))"
-                        :title-action="agent.titleAction"
-                        :needle="needle"
-                        :match-case="matchCase"
-                        :provider="agent.provider"
-                        quiet
-                        :snippet="snippetOf(agent)"
-                        @click="emit('open', agent.id)"
-                    >
-                        <template #meta>
-                            <!-- Archived, not gone: the branch, diff and transcript all survive, so this is a real destination. -->
-                            <Icon v-if="agent.archivedAt !== undefined" name="box" class="shrink-0 text-2xs" :aria-label="t(`shared.archived`)" />
-                            <span v-if="agent.updatedAt > 0" class="ml-auto shrink-0">{{ relativeTime(agent.updatedAt) }}</span>
-                        </template>
-                    </RailCard>
-                    <!-- Conversations no agent owns; only the title and matched line are known, so no provider mark or status. -->
-                    <RailCard
-                        v-for="session in sessionMatches"
-                        :key="session.id"
-                        :title="session.title"
-                        :needle="needle"
-                        :match-case="matchCase"
-                        icon="comments"
-                        quiet
-                        :snippet="session.snippet"
-                        @click="emit('open', session.id)"
-                    >
-                        <template #meta>
-                            <span class="ml-auto shrink-0">{{ relativeTime(session.updatedAt) }}</span>
-                        </template>
-                    </RailCard>
-                </div>
-            </RailLane>
+            <!-- Someone with nothing to show yet still offers the one next step. -->
+            <button
+                v-if="scope !== undefined && occupiedLanes.length === 0"
+                type="button"
+                :class="ui.addTile(`gap-1 rounded-lg py-1.5 text-2xs`)"
+                @click="startAgent(undefined, scope.id)"
+            >
+                <Icon name="plus" class="text-2xs" />
+                {{ t(`chat.chatPersonaRail.newChatAs`, { label: scope.label }) }}
+            </button>
         </div>
         <!-- A failed rename leaves the card's field open with the typed name in it; this says why, and is cleared by
              the next attempt. -->

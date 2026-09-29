@@ -569,7 +569,7 @@ const openHistory = (event: Event): void => {
 
         <!-- Foot of the rail: New agent (the fleet board's own wording) and Past chats, labelled and sized to match, no ellipsis (there's no chooser to promise). -->
         <div v-else class="flex shrink-0 flex-wrap items-center justify-center gap-2 pb-2.5 pt-3">
-            <!-- In the Personas cut it starts as the persona picked there, and says so, like that tile's own "+". -->
+            <!-- Scoped to a persona, it starts as them and shows whose chat it starts, like their tile's own "+". -->
             <Button
                 v-if="railPersona !== undefined"
                 size="small"

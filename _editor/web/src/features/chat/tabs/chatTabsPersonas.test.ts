@@ -1,6 +1,6 @@
-// Pins the rail's Personas cut (ChatPersonaRail): everyone the sandbox can speak as in one list that holds still, and the
-// open chats of the one picked, with every row verb the Agents cut has. Mounted via ChatTabList, since the cut switch is
-// part of what's tested.
+// Pins the chat list's persona scope (ChatPersonaGrid, usePersonaScope): Anyone and everyone the sandbox can speak as in
+// a grid that holds still over the one list of lanes, which a picked persona narrows to the chats that speak as them.
+// Mounted via ChatTabList, since the grid and the lanes it scopes are one component's to draw together.
 import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
 import { type AgentSummary, SANDBOX_ROUTE_NAMES } from "@intentic/sandbox-contract";
@@ -10,7 +10,6 @@ import { VueQueryPlugin } from "@tanstack/vue-query";
 import { type App, createApp, h, nextTick } from "vue";
 import { startAgent } from "../../agents/fleet/agentActions";
 import { setAgents } from "../../agents/fleet/useAgents-registry";
-import { useChatGrouping } from "../transcript/chatGrouping";
 import { useChat } from "../run/useChat";
 import { openAgentConversation } from "../panel/useChat-reveal";
 import { setDaemonRoutes } from "../../sandbox/overview/useDaemonRoutes";
@@ -65,7 +64,7 @@ beforeEach(async () => {
     localStorage.clear();
     selected = [];
     resetSandboxScope();
-    useChatGrouping().set(`persona`);
+    railPersona.value = undefined;
     withPersonas([
         { id: `work`, label: `Work`, capabilities: [`reddit-work`] },
         { id: `inbox`, label: `Inbox Manager`, capabilities: [`gmail-inbox`] },
@@ -76,7 +75,7 @@ beforeEach(async () => {
 afterEach(() => {
     app?.unmount();
     app = undefined;
-    useChatGrouping().set(`lane`);
+    railPersona.value = undefined;
     queryClient.clear();
     queryClient.removeQueries({ queryKey: rpcKey(`system.subagents`) });
     document.body.replaceChildren();
@@ -84,10 +83,10 @@ afterEach(() => {
 
 const NO_ATTENTION = { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false };
 
-// The persona list is the vertical tab list; the cut switch above it is a tab list of its own.
+// The persona grid is a tab list over the lanes, which are its panel.
 const personaList = (el: HTMLElement): HTMLElement | null => el.querySelector<HTMLElement>(`[role="tablist"][aria-label="${t(`shared.personas`)}"]`);
 const personaTabs = (el: HTMLElement): HTMLElement[] => [...(personaList(el)?.querySelectorAll<HTMLElement>(`[role="tab"]`) ?? [])];
-// A row is named by its persona alone (aria-labelledby) and described by what it holds (aria-describedby).
+// A tile is named by its persona alone (aria-labelledby) and described by what it holds (aria-describedby).
 const nameOf = (tab: HTMLElement): string => document.getElementById(tab.getAttribute(`aria-labelledby`) ?? ``)?.textContent?.trim() ?? ``;
 const names = (el: HTMLElement): string[] => personaTabs(el).map(nameOf);
 const tab = (el: HTMLElement, label: string): HTMLElement => {
@@ -102,15 +101,19 @@ const pick = async (el: HTMLElement, label: string): Promise<void> => {
     tab(el, label).click();
     await settle();
 };
-// The row's own "+", which starts a chat as that persona without picking it first.
+// The tile's own "+", which starts a chat as that persona and scopes the list to them.
 const startFromRow = async (el: HTMLElement, label: string): Promise<void> => {
     tab(el, label).querySelector<HTMLElement>(`[role="button"]`)!.click();
     await settle();
 };
 const panel = (el: HTMLElement): HTMLElement => el.querySelector<HTMLElement>(`[role="tabpanel"]`)!;
+const allOpen = (): string[] => useChat().conversations.value.map((conversation) => conversation.conversationId).toSorted();
 const heading = (el: HTMLElement): string => document.getElementById(panel(el).getAttribute(`aria-labelledby`) ?? ``)?.textContent?.trim() ?? ``;
 const rows = (el: HTMLElement): string[] => [...el.querySelectorAll(`[data-chat-tab]`)].map((row) => row.getAttribute(`data-chat-tab`) ?? ``);
 const row = (el: HTMLElement, id: string): HTMLElement => el.querySelector<HTMLElement>(`[data-chat-tab="${id}"]`)!;
+// A lane's drawn text, found by its heading, as the lanes suite reads one.
+const laneText = (el: HTMLElement, lane: string): string =>
+    [...el.querySelectorAll(`section`)].find((section) => section.querySelectorAll(`header span`)[1]?.textContent?.trim() === lane)?.textContent ?? ``;
 const pressKey = async (el: HTMLElement, key: string): Promise<void> => {
     personaList(el)!.dispatchEvent(new KeyboardEvent(`keydown`, { key, bubbles: true, cancelable: true }));
     await settle();
@@ -168,19 +171,33 @@ it(`holds every persona's row in place as chats start and end under it`, async (
     expect(names(el)).toEqual([`Anyone`, `Work`, `Inbox Manager`]);
 });
 
-it(`picks the persona of the chat on screen, and lists that persona's chats alone`, async () => {
+it(`starts on Anyone, which lists every open chat, and stays put as focus moves among them`, async () => {
     const el = await mountList();
     await openAs(`work`, [`first`, `second`]);
     await openAs(`inbox`, [`mail`]);
-    expect(picked(el)).toEqual([`Inbox Manager`]);
-    expect(heading(el)).toBe(`Inbox Manager`);
-    expect(rows(el)).toEqual([`mail`]);
+    expect(picked(el)).toEqual([`Anyone`]);
+    expect(heading(el)).toBe(`Anyone`);
+    expect(rows(el).toSorted()).toEqual([`first`, `mail`, `second`]);
 
     useChat().setActive(`first`);
     await settle();
-    expect(picked(el)).toEqual([`Work`]);
-    expect(rows(el).toSorted()).toEqual([`first`, `second`]);
+    expect(picked(el)).toEqual([`Anyone`]);
     expect(row(el, `first`).classList.contains(`session-card-on`)).toBe(true);
+});
+
+it(`lists a picked persona's chats alone, and moves to the persona of a chat focused outside it`, async () => {
+    const el = await mountList();
+    await openAs(`work`, [`first`, `second`]);
+    await openAs(`inbox`, [`mail`]);
+    await pick(el, `Work`);
+    expect(heading(el)).toBe(`Work`);
+    expect(rows(el).toSorted()).toEqual([`first`, `second`]);
+
+    useChat().setActive(`mail`);
+    await settle();
+    expect(picked(el)).toEqual([`Inbox Manager`]);
+    expect(rows(el)).toEqual([`mail`]);
+    expect(row(el, `mail`).classList.contains(`session-card-on`)).toBe(true);
 });
 
 it(`reads another persona's chats on a press, leaving the chat on screen where it is`, async () => {
@@ -210,16 +227,16 @@ it(`lands on the persona a chat was started as, with the new chat ringed and no 
     expect(row(el, started.conversationId).classList.contains(`session-card-on`)).toBe(true);
 });
 
-it(`follows a New agent press to Anyone, where its blank chat is listed rather than hidden`, async () => {
+it(`follows a New agent press out of a persona to Anyone, where its blank chat is listed rather than hidden`, async () => {
     const el = await mountList();
     await openAs(`work`, [`as-work`]);
-    expect(picked(el)).toEqual([`Work`]);
+    await pick(el, `Work`);
 
     startAgent();
     await settle();
     const blank = useChat().activeId.value;
     expect(picked(el)).toEqual([`Anyone`]);
-    expect(rows(el)).toEqual([blank]);
+    expect(rows(el).toSorted()).toEqual([`as-work`, blank].toSorted());
     expect(row(el, blank).classList.contains(`session-card-on`)).toBe(true);
 });
 
@@ -249,7 +266,7 @@ it(`offers a persona with nothing open its one next step, and starts the chat fr
     expect(rows(el)).toEqual([useChat().activeId.value]);
 });
 
-it(`closes the picked persona's finished chats from the one button above its list, passing pinned ones by`, async () => {
+it(`closes only the picked persona's finished chats from the Finished lane's Clear, passing pinned ones by`, async () => {
     const el = await mountList();
     await openAs(`work`, [`done-a`, `kept`, `live`]);
     await openAs(`inbox`, [`inbox-done`]);
@@ -262,24 +279,48 @@ it(`closes the picked persona's finished chats from the one button above its lis
     panel(el).querySelector<HTMLElement>(`[aria-label="Close 1 finished chat"]`)!.click();
     await settle();
 
-    const open = useChat().conversations.value.map((conversation) => conversation.conversationId);
-    expect(open).toEqual(expect.arrayContaining([`kept`, `live`, `inbox-done`]));
-    expect(open).not.toContain(`done-a`);
-    // Nothing left to sweep: the button goes rather than offering a press that closes nothing.
+    expect(allOpen()).toEqual([`inbox-done`, `kept`, `live`]);
+    // Nothing of Work's left to sweep: the button goes rather than offering a press that closes nothing.
     expect(panel(el).querySelector(`[aria-label^="Close "][aria-label*="finished"]`)).toBeNull();
 });
 
-it(`tells the rail's foot who is picked, so its New agent press starts as them, and nobody once the cut goes`, async () => {
+it(`sweeps every chat's finished ones from Anyone's Clear`, async () => {
+    const el = await mountList();
+    await openAs(`work`, [`done-a`]);
+    await openAs(`inbox`, [`inbox-done`, `live`]);
+    for (const id of [`done-a`, `inbox-done`]) {
+        finish(id);
+    }
+    await settle();
+
+    panel(el).querySelector<HTMLElement>(`[aria-label="Close all 2 finished chats"]`)!.click();
+    await settle();
+    expect(allOpen()).toEqual([`live`]);
+});
+
+it(`tells the rail's foot who is picked, so its New agent press starts as them`, async () => {
     const el = await mountList();
     expect(railPersona.value).toBeUndefined();
     await pick(el, `Inbox Manager`);
     expect(railPersona.value).toEqual({ id: `inbox`, label: `Inbox Manager` });
     await pick(el, `Anyone`);
     expect(railPersona.value).toBeUndefined();
+});
+
+it(`reads a pick whose persona was deleted as Anyone, and keeps a renamed one's new name`, async () => {
+    const el = await mountList();
     await pick(el, `Work`);
-    app?.unmount();
-    app = undefined;
+    withPersonas([
+        { id: `work`, label: `Office`, capabilities: [] },
+        { id: `inbox`, label: `Inbox Manager`, capabilities: [] },
+    ]);
+    await settle();
+    expect(railPersona.value).toEqual({ id: `work`, label: `Office` });
+
+    withPersonas([{ id: `inbox`, label: `Inbox Manager`, capabilities: [] }]);
+    await settle();
     expect(railPersona.value).toBeUndefined();
+    expect(picked(el)).toEqual([`Anyone`]);
 });
 
 it(`moves the pick with the arrow keys, Home and End, wrapping at either end`, async () => {
@@ -303,22 +344,34 @@ it(`moves the pick with the arrow keys, Home and End, wrapping at either end`, a
     expect(personaTabs(el).map((candidate) => candidate.getAttribute(`tabindex`))).toEqual([`0`, `-1`, `-1`]);
 });
 
-it(`picks afresh on a remount: the persona of the chat on screen, not the one last read`, async () => {
+it(`keeps the pick across a remount, moving it only when the chat on screen is outside it`, async () => {
     const el = await mountList();
     await openAs(`work`, [`first`]);
-    await pick(el, `Inbox Manager`);
+    await pick(el, `Work`);
+    app?.unmount();
+    document.body.replaceChildren();
+    expect(picked(await mountList())).toEqual([`Work`]);
 
     app?.unmount();
     document.body.replaceChildren();
-    const again = await mountList();
-    expect(picked(again)).toEqual([`Work`]);
+    railPersona.value = { id: `inbox`, label: `Inbox Manager` };
+    expect(picked(await mountList())).toEqual([`Work`]);
 });
 
-it(`offers to set one up when the workspace has no personas`, async () => {
+it(`draws no grid when the workspace has no personas, only the lanes of every open chat`, async () => {
     withPersonas([]);
     const el = await mountList();
-    expect(el.textContent).toContain(`Set up a persona`);
-    expect(names(el)).toEqual([`Anyone`]);
+    await openAs(undefined, [`plain`]);
+    expect(personaList(el)).toBeNull();
+    expect(el.querySelector(`[role="tabpanel"]`)).toBeNull();
+    expect(rows(el)).toEqual([`plain`]);
+});
+
+// The list used to switch between an Agents cut and a Personas cut, and the Agents cut carried a filter of its own.
+it(`draws no cut switch and no filter above the list: finding a chat by its words is Past chats' search`, async () => {
+    const el = await mountList();
+    expect([...el.querySelectorAll(`[role="tablist"]`)].map((list) => list.getAttribute(`aria-label`))).toEqual([t(`shared.personas`)]);
+    expect(el.querySelectorAll(`input`)).toHaveLength(0);
 });
 
 it(`spells no capability ids or account counts beside a persona's name`, async () => {
@@ -328,33 +381,33 @@ it(`spells no capability ids or account counts beside a persona's name`, async (
     expect(el.textContent).not.toContain(`account`);
 });
 
-it(`lands a chat opened from the board under the persona its record names`, async () => {
+it(`moves to the persona a chat opened from the board names, when the pick leaves it out`, async () => {
     const el = await mountList();
+    await pick(el, `Inbox Manager`);
     await openAs(`work`, [`from-board`]);
     expect(picked(el)).toEqual([`Work`]);
     expect(rows(el)).toEqual([`from-board`]);
 });
 
-// A cut that hid some open chats would leave the reader asking where their chat went.
-it(`holds every open chat under exactly one persona, the ones that act as none under Anyone`, async () => {
+// A scope that hid some open chats from every tile would leave the reader asking where their chat went.
+it(`lists every open chat under Anyone, and each under exactly the persona it speaks as`, async () => {
     const el = await mountList();
     await openAs(undefined, [`plain`]);
     await openAs(`work`, [`as-work`]);
     await openAs(`inbox`, [`as-inbox`]);
 
-    const listed: string[] = [];
-    for (const label of names(el)) {
-        await pick(el, label);
-        listed.push(...rows(el));
-    }
-    expect(listed.toSorted()).toEqual(useChat().conversations.value.map((conversation) => conversation.conversationId).toSorted());
     await pick(el, `Anyone`);
-    expect(rows(el)).toEqual([`plain`]);
+    expect(rows(el).toSorted()).toEqual(allOpen());
+    await pick(el, `Work`);
+    expect(rows(el)).toEqual([`as-work`]);
+    await pick(el, `Inbox Manager`);
+    expect(rows(el)).toEqual([`as-inbox`]);
 });
 
 it(`switches to the chat you pick under a persona`, async () => {
     const el = await mountList();
     await openAs(`work`, [`first`, `second`]);
+    await pick(el, `Work`);
     selected = [];
     row(el, `first`).click();
     await settle();
@@ -443,6 +496,18 @@ it(`offers a new chat, the sweeps and the persona's own page from its tile's men
     ]);
 });
 
+it(`counts every open chat on Anyone's tile and each persona's own on theirs, whoever is picked`, async () => {
+    const el = await mountList();
+    await openAs(undefined, [`plain`]);
+    await openAs(`work`, [`as-work`, `as-work-too`]);
+    await openAs(`inbox`, [`as-inbox`]);
+    const counts = (): string[] => [`Anyone`, `Work`, `Inbox Manager`].map((label) => facts(el, label).replace(/^.*?(\d+ chats?)$/, `$1`));
+
+    expect(counts()).toEqual([`4 chats`, `2 chats`, `1 chat`]);
+    await pick(el, `Work`);
+    expect(counts()).toEqual([`4 chats`, `2 chats`, `1 chat`]);
+});
+
 it(`says what each persona holds: what needs you and what works, open here or not`, async () => {
     setAgents(
         [
@@ -474,14 +539,16 @@ it(`says what each persona holds: what needs you and what works, open here or no
     const el = await mountList();
     expect(facts(el, `Work`)).toBe(`1 needs you, 1 working, 2 chats`);
     expect(facts(el, `Inbox Manager`)).toBe(``);
-    // Waiting on the reader is never folded away, open here or not.
+    // Scoped to Work, its work not open here stands in the lanes it belongs to.
     await pick(el, `Work`);
-    expect(panel(el).textContent).toContain(`answer the question`);
-    expect(panel(el).textContent).toContain(`1 not open`);
+    expect(laneText(el, `Attention`)).toContain(`answer the question`);
+    expect(laneText(el, `Active`)).toContain(`writing the patch`);
+    // Anyone is this window's chats: another window's work is its persona's to show.
+    await pick(el, `Anyone`);
+    expect(panel(el).textContent).not.toContain(`answer the question`);
 });
 
-// The Agents cut hangs every agent a chat started under its card; here the reader is asking who a chat speaks as.
-it(`draws a chat without the tray of agents it started, which the Agents cut still hangs under it`, async () => {
+it(`hangs every agent a chat started under its card, scoped to a persona or not`, async () => {
     const lead: AgentSummary = {
         id: `lead`,
         title: `ship the release`,
@@ -499,51 +566,36 @@ it(`draws a chat without the tray of agents it started, which the Agents cut sti
     await openAs(`work`, [`lead`]);
     const tray = (): Element | null => el.querySelector(`[role="group"][aria-label="${t(`agents.childRows.startedBy`, { title: `ship the release` })}"]`);
 
-    expect(rows(el)).toEqual([`lead`]);
-    expect(tray()).toBeNull();
-
-    useChatGrouping().set(`lane`);
-    await settle();
     expect(tray()?.textContent).toContain(`port the parser`);
+    await pick(el, `Work`);
+    expect(rows(el)).toEqual([`lead`]);
+    expect(tray()?.textContent).toContain(`port the parser`);
+    // Riding in its parent's tray, the child isn't drawn a second time as Work's work not open here.
+    expect(laneText(el, `Active`).match(/port the parser/g)).toHaveLength(1);
 });
 
-it(`leaves the Agents cut on the chat it was reading`, async () => {
-    useChatGrouping().set(`lane`);
+it(`stands a child on its own under a persona its parent doesn't speak as`, async () => {
+    const lead: AgentSummary = {
+        id: `lead`,
+        title: `ship the release`,
+        status: `running`,
+        provider: `claude`,
+        harness: `native`,
+        actsAs: `work`,
+        lastActsAs: `work`,
+        updatedAt: 1_000,
+        startedAt: 1,
+        attention: NO_ATTENTION,
+    };
+    setAgents([lead, { ...lead, id: `port`, title: `port the parser`, actsAs: `inbox`, lastActsAs: `inbox`, startedBy: `agent:lead`, startedAt: 2 }], 100);
     const el = await mountList();
-    openAgentConversation({ id: `working-on-this`, provider: `claude`, harness: `native` });
-    await settle();
+    await openAs(`work`, [`lead`]);
+    await openAs(`inbox`, [`port`]);
 
-    useChatGrouping().set(`persona`);
-    await settle();
-    await startFromRow(el, `Work`);
-
-    selected = [];
-    useChatGrouping().set(`lane`);
-    await settle();
-    expect(selected).toEqual([`working-on-this`]);
-});
-
-it(`reveals nothing when the visit changed no chat`, async () => {
-    useChatGrouping().set(`lane`);
-    await mountList();
-    openAgentConversation({ id: `working-on-this`, provider: `claude`, harness: `native` });
-    await settle();
-
-    useChatGrouping().set(`persona`);
-    await settle();
-    selected = [];
-    useChatGrouping().set(`lane`);
-    await settle();
-    expect(selected).toEqual([]);
-});
-
-it(`hands the column back to the lanes when the switch is flipped`, async () => {
-    const el = await mountList();
-    expect(names(el)).toEqual([`Anyone`, `Work`, `Inbox Manager`]);
-    useChatGrouping().set(`lane`);
-    await settle();
-    expect(personaList(el)).toBeNull();
-    expect(el.querySelector(`[aria-label="Filter chats by your messages or id"]`)).not.toBeNull();
+    expect(picked(el)).toEqual([`Anyone`]);
+    expect(rows(el)).not.toContain(`port`);
+    await pick(el, `Inbox Manager`);
+    expect(rows(el)).toEqual([`port`]);
 });
 
 // A SANDBOX FROM BEFORE 2026-09-25 (v1.312 and older) says only who a conversation's first turn acted as (`actsAs`),

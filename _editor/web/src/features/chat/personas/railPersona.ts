@@ -1,6 +1,8 @@
 import { ref } from "vue";
 
-// The persona the rail's Personas cut has picked, for the rail's foot: its New agent press starts a chat as whoever is
-// picked there, as the tile's own "+" does, so the cut about speaking as someone never quietly starts a chat as nobody.
-// Undefined while Anyone is picked or the cut isn't on screen; the rail clears it when it goes (ChatPersonaRail).
+// Whom the chat list is scoped to: the persona picked in its grid, or undefined for Anyone, which scopes nothing. Held
+// here rather than in the list, since the rail's foot reads it too (its New agent press starts as the persona picked,
+// as that tile's own "+" does), and per window: a floating window is its own app copy with its own module state.
+// The label rides along for the foot's button; the list keeps it current and drops a pick whose persona is gone
+// (usePersonaScope).
 export const railPersona = ref<{ readonly id: string; readonly label: string } | undefined>();

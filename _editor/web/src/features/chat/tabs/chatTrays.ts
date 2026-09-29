@@ -100,13 +100,17 @@ export const useChatTrays = (host: ChatTraysHost) => {
         setRowEl: () => {},
     };
 
-    /** Whether an open chat rides in the tray of another chat open in this list, rather than standing as a card of its own. */
-    const ridesUnder = (agent: FleetAgent | undefined): boolean => {
+    /**
+     * Whether a chat rides in the tray of another chat in this list, rather than standing as a card of its own. `listed`
+     * says which chats the list draws, every open one unless the list is scoped: a child's parent scoped out of it
+     * leaves the child standing on its own rather than riding under a card nobody can see.
+     */
+    const ridesUnder = (agent: FleetAgent | undefined, listed: (id: string) => boolean = host.isOpen): boolean => {
         if (agent === undefined) {
             return false;
         }
         const card = trays.cardOf(agent);
-        return card !== agent && host.isOpen(card.id);
+        return card !== agent && listed(card.id);
     };
     return { board, ridesUnder, answers: trays.answers };
 };
