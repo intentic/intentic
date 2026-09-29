@@ -583,7 +583,11 @@ const openHistory = (event: Event): void => {
                     <PersonaFace v-if="railPersona !== undefined" :persona="railPersona" :size="FACE_SIZES.pill" class="block" />
                     <Icon v-else name="plus" class="text-2xs" />
                 </span>
-                <span class="leading-none">{{ railPersona === undefined ? t(`chat.words.newAgent`) : t(`chat.words.newChat`) }}</span>
+                <!-- Both labels share one grid cell, the idle one hidden, so the pill keeps the wider one's width either way. -->
+                <span class="grid leading-none">
+                    <span class="col-start-1 row-start-1 text-center" :class="{ invisible: railPersona !== undefined }">{{ t(`chat.words.newAgent`) }}</span>
+                    <span class="col-start-1 row-start-1 text-center" :class="{ invisible: railPersona === undefined }" :aria-hidden="railPersona === undefined">{{ t(`chat.words.newChat`) }}</span>
+                </span>
             </button>
             <button type="button" class="composer-ghost h-8 gap-1.5 rounded-full px-3 text-xs" @click="openHistory">
                 <Icon name="history" class="text-xs" />

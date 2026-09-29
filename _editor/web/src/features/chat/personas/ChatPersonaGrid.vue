@@ -81,6 +81,15 @@ const tiles = computed<Tile[]>(() => [
         ),
     ),
 ]);
+// Anyone's tile face: up to three personas' faces huddled into one card-sized box, back pair first, front one last.
+const HUDDLE_FACE = 34;
+const huddle = computed(() => personas.value.slice(0, 3).map((persona) => ({ id: persona.id, label: persona.label ?? persona.id })));
+const huddleSpot = (index: number, count: number): Record<string, string> => {
+    const spots: readonly (readonly [number, number])[] =
+        count === 1 ? [[11, 11]] : count === 2 ? [[2, 6], [20, 16]] : [[0, 2], [22, 2], [11, 20]];
+    const [left, top] = spots[index]!;
+    return { left: `${left}px`, top: `${top}px`, zIndex: `${index}` };
+};
 // The hover says what the tile holds, then what the persona may do.
 const tileTip = (tile: Tile): string | undefined => [tile.facts, tile.persona?.bounds].filter((line) => line !== undefined && line !== ``).join(`\n`) || undefined;
 const isPicked = (tile: Tile): boolean => tile.persona?.id === scope.value?.id;
@@ -206,7 +215,7 @@ defineExpose({ selectedTabId: computed(() => `${tabId(selected.value)}-name`) })
                 :aria-describedby="tile.facts === `` ? undefined : `${tabId(tile)}-facts`"
                 :tabindex="tile === selected ? 0 : -1"
                 v-tooltip.bottom="tileTip(tile)"
-                class="ui-row-select group relative flex min-w-0 flex-col items-center gap-1 rounded-lg px-1 pb-1.5 pt-2.5"
+                class="ui-row-select ui-row-select-horizontal group relative flex min-w-0 flex-col items-center gap-1 rounded-lg px-1 pb-1.5 pt-2.5"
                 :class="{ 'ui-row-select-on': tile === selected }"
                 @click="pick(tile.persona?.id)"
                 @contextmenu.prevent.stop="openMenu(tile, $event)"
@@ -214,7 +223,18 @@ defineExpose({ selectedTabId: computed(() => `${tabId(selected.value)}-name`) })
                 <!-- What needs you and what works ride on the face as badges, where a glance lands anyway; the chat count is the hover's. -->
                 <span class="relative shrink-0">
                     <PersonaFace v-if="tile.persona !== undefined" :persona="tile.persona" :size="FACE_SIZES.card" />
-                    <!-- Anyone has no face: the glyph the composer's Acts as menu gives it, on a disc the size of one. -->
+                    <!-- Anyone is everyone here: a huddle of the first few faces, drawn in the same clay as the tiles beside it. -->
+                    <span v-else-if="huddle.length > 0" class="relative block h-14 w-14" aria-hidden="true">
+                        <PersonaFace
+                            v-for="(face, index) in huddle"
+                            :key="face.id"
+                            :persona="face"
+                            :size="HUDDLE_FACE"
+                            class="absolute"
+                            :style="huddleSpot(index, huddle.length)"
+                        />
+                    </span>
+                    <!-- No personas yet: the glyph the composer's Acts as menu gives Anyone, on a disc the size of a face. -->
                     <span v-else class="flex h-14 w-14 items-center justify-center rounded-full bg-primary-600/15">
                         <Icon name="users" class="text-lg text-link" />
                     </span>
