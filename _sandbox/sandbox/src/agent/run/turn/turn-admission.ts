@@ -5,6 +5,7 @@ import { MENTION_LIMIT, type MessageReceipt, profileOf } from "@intentic/sandbox
 import type { BeginRefusal } from "../../../conversations/actor/conversation-decide.js";
 import { type LiveRun, liveRunOf, turnRunOf } from "../../../conversations/actor/conversation-holdings.js";
 import type { QueuedItem } from "../../../conversations/actor/conversation-queue.js";
+import { windowShut } from "../../../conversations/actor/conversation-state.js";
 import { cardsParkedOn } from "../../../conversations/actor/parked-cards.js";
 import { conversationProfile, worktreeOf } from "../../../conversations/registry/agents-store.js";
 import type { Services } from "../../../composition.js";
@@ -132,6 +133,15 @@ const goesFirst = (services: Services, conversationId: string): boolean => {
     const state = services.conversations.state(conversationId);
     return state?.turn.resuming === true || state?.phase.kind === "rewinding";
 };
+
+// Whether words nobody at the composer typed must wait rather than open a turn: the conversation is stranded behind a
+// spent allowance whose window is known to be shut. A turn opened there is refused at the door within seconds, and the
+// refusal takes the held turn's place, so the press or the booked resend would then re-run a wake instead of the work,
+// on a fresh session. They wait in the queue and go with the conversation's next turn, or once the window reopens
+// (turn-resume.ts drains them then). A live turn still takes them, and a person's words are never held here: sending is
+// the person's own call.
+const heldBehindLimit = (services: Services, conversationId: string, voices: readonly QueuedItem["voice"][]): boolean =>
+    voices.every((voice) => voice !== "person") && windowShut(services.conversations.state(conversationId)?.resume.held, Date.now());
 
 // Whether the live turn takes words now: not being stopped, and not parked on a card, whose answer comes first.
 const takesWords = (services: Services, conversationId: string): boolean => {
@@ -288,6 +298,9 @@ export const createAdmission = (
             daemon.conversations.send(conversationId, { kind: "queue-taken", ids: [head.id] });
             return new Map([[head.id, { delivered: "steered", ...opt("run", live?.id) }]]);
         }
+        if (heldBehindLimit(daemon, conversationId, items.map((item) => item.voice))) {
+            return undefined;
+        }
         const batch = together(items);
         const run = await startWith(batch, turnOf(daemon, batch));
         if (run === "archived") {
@@ -340,6 +353,9 @@ export const createAdmission = (
         const live = liveRunOf(daemon.conversations, conversationId);
         if (live !== undefined || daemon.conversations.state(conversationId)?.phase.kind === "running") {
             return intoLive(item, live);
+        }
+        if (heldBehindLimit(daemon, conversationId, [item.voice])) {
+            return undefined;
         }
         // Its own turn, as its sender asked for it, on the session the daemon says it continues; a wake on the routing
         // the conversation has now.

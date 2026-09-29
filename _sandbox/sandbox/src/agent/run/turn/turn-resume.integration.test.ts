@@ -39,6 +39,7 @@ import type { BeginRefusal } from "../../../conversations/actor/conversation-dec
 import type { TurnRun } from "./turn-runs.js";
 import { createTurnResumeScheduler, fireHeldResume, type HeldTurn, resumeInterruptedTurns, startConversationTurn } from "./turn-resume.js";
 import { parkedCards } from "../../../conversations/actor/parked-cards.js";
+import { opt } from "../../../opt.js";
 
 // `takes` answers each abandon attempt (false: the turn is still unwinding); `armed`/`limitArmed` are per-conversation
 // overrides for outage/limit resume, a missing id follows the sandbox default.
@@ -1898,6 +1899,87 @@ test("a held turn with no booked move and no arming stays held", async () => {
     await scheduler.tick(REOPENS * 1000 + 1);
     expect(turns).toHaveLength(0);
     clearPendingResume(services, "lim-unbooked");
+});
+
+// A watch firing on a conversation stranded behind a spent allowance: the turn it opened was refused at the door within
+// seconds, and the refusal took the held turn's place, so the press re-ran a watch report on a fresh session instead of
+// the work. The admission clock is the system's, so each case sets it where the tick's own clock stands.
+describe("the sandbox's words to a conversation stranded behind a spent allowance", () => {
+    const SHUT = RECORDED + 60 * 60 * 1000;
+    const REOPENED = REOPENS * 1000 + 1;
+    const PROMPT = "Watch fired: the downloads finished.";
+    afterEach(() => jest.setSystemTime());
+
+    // `null`: the provider named no instant (an `undefined` would take the default).
+    const stranded = (conversationId: string, limitArmed = false, reopensAt: number | null = REOPENS) => {
+        jest.setSystemTime(new Date(SHUT));
+        const services = fakeServices(mkdtempSync(join(tmpdir(), "limit-")), [], () => true, new Map(), new Map([[conversationId, limitArmed]]));
+        const turns: AgentTurn[] = [];
+        const driven = drivenBy(services, heldWake(turns));
+        recordHeldTurn(
+            services,
+            {
+                reason: "limit",
+                input: { prompt: "ship the parser", conversationId, isolated: true },
+                sessionId: "s-work",
+                ran: true,
+                ...opt("reopensAt", reopensAt ?? undefined),
+            },
+            RECORDED,
+        );
+        const say = (voice: "sandbox" | "person", prompt = PROMPT) => driven.turns.say({ voice, turn: { prompt, conversationId, isolated: true } });
+        return { services, turns, driven, say };
+    };
+
+    it("wait in its queue while the window is shut, leaving the held turn where a press finds it", async () => {
+        const { services, turns, say } = stranded("lim-wake-shut");
+
+        expect(await say("sandbox")).toEqual({ delivered: "queued" });
+        expect(turns).toEqual([]);
+        expect(services.conversations.queued("lim-wake-shut").items.map((item) => item.turn.prompt)).toEqual([PROMPT]);
+        expect(heldTurn(services, "lim-wake-shut")).toMatchObject({ reason: "limit", sessionId: "s-work", input: { prompt: "ship the parser" } });
+        clearPendingResume(services, "lim-wake-shut");
+    });
+
+    it("go by themselves once the window reopens, even where the answer to the limit is to wait", async () => {
+        const { services, turns, driven, say } = stranded("lim-wake-open");
+        await say("sandbox");
+
+        jest.setSystemTime(new Date(REOPENED));
+        await createTurnResumeScheduler(driven).tick(REOPENED);
+        await settle(services, "lim-wake-open");
+
+        expect(turns.map((turn) => turn.prompt)).toEqual([PROMPT]);
+        expect(services.conversations.queued("lim-wake-open").items).toEqual([]);
+    });
+
+    it("go behind the resend the policy fires at the reopening, never in its place", async () => {
+        const { services, turns, driven, say } = stranded("lim-wake-armed", true);
+        await say("sandbox");
+
+        jest.setSystemTime(new Date(REOPENED));
+        await createTurnResumeScheduler(driven).tick(REOPENED);
+        await settle(services, "lim-wake-armed");
+
+        expect(turns[0]?.prompt).toContain("ship the parser");
+        expect(turns[0]?.sessionId).toBe("s-work");
+    });
+
+    it("hold back nothing a person sends", async () => {
+        const { services, turns, say } = stranded("lim-wake-person");
+
+        expect(await say("person", "try it anyway")).toEqual({ delivered: "started", run: expect.any(String) });
+        await settle(services, "lim-wake-person");
+        expect(turns.map((turn) => turn.prompt)).toEqual(["try it anyway"]);
+    });
+
+    it("are not held where the provider named no instant to wait for", async () => {
+        const { services, turns, say } = stranded("lim-wake-unknown", false, null);
+
+        expect(await say("sandbox")).toEqual({ delivered: "started", run: expect.any(String) });
+        await settle(services, "lim-wake-unknown");
+        expect(turns.map((turn) => turn.prompt)).toEqual([PROMPT]);
+    });
 });
 
 // A turn that stopped short with nothing to repair: the ladder that re-runs it used to live in a browser tab, where it

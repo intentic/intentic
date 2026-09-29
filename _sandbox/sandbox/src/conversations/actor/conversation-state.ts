@@ -88,6 +88,13 @@ export interface LandLease {
 // rungs of the stop ladder it inherited.
 export type HeldRecord = HeldTurn & { readonly recordedAt: number; readonly fired: boolean; readonly tries: number };
 
+/**
+ * Whether a spent allowance holds this conversation and its window is known to be shut at `now`: a turn started then
+ * is refused before the model sees it. No published instant is never shut, as the card reads it (agentStatus.limitClosed).
+ */
+export const windowShut = (held: HeldRecord | undefined, now: number): boolean =>
+    held?.reason === "limit" && held.reopensAt !== undefined && held.reopensAt * 1000 > now;
+
 // The turn a wall stranded, until a press or the resume pass (turn-resume.ts) fires it or a new turn supersedes it.
 export interface ResumeRecords {
     readonly held: HeldRecord | undefined;

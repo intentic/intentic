@@ -408,8 +408,8 @@ describe("watchLine", () => {
     });
 });
 
-// A spent allowance arrives as `status: "error"` and is a wait rather than a fault, but one that ends only when a
-// person acts, unlike a scheduled reset which owes nothing until it sends something through.
+// A spent allowance arrives as `status: "error"` and is a wait rather than a fault, a stall the reader is shown whether
+// or not a resend is booked at the reset.
 const SHUT = { failureCode: `rate_limit`, limitResetsAt: (NOW + 4 * 60 * 60 * 1000) / 1000 };
 const OPEN = { failureCode: `rate_limit`, limitResetsAt: (NOW - 60 * 60 * 1000) / 1000 };
 describe("a spent allowance", () => {
@@ -421,14 +421,24 @@ describe("a spent allowance", () => {
         expect(blocked({ status: `error`, attention: none, ...SHUT })).toBe(true);
     });
 
-    // The one card that needs no person: armed, the daemon resends the held turn at the reset itself, so this session
-    // progresses on its own exactly as a resuming one does.
-    it("leaves attention only when something is already booked to send it", () => {
+    // Booked to go again at the reset, it still stands still until then, for hours, and the way around the wait (an
+    // account with room) is the reader's: Active would read as work in progress and hide that.
+    it("stays in attention with a resend booked at the reset", () => {
         const booked = { status: `error`, attention: none, ...SHUT, limitScheduled: true } as const;
-        expect(blocked(booked)).toBe(false);
-        expect(laneOf(booked)).toBe(`active`);
-        // Active, not finished: it will run again tonight, and a settled lane would call that over.
-        expect(unfinishedMark(booked)?.label).toBe(`Sends itself again`);
+        expect(blocked(booked)).toBe(true);
+        expect(laneOf(booked)).toBe(`attention`);
+        expect(unfinishedMark(booked)?.label).toBe(`Usage limit`);
+        // An armed watch beside it changes nothing: the watch cannot run a turn through a shut window either.
+        expect(laneOf({ ...booked, awaitingWake: true })).toBe(`attention`);
+    });
+
+    // The one spent allowance already under way: the policy is carrying the held turn to another account on the resume
+    // pass's next beat, seconds out, so filing it in Attention would flash a card nobody needs to touch.
+    it("leaves attention only while a move to another account is booked", () => {
+        const moving = { status: `error`, attention: none, ...SHUT, limitScheduled: true, limitMoving: `Work` } as const;
+        expect(blocked(moving)).toBe(false);
+        expect(laneOf(moving)).toBe(`active`);
+        expect(unfinishedMark(moving)?.label).toBe(`Moving to Work`);
     });
 
     // The chip does the work: the card carries no other sentence about the wall, and both halves of the wait name the

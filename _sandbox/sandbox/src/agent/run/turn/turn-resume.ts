@@ -31,7 +31,7 @@ import type { StartedRun, StartOptions, TurnInput, TurnStarter } from "../../../
 import { refusedBegin } from "../placement/turn-placement.js";
 import { startTurnRun, type TurnRun } from "./turn-runs.js";
 import type { BeginRefusal } from "../../../conversations/actor/conversation-decide.js";
-import type { HeldRecord } from "../../../conversations/actor/conversation-state.js";
+import { type HeldRecord, windowShut } from "../../../conversations/actor/conversation-state.js";
 import { opt } from "../../../opt.js";
 import type { VerificationStanding } from "../../verification/agent-verification.js";
 
@@ -468,6 +468,14 @@ const runRung = async (services: Services, conversationId: string, held: HeldRec
     }
 };
 
+// Whether the sandbox's own words wait on a window that has now reopened: admission held them while it was shut
+// (turn-admission.ts), and nothing else would send them where the answer to the limit is to wait for a press.
+const wakesReopened = (services: Services, conversationId: string, held: HeldRecord, now: number): boolean =>
+    held.reason === "limit" &&
+    held.reopensAt !== undefined &&
+    !windowShut(held, now) &&
+    services.conversations.queued(conversationId).items.some((item) => item.voice !== "person");
+
 // One pass over every held turn, oldest first; snapshotted, since every rung stamps or drops the records it walks.
 export const createTurnResumeScheduler = (services: Services, intervalMs = 5_000): TurnResumeScheduler => {
     let timer: NodeJS.Timeout | undefined;
@@ -475,6 +483,10 @@ export const createTurnResumeScheduler = (services: Services, intervalMs = 5_000
     const tick = async (now: number = Date.now()): Promise<void> => {
         for (const { conversationId, record } of services.conversations.stranded()) {
             await runRung(services, conversationId, record, now);
+            // After the rung, so a resend it just fired goes first and hears them as it runs.
+            if (wakesReopened(services, conversationId, record, now)) {
+                await services.turns.drain(conversationId);
+            }
         }
     };
 

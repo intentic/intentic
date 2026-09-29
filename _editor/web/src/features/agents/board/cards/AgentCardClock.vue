@@ -3,7 +3,7 @@ import { Button, useDevice } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
-import { activityIcon, formatElapsed, limitClosed, limitCountdown, turnInFlight, watching, watchLine } from "../../fleet/agentStatus";
+import { activityIcon, formatElapsed, limitClosed, limitCountdown, limitScheduled, turnInFlight, watching, watchLine } from "../../fleet/agentStatus";
 import { cacheCooling, cacheWarm, warmMark } from "../../fleet/prompt-cache/promptCache";
 import type { FleetAgent } from "../../fleet/useAgents-fleet";
 import { relativeTime } from "../../../chat/models/catalog";
@@ -36,6 +36,9 @@ const watch = computed(() => (props.working ? undefined : watchLine(props.agent,
 // happened, this says when.
 // Undefined once the window is open or the provider gave no instant; the corner then falls back to the ordinary date.
 const limitBackAt = computed(() => limitCountdown(props.agent, now.value));
+// A booked resend sits in Attention beside cards waiting on a press, so the corner is what tells the two apart: this
+// one goes again by itself at that hour, the other only comes back within reach.
+const limitBooked = computed(() => limitScheduled(props.agent));
 // Shares that same corner, and yields it: a reset clock and a watch are each a firmer promise about the card than a
 // cache that only makes answering cheaper, so this speaks when the corner is otherwise free.
 const cooling = computed(() => (watch.value !== undefined || limitBackAt.value !== undefined ? undefined : cacheCooling(props.agent, now.value)));
@@ -52,10 +55,10 @@ const warm = computed(() => (watch.value !== undefined || limitBackAt.value !== 
     <span
         v-else-if="limitBackAt !== undefined"
         class="inline-flex shrink-0 items-center gap-1"
-        v-tooltip.top="agent.failure ?? t(`agents.agentCard.providerRefusedTurnUsage`)"
+        v-tooltip.top="limitBooked ? t(`agents.agentCard.resendsHint`) : (agent.failure ?? t(`agents.agentCard.providerRefusedTurnUsage`))"
     >
         <Icon name="clock" class="shrink-0 text-2xs" />
-        <span class="tabular-nums">{{ t(`agents.agentCard.back`, { limitBackAt }) }}</span>
+        <span class="tabular-nums">{{ limitBooked ? t(`agents.agentCard.resends`, { limitBackAt }) : t(`agents.agentCard.back`, { limitBackAt }) }}</span>
     </span>
     <!-- A hold on the cache, running or stopped early: the corner says until when, or since when it went cold. -->
     <button
