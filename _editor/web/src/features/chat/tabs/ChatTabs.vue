@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { AnchoredOverlay, Button, ContextMenu, FACE_SIZES, isOverlayTarget, PersonaFace, SearchBar, type Tip } from "@intentic/ui";
+import { AnchoredOverlay, ContextMenu, FACE_SIZES, isOverlayTarget, PersonaFace, SearchBar, type Tip } from "@intentic/ui";
 import { createInlineRename } from "@intentic/ui/inline-rename";
 import type { Disposable } from "@intentic/extension-api";
 import type { MenuItem } from "primevue/menuitem";
@@ -569,19 +569,24 @@ const openHistory = (event: Event): void => {
 
         <!-- Foot of the rail: New agent (the fleet board's own wording) and Past chats, labelled and sized to match, no ellipsis (there's no chooser to promise). -->
         <div v-else class="flex shrink-0 flex-wrap items-center justify-center gap-2 pb-2.5 pt-3">
-            <!-- Scoped to a persona, it starts as them and shows whose chat it starts, like their tile's own "+". -->
-            <Button
-                v-if="railPersona !== undefined"
-                size="small"
-                :aria-label="t(`chat.chatPersonaRail.newChatAs`, { label: railPersona.label })"
-                v-tooltip.top="t(`chat.chatPersonaRail.newChatAs`, { label: railPersona.label })"
-                @click="startAgent(undefined, railPersona.id)"
+            <!-- One pill either way, its lead a disc: the "+" of New agent, or scoped to a persona their face, since the chat
+                 it starts speaks as them, like their tile's own "+". Drawn on the card ground with the page's own text, so it
+                 reads in every look rather than taking a skin's primary fill. -->
+            <button
+                type="button"
+                class="flex h-8 items-center gap-2 rounded-full border border-line-strong bg-card py-1 pl-1 pr-3.5 text-xs font-medium text-content transition-colors hover:border-primary-500/60 hover:bg-primary-500/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-500"
+                :aria-label="railPersona === undefined ? undefined : t(`chat.chatPersonaRail.newChatAs`, { label: railPersona.label })"
+                v-tooltip.top="railPersona === undefined ? undefined : t(`chat.chatPersonaRail.newChatAs`, { label: railPersona.label })"
+                @click="railPersona === undefined ? startAgent() : startAgent(undefined, railPersona.id)"
             >
-                <PersonaFace :persona="railPersona" :size="FACE_SIZES.pill" class="-my-1" />{{ t(`chat.words.newChat`) }}
-            </Button>
-            <Button v-else size="small" @click="startAgent()"> <Icon name="plus" />{{ t(`chat.words.newAgent`) }} </Button>
-            <button type="button" class="composer-ghost h-7 gap-1.5 px-2 text-2xs" @click="openHistory">
-                <Icon name="history" class="text-2xs" />
+                <span class="flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary-500/15 text-link">
+                    <PersonaFace v-if="railPersona !== undefined" :persona="railPersona" :size="FACE_SIZES.pill" class="block" />
+                    <Icon v-else name="plus" class="text-2xs" />
+                </span>
+                <span class="leading-none">{{ railPersona === undefined ? t(`chat.words.newAgent`) : t(`chat.words.newChat`) }}</span>
+            </button>
+            <button type="button" class="composer-ghost h-8 gap-1.5 rounded-full px-3 text-xs" @click="openHistory">
+                <Icon name="history" class="text-xs" />
                 <span>{{ t(`chat.chatTabs.pastChats`) }}</span>
             </button>
         </div>
