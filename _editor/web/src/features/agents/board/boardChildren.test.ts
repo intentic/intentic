@@ -196,6 +196,27 @@ it(`shows an in-process subagent's transcript in its parent's chat from its row`
     expect(row?.classList.contains(`ui-row-select-on`)).toBe(true);
 });
 
+// The view is held per window and only the chat panel prunes it, so a board whose chat is popped out keeps a stale copy
+// once the reader moves on: the ring follows what the chat shows, not that copy, and never lands on row and card both.
+it(`rings the subagent's row alone, and lets it go when the chat moves to another card`, async () => {
+    setAgents([lead, agent(`other`, { title: `other work`, startedAt: 3 })], 100);
+    roster([inProcess(`call-map`, { description: `map the UI` })]);
+    const board = await mountBoard();
+    const card = (title: string): HTMLElement => board.querySelector<HTMLElement>(`[aria-label="Focus agent: ${title}"]`)!;
+    const row = (): HTMLButtonElement => tray(board)!.querySelector<HTMLButtonElement>(`button`)!;
+
+    row().click();
+    await settle();
+    expect(row().classList.contains(`ui-row-select-on`)).toBe(true);
+    expect(card(`ship the release`).closest(`.session-card-on`)).toBeNull();
+
+    card(`other work`).click();
+    await settle();
+    expect(useChat().activeId.value).toBe(`other`);
+    expect(row().classList.contains(`ui-row-select-on`)).toBe(false);
+    expect(card(`other work`).closest(`.session-card-on`)).not.toBeNull();
+});
+
 it(`draws no tray for a card that started nothing`, async () => {
     setAgents([agent(`alone`)], 100);
     const board = await mountBoard();

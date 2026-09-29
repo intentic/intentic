@@ -80,6 +80,16 @@ const { scopeOptions, ownerOptions, ownerScope, projectHidden, scopedHeld } = sc
 followAcross();
 const ring = useCardRing({ mobile, strip: chatStrip, wide: chatWide, runs: workflows.runs });
 const { highlightId, inPane, peeked } = ring;
+// The subagent this window's chat is stepped into, while its parent's column is still what the chat shows. The view is
+// held per window and only the panel prunes it (keepSubagentWhileShown), so with the chat popped out this window's copy
+// outlives the column: read on its own it rings a row the reader has since moved away from.
+const subagentShown = computed(() => {
+    const shown = subagentOnScreen.value;
+    return shown !== undefined && (shown.parentId === highlightId.value || inPane(shown.parentId)) ? shown : undefined;
+});
+// A card or spawned child wears the ring while the chat shows it, unless it is only the column a subagent is shown in:
+// the row pressed is what is selected, not its parent (ChatRowList's rule).
+const ringed = (id: string): boolean => (id === highlightId.value || inPane(id)) && subagentShown.value?.parentId !== id;
 // The subagents each card's runtime ran in-process, which ride in its tray beside the conversations it spawned.
 const roster = useSubagentRoster();
 const lanes = useBoardLanes({ view, scope, filter, drag, agents, roster, selected: highlightId });
@@ -138,7 +148,7 @@ provide(CHILD_ROWS, {
     stateOf: lanes.trayState,
     toggle: lanes.toggleTray,
     // An in-process row is on screen while this window's chat shows its transcript (subagentView.ts).
-    selected: (id) => id === highlightId.value || inPane(id) || subagentOnScreen.value?.id === id,
+    selected: (id) => ringed(id) || subagentShown.value?.id === id,
     needle,
     matchCase,
     idMatchOf,
@@ -188,7 +198,11 @@ const starters = computed(() => boardStarters(workspaceRepos.value.length, works
 <!-- Kept outside the template: a comment inside it makes this multi-root, and dev patches a multi-root subtree
      unoptimized — every slotted child, closed dialogs included, redraws on every board render. -->
 <template>
-    <div ref="boardEl" class="relative flex h-full min-h-0 flex-col">
+    <div ref="boardEl" class="agents-board relative flex h-full min-h-0 flex-col">
+        <!-- Sanctum only: mist at dawn behind the lanes (sanctum.css); the flat canvas wash stays everywhere else. -->
+        <div class="agents-board-backdrop" aria-hidden="true">
+            <div class="agents-board-art"></div>
+        </div>
         <!-- The filter remains usable at narrow /agents widths. -->
         <div class="view-header view-header-wrap flex flex-wrap items-center gap-x-2 gap-y-1 px-3 py-1">
             <div class="flex min-w-0 flex-1 basis-0 items-center gap-2">
@@ -422,7 +436,7 @@ const starters = computed(() => boardStarters(workspaceRepos.value.length, works
                                 callOf(agent),
                                 lane.key,
                                 pendingFor(agent),
-                                agent.id === highlightId || inPane(agent.id),
+                                ringed(agent.id),
                                 snippetOf(agent),
                                 idMatchOf(agent),
                                 needle,
@@ -440,7 +454,7 @@ const starters = computed(() => boardStarters(workspaceRepos.value.length, works
                                     :dense="narrow"
                                     :dragging="draggedId === agent.id && dragging"
                                     :pending="pendingFor(agent)"
-                                    :selected="agent.id === highlightId || inPane(agent.id)"
+                                    :selected="ringed(agent.id)"
                                     :peek="peeked(agent.id)"
                                     :match="snippetOf(agent)"
                                     :id-match="idMatchOf(agent)"
@@ -528,7 +542,7 @@ const starters = computed(() => boardStarters(workspaceRepos.value.length, works
                             :agent="agent"
                             :dense="narrow"
                             :pending="pendingFor(agent)"
-                            :selected="agent.id === highlightId || inPane(agent.id)"
+                            :selected="ringed(agent.id)"
                             :match="snippetOf(agent)"
                             :id-match="idMatchOf(agent)"
                             :query="needle"
