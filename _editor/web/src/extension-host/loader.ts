@@ -55,6 +55,7 @@ let scope = 0;
 const hasUi = (manifest: ExtensionManifest): boolean =>
     (manifest.contributes?.views ?? []).length > 0 ||
     (manifest.contributes?.viewers ?? []).length > 0 ||
+    (manifest.contributes?.sideViews ?? []).length > 0 ||
     (manifest.contributes?.commands ?? []).length > 0;
 
 // Loads settings first only if the manifest declares any, so compiled-ins with none skip a round-trip; then checks

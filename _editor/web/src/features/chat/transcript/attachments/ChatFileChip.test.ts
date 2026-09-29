@@ -121,7 +121,7 @@ it("fades the drawn lines only where the file runs past them", () => {
     expect(whole.querySelector(`[class*="mask-b"]`)).toBeNull();
 });
 
-it("opens the real file in the workspace when pressed", () => {
+it("opens the real file through the surface when pressed", () => {
     const element = mount({ look: LOG });
     element.querySelector(`button`)?.click();
     expect(openFile).toHaveBeenCalledWith(`${STATE_DIR}/x/desktop-setup-20260912-212645.log`);

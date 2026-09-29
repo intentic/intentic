@@ -3,7 +3,7 @@ import { sandboxBlob } from "../../sandbox/client/sandboxClient";
 import { sandboxRpc } from "../../sandbox/client/sandboxRpc";
 import { supportsRoute } from "../../sandbox/overview/useDaemonRoutes";
 import { useEndpoint } from "../../sandbox/secrets/useEndpoint";
-import { scopeQuery, workspaceAgent } from "../health/workspaceScope";
+import { scopeQuery, type ViewScope, workspaceScope } from "../health/workspaceScope";
 import { mediaUrl } from "./mediaUrl";
 
 // Saves workspace entries onto this computer through the browser's own download manager, which streams them to disk:
@@ -29,8 +29,8 @@ const HOLD_MS = 10_000;
 
 // One file from its bytes, for a backend with no media tickets (a folder on this computer, whose file server has only
 // /workspace/raw): read whole into the tab, as far as that route's cap, and saved under the file's own name.
-const handBytes = async (path: string): Promise<void> => {
-    const url = URL.createObjectURL(await sandboxBlob(`/workspace/raw?${scopeQuery(new URLSearchParams({ path })).toString()}`));
+const handBytes = async (path: string, scope: ViewScope): Promise<void> => {
+    const url = URL.createObjectURL(await sandboxBlob(`/workspace/raw?${scopeQuery(new URLSearchParams({ path }), scope).toString()}`));
     const anchor = document.createElement(`a`);
     anchor.href = url;
     anchor.download = basename(path);
@@ -39,24 +39,25 @@ const handBytes = async (path: string): Promise<void> => {
     setTimeout(() => URL.revokeObjectURL(url), HOLD_MS);
 };
 
-/** Starts the download; answers the archive's name when it is one, so the caller can say what is on its way. */
-export const downloadEntries = async (targets: readonly DownloadTarget[]): Promise<string | undefined> => {
+/** Starts the download; answers the archive's name when it is one, so the caller can say what is on its way. `scope`
+ * names whose copy, the Workspace's when absent. */
+export const downloadEntries = async (targets: readonly DownloadTarget[], scope: ViewScope = workspaceScope()): Promise<string | undefined> => {
     const [only] = targets;
     if (only === undefined) {
         return undefined;
     }
     if (targets.length === 1 && only.type === `file`) {
         if (supportsRoute(`workspace.mediaTicket`)) {
-            hand(await mediaUrl(only.path, { download: true }));
+            hand(await mediaUrl(only.path, { download: true, scope }));
         } else {
-            await handBytes(only.path);
+            await handBytes(only.path, scope);
         }
         return undefined;
     }
     // The ticket carries the selection, so the URL stays short however much is selected, and the scope rides in it too.
     const { ticket, filename } = await sandboxRpc.workspace.downloadTicket({
         paths: targets.map((target) => target.path),
-        agent: workspaceAgent.value,
+        agent: scope.agent,
     });
     const base = useEndpoint().daemonBase.value;
     if (base === undefined || base === ``) {

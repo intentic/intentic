@@ -16,7 +16,7 @@ jest.mock("../../../agents/fleet/useAgents", () => ({
 jest.mock("../useChat-view", () => ({ usePaneView: () => ({ conversation: shallowRef({ conversationId: `agent-1` }), streaming: pane.streaming }) }));
 jest.mock("../../../sandbox/client/useSandbox", () => ({ useSandbox: () => ({ reachable: shallowRef(true) }) }));
 jest.mock("../../tools/chatToolSurface", () => ({ useChatSurface: () => ({ watchTerminal: watched }) }));
-jest.mock("../../../preview/previewSurface", () => ({ openPreview: previewed }));
+jest.mock("../../../preview/previewSurface", () => ({ openPreviewBeside: previewed }));
 jest.mock("vue-router", () => ({ useRouter: () => ({}) }));
 
 const { default: ChatLeftRunning } = await import("./ChatLeftRunning.vue");

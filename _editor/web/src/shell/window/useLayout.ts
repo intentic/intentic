@@ -63,6 +63,13 @@ export const DEFAULT_SIDE_PANE_WIDTH = 560;
 const MIN_SIDE_PANE_WIDTH = MIN_PANE_PX;
 const MAX_SIDE_PANE_WIDTH = 4000;
 
+// How much of the side panel's height the things opened beside take while the chat shares the column, as a fraction of
+// it rather than pixels, so the split survives a window resize the way it was drawn.
+const SIDE_SPLIT_KEY = `ui-side-split`;
+export const DEFAULT_SIDE_SPLIT = 0.5;
+const MIN_SIDE_SPLIT = 0.15;
+const MAX_SIDE_SPLIT = 0.85;
+
 // The agent review panel's own file list width, separate from the workspace explorer's since the two never appear
 // together and a review list needs room for full paths.
 const REVIEW_LIST_WIDTH_KEY = `ui-agent-review-list-width`;
@@ -149,6 +156,9 @@ const clampReviewListWidth = (px: number): number => Math.round(Math.max(MIN_REV
 
 const clampSidePaneWidth = (px: number): number => Math.round(Math.max(MIN_SIDE_PANE_WIDTH, Math.min(px, MAX_SIDE_PANE_WIDTH)));
 
+// Two decimals are all a drag can mean, and all the stored string needs.
+const clampSideSplit = (fraction: number): number => Math.round(Math.max(MIN_SIDE_SPLIT, Math.min(fraction, MAX_SIDE_SPLIT)) * 100) / 100;
+
 // Three preference shapes built on definePreference, which owns storage, DOM and cross-window sync; only what a stored
 // string means differs between them.
 
@@ -182,6 +192,14 @@ const chatWidth = widthPref(WIDTH_KEY, clampWidth, defaultChatWidth);
 const sidebarWidth = widthPref(SIDEBAR_WIDTH_KEY, clampSidebarWidth, defaultSidebarWidth);
 const reviewListWidth = widthPref(REVIEW_LIST_WIDTH_KEY, clampReviewListWidth, defaultReviewListWidth);
 const sidePaneWidth = widthPref(SIDE_PANE_WIDTH_KEY, clampSidePaneWidth, () => DEFAULT_SIDE_PANE_WIDTH);
+const sideSplit = definePreference<number>({
+    key: SIDE_SPLIT_KEY,
+    read: (raw) => {
+        const parsed = raw === null ? Number.NaN : Number.parseFloat(raw);
+        return Number.isFinite(parsed) ? clampSideSplit(parsed) : DEFAULT_SIDE_SPLIT;
+    },
+    write: String,
+});
 const sidebarCollapsed = boolPref(SIDEBAR_COLLAPSED_KEY);
 const sidebarPanel = enumPref(SIDEBAR_PANEL_KEY, [`files`, `changes`, `history`] as const, `files`);
 const showIgnored = boolPref(SHOW_IGNORED_KEY);
@@ -251,6 +269,11 @@ const setSidePaneWidth = (px: number): void => {
 
 const resetSidePaneWidth = (): void => {
     setSidePaneWidth(DEFAULT_SIDE_PANE_WIDTH);
+};
+
+// A fraction of the side panel's height, from its seam's drag.
+const setSideSplit = (fraction: number): void => {
+    sideSplit.value = clampSideSplit(fraction);
 };
 
 const setSidebarCollapsed = (collapsed: boolean): void => {
@@ -332,6 +355,7 @@ export function useLayout() {
         sidebarWidth,
         reviewListWidth,
         sidePaneWidth,
+        sideSplit,
         sidebarCollapsed,
         terminalOpen,
         sidebarPanel,
@@ -358,6 +382,7 @@ export function useLayout() {
         resetReviewListWidth,
         setSidePaneWidth,
         resetSidePaneWidth,
+        setSideSplit,
         setSidebarCollapsed,
         toggleSidebar,
         setTerminalOpen,

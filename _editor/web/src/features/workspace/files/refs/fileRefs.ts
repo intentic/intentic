@@ -1,7 +1,7 @@
 import type { WorkspaceTreeEntry, WorkspaceTreeResponse } from "@intentic/api-contract";
 import { rankRefCandidates, referenceTails } from "@intentic/sandbox-contract";
 import { queryClient } from "../../../../lib/queryPersistence";
-import { workspaceAgent } from "../../health/workspaceScope";
+import { type ViewScope, workspaceScope } from "../../health/workspaceScope";
 
 // A file reference is a suffix of the real path, matched against the fetched tree via tail + ranking rules shared with
 // the daemon (@intentic/sandbox-contract). Shared grammar across terminal, markdown and tool-card links; free of the
@@ -14,8 +14,8 @@ export const FILE_REF = /(?<![\w./:@-])(?:[~.]{0,2}\/)?(?:[\w.@+-]+\/)+[\w.@+-]+
 
 // Workspace tree already fetched by the explorer, read by containerRoot and resolveInTree; undefined until the first
 // fetch lands. Filters by scope, since more than one tree can be cached at once (workspaceScope).
-const cachedTree = (): WorkspaceTreeResponse | undefined => {
-    const prefix = [`workspace`, `tree`, workspaceAgent.value ?? `shared`];
+const cachedTree = (scope: ViewScope = workspaceScope()): WorkspaceTreeResponse | undefined => {
+    const prefix = [`workspace`, `tree`, scope.agent ?? `shared`];
     for (const [, data] of queryClient.getQueriesData<WorkspaceTreeResponse>({ queryKey: prefix })) {
         if (data?.root !== undefined && data.root !== ``) {
             return data;
@@ -68,9 +68,10 @@ const fileIndex = (tree: WorkspaceTreeResponse): FileIndex => {
 };
 
 // Matches a reference against the already-held tree, no round trip. undefined means "not answered here" (the walk is
-// capped; misses fall to the daemon's /workspace/resolve), not "no such file".
-export const resolveInTree = (path: string): string | undefined => {
-    const tree = cachedTree();
+// capped; misses fall to the daemon's /workspace/resolve), not "no such file". `scope` names whose tree, the
+// Workspace's when absent.
+export const resolveInTree = (path: string, scope?: ViewScope): string | undefined => {
+    const tree = cachedTree(scope);
     if (tree === undefined) {
         return undefined;
     }

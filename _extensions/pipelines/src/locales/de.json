@@ -84,6 +84,12 @@
         "runs": "{runs} Läufe",
         "thisRepo": "dieses Repo"
     },
+    "runSide": {
+        "notListed": "Lauf #{number} von {repo} gehört nicht zu den letzten Läufen, die die Sandbox vorhält.",
+        "openOn": "Auf {forge} öffnen",
+        "run": "Lauf {number}",
+        "unreadable": "Dieser Tab nennt keinen Lauf."
+    },
     "tip": {
         "attempt": "Versuch",
         "branch": "Branch",

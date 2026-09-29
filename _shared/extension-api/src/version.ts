@@ -127,4 +127,14 @@
 // extension tool was listed with none, which Claude Code reads as a destructive write and runs alone, so a read-only
 // tool was serialised and looked dangerous. Additive: a tool that declares nothing is listed as before, and an older
 // host ignores the field. The recorded surface grows a grain for it, `ToolDefinition`'s own fields (`toolDefinition`).
-export const extensionApiVersion = "2.21.0";
+// 2.22.0 gives an extension the editor's side panel: `contributes.sideViews` and `api.sideViews`, something it can show
+// for one input (a CI run, a workflow run) beside whichever section the reader is in, opened as a peek the next one
+// replaces unless kept, with "Open in …" to its own view. Until now an extension drew only whole routes, so a run
+// mentioned in a conversation could be looked at only by leaving the conversation. A side view whose manifest entry says
+// `links: true` may also claim links the chat renders (`claim`), which then open beside the chat instead of in a new
+// browser tab. Additive: nothing changes for an extension that declares none. The recorded surface grows two grains,
+// `api.sideViews`' own members (`sideViewsApi`) and SideViewRegistration's own fields (`sideViewRegistration`), since
+// the block and the registration are where this surface will grow. Its manifest digest also records a capability card's
+// `hosts` (the hosts its credential is meant for, which the sandbox limits the `{{secret:…}}` reference to), added
+// under 2.21.0 without a version: an older host drops the list and leaves the reference unlimited, as before it.
+export const extensionApiVersion = "2.22.0";

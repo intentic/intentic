@@ -15,12 +15,16 @@ const {
     stages,
     recurring,
     fill = false,
+    direction = `LR`,
 } = defineProps<{
     stages: readonly PipelineStage[];
     // Job name to consecutive failing runs; the single most actionable fact about a row.
     recurring: ReadonlyMap<string, number>;
     // Fill the parent instead of sizing an inline band: what the full-screen dialog wants.
     fill?: boolean;
+    // Which way the stages run. `TB` stacks them for a column narrower than the run is long (the side panel), where
+    // left to right would shrink every card past reading; only a filled graph asks for it, the band is sized for `LR`.
+    direction?: `LR` | `TB`;
 }>();
 // Row owns the dialog; the canvas only asks. A filled instance already has the window, no button needed.
 defineEmits<{ expand: [] }>();
@@ -145,6 +149,7 @@ const focusedCard = computed(() => dag.value.nodes.find((node) => node.data.jobs
             :rank-sep="RANK_SEP"
             :node-sep="NODE_SEP"
             edge-shape="elbow"
+            :direction="direction"
             :magnify="false"
             :readable-zoom="0.8"
             :min-zoom="0.15"

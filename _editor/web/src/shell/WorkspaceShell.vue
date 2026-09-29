@@ -6,12 +6,14 @@ import { watchAgentsScope } from "../features/agents/board/agentsTile";
 import { useExtensionHost } from "../extension-host/useExtensionHost";
 import { useMainWindow } from "./window/mainWindow";
 import { openWorkspaceRef } from "../features/workspace/files/refs/openFileRef";
+import { openPreviewBeside } from "../features/preview/previewSurface";
+import { revealSideView } from "./side/sideViews";
 import { prefetchViewsAtIdle } from "../router/prefetch";
 import { useChat } from "../features/chat/run/useChat";
 import { mobileChatPath } from "./tabRoots";
 import { useGuestFence } from "./guestFence";
 
-// Persistent post-login chrome, split by form factor: ShellDesktop (rail, chat, terminal) under a
+// Persistent post-login chrome, split by form factor: ShellDesktop (rail, side panel, terminal) under a
 // pointer, ShellMobile (tab bar, full-screen views) below 768px. State lives in module composables, so
 // the breakpoint swap doesn't restart it; liveness and the panels mount above the router (WorkspaceRuntime.vue).
 
@@ -30,11 +32,15 @@ onMounted(prefetchViewsAtIdle);
 const router = useRouter();
 const route = useRoute();
 
-// Runs an errand a popped-out panel can't: opening a file or taking a route. Announced only from here,
-// since only a mounted shell can promise there's somewhere to put it (mainWindow.ts).
+// Runs an errand a popped-out panel can't: opening a file, showing something beside, or taking a route. Announced only
+// from here, since only a mounted shell can promise there's somewhere to put it (mainWindow.ts).
 useMainWindow((errand) => {
     if (errand.kind === `file`) {
         void openWorkspaceRef(errand.path, errand.line, errand.scope);
+    } else if (errand.kind === `preview`) {
+        openPreviewBeside(router, errand.target);
+    } else if (errand.kind === `side`) {
+        revealSideView(errand.view, errand.input, { keep: errand.keep });
     } else {
         void router.push(errand.path);
     }

@@ -2,14 +2,19 @@
 // what is asserted is what is on screen.
 import "@intentic/testing/dom";
 import type { WorkspaceFileResponse } from "@intentic/api-contract";
-import { type App, computed, createApp, defineComponent, h, nextTick, ref, useSlots } from "vue";
+import { type App, computed, createApp, defineComponent, h, nextTick, provide, ref, useSlots } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
-// The daemon's two reads, stood in for at the viewer's seams: a file's text window, and its bytes.
+// The daemon's two reads, stood in for at the viewer's seams: a file's text window, and its bytes. Each text read says
+// whose copy it asked for, since a surface may read another than the Workspace's.
 let answer: (path: string) => WorkspaceFileResponse = (path) => ({ present: false, path });
+const reads: { path: string; agent: string | undefined }[] = [];
 jest.mock("../files/fileWindow", () => ({
     FILE_WINDOW_BYTES: 4 * 1024 * 1024,
-    readFileWindow: (path: string) => Promise.resolve(answer(path)),
+    readFileWindow: (path: string, opts?: { scope?: { agent: string | undefined } }) => {
+        reads.push({ path, agent: opts?.scope?.agent });
+        return Promise.resolve(answer(path));
+    },
 }));
 jest.mock("../../sandbox/client/sandboxClient", () => ({
     sandboxBlob: (path: string) => Promise.resolve(new Blob([`bytes of ${path}`])),
@@ -44,7 +49,8 @@ jest.mock("./DerivedTextView.vue", () => ({
 const { default: FileViewer } = await import("./FileViewer.vue");
 const { registerViewer } = await import("../../../core-views/viewerRegistry");
 const { externalDirtyPaths } = await import("../files/externalDirty");
-const { workspaceAgent } = await import("../health/workspaceScope");
+const { VIEW_SCOPE, workspaceAgent } = await import("../health/workspaceScope");
+const { useEditBuffers } = await import("../files/useEditBuffers");
 
 // Where a `path` viewer said its document's unsaved edits go, kept past the viewer the way ONLYOFFICE's kept editor
 // keeps it; and how many times a viewer was set up, which is how often the tab drew it anew.
@@ -77,10 +83,18 @@ const register = (extensions: readonly string[], fetch: `blob` | `path`): void =
 };
 
 let app: App | undefined;
-const mount = (path: string): HTMLElement => {
+// `readOnly` draws it as a look; `scope` is the copy a surface around it names (the side panel's), none for the Workspace's.
+const mount = (path: string, options: { readOnly?: true; scope?: string } = {}): HTMLElement => {
     const element = document.createElement(`div`);
     document.body.append(element);
-    app = createApp({ render: () => h(FileViewer, { path }) });
+    app = createApp({
+        setup: () => {
+            if (options.scope !== undefined) {
+                provide(VIEW_SCOPE, ref(options.scope));
+            }
+            return () => h(FileViewer, { path, readOnly: options.readOnly });
+        },
+    });
     app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.mount(element);
@@ -116,6 +130,7 @@ afterEach(() => {
     reportUnsaved?.(false);
     reportUnsaved = undefined;
     setups = 0;
+    reads.length = 0;
     answer = (path) => ({ present: false, path });
     document.body.innerHTML = ``;
 });
@@ -173,6 +188,60 @@ describe(`a file that isn't UTF-8`, () => {
         expect(element.querySelector(`.code-view`)?.getAttribute(`data-editable`)).toBe(`true`);
         expect(element.textContent).not.toContain(`isn't UTF-8`);
         expect(element.querySelector(`[aria-label="Save file"]`)).not.toBeNull();
+    });
+});
+
+// The side panel's peek: a look at a file beside the reader's section, which never edits, since the Workspace may hold
+// the same path open with unsaved work in the one buffer a path has.
+describe(`a look`, () => {
+    it(`shows the file with no caret and no Save, and says where editing happens`, async () => {
+        answer = (path) => text(path, `export const a = 1;`);
+        const element = mount(`src/a.ts`, { readOnly: true });
+        await settle();
+        expect(element.querySelector(`.code-view`)?.getAttribute(`data-editable`)).toBe(`false`);
+        expect(element.querySelector(`.code-view`)?.textContent).toBe(`export const a = 1;`);
+        expect(element.querySelector(`[aria-label="Save file"]`)).toBeNull();
+        expect(element.textContent).toContain(`Read-only`);
+    });
+
+    it(`writes no baseline and shows disk, even with unsaved work on the path elsewhere`, async () => {
+        const edit = useEditBuffers();
+        edit.setBaseline(`src/b.ts`, `old`);
+        edit.setBuffer(`src/b.ts`, `mine, unsaved`);
+        answer = (path) => text(path, `new on disk`);
+        const element = mount(`src/b.ts`, { readOnly: true });
+        await settle();
+        expect(element.querySelector(`.code-view`)?.textContent).toBe(`new on disk`);
+        expect(edit.baselineOf(`src/b.ts`)).toBe(`old`);
+        expect(edit.bufferOf(`src/b.ts`)).toBe(`mine, unsaved`);
+        edit.forget(`src/b.ts`);
+    });
+
+    it(`tells a viewer that edits through its own backend that it may not write`, async () => {
+        register([`docx`], `path`);
+        const element = mount(`brief.docx`, { readOnly: true });
+        await settle();
+        expect(element.querySelector(`.fake-viewer`)?.getAttribute(`data-read-only`)).toBe(`true`);
+    });
+});
+
+// A surface naming a copy of its own reads that copy, and leaves the Workspace's scope where it was.
+describe(`a copy named by the surface around the viewer`, () => {
+    it(`reads the conversation's checkout it names, read-only, without switching the Workspace`, async () => {
+        answer = (path) => text(path, `plan`);
+        const element = mount(`docs/plan.md`, { scope: `c-9` });
+        await settle();
+        expect(reads).toEqual([{ path: `docs/plan.md`, agent: `c-9` }]);
+        expect(element.querySelector(`.markdown-view`)?.getAttribute(`data-editable`)).toBe(`false`);
+        expect(workspaceAgent.value).toBeUndefined();
+    });
+
+    it(`reads the Workspace's own scope when nothing names one`, async () => {
+        workspaceAgent.value = `c-2`;
+        answer = (path) => text(path, `plan`);
+        mount(`docs/plan.md`);
+        await settle();
+        expect(reads).toEqual([{ path: `docs/plan.md`, agent: `c-2` }]);
     });
 });
 

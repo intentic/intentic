@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, Icon, ResizeSeam, useDevice, ui } from "@intentic/ui";
+import { Button, Icon, useDevice, ui } from "@intentic/ui";
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { CAPACITY_RAIL_PX, hasCapacity, railFitsBeside } from "./chatCapacity";
 import { accountsLoaded } from "../accounts/providerAccounts";
@@ -12,8 +12,8 @@ import { quickBarTranscript, chatOnRail, chatWide } from "./chatPanelLayout";
 import { useChat } from "../run/useChat";
 import { useChatFloating } from "./chatFloating";
 import { useWorkflowRuns } from "../../agents/fleet/useWorkflowRuns";
-import { defaultChatWidth, maxChatWidth, MIN_CHAT_WIDTH, MIN_PANE_PX, useLayout } from "../../../shell/window/useLayout";
-import { toAppPx, toScreenPx, uiLength } from "../../../shell/window/uiScale";
+import { MIN_PANE_PX, useLayout } from "../../../shell/window/useLayout";
+import { toAppPx, uiLength } from "../../../shell/window/uiScale";
 import ChatPane from "./ChatPane.vue";
 import ChatSubagentPane from "./subagent/ChatSubagentPane.vue";
 import { keepSubagentWhileShown, subagentOnScreen } from "./subagent/subagentView";
@@ -24,9 +24,9 @@ import ChatTabsMobile from "../tabs/ChatTabsMobile.vue";
 import { useT } from "@intentic/ui/i18n";
 
 // The shared assistant: the frame around one or more chats (each conversation is a ChatPane). Owns what belongs
-// to the panel, not any one chat: the switcher bar, the pop-out-window button, the resize handle. All state lives
-// in the useChat singleton, so a transcript persists across workspace areas; on a wide surface the bar becomes a
-// left rail and panes stand side by side.
+// to the panel, not any one chat: the switcher bar and the pop-out-window button. Docked, it lives in the side panel,
+// which owns the column's width and its resize seam (shell/side). All state lives in the useChat singleton, so a
+// transcript persists across workspace areas; on a wide surface the bar becomes a left rail and panes stand side by side.
 
 // `tabs: false` draws no header of its own, for the one caller (mobile agent route) whose surface already has
 // one — everything that bar offered is a tap away on the same form factor. A prop, not a `mobile` check, since
@@ -42,7 +42,7 @@ const layout = useLayout();
 const { here: floating, fit } = useChatFloating();
 const { mobile } = useDevice();
 
-// The panel's own element; the left-edge resize handle measures against it.
+// The panel's own element; its width decides whether the capacity rail fits.
 const root = ref<HTMLElement>();
 
 // The strip, asked for its transcript (ChatQuickBar's handle). It withholds the turns until then, so a transcript is this
@@ -242,13 +242,6 @@ watch(
     { flush: `post`, immediate: true },
 );
 
-// The seam speaks pointer coordinates; the stored width is app pixels (uiScale). Reports a size, not a position,
-// since a position read from the pointer-to-edge distance is only correct while the chat is flush to the window's
-// right edge.
-const seamWidth = computed<number>({
-    get: () => toScreenPx(layout.chatWidth.value),
-    set: (px) => layout.setChatWidth(toAppPx(px)),
-});
 </script>
 
 <template>
@@ -262,18 +255,6 @@ const seamWidth = computed<number>({
         :class="[chatWide ? 'flex-row' : 'flex-col', ground]"
         :style="{ '--capacity-rail': showsRail ? uiLength(CAPACITY_RAIL_PX) : `0px` }"
     >
-        <!-- An overlay seam (`place="edge"`), not in-flow, since docked the panel's own axis is the bar-then-panes column, not this border. -->
-        <ResizeSeam
-            v-if="!chatWide && !mobile && !bar"
-            v-model="seamWidth"
-            place="edge"
-            pane="after"
-            :min="toScreenPx(MIN_CHAT_WIDTH)"
-            :max="toScreenPx(maxChatWidth())"
-            :reset="toScreenPx(defaultChatWidth())"
-            :title="t(`ui.resizeSeam.doubleClickResets`)"
-        />
-
         <template v-if="tabs && !bar">
             <ChatTabsMobile v-if="mobile" @select="setActive" @close="closeTabs" @open="openConversation" />
             <ChatTabs v-else @select="setActive" @close="closeTabs" @open="openConversation" />

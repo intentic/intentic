@@ -1,6 +1,6 @@
 import type { WorkspaceFileResponse } from "@intentic/api-contract";
 import { sandboxRpc } from "../../sandbox/client/sandboxRpc";
-import { workspaceAgent } from "../health/workspaceScope";
+import { type ViewScope, workspaceScope } from "../health/workspaceScope";
 
 // The only way the browser reads workspace text: a bounded window, never the whole file. The daemon clamps `limit` to
 // its own MAX_TEXT_BYTES and reports the range it served, so this is a request, not a guarantee. Larger than
@@ -8,13 +8,14 @@ import { workspaceAgent } from "../health/workspaceScope";
 export const FILE_WINDOW_BYTES = 4 * 1024 * 1024;
 
 // Negative `offset` counts from the file's end (what a tail wants, without a stale stat). A missing path resolves
-// `present: false`; only a refused or unreachable read throws. `scope` reads another tree than the one on screen
-// (`{ agent: undefined }` is the shared one), for a reference that names its own.
+// `present: false`; only a refused or unreachable read throws. `scope` reads another tree than the one on screen (a
+// reference that names its own, a surface that reads its own copy); `{ agent: undefined }` is the shared one, and absent
+// is the Workspace's.
 export const readFileWindow = (
     path: string,
-    opts?: { offset?: number; limit?: number; signal?: AbortSignal; scope?: { readonly agent: string | undefined } },
+    opts?: { offset?: number; limit?: number; signal?: AbortSignal; scope?: ViewScope },
 ): Promise<WorkspaceFileResponse> =>
     sandboxRpc.workspace.file(
-        { path, limit: opts?.limit ?? FILE_WINDOW_BYTES, offset: opts?.offset, agent: opts?.scope === undefined ? workspaceAgent.value : opts.scope.agent },
+        { path, limit: opts?.limit ?? FILE_WINDOW_BYTES, offset: opts?.offset, agent: (opts?.scope ?? workspaceScope()).agent },
         { signal: opts?.signal },
     );

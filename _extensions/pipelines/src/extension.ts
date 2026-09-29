@@ -1,8 +1,9 @@
 import type { CapabilityFacts, ExtensionContext, IntenticApi } from "@intentic/extension-api";
-import { ciBadge, startCiAttention } from "./ciAttention";
+import { ciBadge, ciRunsNow, startCiAttention } from "./ciAttention";
 import { ciRunsQuery } from "./ciRunsQuery";
 import { bindHost } from "./host";
 import { t } from "./i18n.js";
+import { claimRunUrl, describeRun, RUN_SIDE_VIEW, runHome } from "./runSide";
 
 const forgeConnected = (capabilities: readonly CapabilityFacts[]): boolean =>
     capabilities.some(
@@ -34,6 +35,15 @@ export const activate = (api: IntenticApi, context: ExtensionContext): void => {
             // Board's initial read, sharing the entry usePipelines reads and the badge fills; scheduled at low priority.
             warm: () => [ciRunsQuery()],
             view: async () => (await import(`./PipelinesView.vue`)).default,
+        }),
+        // One run beside whatever the reader is doing: opened from a run link in a chat (the forge page an agent or a
+        // ci-fix errand names), with the board one "Open in Pipelines" away.
+        api.sideViews.register({
+            id: RUN_SIDE_VIEW,
+            describe: (input) => describeRun(input, ciRunsNow()),
+            home: runHome,
+            claim: (url) => claimRunUrl(url, ciRunsNow()),
+            view: async () => (await import(`./PipelineRunSide.vue`)).default,
         }),
     );
 };

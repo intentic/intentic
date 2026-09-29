@@ -1103,7 +1103,7 @@
         },
         "chatFileChip": {
             "notShown": "not shown",
-            "openInWorkspace2": "Open in the workspace",
+            "openFile": "Open the file",
             "removeAttachment": "Remove attachment"
         },
         "chatForkCut": {
@@ -1211,6 +1211,7 @@
             "keepFutureWorkOn": "Keep future work on the branch",
             "noKeepPlanning": "No, keep planning",
             "notNow": "Not now",
+            "openBeside": "Open beside",
             "openBrowser": "Open the browser",
             "openSetup": "Open setup",
             "openTerminal": "Open the terminal",
@@ -1777,6 +1778,7 @@
             "keepOpen": "Keep open",
             "nextChatReplaces": "Next chat replaces it",
             "openFile": "Open file",
+            "openFileNamed": "Open {name}",
             "reconnectNeeded": "Reconnect needed",
             "showTerminal": "Show terminal",
             "showToolCalls": "Show tool calls",
@@ -1797,7 +1799,6 @@
             "searchChatsEllipsis": "Search chats…",
             "chatTitle": "Chat title",
             "keepChatOpen": "Keep this chat open",
-            "openInWorkspace": "Open {name} in the workspace",
             "moveChatIntoNewWindow": "Move chat into new window",
             "closeFinished": "Close Finished",
             "closeAll": "Close All",
@@ -4705,6 +4706,23 @@
             "tunnels": "Tunnel | Tunnels",
             "vpnConnected": "VPN connected"
         },
+        "sidePanel": {
+            "closeAll": "Close All",
+            "closeOthers": "Close Others",
+            "doubleClickToKeep": "Double-click to keep",
+            "fold": "Fold",
+            "foldNote": "The chat below gets the room",
+            "gone": "{name} is no longer here",
+            "goneNote": "It was moved or deleted after it was mentioned.",
+            "label": "Side panel",
+            "openIn": "Open in {section}",
+            "openInSection": "Open in Its Section",
+            "previous": "Previous",
+            "tabs": "Opened beside",
+            "unavailable": "Not available",
+            "unavailableNote": "The extension that shows it is off or was removed.",
+            "unfold": "Unfold"
+        },
         "useNavigationCommands": {
             "add": "Add…"
         },
@@ -5355,6 +5373,7 @@
         },
         "fileViewer": {
             "copyFileContent": "Copy file content",
+            "editIn": "Edit it in {section}",
             "extractToEdit": "Extract to edit",
             "fileChangedOnDisk": "This file changed on disk. Your unsaved edits are preserved.",
             "hideComments": "Hide comments",
@@ -5365,6 +5384,7 @@
             "pageSealed": "Sealed: no network, no logins",
             "preview": "Preview",
             "readAsText": "Read as text",
+            "readOnlyHere": "Read only here",
             "reloadDisk": "Reload from disk",
             "saveChanges": "Save changes",
             "saved": "Saved",

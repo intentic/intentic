@@ -11,6 +11,7 @@ export const SETTINGS = `Settings`;
 export const WORKSPACE = `Workspace`;
 export const TERMINAL = `Terminal`;
 export const CHAT = `Chat`;
+export const SIDE_PANEL = `Side Panel`;
 export const PREVIEW = `Preview`;
 export const AGENTS = `Agents`;
 export const ACCOUNT = `Account`;

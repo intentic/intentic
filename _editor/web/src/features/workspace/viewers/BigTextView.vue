@@ -6,6 +6,7 @@ import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { FILE_WINDOW_BYTES, readFileWindow } from "../files/fileWindow";
 import { changeEpochOf } from "../changes/live/useWorkspaceLive";
 import { RAW_MAX_BYTES } from "../explorer/fileType";
+import { useViewScope } from "../health/workspaceScope";
 import CodeView from "./CodeView.vue";
 import { useT } from "@intentic/ui/i18n";
 
@@ -17,6 +18,8 @@ import { useT } from "@intentic/ui/i18n";
 const t = useT();
 
 const { path, first, lang } = defineProps<{ path: string; first: WorkspaceFileWindow; lang?: string }>();
+// Whose copy the windows are read from: the surface's, like the first window its parent read.
+const viewAgent = useViewScope();
 const emit = defineEmits<{ download: [] }>();
 
 // Text kept while following; past this it reseeds from the tail instead of growing the model unbounded.
@@ -53,7 +56,7 @@ const read = async (offset: number, limit?: number): Promise<WorkspaceFileWindow
     inFlight = controller;
     busy.value = true;
     try {
-        const window = await readFileWindow(path, { offset, limit, signal: controller.signal });
+        const window = await readFileWindow(path, { offset, limit, signal: controller.signal, scope: { agent: viewAgent.value } });
         // Deleted while being followed: view keeps what it already holds rather than blanking on the reader.
         if (!window.present) {
             error.value = `That file is no longer there.`;

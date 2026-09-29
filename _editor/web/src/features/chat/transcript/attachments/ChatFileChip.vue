@@ -178,7 +178,7 @@ onBeforeUnmount(() => clearTimeout(timer));
             :type="openable ? `button` : undefined"
             class="relative flex min-w-0 flex-1 flex-col gap-1 text-left"
             :class="[framed ? `px-2 py-1.5` : ``, openable ? `cursor-pointer` : ``]"
-            :aria-label="openable ? t(`chat.words.openInWorkspace`, { name }) : undefined"
+            :aria-label="openable ? t(`chat.words.openFileNamed`, { name }) : undefined"
             @click="openable && opening(open)"
             @focus="onFocus"
             @blur="onBlur"
@@ -231,7 +231,7 @@ onBeforeUnmount(() => clearTimeout(timer));
                 <div v-if="openable" class="shrink-0 border-t border-line px-3 py-1">
                     <Button type="button" size="small" :text="true" class="w-full" @click="opening(open)">
                         <Icon name="external-link" />
-                        {{ t(`chat.chatFileChip.openInWorkspace2`) }}
+                        {{ t(`chat.chatFileChip.openFile`) }}
                     </Button>
                 </div>
             </div>

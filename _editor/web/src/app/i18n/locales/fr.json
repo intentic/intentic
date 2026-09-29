@@ -1019,7 +1019,7 @@
         },
         "chatFileChip": {
             "notShown": "non affiché",
-            "openInWorkspace2": "Ouvrir dans l'espace de travail",
+            "openFile": "Ouvrir le fichier",
             "removeAttachment": "Retirer la pièce jointe"
         },
         "chatForkCut": {
@@ -1127,6 +1127,7 @@
             "keepFutureWorkOn": "Retenir le travail à venir sur la branche",
             "noKeepPlanning": "Non, continue à planifier",
             "notNow": "Pas maintenant",
+            "openBeside": "Ouvrir à côté",
             "openBrowser": "Ouvrir le navigateur",
             "openSetup": "Ouvrir l'installation",
             "openTerminal": "Ouvrir le terminal",
@@ -1639,6 +1640,7 @@
             "keepOpen": "Garder ouvert",
             "nextChatReplaces": "Le prochain chat le remplace",
             "openFile": "Ouvrir le fichier",
+            "openFileNamed": "Ouvrir {name}",
             "reconnectNeeded": "Reconnexion requise",
             "showTerminal": "Voir le terminal",
             "showToolCalls": "Afficher les appels d'outils",
@@ -1659,7 +1661,6 @@
             "searchChatsEllipsis": "Rechercher des chats…",
             "chatTitle": "Titre du chat",
             "keepChatOpen": "Garder ce chat ouvert",
-            "openInWorkspace": "Ouvrir {name} dans l'espace de travail",
             "moveChatIntoNewWindow": "Déplacer le chat dans une nouvelle fenêtre",
             "closeFinished": "Fermer les terminés",
             "closeAll": "Tout fermer",
@@ -4124,6 +4125,23 @@
             "tunnels": "Tunnel | Tunnels",
             "vpnConnected": "VPN connecté"
         },
+        "sidePanel": {
+            "closeAll": "Tout fermer",
+            "closeOthers": "Fermer les autres",
+            "doubleClickToKeep": "Double-clic pour garder",
+            "fold": "Replier",
+            "foldNote": "Le chat en dessous prend la place",
+            "gone": "{name} n'est plus là",
+            "goneNote": "Déplacé ou supprimé après avoir été mentionné.",
+            "label": "Panneau latéral",
+            "openIn": "Ouvrir dans {section}",
+            "openInSection": "Ouvrir dans sa section",
+            "previous": "Précédent",
+            "tabs": "Ouvert à côté",
+            "unavailable": "Indisponible",
+            "unavailableNote": "L'extension qui l'affiche est désactivée ou a été supprimée.",
+            "unfold": "Déplier"
+        },
         "useNavigationCommands": {
             "add": "Ajouter…"
         },
@@ -4705,6 +4723,7 @@
         },
         "fileViewer": {
             "copyFileContent": "Copier le contenu du fichier",
+            "editIn": "Modifiez-le dans {section}",
             "extractToEdit": "Extraire pour modifier",
             "fileChangedOnDisk": "Ce fichier a changé sur le disque. Vos modifications non enregistrées sont préservées.",
             "hideComments": "Masquer les commentaires",
@@ -4714,6 +4733,7 @@
             "pageSealed": "Isolée : ni réseau ni session",
             "preview": "Aperçu",
             "readAsText": "Lire en texte",
+            "readOnlyHere": "Lecture seule ici",
             "reloadDisk": "Recharger depuis le disque",
             "saveChanges": "Enregistrer",
             "saved": "Enregistré",

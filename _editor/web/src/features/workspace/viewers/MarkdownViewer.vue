@@ -5,7 +5,7 @@ import { computed, inject, ref, watch } from "vue";
 import { fileLinkDecorator } from "../../../lib/markdown/renderMarkdown";
 import { useLayout } from "../../../shell/window/useLayout";
 import { openFileRefFromEvent } from "../files/refs/openFileRef";
-import { workspaceAgent } from "../health/workspaceScope";
+import { useViewScope } from "../health/workspaceScope";
 import { picture } from "../home/thumbnails";
 import type { LineJump } from "../tabs/workspaceTabs";
 import CodeView from "./CodeView.vue";
@@ -45,8 +45,9 @@ const editing = computed(() => editable === true && layout.editMode.value && vie
 // Held as a computed so identity is stable and the component re-parses only when the decorator changes; a doc
 // cross-referencing others (README → ARCHITECTURE.md) navigates within the reader's own scope. A picture beside the
 // document is drawn from its own bytes in that scope: the cache is read inside the parse, which redraws when they land.
+const viewAgent = useViewScope();
 const decorate = computed<MarkdownDecorator>(() => {
-    const agent = workspaceAgent.value;
+    const agent = viewAgent.value;
     const links = fileLinkDecorator({
         dir: path.slice(0, path.lastIndexOf(`/`) + 1),
         agent,

@@ -22,7 +22,7 @@ import { useVocabulary } from "../../../core-views/vocabulary";
 import { useMonaco } from "../files/useMonaco";
 import { changeEpochOf } from "../changes/live/useWorkspaceLive";
 import { useWorkspaceTree } from "../explorer/useWorkspaceTree";
-import { scopeQuery, workspaceAgent } from "../health/workspaceScope";
+import { scopeQuery, useViewScope, type ViewScope } from "../health/workspaceScope";
 import { useScopeTitle } from "../health/scopeTitle";
 import BigTextView from "./BigTextView.vue";
 import CodeView from "./CodeView.vue";
@@ -48,9 +48,12 @@ import { useT } from "@intentic/ui/i18n";
 // not the tree entry's, decides editable vs. windowed text; useLatest and an AbortController drop stale reads.
 
 // `line` = jump the viewer to this line (a content-search match); undefined for a plain open.
+// `readOnly` = a look, never an editor: the side panel's peek, where a second editor on a path the Workspace may hold open
+// would fight it over the path's one edit buffer. The file is read from disk and shown with no caret, no baseline
+// written and no dirty dot; editing is the Workspace's.
 const t = useT();
 
-const { path, meta, line } = defineProps<{ path: string; meta?: WorkspaceTreeEntry; line?: LineJump }>();
+const { path, meta, line, readOnly = false } = defineProps<{ path: string; meta?: WorkspaceTreeEntry; line?: LineJump; readOnly?: boolean }>();
 // Fires when the file is gone on disk, so the parent closes the tab; skipped for a dirty file (staleOnDisk).
 const emit = defineEmits<{ gone: [path: string] }>();
 
@@ -84,10 +87,14 @@ const lossy = ref(false);
 const reloadNonce = ref(0);
 // Edit buffers: the read trigger's dirty-guard below reads this, so it must exist before the watch.
 const edit = useEditBuffers();
+// Whose copy this surface reads: the Workspace's scope, unless the surface around it names another (the side panel).
+const viewAgent = useViewScope();
+const viewScope = computed<ViewScope>(() => ({ agent: viewAgent.value }));
 // Warms Monaco + grammar alongside the fetch, so CodeView paints coloured immediately, no flash.
 const { ensureMonaco, ensureLanguage } = useMonaco();
 
-const readBlob = (target: string): Promise<Blob> => sandboxBlob(`/workspace/raw?${scopeQuery(new URLSearchParams({ path: target })).toString()}`);
+const readBlob = (target: string): Promise<Blob> =>
+    sandboxBlob(`/workspace/raw?${scopeQuery(new URLSearchParams({ path: target }), viewScope.value).toString()}`);
 
 // A backend that mints no media tickets (a folder on this computer, whose file server has only /workspace/raw) plays a
 // recording from its bytes instead, through an object URL held for the one file on screen and let go with it.
@@ -100,7 +107,7 @@ const letGo = (): void => {
 };
 const mediaSource = async (target: string): Promise<string> => {
     if (supportsRoute(`workspace.mediaTicket`)) {
-        return mediaUrl(target);
+        return mediaUrl(target, { scope: viewScope.value });
     }
     const blob = await readBlob(target);
     letGo();
@@ -120,7 +127,7 @@ const pathViewerProps = (target: string, agent: string | undefined): PathViewerP
     if (agent !== undefined) {
         props.agent = agent;
     }
-    if (!writableHere(target)) {
+    if (readOnly || !writableHere(target)) {
         props.readOnly = true;
     }
     return props;
@@ -161,7 +168,7 @@ const gone = (err: unknown): boolean => err instanceof FileGone;
 const readText = async (target: string): Promise<WorkspaceFileWindow> => {
     reading?.abort();
     reading = new AbortController();
-    const window = await readFileWindow(target, { signal: reading.signal });
+    const window = await readFileWindow(target, { signal: reading.signal, scope: viewScope.value });
     if (!window.present) {
         throw new FileGone();
     }
@@ -224,6 +231,31 @@ const reconcileOpenFile = (currentPath: string): void => {
     );
 };
 
+// A look's answer to the file changing on disk: the new text, remounted, and nothing written to any buffer.
+const refreshLook = (currentPath: string): void => {
+    const isLatest = latest();
+    readText(currentPath).then(
+        (window) => {
+            if (!isLatest() || window.content === text.value) {
+                return;
+            }
+            lossy.value = decodedLossily(window);
+            text.value = window.content;
+            reloadNonce.value++;
+        },
+        (err) => {
+            if (!isLatest() || superseded(err)) {
+                return;
+            }
+            if (gone(err)) {
+                emit(`gone`, currentPath);
+                return;
+            }
+            error.value = errorMessage(err, `Could not load the file.`);
+        },
+    );
+};
+
 // Which viewer claims this file's extension, read where the watch below tracks it: resolveOpenFile reads the registry
 // inside the callback, where nothing is tracked, so a viewer registering after the tab opened (an extension activating
 // late, a restored tab, a local window's one document) would otherwise leave it on "no preview" for good. Named by what
@@ -238,7 +270,7 @@ type Trigger = readonly [string, unknown, string | undefined, string | undefined
 // Whether a refire is the same file in the same scope, claimed by the same viewer, changing on disk, rather than another
 // file or another surface taking the tab.
 const sameFileRefire = (previous: Trigger | undefined, currentPath: string): boolean =>
-    previous !== undefined && currentPath === previous[0] && workspaceAgent.value === previous[2] && claimed.value === previous[3];
+    previous !== undefined && currentPath === previous[0] && viewAgent.value === previous[2] && claimed.value === previous[3];
 // A `path` viewer's backend either made the change (its own save) or reads it on the next open; remounting it would
 // reload an editor mid-session.
 const keepsOwnSurface = (current: OpenFile): boolean => current.kind === `viewer` && current.viewer.fetch === `path`;
@@ -247,8 +279,13 @@ watch(
     // changeEpochOf is the complete change signal; the tree's size isn't a trigger, or a post-save refetch would
     // race markSaved. Scope is a trigger too: the same path in another copy is a different file. So is the claiming
     // viewer: one registering (or going) re-resolves the tab.
-    (): Trigger => [path, changeEpochOf(path), workspaceAgent.value, claimed.value] as const,
+    (): Trigger => [path, changeEpochOf(path), viewAgent.value, claimed.value] as const,
     ([currentPath], previous, onCleanup) => {
+        // A look has no buffer to reconcile against: it re-reads and shows what disk holds now.
+        if (readOnly && sameFileRefire(previous, currentPath) && (open.value.kind === `code` || open.value.kind === `markdown`)) {
+            refreshLook(currentPath);
+            return;
+        }
         // Same-path re-fire in an editable view reconciles by content; anything else resets and re-fetches below.
         if (sameFileRefire(previous, currentPath) && (open.value.kind === `code` || open.value.kind === `markdown`)) {
             reconcileOpenFile(currentPath);
@@ -319,8 +356,9 @@ watch(
                 // Settles the tokenizer with the real size now known; set before `text` so CodeView mounts coloured.
                 lang.value = highlightLangFor(currentPath, window.size, content);
                 text.value = content;
-                // Skipped in scope, since a path-keyed buffer would mislabel the shared file.
-                if (workspaceAgent.value === undefined) {
+                // Skipped in scope, since a path-keyed buffer would mislabel the shared file, and in a look, which never
+                // edits: a baseline written from here could move the one an unsaved edit in the Workspace is measured from.
+                if (viewAgent.value === undefined && !readOnly) {
                     edit.setBaseline(currentPath, content);
                 }
             }, fail);
@@ -331,7 +369,7 @@ watch(
         if (resolution.kind === `viewer`) {
             const { viewer } = resolution;
             loading.value = true;
-            const content = viewerContentFor(viewer.fetch, currentPath, workspaceAgent.value);
+            const content = viewerContentFor(viewer.fetch, currentPath, viewAgent.value);
             Promise.all([viewer.component(), content]).then(([component, loaded]) => {
                 if (!isLatest()) {
                     return;
@@ -371,7 +409,7 @@ const reloadFromDisk = (): void => {
 // the bytes over instead (downloadEntries.ts).
 const download = async (): Promise<void> => {
     try {
-        await downloadEntries([{ path, type: `file` }]);
+        await downloadEntries([{ path, type: `file` }], viewScope.value);
     } catch (err) {
         error.value = errorMessage(err, `Could not download the file.`);
     }
@@ -381,8 +419,8 @@ const download = async (): Promise<void> => {
 // conversation's checkout is never shadowed, and the shared file's text under a scoped tab would describe another file.
 // For a format with no surface at all (an archive, a font) it IS the view, since the alternative is a download button
 // and nothing else; everywhere else it's a second reading the chip switches to.
-const derivedOnly = computed(() => workspaceAgent.value === undefined && derivedIsOnlyView(path, open.value.kind));
-const derivedOffered = computed(() => workspaceAgent.value === undefined && !derivedOnly.value && mayHaveDerivedText(path, open.value.kind));
+const derivedOnly = computed(() => viewAgent.value === undefined && derivedIsOnlyView(path, open.value.kind));
+const derivedOffered = computed(() => viewAgent.value === undefined && !derivedOnly.value && mayHaveDerivedText(path, open.value.kind));
 const showDerived = computed(() => derivedOnly.value || (textWanted.value && derivedOffered.value));
 // The file's own bytes are worth offering beside its text wherever they aren't already on screen as text.
 const derivedDownloadable = computed(() => open.value.kind !== `code` && open.value.kind !== `markdown` && open.value.kind !== `big-text`);
@@ -407,7 +445,7 @@ const editableKind = computed(() => (open.value.kind === `code` || open.value.ki
 // file of the same path, possibly racing the agent's own writes to it. Off for a lossy read, whose save would write the
 // replacement characters back, and for any file but a document window's own.
 const canEdit = computed(
-    () => canEditFiles.value && workspaceAgent.value === undefined && !inArchive.value && editableKind.value && !lossy.value && writableHere(path),
+    () => !readOnly && canEditFiles.value && viewAgent.value === undefined && !inArchive.value && editableKind.value && !lossy.value && writableHere(path),
 );
 // Reason lives here, where a reader would look for edit capability.
 // Four causes: tier (checked first, outranks the rest), scope, an archive, or a document window's other file; any one
@@ -416,9 +454,11 @@ const scopedReadOnly = computed(
     () =>
         !mobile.value &&
         editableKind.value &&
-        (!canEditFiles.value || workspaceAgent.value !== undefined || inArchive.value || !writableHere(path)),
+        (!canEditFiles.value || viewAgent.value !== undefined || inArchive.value || !writableHere(path)),
 );
-const scopeTitle = useScopeTitle();
+// A look at a file this reader could edit in the Workspace: says where the caret is, rather than leaving it missing.
+const lookReadOnly = computed(() => readOnly && !mobile.value && !scopedReadOnly.value && editableKind.value && !lossy.value);
+const scopeTitle = useScopeTitle(viewAgent);
 const words = useVocabulary();
 const readOnlyReason = computed((): Tip => {
     if (!canEditFiles.value) {
@@ -450,7 +490,7 @@ const saveKeys = formatChord(`Mod+S`, isApplePlatform());
 const lossyShown = computed(() => lossy.value && (open.value.kind === `code` || open.value.kind === `markdown` || open.value.kind === `big-text`));
 // A local window's file server derives text too, which a viewer that cannot draw its file yet (ONLYOFFICE downloading
 // its editor) may show meanwhile, through its `text` slot; a viewer with no use for it never renders the slot.
-const quickLookOffered = computed(() => localFace() !== undefined && workspaceAgent.value === undefined);
+const quickLookOffered = computed(() => localFace() !== undefined && viewAgent.value === undefined);
 const markdownHere = computed(() => open.value.kind === `markdown`);
 // Text files are continuously editable on desktop whenever permissions allow.
 const editingThis = computed(() => !mobile.value && canEdit.value && !markdownHere.value);
@@ -474,14 +514,14 @@ const openLinked = (target: string): void => {
     if (deliverableKindOf(target) === `html`) {
         setHtmlPreviewed(target, true);
     }
-    void openWorkspaceRef(target, undefined, { agent: workspaceAgent.value });
+    void openWorkspaceRef(target, undefined, { agent: viewAgent.value });
 };
 // Offered only while reading code with comments present.
 const canHideComments = computed(() => open.value.kind === `code` && text.value !== null && !previewing.value);
 // In a scope the file shown is disk, not a buffer: a dirty dot here would misattribute someone else's edit to
 // this agent's copy.
-const dirtyThis = computed(() => workspaceAgent.value === undefined && edit.isDirty(path));
-const editorSeed = computed(() => (workspaceAgent.value === undefined ? (edit.bufferOf(path) ?? text.value ?? ``) : (text.value ?? ``)));
+const dirtyThis = computed(() => !readOnly && viewAgent.value === undefined && edit.isDirty(path));
+const editorSeed = computed(() => (!readOnly && viewAgent.value === undefined ? (edit.bufferOf(path) ?? text.value ?? ``) : (text.value ?? ``)));
 
 const onEditorChange = (value: string): void => edit.setBuffer(path, value);
 // markSaved runs only after a successful write. Guarded by the baseline's hash: the daemon 409s on a
@@ -557,7 +597,7 @@ const onEditorSave = (value: string): void =>
             </button>
             <!-- Tab row's chip says the view shows an agent's copy; this says this file specifically came from the shared workspace. -->
             <span
-                v-if="workspaceAgent !== undefined && fromShared"
+                v-if="viewAgent !== undefined && fromShared"
                 class="inline-flex shrink-0 items-center gap-1 rounded-md bg-overlay px-1.5 py-0.5 text-2xs text-muted"
                 v-tooltip.bottom="sharedTip"
             >
@@ -568,6 +608,15 @@ const onEditorSave = (value: string): void =>
                 v-if="scopedReadOnly"
                 class="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-2xs text-muted"
                 v-tooltip.bottom="readOnlyReason"
+            >
+                <Icon name="lock" class="text-xs" />
+                <span class="max-md:hidden">{{ t(`workspace.words.readOnly`) }}</span>
+            </span>
+            <!-- A look beside the reader's section: the caret is in the Workspace, and this says so. -->
+            <span
+                v-if="lookReadOnly"
+                class="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-2xs text-muted"
+                v-tooltip.bottom="{ title: t(`workspace.fileViewer.readOnlyHere`), note: t(`workspace.fileViewer.editIn`, { section: words.workspace }) }"
             >
                 <Icon name="lock" class="text-xs" />
                 <span class="max-md:hidden">{{ t(`workspace.words.readOnly`) }}</span>

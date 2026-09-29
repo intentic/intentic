@@ -9,7 +9,7 @@ import { useRouter } from "vue-router";
 import { formatElapsed } from "../../../agents/fleet/agentStatus";
 import { useAgents } from "../../../agents/fleet/useAgents";
 import { portTargetId } from "../../../preview/previewModel";
-import { openPreview } from "../../../preview/previewSurface";
+import { openPreviewBeside } from "../../../preview/previewSurface";
 import { useSandbox } from "../../../sandbox/client/useSandbox";
 import { useChatSurface } from "../../tools/chatToolSurface";
 import { portsLine, runningJobs } from "../../transcript/jobPhase";
@@ -111,11 +111,12 @@ const stop = (row: Row): void => {
     }
 };
 
-// A server left for the person opens where a person looks at one; Preview offers publishing it from there.
+// A server left for the person opens where a person looks at one, beside the chat that started it, so what it serves
+// and the conversation changing it are on one screen; Preview offers publishing it from there.
 const preview = (job: AgentJob): void => {
     const port = job.ports?.[0];
     if (port !== undefined) {
-        openPreview(router, portTargetId(port));
+        openPreviewBeside(router, portTargetId(port));
     }
 };
 </script>

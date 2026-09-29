@@ -8,6 +8,9 @@ import { fakeSandboxRpc } from "../../../../testing/sandboxRpcFake";
 const openFile = jest.fn();
 const openAtLine = jest.fn();
 const push = jest.fn();
+// Where the reader stands: the Workspace route opens a file in place, anywhere else it peeks beside.
+const currentRoute = { value: { name: `agents` } };
+const sectionReachable = jest.fn((_to: string) => true);
 // Daemon's reference resolver; unmatched by default so a click opens the path as written.
 const unmatched = async (_input: ProcedureInput<`workspace.resolve`>): Promise<{ path?: string }> => ({});
 const resolve = jest.fn(unmatched);
@@ -15,13 +18,15 @@ const resolve = jest.fn(unmatched);
 jest.mock("../../../../lib/queryPersistence", () => ({ queryClient: { getQueriesData: () => [] } }));
 jest.mock("../../../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ workspace: { resolve } }) }));
 jest.mock("../../tabs/useWorkspaceTabs", () => ({ useWorkspaceTabs: () => ({ openFile, openAtLine }) }));
-jest.mock("../../../../router", () => ({ router: { push } }));
+jest.mock("../../../../router", () => ({ router: { push, currentRoute } }));
+jest.mock("../../../../core-views/registry", () => ({ sectionReachable }));
 
 const { fileLinkDecorator, renderMarkdown } = await import("../../../../lib/markdown/renderMarkdown");
 const { renderMarkdown: renderEngine } = await import("@intentic/ui/markdown");
 const { openFileRefFromEvent } = await import("./openFileRef");
 const { workspaceAgent } = await import("../../health/workspaceScope");
 const { claimFloating } = await import("../../../../shell/window/floating");
+const { sideDocked, sideTabId, useSidePanel, closeAllTabs } = await import("../../../../shell/side/sideTabs");
 
 // Binds a click listener the way ChatMessageView and MarkdownViewer do, then renders markdown into it.
 const surface = (markdown: string): HTMLDivElement => {
@@ -46,6 +51,10 @@ beforeEach(() => {
     resolve.mockClear();
     resolve.mockImplementation(unmatched);
     workspaceAgent.value = undefined;
+    sideDocked.value = false;
+    currentRoute.value = { name: `agents` };
+    sectionReachable.mockImplementation(() => true);
+    closeAllTabs();
 });
 
 afterEach(() => {
@@ -135,5 +144,62 @@ describe(`clicking a file in a popped-out panel`, () => {
         expect(push).not.toHaveBeenCalled();
         expect(open).toHaveBeenCalledWith(`/workspace`, `intentic-main`);
         scope.stop();
+    });
+});
+
+// With a side panel in the window, a file named anywhere but the Workspace is looked at beside the section the reader
+// picked, which stays in the main area.
+describe(`clicking a file with the side panel in the window`, () => {
+    const panel = useSidePanel();
+    const scopedSurface = (markdown: string): HTMLDivElement => {
+        const root = document.createElement(`div`);
+        root.addEventListener(`click`, openFileRefFromEvent);
+        root.innerHTML = renderEngine(markdown, fileLinkDecorator({ agent: `c-1` }));
+        return root;
+    };
+
+    beforeEach(() => {
+        sideDocked.value = true;
+    });
+
+    it(`peeks it beside the section, at the named line, and leaves the main area where it was`, async () => {
+        const event = clickFileLink(surface(`Fixed in src/foo.ts:42.`));
+        await waitFor(() => expect(panel.tabs.value.map((tab) => tab.input)).toEqual([{ path: `src/foo.ts` }]));
+        const id = sideTabId(`file`, { path: `src/foo.ts` });
+        expect(panel.peek.value).toBe(id);
+        expect(panel.jumps.value[id]?.line).toBe(42);
+        expect(push).not.toHaveBeenCalled();
+        expect(openAtLine).not.toHaveBeenCalled();
+        expect(event.defaultPrevented).toBe(true);
+    });
+
+    it(`reads an isolated conversation's own copy without switching the Workspace to it`, async () => {
+        resolve.mockImplementation(async ({ agent }) => (agent === `c-1` ? { path: `docs/plan.md` } : {}));
+        clickFileLink(scopedSurface("Wrote `plan.md/notes.md` just now."));
+        await waitFor(() => expect(panel.tabs.value.map((tab) => tab.input)).toEqual([{ path: `docs/plan.md`, agent: `c-1` }]));
+        expect(resolve).toHaveBeenCalledWith({ path: `plan.md/notes.md`, agent: `c-1` });
+        expect(workspaceAgent.value).toBeUndefined();
+    });
+
+    it(`replaces the last peek with the next link followed`, async () => {
+        clickFileLink(surface(`See src/a.ts.`));
+        await waitFor(() => expect(panel.tabs.value).toHaveLength(1));
+        clickFileLink(surface(`And src/b.ts.`));
+        await waitFor(() => expect(panel.tabs.value.map((tab) => tab.input)).toEqual([{ path: `src/b.ts` }]));
+    });
+
+    it(`opens it in the Workspace itself while the reader stands there`, async () => {
+        currentRoute.value = { name: `workspace` };
+        clickFileLink(surface(`Fixed in src/foo.ts:42.`));
+        await waitFor(() => expect(openAtLine).toHaveBeenCalledWith(`src/foo.ts`, 42));
+        expect(push).toHaveBeenCalledWith({ name: `workspace`, params: { path: [`src`, `foo.ts`] }, query: {} });
+        expect(panel.tabs.value).toEqual([]);
+    });
+
+    it(`keeps the Workspace route for a reader the Workspace is closed to`, async () => {
+        sectionReachable.mockImplementation((to) => to !== `/workspace`);
+        clickFileLink(surface(`Fixed in src/foo.ts:42.`));
+        await waitFor(() => expect(push).toHaveBeenCalledWith({ name: `workspace`, params: { path: [`src`, `foo.ts`] }, query: {} }));
+        expect(panel.tabs.value).toEqual([]);
     });
 });

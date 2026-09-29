@@ -85,6 +85,12 @@
         "runs": "{runs} ejecuciones",
         "thisRepo": "este repo"
     },
+    "runSide": {
+        "notListed": "La ejecución #{number} de {repo} no está entre las recientes que guarda el sandbox.",
+        "openOn": "Abrir en {forge}",
+        "run": "Ejecución {number}",
+        "unreadable": "Esta pestaña no nombra ninguna ejecución."
+    },
     "tip": {
         "attempt": "Intento",
         "branch": "Rama",

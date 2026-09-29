@@ -1027,7 +1027,7 @@
         },
         "chatFileChip": {
             "notShown": "niepokazane",
-            "openInWorkspace2": "Otwórz w przestrzeni roboczej",
+            "openFile": "Otwórz plik",
             "removeAttachment": "Usuń załącznik"
         },
         "chatForkCut": {
@@ -1135,6 +1135,7 @@
             "keepFutureWorkOn": "Wstrzymaj przyszłą pracę na gałęzi",
             "noKeepPlanning": "Nie, planuj dalej",
             "notNow": "Nie teraz",
+            "openBeside": "Otwórz obok",
             "openBrowser": "Otwórz przeglądarkę",
             "openSetup": "Otwórz konfigurację",
             "openTerminal": "Otwórz terminal",
@@ -1648,6 +1649,7 @@
             "keepOpen": "Zostaw otwarty",
             "nextChatReplaces": "Następny czat go zastąpi",
             "openFile": "Otwórz plik",
+            "openFileNamed": "Otwórz {name}",
             "reconnectNeeded": "Połącz ponownie",
             "showTerminal": "Pokaż terminal",
             "showToolCalls": "Pokaż wywołania narzędzi",
@@ -1668,7 +1670,6 @@
             "searchChatsEllipsis": "Szukaj czatów…",
             "chatTitle": "Tytuł czatu",
             "keepChatOpen": "Trzymaj ten czat otwarty",
-            "openInWorkspace": "Otwórz {name} w przestrzeni roboczej",
             "moveChatIntoNewWindow": "Przenieś czat do nowego okna",
             "closeFinished": "Zamknij skończone",
             "closeAll": "Zamknij wszystkie",
@@ -4157,6 +4158,23 @@
             "tunnels": "Tunel | Tunele",
             "vpnConnected": "VPN połączony"
         },
+        "sidePanel": {
+            "closeAll": "Zamknij wszystko",
+            "closeOthers": "Zamknij pozostałe",
+            "doubleClickToKeep": "Dwuklik, by zachować",
+            "fold": "Zwiń",
+            "foldNote": "Czat poniżej dostaje miejsce",
+            "gone": "{name} już tu nie ma",
+            "goneNote": "Przeniesiony lub usunięty po tym, jak o nim wspomniano.",
+            "label": "Panel boczny",
+            "openIn": "Otwórz w: {section}",
+            "openInSection": "Otwórz w jego sekcji",
+            "previous": "Poprzedni",
+            "tabs": "Otwarte obok",
+            "unavailable": "Niedostępne",
+            "unavailableNote": "Rozszerzenie, które to pokazuje, jest wyłączone lub zostało usunięte.",
+            "unfold": "Rozwiń"
+        },
         "useNavigationCommands": {
             "add": "Dodaj…"
         },
@@ -4746,6 +4764,7 @@
         },
         "fileViewer": {
             "copyFileContent": "Kopiuj zawartość pliku",
+            "editIn": "Edytuj w: {section}",
             "extractToEdit": "Rozpakuj, by edytować",
             "fileChangedOnDisk": "Ten plik zmienił się na dysku. Twoje niezapisane zmiany są zachowane.",
             "hideComments": "Ukryj komentarze",
@@ -4755,6 +4774,7 @@
             "pageSealed": "Odizolowana: bez sieci i logowań",
             "preview": "Podgląd",
             "readAsText": "Czytaj jako tekst",
+            "readOnlyHere": "Tu tylko do odczytu",
             "reloadDisk": "Wczytaj ponownie z dysku",
             "saveChanges": "Zapisz zmiany",
             "saved": "Zapisano",

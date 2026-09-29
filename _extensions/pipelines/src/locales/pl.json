@@ -92,6 +92,12 @@
         "runs": "{runs} przebiegów",
         "thisRepo": "to repozytorium"
     },
+    "runSide": {
+        "notListed": "Przebiegu #{number} z {repo} nie ma wśród ostatnich przebiegów, które przechowuje sandbox.",
+        "openOn": "Otwórz w: {forge}",
+        "run": "Przebieg {number}",
+        "unreadable": "Ta karta nie wskazuje żadnego przebiegu."
+    },
     "tip": {
         "attempt": "Próba",
         "branch": "Gałąź",

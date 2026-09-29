@@ -5,6 +5,7 @@ import type {
     ExtensionContext,
     IntenticApi,
     RepoFacts,
+    SideViewRegistration,
     ViewRegistration,
 } from "@intentic/extension-api";
 import { extensionIdOf } from "@intentic/extension-manifest";
@@ -38,6 +39,7 @@ await Promise.all(
 const capture = () => {
     const views: ViewRegistration[] = [];
     const documents: DocumentProviderRegistration[] = [];
+    const sideViews: SideViewRegistration[] = [];
     const api = {
         views: {
             register: (view: ViewRegistration) => {
@@ -52,11 +54,17 @@ const capture = () => {
                 return { dispose: () => {} };
             },
         },
+        sideViews: {
+            register: (view: SideViewRegistration) => {
+                sideViews.push(view);
+                return { dispose: () => {} };
+            },
+        },
         commands: { register: () => ({ dispose: () => {} }) },
         // The project scope a detect() may read; none open, which is every fresh sandbox.
         workspace: { project: () => undefined },
     } as unknown as IntenticApi;
-    return { api, views, documents };
+    return { api, views, documents, sideViews };
 };
 
 const activateAndCapture = (module: { activate: (api: IntenticApi, ctx: ExtensionContext) => void }): ViewRegistration => {
@@ -115,6 +123,15 @@ describe(`every builtin`, () => {
             const declared = (module.manifest.contributes?.documents ?? []).map((document) => document.id);
             for (const provider of documents) {
                 expect(declared).toContain(provider.id);
+            }
+        });
+        // And for a side view: an undeclared one is refused the same way, and takes what follows it down with it.
+        it(`registers only side views its manifest declares: ${id}`, () => {
+            const { api, sideViews } = capture();
+            module.activate(api, { extensionId: id, subscriptions: [] });
+            const declared = (module.manifest.contributes?.sideViews ?? []).map((view) => view.id);
+            for (const view of sideViews) {
+                expect(declared).toContain(view.id);
             }
         });
         // The map's key is how the loader pairs a daemon-listed manifest with the code compiled in here, so a key that

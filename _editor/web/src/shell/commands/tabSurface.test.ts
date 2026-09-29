@@ -1,5 +1,5 @@
-// Pins the tab-surface focus gate: one chord per verb, registered by all three strips, resolved by which surface
-// the keystroke came from.
+// Pins the tab-surface focus gate: one chord per verb, registered by every strip, resolved by which surface the
+// keystroke came from.
 import "@intentic/testing/dom";
 import { type TabSurface, tabSurfaceOf } from "./tabSurface";
 import { boundCommand, registerCommand } from "./useCommands";
@@ -11,6 +11,10 @@ document.body.innerHTML = `
     <div class="chat-panel"><textarea data-id="composer"></textarea></div>
     <div class="editor"><span data-id="line"></span></div>
     <div class="chat-panel" data-id="nesting"><div class="term"><span data-id="nested-pill"></span></div></div>
+    <aside class="side-panel">
+        <div class="side-tabs"><span data-id="side-tab"></span></div>
+        <div class="chat-panel"><textarea data-id="side-composer"></textarea></div>
+    </aside>
 `;
 
 // Dispatches a real keydown so `event.target` is the focused node, not something hand-planted onto the event.
@@ -42,10 +46,13 @@ it(`routes a keystroke to the strip it came from, and to the workspace when it c
     expect(tabSurfaceOf(new KeyboardEvent(`keydown`))).toBe(`workspace`);
     // Nested pill inside a chat panel still resolves to terminal: the innermost surface wins.
     expect(tabSurfaceOf(keydownFrom(`nested-pill`))).toBe(`terminal`);
+    // The side panel's tabs are their own strip; the chat living under them in the same panel stays the chat's.
+    expect(tabSurfaceOf(keydownFrom(`side-tab`))).toBe(`side`);
+    expect(tabSurfaceOf(keydownFrom(`side-composer`))).toBe(`chat`);
 });
 
-it(`lets the three strips share one chord: the focused surface's command is the one that binds`, () => {
-    const surfaces: readonly TabSurface[] = [`chat`, `terminal`, `workspace`];
+it(`lets the strips share one chord: the focused surface's command is the one that binds`, () => {
+    const surfaces: readonly TabSurface[] = [`chat`, `side`, `terminal`, `workspace`];
     disposables = surfaces.map((surface) =>
         registerCommand({
             owner: `builtin`,
@@ -61,6 +68,7 @@ it(`lets the three strips share one chord: the focused surface's command is the 
     expect(boundCommand(keydownFrom(`composer`, closeChord), false)?.command).toBe(`test.closeTab.chat`);
     expect(boundCommand(keydownFrom(`pill`, closeChord), false)?.command).toBe(`test.closeTab.terminal`);
     expect(boundCommand(keydownFrom(`line`, closeChord), false)?.command).toBe(`test.closeTab.workspace`);
+    expect(boundCommand(keydownFrom(`side-tab`, closeChord), false)?.command).toBe(`test.closeTab.side`);
     // Registration order decides nothing here: the gates are mutually exclusive, so exactly one ever matches.
     expect(boundCommand(keydownFrom(`line`, { key: `X`, code: `KeyX`, ctrlKey: true }), false)).toBeUndefined();
 });

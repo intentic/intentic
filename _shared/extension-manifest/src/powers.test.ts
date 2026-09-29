@@ -92,6 +92,18 @@ const ROWS: readonly Row[] = [
         adds: ["document:readmes", 'marks workspace directories ("Readmes")'],
     },
     {
+        power: "side-view:${id}",
+        without: contributes({ sideViews: [] }),
+        with: contributes({ sideViews: [{ id: "run", label: "CI run" }] }),
+        adds: ["side-view:run", 'shows "CI run" in the side panel'],
+    },
+    {
+        power: "side-view-links:${id}",
+        without: contributes({ sideViews: [{ id: "run", label: "CI run", links: false }] }),
+        with: contributes({ sideViews: [{ id: "run", label: "CI run", links: true }] }),
+        adds: ["side-view-links:run", 'opens links it recognises as "CI run" beside the chat'],
+    },
+    {
         power: "command:${command}",
         without: contributes({ commands: [] }),
         with: contributes({ commands: [COMMAND] }),

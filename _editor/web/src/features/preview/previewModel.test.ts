@@ -4,6 +4,7 @@ import {
     addressTarget,
     appTargets,
     frameSandbox,
+    loopbackPreviewTarget,
     mergeTargets,
     pickTarget,
     portTargets,
@@ -219,5 +220,35 @@ describe(`the rail's half`, () => {
         expect(previewHealthyCount([], [], [file({})])).toBe(0);
         expect(previewHealthyCount([], [port({})], [])).toBe(1);
         expect(previewHealthyCount([panel({ repo: `lib`, hasPanel: false, healthy: true })], [], [])).toBe(0);
+    });
+});
+
+// A link the chat renders to a server on the sandbox's own loopback: the preview's, but only for a port it can show.
+describe(`loopbackPreviewTarget`, () => {
+    const ports = [
+        port({ port: 5173, forwarded: true, previewUrl: `https://5173.box.example` }),
+        port({ port: 8080, forwarded: false }),
+    ];
+
+    it(`names the forwarded port's target, whichever loopback spelling the link used`, () => {
+        for (const url of [`http://localhost:5173`, `http://127.0.0.1:5173/pricing`, `http://0.0.0.0:5173/`, `http://[::1]:5173`]) {
+            expect(loopbackPreviewTarget(url, ports)).toBe(`port:5173`);
+        }
+    });
+
+    it(`leaves a port the preview cannot show to the browser`, () => {
+        expect(loopbackPreviewTarget(`http://localhost:8080`, ports)).toBeUndefined();
+        expect(loopbackPreviewTarget(`http://localhost:3000`, ports)).toBeUndefined();
+    });
+
+    it(`leaves every other link alone`, () => {
+        expect(loopbackPreviewTarget(`https://example.com:5173`, ports)).toBeUndefined();
+        expect(loopbackPreviewTarget(`http://localhost`, ports)).toBeUndefined();
+        expect(loopbackPreviewTarget(`not a url`, ports)).toBeUndefined();
+    });
+
+    it(`names a server a turn left running for the person before it is forwarded`, () => {
+        const left = port({ port: 4000, forwarded: false, job: { conversationId: `c-1`, jobId: `j-1`, label: `dev` } });
+        expect(loopbackPreviewTarget(`http://localhost:4000`, [left])).toBe(`port:4000`);
     });
 });

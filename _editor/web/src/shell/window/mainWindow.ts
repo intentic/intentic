@@ -4,12 +4,13 @@ import { raiseOwnWindow } from "../../app/environments/desktop";
 import { floatingWindowPanel, floatsElsewhere } from "./floating";
 import { reloadOnHotUpdate } from "../../app/hotReload";
 import { uuid } from "../../lib/uuid";
+import type { SideInput } from "../side/sideTabs";
 
 // A link pressed in a popped-out panel is handed as an errand (not a navigation) to whichever window with the app in it
 // last had the reader's attention, never to itself; addressed (`to`), not broadcast, so exactly one acts. If none is
 // open, one is opened and the errand waits for it to announce itself.
 
-/** File references carry a line; routes carry other in-app destinations. */
+/** File references carry a line; routes carry other in-app destinations; the rest are things to show beside. */
 export type MainWindowErrand =
     | {
           readonly kind: `file`;
@@ -17,7 +18,11 @@ export type MainWindowErrand =
           readonly line: number | undefined;
           readonly scope: { readonly agent: string | undefined } | undefined;
       }
-    | { readonly kind: `route`; readonly path: string };
+    | { readonly kind: `route`; readonly path: string }
+    // The running app, on a target or the one last shown: beside the main window's section, or its own route.
+    | { readonly kind: `preview`; readonly target: string | undefined }
+    // A side view on an input (an extension's run, a CI run): the popped-out window has no side panel of its own.
+    | { readonly kind: `side`; readonly view: string; readonly input: SideInput; readonly keep: boolean };
 
 // Notes windows exchange; only `here` carries state. `roll` lets a newly loaded window learn who's out there without
 // waiting for a heartbeat.
@@ -112,7 +117,8 @@ export const handOffToMainWindow = (errand: MainWindowErrand): boolean => {
     const path = errand.kind === `route` ? errand.path.replace(/^\//u, ``) : `workspace`;
     const win = window.open(`${import.meta.env.BASE_URL}${path}`, `intentic-main`);
     win?.focus(); // null when the popup blocker refused; the errand simply expires on the doorstep.
-    if (errand.kind === `file`) {
+    // A route arrives as the window's own address; anything else waits for the window to say it is there.
+    if (errand.kind !== `route`) {
         doorstep = { errand, until: Date.now() + DOORSTEP_MS };
     }
     return true;

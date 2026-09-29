@@ -11,6 +11,7 @@ import { filesPoint } from "./files.js";
 import { listenerPoint } from "./listener.js";
 import { processesPoint } from "./processes.js";
 import { settingsPoint } from "./settings.js";
+import { sideViewsPoint } from "./side-views.js";
 import { toolsPoint } from "./tools.js";
 import { viewersPoint } from "./viewers.js";
 import { viewsPoint } from "./views.js";
@@ -26,6 +27,7 @@ export * from "./files.js";
 export * from "./listener.js";
 export * from "./processes.js";
 export * from "./settings.js";
+export * from "./side-views.js";
 export * from "./tools.js";
 export * from "./viewers.js";
 export * from "./views.js";
@@ -38,6 +40,7 @@ export const CONTRIBUTION_POINTS = [
     filesPoint,
     viewersPoint,
     documentsPoint,
+    sideViewsPoint,
     commandsPoint,
     settingsPoint,
     processesPoint,

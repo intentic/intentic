@@ -1,0 +1,182 @@
+// The side panel mounted for real: what it draws for what it holds, and the one invariant the chat depends on, that the
+// chat's slot is the same element whatever comes and goes above it.
+import "@intentic/testing/dom";
+import { installUi } from "@intentic/ui";
+import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
+
+// Whether the chat's home is the side: the one fact the panel reads from the chat.
+const chatInSidePanel = ref(true);
+jest.mock("../../features/chat/panel/chatPanelLayout", () => ({ chatInSidePanel }));
+
+const { default: SidePanel } = await import("./SidePanel.vue");
+const { closeAllTabs, openBeside, sideTabId, useSidePanel } = await import("./sideTabs");
+const { registerSideView } = await import("./sideViews");
+const { chatSlot } = await import("../window/panelSlots");
+
+const panel = useSidePanel();
+
+// A side view that says what it was handed.
+const Body = defineComponent({
+    props: { input: { type: Object, required: true } },
+    setup: (props) => () => h(`p`, { class: `stub-body` }, `body ${String(props.input[`n`])}`),
+});
+
+const lent = ref(false);
+const openedHome = jest.fn();
+const disposables: { dispose: () => void }[] = [];
+beforeAll(() => {
+    disposables.push(
+        registerSideView({
+            id: `stub`,
+            owner: `builtin`,
+            label: `Stub`,
+            describe: (input) => ({ title: `Thing ${String(input[`n`])}`, icon: `file` }),
+            home: () => ({ label: `Things`, open: openedHome }),
+            component: async () => Body,
+            lent: () => lent.value,
+        }),
+    );
+});
+afterAll(() => {
+    for (const disposable of disposables) {
+        disposable.dispose();
+    }
+});
+
+let app: App | undefined;
+const mount = async (): Promise<HTMLElement> => {
+    const host = document.createElement(`div`);
+    document.body.append(host);
+    app = createApp({ render: () => h(SidePanel) });
+    installUi(app);
+    app.mount(host);
+    await settle();
+    return host;
+};
+
+// Async bodies load on the microtask queue; a macrotask turn and a render later, they are drawn.
+const settle = async (): Promise<void> => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await nextTick();
+    await nextTick();
+};
+
+const tabTitles = (host: HTMLElement): string[] => [...host.querySelectorAll(`[role="tab"]`)].map((tab) => tab.textContent?.trim() ?? ``);
+const button = (host: HTMLElement, label: string): HTMLButtonElement | null => host.querySelector(`button[aria-label="${label}"]`);
+
+beforeEach(() => {
+    chatInSidePanel.value = true;
+    lent.value = false;
+    openedHome.mockClear();
+    closeAllTabs();
+});
+
+afterEach(() => {
+    app?.unmount();
+    app = undefined;
+    document.body.innerHTML = ``;
+});
+
+it(`draws the chat alone, as the column always looked, when nothing was opened beside`, async () => {
+    const host = await mount();
+    expect(host.querySelector(`.side-tabs`)).toBeNull();
+    expect(chatSlot.value?.parentElement?.classList.contains(`side-chat`)).toBe(true);
+});
+
+it(`stacks what was opened beside above the chat, and never moves the chat to do it`, async () => {
+    const host = await mount();
+    const slot = chatSlot.value;
+    openBeside(`stub`, { n: 1 });
+    await settle();
+
+    expect(tabTitles(host)).toEqual([`Thing 1`]);
+    expect(host.querySelector(`.stub-body`)?.textContent).toBe(`body 1`);
+    expect(chatSlot.value).toBe(slot);
+
+    closeAllTabs();
+    await settle();
+    expect(host.querySelector(`.side-tabs`)).toBeNull();
+    expect(chatSlot.value).toBe(slot);
+});
+
+it(`gives the tabs the whole column while the chat lives elsewhere`, async () => {
+    chatInSidePanel.value = false;
+    openBeside(`stub`, { n: 1 });
+    const host = await mount();
+
+    expect(host.querySelector(`.side-chat`)).toBeNull();
+    expect(chatSlot.value).toBeNull();
+    expect(host.querySelector(`.side-tabs`)?.classList.contains(`flex-1`)).toBe(true);
+    // No chat below, so nothing to fold the tabs away for.
+    expect(button(host, `Fold`)).toBeNull();
+});
+
+it(`keeps every body mounted and shows only the tab on screen`, async () => {
+    openBeside(`stub`, { n: 1 }, { keep: true });
+    openBeside(`stub`, { n: 2 });
+    const host = await mount();
+
+    const bodies = [...host.querySelectorAll(`[role="tabpanel"]`)];
+    expect(bodies.map((body) => body.textContent)).toEqual([`body 1`, `body 2`]);
+    expect(bodies.map((body) => body.classList.contains(`invisible`))).toEqual([true, false]);
+    expect(bodies.map((body) => body.hasAttribute(`inert`))).toEqual([true, false]);
+});
+
+it(`offers Keep open on the peek alone, and keeps it`, async () => {
+    openBeside(`stub`, { n: 1 });
+    const host = await mount();
+
+    button(host, `Keep Open`)?.click();
+    await settle();
+    expect(panel.peek.value).toBeNull();
+    expect(button(host, `Keep Open`)).toBeNull();
+});
+
+it(`moves a thing into its home section and closes its tab`, async () => {
+    openBeside(`stub`, { n: 1 });
+    const host = await mount();
+
+    button(host, `Open in Things`)?.click();
+    await settle();
+    expect(openedHome).toHaveBeenCalledTimes(1);
+    expect(panel.tabs.value).toEqual([]);
+});
+
+it(`steps a tab aside while the main area is showing its thing, and brings it back after`, async () => {
+    openBeside(`stub`, { n: 1 });
+    const host = await mount();
+
+    lent.value = true;
+    await settle();
+    expect(host.querySelector(`.side-tabs`)).toBeNull();
+    expect(panel.tabs.value.map((tab) => tab.id)).toEqual([sideTabId(`stub`, { n: 1 })]);
+
+    lent.value = false;
+    await settle();
+    expect(tabTitles(host)).toEqual([`Thing 1`]);
+});
+
+it(`draws a tab whose side view is gone, so it can be read and closed`, async () => {
+    openBeside(`someone.gone/run`, { n: 1 });
+    const host = await mount();
+
+    expect(tabTitles(host)).toEqual([`run`]);
+    expect(host.querySelector(`[role="tabpanel"]`)?.textContent).toContain(`Not available`);
+});
+
+it(`folds the tabs to their strip, giving the chat the height, and unfolds them`, async () => {
+    openBeside(`stub`, { n: 1 });
+    const host = await mount();
+    const bodies = (): HTMLElement | null => host.querySelector<HTMLElement>(`[role="tabpanel"]`)?.parentElement ?? null;
+
+    button(host, `Fold`)?.click();
+    await settle();
+    expect(panel.collapsed.value).toBe(true);
+    expect(bodies()?.style.display).toBe(`none`);
+    expect(tabTitles(host)).toEqual([`Thing 1`]);
+
+    button(host, `Unfold`)?.click();
+    await settle();
+    expect(panel.collapsed.value).toBe(false);
+    expect(bodies()?.style.display).toBe(``);
+});

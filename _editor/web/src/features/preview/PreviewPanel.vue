@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import {
     Button,
+    clipboardOf,
+    ContextMenu,
     CopyButton,
     Notice,
     noticeOf,
@@ -14,8 +16,10 @@ import {
     type StatusVariant,
     type Tip,
     ui,
+    useNarrow,
 } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
+import type { MenuItem } from "primevue/menuitem";
 import { computed, nextTick, onUnmounted, ref, watch } from "vue";
 import { RouterLink, useRouter } from "vue-router";
 import type { PanelLaunch } from "@intentic/api-contract";
@@ -43,6 +47,12 @@ const target = computed(() => pickTarget(targets.value, previewSelectedId.value)
 
 const { floats } = usePreviewFloating();
 const terminal = useTerminalPanel();
+
+// Narrow (a tab in the side panel, beside the chat), the bar keeps what changes the app on screen (which one, start or
+// stop, reload) and folds the rest into one menu, rather than running under its own edge.
+const panelRoot = ref<HTMLElement>();
+const compact = useNarrow(panelRoot, 36);
+const moreMenu = ref<{ show: (event: Event) => void }>();
 
 // The switcher
 // Grouped by where a row comes from: one heading per repo, then forwarded ports, the workspace page, the address. Each
@@ -258,6 +268,37 @@ const phoneChoice = computed<string | undefined>({
     },
 });
 
+// The compact bar's menu: every verb the wide bar draws as a button of its own, in the order it draws them.
+const moreItems = computed<MenuItem[]>(() => {
+    const entry = target.value;
+    const items: MenuItem[] = [];
+    if (entry !== undefined) {
+        items.push({
+            label: t(`preview.previewPanel.phone`),
+            checked: fit.value === `phone`,
+            command: (): void => {
+                fit.value = fit.value === `phone` ? `full` : `phone`;
+            },
+        });
+        if (entry.session !== undefined) {
+            const session = entry.session;
+            items.push({ label: t(`preview.previewPanel.openDevServersTerminal`), command: (): void => terminal.openFocused(session) });
+        }
+        if (entry.url !== undefined && entry.healthy) {
+            const url = entry.url;
+            items.push(
+                { label: copyHint.value, command: (): void => void clipboardOf(panelRoot.value).writeText(url) },
+                { label: t(`preview.previewPanel.openInNewTab`, { label: entry.label }), command: (): void => void window.open(url, `_blank`, `noopener`) },
+            );
+        }
+    }
+    items.push({
+        label: floats.value ? t(`preview.previewPanel.dockPreviewBack`) : t(`preview.previewPanel.movePreviewIntoOwn`),
+        command: togglePreviewFloating,
+    });
+    return items;
+});
+
 // Names what Start will run and where its output lands (`panel-<repo>` / `panel-<repo>--<app>`), since a bare "Start"
 // names neither the target nor the command it's about to run.
 const startSession = computed<string | undefined>(() => {
@@ -382,7 +423,7 @@ onUnmounted(stopStartingPoll);
 </script>
 
 <template>
-    <div class="flex h-full min-h-0 w-full flex-col bg-canvas">
+    <div ref="panelRoot" class="flex h-full min-h-0 w-full flex-col bg-canvas">
         <!-- One bar (`.view-header`, so the desktop app's window buttons reserve its right end): switcher and status on the left, verbs on the right; typing an address swaps the left half for the field. -->
         <div class="view-header flex items-center gap-1 border-b border-line bg-card px-1.5">
             <template v-if="addressOpen">
@@ -457,6 +498,7 @@ onUnmounted(stopStartingPoll);
                 </Button>
 
                 <SegmentedControl
+                    v-if="!compact"
                     v-model="fit"
                     size="xs"
                     :options="[
@@ -466,7 +508,7 @@ onUnmounted(stopStartingPoll);
                 />
                 <!-- Only meaningful once there's a handset on the stage, and the row is tight enough to mind the width. -->
                 <Picker
-                    v-if="fit === `phone`"
+                    v-if="fit === `phone` && !compact"
                     v-model="phoneChoice"
                     :options="phoneOptions"
                     variant="ghost"
@@ -486,7 +528,7 @@ onUnmounted(stopStartingPoll);
                     <Icon name="refresh" />
                 </button>
                 <button
-                    v-if="target.session"
+                    v-if="target.session && !compact"
                     type="button"
                     :class="ui.iconButton(`h-8 w-8`)"
                     :aria-label="t(`preview.previewPanel.openDevServersTerminal`)"
@@ -496,7 +538,7 @@ onUnmounted(stopStartingPoll);
                     <Icon name="code" />
                 </button>
                 <!-- The external link appears only after the target has answered. -->
-                <template v-if="target.url && target.healthy">
+                <template v-if="target.url && target.healthy && !compact">
                     <CopyButton :text="target.url" :aria-label="copyHint" v-tooltip.bottom="copyHint" />
                     <a
                         :href="target.url"
@@ -513,6 +555,7 @@ onUnmounted(stopStartingPoll);
 
             <!-- external-link, matching the chat's pop-out button; opens a separate OS window, not fullscreen. -->
             <button
+                v-if="!compact"
                 type="button"
                 :class="ui.iconButton(`h-8 w-8`)"
                 :aria-label="floats ? t(`preview.previewPanel.dockPreviewBack`) : t(`preview.previewPanel.movePreviewIntoOwn`)"
@@ -521,6 +564,13 @@ onUnmounted(stopStartingPoll);
             >
                 <Icon :name="floats ? 'sign-in' : 'external-link'" />
             </button>
+            <!-- Compact, the verbs the wide bar draws one by one, in one menu. -->
+            <template v-else>
+                <button type="button" :class="ui.iconButton(`h-8 w-8`)" :aria-label="t(`ui.action.moreActions`)" @click="moreMenu?.show($event)">
+                    <Icon name="ellipsis" />
+                </button>
+                <ContextMenu ref="moreMenu" :model="moreItems" :min-width="13" />
+            </template>
         </div>
 
         <!-- Preview errors stay beside the controls that caused them. -->

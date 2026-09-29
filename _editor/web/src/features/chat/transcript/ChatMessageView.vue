@@ -15,6 +15,7 @@ import { changedNothing, type ChatMessage, type ChecklistView, foldsIntoTurn } f
 import { type CardAnswer, requestIdOf } from "../session/cardReplies";
 import { useMarkdown } from "../../../lib/markdown/useMarkdown";
 import { openFileRefFromEvent } from "../../workspace/files/refs/openFileRef";
+import { claimInText, openClaimed, openClaimedLinkFromEvent } from "../../../shell/side/sideLinks";
 import { usePaneView } from "../panel/useChat-view";
 import ChatAttachmentStrip from "../composer/ChatAttachmentStrip.vue";
 import ChatBrowserHelpCard from "./cards/ChatBrowserHelpCard.vue";
@@ -115,11 +116,12 @@ const body = useMarkdown(
     () => conversation.value.scope.value,
 );
 
-// Delegated listener for markdown's copy buttons and file links (inside v-html); bound to press, since a live rerender
-// can destroy the button before click fires.
+// Delegated listener for markdown's copy buttons, file links and links a side view claims (inside v-html); bound to
+// press, since a live rerender can destroy the button before click fires.
 const onMarkdownClick = (event: MouseEvent): void => {
     copyCodeFromEvent(event);
     openFileRefFromEvent(event);
+    openClaimedLinkFromEvent(event);
 };
 
 // Status line shows for the whole live turn, not just before the first token, since the model can go quiet
@@ -236,6 +238,10 @@ const errandMarks = computed(() =>
         ? []
         : [{ key: `errand`, icon: errand.value.icon, label: errand.value.label, tip: t(`chat.chatMessageView.showPrompt`), findable: true }],
 );
+
+// What an errand is about, when its prompt names something a side view can show (a ci-fix errand's failing run): one
+// press on its line opens it beside the chat, so the conversation fixing it and the thing it fixes share a screen.
+const errandSubject = computed(() => (errand.value === undefined ? undefined : claimInText(props.message.text)));
 
 // Trailer naming the latest thing keeping this turn going, and how many said the same; shown in-flow so it can't shift
 // the pinned row's height.
@@ -471,6 +477,16 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
              turn nobody typed reads the same whichever way it landed. -->
         <ChatAsideLane v-if="errand" :marks="errandMarks">
             <span class="min-w-0 truncate text-2xs text-subtle">↳ {{ errand.label }} · {{ errand.detail }}</span>
+            <button
+                v-if="errandSubject !== undefined"
+                type="button"
+                class="ui-chip shrink-0 gap-1 rounded-md px-1.5 py-0.5 text-2xs font-medium"
+                v-tooltip.top="t(`chat.chatMessageView.openBeside`)"
+                @click="openClaimed(errandSubject)"
+            >
+                <Icon name="expand" class="text-2xs" />
+                {{ errandSubject.label }}
+            </button>
             <template #errand>
                 <pre class="chat-inset max-h-64 overflow-auto px-2.5 py-1.5 text-2xs leading-relaxed whitespace-pre-wrap">{{ message.text }}</pre>
             </template>

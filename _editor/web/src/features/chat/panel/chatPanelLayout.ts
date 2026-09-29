@@ -5,10 +5,10 @@ import { chatFullSlot } from "../../../shell/window/panelSlots";
 import { useChatFloating } from "./chatFloating";
 import { useLayout } from "../../../shell/window/useLayout";
 
-// Which of the panel's three homes (side column, rail, own window) is in effect, derived from where it's drawn, never a
-// stored mode.
+// Which of the panel's three homes (the side panel, the rail, its own window) is in effect, derived from where it's
+// drawn, never a stored mode.
 // - chatWide: on a wide surface (own window, or the full-window section); turns onto its side.
-// - chatOnRail: home is the rail, wherever the panel currently sits; the side column never opens.
+// - chatOnRail: home is the rail, wherever the panel currently sits; the side panel holds no chat.
 // - chatParked: this window draws the chat but no surface on it is showing the panel.
 
 const floating = useChatFloating();
@@ -16,6 +16,9 @@ const layout = useLayout();
 
 export const chatWide = computed(() => floating.floats.value || chatFullSlot.value !== null);
 export const chatOnRail = computed(() => layout.chatHome.value === `rail`);
+// The side home in effect: the chat lives in the side panel, under whatever was opened beside it (shell/side). Neither
+// homed on the rail nor in a window of its own.
+export const chatInSidePanel = computed(() => !chatOnRail.value && !floating.floats.value);
 
 // The rail's home has no column, so off /chat the panel has nowhere to go. This says so, and is what decides whether
 // the quick bar draws — which is how "which views show the quick bar" is answered by shape rather than by a list of

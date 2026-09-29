@@ -39,6 +39,8 @@ const fakeHost = (reachable = true) => {
                 return { dispose: () => undefined };
             },
         },
+        // activate() registers the run side view after the rail view; a host missing it would stop activate() there.
+        sideViews: { register: () => ({ dispose: () => undefined }) },
     } as unknown as IntenticApi;
     return { api, procedures, views, fetched };
 };

@@ -117,6 +117,40 @@ export interface DocumentProviderRegistration {
     readonly view: () => Promise<Component>;
 }
 
+// What one side view is opened on: plain values only, since the tab survives a reload and travels between windows (a
+// popped-out chat hands what it opens to the main window). Keep it to what identifies the thing (`{ repo, runId }`), and
+// look the rest up when drawing.
+export type SideViewInput = Readonly<Record<string, string | number | boolean>>;
+
+// What a side panel tab says about the thing it shows. An unknown `icon` falls back in the host's set.
+export interface SideViewLabel {
+    // Short: the tab is narrow ("#4812 build", "Nightly run").
+    readonly title: string;
+    readonly icon?: string | undefined;
+    // What hovering the tab explains beyond the title: the thing's full name, where it lives.
+    readonly tooltip?: string | undefined;
+}
+
+// Something an extension can show in the editor's side panel for one input, beside whatever section the reader is in.
+// The host owns the panel, the tab and its peek/keep lifecycle; `view` draws the body. `id` must match a
+// `contributes.sideViews` entry in the approved manifest.
+export interface SideViewRegistration {
+    readonly id: string;
+    // The tab's words for one input; read on every render of the strip, so a lookup, never a fetch. Throwing falls back
+    // to the manifest's label.
+    readonly describe: (input: SideViewInput) => SideViewLabel;
+    // The app path "Open in …" takes the reader to for this input (e.g. "/ext/pipelines?repo=web"), which is also where a
+    // phone, with no side panel, goes instead; absent offers no such button.
+    readonly home?: ((input: SideViewInput) => string | undefined) | undefined;
+    // A link this side view can show instead of the browser opening it: the input it would open for `url`, or undefined.
+    // Asked only when a link in the chat is followed, and only with `links: true` on the manifest entry; it may parse,
+    // but it never fetches.
+    readonly claim?: ((url: string) => SideViewInput | undefined) | undefined;
+    // Lazily imported component, rendered with `input` bound. It must not read or write `api.route`: the route belongs to
+    // the section beside it.
+    readonly view: () => Promise<Component>;
+}
+
 // Everything that decides who serves a turn. `label` lets a view show the choice without its own
 // catalog; everything after it is an optional pin (absent means the daemon resolves it).
 export interface PickedModel {
@@ -175,6 +209,14 @@ export interface IntenticApi {
         // Opens one of this extension's documents for a path with no row of its own (e.g. the workspace root).
         // `id` must be a registered provider with an offer for `path`, or nothing opens.
         open(id: string, path: string): void;
+    };
+    // The editor's side panel (contributes.sideViews): the extension says what it can show for an input, the host draws
+    // the tab beside whichever section the reader is in. See SideViewRegistration.
+    readonly sideViews: {
+        register(view: SideViewRegistration): Disposable;
+        // Opens (or focuses) one of this extension's side views on `input`: a peek the next one replaces, unless `keep`.
+        // On a phone, with no side panel, it goes to the view's `home` instead. `id` must be a registered side view.
+        open(id: string, input: SideViewInput, options?: { readonly keep?: boolean }): void;
     };
     readonly commands: {
         // `command` must match a `contributes.commands` entry in the approved manifest.

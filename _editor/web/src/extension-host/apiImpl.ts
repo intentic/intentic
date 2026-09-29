@@ -25,6 +25,10 @@ import { useSandbox } from "../features/sandbox/client/useSandbox";
 import { useWorkspaceTabs } from "../features/workspace/tabs/useWorkspaceTabs";
 import { diffTabId } from "../features/workspace/tabs/workspaceTabs";
 import { documentProvider, registerDocumentProvider } from "../core-views/documentRegistry";
+import { extensionSideViewId, registerExtensionSideView } from "../core-views/extensionSideViews";
+import { SideInputSchema } from "../shell/side/sideTabs";
+import { revealSideView, sideViewOf } from "../shell/side/sideViews";
+import { handOffToMainWindow } from "../shell/window/mainWindow";
 import { onFilesChanged } from "./fileEvents";
 import { onRefsChanged, onReposChanged } from "./repoEvents";
 import { registerView } from "../core-views/registry";
@@ -100,6 +104,37 @@ export const deactivateAllExtensions = (): void => {
     for (const extensionId of activations.keys()) {
         deactivateExtension(extensionId);
     }
+};
+
+// api.sideViews, gated like documents: a registration only for an id the manifest declares, an open only of this
+// extension's own registered side views and only on an input of plain values, since the tab is stored and handed between
+// windows. A popped-out window hands the open to the app's own; a phone, with no side panel, goes to the view's home.
+const sideViewsApi = (
+    extensionId: string,
+    contributes: ExtensionSummary["manifest"]["contributes"],
+    track: (disposable: Disposable) => Disposable,
+): IntenticApi["sideViews"] => {
+    const declared = new Map((contributes?.sideViews ?? []).map((view) => [view.id, view]));
+    return {
+        register: (view) => {
+            const entry = declared.get(view.id);
+            if (entry === undefined) {
+                throw new Error(`side view "${view.id}" is not declared in the manifest's contributes.sideViews`);
+            }
+            return track(registerExtensionSideView(extensionId, entry, view, (path) => void router.push(path)));
+        },
+        open: (id, input, options) => {
+            const view = extensionSideViewId(extensionId, id);
+            const plain = SideInputSchema.safeParse(input).data;
+            if (!declared.has(id) || sideViewOf(view) === undefined || plain === undefined) {
+                return;
+            }
+            const keep = options?.keep === true;
+            if (!handOffToMainWindow({ kind: `side`, view, input: plain, keep })) {
+                revealSideView(view, plain, { keep });
+            }
+        },
+    };
 };
 
 export const createExtensionApi = (
@@ -257,6 +292,7 @@ export const createExtensionApi = (
                 useWorkspaceTabs().openDocument(extensionId, id, path, offer.title, offer.icon);
             },
         },
+        sideViews: sideViewsApi(extensionId, contributes, track),
         commands: {
             register: (command, handler) => {
                 const declared = declaredCommands.get(command);

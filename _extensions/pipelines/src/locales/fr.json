@@ -85,6 +85,12 @@
         "runs": "{runs} exécutions",
         "thisRepo": "ce dépôt"
     },
+    "runSide": {
+        "notListed": "L'exécution #{number} de {repo} ne fait pas partie des exécutions récentes que la sandbox conserve.",
+        "openOn": "Ouvrir sur {forge}",
+        "run": "Exécution {number}",
+        "unreadable": "Cet onglet ne désigne aucune exécution."
+    },
     "tip": {
         "attempt": "Tentative",
         "branch": "Branche",

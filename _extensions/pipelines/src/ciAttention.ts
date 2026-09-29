@@ -18,6 +18,10 @@ const { state: runs, start: startCiAttention } = sandboxPoll<CiRunsResponse>({
 // Started by activate() so the badge is live from login, and disposed with the extension.
 export { startCiAttention };
 
+// The runs and repositories as the poll last read them: what the run side view's tab and a claimed link are answered
+// from, since both are asked synchronously, on a render and on a click.
+export const ciRunsNow = (): CiRunsResponse => runs.value;
+
 // What CI is doing right now, in the board's own words and split the board's own way: `queued` is never folded into
 // `running`, or the rail would claim a runner had picked up work nobody has started. Undefined when nothing is moving,
 // which is most of the day.

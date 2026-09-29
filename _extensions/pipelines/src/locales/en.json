@@ -92,6 +92,12 @@
         "runs": "{runs} runs",
         "thisRepo": "this repo"
     },
+    "runSide": {
+        "notListed": "Run #{number} of {repo} isn't among the recent runs the sandbox keeps.",
+        "openOn": "Open on {forge}",
+        "run": "Run {number}",
+        "unreadable": "This tab doesn't name a run."
+    },
     "tip": {
         "attempt": "Attempt",
         "branch": "Branch",

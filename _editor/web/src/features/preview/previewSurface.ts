@@ -1,7 +1,11 @@
 import { sandboxRef } from "@intentic/extension-api";
 import type { Router } from "vue-router";
 import { storedValue, storeValue } from "../../lib/browserStorage";
+import { guestAllowedPath } from "../../shell/guestPaths";
+import { openBeside, sideDocked } from "../../shell/side/sideTabs";
+import { handOffToMainWindow } from "../../shell/window/mainWindow";
 import { useSandbox } from "../sandbox/client/useSandbox";
+import { useRole } from "../sandbox/secrets/useRole";
 import { ADDRESS_TARGET_ID } from "./previewModel";
 
 // The preview panel's own state (target, whether it exists), module-level like useChat/useLayout since the panel mounts
@@ -54,6 +58,28 @@ export const openPreview = (router: Router, targetId?: string): void => {
     void router.push(`/preview`);
 };
 
+// The side panel's name for the preview: one tab, since a window draws one preview panel.
+export const PREVIEW_SIDE_VIEW = `preview`;
+
+// A reference to a running app (a server a turn left running, a localhost link): selects it, and shows it beside the
+// section the reader is in rather than taking the main area. Standing on /preview it is simply selected there; a window
+// with no side panel, or a reader the preview is closed to, goes to /preview as before; a popped-out panel hands it to
+// the app's own window. Kept, not a peek: replacing it with the next file looked at would reload the app.
+export const openPreviewBeside = (router: Router, targetId?: string): void => {
+    if (handOffToMainWindow({ kind: `preview`, target: targetId })) {
+        return;
+    }
+    if (!sideDocked.value || router.currentRoute.value.name === `preview` || (useRole().isGuest.value && !guestAllowedPath(`/preview`))) {
+        openPreview(router, targetId);
+        return;
+    }
+    if (targetId !== undefined) {
+        selectPreviewTarget(targetId);
+    }
+    markPreviewOpened();
+    openBeside(PREVIEW_SIDE_VIEW, {}, { keep: true });
+};
+
 // Opens the preview once per sandbox, on first visit only; the user's later choice (open or closed) always wins after
 // that. Stored, not in-memory, so the flag survives a reload; returns whether it opened.
 const autoShownKey = (sandboxId: string | undefined): string => `intentic-preview-autoshown:${sandboxId ?? ``}`;
@@ -64,7 +90,7 @@ export const openPreviewOnFirstVisit = (router: Router, targetId: string): boole
         return false;
     }
     storeValue(key, `1`);
-    openPreview(router, targetId);
+    openPreviewBeside(router, targetId);
     return true;
 };
 

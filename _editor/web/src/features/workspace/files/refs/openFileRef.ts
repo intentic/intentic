@@ -1,10 +1,13 @@
 import { STATE_DIR } from "@intentic/sandbox-contract";
 import { router } from "../../../../router";
+import { sectionReachable } from "../../../../core-views/registry";
+import { FILE_SIDE_VIEW, fileSideInput } from "../../../../shell/side/sideFileInput";
+import { openBeside, sideDocked } from "../../../../shell/side/sideTabs";
 import { handOffToMainWindow } from "../../../../shell/window/mainWindow";
 import { resolveWorkspaceRef } from "./resolveFileRef";
 import { useWorkspaceTabs } from "../../tabs/useWorkspaceTabs";
 import { setProjectScope, withinScope } from "../../../../app/projectScope";
-import { workspaceAgent } from "../../health/workspaceScope";
+import { workspaceAgent, workspaceScope } from "../../health/workspaceScope";
 
 // `.intentic` is bind-mounted into every isolated namespace, so a path under it is shared regardless of scope.
 export const sharedStatePath = (path: string): boolean => path.startsWith(`${STATE_DIR}/`);
@@ -15,6 +18,9 @@ export const sharedStatePath = (path: string): boolean => path.startsWith(`${STA
 
 // Resolves the reference before opening it, since a path written in prose is often a suffix of the real one;
 // an unresolved reference opens as written.
+// Where it opens is the file's home or beside it: standing in the Workspace, the file opens there; anywhere else it is
+// peeked in the side panel and the section the rail put in the main area stays put. A window with no side panel (a
+// phone), and a reader the Workspace is closed to, keep the Workspace route.
 export const openWorkspaceRef = async (path: string, line?: number, asked?: { readonly agent: string | undefined }): Promise<void> => {
     // Set before the hand-off below, so both windows resolve the same file.
     const scope = sharedStatePath(path) ? { agent: undefined } : asked;
@@ -22,6 +28,19 @@ export const openWorkspaceRef = async (path: string, line?: number, asked?: { re
     if (handOffToMainWindow({ kind: `file`, path, line, scope })) {
         return;
     }
+    if (sideDocked.value && router.currentRoute.value.name !== `workspace` && sectionReachable(`/workspace`)) {
+        // Resolved in the copy it names, which the Workspace's own scope is left alone by: a look is not a move.
+        const { agent } = scope ?? workspaceScope();
+        const target = (await resolveWorkspaceRef(path, { agent })) ?? path;
+        openBeside(FILE_SIDE_VIEW, fileSideInput(target, agent), line === undefined ? {} : { line });
+        return;
+    }
+    await openInWorkspace(path, line, scope);
+};
+
+// The Workspace route itself, with the file open in its editor: what a reference did before the side panel, and what a
+// peek's "Open in Workspace" still does. Switches the Workspace to the copy the reference named.
+export const openInWorkspace = async (path: string, line?: number, scope?: { readonly agent: string | undefined }): Promise<void> => {
     // `{ agent: undefined }` means the shared tree, not "leave as is"; set before resolving, which reads it.
     if (scope !== undefined) {
         workspaceAgent.value = scope.agent;

@@ -29,7 +29,7 @@ import {
 import ViewBadgeChip from "../core-views/ViewBadgeChip.vue";
 import { useVocabulary } from "../core-views/vocabulary";
 import { useAudience } from "../app/useAudience";
-import { chatOnRail, lastSectionPath, toggleChatFloating, toggleChatHome } from "../features/chat/panel/chatPanelLayout";
+import { chatInSidePanel, chatOnRail, lastSectionPath, toggleChatFloating, toggleChatHome } from "../features/chat/panel/chatPanelLayout";
 import { useChatFloating } from "../features/chat/panel/chatFloating";
 import { useShellCommands } from "./commands/useShellCommands";
 import { useKeybindings } from "./commands/useKeybindings";
@@ -51,7 +51,11 @@ import { useLiveLinks } from "../features/sandbox/devices/useLiveLinks";
 import { extensionsLoaded } from "../extension-host/loader";
 import AccountPanel from "./AccountPanel.vue";
 import ChatQuickBar from "../features/chat/panel/ChatQuickBar.vue";
-import { chatSlot, terminalSlot } from "./window/panelSlots";
+import { terminalSlot } from "./window/panelSlots";
+import SidePanel from "./side/SidePanel.vue";
+import { registerCoreSideViews } from "./side/coreSideViews";
+import { sideDocked } from "./side/sideTabs";
+import { shownSideTabs } from "./side/sideViews";
 import { type RailTile, useRailMemory } from "./rail/railMemory";
 import { useRailPins } from "./rail/railPins";
 import RailIcon from "./rail/RailIcon.vue";
@@ -96,8 +100,8 @@ const tileTip = (tile: SectionTile, extra?: string): TooltipValue => {
     return { title: tile.label, tone, note: parts.join(` · `) };
 };
 
-// Desktop chrome of the post-login shell: a square-tile rail, the shared chat panel, and a workspace
-// outlet, laid out as a three-column grid (chat width via the --chat-width var, set by its drag handle).
+// Desktop chrome of the post-login shell: a square-tile rail, a workspace outlet, and the side panel (the chat and what
+// was opened beside), laid out as a three-column grid (the side panel's width via --side-width, set by its drag handle).
 // Shared lifecycle (liveness, presence, plan) lives in WorkspaceShell, which picks this or ShellMobile.
 
 const { panels, settled: panelsSettled } = usePanels();
@@ -356,8 +360,12 @@ const cycleSection = (delta: number): void => {
 };
 
 let sectionCommands: readonly Disposable[] = [];
+// What the side panel can show of the core's own: a file, the running app.
+const coreSideViews = registerCoreSideViews();
 
 onMounted(() => {
+    // References opened from here on land in the side panel rather than moving the main area (openBeside).
+    sideDocked.value = true;
     sectionCommands = [
         // Follows the tiles: cached views stay useful during a stall, even while live actions wait on reachability.
         registerCommand({
@@ -382,6 +390,10 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+    sideDocked.value = false;
+    for (const disposable of coreSideViews) {
+        disposable.dispose();
+    }
     for (const disposable of sectionCommands) {
         disposable.dispose();
     }
@@ -480,13 +492,15 @@ const keepOnRail = (tile: SectionTile): void => {
     moreTrigger.value?.focus();
 };
 
-// Chat column collapses to 0 whenever the panel doesn't live in it (floated, mid-restore, or homed on
-// the rail). Rail measures divide out --ui-scale (`rail()`): chrome doesn't grow with the app's text size.
+// The side panel (shell/side) takes its column while it holds anything: the chat whose home is the side, or what was
+// opened beside the section. Empty, the column is 0 wide. Rail measures divide out --ui-scale (`rail()`): chrome doesn't
+// grow with the app's text size.
+const sideShown = computed(() => chatInSidePanel.value || shownSideTabs.value.length > 0);
 const rail = (value: string): string => `calc(${value} / var(--ui-scale))`;
 const gridStyle = computed(() => {
     const compact = iconRailSize.value === `compact`;
     return {
-        "--chat-width": chatFloats.value || chatOnRail.value ? `0px` : uiLength(layout.chatWidth.value),
+        "--side-width": sideShown.value ? uiLength(layout.chatWidth.value) : `0px`,
         "--icon-rail-width": rail(`${ICON_RAIL_WIDTH_REM[iconRailSize.value]}rem`),
         "--icon-rail-tile-size": rail(compact ? `2.5rem` : `2.75rem`),
         "--icon-rail-account-size": rail(compact ? `2rem` : `2.25rem`),
@@ -736,8 +750,8 @@ useKeybindings();
             <AccountPanel />
         </nav>
 
-        <!-- This slot serves the panel's docked and floating instances. -->
-        <div ref="chatSlot" class="contents"></div>
+        <!-- The right-hand column: things opened beside the section, and the chat when its home is the side. -->
+        <SidePanel v-if="sideShown" />
 
         <main ref="page" class="relative flex min-w-0 flex-col overflow-hidden" style="grid-area: workspace">
             <SandboxGate>
@@ -764,10 +778,10 @@ useKeybindings();
 <style scoped>
 .shell {
     /* Floor is 0, not the stored width, which was clamped at drag time and could push past a shrunk window. */
-    grid-template-columns: var(--icon-rail-width) minmax(0, 1fr) minmax(0, var(--chat-width, 22rem));
+    grid-template-columns: var(--icon-rail-width) minmax(0, 1fr) minmax(0, var(--side-width, 22rem));
     /* One explicit row, so a stray element landing in an implicit row can't starve 1fr to zero height. */
     grid-template-rows: minmax(0, 1fr);
-    grid-template-areas: "rail workspace chat";
+    grid-template-areas: "rail workspace side";
 }
 
 .icon-rail {

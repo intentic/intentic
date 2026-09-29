@@ -5,16 +5,17 @@ import { useChatFloating } from "../../features/chat/panel/chatFloating";
 import { globalTerminalSource, useTerminalPanel } from "../../features/terminal/useTerminalPanel";
 import { useTerminalFloating } from "../../features/terminal/terminalFloating";
 import { chatOnRail } from "../../features/chat/panel/chatPanelLayout";
-import { previewOpened } from "../../features/preview/previewSurface";
+import { previewOpened,PREVIEW_SIDE_VIEW } from "../../features/preview/previewSurface";
 import { usePreviewFloating } from "../../features/preview/previewFloating";
 import ChatPanel from "../../features/chat/panel/ChatPanel.vue";
 import PreviewPanel from "../../features/preview/PreviewPanel.vue";
 import TerminalPanel from "../../features/terminal/TerminalPanel.vue";
-import { chatBarSlot, chatSlot, chatFullSlot, previewSlot, terminalSlot } from "./panelSlots";
+import { chatBarSlot, chatSlot, chatFullSlot, previewSlot, sidePreviewSlot, terminalSlot } from "./panelSlots";
+import { tabsOfView } from "../side/sideTabs";
 
 // The three poppable panels (chat, terminal, preview), mounted once per window, above the router. Each is
-// teleported to wherever it belongs (docked slot, full area, floating window's slot, or a parking stage) — a move,
-// never a rebuild. Which window draws which is one read of `shows`: this window is the panel's floating window, or
+// teleported to wherever it belongs (its section, the side panel, a floating window's slot, or a parking stage) — a
+// move, never a rebuild. Which window draws which is one read of `shows`: this window is the panel's floating window, or
 // nobody is.
 
 const chat = useChatFloating();
@@ -31,13 +32,12 @@ onUnmounted(() => park.remove());
 
 // Full-window slot first; on the rail the column is never a fallback, only the quick bar and then the parking stage.
 const chatTarget = computed(() => chatFullSlot.value ?? (chatOnRail.value ? (chatBarSlot.value ?? park) : (chatSlot.value ?? park)));
-// Both read off where it actually went, like every other presentation question here: the strip takes the composer
-// alone, and the left border is the side column's own edge — every other home already has one drawn beside it.
+// Read off where it actually went, like every other presentation question here: the strip takes the composer alone.
+// The side panel draws its own edge and seam around the chat, as it does around everything it holds.
 const inBar = computed(() => chatTarget.value === chatBarSlot.value);
-const inColumn = computed(() => chatTarget.value === chatSlot.value);
 const terminalTarget = computed(() => terminalSlot.value ?? park);
-// No side-column slot: fills its area or window, or waits parked, where the live iframe keeps its own state.
-const previewTarget = computed(() => previewSlot.value ?? park);
+// Its section, then its tab in the side panel, then parked, where the live iframe keeps its own state.
+const previewTarget = computed(() => previewSlot.value ?? sidePreviewSlot.value ?? park);
 
 // Only a dock lands a panel visible on its route home; one whose window merely went away returns without moving the reader.
 chat.onDocked(() => {
@@ -45,8 +45,9 @@ chat.onDocked(() => {
         void router.push(`/chat`);
     }
 });
+// A preview with a tab in the side panel comes back to it, beside wherever the reader is.
 preview.onDocked(() => {
-    if (previewOpened.value && router.currentRoute.value.name !== `preview`) {
+    if (previewOpened.value && router.currentRoute.value.name !== `preview` && tabsOfView(PREVIEW_SIDE_VIEW).length === 0) {
         void router.push(`/preview`);
     }
 });
@@ -54,9 +55,8 @@ preview.onDocked(() => {
 
 <template>
     <!-- Grid area and border live on the panel, not the slot: the slot is `display: contents` and generates no box. -->
-    <!-- Border belongs to the docked column alone; a full window, /chat or the strip would double an edge already drawn. -->
     <Teleport :to="chatTarget">
-        <ChatPanel v-if="chat.shows.value" :bar="inBar" :class="{ 'border-l border-line': inColumn }" style="grid-area: chat" />
+        <ChatPanel v-if="chat.shows.value" :bar="inBar" style="grid-area: chat" />
     </Teleport>
     <Teleport :to="terminalTarget">
         <TerminalPanel

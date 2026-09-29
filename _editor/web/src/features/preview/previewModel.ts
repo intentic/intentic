@@ -98,6 +98,25 @@ export const appTargets = (repo: string, apps: readonly RepoApp[]): PreviewTarge
 // One forwarded port's target id; the panel also forwards ports itself and needs to name what it made.
 export const portTargetId = (port: number): string => `port:${port}`;
 
+// A link to a server on the sandbox's own loopback (`http://localhost:5173`, the address an agent's dev server prints):
+// the preview target of that port, while the preview has one, which is only once the port is forwarded or was left
+// running for the person. Any other link is not the preview's.
+const LOOPBACK = new Set([`localhost`, `127.0.0.1`, `0.0.0.0`, `[::1]`]);
+export const loopbackPreviewTarget = (url: string, ports: readonly PortSummary[]): string | undefined => {
+    let parsed: URL;
+    try {
+        parsed = new URL(url);
+    } catch {
+        return undefined;
+    }
+    const port = Number(parsed.port);
+    if (!LOOPBACK.has(parsed.hostname) || !Number.isInteger(port) || port === 0) {
+        return undefined;
+    }
+    const served = ports.some((entry) => entry.port === port && ((entry.forwarded && entry.previewUrl !== undefined) || entry.job !== undefined));
+    return served ? portTargetId(port) : undefined;
+};
+
 // Forwarded ports: the answer for a dev server this app never started. Only forwarded ones qualify; an unforwarded
 // port's loopback address means nothing to this browser. The one exception is a server an agent left running for the
 // person (`job`): it is listed before it is forwarded, with no address, and the panel offers forwarding it, since

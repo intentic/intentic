@@ -46,10 +46,21 @@ flowchart LR
   `local/` holds the window's own parts: Ctrl+P, Ctrl+Shift+F and Ctrl+W (`localKeys.ts`), the close guard for unsaved
   edits (`useUnsavedGuard.ts`), and a project folder's Bring back section (`LocalBringBack.vue`).
 - **Routes.** `/login` and `/setup` sit outside the shell. Everything else lives under `/` in
-  `WorkspaceShell.vue`, guarded by `requireAuth` and `requireSetup`, which renders `ShellDesktop.vue` (rail, docked
-  chat and terminal) or `ShellMobile.vue` (tab bar, full-screen views). A link naming a sandbox (`/?sandbox=<id>`, the
+  `WorkspaceShell.vue`, guarded by `requireAuth` and `requireSetup`, which renders `ShellDesktop.vue` (rail, side
+  panel and terminal) or `ShellMobile.vue` (tab bar, full-screen views). A link naming a sandbox (`/?sandbox=<id>`, the
   desktop app's) opens the shell on it if the account lists it, and the id leaves the address either way
   (`router/sandboxArrival.ts`).
+- **The side panel.** The rail owns the main area; `shell/side/` is where the reader looks at another section's
+  things without leaving the one they picked. A reference (a file a chat names, a server a turn left running, an
+  extension's side view) opens in its home while that home is the main area, and beside it everywhere else, as a peek
+  the next one replaces unless kept. "Open in …" moves it into its home. The chat whose home is the side is the
+  panel's lower part, under the tabs, and a popped-out window hands its references to the main window's panel. A phone
+  has no side panel: there every reference navigates as before. A file peek reads the copy it names (`VIEW_SCOPE`)
+  without switching the Workspace's scope, and never edits, since the Workspace may hold the same path unsaved.
+  _2026-09-29: peeks stack above the chat rather than sharing tabs with it. A tab would hide the chat that linked to
+  the file, and typing to an agent while its preview updates needs both on screen. References from the side panel's
+  own chat open beside, not in the main area as a side chat does in an IDE: that would let one click replace the
+  section the rail picked._
 - **The browser tab.** `shell/browser-tab/` shows the fleet's news to a reader who is looking elsewhere. One mark at
   a time, the first that holds: `(2)` for what needs you (the Agents tile's own count), `Offline` when the sandbox is
   not answering, `✓` for a turn someone started that finished while you were away (gone when you come back), and a dot
@@ -92,7 +103,9 @@ One word per idea on screen and in code. The retired spellings are refused by
 | tray | The rows hung under a board card, and under a card in the chat's list (`features/chat/tabs/chatTrays.ts`), for every subagent it started: the ones it spawned, which are conversations of their own, and the ones its runtime ran in-process, from the roster (`features/agents/fleet/subagentRoster.ts`). Asks and working ones in sight, stopped ones one row per thing they stopped on, settled ones folded behind a count (`features/agents/board/view/childFold.ts`). A row shows its subagent in the chat: a spawned one's own chat, an in-process one's transcript in its parent's column (`features/chat/panel/subagent/subagentView.ts`) |
 | quick bar | The parked chat's pill that grows into the composer (`ChatQuickBar.vue`); what it unfolds is its transcript |
 | quick look | A card a hover raises: a home tile's preview, a bigger picture, an attached file's first lines |
-| peek | A tab opened as a look, which closes when the reader moves on unless kept (`Conversation.peek`), and nothing else |
+| peek | A tab opened as a look, which closes when the reader moves on unless kept (`Conversation.peek`, the side panel's `peek`), and nothing else |
+| side panel | The desktop shell's right-hand column: what the reader opened beside the section the rail put in the main area, one tab each, stacked over the chat when the chat's home is the side (`shell/side/`). Not the Workspace's second editor pane, which is its companion pane |
+| side view | What one side panel tab shows for one input: the core's file and preview, or an extension's (`shell/side/sideViews.ts`) |
 | cover | One file name read in every folder (README.md, package.json): the explorer tree lists folders alone and marks those holding it, and the home shows the current folder's copy in place of its tiles (`features/workspace/home/homeCover.ts`); on screen, "Show README.md in every folder" |
 
 The status bar still stores its panel under `ui-board-dock-*` in local storage: renaming a stored key would close
