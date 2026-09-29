@@ -81,6 +81,8 @@ const tiles = computed<Tile[]>(() => [
         ),
     ),
 ]);
+// The hover says what the tile holds, then what the persona may do.
+const tileTip = (tile: Tile): string | undefined => [tile.facts, tile.persona?.bounds].filter((line) => line !== undefined && line !== ``).join(`\n`) || undefined;
 const isPicked = (tile: Tile): boolean => tile.persona?.id === scope.value?.id;
 const selected = computed(() => tiles.value.find(isPicked) ?? tiles.value[0]!);
 
@@ -184,12 +186,12 @@ defineExpose({ selectedTabId: computed(() => `${tabId(selected.value)}-name`) })
 <template>
     <div class="flex min-w-0 shrink-0 flex-col gap-1.5">
         <SandboxOutdatedNotice v-if="outdated" :missing="t(`chat.chatPersonaRail.outdatedMissing`)" class="shrink-0" />
-        <!-- Capped, so a long roster scrolls in place rather than pushing the chats off the column. -->
+        <!-- Capped, so a long roster scrolls in place rather than pushing the chats off the column. auto-fit, so a short roster spreads over the column's width rather than leaving empty tracks on the right. -->
         <div
             ref="grid"
             role="tablist"
             :aria-label="t(`shared.personas`)"
-            class="grid max-h-[40vh] min-w-0 grid-cols-[repeat(auto-fill,minmax(4.5rem,1fr))] gap-1 overflow-y-auto"
+            class="grid max-h-[40vh] min-w-0 grid-cols-[repeat(auto-fit,minmax(4.5rem,1fr))] gap-1 overflow-y-auto"
             @keydown="onKey"
         >
             <button
@@ -203,16 +205,32 @@ defineExpose({ selectedTabId: computed(() => `${tabId(selected.value)}-name`) })
                 :aria-labelledby="`${tabId(tile)}-name`"
                 :aria-describedby="tile.facts === `` ? undefined : `${tabId(tile)}-facts`"
                 :tabindex="tile === selected ? 0 : -1"
-                v-tooltip.bottom="tile.persona?.bounds"
+                v-tooltip.bottom="tileTip(tile)"
                 class="ui-row-select group relative flex min-w-0 flex-col items-center gap-1 rounded-lg px-1 pb-1.5 pt-2.5"
                 :class="{ 'ui-row-select-on': tile === selected }"
                 @click="pick(tile.persona?.id)"
                 @contextmenu.prevent.stop="openMenu(tile, $event)"
             >
-                <PersonaFace v-if="tile.persona !== undefined" :persona="tile.persona" :size="FACE_SIZES.card" />
-                <!-- Anyone has no face: the glyph the composer's Acts as menu gives it, on a disc the size of one. -->
-                <span v-else class="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-primary-600/15">
-                    <Icon name="users" class="text-lg text-link" />
+                <!-- What needs you and what works ride on the face as badges, where a glance lands anyway; the chat count is the hover's. -->
+                <span class="relative shrink-0">
+                    <PersonaFace v-if="tile.persona !== undefined" :persona="tile.persona" :size="FACE_SIZES.card" />
+                    <!-- Anyone has no face: the glyph the composer's Acts as menu gives it, on a disc the size of one. -->
+                    <span v-else class="flex h-14 w-14 items-center justify-center rounded-full bg-primary-600/15">
+                        <Icon name="users" class="text-lg text-link" />
+                    </span>
+                    <span
+                        v-if="tile.needsYou > 0"
+                        aria-hidden="true"
+                        class="absolute -right-1 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-warning px-1 text-2xs font-semibold tabular-nums leading-none text-canvas ring-2 ring-canvas"
+                        >{{ tile.needsYou }}</span
+                    >
+                    <span
+                        v-if="tile.working > 0"
+                        aria-hidden="true"
+                        class="absolute -bottom-0.5 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-canvas text-link ring-2 ring-canvas"
+                    >
+                        <Icon name="spinner" spin class="text-2xs" />
+                    </span>
                 </span>
                 <span
                     :id="`${tabId(tile)}-name`"
@@ -220,30 +238,6 @@ defineExpose({ selectedTabId: computed(() => `${tabId(selected.value)}-name`) })
                     :class="tile === selected ? 'text-content' : 'text-muted'"
                     >{{ tile.label }}</span
                 >
-                <!-- What needs you, what works and how many chats the lanes would hold, in the marks the chat bar's header uses; a seat held even when empty, so tiles in a row keep one height. -->
-                <span aria-hidden="true" class="flex h-4 items-center justify-center gap-1.5">
-                    <span
-                        v-if="tile.needsYou > 0"
-                        v-tooltip.top="t(`agents.agentStatus.needsYou`)"
-                        class="ui-status-pill flex shrink-0 items-center gap-1 bg-warning/15 text-2xs font-semibold text-warning"
-                    >
-                        <Icon name="exclamation-circle" class="text-2xs" />{{ tile.needsYou }}
-                    </span>
-                    <!-- A spinner without a number: beside the chat count a second figure read as a sum, and how many work is the hover's to say. -->
-                    <span
-                        v-if="tile.working > 0"
-                        v-tooltip.top="t(`chat.chatPersonaRail.working`, { count: tile.working }, tile.working)"
-                        class="flex shrink-0 items-center text-link"
-                    >
-                        <Icon name="spinner" spin class="text-2xs" />
-                    </span>
-                    <span
-                        v-if="tile.chats > 0"
-                        v-tooltip.top="t(`chat.chatPersonaRail.chats`, { count: tile.chats }, tile.chats)"
-                        class="shrink-0 text-2xs tabular-nums text-subtle"
-                        >{{ tile.chats }}</span
-                    >
-                </span>
                 <span v-if="tile.facts !== ``" :id="`${tabId(tile)}-facts`" class="sr-only">{{ tile.facts }}</span>
                 <!-- One press to start as anyone here, without picking them first: in the tile's corner, shown on hover. -->
                 <span
