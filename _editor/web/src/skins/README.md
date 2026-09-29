@@ -32,7 +32,7 @@ the four looks. `useWallpaper.ts` stores it under `ui-wallpaper` (`none` or `mis
 `data-wallpaper` on `<html>`; `wallpapers.css` draws it as the backgrounds of `.agents-board`, and of the shell's
 main scroller (`.wallpaper-surface`, set by `useWallpaperedRoute`) on those pages, so the picture stays put while the
 page scrolls. The scheme picks each picture's dark or light version and its scrims, and every picture is toned the
-same way: a veil of the canvas colour and half its saturation taken out, so it reads as a ground rather than a poster. While one is worn the board's lane headers drop their
+same way: dimmed by a veil that keeps its own hue (warm paper by day, dark by night), never desaturated, which read as grey. While one is worn the board's lane headers drop their
 canvas band and stop pinning, since a pinned header with nothing behind it would slide over the cards under it.
 
 - A picture's masters are `src/assets/wallpaper/<name>-dark.png` and `<name>-light.png`, 16:9;
