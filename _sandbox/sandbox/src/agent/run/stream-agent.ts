@@ -56,6 +56,7 @@ import { classifyFailure, type ErrorFrame, type FailureContext, type FailureQuer
 import { abortSuppresses, type Attribution, decorateFrame, silenceOf, silentEnding, withSilentEnding } from "./frames/frame-decorators.js";
 import { performFailureWrites, providerAnswered, recordFrame, turnActivity } from "./frames/frame-effects.js";
 import { createTurnFrames, type TurnFrames } from "./frames/frame-reducers.js";
+import { endedAfterStop } from "./frames/stop-grace.js";
 import { performSettlement } from "./settle/settle-turn.js";
 import { settleTurn } from "./settle/turn-settlement.js";
 import { conversationIdentity, mainTreePlacement, type Placement, placedTurn, refusedBegin, runnerPlacement } from "./placement/turn-placement.js";
@@ -758,7 +759,13 @@ async function* runTurn(
     // The prefix this turn's requests were built from, as the CLI announced it; what a cache refresh must match.
     let fingerprint: PromptFingerprint | undefined;
     try {
-        const runtime = runtimeFrames(services, input, plan.run(request.spec));
+        // A stopped runtime that never winds down is walked away from, so the stop frees the conversation.
+        const runtime = endedAfterStop(runtimeFrames(services, input, plan.run(request.spec)), signal, () =>
+            services.logger.warn(
+                { conversationId: input.conversationId, provider, harness: input.harness, turnId },
+                "turn stopped: the runtime did not wind down within its grace, so the turn ended without it",
+            ),
+        );
         for await (const raw of withSilentEnding(withDocuments(services, input, { worktree, effectiveCwd }, runtime), silent)) {
             if (abortSuppresses(raw, aborted())) {
                 continue;

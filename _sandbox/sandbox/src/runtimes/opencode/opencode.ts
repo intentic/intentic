@@ -245,16 +245,30 @@ const answerPermission = async (replies: OpencodeReplyClient, judge: SessionJudg
     await replyPermission(replies, ask, directory, outcome.allow ? { reply: "once" } : { reply: "reject", message: outcome.reason });
 };
 
-// How many times the stream may die in a row before the watcher gives up; the service never restarts a dead server
-// either.
+// How many times the stream may die in a row before the watcher gives up; a dead server is booted afresh by the next
+// turn (ensure), which opens its own watch.
 const STREAM_RETRIES = 3;
 const STREAM_RETRY_MS = 5_000;
 
 // The event stream is scoped to an exact directory match (not a prefix); subscribing without one still connects and
 // heartbeats but carries no session events at all. One helper rather than inlining the query, since a subscription
 // missing the scope fails silently.
+// The SDK's stream retries a lost connection for ever by default, so a server that died (an OOM kill) would leave every
+// reader parked on a stream that never ends; bounded, the stream ends and its reader sees the server gone.
+const SSE_RETRY_ATTEMPTS = 3;
+const SSE_RETRY_DELAY_MS = 1_000;
 const subscribeEvents = async (client: OpencodeClient, directory: string): ReturnType<OpencodeClient["event"]["subscribe"]> =>
-    client.event.subscribe({ query: { directory } });
+    client.event.subscribe({ query: { directory }, sseMaxRetryAttempts: SSE_RETRY_ATTEMPTS, sseDefaultRetryDelay: SSE_RETRY_DELAY_MS });
+
+// Whether a process still exists; signal 0 checks without sending anything, and EPERM still means it is there.
+export const processAlive = (pid: number): boolean => {
+    try {
+        process.kill(pid, 0);
+        return true;
+    } catch (error) {
+        return (error as NodeJS.ErrnoException).code === "EPERM";
+    }
+};
 
 // The server's two clients: the one every call rides, and the current API's, which alone can answer a permission with
 // the reason the model should hear.
@@ -450,12 +464,17 @@ export const createOpenCodeService = (
         readonly port?: number;
         // What starts `opencode serve`; the SDK's own unless a test watches the environment the spawn sees.
         readonly spawnServer?: typeof createOpencodeServer;
+        // Whether the served process still runs; the real process table unless a test stands in for it.
+        readonly alive?: (pid: number) => boolean;
     } = {},
 ): OpenCodeService => {
     const { gemini, workspaceRoot } = options;
     const fetchImpl = options.fetchImpl ?? fetch;
     const spawnServer = options.spawnServer ?? createOpencodeServer;
+    const alive = options.alive ?? processAlive;
     let booting: Promise<OpenCodeClients> | undefined;
+    // The served process, once found by its spawn stamp; undefined where it cannot be found (not Linux).
+    let serverPid: number | undefined;
     // Directories already being watched; streams are scoped to one exact directory, so this keeps one watcher per
     // directory.
     const watched = new Set<string>();
@@ -510,7 +529,7 @@ export const createOpenCodeService = (
                     },
                 }),
         );
-        applyToStampedChild(stamp, { class: "agentRuntime", spawnDepth: 0 });
+        serverPid = applyToStampedChild(stamp, { class: "agentRuntime", spawnDepth: 0 });
         const server = await starting;
         serverHandle = server;
         const clients = { client: createOpencodeClient({ baseUrl: server.url }), replies: createOpencodeReplyClient({ baseUrl: server.url }), judgeOf };
@@ -525,7 +544,12 @@ export const createOpenCodeService = (
 
     // Single-flight: memoizes the in-flight boot, not just the finished client, so a caller arriving mid-spawn doesn't
     // start a rival server on the same fixed port. Cleared on rejection so a failed boot stays retryable.
+    // A server that died under a booted client (the kernel's OOM killer, a crash) is forgotten here and booted afresh,
+    // or every later turn would be handed a client pointed at a dead port and fail with a bare "fetch failed".
     const ensure = (): Promise<OpenCodeClients> => {
+        if (booting !== undefined && serverPid !== undefined && !alive(serverPid)) {
+            forget();
+        }
         booting ??= boot().catch((error: unknown) => {
             booting = undefined;
             throw error;
@@ -533,6 +557,13 @@ export const createOpenCodeService = (
         return booting;
     };
     const mounts = mcpHolds(async () => (await ensure()).client);
+    // Everything that belonged to the last server: its client, its watchers and its mounted MCP clients.
+    function forget(): void {
+        booting = undefined;
+        serverPid = undefined;
+        watched.clear();
+        mounts.forget();
+    }
 
     // OpenCode's persisted auth store, each provider keyed at the top level: { xai: { type: "oauth", access, refresh,
     // expires } } (expires is a ms epoch). {} when absent/unreadable.
@@ -584,9 +615,7 @@ export const createOpenCodeService = (
         stop: async () => {
             serverHandle?.close();
             serverHandle = undefined;
-            booting = undefined;
-            watched.clear();
-            mounts.forget();
+            forget();
         },
         events: async (directory) => subscribeEvents((await ensure()).client, directory),
         watch: async (directory) => {

@@ -626,6 +626,16 @@ const openCodePlan = (
     };
 };
 
+// undici's bare "fetch failed" names neither what was unreachable nor why: said as the local OpenCode server the turn
+// could not reach, with the cause undici tucked away, since the next turn boots that server afresh (opencode.ts ensure).
+const unreachableServer = (error: unknown, provider: string): string | undefined => {
+    if (!(error instanceof TypeError) || error.message !== "fetch failed") {
+        return undefined;
+    }
+    const cause = error.cause instanceof Error ? ` (${error.cause.message})` : "";
+    return `The local OpenCode server that runs ${openCodeBackendLabel(provider)} turns could not be reached${cause}. Send again: it is restarted for the next turn.`;
+};
+
 // A provider's loop on OpenCode's `provider` backend; capability limits are declared in the contract's agent-catalog.ts.
 export const createOpenCodeAgent = (runner: OpenCodeRunner, provider: string = XAI) =>
     async function* runOpenCodeAgent(request: AgentRequest<ContainerCredential>): AsyncGenerator<AgentEvent> {
@@ -665,7 +675,7 @@ export const createOpenCodeAgent = (runner: OpenCodeRunner, provider: string = X
             }
         } catch (error) {
             if (!surfacedError) {
-                const message = error instanceof Error ? error.message : `${openCodeBackendLabel(provider)} agent failed`;
+                const message = unreachableServer(error, provider) ?? (error instanceof Error ? error.message : `${openCodeBackendLabel(provider)} agent failed`);
                 // A thrown model-not-found (self-heal found no alternatives) gets the same code as the event path, so
                 // the client reloads the catalog and drops the bad pinned model.
                 yield { kind: "error", message, ...(MODEL_INVALID.test(message) ? { code: "grok-model-invalid" as const } : {}) };
