@@ -3649,7 +3649,9 @@
                 "textSize": "Tamaño del texto",
                 "textSizeComfortableHint": "110 %: el tamaño con el que se dibujó la interfaz",
                 "textSizeLarge": "Grande",
-                "theme": "Tema"
+                "theme": "Tema",
+                "wallpaper": "Fondo de pantalla",
+                "wallpaperHint": "Una imagen detrás del tablero de agentes, en la versión clara u oscura de tu tema."
             },
             "theme": {
                 "dark": "Oscuro",
@@ -3657,6 +3659,10 @@
                 "sanctumHint": "El aspecto de intentic.dev: piedra ceniza, una regla dorada alrededor de cada panel, placas talladas y fundidas, y la tipografía del propio sitio.",
                 "system": "Sistema",
                 "systemHint": "Sigue a tu sistema operativo: Sanctum cuando está en oscuro, el aspecto claro cuando no."
+            },
+            "wallpaper": {
+                "mist": "Niebla",
+                "none": "Ninguno"
             },
             "work": {
                 "developerHint": "Las palabras de git, el árbol de archivos como inicio, todos los paneles.",

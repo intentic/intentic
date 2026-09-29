@@ -3651,7 +3651,9 @@
                 "textSize": "Rozmiar tekstu",
                 "textSizeComfortableHint": "110% — rozmiar, w jakim narysowano interfejs",
                 "textSizeLarge": "Duży",
-                "theme": "Motyw"
+                "theme": "Motyw",
+                "wallpaper": "Tapeta",
+                "wallpaperHint": "Obraz za tablicą agentów, w jasnej lub ciemnej wersji Twojego motywu."
             },
             "theme": {
                 "dark": "Ciemny",
@@ -3659,6 +3661,10 @@
                 "sanctumHint": "Wygląd intentic.dev: popielaty kamień, złota linia wokół każdego panelu, ryte i odlewane tablice oraz własny krój pisma strony.",
                 "system": "Systemowy",
                 "systemHint": "Podąża za systemem operacyjnym: Sanctum, gdy jest ciemny, jasny wygląd, gdy nie."
+            },
+            "wallpaper": {
+                "mist": "Mgła",
+                "none": "Brak"
             },
             "work": {
                 "developerHint": "Własne słowa gita, drzewo plików jako strona główna, wszystkie panele.",

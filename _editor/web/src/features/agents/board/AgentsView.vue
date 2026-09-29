@@ -47,6 +47,7 @@ import { useFoundCard } from "./view/foundCard";
 import { boardStarters } from "./view/firstScreen";
 import { useLaneMotion } from "./view/laneMotion";
 import { useT } from "@intentic/ui/i18n";
+import { useWallpaper } from "../../../skins/useWallpaper";
 // Kanban across Attention/Active/Finished, pure projections of laneOf; a drop runs the action that causes a lane change
 // (laneDrop), never assigns status directly. Template and wiring: what the lanes draw and cover, how the board is being
 // read, the selection, the menu, the motion and the commands are the headless modules in `view/`.
@@ -174,6 +175,10 @@ const NARROW_BOARD_REM = 48;
 const boardEl = ref<HTMLElement | undefined>(undefined);
 const narrow = useNarrow(boardEl, NARROW_BOARD_REM);
 const LANES = computed(laneHeads);
+// A wallpaper shows through the lanes (wallpapers.css), so their headers drop the canvas band they pin on; a pinned
+// header with nothing behind it would slide over the cards scrolling under it, so they scroll away with the lane.
+const { wallpaper } = useWallpaper();
+const papered = computed(() => wallpaper.value !== `none`);
 // Folding Finished shrinks the board under the reader, and from its tail that drops them far below the lane; its header
 // is brought back to the top instead, so the fold lands where the lane starts.
 const toggleFinished = async (): Promise<void> => {
@@ -199,10 +204,6 @@ const starters = computed(() => boardStarters(workspaceRepos.value.length, works
      unoptimized — every slotted child, closed dialogs included, redraws on every board render. -->
 <template>
     <div ref="boardEl" class="agents-board relative flex h-full min-h-0 flex-col">
-        <!-- Sanctum only: mist at dawn behind the lanes (sanctum.css); the flat canvas wash stays everywhere else. -->
-        <div class="agents-board-backdrop" aria-hidden="true">
-            <div class="agents-board-art"></div>
-        </div>
         <!-- The filter remains usable at narrow /agents widths. -->
         <div class="view-header view-header-wrap flex flex-wrap items-center gap-x-2 gap-y-1 px-3 py-1">
             <div class="flex min-w-0 flex-1 basis-0 items-center gap-2">
@@ -305,8 +306,8 @@ const starters = computed(() => boardStarters(workspaceRepos.value.length, works
                     class="flex min-w-0 flex-col rounded-xl transition-colors"
                     :class="[!dragging && !narrow ? 'min-h-0' : '', laneDropClass(lane.key)]"
                 >
-                    <!-- Finished's header doubles as the archive's window, swapping its dot/label and growing a way back; pinned while scrolling stacked. -->
-                    <LaneHeader :label="lane.label" :dot="lane.dot" class="sticky top-0 z-10 rounded-t-xl bg-canvas px-1">
+                    <!-- Finished's header doubles as the archive's window, swapping its dot/label and growing a way back; pinned while scrolling, unless a wallpaper shows through. -->
+                    <LaneHeader :label="lane.label" :dot="lane.dot" class="rounded-t-xl px-1" :class="papered ? '' : 'sticky top-0 z-10 bg-canvas'">
                         <template v-if="lane.key === 'finished' && view.archive" #mark>
                             <button
                                 type="button"

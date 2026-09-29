@@ -3628,7 +3628,9 @@
                 "textSize": "Taille du texte",
                 "textSizeComfortableHint": "110 % — la taille à laquelle l'interface a été dessinée",
                 "textSizeLarge": "Grand",
-                "theme": "Thème"
+                "theme": "Thème",
+                "wallpaper": "Fond d’écran",
+                "wallpaperHint": "Une image derrière le tableau des agents, dans la version claire ou sombre de votre thème."
             },
             "theme": {
                 "dark": "Sombre",
@@ -3636,6 +3638,10 @@
                 "sanctumHint": "L'apparence d'intentic.dev : pierre cendrée, un filet doré autour de chaque panneau, des plaques gravées et fondues, et la typographie du site.",
                 "system": "Système",
                 "systemHint": "Suit votre système d'exploitation : Sanctum quand il est sombre, l'apparence claire sinon."
+            },
+            "wallpaper": {
+                "mist": "Brume",
+                "none": "Aucun"
             },
             "work": {
                 "developerHint": "Les mots de git, l'arborescence comme accueil, tous les panneaux.",

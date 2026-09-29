@@ -13,6 +13,7 @@ const root = () => document.documentElement;
 // scheme and text size stay the one instance per window, which is what those changes reach.
 const boot = async (): Promise<void> => {
     await freshImport<typeof import("../../skins/useSkin")>("../../skins/useSkin", import.meta.url);
+    await freshImport<typeof import("../../skins/useWallpaper")>("../../skins/useWallpaper", import.meta.url);
     installDocumentAppearance();
 };
 
@@ -21,6 +22,7 @@ beforeEach(() => {
     root().removeAttribute(`data-skin`);
     root().removeAttribute(`data-mode`);
     root().removeAttribute(`data-text-size`);
+    root().removeAttribute(`data-wallpaper`);
 });
 
 describe(`installDocumentAppearance`, () => {
@@ -38,6 +40,13 @@ describe(`installDocumentAppearance`, () => {
         receivePreferenceChange({ key: `ui-skin`, raw: `sanctum` });
 
         expect(root().getAttribute(`data-skin`)).toBe(`sanctum`);
+    });
+
+    it(`makes a wallpaper picked in another window land here`, async () => {
+        await boot();
+        receivePreferenceChange({ key: `ui-wallpaper`, raw: `mist` });
+
+        expect(root().getAttribute(`data-wallpaper`)).toBe(`mist`);
     });
 
     it(`makes the scheme and the text size land here too`, async () => {

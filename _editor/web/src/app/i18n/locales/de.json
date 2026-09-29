@@ -3631,13 +3631,19 @@
                 "textSize": "Textgröße",
                 "textSizeComfortableHint": "110 % — die Größe, in der die Oberfläche gezeichnet wurde",
                 "textSizeLarge": "Groß",
-                "theme": "Design"
+                "theme": "Design",
+                "wallpaper": "Hintergrundbild",
+                "wallpaperHint": "Ein Bild hinter der Agenten-Übersicht, in der hellen oder dunklen Fassung deines Designs."
             },
             "theme": {
                 "dark": "Dunkel",
                 "light": "Hell",
                 "sanctumHint": "Das Aussehen von intentic.dev: Aschestein, eine goldene Linie um jedes Panel, gemeißelte und gegossene Tafeln und die eigene Schrift der Website.",
                 "systemHint": "Folgt Ihrem Betriebssystem: Sanctum, wenn es dunkel ist, sonst das helle Aussehen."
+            },
+            "wallpaper": {
+                "mist": "Nebel",
+                "none": "Keins"
             },
             "work": {
                 "developerHint": "Gits eigene Worte, der Dateibaum als Startseite, alle Panels.",

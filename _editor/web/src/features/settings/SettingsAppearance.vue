@@ -23,6 +23,7 @@ import { useChangeWeight } from "../workspace/changes/changeWeight";
 import { useFileNesting } from "../workspace/explorer/useFileNesting";
 import { useIconRailSize } from "../../shell/rail/useIconRailSize";
 import { useSkin } from "../../skins/useSkin";
+import { WALLPAPERS, useWallpaper } from "../../skins/useWallpaper";
 import { THEME_ROW, type ThemeRow, themeRowLook, themeRowValue } from "./themeRow";
 import { type Audience, useAudience } from "../../app/useAudience";
 
@@ -98,6 +99,9 @@ const setThemeChoice = (value: ThemeRow): void => {
     setSkin(look.skin);
     setScheme(look.scheme);
 };
+// Its own row rather than a fifth look: a wallpaper is worn under any of them, in its dark or light version.
+const { wallpaper } = useWallpaper();
+const wallpaperOptions = computed(() => WALLPAPERS.map((value) => ({ label: t(`settings.appearance.wallpaper.${value}`), value })));
 const explorerOptions = computed(() => explorerStyles.map((value) => ({ label: t(`settings.appearance.explorer.${value}`), value })));
 const iconRailOptions = computed(() => [
     { label: t(`settings.words.iconRailCompact`), value: `compact` as const },
@@ -169,6 +173,11 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
                 <template #control
                     ><SegmentedControl :model-value="themeChoice" :options="themeOptions" @update:model-value="setThemeChoice"
                 /></template>
+            </Row>
+            <Row icon="image" :title="t(`settings.appearance.look.wallpaper`)" :description="t(`settings.appearance.look.wallpaperHint`)">
+                <template #control>
+                    <SegmentedControl :model-value="wallpaper" :options="wallpaperOptions" @update:model-value="(value) => (wallpaper = value)" />
+                </template>
             </Row>
             <!-- wide-control lets this wrap to a second line in a narrow pane rather than stretch the row. -->
             <Row icon="palette" :title="t(`settings.appearance.look.colour`)" wide-control>

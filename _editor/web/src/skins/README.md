@@ -1,6 +1,6 @@
 # skins
 
-A skin is the editor's whole look, worn as one `data-skin` attribute on `<html>`, and this directory holds the skin's stylesheet and the preference that picks it.
+A skin is the editor's whole look, worn as one `data-skin` attribute on `<html>`; this directory holds the skin's stylesheet, the preference that picks it, and the agents board's wallpapers.
 
 ```mermaid
 flowchart LR
@@ -24,8 +24,23 @@ flowchart LR
 - A new skin needs its name in `Skin` and `isSkin`, a stylesheet scoped to its attribute, a line in the
   pre-paint script, and a place on the theme row.
 
+## Wallpapers
+
+A wallpaper is a picture behind the agents board, picked on its own row in Appearance and worn under any of the
+four looks. `useWallpaper.ts` stores it under `ui-wallpaper` (`none` or `mist`, `none` by default) and writes it as
+`data-wallpaper` on `<html>`; `wallpapers.css` draws it as the backgrounds of `.agents-board`, with the scheme
+picking each picture's dark or light version and its scrims. While one is worn the board's lane headers drop their
+canvas band and stop pinning, since a pinned header with nothing behind it would slide over the cards under it.
+
+- A picture's masters are `src/assets/wallpaper/<name>-dark.png` and `<name>-light.png`, 16:9;
+  `pnpm --filter @intentic/web wallpaper:art` encodes every master into the AVIF rungs under
+  `public/assets/wallpaper/`, which are committed.
+- A new wallpaper needs its masters, its name in `WALLPAPERS`, its `--wallpaper-art` rules in `wallpapers.css` and
+  a `settings.appearance.wallpaper.<name>` label in every locale.
+
 ## Key files
 
 - [useSkin.ts](useSkin.ts) — the preference, the rule that resolves `system`, and the dark pin.
 - [sanctum.css](sanctum.css) — the one skin, as role tokens and surfaces under `[data-skin="sanctum"]`.
 - [../features/settings/themeRow.ts](../features/settings/themeRow.ts) — how the four looks map onto scheme and skin.
+- [useWallpaper.ts](useWallpaper.ts) — the wallpaper preference and the attribute it writes.

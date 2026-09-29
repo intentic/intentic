@@ -17,7 +17,8 @@
         "build": "vite build && esbuild src/app/environments/environment.deployment.ts --bundle --minify --target=es2024 --outfile=dist/assets/js/env.js",
         "docker:release": "bash ../../_tools/scripts/platform/docker-release.sh web",
         "test": "suites",
-        "typecheck": "node --max-old-space-size=4096 ./node_modules/vue-tsc/bin/vue-tsc.js --noEmit -p tsconfig.app.json"
+        "typecheck": "node --max-old-space-size=4096 ./node_modules/vue-tsc/bin/vue-tsc.js --noEmit -p tsconfig.app.json",
+        "wallpaper:art": "node scripts/wallpaper-art.mjs"
     },
     "dependencies": {
         "@intentic/api-contract": "workspace:*",

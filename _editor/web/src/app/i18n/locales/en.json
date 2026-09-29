@@ -4152,7 +4152,9 @@
                 "textSize": "Text size",
                 "textSizeComfortableHint": "110% — the size the interface was drawn at",
                 "textSizeLarge": "Large",
-                "theme": "Theme"
+                "theme": "Theme",
+                "wallpaper": "Wallpaper",
+                "wallpaperHint": "A picture behind the agents board, drawn in the light or dark version of your theme."
             },
             "theme": {
                 "dark": "Dark",
@@ -4161,6 +4163,10 @@
                 "sanctumHint": "The look of intentic.dev: ash stone, a gold rule round every panel, carved and cast plaques, and the site's own type.",
                 "system": "System",
                 "systemHint": "Follows your operating system: Sanctum when it is dark, the light look when it is not."
+            },
+            "wallpaper": {
+                "mist": "Mist",
+                "none": "None"
             },
             "work": {
                 "developerHint": "Git's own words, the file tree as the home, every panel.",

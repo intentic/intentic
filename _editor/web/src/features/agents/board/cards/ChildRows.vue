@@ -70,7 +70,7 @@ const inset = computed(() => (props.rail ? `ml-6` : props.live ? `ml-7.5` : `ml-
         v-if="board !== undefined && tray !== undefined"
         role="group"
         :aria-label="label"
-        class="flex flex-col border-l border-line pt-1 pl-1"
+        class="child-tray flex flex-col border-l border-line pt-1 pl-1"
         :class="inset"
     >
         <ChildRow

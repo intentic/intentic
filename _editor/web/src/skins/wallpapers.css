@@ -1,0 +1,78 @@
+/* WALLPAPERS — a picture behind the agents board, worn under any look and scoped to `data-wallpaper` on <html>
+   (useWallpaper.ts), so this whole file is inert until one is picked in Appearance. Each picture has a dark and a
+   light master; the scheme picks between them. The board is drawn as backgrounds of `.agents-board` itself rather
+   than a layer inside it, so nothing on the board has to be lifted over it and no stacking context changes. */
+
+@layer components {
+    /* THE ART, per wallpaper and scheme. 900px is for a small one-density screen; everything else gets the 1600px rung. */
+    [data-wallpaper="mist"] {
+        --wallpaper-art: url("/assets/wallpaper/mist-light-1600.avif");
+    }
+    [data-wallpaper="mist"][data-mode="dark"] {
+        --wallpaper-art: url("/assets/wallpaper/mist-dark-1600.avif");
+    }
+    @media (max-width: 40rem) and (max-resolution: 1.5dppx) {
+        [data-wallpaper="mist"] {
+            --wallpaper-art: url("/assets/wallpaper/mist-light-900.avif");
+        }
+        [data-wallpaper="mist"][data-mode="dark"] {
+            --wallpaper-art: url("/assets/wallpaper/mist-dark-900.avif");
+        }
+    }
+
+    /* THE LIGHT OVER IT, per scheme rather than per picture: a well under the header row so its controls read, and a
+       soft close at the edges so the cards sit in the picture rather than on it. Day is lifted toward paper, night
+       taken down toward the canvas. */
+    [data-wallpaper] {
+        --wallpaper-scrim:
+            linear-gradient(180deg, rgb(255 252 246 / 0.72) 0, rgb(255 252 246 / 0.34) 3.25rem, transparent 9rem),
+            radial-gradient(130% 110% at 50% 30%, transparent 52%, rgb(112 88 54 / 0.16) 100%);
+        --wallpaper-ink-shadow: 0 0 2px rgb(255 252 246 / 0.95), 0 0 10px rgb(255 252 246 / 0.85);
+        --wallpaper-card-drop: 0 1px 2px rgb(74 56 30 / 0.1), 0 10px 24px -12px rgb(74 56 30 / 0.38);
+        --wallpaper-tray: rgb(255 252 246 / 0.55);
+    }
+    [data-wallpaper][data-mode="dark"] {
+        --wallpaper-scrim:
+            linear-gradient(180deg, rgb(0 0 0 / 0.55) 0, rgb(0 0 0 / 0.24) 3.25rem, transparent 9rem),
+            radial-gradient(130% 110% at 50% 30%, transparent 55%, rgb(0 0 0 / 0.32) 100%);
+        --wallpaper-ink-shadow: 0 1px 2px rgb(0 0 0 / 0.9), 0 0 10px rgb(0 0 0 / 0.6);
+        --wallpaper-card-drop: 0 2px 4px -1px rgb(0 0 0 / 0.55), 0 14px 30px -12px rgb(0 0 0 / 0.75);
+        --wallpaper-tray: rgb(0 0 0 / 0.32);
+    }
+
+    /* The canvas colour stays under the art, so the board is its usual self for the frame before the picture decodes. */
+    [data-wallpaper] .agents-board {
+        background-color: var(--color-canvas);
+        background-image: var(--wallpaper-scrim), var(--wallpaper-art);
+        background-position: center;
+        background-size: cover;
+        background-repeat: no-repeat;
+    }
+
+    /* WORDS STANDING ON THE PICTURE — lane names, an empty lane's line, the "earlier" fold — carry a halo of the
+       scheme's own ground; a card is its own ground, so nothing inside one inherits it. */
+    [data-wallpaper] .agents-board [data-lane] {
+        text-shadow: var(--wallpaper-ink-shadow);
+    }
+    [data-wallpaper] .agents-board [data-lane] :is(.session-card, .bg-card) {
+        text-shadow: none;
+    }
+
+    /* Cards cast onto the picture, where on the flat canvas a hairline edge was enough. */
+    [data-wallpaper] .agents-board .session-card {
+        --card-drop: var(--wallpaper-card-drop);
+    }
+    [data-wallpaper] .agents-board [data-lane] .bg-card:not(.session-card) {
+        box-shadow: var(--wallpaper-card-drop);
+    }
+
+    /* A card's tray of children is rows, not a card: a frosted strip under them, open on its rule side, so a row's
+       small type never lands on the brightest part of the picture. */
+    [data-wallpaper] .agents-board .child-tray {
+        background-color: var(--wallpaper-tray);
+        -webkit-backdrop-filter: blur(10px);
+        backdrop-filter: blur(10px);
+        border-radius: 0 0.5rem 0.5rem 0;
+        padding-bottom: 0.25rem;
+    }
+}
