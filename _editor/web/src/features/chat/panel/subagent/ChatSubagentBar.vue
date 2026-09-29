@@ -13,7 +13,8 @@ import { relativeTime } from "../../models/catalog";
 // ask, reads its report, and decides what it does next, so a box to type into here would invite words the parent never
 // hears. The bar takes the box's place rather than leaving a hole, since a composer that vanishes reads as the app
 // breaking: it says whose subagent this is, with the way back to that parent as the first thing on it, and how the
-// subagent stands, in the same glyph and clock its row in the parent's tray wears (childLook).
+// subagent stands, in the same glyph and clock its row in the parent's tray wears (childLook), and what it runs on:
+// the model and tier the composer's picker would say, had it a composer (a hover gives the exact ids).
 //
 // A spawned subagent is a conversation of its own, so the reader may still speak to it directly, a press away ("Write to
 // it"), and stop it while it works. One its parent's runtime ran in-process has no conversation to send to at all.
@@ -64,6 +65,12 @@ const spawned = computed(() => !inProcess(props.child));
                 <span class="min-w-0 truncate font-medium text-content">{{ look.title }}</span>
                 <span v-if="look.tag !== undefined" class="shrink-0 text-2xs text-subtle">{{ look.tag }}</span>
             </span>
+            <span
+                v-if="look.run !== undefined"
+                v-tooltip.top="look.run.tip"
+                class="ui-status-pill max-w-[40%] shrink truncate bg-content/5 text-2xs text-muted"
+                >{{ look.run.label }}</span
+            >
             <span
                 v-if="look.working && look.since !== undefined && look.since > 0"
                 v-tooltip.top="look.doing"

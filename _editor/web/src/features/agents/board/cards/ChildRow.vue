@@ -9,8 +9,9 @@ import { inProcess, type TrayChild } from "../view/childFold";
 import { childLook } from "./childLook";
 
 // One child riding under its parent's card (childFold): how it stands, what it is called, and how long it has worked
-// or when it settled. Everything else it has — the model, the branch, the cost, the diff — is its own chat's to say,
-// one press away; a row carries only what tells the children apart at a glance. A child asking what only the reader can
+// or when it settled. Everything else it has — the branch, the cost, the diff — is its own chat's to say, one press
+// away; a row carries only what tells the children apart at a glance. What it runs on is its title's hover, and a chip
+// on the bar of its chat (ChatSubagentBar). A child asking what only the reader can
 // give wears its ask, in the card's own pill, and the row's one press opens its chat, where the ask is answered. Either
 // kind of child draws here, from one reading (childLook): a subagent its parent's runtime ran in-process has no chat of
 // its own, so its press shows its transcript in its parent's, and it has no review or menu to offer.

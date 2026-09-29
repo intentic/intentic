@@ -4033,6 +4033,8 @@
         }
     },
     "shared": {
+        "effort": "Wysiłek",
+        "model": "Model",
         "account": "Konto",
         "active": "Aktywne",
         "address": "Adres",
