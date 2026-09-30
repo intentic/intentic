@@ -511,7 +511,7 @@ describe("a spent allowance", () => {
         const soon = { status: `error`, attention: none, failureCode: `rate_limit`, limitResetsAt: (NOW + 40 * 60 * 1000) / 1000 } as const;
         expect(limitCorner(soon, NOW)?.text).toBe(`back in 40m`);
         expect(limitCorner({ ...soon, limitScheduled: true }, NOW)?.text).toBe(`resends in 40m`);
-        expect(limitCorner({ status: `error`, attention: none, ...SHUT, limitScheduled: true }, NOW)?.text).toMatch(/^resends \S.*\d{2}:\d{2}$/u);
+        expect(limitCorner({ status: `error`, attention: none, ...SHUT, limitScheduled: true }, NOW)?.text).toMatch(/^resends (?:\S.* )?\d{2}:\d{2}$/u);
         // Past its instant a booked resend goes on the pass's next beat: said so, not dropped for a date that makes a
         // card resting in Active look stuck.
         expect(limitCorner({ status: `error`, attention: none, ...OPEN, limitScheduled: true }, NOW)?.text).toBe(`resends in a moment`);

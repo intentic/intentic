@@ -236,6 +236,45 @@ test("a worktree that never came up settles nothing and says nothing, and the fa
     expect(deps.agents.entry("never")).toMatchObject({ ending: { kind: "failed", failure: "no such repo" } });
 });
 
+// What happened to ci-fix-intentic-36461135033-attempt2: asked for a second fix, the agent cut a branch of its own from
+// the remote and committed there. Land read agent/<id>, which had stopped moving, so the work was stranded on a branch
+// nobody lands. The turn's close now carries it back, and the copy stays where the agent put it.
+test("a turn that moved its copy to a branch cut from the remote still lands what it committed there", async () => {
+    const { deps, work, worktree, composed } = await begun("strayed");
+    await writeFile(join(work, "remote-only.ts"), "on origin, not the owner's tree\n");
+    await gitOut(work, "add", "-A");
+    await gitOut(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "remote only");
+    await gitOut(work, "update-ref", "refs/remotes/origin/main", "HEAD");
+    await gitOut(work, "reset", "-q", "--hard", "HEAD~1");
+    const placement = worktreePlacement(
+        deps,
+        {
+            input: { prompt: "and fix the perf job", conversationId: "strayed", autoLand: true },
+            conversationId: "strayed",
+            snapshot: { conversationId: "strayed", index: 0 },
+            signal: undefined,
+        },
+        {
+            ...stepsOf(composed, []),
+            run: () =>
+                (async function* (): AsyncGenerator<AgentEvent> {
+                    await gitOut(worktree, "checkout", "-q", "-B", "agent/perf-chat-typing", "origin/main");
+                    await writeFile(join(worktree, "app.ts"), "line one\nthe perf fix\n");
+                    await gitOut(worktree, "add", "-A");
+                    await gitOut(worktree, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "fix perf");
+                    yield { kind: "done" };
+                })(),
+        },
+    );
+
+    await drain(placedTurn(deps.conversations, "strayed", placement));
+
+    expect(await gitOut(worktree, "rev-parse", "--abbrev-ref", "HEAD")).toBe("agent/perf-chat-typing");
+    expect(await gitOut(work, "log", "-1", "--format=%s", "agent/strayed")).toBe("fix perf");
+    expect(await gitOut(work, "status", "--porcelain")).toBe("M app.ts");
+    expect(await gitOut(work, "diff")).toContain("+the perf fix");
+});
+
 test("a land whose last rebase fails still lands, on the old base, and says why", async () => {
     const { deps, lines, worktree, writes } = await begun("stale");
     await writeFile(join(worktree, "app.ts"), "line one\nthe agent's work\n");

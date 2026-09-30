@@ -4,6 +4,7 @@ import { liveTurnConversations } from "./actor/conversation-holdings.js";
 import type { AgentsRegistry } from "./registry/agents-registry.js";
 import { isIsolated } from "./registry/agents-store.js";
 import type { AgentWorktrees } from "./worktrees/worktrees.js";
+import { type StrayStanding, strayStandings } from "./worktrees/stray-work.js";
 
 // Two independent records of whether a conversation is running (the run each actor holds, the conversation actors'
 // own phase) that must agree. Checks only registry-idle-while-turn-live, the direction a live run's own start time
@@ -18,6 +19,8 @@ export interface FleetRegistryDeps {
     readonly agentWorktrees: AgentWorktrees;
     readonly live?: () => readonly { readonly conversationId: string; readonly startedAt: number }[];
     readonly now?: () => number;
+    // Which checkouts stand off `agent/<id>` and whether their work there is carried; git-backed unless handed in.
+    readonly strays?: (id: string, repos: readonly { readonly repo: string }[]) => Promise<readonly StrayStanding[]>;
 }
 
 export const owner = "agents";
@@ -28,31 +31,36 @@ export const checks = ({
     agentWorktrees,
     live = () => liveTurnConversations(conversations),
     now = Date.now,
+    strays = (id, repos) => strayStandings(agentWorktrees, id, repos),
 }: FleetRegistryDeps): readonly InvariantCheck[] => [
-    // A conversation's checkout standing on a branch of its own is invisible from every surface: the turn still writes
-    // there, while review and land read `agent/<id>`, which stopped moving. Asked at turn-settled because a switch
-    // mid-turn is ordinary (an agent reads main and comes back within seconds) and only the state a turn LEAVES is
-    // drift; the sweep catches conversations that will never run again.
-    // Reports and never repairs: the one real case was an agent cutting a CI branch to push, and taking its checkout
-    // back would have taken that work's context with it.
+    // A conversation may stand its checkout on a branch of its own (a CI branch to push, a pull request it was asked to
+    // work on), and each turn's close carries what it committed there onto `agent/<id>`, which review and land read
+    // (worktrees/stray-work.ts). What this watches is the carry failing: a commit that would not copy over leaves the
+    // work somewhere no land reaches. Asked at turn-settled, after the carry ran; the sweep catches conversations that
+    // will never run again. Uncommitted edits there are not a finding: they are a turn's work in progress, and the
+    // review says they are there.
+    // 2026-09-30: this used to fail on any checkout standing elsewhere, reporting and never repairing; the carry replaced
+    // pulling the checkout back, which would have taken the other branch's context from an agent asked to work there.
     {
-        name: "checkouts-stand-on-their-own-branch",
+        name: "stray-work-reaches-its-own-branch",
         on: ["turn-settled", "sweep"],
         run: async ({ fail }) => {
-            const strayed: string[] = [];
+            const stranded: string[] = [];
             for (const id of agents.ids()) {
                 const entry = agents.entry(id);
                 // Non-isolated conversations run in the owner's own tree and have no branch of their own to stand on.
                 if (entry === undefined || !isIsolated(entry)) {
                     continue;
                 }
-                for (const { repo, branch } of await agentWorktrees.elsewhere(id, entry.placement.repos)) {
-                    strayed.push(`${id}/${repo} on ${branch ?? "a detached HEAD"}`);
+                for (const { repo, branch, carried } of await strays(id, entry.placement.repos)) {
+                    if (!carried) {
+                        stranded.push(`${id}/${repo} on ${branch ?? "a detached HEAD"}`);
+                    }
                 }
             }
-            if (strayed.length > 0) {
+            if (stranded.length > 0) {
                 fail(
-                    `${strayed.length} checkout(s) stand off their conversation's own branch, so its turns write there while review and land read agent/<id>: ${strayed.join(", ")}`,
+                    `${stranded.length} checkout(s) stand off their conversation's own branch with commits the turn's carry could not copy onto agent/<id>, which review and land read: ${stranded.join(", ")}`,
                 );
             }
         },

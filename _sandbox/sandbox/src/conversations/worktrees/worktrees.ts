@@ -35,8 +35,9 @@ export interface ConversationWorktree {
     // Whether this checkout was cut to a fence; what the turn's namespace must not hand back (isolation.ts).
     readonly fenced: boolean;
     // Repos whose checkout is standing somewhere other than `branch`, with what it stands on (absent = detached HEAD).
-    // Reported, never corrected: a turn that cut a branch of its own is doing real work, and yanking its checkout back
-    // would take that work's context away. Empty is the ordinary case.
+    // Never moved back: a turn that cut a branch of its own, or was asked to work on one, is doing real work there, and
+    // yanking its checkout back would take that work's context away. What it commits there is carried onto `branch` at
+    // each turn's close instead (stray-work.ts). Empty is the ordinary case.
     readonly elsewhere: readonly { readonly repo: string; readonly branch?: string }[];
 }
 
@@ -51,7 +52,8 @@ export interface AgentWorktrees {
     // checkout stays retired until the next ensure().
     // Diff, fileDiff and land branch on this: the checkout when present, branch refs when not. A checkout the turn moved
     // to a branch of its own counts as retired, or those three would read someone else's tip as this conversation's
-    // work — which is how a land came to apply nothing while the review still listed files.
+    // work — which is how a land came to apply nothing while the review still listed files. Its work reaches the branch
+    // refs by the turn's carry (stray-work.ts), and sync leaves such a checkout alone.
     readonly attached: (id: string, repo: string) => Promise<boolean>;
     // Which of a conversation's checkouts are standing somewhere other than `agent/<id>`, and on what. One reading for
     // every caller that reports drift, so the invariant and the review cannot describe the same tree differently.

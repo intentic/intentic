@@ -15,8 +15,9 @@ public class IntenticWin {
   public delegate bool EnumWindowsProc(IntPtr h, IntPtr l);
   [DllImport("user32.dll")] public static extern bool EnumWindows(EnumWindowsProc callback, IntPtr l);
   [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);
-  [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetWindowTextLength(IntPtr h);
-  [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetWindowText(IntPtr h, StringBuilder text, int length);
+  // InternalGetWindowText, not GetWindowText: the latter sends WM_GETTEXT to another process's window and blocks
+  // while that window is hung (a just-launched app behind a prompt), which ran a listing past its timeout.
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int InternalGetWindowText(IntPtr h, StringBuilder text, int length);
   [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint processId);
   [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT r);
   [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
@@ -65,10 +66,8 @@ $items = [System.Collections.Generic.List[object]]::new();
 $callback = [IntenticWin+EnumWindowsProc] {
   param([IntPtr]$h, [IntPtr]$unused)
   if (-not [IntenticWin]::IsWindowVisible($h)) { return $true }
-  $length = [IntenticWin]::GetWindowTextLength($h);
-  if ($length -le 0) { return $true }
-  $text = [System.Text.StringBuilder]::new($length + 1);
-  [void][IntenticWin]::GetWindowText($h, $text, $text.Capacity);
+  $text = [System.Text.StringBuilder]::new(1024);
+  [void][IntenticWin]::InternalGetWindowText($h, $text, $text.Capacity);
   if ($text.Length -eq 0) { return $true }
   [uint32]$processId = 0;
   [void][IntenticWin]::GetWindowThreadProcessId($h, [ref]$processId);
@@ -95,8 +94,8 @@ $fg = [IntenticWin]::GetForegroundWindow();
 $id = '0'; $title = ''; $app = '';
 if ($fg -ne [IntPtr]::Zero) {
   $id = [string]($fg.ToInt64());
-  $text = [System.Text.StringBuilder]::new([IntenticWin]::GetWindowTextLength($fg) + 1);
-  [void][IntenticWin]::GetWindowText($fg, $text, $text.Capacity);
+  $text = [System.Text.StringBuilder]::new(1024);
+  [void][IntenticWin]::InternalGetWindowText($fg, $text, $text.Capacity);
   $title = $text.ToString();
   [uint32]$owner = 0;
   [void][IntenticWin]::GetWindowThreadProcessId($fg, [ref]$owner);

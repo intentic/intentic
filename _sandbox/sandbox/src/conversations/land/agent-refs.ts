@@ -83,11 +83,17 @@ export const unparkAgentRef = async (main: string, branch: string, git: GitRunne
     await git(main, ["update-ref", "-d", parkedRef(branch)]);
 };
 
+// Where the last carry of a conversation's work off a branch of its own left that copy's HEAD
+// (conversations/worktrees/stray-work.ts); outside `refs/heads/`, so no branch listing shows it.
+export const carriedRef = (branch: string): string => `${REFS}intentic/carried/${branch.startsWith(AGENT) ? branch.slice(AGENT.length) : branch}`;
+
 // Drops an agent's commits from this repo for good, used by discard and archive purge.
-// Deletes both spellings since the caller does not know which one holds it.
+// Deletes both spellings since the caller does not know which one holds it, and the carry marker with them.
 export const dropAgentRef = async (main: string, branch: string, git: GitRunner): Promise<void> => {
     await git(main, ["branch", "-D", branch]).catch(() => undefined);
     await git(main, ["update-ref", "-d", parkedRef(branch)]).catch(() => undefined);
+    // allow(silent-catch): most conversations never stood elsewhere, so there is usually no marker to delete.
+    await git(main, ["update-ref", "-d", carriedRef(branch)]).catch(() => undefined);
 };
 
 // Whether `ancestor` is reachable from `descendant`, via `git merge-base --is-ancestor`'s exit code; shared by both

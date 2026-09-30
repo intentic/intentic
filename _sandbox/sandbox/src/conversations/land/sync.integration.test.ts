@@ -70,6 +70,23 @@ test("reports nothing when the branch already sits on the main line", async () =
     expect(await sync(worktrees)).toEqual([]);
 });
 
+// A copy moved to a branch of its own (a pull request it was asked to work on) must not be rebased onto the owner's
+// HEAD: that branch would then carry the owner's unpushed commits, plus an "Agent:" commit of whatever was uncommitted.
+test("a copy standing on a branch of its own is left exactly where it stands", async () => {
+    const { work, worktree, worktrees } = await setup();
+    await sh(worktree, "checkout", "-q", "-b", "feature");
+    await turn(worktree, async () => await writeFile(join(worktree, "app.ts"), "one\ntwo\nthree\nfour\nFEATURE\n"));
+    const tip = await sh(worktree, "rev-parse", "HEAD");
+    await writeFile(join(worktree, "other.ts"), "not committed yet\n");
+    await writeFile(join(work, "app.ts"), "OWNER\ntwo\nthree\nfour\nfive\n");
+    await sh(work, "add", "-A");
+    await commit(work, "owner's unpushed work");
+
+    expect(await sync(worktrees)).toEqual([]);
+    expect(await sh(worktree, "rev-parse", "HEAD")).toBe(tip);
+    expect(await sh(worktree, "status", "--porcelain")).toBe("M other.ts");
+});
+
 // `--name-only` reports a rename only at its destination: main renaming a file the agent edits makes two path lists
 // that can't intersect, naming nothing on the file about to be replayed onto a gone path.
 test("a main-line RENAME of a file the agent edited is reported as an overlap", async () => {

@@ -10,6 +10,7 @@ import type {
 import type { Services } from "../../composition.js";
 import { headSha } from "../../git/changes/changes.js";
 import type { IsolatedAgent, RepoRecord } from "../registry/agents-store.js";
+import { strayStandings } from "../worktrees/stray-work.js";
 import { agentRepoModules, agentRepoReview, anchorOf, presentInMain } from "./agent-changes.js";
 import { intoOf, landTargetOf } from "./land-target.js";
 import { outstandingConflicts } from "./land.js";
@@ -87,15 +88,15 @@ export const reviewOf = async (deps: ReviewDeps, entry: IsolatedAgent): Promise<
     const scratch = entry.placement.repos.map((composed, index) => ({ repo: composed.repo, paths: parts[index]?.scratch ?? [] }));
     const conflicts = await liveConflicts(deps, entry);
     // Asked of the whole composition, not of the repos that produced rows: a conversation that did all its work
-    // on a branch of its own leaves `agent/<id>` empty, which is the case with no row to hang this on.
-    const elsewhere = await deps.agentWorktrees.elsewhere(entry.id, entry.placement.repos);
+    // on a branch of its own leaves `agent/<id>` empty whenever the turn's carry could not copy it over.
+    const elsewhere = await strayStandings(deps.agentWorktrees, entry.id, entry.placement.repos);
     // Tells apart an agent that wrote nothing from one whose every file is committed (AgentChangesSchema).
     return {
         repos,
         absorbed,
         ...scratchField(scratch),
         ...(conflicts.length > 0 ? { conflicts } : {}),
-        ...(elsewhere.length > 0 ? { elsewhere: elsewhere.map(({ repo, branch }) => ({ repo, ...(branch === undefined ? {} : { branch }) })) } : {}),
+        ...(elsewhere.length > 0 ? { elsewhere } : {}),
     };
 };
 

@@ -116,7 +116,6 @@
             "inHistory": "In der Historie {count}",
             "landedWithFiles": "Gelandet, {count} Datei noch abzuschließen | Gelandet, {count} Dateien noch abzuschließen",
             "leftCopiesElsewhere": "Diese Unterhaltung hat {count} Kopie auf einem eigenen Branch zurückgelassen | Diese Unterhaltung hat {count} Kopien auf eigenen Branches zurückgelassen",
-            "leftCopiesElsewhereHint": "Hier steht der eigene Branch dieser Unterhaltung, so wie er zuletzt verlassen wurde. Alles seither Geschriebene ging stattdessen auf den Branch neben dem jeweiligen Repository, und Übernehmen trägt es nicht mit.",
             "manifestAdds": "fügt {names} hinzu",
             "markReviewed": "Als geprüft markieren",
             "markReviewed2": "{label} als geprüft markieren",

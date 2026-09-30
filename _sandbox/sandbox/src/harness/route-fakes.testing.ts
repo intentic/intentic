@@ -10,6 +10,7 @@ import { type Logger, pino } from "pino";
 import type { AgentWorktrees } from "../conversations/worktrees/worktrees.js";
 import type { Services } from "../composition.js";
 import { claudeStoreOf } from "../sessions/session-store.js";
+import { opt } from "../opt.js";
 import { workspacePaths } from "../workspace/workspace.js";
 import { LANDING_CHECKS_NOTE } from "../agent/prompt/checks-note.js";
 
@@ -95,8 +96,12 @@ export const realCheckout = async (
             mainDir: () => work,
             sessionStore: (entry) => claudeStoreOf(work, root, entry),
             exists: async () => true,
-            attached: async () => true,
-            elsewhere: async () => [],
+            // Read off the real checkout, so a test that moves it to a branch of its own sees what the daemon would.
+            attached: async () => (await gitOut(worktree, "rev-parse", "--abbrev-ref", "HEAD")) === `agent/${id}`,
+            elsewhere: async () => {
+                const branch = await gitOut(worktree, "rev-parse", "--abbrev-ref", "HEAD");
+                return branch === `agent/${id}` ? [] : [{ repo: "root", ...opt("branch", branch === "HEAD" ? undefined : branch) }];
+            },
             snapshot: async () => repos,
             ensure: async () => ({ cwd: worktree, branch: `agent/${id}`, repos, fenced: false, elsewhere: [] }),
             remove: async () => {},

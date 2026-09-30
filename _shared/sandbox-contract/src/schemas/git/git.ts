@@ -447,11 +447,21 @@ export const AgentChangesSchema = z.object({
                     .string()
                     .optional()
                     .describe("The branch its copy is standing on. Absent where it stands on no branch at all, which is a state git allows."),
+                carried: z
+                    .boolean()
+                    .optional()
+                    .describe(
+                        "Whether everything the conversation committed there has also been copied onto its own branch, so what is listed here and what a merge brings include it. False where a commit would not copy over cleanly. Absent from a sandbox too old to copy it, which never did.",
+                    ),
+                uncommitted: z
+                    .boolean()
+                    .optional()
+                    .describe("Whether its copy there holds uncommitted changes to tracked files, which no merge brings until they are committed there."),
             }),
         )
         .optional()
         .describe(
-            "Repositories whose copy the conversation left standing on a different branch of its own. What is listed for them is this conversation's branch as it was last left, not what its copy holds now, and anything it has written since went to the other branch.",
+            "Repositories whose copy the conversation left standing on a different branch of its own. What is listed for them is this conversation's own branch, onto which each turn copies what it committed on the other branch unless `carried` says it could not.",
         ),
     // Read off the live copy, so a retired one has none: its scratch went with it.
     scratch: z

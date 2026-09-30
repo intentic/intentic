@@ -1,6 +1,7 @@
 import type { ConversationActors } from "./actor/conversation-actors.js";
 import type { AgentsRegistry } from "./registry/agents-registry.js";
 import type { AgentWorktrees } from "./worktrees/worktrees.js";
+import type { StrayStanding } from "./worktrees/stray-work.js";
 import { checks } from "./invariant.js";
 import { unstubbed } from "@intentic/testing";
 import { conversationEntry, isolatedAgent } from "../testing.js";
@@ -76,7 +77,8 @@ test("a registry entry running with no live turn is deliberately not a finding h
     await expect(run({ spinning: true }, [])).resolves.toBeUndefined();
 });
 
-/* The second failure: a checkout standing on a branch of its own, where the turn keeps writing and nothing reads. */
+/* The second failure: work a turn committed on a branch of its own that its carry could not copy onto agent/<id>, the one
+   branch review and land read. */
 
 // Only `ids`, `entry` and the strayed list matter here; the composition is whatever the entry says it spans.
 const fleetOf = (entries: Readonly<Record<string, PersistedAgent>>): AgentsRegistry =>
@@ -85,19 +87,16 @@ const fleetOf = (entries: Readonly<Record<string, PersistedAgent>>): AgentsRegis
         entry: (id: string) => entries[id],
     }) as unknown as AgentsRegistry;
 
-const standingOff = (strayed: Readonly<Record<string, readonly { repo: string; branch?: string }[]>>): AgentWorktrees =>
-    ({ elsewhere: async (id: string) => strayed[id] ?? [] }) as unknown as AgentWorktrees;
+type Strayed = Readonly<Record<string, readonly StrayStanding[]>>;
 
-const runCheckouts = async (
-    entries: Readonly<Record<string, PersistedAgent>>,
-    strayed: Readonly<Record<string, readonly { repo: string; branch?: string }[]>>,
-): Promise<void> => {
-    const check = checkNamed("checkouts-stand-on-their-own-branch", {
+const runCheckouts = async (entries: Readonly<Record<string, PersistedAgent>>, strayed: Strayed): Promise<void> => {
+    const check = checkNamed("stray-work-reaches-its-own-branch", {
         agents: fleetOf(entries),
         conversations: actorsOf({}),
-        agentWorktrees: standingOff(strayed),
+        agentWorktrees: SETTLED,
         live: () => [],
         now: () => NOW,
+        strays: async (id) => strayed[id] ?? [],
     });
     await check.run({ moment: "turn-settled", fail });
 };
@@ -108,23 +107,34 @@ test("every checkout on its own branch reports nothing", async () => {
     await expect(runCheckouts({ c1: ONE_REPO }, {})).resolves.toBeUndefined();
 });
 
-test("a checkout left on a branch of its own is named, with the branch it stands on", async () => {
-    await expect(runCheckouts({ c1: ONE_REPO }, { c1: [{ repo: "registry", branch: "ci/extension-admission" }] })).rejects.toThrow(
-        /c1\/registry on ci\/extension-admission/,
-    );
+// A CI branch to push, a pull request it was asked to work on: standing there is allowed, once what it wrote is carried.
+test("a checkout on a branch of its own whose work is carried reports nothing, uncommitted edits or not", async () => {
+    await expect(
+        runCheckouts({ c1: ONE_REPO }, { c1: [{ repo: "registry", branch: "ci/extension-admission", carried: true, uncommitted: true }] }),
+    ).resolves.toBeUndefined();
+});
+
+test("work its carry could not copy over is named, with the branch it stands on", async () => {
+    await expect(
+        runCheckouts({ c1: ONE_REPO }, { c1: [{ repo: "registry", branch: "ci/extension-admission", carried: false, uncommitted: false }] }),
+    ).rejects.toThrow(/could not copy onto agent\/<id>.*: c1\/registry on ci\/extension-admission$/);
 });
 
 test("a detached HEAD is named as one: it is not a branch, so there is no name to print", async () => {
-    await expect(runCheckouts({ c1: ONE_REPO }, { c1: [{ repo: "registry" }] })).rejects.toThrow(/c1\/registry on a detached HEAD/);
+    await expect(runCheckouts({ c1: ONE_REPO }, { c1: [{ repo: "registry", carried: false, uncommitted: false }] })).rejects.toThrow(
+        /c1\/registry on a detached HEAD$/,
+    );
 });
 
 // A non-isolated conversation runs in the owner's own tree, which is on whatever branch the owner put it on. It has no
 // branch of its own, so there is nothing for it to have strayed from.
 test("a conversation with no branch of its own is not held to one", async () => {
-    await expect(runCheckouts({ auto: conversationEntry({ id: "auto" }) }, { auto: [{ repo: "root", branch: "main" }] })).resolves.toBeUndefined();
+    await expect(
+        runCheckouts({ auto: conversationEntry({ id: "auto" }) }, { auto: [{ repo: "root", branch: "main", carried: false, uncommitted: false }] }),
+    ).resolves.toBeUndefined();
 });
 
-test("the check runs at turn-settled, when a switch stops being transient, and on the sweep", () => {
-    const check = checkNamed("checkouts-stand-on-their-own-branch", { agents: fleetOf({}), conversations: actorsOf({}), agentWorktrees: SETTLED });
+test("the check runs at turn-settled, after the turn's carry, and on the sweep", () => {
+    const check = checkNamed("stray-work-reaches-its-own-branch", { agents: fleetOf({}), conversations: actorsOf({}), agentWorktrees: SETTLED });
     expect([...check.on].sort()).toEqual(["sweep", "turn-settled"]);
 });

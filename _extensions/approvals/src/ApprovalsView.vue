@@ -9,6 +9,7 @@ import {
 } from "@intentic/sandbox-contract";
 import {
     BrandMark,
+    appLink,
     Button,
     ui,
     ConfirmDialog,
@@ -36,6 +37,9 @@ import ApprovalRail, { type ApprovalScope } from "./ApprovalRail.vue";
 import { approvalsAttention } from "./extension";
 import HookSetBody from "./HookSetBody.vue";
 import { host } from "./host";
+
+// Where an empty queue points: what agents ask while they work is answered from Needs you.
+const needsLink = appLink(host().href(`/needs`), () => host().navigate(`/needs`));
 import PostBody from "./PostBody.vue";
 import { countdownWords, limitOf, postsATitle } from "./postText";
 import PostEditor from "./PostEditor.vue";
@@ -409,7 +413,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                      waits on them: what agents ask while they work is answered from Needs you, never here. -->
                 <div v-else-if="isEmpty" :class="ui.emptyState(`flex flex-col items-center gap-3 py-8`)">
                     <p>{{ t(`approvalsView.nothingWaitingPostsAgent`) }}</p>
-                    <button type="button" :class="ui.linkButton()" @click="host().navigate(`/needs`)">{{ t(`approvalsView.seeWhatNeedsYou`) }}</button>
+                    <a v-bind="needsLink" :class="ui.linkButton()">{{ t(`approvalsView.seeWhatNeedsYou`) }}</a>
                 </div>
 
                 <div v-else class="flex flex-col gap-6">

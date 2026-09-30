@@ -2,7 +2,7 @@ import type { Activation, CapabilityFacts, Disposable, RepoFacts, ViewBadge, Vie
 import { computed, shallowRef } from "vue";
 import { type Audience, useAudience } from "../app/useAudience";
 import { useRole } from "../features/sandbox/secrets/useRole";
-import { registerViewAsksGatherer, viewAsks, type ViewAsks } from "../lib/viewAsks";
+import { registerViewAsksGatherer, viewAsks, type ViewAsks } from "../lib/registries/viewAsks";
 import { guestAllowedPath } from "../shell/guestPaths";
 import { coreViews } from "./coreViews";
 import { badgeSpeaks } from "./viewBadge";

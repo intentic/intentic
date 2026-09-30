@@ -590,6 +590,10 @@ const NOTICE = `flex items-start gap-1.5 rounded-md border border-danger/40 bg-d
 // What a refused land left behind; causes and the action ladder are AgentConflictReport's to own.
 const resolvingPaths = computed(() => (changes.resolving.value ?? []).flatMap((entry) => entry.paths));
 
+// Copies on a branch of their own whose commits there did not reach this conversation's branch. Absent `carried` is a
+// sandbox too old to copy them, which never did.
+const strandedCount = computed(() => changes.elsewhere.value.filter((stray) => stray.carried !== true).length);
+
 // What landing the work takes on: per manifest that gained any, the dependency names it declares now and did not
 // before, labelled the way the rows are. This is where a new dependency is approved, since a conversation installs
 // freely in its own copy.
@@ -624,19 +628,29 @@ const seamWidth = computed<number>({
             </div>
         </div>
 
-        <!-- The rows below are a branch, not a checkout, and only here can that be said: a repo whose branch holds
-             nothing produces no row to hang it on, which is exactly the conversation that worked entirely elsewhere. -->
+        <!-- The rows below are a branch, not a checkout, and only here can that be said. Each turn copies what it
+             committed on a branch of its own onto that branch, so a copy standing elsewhere is news, not trouble, until
+             a copy fails: then the work there is somewhere no land reaches, which a repo with no row could not say. -->
         <div
             v-if="changes.elsewhere.value.length > 0"
-            class="mx-2 mt-2 flex shrink-0 flex-col gap-1 rounded-md border border-warning/40 bg-warning/10 px-2 py-1.5"
+            class="mx-2 mt-2 flex shrink-0 flex-col gap-1 rounded-md border px-2 py-1.5"
+            :class="strandedCount > 0 ? `border-warning/40 bg-warning/10` : `border-info/40 bg-info/10`"
         >
-            <span class="text-2xs font-medium text-warning">
-                {{ t(`agents.agentReviewPanel.leftCopiesElsewhere`, { count: changes.elsewhere.value.length }, changes.elsewhere.value.length) }}
+            <span class="text-2xs font-medium" :class="strandedCount > 0 ? `text-warning` : `text-info`">
+                {{
+                    strandedCount > 0
+                        ? t(`agents.agentReviewPanel.leftCopiesElsewhere`, { count: strandedCount }, strandedCount)
+                        : t(`agents.agentReviewPanel.worksOnBranchesOfItsOwn`, { count: changes.elsewhere.value.length }, changes.elsewhere.value.length)
+                }}
             </span>
-            <p class="text-2xs text-muted">{{ t(`agents.agentReviewPanel.leftCopiesElsewhereHint`) }}</p>
+            <p class="text-2xs text-muted">
+                {{ strandedCount > 0 ? t(`agents.agentReviewPanel.strayStrandedHint`) : t(`agents.agentReviewPanel.strayCarriedHint`) }}
+            </p>
             <ul class="flex flex-col gap-0.5">
-                <li v-for="stray in changes.elsewhere.value" :key="stray.repo" class="truncate font-mono text-2xs text-subtle">
-                    {{ stray.repo }} → {{ stray.branch ?? t(`agents.agentReviewPanel.noBranchAtAll`) }}
+                <li v-for="stray in changes.elsewhere.value" :key="stray.repo" class="truncate text-2xs text-subtle">
+                    <span class="font-mono">{{ stray.repo }} → {{ stray.branch ?? t(`agents.agentReviewPanel.noBranchAtAll`) }}</span>
+                    <span v-if="stray.carried !== true" class="text-warning"> · {{ t(`agents.agentReviewPanel.strayNotCarried`) }}</span>
+                    <span v-if="stray.uncommitted === true"> · {{ t(`agents.agentReviewPanel.strayUncommitted`) }}</span>
                 </li>
             </ul>
         </div>

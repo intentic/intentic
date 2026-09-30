@@ -117,7 +117,6 @@
             "inHistory": "Dans l'historique {count}",
             "landedWithFiles": "Intégré, avec {count} fichier à finir | Intégré, avec {count} fichiers à finir",
             "leftCopiesElsewhere": "Cette conversation a laissé {count} copie sur une branche à elle | Cette conversation a laissé {count} copies sur des branches à elles",
-            "leftCopiesElsewhereHint": "Ce qui figure ici est la branche propre à cette conversation, telle qu'elle a été laissée. Tout ce qui a été écrit depuis est parti sur la branche indiquée à côté de chaque dépôt, et Intégrer ne l'emportera pas.",
             "manifestAdds": "ajoute {names}",
             "markReviewed": "Marquer relu",
             "markReviewed2": "Marquer {label} comme relu",

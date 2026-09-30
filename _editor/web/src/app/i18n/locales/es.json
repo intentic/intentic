@@ -119,7 +119,6 @@
             "inHistory": "En el historial {count}",
             "landedWithFiles": "Integrado, con {count} archivo por terminar | Integrado, con {count} archivos por terminar",
             "leftCopiesElsewhere": "Esta conversación dejó {count} copia en una rama propia | Esta conversación dejó {count} copias en ramas propias",
-            "leftCopiesElsewhereHint": "Lo que aparece aquí es la rama propia de esta conversación tal como quedó la última vez. Todo lo escrito desde entonces fue a la rama que figura junto a cada repositorio, e Integrar no lo llevará.",
             "manifestAdds": "añade {names}",
             "markReviewed": "Marcar revisado",
             "markReviewed2": "Marcar {label} como revisado",

@@ -6,6 +6,7 @@ import { headSha } from "../../../git/changes/changes.js";
 import { followedParent, landTargetOf, type Upstream, upstreamOf, underLeases } from "../../../conversations/land/land-target.js";
 import { isIsolated, worktreeOf } from "../../../conversations/registry/agents-store.js";
 import type { ConversationWorktree } from "../../../conversations/worktrees/worktrees.js";
+import { carryStrayWork, type RefSnapshot, snapshotRefs } from "../../../conversations/worktrees/stray-work.js";
 import type { Services } from "../../../composition.js";
 import { forkWorktreeBase } from "../../checkpoints/checkpoint-worktree.js";
 import type { TurnInput } from "../../../seams/turn-starter.js";
@@ -140,6 +141,24 @@ const warmReview = (deps: Pick<Services, "agents" | "agentWorktrees" | "logger">
     }
 };
 
+// Carries what the turn committed on a branch of its own back onto `agent/<id>` (stray-work.ts), under the
+// conversation's land lease so a land pressed meanwhile queues behind it rather than reading the branch mid-move. Never
+// throws: work it could not carry stays where the agent left it, and the review says so.
+const carryStray = async (deps: LandingDeps, conversationId: string, repos: ConversationWorktree["repos"], snapshot: RefSnapshot): Promise<void> => {
+    try {
+        const carries = await deps.conversations.withLandLease(conversationId, () => carryStrayWork(deps.agentWorktrees, conversationId, repos, snapshot));
+        for (const carry of carries) {
+            if (carry.refused !== undefined) {
+                deps.logger.warn({ id: conversationId, ...carry }, "agents: work on a branch of its own could not be carried to the conversation's branch");
+            } else if (carry.carried > 0) {
+                deps.logger.info({ id: conversationId, ...carry }, "agents: carried a turn's commits off a branch of its own");
+            }
+        }
+    } catch (error) {
+        deps.logger.warn({ err: error, id: conversationId }, "agents: carrying work off a branch of its own failed");
+    }
+};
+
 export interface WorktreeSteps extends LandingHooks {
     // Creates the conversation's worktree on its first turn or repairs its composition, with the repos it carries
     // decided once and handed back on every later turn.
@@ -166,6 +185,16 @@ export const worktreePlacement = (
         const upstream = await upstreamNow(deps, conversationId);
         return underLeases(deps.conversations, conversationId, followedParent(upstream), () => rebase(upstream));
     };
+    // The refs as the turn opened, once its copy is composed and synced: what tells the turn's own commits on a branch
+    // it switched to from that branch's history. Carried once per turn, before a clean turn's land and in any turn's close.
+    let opened: { readonly repos: ConversationWorktree["repos"]; readonly refs: RefSnapshot } | undefined;
+    let carried: Promise<void> | undefined;
+    const carryOnce = (): Promise<void> => {
+        if (opened !== undefined) {
+            carried ??= carryStray(deps, conversationId, opened.repos, opened.refs);
+        }
+        return carried ?? Promise.resolve();
+    };
     return {
         async *open () {
             const entry = deps.agents.entry(conversationId);
@@ -179,6 +208,7 @@ export const worktreePlacement = (
             const enforced = await deps.turnIsolation.available();
             await steps.versionMain(worktree.repos.map(({ repo }) => repo));
             const synced = await rebaseLeased();
+            opened = { repos: worktree.repos, refs: await snapshotRefs(deps.agentWorktrees, worktree.repos) };
             books.branch = worktree.branch;
             books.span = await Promise.all(
                 worktree.repos.map(async ({ repo, base }) => ({
@@ -219,8 +249,9 @@ export const worktreePlacement = (
             };
             return steps.run({ id: conversationId, cwd: worktree.cwd, fenced: worktree.fenced, synced, resync });
         },
-        land: (failed, awaiting) =>
-            landTurn(
+        async *land(failed, awaiting) {
+            await carryOnce();
+            yield* landTurn(
                 deps,
                 steps,
                 {
@@ -233,9 +264,12 @@ export const worktreePlacement = (
                     sync: (upstream) => rebase(upstream),
                 },
                 books,
-            ),
-        // A person-ended turn skipped the land, so its books are settled here; an errored one is left as it is.
+            );
+        },
+        // A person-ended turn skipped the land, so its books are settled here; an errored one is left as it is. Its
+        // commits on a branch of its own are carried either way, so the review shows them.
         close: async (failed) => {
+            await carryOnce();
             if (!books.reconciled && !failed) {
                 await settleLandBooks(deps, conversationId);
             }

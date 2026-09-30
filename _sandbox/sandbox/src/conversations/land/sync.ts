@@ -18,6 +18,12 @@ import { assertLinked } from "../worktrees/checkout-link.js";
 //
 // That retry drops commits, so what main holds is read from main rather than taken from the rung: see
 // `mainAccountsForPrefix`.
+//
+// `standsElsewhere`: a repo whose copy the conversation moved to a branch of its own (a pull request it was asked to
+// work on, a CI branch it pushes) is not synced at all. A rebase runs on whatever the copy stands on, so it used to
+// rewrite that branch onto the owner's HEAD, unpushed commits included, and commit the dirty remainder onto it, while
+// `agent/<id>`, the branch land reads, never moved. What the turn commits there reaches `agent/<id>` by the turn's carry
+// instead (conversations/worktrees/stray-work.ts), and a land measures it from there as from any branch.
 
 // A repo whose branch was not on main's tip; `commits` are the main-line commits between the two, gained if rebased,
 // still missing if `blocked`.
@@ -115,6 +121,9 @@ const syncOne = async (
     if (!(await pathExists(join(worktree, ".git")))) {
         return undefined;
     }
+    if (!(await worktrees.attached(id, repo))) {
+        return undefined; // Standing on a branch of its own: see `standsElsewhere`.
+    }
     const head = await headSha(worktrees.mainDir(repo), git);
     if (head === undefined) {
         return undefined; // Unborn HEAD, or the main checkout is gone: no main line to sit on.
@@ -156,6 +165,9 @@ const syncOntoParent = async (
     const upstream = worktrees.worktreeDir(parent, repo);
     if (base === undefined || !(await pathExists(join(worktree, ".git"))) || !(await pathExists(join(upstream, ".git")))) {
         return undefined;
+    }
+    if (!(await worktrees.attached(id, repo))) {
+        return undefined; // Standing on a branch of its own: see `standsElsewhere`.
     }
     await commitWorktreeRemainder(repo, upstream, `Agent: before ${title ?? id} caught up`, worktrees.mainDir("root"), git);
     const head = await headSha(upstream, git);

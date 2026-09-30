@@ -1,6 +1,7 @@
 import { roleAtLeast } from "@intentic/sandbox-contract";
+import type { ViewBadge } from "@intentic/extension-api";
 import { computed } from "vue";
-import { viewAsks } from "../../../lib/viewAsks";
+import { viewAsks } from "../../../lib/registries/viewAsks";
 import { awaitingUser } from "../../agents/fleet/agentStatus";
 import { useAgents } from "../../agents/fleet/useAgents";
 import { useExtensions } from "../../extensions/useExtensions";
@@ -37,6 +38,18 @@ export function useInbox() {
         items,
         ordered: computed(() => inboxOrder(items.value)),
         sections: computed(() => inboxSections(items.value)),
-        badge: computed(() => inboxBadge(items.value)),
+        // The rail's Needs tile reads this from ShellDesktop, and `items` rebuilds on every composer keystroke (the fleet
+        // carries each chat's unsent mark). Keeping the previous object while count, tone and tooltip are unchanged is
+        // what stops a keystroke from redrawing the whole shell (perf chat-typing budget).
+        badge: computed<ViewBadge | undefined>((previous) => {
+            const next = inboxBadge(items.value);
+            return previous !== undefined &&
+                next !== undefined &&
+                previous.count === next.count &&
+                previous.tone === next.tone &&
+                previous.tooltip === next.tooltip
+                ? previous
+                : next;
+        }),
     };
 }

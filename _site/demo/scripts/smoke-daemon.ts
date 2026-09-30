@@ -99,6 +99,7 @@ const ENTRIES = {
     workflows: `src/fixture/workflows.ts`,
     loops: `src/fixture/loops.ts`,
     devices: `src/fixture/devices.ts`,
+    approvals: `src/fixture/approvals.ts`,
     contract: `@intentic/sandbox-contract`,
 } as const;
 
@@ -131,6 +132,7 @@ const fixturesOf = async (out: string) => ({
     workflows: await loaded<typeof import("../src/fixture/workflows.ts")>(out, `workflows`),
     loops: await loaded<typeof import("../src/fixture/loops.ts")>(out, `loops`),
     devices: await loaded<typeof import("../src/fixture/devices.ts")>(out, `devices`),
+    approvals: await loaded<typeof import("../src/fixture/approvals.ts")>(out, `approvals`),
 });
 
 const required = <T>(value: T | undefined, what: string): T => {
@@ -141,7 +143,7 @@ const required = <T>(value: T | undefined, what: string): T => {
 };
 
 // Ids and records come from the fixture itself, so a renamed id moves the inputs with it.
-const samplesOf = ({ fleet, automations, ci, workflows, loops, devices }: Awaited<ReturnType<typeof fixturesOf>>, now: number): Samples => {
+const samplesOf = ({ fleet, automations, ci, workflows, loops, devices, approvals }: Awaited<ReturnType<typeof fixturesOf>>, now: number): Samples => {
     const run = required(ci.ciRunsResponse(now).runs[0], `pipeline run`);
     const pipeline = { repo: run.repo, runId: run.runId };
     const automation = required(automations.automationsList(now)[0], `automation`);
@@ -149,6 +151,7 @@ const samplesOf = ({ fleet, automations, ci, workflows, loops, devices }: Awaite
     const design = required(workflows.demoWorkflows([])[0], `workflow`);
     const loop = required(loops.demoLoops()[0], `loop design`);
     const host = required(devices.demoDevices(now)[0]?.hostId, `paired device`);
+    const prepared = required(approvals.demoApprovals()[0], `prepared approval`);
     return {
         system: {
             events: { clientId: `smoke` },
@@ -345,6 +348,8 @@ const samplesOf = ({ fleet, automations, ci, workflows, loops, devices }: Awaite
         },
         approvals: {
             list: undefined,
+            upsert: prepared,
+            remove: { id: prepared.id },
             hookRequests: undefined,
         },
     };
