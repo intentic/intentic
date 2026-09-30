@@ -50,6 +50,7 @@ const openByDefault = computed(() => (props.thinking !== undefined && props.thin
 </script>
 
 <template>
+    <div class="chat-turn-asides">
     <ChatAsideLane :marks="marks" :open-by-default="openByDefault">
         <template #thinking>
             <pre class="chat-inset max-h-64 overflow-auto px-2.5 py-1.5 text-2xs leading-relaxed whitespace-pre-wrap italic">{{ thinking }}</pre>
@@ -63,5 +64,6 @@ const openByDefault = computed(() => (props.thinking !== undefined && props.thin
     <!-- Shown inline, the run is what it always was: one row per call. -->
     <div v-if="showToolCalls && tools?.length" class="flex w-full flex-col gap-1">
         <ChatToolRows :tools="tools" :live="live" />
+    </div>
     </div>
 </template>
