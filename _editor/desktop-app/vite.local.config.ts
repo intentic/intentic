@@ -40,9 +40,13 @@ const platformOrigin = (): Plugin => ({
 // images from the web as any markdown preview shows them. No script, frame or fetch from anywhere else; no eval.
 // Built pages only: the dev server's client is itself scripts and a socket this would refuse.
 const LOOPBACK = `http://127.0.0.1:*`;
+// The app's own commands (the shell's places, This device): Tauri's IPC, which a platform serves at one of these two
+// origins, and the analytics endpoint This device reports the app's own work to (src/analytics.ts).
+const IPC = [`ipc:`, `http://ipc.localhost`];
+const ANALYTICS = `https://us.i.posthog.com`;
 const POLICY: Readonly<Record<string, readonly string[]>> = {
     "default-src": [`'self'`],
-    "connect-src": [`'self'`, LOOPBACK],
+    "connect-src": [`'self'`, LOOPBACK, ...IPC, ANALYTICS],
     "img-src": [`'self'`, `data:`, `blob:`, LOOPBACK, `https:`],
     "media-src": [`'self'`, `data:`, `blob:`, LOOPBACK],
     "font-src": [`'self'`, `data:`],
@@ -77,6 +81,8 @@ const contentPolicy = (): Plugin => ({
 
 export default defineConfig({
     ...shared,
+    // The analytics key This device reports the app's own work under (src/analytics.ts), baked in as the launcher's was.
+    define: { ...shared.define, __POSTHOG_KEY__: JSON.stringify(process.env[`POSTHOG_KEY`] ?? ``) },
     plugins: [...shared.plugins, platformOrigin(), onePage(), contentPolicy()],
     resolve: {
         alias: {
@@ -84,6 +90,8 @@ export default defineConfig({
             // The editor's entry and the one module of it the bootstrap reads, source-first.
             "@intentic/web/main": fromRoot(`_editor/web/src/main.ts`),
             "@intentic/web/local": fromRoot(`_editor/web/src/app/environments/local.ts`),
+            // The seam this app's half of the shell is written against (src/host.ts).
+            "@intentic/web/local-host": fromRoot(`_editor/web/src/app/environments/localHost.ts`),
         },
     },
     base: `/files/`,

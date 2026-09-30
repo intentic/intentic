@@ -503,8 +503,8 @@ fn answer_line(id: &str, outcome: &Result<(), String>) -> String {
 
 /* THE OFFICE EDITOR, fetched before the first document needs it. */
 
-/// The office editor is wanted this run: Home was shown at launch (lib.rs), or the first local window opened
-/// (local.rs). Asked for once the sidecar is up, if it is not already.
+/// The office editor is wanted this run: the first local window opened (local.rs), the main one at launch included.
+/// Asked for once the sidecar is up, if it is not already.
 pub fn want_office(app: &AppHandle) {
     app.state::<Sidecar>()
         .office_wanted

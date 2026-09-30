@@ -115,7 +115,7 @@ watch(
 <template>
     <!-- ONE PRIMARY OBJECT PER SCREEN: with the requirements card up, this is not the thing to read, so it gives up
          its plate, its bar and its sentence and keeps only where the run is parked. -->
-    <section :class="blocked ? `flex flex-col gap-3` : `entry-card flex flex-col gap-3 p-4`">
+    <section :class="blocked ? `flex flex-col gap-3` : `flex flex-col gap-3 rounded-lg border border-line bg-canvas p-4`">
         <!-- The one sentence at reading size: what this computer is doing right now. -->
         <div v-if="!blocked" class="flex items-start gap-3">
             <span class="mt-0.5 flex size-4 shrink-0 items-center justify-center">

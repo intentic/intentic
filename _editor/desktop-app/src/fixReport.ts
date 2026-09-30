@@ -1,8 +1,8 @@
-// `ic sandbox fix --json` as the launcher draws it (src-tauri/src/fix.rs runs it). Its stdout carries machine lines
-// only: progress as `intentic-fix: {json}` while it works, then one `{"slug", "report"}` line per sandbox at the end;
-// its words for people go to stderr. The report is the api contract's HostReportInput. Everything in it is read
-// leniently, since the progress line is younger than this app: a line that is neither shape is passed over, and a
-// state, a fix, an outcome or a check id this app has never heard of is kept as the string it is.
+// `ic sandbox fix --json` as This device draws it (src/device/fix.ts; src-tauri/src/fix.rs runs it). Its stdout
+// carries machine lines only: progress as `intentic-fix: {json}` while it works, then one `{"slug", "report"}` line per
+// sandbox at the end; its words for people go to stderr. The report is the api contract's HostReportInput. Everything
+// in it is read leniently, since the progress line is younger than this app: a line that is neither shape is passed
+// over, and a state, a fix, an outcome or a check id this app has never heard of is kept as the string it is.
 
 /** One link of the chain `ic` checks, as the view holds it: the latest `ic` said about that id. */
 export interface FixCheck {
@@ -64,7 +64,7 @@ const parseJson = (text: string): JsonValue | undefined => {
         // SAFETY: JSON.parse returns nothing but JSON values, which is all JsonValue says.
         return JSON.parse(text) as JsonValue;
     } catch {
-        // A line cut short (the pipe closed mid-write) is not worth a broken screen; the next one says more.
+        // allow(silent-catch): a line cut short (the pipe closed mid-write) is not worth a broken screen; the next one says more.
         return undefined;
     }
 };

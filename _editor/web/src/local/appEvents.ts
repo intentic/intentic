@@ -13,3 +13,14 @@ export const openedPath = (event: Event): string | undefined => {
     const detail = OpenDetail.safeParse(event.detail);
     return detail.success ? detail.data.path : undefined;
 };
+
+const NavigateDetail = z.object({ path: z.string().startsWith(`/`) });
+
+/** The route an `intentic:navigate` names (`/device`), for the local shell to take; nothing for any other shape. */
+export const navigatedPath = (event: Event): string | undefined => {
+    if (!(event instanceof CustomEvent)) {
+        return undefined;
+    }
+    const detail = NavigateDetail.safeParse(event.detail);
+    return detail.success ? detail.data.path : undefined;
+};

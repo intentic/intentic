@@ -163,8 +163,11 @@ const diffOutline = useLoadingReveal(
         </div>
         <!-- The home, whenever there are files to draw; an empty workspace still gets every way to get code in. -->
         <HomeView v-else-if="!empty" />
-        <!-- Nothing in the workspace yet: every way to get code in. -->
-        <WorkspaceEmptyState v-else @pick="emit('pick')" />
+        <!-- Nothing in the workspace yet: every way to get code in, or what the pane's owner says instead (a folder of this
+             computer has no repository to clone into it, local/LocalEmptyFolder.vue). -->
+        <slot v-else name="empty">
+            <WorkspaceEmptyState @pick="emit('pick')" />
+        </slot>
     </section>
 </template>
 

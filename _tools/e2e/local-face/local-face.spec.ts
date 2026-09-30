@@ -15,12 +15,14 @@ import { type FaceServer, type LocalFace, type Sidecar, serveFace, startSidecar 
 // a reworded label moves with the page. Asserted to be strings before anything is found by them.
 interface Labels {
     readonly local: { readonly localFiles: { readonly toggleFolder: string } };
+    readonly shared: { readonly files: string };
     readonly workspace: { readonly fileViewer: { readonly saveFile: string } };
 }
 // SAFETY: the editor's own catalogue, nested objects of strings; a key gone from it reads as undefined, which the first
 // step's assertion names.
 const EN = JSON.parse(readFileSync(join(repoRoot(import.meta.url), `_editor/web/src/app/i18n/locales/en.json`), `utf8`)) as Labels;
 const TOGGLE_FOLDER = EN.local.localFiles.toggleFolder;
+const FILES = EN.shared.files;
 const SAVE_FILE = EN.workspace.fileViewer.saveFile;
 
 const FOLDER = {
@@ -123,12 +125,17 @@ test(`a window on a folder lists it, opens, edits and saves a file, and asks the
     // As local.rs writes it: before any of the page's scripts run.
     await page.addInitScript({ content: `window.__INTENTIC_LOCAL__ = Object.freeze(${JSON.stringify(local)});` });
 
-    await test.step(`boots to the local screen`, async () => {
-        expect({ TOGGLE_FOLDER, SAVE_FILE }).toEqual({ TOGGLE_FOLDER: expect.any(String), SAVE_FILE: expect.any(String) });
+    await test.step(`boots to the local shell, on the folder`, async () => {
+        expect({ TOGGLE_FOLDER, FILES, SAVE_FILE }).toEqual({ TOGGLE_FOLDER: expect.any(String), FILES: expect.any(String), SAVE_FILE: expect.any(String) });
         await page.goto(bundle.page);
         await expect(page.getByRole(`button`, { name: TOGGLE_FOLDER })).toBeVisible();
         await expect(page.getByRole(`complementary`).getByText(local.name, { exact: true })).toBeVisible();
+        // The shell's rail, as a sandbox's has it: the folder's own tile, lit. With no app behind this page there is no
+        // This device tile (src/host.ts keeps the link-only host), and nothing else for it to be.
+        await expect(page.getByRole(`navigation`).getByRole(`link`, { name: FILES, exact: true })).toBeVisible();
+        // One address for the page, whatever screen it is on: the screen rides the hash (the web's router, a local window).
         expect(new URL(page.url()).pathname).toBe(`/files/local`);
+        expect(new URL(page.url()).hash).toBe(`#/workspace`);
     });
 
     await test.step(`the tree lists the folder`, async () => {

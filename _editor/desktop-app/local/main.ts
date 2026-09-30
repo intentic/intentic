@@ -1,4 +1,6 @@
 import type { LocalFace } from "@intentic/web/local";
+import { installHost } from "../src/host";
+import { registerDesktopCatalog } from "../src/i18n";
 import { installPlatform, LOCAL_EMAIL, sandboxIdOf } from "./platform";
 import { editorChunk, FACE_EVENT, faceArrives, warmModule } from "./warm";
 
@@ -7,8 +9,8 @@ import { editorChunk, FACE_EVENT, faceArrives, warmModule } from "./warm";
 // window's credentials are written where the editor already reads them, never faked past it.
 
 // A dev server has no app to inject the window's facts, so it takes them from the address instead
-// (`/files/local?daemon=…&token=…&id=…&name=…&path=…[&file=…]`), and keeps them for the tab's reloads, since the
-// address is rewritten below; a build only ever reads the app's.
+// (`/files/local?daemon=…&token=…&id=…&name=…&path=…[&file=…][&home=1]`), and keeps them for the tab's reloads, since
+// the address is rewritten below; a build only ever reads the app's.
 const DEV_FACE_KEY = `intentic.local.devFace`;
 const devFace = (): LocalFace | undefined => {
     if (!import.meta.env.DEV) {
@@ -21,7 +23,7 @@ const devFace = (): LocalFace | undefined => {
         // SAFETY: the tab's own storage, written below from a face this function built; a dev server's tab only.
         return kept === null ? undefined : (JSON.parse(kept) as LocalFace);
     }
-    const face: LocalFace = { daemonUrl, token, id, name, path, file: query.get(`file`) ?? undefined };
+    const face: LocalFace = { daemonUrl, token, id, name, path, file: query.get(`file`) ?? undefined, home: query.get(`home`) === `1` };
     sessionStorage.setItem(DEV_FACE_KEY, JSON.stringify(face));
     return face;
 };
@@ -32,6 +34,15 @@ const loadEditor = async (): Promise<void> => {
     await import(`@intentic/web/main`);
 };
 
+// A dev server in a browser has no app behind it: the app's commands are answered by a stand-in (devDesktop.ts), so the
+// shell and This device can be looked at. Never in a build, and never inside the app itself.
+const standInForTheApp = async (): Promise<void> => {
+    if (import.meta.env.DEV && !(`__TAURI_INTERNALS__` in window)) {
+        const { installDevDesktop } = await import(`./devDesktop`);
+        installDevDesktop();
+    }
+};
+
 const boot = async (face: LocalFace): Promise<void> => {
     window.__INTENTIC_LOCAL__ = face;
     const id = sandboxIdOf(face);
@@ -40,8 +51,14 @@ const boot = async (face: LocalFace): Promise<void> => {
     // The loopback shortcut is for reaching a sandbox faster; the sidecar is already on loopback.
     localStorage.setItem(`intentic.localShortcut.declined.${id}`, `yes`);
     installPlatform(face);
-    // The editor's one screen for a local window, whatever address the window was opened at.
-    window.history.replaceState(window.history.state, ``, `${import.meta.env.BASE_URL}local`);
+    await standInForTheApp();
+    // The app's own words (This device, the tile it adds), registered before the editor starts its languages, and its
+    // half of the shell, on the window before the router reads it (src/host.ts).
+    await registerDesktopCatalog();
+    installHost(face);
+    // The local page's one address, whatever the window was opened at: the app answers `files/local` with this page and
+    // nothing below it. The screen the window was on rides the hash (the editor's router keeps its route there).
+    window.history.replaceState(window.history.state, ``, `${import.meta.env.BASE_URL}local${window.location.hash}`);
     await loadEditor();
 };
 

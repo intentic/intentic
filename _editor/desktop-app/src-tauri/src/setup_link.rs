@@ -135,7 +135,7 @@ pub struct SetupArgs {
     pub name: Option<String>,
     /// Own-Cloudflare only. It rides the link ONLY from the in-app webview, where the navigation is cancelled
     /// in-process and never reaches the OS — an external browser's deep link may be logged by the protocol
-    /// handler, so from there the launcher asks for the token itself. [`Source`] is what enforces that.
+    /// handler, so from there the setup asks for the token itself. [`Source`] is what enforces that.
     pub cf_token: Option<String>,
     pub sync_dir: Option<String>,
     /// The API origin the setup code is redeemed against. Local dev only, and [`Source::App`] only — see
@@ -166,7 +166,7 @@ pub struct RecreateArgs {
 }
 
 /// `intentic://fix?slug=…[&code=…]`: the recovery panel's button for a sandbox on this machine that cannot be
-/// reached. The app runs `ic sandbox fix` for it and shows the run in the launcher (fix.rs). `code` is a fix code the
+/// reached. The app runs `ic sandbox fix` for it and shows the run on This device (fix.rs). `code` is a fix code the
 /// browser minted, which `ic` claims so the panel that asked mirrors the run live; without one the run still reports
 /// to the platform, and nothing waits for it.
 ///
@@ -271,8 +271,13 @@ pub enum Link {
     Auth(AuthArgs),
     /* `intentic://update` — the workspace banner's button, and the reason the SPA can offer a swap it has no way to perform. */
     Update,
-    /* `intentic://launcher` — the setup page's way back to the app's own face after "Back to your workspace" stepped it aside. */
-    Launcher,
+    /// `intentic://launcher[?to=files]`: the workspace's way back to this computer's face, the main local window. Bare,
+    /// This device (the setup page's way back to the run it handed over); `to=files`, the folder itself (the sandbox
+    /// switcher's "This computer"). The name is the launcher's, whose place the main window took: a page that predates
+    /// it still sends it, and an app that predates `to` reads the bare link.
+    Launcher {
+        files: bool,
+    },
     /// See [`WindowVerb`]: the workspace SPA's own title bar, which is a link channel rather than IPC for the
     /// same reason everything else here is.
     Window(WindowVerb),
@@ -344,7 +349,9 @@ pub fn parse_link(url: &str, source: Source) -> Option<Link> {
             switch_account: get("switch").is_some(),
         }),
         "update" => source.is_app().then_some(Link::Update),
-        "launcher" => source.is_app().then_some(Link::Launcher),
+        "launcher" => source.is_app().then(|| Link::Launcher {
+            files: get("to").as_deref() == Some("files"),
+        }),
         // App-window only, like `update`, and for a sharper reason: see [`SyncArgs`]. There is nothing to
         // strip and keep — the url and the token ARE the request — so an external copy is refused whole.
         "sync" if source.is_app() => {
@@ -579,7 +586,7 @@ mod tests {
             parse_link(
                 "intentic://fix?slug=work&code=abc",
                 Source::App {
-                    window: crate::windows::LAUNCHER
+                    window: "floating-chat"
                 }
             ),
             Some(Link::Fix(FixArgs {
@@ -644,10 +651,22 @@ mod tests {
         assert_eq!(parse_link("intentic://update", Source::External), None);
     }
 
-    /// The way back to the setup card is the app's own window's to ask for, exactly like the update.
+    /// The way back to this computer's face is the app's own window's to ask for, exactly like the update.
     #[test]
     fn the_launcher_link_is_honoured_from_the_app_and_refused_from_outside() {
-        assert_eq!(parse_link("intentic://launcher", APP), Some(Link::Launcher));
+        assert_eq!(
+            parse_link("intentic://launcher", APP),
+            Some(Link::Launcher { files: false })
+        );
+        assert_eq!(
+            parse_link("intentic://launcher?to=files", APP),
+            Some(Link::Launcher { files: true })
+        );
+        // Anything else it might say is This device, as a bare link is.
+        assert_eq!(
+            parse_link("intentic://launcher?to=elsewhere", APP),
+            Some(Link::Launcher { files: false })
+        );
         assert_eq!(parse_link("intentic://launcher", Source::External), None);
     }
 

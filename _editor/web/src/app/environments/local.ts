@@ -21,6 +21,9 @@ export interface LocalFace {
     readonly file?: string;
     // Set when the folder already has a sandbox of its own (the app's projects.json), which the way to an agent opens.
     readonly sandbox?: boolean;
+    // Set on the app's main window (windows.rs `HOME`), the one the app shows for work of its own: a setup handed over
+    // from the workspace, a Docker start at launch. Every other local window is a folder or a document opened beside it.
+    readonly home?: boolean;
 }
 
 declare global {
@@ -83,3 +86,6 @@ export const LOCAL_CLOSE_REQUESTED_EVENT = `intentic:close-requested`;
 export const LOCAL_OPEN_EVENT = `intentic:open`;
 // The answer to `changes`, `bring-back`, `restore` or `direction`, or the error that stopped one (local/bringBack.ts).
 export const LOCAL_PROJECT_EVENT = `intentic:project`;
+// The app showing this window for a reason of its own (a setup handed over from the workspace, the tray's agent row): the
+// screen it is for, as `detail.path`, a route of the local shell (`/device`). local/LocalShell.vue takes it there.
+export const LOCAL_NAVIGATE_EVENT = `intentic:navigate`;

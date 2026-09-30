@@ -1,16 +1,16 @@
 # desktop-app
 
-The Tauri app for Windows and Linux that sets up and runs an intentic sandbox on the user's own computer, opens the hosted workspace in its window, and opens the user's own folders and documents in windows of their own.
+The Tauri app for Windows and Linux that opens the editor on a folder of the user's own computer from the first launch, with no account, runs sandboxes on that computer from its This device view, and shows the hosted workspace in the same window once they sign in.
 
 ```mermaid
 flowchart LR
     spa["Workspace face<br/>hosted editor, no IPC"] -->|"intentic:// navigation"| app(["desktop-app<br/>Rust shell"])
     os["OS link handler<br/>browser, second launch"] -->|"intentic://"| app
-    launcher["Launcher face<br/>src/ Vue bundle"] -->|"Tauri commands"| app
-    local["Local windows<br/>the editor on a folder"] -->|"intentic://window, local"| app
-    app -->|"stdin: grants, answers"| files["intentic-files<br/>sidecar"]
+    local["Local windows<br/>the editor's shell on a folder:<br/>the main one, each folder's"] -->|"Tauri commands:<br/>places, This device"| app
+    local -->|"intentic://window, local"| app
+    local -->|"HTTP on loopback, token"| files["intentic-files<br/>sidecar"]
+    app -->|"stdin: grants, answers"| files
     files -->|"stdout: asks"| app
-    local -->|"HTTP on loopback, token"| files
     app -->|"spawns"| scripts["Staged scripts<br/>connect, sync, recreate"]
     app -->|"sync changes, bring-back"| machine(["intentic-machine"])
     app -->|"list --json, sandbox fix"| ic(["ic"])
@@ -20,25 +20,42 @@ flowchart LR
     app -->|"updater"| release["GitHub release<br/>latest.json"]
 ```
 
-- **One window, two faces.** The workspace face loads the hosted [web](../web) editor from `https://app.intentic.dev`
-  (or the `appUrl` setting, or `INTENTIC_APP_URL`) as remote content with no IPC. The launcher face is this
-  package's `src/` bundle: local, and the only window granted Tauri commands (`src-tauri/capabilities/launcher.json`).
-  A panel the editor floats out gets a frameless window of its own.
-- **Home.** The launcher's own screen (window title "Intentic"; `src/home.ts` decides what it shows). It leads with
-  "Open anything on this computer": Open folder…, Open file… and a drop zone, which needs the launcher's native drop
-  handler left on. Below it, up to 12 recents (a filter past 6) with their age, a Sandbox chip for a folder with a
-  sandbox of its own, a remove (`local_forget_recent`), a moved or deleted path dimmed as such, and a failed
-  `local_open_path` said under its row. The agents row offers Sign in (`sign_in`) until an account has been seen, then
-  Open workspace (`workspace_open`). The "This device" block (Docker, the machine agent, sync, sandboxes, "See all
-  your devices") shows only on a machine that needs it (`deviceShown`), so a files-only machine sees no Docker; the
-  app's URL is the version's tooltip. The header's × and Esc call `launcher_close`, labelled "Close" or "Back to your
-  workspace" by `lastFace` (Esc clears a typed filter first). The launcher is hidden, never destroyed, so it re-reads
-  `home_facts` and `local_recents` whenever it is focused or shown.
+- **One window, two faces.** The main local window (label `home`) and the workspace face swap in one frame
+  (`swap_in`, `take_frame`): the one coming up takes the place, size and maximised state of the one going, so the
+  reader sees one window changing what it shows. The workspace face loads the hosted [web](../web) editor from
+  `https://app.intentic.dev` (or the `appUrl` setting, or `INTENTIC_APP_URL`) as remote content with no IPC. The main
+  window is the local face: the same editor built into this package's bundle (`dist/files/`, `local/main.ts`), on a
+  folder of this computer. A panel the editor floats out gets a frameless window of its own. This package's own `src/`
+  bundle (`index.html`) now draws one thing, the close question (`CloseConfirm.vue`).
+- **The main window.** The editor's shell with the sandbox shell's rail, holding what needs no sandbox and no
+  account: at the top the place chip (the folder this window shows, and every other place: the recent folders and
+  documents, the system's Open folder… and Open file…, the workspace or the sign-in, This device), then Files (the
+  folder's tree and documents, `/workspace`), then This device (`/device`), and at the foot the way to agents (a sign-in
+  in the default browser until an account has been seen, then the workspace). It opens on the folder it was last
+  pointed at (`home-folder.json`), or on `~/intentic/local`, which a first launch creates: nothing is asked before the
+  first screen. A folder picked on the place chip takes the window's place (`local_point`: a grant of its own, the old
+  one revoked, the page reloaded onto the new face at `#/workspace`), after the page has asked about anything unsaved;
+  a folder another window already shows raises that window instead. A document picked there opens where `local_open_path`
+  puts it. The main window's ×, like the workspace's, is a question and a hide (`request_close`), so nothing it holds
+  is lost and the tray brings it back as it was. The shell's routes ride the page's hash (`files/local#/device`),
+  since the asset protocol answers `files/local` with the local page and an address below it with the bundle's other
+  page.
+- **This device.** A view this app adds to the local shell (`src/host.ts`, the web's
+  `app/environments/localHost.ts`), where the launcher's card used to be: this computer's sandboxes with every verb the
+  workspace's Devices tab has for them (start, stop, restart, update, rollback, resources, logs, remove), its machine
+  agent and its Restart, the Docker engine they run in, and the app's own work here, which leads the page while it runs: a
+  setup handed over from the workspace, with its requirements and its plan, and a sync enrollment. Its state is a store
+  (`src/device/useDevice.ts`) rather than the page's, so a setup keeps running and reporting while the reader is on
+  their files, and the rail's tile carries it (`src/device/badge.ts`: the running mark for a setup or a Docker start,
+  a warning mark for one that stopped for the reader, a dot for an update). A computer that runs no sandbox is told what
+  one is for and offered the way to one, and nothing about Docker. Only the main window takes the work the app parks
+  for its face (a setup, a recreate, a sync, a sleeping engine); every local window draws the same view and runs its
+  verbs. The machine is read when the page opens and every 30 seconds while it is on screen.
 - **Native work is the public scripts.** Setup, sync and everything done to a sandbox run the same `connect`,
   `sync` and `recreate` scripts the copy-paste one-liners run. `stage-desktop-scripts.sh` copies them from
   `_site/site/public/scripts` at the current commit, so an uncommitted script edit does not reach `tauri dev` or a
   local installer.
-- **What runs is `ic`'s to say.** The manager's list is `ic sandbox list --json` from the installed `ic` (the shim's
+- **What runs is `ic`'s to say.** This device's list is `ic sandbox list --json` from the installed `ic` (the shim's
   `--list` when that one is missing or older than this app, whose fetch brings it level). Start, stop and restart are
   `recreate --start|--stop|--restart`, and the Resources form's Apply and Save are `recreate --shape`, all `ic` verbs
   behind the shim's switch, so a Restart here applies a shape saved for the next restart exactly as a Restart from
@@ -47,46 +64,61 @@ flowchart LR
   confirmation says so, in place of the kit's "cannot be undone". The app reads nothing off `docker inspect`; the
   short children it waits on (Docker probes, the listing, the agent's status) share `ic`'s time-limited capture
   crate, `_sandbox/ic/bounded`.
-- **Fixing a sandbox the workspace cannot reach.** The workspace's recovery panel sends `intentic://fix?slug=…`, and
-  the launcher runs `ic sandbox fix <slug> [--code <code>] --source app --json` with the installed `ic`, looked for
-  where the manager's listing looks, with no console window, one run at a time, and stopped with everything it started
-  after ten minutes (`src-tauri/src/fix.rs`). A second link while one runs brings that run forward. The card at the
-  top of Home is built from `ic`'s `intentic-fix:` progress lines and its final report (`src/fixReport.ts`): what `ic`
-  is doing now, every check with its state and, for one that warns or fails, the problem and the remedy, then the
-  outcome and what the exit code leaves (3: a yes nobody could give in a terminal; 4: a restart or sign-out). Each
-  check whose fix waits on consent becomes a button that runs the fix again with `--accept <that check>` and no code.
-  An `ic` that ends without a report, one from before `sandbox fix`, is said to be unable to fix yet, with setting
-  the sandbox up again as the way to update it, and nothing retries. `ic` posts every run to the platform itself; the
-  app never talks to the platform about it.
-- **Tray-resident.** The × hides the workspace, and the launcher's ×, Esc and platform close go back to the
-  workspace when that is the face in use and it is still open, or else hide the card into the tray
-  (`launcher_close`). The tray's "Open Intentic" opens the last face, "Home" opens Home, "Open workspace" appears
-  once an account has been seen, then "Open a folder…", "Open a file…", the machine agent's row, the update row and
-  Quit. Updates download in the background and install on quit or from the editor's banner; deb and rpm installs
-  cannot replace themselves and link to the download page instead. A local window never draws the update banner.
+- **Fixing a sandbox the workspace cannot reach.** The workspace's recovery panel sends `intentic://fix?slug=…`; the
+  app brings This device forward in the main window, and it runs `ic sandbox fix <slug> [--code <code>] --source app
+  --json` with the installed `ic`, looked for where This device's listing looks, with no console window, one run at a
+  time and never beside another run of the app's on this machine, stopped with everything it started after ten minutes
+  (`src-tauri/src/fix.rs`). A second link while one runs brings that run forward. The card at the top of This device
+  is built from `ic`'s `intentic-fix:` progress lines and its final report (`src/fixReport.ts`, `src/device/fix.ts`):
+  what `ic` is doing now, every check with its state and, for one that warns or fails, the problem and the remedy,
+  then the outcome and what the exit code leaves (3: a yes nobody could give in a terminal; 4: a restart or sign-out).
+  Each check whose fix waits on consent becomes a button that runs the fix again with `--accept <that check>` and no
+  code. An `ic` that ends without a report, one from before `sandbox fix`, is said to be unable to fix yet, with
+  setting the sandbox up again as the way to update it, and nothing retries. While it runs, the rail's This device
+  tile spins for a reader who went back to their files. `ic` posts every run to the platform itself; the app never
+  talks to the platform about it.
+- **Tray-resident.** The × of either face hides it into the tray, once the first × has asked whether that is what
+  closing should do (`close-action.json`, "Keep Intentic in the tray" or "Quit Intentic"). The tray's "Open Intentic"
+  opens the last face, "This computer" the main window, "Open workspace" appears once an account has been seen, then
+  "Open a folder…" and "Open a file…" (each in a window of its own), the machine agent's row (This device), the update
+  row and Quit. Updates download in the background and install on quit or from the editor's banner or This device;
+  deb and rpm installs cannot replace themselves and link to the download page instead. A local window never draws the
+  editor's update banner: This device says it instead.
 - **Sign-in runs in the default browser**, because Google refuses OAuth inside an embedded webview. The credential
-  returns over `intentic://auth`, which also records that this install has an account (`account-seen.json`).
+  returns over `intentic://auth`, which also records that this install has an account (`account-seen.json`) and opens
+  the workspace at `/desktop-auth/complete`, in the main window's place.
 - **The last face.** `last-face.json` (`home` or `workspace`) is the face the user was last seen choosing: every
-  showing of the workspace writes `workspace`, and Home shown on purpose (a launch into it, the tray's "Home", "Open
-  Intentic" on an install last used through Home) writes `home`. An install without the file reads `workspace` if
-  it ever showed the workspace (`workspace-seen.json`) and `home` otherwise. A launch opens the launcher for a setup
-  parked across a Windows restart, then for a machine that hosts a sandbox and has no Docker engine listening, then
-  Home when the last face is Home on a machine that hosts no sandbox, and the workspace otherwise (`opening` in
-  `src-tauri/src/lib.rs`). A bare second launch opens the last face too. `home_facts` hands Home `accountSeen` (a
-  sign-in, or the workspace ever shown), `lastFace` and `hostsSandboxes`.
-- **Local windows.** A folder or a document opened from Home, the tray, a double-click ("Open with Intentic" on
-  documents, folders, the space inside one and a drive root), a drop on Home or a second launch gets a window of its
-  own (`files-<n>`, `src-tauri/src/local.rs`). A document inside the folder of a window already open is handed to that
-  window instead (`intentic:open`), and a path already being opened is not opened twice. The window shows the local
-  face: the editor itself, built from `_editor/web` into `dist/files/` (`vite.local.config.ts`, entered through
-  `local/main.ts`), with its file reads answered by the `intentic-files` sidecar
-  ([local-files](../../_devices/local-files)) instead of a sandbox. The app starts the sidecar (a few seconds after a
-  launch into Home, or one with recents), grants each window one folder by a random token on the sidecar's stdin, and
-  revokes it when the window closes (`src-tauri/src/sidecar.rs`). A local window holds no capability: every app
-  command is a permission granted by name (`build.rs`), and its only links are its own title bar and `local`. No
-  sandbox, account or Docker is involved. What fails to open is said in a native dialog in the user's words (Home
-  shows the same sentence under the row), and the original error goes to stderr.
-- **The warm window.** After the first local window of a run, the app keeps one hidden spare files window whose page
+  showing of the workspace writes `workspace`, and the main window shown on purpose (a launch into it, the tray's "This
+  computer", the workspace's way back) writes `home`. An install without the file reads `workspace` if it ever showed the
+  workspace (`workspace-seen.json`) and `home` otherwise. A launch opens This device for a setup parked across a Windows
+  restart, then for a machine that hosts a sandbox and has no Docker engine listening (handing over to the workspace
+  once the engine wakes, when the workspace is the last face), and otherwise the last face (`opening` in
+  `src-tauri/src/lib.rs`). A bare second launch opens the last face too. `home_facts` hands the shell `accountSeen` (a
+  sign-in, or the workspace ever shown), `lastFace`, `hostsSandboxes` and `homeFolder`.
+- **Local windows.** The main window, and a folder or a document opened from the tray, the place chip, a
+  double-click ("Open with Intentic" on documents, folders, the space inside one and a drive root) or a second launch
+  in a window of its own (`files-<n>`, `src-tauri/src/local.rs`). Each is the same shell. A document inside the folder of
+  a window already open is handed to that window instead (`intentic:open`), and a path already being opened is not
+  opened twice. Its file reads are answered by the `intentic-files` sidecar ([local-files](../../_devices/local-files))
+  instead of a sandbox. The app starts the sidecar (with the main window, or a few seconds after a launch with recents),
+  grants each window one folder by a random token on the sidecar's stdin, and revokes it when the window closes
+  (`src-tauri/src/sidecar.rs`). What else a local window may do is the commands its capability names
+  (`capabilities/local.json`): the place chip's and This device's, granted by name (`build.rs`); its links are only its
+  own title bar and `local`. The documents it draws can do none of it: the page's policy runs no script but the
+  bundle's own (`vite.local.config.ts`), a frame a document opens is another origin, which holds no capability, and a
+  link it carries is heard only as `window` or `local`. No sandbox, account or Docker is needed to open anything. What
+  fails to open is said in a native dialog in the user's words (the place chip shows the same sentence under the row),
+  and the original error goes to stderr.
+
+  (2026-09-30) The launcher window is gone. It was a card of its own design between the reader and everything else:
+  Home (open a folder or a file, recents, sign-in), This device (Docker, the agent, sandboxes), and a handed-over setup,
+  none of it in the editor's shell, and a first launch without an account opened on it. The main window replaced it,
+  so every window of the app is the editor's shell from the first launch, and This device became a view of that shell.
+  The local windows were granted the commands to draw it. The alternative, keeping them capability-less and asking the
+  app for This device by `intentic://` links answered with events, was rejected: a link is a navigation any document
+  can make on a click, while a command needs script, which the page's policy lets only the bundle run.
+- **The warm window.** After the first folder or document window of a run (never for the main window alone, which
+  most runs never go past), the app keeps one hidden spare files window whose page
   has loaded the editor and waits for its face: the next open, once that page has finished loading, registers its
   grant under the spare's label, hands it the face (`window.__INTENTIC_LOCAL__`, then `intentic:face`), sizes, places
   and shows it, and builds the next spare. A spare still loading is left for the open after. The spare goes after
@@ -129,7 +161,8 @@ flowchart LR
 
 ## The link surface
 
-`intentic://` is the only channel from a page into the app. Navigations in the app's own windows are intercepted
+`intentic://` is the only channel from the workspace's page into the app, and a local window's for its own title bar
+and folder (its other verbs are Tauri commands, above). Navigations in the app's own windows are intercepted
 in `windows.rs`. Links from anywhere else arrive through the OS scheme handler, which on Linux is the desktop entry
 built from [src-tauri/main.desktop](src-tauri/main.desktop). [setup_link.rs](src-tauri/src/setup_link.rs) parses
 every link and drops what an outside sender may not ask for. The editor builds them in
@@ -137,15 +170,15 @@ every link and drops what an outside sender may not ask for. The editor builds t
 
 | Link | Accepted from | Does |
 | --- | --- | --- |
-| `setup?code=…[&sandbox=…][&name=…][&syncDir=…]` | anywhere; outside asks first | The launcher runs that sandbox's setup here. `cfToken`, `platform` and `project` count only from the app. |
+| `setup?code=…[&sandbox=…][&name=…][&syncDir=…]` | anywhere; outside asks first | This device, in the main window, runs that sandbox's setup here. `cfToken`, `platform` and `project` count only from the app. |
 | `signin[?switch=1]` | anywhere | Opens platform sign-in in the default browser; `switch` asks for the account chooser. |
 | `auth?handoff=…&state=…[&profile=…]` | anywhere | Completes a sign-in this app started and opens the workspace at `/desktop-auth/complete`. |
-| `sync?url=…&pair=…[&name=…][&takeover=1][&mirror=1]` | app windows | Enrolls this device in desktop sync; the folder is picked in a system dialog. |
+| `sync?url=…&pair=…[&name=…][&takeover=1][&mirror=1]` | app windows | Enrolls this device in desktop sync from This device; the folder is picked in a system dialog. |
 | `sync?url=…&pair=…&project=<name>[&sandbox=<id>]` | app windows | A hosted sandbox's project: syncs the parked folder with `/work/<name>` and remembers it with that sandbox. |
-| `recreate?slug=…[&hash=…][&rollback=1]` | app windows | Moves the sandbox to the `:stable` base, a pinned overlay, or its previous image. |
-| `fix?slug=…[&code=…]` | app windows | Runs `ic sandbox fix` for that sandbox here and shows it in the launcher; `code` is the recovery panel's fix code, which `ic` claims so the panel follows the run. A slug or code that is not a plain token drops the link. |
+| `recreate?slug=…[&hash=…][&rollback=1]` | app windows | Moves the sandbox to the `:stable` base, a pinned overlay, or its previous image, from This device. |
+| `fix?slug=…[&code=…]` | app windows | Runs `ic sandbox fix` for that sandbox here and shows it on This device; `code` is the recovery panel's fix code, which `ic` claims so the panel follows the run. A slug or code that is not a plain token drops the link. |
 | `update` | app windows | Installs the downloaded update and restarts. |
-| `launcher` | app windows | Brings the launcher face back. |
+| `launcher[?to=files]` | app windows | Brings the main window back in the workspace's place: at This device (a setup's way back to its run, a sandbox's restart), or at its folder with `to=files` (the sandbox switcher's "This computer"). |
 | `window?do=…` | app and local windows | The editor's own title bar: `ready`, `minimize`, `maximize`, `close[&confirmed=1]`, `dirty&value=0\|1`, `drag`, `raise`, `fit`, `mode`. |
 | `local?do=…` | local windows only | `open-folder` and `open-file` in the system dialog, `reveal[&path=…]` an entry of the window's own folder, `sandbox`, `ask&path=…`, and the project's `changes`, `bring-back[&paths=<JSON array>]`, `restore&point=…`, `direction&value=to-sandbox\|both`. |
 
@@ -166,11 +199,16 @@ Nothing is returned over a link. The app answers with DOM events it dispatches i
 | --- | --- | --- |
 | `intentic-desktop-window` | workspace, floating, local | `{ maximized }`, for the page's own maximise button. |
 | `intentic-desktop-update` | workspace | `{ version }` of a downloaded update. |
-| `intentic-desktop-setup` | workspace | The launcher's setup progress (`SetupReport`). |
+| `intentic-desktop-setup` | workspace | This device's setup progress (`SetupReport`). |
 | `intentic:face` | a worn spare | none: `window.__INTENTIC_LOCAL__` has just been set. |
 | `intentic:open` | local folder window | `{ path }` of a document inside its folder, root-relative. |
 | `intentic:close-requested` | local window | none: a close is held for unsaved changes. |
 | `intentic:project` | local folder window | `{ kind: "changes" \| "brought-back" \| "restored" \| "direction", result }`, `result` being the machine agent's own `{ ok, … }`; or `{ kind: "error", verb, error }` when the agent is missing, would not start, timed out or printed no JSON, or the folder has a run under way already. |
+| `intentic:navigate` | main window | `{ path }`, a route of the local shell (`/device`): the screen the app raised the window for. |
+
+A local window also hears the app's Tauri events, which This device listens on: `desktop://run` (a script run's
+`started`, `line` and `exit`), `desktop://pending-setup`, `desktop://pending-recreate`, `desktop://pending-sync` and
+`desktop://update`.
 
 ## The sidecar's control lines
 
@@ -187,7 +225,7 @@ reloaded onto their new address and token.
 | `{"op":"grant",…,"id":"handoff-<n>","kind":"file","readOnly":true,"origins":[…],"expiresInMs":900000}` | in | A handoff: one file, read-only, for the workspace's origin. |
 | `{"op":"revoke","token"}` | in | The window closed. |
 | `{"op":"answer","id","ok"[,"error"]}` | in | The answer to an `ask`. |
-| `{"op":"prefetch-office"}` | in | Fetch the office editor now: once per run, after Home at launch or the first local window, never with `INTENTIC_DISABLE_UPDATE_CHECK` set. |
+| `{"op":"prefetch-office"}` | in | Fetch the office editor now: once per run, after the first local window opens (the main one at launch included), never with `INTENTIC_DISABLE_UPDATE_CHECK` set. |
 | `{"event":"ready","port"}`, `granted`, `refused`, `revoked` | out | Where it listens, and what it made of each grant. |
 | `{"event":"ask","id","verb":"trash","path"}` | out | Move this entry to the Recycle Bin or Trash. |
 | `{"event":"office","state":"ready"\|"failed"[,"error"]}` | out | Where the office editor's download went; logged. |
@@ -195,11 +233,11 @@ reloaded onto their new address and token.
 ## Key files
 
 - [src-tauri/src/lib.rs](src-tauri/src/lib.rs) — startup: plugins, the command list, the tray and what a launch opens onto.
+- [src-tauri/src/local.rs](src-tauri/src/local.rs) — the local windows: the main one and its folder, each window's grant, pointing a window at another folder, the warm window, handoffs, launch arguments; the `intentic-files` process itself, its generations and trash asks, is `sidecar.rs`.
 - [src-tauri/src/setup_link.rs](src-tauri/src/setup_link.rs) — every `intentic://` link and which senders it is believed from.
-- [src-tauri/src/commands.rs](src-tauri/src/commands.rs) — the Tauri commands the launcher calls, and the script each run starts.
-- [src-tauri/src/local.rs](src-tauri/src/local.rs) — the local windows: each window's grant, the warm window, handoffs, launch arguments; the `intentic-files` process itself, its generations and trash asks, is `sidecar.rs`.
-- [src/App.vue](src/App.vue) — Home: this computer's files, recents and an agent, plus Docker, sandboxes and sync for a machine that hosts them; a handed-over setup.
-- [src-tauri/tauri.conf.json](src-tauri/tauri.conf.json) — bundle targets, updater endpoint, the deep-link scheme and the Linux glibc floor.
+- [src-tauri/src/commands.rs](src-tauri/src/commands.rs) — the Tauri commands This device calls, and the script each run starts.
+- [src/host.ts](src/host.ts) — this app's half of the local shell: its places, the way to agents, and the This device view it adds to the rail.
+- [src/device/useDevice.ts](src/device/useDevice.ts) — This device's store: the machine's sandboxes, agent and engine, and the setups, recreates and syncs the app runs here.
 
 ## Building
 
@@ -225,9 +263,15 @@ deb, rpm or AppImage (vendored libraries included) imports a newer `GLIBC_` vers
 Moving the floor means both entries, the download page (`_site/site/src/pages/download.astro`) and the quickstart's
 desktop section. To check a local build, run `bash _tools/scripts/desktop/verify-desktop-bundle.sh <dist-bin dir>`.
 
+The local face runs in a plain browser too, on the dev server alone: open
+`http://127.0.0.1:47147/files/local?daemon=…&token=…&id=…&name=…&path=…[&home=1]` against a running `intentic-files`
+granted that token. With no app behind the page, its commands are answered by a stand-in (`local/devDesktop.ts`,
+Tauri's own IPC mock), for a machine picked by `?machine=fresh|host|setup`: a first launch, one hosting two sandboxes,
+or one mid-setup.
+
 ```sh
-pnpm --filter @intentic/desktop-app tauri:dev        # launcher on :47146, workspace from INTENTIC_APP_URL
-pnpm --filter @intentic/desktop-app dev:local        # the local face on :47147, proxied under the launcher's /files
+pnpm --filter @intentic/desktop-app tauri:dev        # the close question's page on :47146, workspace from INTENTIC_APP_URL
+pnpm --filter @intentic/desktop-app dev:local        # the local face on :47147, proxied under :47146's /files
 pnpm --filter @intentic/desktop-app check:rust       # rustfmt, clippy, cargo test
 pnpm --filter @intentic/desktop-app stage:downloads  # local installers into _site/site/public/desktop/
 ```

@@ -91,13 +91,22 @@ impl Mode {
 }
 
 /// Which of the app's two faces the user was last seen choosing: the workspace (the hosted editor) or Home (the
-/// launcher's own card, which leads with the folders and documents of this computer). What a launch and the tray's
-/// "Open Intentic" open onto (lib.rs `opening`), kept on disk as `last-face.json`.
+/// main local window, windows.rs `HOME`: the editor's shell on a folder of this computer, with This device beside
+/// it). What a launch and the tray's "Open Intentic" open onto (lib.rs `opening`), kept on disk as `last-face.json`.
+/// The spelling `home` is the one the launcher's card had before the main window took its place (2026-09-30), so a
+/// file written then still reads.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Face {
     Home,
     Workspace,
+}
+
+/// Where the main window opens on a machine that has never pointed it anywhere: a folder of Intentic's own under the
+/// user's home, `~/intentic/local`, made on first launch. Opinionated on purpose: a first launch asks nothing, and a
+/// folder the app owns is one it can open without reading anybody's documents. `intentic/` leaves room beside it.
+pub fn default_home_folder(home: &Path) -> PathBuf {
+    home.join("intentic").join("local")
 }
 
 /// The face an install that has no `last-face.json` yet was last using. Before the file existed the only record
@@ -180,11 +189,11 @@ pub struct Project {
 pub struct AppState {
     config_dir: PathBuf,
     pub settings: Mutex<Settings>,
-    /* A request waiting for the launcher UI to pick up. */
+    /* A request waiting for This device, in the main window, to pick up. */
     pub pending: Mutex<Option<SetupArgs>>,
     pub pending_recreate: Mutex<Option<RecreateArgs>>,
-    /// A desktop-sync enrollment the SPA handed over (`intentic://sync`), waiting for the launcher face to
-    /// ask for the folder and run it. Same taken-not-read contract as the two above.
+    /// A desktop-sync enrollment the SPA handed over (`intentic://sync`), waiting for This device to ask for the
+    /// folder and run it. Same taken-not-read contract as the two above.
     pub pending_sync: Mutex<Option<SyncArgs>>,
     /// This launch opened the app's own face because the engine was asleep (lib.rs), so this launch is the one
     /// that hands over to the workspace once it wakes. In-process only: a launch is not a thing to remember.
@@ -217,6 +226,11 @@ pub struct AppState {
     /// The folder a local window asked a sandbox for, waiting for the setup page's code (project.rs). In-process
     /// only: a question a quit left unanswered is asked again.
     pub pending_project: Mutex<Option<PathBuf>>,
+    /// The folder the main window was last pointed at (`home-folder.json`), which the next launch opens it on; none
+    /// until it has been pointed anywhere, which is [`AppState::default_home`].
+    home_folder: Mutex<Option<PathBuf>>,
+    /// `~/intentic/local` ([`default_home_folder`]), or a folder in the app's own config dir where the OS names no home.
+    default_home: PathBuf,
 }
 
 impl AppState {
@@ -233,6 +247,11 @@ impl AppState {
             workspace_seen,
         );
         let account_seen = read_json(&config_dir.join("account-seen.json")).unwrap_or(false);
+        let home_folder = read_json(&config_dir.join("home-folder.json"));
+        let default_home = app.path().home_dir().map_or_else(
+            |_| config_dir.join("local"),
+            |home| default_home_folder(&home),
+        );
         Ok(AppState {
             config_dir,
             settings: Mutex::new(settings),
@@ -249,6 +268,8 @@ impl AppState {
             account_seen: Mutex::new(account_seen),
             lists: Mutex::new(()),
             pending_project: Mutex::new(None),
+            home_folder: Mutex::new(home_folder),
+            default_home,
         })
     }
 
@@ -356,7 +377,7 @@ impl AppState {
 
     /// What a close should do without asking again — `None` until the user has ticked "always do this".
     ///
-    /// Deliberately NOT a [`Settings`] field: the launcher UI saves that struct wholesale, so changing an
+    /// Deliberately NOT a [`Settings`] field: `settings_set` saves that struct wholesale, so changing an
     /// origin there would throw away an answer the user has already given and put the question back. An
     /// unreadable or unwritable file answers `None`, which is the question returning rather than a wrong × —
     /// the one failure mode here that cannot surprise anybody.
@@ -414,6 +435,33 @@ impl AppState {
         write_json(&self.config_dir.join("projects.json"), &projects);
     }
 
+    /* THE FOLDER THE MAIN WINDOW SHOWS. */
+
+    /// The folder the main window opens on: the one it was last pointed at, or `~/intentic/local`.
+    pub fn home_folder(&self) -> PathBuf {
+        self.home_folder
+            .lock()
+            .unwrap()
+            .clone()
+            .unwrap_or_else(|| self.default_home.clone())
+    }
+
+    /// The folder a first launch makes and opens (`~/intentic/local`), and the one the main window falls back to when
+    /// the folder it was pointed at has gone.
+    pub fn default_home(&self) -> &Path {
+        &self.default_home
+    }
+
+    /// The main window was pointed at `path`: the next launch opens it there. Written only on a change.
+    pub fn remember_home_folder(&self, path: &Path) {
+        let mut held = self.home_folder.lock().unwrap();
+        if held.as_deref() == Some(path) {
+            return;
+        }
+        *held = Some(path.to_path_buf());
+        write_json(&self.config_dir.join("home-folder.json"), &path);
+    }
+
     /* WHAT WAS OPENED LOCALLY, newest first. */
 
     pub fn recents(&self) -> Vec<Recent> {
@@ -453,7 +501,7 @@ impl AppState {
         }
     }
 
-    /* The launcher and the workspace are separate webviews with separate storage. */
+    /* The local windows and the workspace are separate webviews with separate storage. */
     pub fn install_id(&self) -> String {
         let mut cached = self.install_id.lock().unwrap();
         if let Some(id) = cached.as_ref() {
@@ -563,6 +611,8 @@ mod tests {
             ),
             lists: Mutex::new(()),
             pending_project: Mutex::new(None),
+            home_folder: Mutex::new(read_json(&config_dir.join("home-folder.json"))),
+            default_home: default_home_folder(&config_dir.join("home")),
         }
     }
 
@@ -749,6 +799,27 @@ mod tests {
         assert_eq!(
             std::fs::read_to_string(dir.join("last-face.json")).unwrap(),
             "\"home\""
+        );
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// A first launch opens the main window on `~/intentic/local`; once it has been pointed elsewhere, every launch
+    /// after opens it there.
+    #[test]
+    fn the_main_window_opens_on_intentic_local_until_it_is_pointed_at_another_folder() {
+        assert_eq!(
+            default_home_folder(Path::new("/home/ada")),
+            PathBuf::from("/home/ada/intentic/local")
+        );
+        let dir = std::env::temp_dir().join(format!("intentic-home-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let first = state_in(&dir);
+        assert_eq!(first.home_folder(), first.default_home());
+        first.remember_home_folder(Path::new("/home/ada/Taxes 2026"));
+        // Read back by the next launch, from disk.
+        assert_eq!(
+            state_in(&dir).home_folder(),
+            PathBuf::from("/home/ada/Taxes 2026")
         );
         std::fs::remove_dir_all(&dir).unwrap();
     }

@@ -6,9 +6,10 @@ fn main() {
         .unwrap_or_else(|| "0.0.0".to_string());
     println!("cargo:rustc-env=INTENTIC_VERSION={version}");
     println!("cargo:rerun-if-env-changed=INTENTIC_VERSION");
-    // Every command this app registers (lib.rs), listed so each is a permission a capability must grant rather
-    // than something any local window may call. Two local windows draw content nobody vouched for: a window on a
-    // folder of the user's disk shows their documents (local.rs), and it holds no capability at all.
+    // Every command this app registers (lib.rs), listed so each is a permission a capability must grant rather than
+    // something any window may call. The local windows (the main one and each folder's, local.rs) are granted the
+    // commands their shell and This device call (capabilities/local.json) and nothing else; the documents they draw
+    // run no script of their own there, so only the app's own bundle can call even those.
     tauri_build::try_build(
         tauri_build::Attributes::new()
             .app_manifest(tauri_build::AppManifest::new().commands(COMMANDS)),
@@ -51,7 +52,6 @@ const COMMANDS: &[&str] = &[
     "machine_restart",
     "workspace_open",
     "home_facts",
-    "launcher_close",
     "setup_alert",
     "setup_progress",
     "fit_to_content",
@@ -60,7 +60,8 @@ const COMMANDS: &[&str] = &[
     "settings_set",
     "update_state",
     "update_install",
-    "local_open",
+    "local_pick",
+    "local_point",
     "local_open_path",
     "local_recents",
     "local_forget_recent",

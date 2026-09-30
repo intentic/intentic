@@ -36,7 +36,8 @@ import { useShellCommands } from "./commands/useShellCommands";
 import { useKeybindings } from "./commands/useKeybindings";
 import { useLayout } from "./window/useLayout";
 import { uiLength } from "./window/uiScale";
-import { ICON_RAIL_WIDTH_REM, useIconRailSize } from "./rail/useIconRailSize";
+import { useIconRailSize } from "./rail/useIconRailSize";
+import { railFrame } from "./rail/railFrame";
 import { presenceOthers } from "./presence/usePresence";
 import { usePanels } from "../features/extensions/usePanels";
 import { appTargetId, previewEvidence, previewHealthyCount } from "../features/preview/previewModel";
@@ -494,26 +495,13 @@ const keepOnRail = (tile: SectionTile): void => {
 };
 
 // The side panel (shell/side) takes its column while it holds anything: the chat whose home is the side, or what was
-// opened beside the section. Empty, the column is 0 wide. Rail measures divide out --ui-scale (`rail()`): chrome doesn't
-// grow with the app's text size.
+// opened beside the section. Empty, the column is 0 wide.
 const sideShown = computed(() => chatInSidePanel.value || shownSideTabs.value.length > 0);
-const rail = (value: string): string => `calc(${value} / var(--ui-scale))`;
-const gridStyle = computed(() => {
-    const compact = iconRailSize.value === `compact`;
-    return {
-        "--side-width": sideShown.value ? uiLength(layout.chatWidth.value) : `0px`,
-        "--icon-rail-width": rail(`${ICON_RAIL_WIDTH_REM[iconRailSize.value]}rem`),
-        "--icon-rail-tile-size": rail(compact ? `2.5rem` : `2.75rem`),
-        "--icon-rail-account-size": rail(compact ? `2rem` : `2.25rem`),
-        "--icon-rail-divider-width": rail(compact ? `1.75rem` : `2rem`),
-        "--icon-rail-gap": rail(compact ? `0.375rem` : `0.5rem`),
-        "--icon-rail-padding": rail(compact ? `0.5rem` : `0.75rem`),
-        // Half the tile at both widths, so the glyph keeps the same air around it when the rail narrows.
-        "--icon-rail-glyph-size": rail(compact ? `1.25rem` : `1.375rem`),
-        // The type size every corner mark is drawn from: a 1.6em plate on the chip, a 1.1em glyph on a bare mark.
-        "--icon-rail-mark-size": rail(`0.625rem`),
-    };
-});
+const gridStyle = computed(() => ({
+    "--side-width": sideShown.value ? uiLength(layout.chatWidth.value) : `0px`,
+    // The rail's own measures, shared with a desktop window on a local folder (railFrame.ts, iconRail.css).
+    ...railFrame(iconRailSize.value),
+}));
 
 // Toggled by the rail tile or Ctrl+`; the panel docks below the workspace since sessions are sandbox-global.
 const terminal = useTerminalPanel();
@@ -792,61 +780,5 @@ const wallpapered = useWallpaperedRoute();
     grid-template-areas: "rail workspace side";
 }
 
-.icon-rail {
-    gap: var(--icon-rail-gap);
-    padding-block: var(--icon-rail-padding);
-    /* An inset shadow, not a background: layers over a skin's own background-image without a specificity fight. */
-    box-shadow: inset 0 0 0 100vmax color-mix(in oklab, var(--color-brand-950) 11%, transparent);
-    /* What the badge's ring is cut from: the card under that same wash, so the plate keeps a clean edge where it
-       crosses a glyph stroke — including on the open tile, where plate and ink are the same colour. A skin
-       repainting the rail re-points this and the ring follows. */
-    --ui-tile-ground: color-mix(in oklab, var(--color-brand-950) 11%, var(--color-card));
-}
-
-/* flex-shrink: 0 everywhere: with `height` (not min-height) tiles would otherwise compress instead of scrolling. */
-.icon-rail > *,
-.icon-rail-tile,
-.icon-rail-band,
-.icon-rail-divider {
-    flex-shrink: 0;
-}
-
-/* One gap unit for a band seam, matching the old hairline's rhythm; scales with the rail via `rail()`. */
-.icon-rail-band {
-    height: var(--icon-rail-gap);
-}
-
-/* The one unbounded run (one tile per extension), so it's the one that scrolls; everything else stays anchored. */
-.icon-rail-nav {
-    flex-shrink: 1;
-    min-height: 0;
-    gap: var(--icon-rail-gap);
-    /* Scrollbar hidden (.scrollbar-none): in a 44px column it would eat a quarter of it. */
-}
-
-.icon-rail-tile {
-    width: var(--icon-rail-tile-size);
-    height: var(--icon-rail-tile-size);
-}
-
-/* WHAT A TILE HOLDS IS SIZED LIKE THE TILE ITSELF. Both measures come from `rail()`, so the glyph and the corner
-   marks hold their size across the text-size setting exactly as the box around them does; written in `rem` they
-   grew 20% inside a box that did not, which crowded the corner at the one setting nobody tests. */
-.icon-rail-glyph {
-    font-size: var(--icon-rail-glyph-size);
-}
-
-/* The one type size behind all three corner marks; each states its own size as a multiple of it. */
-.icon-rail-mark {
-    font-size: var(--icon-rail-mark-size);
-}
-
-.icon-rail-tile:focus-visible {
-    outline: 2px solid var(--color-primary-500);
-    outline-offset: -2px;
-}
-
-.icon-rail-divider {
-    width: var(--icon-rail-divider-width);
-}
+/* The rail's own rules (tiles, glyphs, marks, bands) are the shared stylesheet's, shell/rail/iconRail.css. */
 </style>

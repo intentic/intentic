@@ -49,6 +49,8 @@
                     "__INTENTIC_DESKTOP__",
                     // What the desktop app's init script hands a window on a local folder (src-tauri/src/local.rs).
                     "__INTENTIC_LOCAL__",
+                    // The desktop app's half of that window's shell, set by its bootstrap (desktop-app/src/host.ts).
+                    "__INTENTIC_LOCAL_HOST__",
                     "__termFrames",
                     "__name",
                     "_core",

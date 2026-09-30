@@ -17,6 +17,7 @@ import QuickOpen from "../shell/commands/QuickOpen.vue";
 import { useQuickOpen } from "../shell/commands/useQuickOpen";
 import { openedPath } from "./appEvents";
 import LocalBringBack from "./LocalBringBack.vue";
+import LocalEmptyFolder from "./LocalEmptyFolder.vue";
 import { type LocalChord, localChord } from "./localKeys";
 import { useUnsavedGuard } from "./useUnsavedGuard";
 
@@ -34,6 +35,9 @@ const { listingOf, hiddenIn, keepListed, error, isLoading, busy } = useWorkspace
 const tree = computed(() => listingOf(``) ?? []);
 keepListed(() => ``);
 const rootHidden = computed(() => hiddenIn(``));
+// A folder whose listing has come back with nothing to draw. A document opened on its own is never one: its folder is
+// not what the window shows.
+const folderEmpty = computed(() => face?.file === undefined && listingOf(``)?.length === 0 && error.value === undefined);
 
 const { activeId, activeTab, openFile, openAtLine, openDirectory, selectTab, keepTab } = useWorkspaceTabs();
 // Every close that would lose unsaved edits asks first, the window's and a tab's alike (useUnsavedGuard.ts): the pane
@@ -147,12 +151,14 @@ onUnmounted(() => {
 </script>
 
 <template>
-    <div class="flex h-screen w-screen overflow-hidden">
+    <!-- The shell's page: the folder's explorer beside its documents, filling what the rail leaves (LocalShell.vue). -->
+    <div class="flex h-full w-full overflow-hidden">
         <aside v-if="treeShown" class="flex w-72 shrink-0 flex-col border-r border-line bg-card">
             <div class="flex h-9 shrink-0 items-center gap-1 border-b border-line pl-3 pr-1">
                 <Icon name="folder" class="shrink-0 text-sm text-muted" />
                 <span class="min-w-0 flex-1 truncate text-xs font-medium" v-tooltip.bottom="face?.path">{{ face?.name }}</span>
                 <Icon v-if="busy || isLoading" name="spinner" class="text-sm text-muted" spin :aria-label="t(`workspace.words.working`)" />
+                <!-- Another folder is the place chip's to open (LocalPlaceSwitcher.vue); this row is about this one. -->
                 <button
                     type="button"
                     :class="ui.iconButton(`h-7 w-7`)"
@@ -161,15 +167,6 @@ onUnmounted(() => {
                     @click="askLocalApp(`reveal`, { path: selected })"
                 >
                     <Icon name="external-link" class="text-sm" />
-                </button>
-                <button
-                    type="button"
-                    :class="ui.iconButton(`h-7 w-7`)"
-                    v-tooltip.bottom="t(`local.localFiles.openFolder`)"
-                    :aria-label="t(`local.localFiles.openFolder`)"
-                    @click="askLocalApp(`open-folder`)"
-                >
-                    <Icon name="folder-open" class="text-sm" />
                 </button>
             </div>
             <!-- The folder's text (Ctrl/Cmd+Shift+F): matches take the tree's place while a query stands, and Esc brings it back. -->
@@ -255,8 +252,9 @@ onUnmounted(() => {
             </div>
             <!-- What agents changed in the folder's own sandbox, brought back on request (LocalBringBack.vue). -->
             <LocalBringBack v-if="face !== undefined && face.file === undefined && face.sandbox === true" />
-            <!-- The way from this folder to an agent: a sandbox of its own, kept in sync with it (the app's project.rs). -->
-            <div v-if="face !== undefined && face.file === undefined" class="shrink-0 border-t border-line p-2">
+            <!-- The way from this folder to an agent: a sandbox of its own, kept in sync with it (the app's project.rs). Not for
+                 a folder with nothing in it yet, which would hand an agent nothing to work on. -->
+            <div v-if="face !== undefined && face.file === undefined && !folderEmpty" class="shrink-0 border-t border-line p-2">
                 <Button
                     class="w-full"
                     size="small"
@@ -272,7 +270,11 @@ onUnmounted(() => {
             </div>
         </aside>
         <div class="relative flex min-h-0 min-w-0 flex-1">
-            <EditorPane pane="main" @select="selectTab" @keep="keepTab" @close="closeTab">
+            <EditorPane pane="main" :empty="folderEmpty" @select="selectTab" @keep="keepTab" @close="closeTab">
+                <!-- A folder with nothing in it yet (the one the app starts in, first of all): what it is for, and the ways to fill it. -->
+                <template #empty>
+                    <LocalEmptyFolder />
+                </template>
                 <template #lead>
                     <button
                         type="button"
@@ -291,7 +293,7 @@ onUnmounted(() => {
                         size="small"
                         severity="secondary"
                         :label="t(`local.localFiles.askAgent`)"
-                        v-tooltip.bottom="t(`local.localFiles.askAgentHint`)"
+                        v-tooltip.bottom="{ title: t(`local.localFiles.askAgent`), note: t(`local.localFiles.askAgentHint`) }"
                         @click="askActive"
                     >
                         <template #icon><Icon name="robot" /></template>

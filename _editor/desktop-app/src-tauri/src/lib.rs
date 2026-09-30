@@ -26,22 +26,23 @@ pub(crate) fn handle_intentic_link(app: &AppHandle, link: &str, source: setup_li
     windows::handle_link(app, link, source);
 }
 
-/// Open the platform's sign-in page in the default browser (see auth.rs). The app's own faces have no account
-/// to reject, so this road never asks for the chooser; the link `intentic://signin?switch=1` is the one that does.
+/// Open the platform's sign-in page in the default browser (see auth.rs): the local shell's way to agents. It has no
+/// account to reject, so this road never asks for the chooser; the link `intentic://signin?switch=1` is the one that
+/// does.
 #[tauri::command]
 fn sign_in(app: AppHandle) -> Result<(), String> {
     auth::start(&app, false)
 }
 
-/// What a launch opens onto. The app's own face is for the two things a workspace window cannot show: work
-/// parked across a restart, and a machine whose engine is not running under a sandbox that lives on it.
+/// What a launch opens onto. This device, in the main window, is for the two things a workspace window cannot
+/// show: work parked across a restart, and a machine whose engine is not running under a sandbox that lives on it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Opening {
     Workspace,
     ParkedSetup,
     SleepingEngine,
-    /// An install last used through Home (a first launch included): the app's own card, which leads with opening
-    /// a folder or a document of this computer (local.rs) — the one thing a launch can do with no account at all.
+    /// An install last used through the main window (a first launch included): the editor's shell on a folder of
+    /// this computer, `~/intentic/local` at first (local.rs), which needs no account at all.
     Home,
 }
 
@@ -60,8 +61,9 @@ enum Opening {
 /// nothing at all.
 ///
 /// Past those two, the face the user was last seen choosing (state.rs `Face`): the workspace once it has been
-/// shown, Home until then or once they go back to it — except on a machine that hosts a sandbox, which was set up
-/// from the workspace and opens it.
+/// shown, the main window until then or once they go back to it. A machine that hosts a sandbox is no exception any
+/// more: the main window is a place to work, not a card on the way to the workspace, so going back to it is a choice
+/// the next launch keeps (2026-09-30; before, such a machine always opened the workspace).
 const fn opening(
     parked: bool,
     hosts_sandboxes: bool,
@@ -74,10 +76,10 @@ const fn opening(
     if hosts_sandboxes && !engine_listening {
         return Opening::SleepingEngine;
     }
-    if !hosts_sandboxes && matches!(last_face, Face::Home) {
-        return Opening::Home;
+    match last_face {
+        Face::Home => Opening::Home,
+        Face::Workspace => Opening::Workspace,
     }
-    Opening::Workspace
 }
 
 pub fn run() {
@@ -156,7 +158,6 @@ pub fn run() {
             commands::machine_restart,
             commands::workspace_open,
             commands::home_facts,
-            commands::launcher_close,
             commands::setup_alert,
             commands::setup_progress,
             commands::fit_to_content,
@@ -165,7 +166,8 @@ pub fn run() {
             commands::settings_set,
             commands::update_state,
             commands::update_install,
-            local::local_open,
+            local::local_pick,
+            local::local_point,
             local::local_open_path,
             local::local_recents,
             local::local_forget_recent,
@@ -225,7 +227,6 @@ pub fn run() {
             );
 
             /* BEFORE the link, nothing opens. */
-            let mut home_at_launch = false;
             if app.webview_windows().is_empty() && !opened_local {
                 let state = app.state::<state::AppState>();
                 // The engine is asked for by its socket, never by `docker info`, which would hold the first
@@ -236,28 +237,24 @@ pub fn run() {
                     scripts::engine_listening(),
                     state.last_face(),
                 );
-                if opening == Opening::SleepingEngine {
+                // A launch that shows This device for the engine hands over to the workspace once it wakes, when the
+                // workspace is the face it would otherwise have opened; one last used through the main window stays.
+                if opening == Opening::SleepingEngine && state.last_face() == Face::Workspace {
                     *state.pending_docker.lock().unwrap() = true;
                 }
                 match opening {
                     Opening::Workspace => windows::show_workspace(app.handle()),
-                    // A launch into Home is Home shown by the user's own doing: remembered as the face in use.
-                    Opening::Home => {
-                        home_at_launch = true;
-                        windows::show_home(app.handle());
-                    }
+                    // A launch into the main window is that window shown by the user's own doing: remembered as the
+                    // face in use. It starts the file server itself, since it is a window on a folder.
+                    Opening::Home => windows::show_home(app.handle()),
                     Opening::ParkedSetup | Opening::SleepingEngine => {
-                        windows::show_launcher(app.handle())
+                        windows::show_device(app.handle())
                     }
                 }
             }
-            // The file server a few seconds in, when a local window is likely: Home leads with opening one, and an
-            // install that has opened any is likely to again. Home also wants the office editor fetched for the
-            // first document (sidecar.rs), once the server is up.
-            if home_at_launch {
-                sidecar::want_office(app.handle());
-            }
-            if home_at_launch || !app.state::<state::AppState>().recents().is_empty() {
+            // The file server a few seconds in, when a local window is likely: an install that has opened any is likely
+            // to again.
+            if !app.state::<state::AppState>().recents().is_empty() {
                 sidecar::start_early(app.handle());
             }
             Ok(())
@@ -267,8 +264,8 @@ pub fn run() {
 
     /* Quitting is the one moment with nothing to interrupt: the window is going anyway, no script run is being watched. */
     app.run(|app, event| match event {
-        // The last window closing is not the app ending: it lives in the tray (a local window closed, Home closed
-        // before any workspace was seen). Only Quit, which exits with a code, ends it.
+        // The last window closing is not the app ending: it lives in the tray (a local window closed, a face hidden
+        // by its ×). Only Quit, which exits with a code, ends it.
         RunEvent::ExitRequested {
             api, code: None, ..
         } => api.prevent_exit(),
@@ -300,7 +297,7 @@ struct TrayWorkspace {
     offered: AtomicBool,
 }
 
-/// Where the row goes: after "Open Intentic" and "Home".
+/// Where the row goes: after "Open Intentic" and "This computer".
 const WORKSPACE_ROW_AT: usize = 2;
 
 /// Put "Open workspace" in the tray, once, when an account has been seen (a sign-in, or the workspace shown).
@@ -317,15 +314,15 @@ pub(crate) fn offer_workspace(app: &AppHandle) {
     }
 }
 
-/// Where the app lives once its window is closed: the × hides the workspace rather than ending the app, and the
-/// launcher's steps into the tray, so `Open Intentic` here is the way back to whichever face was last in use. That
-/// is a lot of weight on an icon the user may never have seen, which is why the × asks the first time and names
-/// this tray in the asking (windows.rs) — and why `Quit` is offered there too, rather than only here.
+/// Where the app lives once its window is closed: the × hides a face (the workspace or the main window) rather than
+/// ending the app, so `Open Intentic` here is the way back to whichever face was last in use. That is a lot of weight
+/// on an icon the user may never have seen, which is why the × asks the first time and names this tray in the asking
+/// (windows.rs) — and why `Quit` is offered there too, rather than only here.
 fn create_tray(app: &AppHandle) -> tauri::Result<()> {
     let open = MenuItemBuilder::with_id("open", "Open Intentic").build(app)?;
-    // "Home", matching the card it opens: the folders and documents of this computer first, then the machine's
-    // sandboxes and its desktop sync. The id is the one the row has always had.
-    let manager = MenuItemBuilder::with_id("manager", "Home").build(app)?;
+    // "This computer", as the workspace's sandbox switcher names the same place: the main window, on this computer's
+    // folder, with This device beside it. The id is the one the row has always had.
+    let manager = MenuItemBuilder::with_id("manager", "This computer").build(app)?;
     let workspace = MenuItemBuilder::with_id("workspace", "Open workspace").build(app)?;
     /* This app spends most of its life as a tray icon with nothing on screen. */
     let update = MenuItemBuilder::with_id("update", "Checking for updates…")
@@ -357,7 +354,7 @@ fn create_tray(app: &AppHandle) -> tauri::Result<()> {
             "open" => windows::show_last_face(app),
             "manager" => windows::show_home(app),
             "workspace" => windows::show_workspace(app),
-            "agent" => windows::show_launcher(app),
+            "agent" => windows::show_device(app),
             "open-folder" => local::pick(app, true),
             "open-file" => local::pick(app, false),
             "update" => update::act(app),
@@ -393,7 +390,7 @@ mod tests {
             opening(false, true, false, Face::Workspace),
             Opening::SleepingEngine
         );
-        // Last used through Home or not, the engine is still what this launch has to say something about.
+        // Last used through the main window or not, the engine is still what this launch has to say something about.
         assert_eq!(
             opening(false, true, false, Face::Home),
             Opening::SleepingEngine
@@ -428,14 +425,15 @@ mod tests {
         );
     }
 
-    /// A launch opens the face the user was last seen choosing: Home for a first launch (there is no workspace
-    /// to show anyone without an account) and for anyone who went back to it; the card leads with the folder or
-    /// the document they can open right now.
+    /// A launch opens the face the user was last seen choosing: the main window for a first launch (there is no
+    /// workspace to show anyone without an account) and for anyone who went back to it, on the folder they can work in
+    /// right now.
     #[test]
-    fn an_install_last_used_through_home_opens_home() {
+    fn an_install_last_used_through_the_main_window_opens_it() {
         assert_eq!(opening(false, false, true, Face::Home), Opening::Home);
         assert_eq!(opening(false, false, false, Face::Home), Opening::Home);
-        // A machine that hosts a sandbox was set up from the workspace, whatever the face says.
-        assert_eq!(opening(false, true, true, Face::Home), Opening::Workspace);
+        // A machine that hosts a sandbox too: the main window is a place to work, not a card on the way to the
+        // workspace, so going back to it is kept.
+        assert_eq!(opening(false, true, true, Face::Home), Opening::Home);
     }
 }

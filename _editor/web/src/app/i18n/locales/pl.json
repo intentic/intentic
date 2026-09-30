@@ -4041,7 +4041,9 @@
             "toAlsoRemoveMachine": "Żeby usunąć go też z maszyny, która go gości — razem z jego plikami — uruchom tam:",
             "undoLastUpdate": "Cofa ostatnią aktualizację",
             "update": "Aktualizacja",
-            "waitingUnknown": "Oczekujące nieznane"
+            "waitingUnknown": "Oczekujące nieznane",
+            "thisComputer": "Ten komputer",
+            "thisComputerNote": "Twoje pliki, bez sandboxa"
         },
         "sandboxSyncToggles": {
             "filesAndPorts": "Pliki i porty",
@@ -6466,7 +6468,8 @@
             "stopsCountingEmpty": "Przestaje liczyć się jako pusty",
             "technicalHidden": "Ukryto {count} plik techniczny | Ukryto {count} pliki techniczne | Ukryto {count} plików technicznych",
             "technicalKinds": "Lockfile, konfiguracja, dotfile, buildy",
-            "viewingFile": "ogląda ten plik"
+            "viewingFile": "ogląda ten plik",
+            "emptyFolder": "Pusty folder."
         },
         "words": {
             "cantEditHere": "Nie do edycji tutaj",
@@ -6771,12 +6774,11 @@
         "localFiles": {
             "keepsFolderSynced": "Synchronizuje ten folder",
             "newSandbox": "Nowy sandbox",
-            "openFolder": "Otwórz folder",
             "reveal": "Pokaż plik",
             "withAgent": "Popracuj nad tym z agentem",
             "openSandbox": "Otwórz sandbox tego folderu",
             "askAgent": "Zapytaj agenta",
-            "askAgentHint": "Zaczyna rozmowę z agentem o tym pliku",
+            "askAgentHint": "Rozmowa o tym pliku",
             "closingDiscardsUnsaved": "Zamknięcie tego okna odrzuci ich niezapisane zmiany. Tego nie można cofnąć.",
             "closingTabDiscardsUnsaved": "Zamknięcie tej karty odrzuci jej niezapisane zmiany. Tego nie można cofnąć.",
             "startsIfStopped": "Uruchamia, gdy zatrzymany",
@@ -6791,6 +6793,41 @@
         "trash": {
             "recycleBin": "Przeniesiono do Kosza",
             "trash": "Przeniesiono do Kosza"
+        },
+        "placeSwitcher": {
+            "switchPlace": "Zmień folder: {name}",
+            "onThisComputer": "Na tym komputerze",
+            "showInFileManager": "Pokaż w menedżerze plików",
+            "movedOrDeleted": "Przeniesiono lub usunięto",
+            "hasSandbox": "Synchronizowany z własnym sandboxem",
+            "sandbox": "Sandbox",
+            "forget": "Usuń {name} z tej listy",
+            "goneOffer": "Tego już tam nie ma. Usunąć z tej listy?",
+            "openFolder": "Otwórz folder…",
+            "openFile": "Otwórz plik…",
+            "workspace": "Twoja przestrzeń robocza",
+            "workspaceLead": "Agenci i sandboxy",
+            "putAgentsToWork": "Zaprzęgnij agentów do pracy",
+            "signInLead": "Zaloguj się, żeby utworzyć sandbox",
+            "switchAnyway": "Przełącz mimo to",
+            "switchingDiscardsUnsaved": "Otwarcie tu innego folderu odrzuci ich niezapisane zmiany. Tego nie da się cofnąć.",
+            "reveal": "Pokaż folder",
+            "forgetNote": "Tylko z tej listy"
+        },
+        "agentsTile": {
+            "workspace": "Twoja przestrzeń robocza",
+            "putAgentsToWork": "Zaprzęgnij agentów do pracy",
+            "workspaceLead": "Twoi agenci i sandboxy są w Twojej przestrzeni roboczej. Otworzy się w tym oknie, a pliki tego komputera zostaną o jedno kliknięcie stąd.",
+            "agentsLead": "Agenci pracują w sandboxie: na tym komputerze w Dockerze albo na maszynie, którą utrzymujemy my. Zaloguj się, żeby go utworzyć.",
+            "finishInBrowser": "Dokończ logowanie w przeglądarce. Twoja przestrzeń robocza otworzy się tutaj, gdy skończysz.",
+            "openWorkspace": "Otwórz przestrzeń roboczą",
+            "filesStayHere": "Twoje pliki zostają na tym komputerze. Nic tutaj nie wymaga konta."
+        },
+        "emptyFolder": {
+            "title": "Ten folder jest pusty",
+            "lead": "Wszystko, co włożysz do folderu {name}, pojawi się tutaj. Zapisz lub skopiuj do niego pliki, przeciągnij je na listę po lewej albo otwórz folder, który już masz.",
+            "openFolder": "Otwórz folder…",
+            "showInFileManager": "Pokaż w menedżerze plików"
         }
     }
 }

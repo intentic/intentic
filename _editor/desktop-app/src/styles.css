@@ -35,9 +35,3 @@
         user-select: text;
     }
 }
-
-/* The launcher is a card, not a page: `.entry` stands 100dvh tall for a screen with a plate behind it, and this
-   window is only ever as tall as what it draws (windows.rs `fit_to_content`). */
-.entry.launcher {
-    min-height: 0;
-}

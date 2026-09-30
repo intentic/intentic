@@ -13,7 +13,8 @@
 # in tauri.conf.json. Without the variable the installers still build; the .sig files and latest.json are
 # skipped, which means no auto-update for that release.
 #
-# Analytics: POSTHOG_KEY is baked into the launcher UI here (desktop-app/vite.config.ts), because a compiled
+# Analytics: POSTHOG_KEY is baked into the app's own pages here (desktop-app/vite.config.ts, and vite.local.config.ts
+# for This device, which reports the app's setups and Docker starts), because a compiled
 # app has no container entrypoint to substitute one at start the way the web image does. Unset — which is
 # every local build and every CI/nightly build — leaves the app's own analytics off, so only installers a user
 # actually downloads report anything. Nothing about the workspace window depends on it: that face is the
@@ -197,11 +198,11 @@ if [ "$ASSEMBLE" -eq 0 ]; then
     else
         INTENTIC_VERSION="$VERSION" bash "$ROOT/_tools/scripts/desktop/stage-local-files.sh" "$(rustc -vV | sed -n 's/^host: //p')" x86_64-pc-windows-msvc
     fi
-    # The launcher UI, once. tauri.conf.json's beforeBuildCommand would build it per `tauri build` invocation, and
+    # The app's own pages, once. tauri.conf.json's beforeBuildCommand would build them per `tauri build` invocation, and
     # this script invokes tauri twice against ONE frontendDist — so the Windows pass re-ran vue-tsc + vite over
     # bytes the Linux pass had already produced (34s + 14s, release job 15686372011). Built here instead, and
     # switched off in the config below for both passes; an empty beforeBuildCommand is how tauri is told to skip it.
-    echo "==> building the launcher UI"
+    echo "==> building the app's own pages"
     pnpm --filter @intentic/desktop-app build
 fi
 

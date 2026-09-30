@@ -2,7 +2,15 @@ import type { User } from "@intentic/api-contract";
 import { overlayBackSettled, useDevice } from "@intentic/ui";
 import { isStaleChunkError, recoverStaleChunk } from "@intentic/ui/chunk";
 import { type FunctionalComponent, h } from "vue";
-import { createRouter, createWebHistory, type RouteLocationNormalized, type RouteLocationRaw, type RouteRecordRaw, START_LOCATION } from "vue-router";
+import {
+    createRouter,
+    createWebHashHistory,
+    createWebHistory,
+    type RouteLocationNormalized,
+    type RouteLocationRaw,
+    type RouteRecordRaw,
+    START_LOCATION,
+} from "vue-router";
 import { asyncView } from "../components/asyncView";
 import { homeViewId, PROJECTS_VIEW_ID } from "../core-views/registry";
 import { conversationRedirect } from "./conversationLink";
@@ -20,6 +28,7 @@ import { setupRedirect } from "./setupGate";
 import { signInAt } from "./signIn";
 import { t } from "@intentic/ui/i18n";
 import { localFace } from "../app/environments/local";
+import { localHost } from "../app/environments/localHost";
 import { receiveHandoff } from "../features/chat/drafts/localHandoff";
 import { setPageTitle } from "../shell/browser-tab/tabTitle";
 import { coldStartAtRoot, installedApp, lastRoute, rememberRoute } from "./recentRoute";
@@ -151,15 +160,6 @@ const routes: RouteRecordRaw[] = [
         // Wrapped although it is outside the shell: "Add sandbox" reaches it from the shell, and that click deserves
         // the same instant flip as any other. Full-screen wizard, so no outline to promise.
         component: asyncView(() => import(`../features/setup/Setup.vue`)),
-    },
-    {
-        // A desktop window on a folder of the user's own disk (app/environments/local.ts): the explorer and the editor
-        // panes, nothing that needs a sandbox. Guarded like the shell; the window's bootstrap seeds what both read.
-        path: `/local`,
-        name: `local`,
-        meta: { title: () => localFace()?.name ?? t(`shared.files`) },
-        beforeEnter: [requireAuth, requireSetup],
-        component: () => import(`../local/LocalFiles.vue`),
     },
     {
         // A floating panel's own window (chat, terminal or preview), no shell around it, nothing to navigate. Guarded
@@ -324,11 +324,46 @@ const routes: RouteRecordRaw[] = [
     { path: `/:pathMatch(.*)*`, redirect: `/` },
 ];
 
+// A DESKTOP WINDOW ON A FOLDER OF THIS COMPUTER (app/environments/local.ts) has a shell of its own, not a sandbox's: the
+// same rail, holding what needs no sandbox (local/LocalShell.vue). Files is the folder; every other tile is a view the app
+// adds (localHost.ts), This device first. Guarded like the sandbox shell: the window's bootstrap seeds what both guards
+// read, so neither waits on a server. Anything else leads back to the folder, since every other screen reads a sandbox.
+const localRoutes = (): RouteRecordRaw[] => [
+    {
+        path: `/`,
+        beforeEnter: [requireAuth, requireSetup],
+        component: () => import(`../local/LocalShell.vue`),
+        children: [
+            { path: ``, redirect: `/workspace` },
+            {
+                // The folder's tree and its documents. The path is the tree's, not the window's: the window is one folder.
+                path: `workspace/:path(.*)*`,
+                name: `workspace`,
+                meta: { title: () => localFace()?.name ?? t(`shared.files`) },
+                component: asyncView(() => import(`../local/LocalFiles.vue`)),
+            },
+            ...localHost().views.map(
+                (view): RouteRecordRaw => ({
+                    path: view.path,
+                    name: view.path,
+                    meta: { title: view.title },
+                    component: asyncView(view.load),
+                }),
+            ),
+        ],
+    },
+    { path: `/:pathMatch(.*)*`, redirect: `/workspace` },
+];
+
 export const router = createRouter({
     // The build's own base, not vue-router's default (`<base href>` or `/`): otherwise a path-prefixed build resolves
     // every route one level up. `/` here; @intentic/demo needs it under `/demo/`.
-    history: createWebHistory(import.meta.env.BASE_URL),
-    routes,
+    //
+    // A local window keeps its route in the hash instead: the app's asset protocol answers `files/local` with the local
+    // page (vite.local.config.ts) and an address below it with the bundle's other page, so a reload of `files/local/device`
+    // would load the wrong app. `files/local#/device` reloads onto the screen it was on.
+    history: localFace() === undefined ? createWebHistory(import.meta.env.BASE_URL) : createWebHashHistory(),
+    routes: localFace() === undefined ? routes : localRoutes(),
     // Makes a hash like `/sandbox/usage#accounts` actually scroll into view; vue-router ignores a fragment on its
     // pushState navigations. `{ el }` finds whichever pane owns the scrollbar; no hash means no opinion.
     scrollBehavior: (to) => (to.hash === `` ? false : { el: to.hash, behavior: `smooth` }),
@@ -366,10 +401,6 @@ router.beforeEach((to) => receiveHandoff(to, () => useAuth().user.value !== null
 // drop the tap on the way in. Global, not the home redirect's, for that reason; the target carries no such query,
 // so it cannot loop.
 router.beforeEach((to) => conversationRedirect(to.query, useDevice().mobile.value) ?? true);
-
-// A window on a local folder has one screen. Anything that would lead elsewhere (a link into the workspace, the shell's
-// home) leads back to it: every other screen reads a sandbox this window has none of.
-router.beforeEach((to) => (localFace() !== undefined && to.name !== `local` ? { name: `local` } : true));
 
 // Router half of stale-chunk recovery (asyncView owns the in-shell half). Covers route-level loads (login, handoffs,
 // invite, the shell); a dead chunk here reloads onto the route asked for.

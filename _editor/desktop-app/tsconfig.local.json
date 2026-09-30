@@ -8,7 +8,11 @@
         "paths": {
             "@intentic/web/main": ["./local/editor-entry.d.ts"],
             "@intentic/web/local": ["../../_editor/web/src/app/environments/local.ts"],
-            "@intentic/api-contract": ["../../_shared/api-contract/src/index.ts"]
+            "@intentic/web/local-host": ["../../_editor/web/src/app/environments/localHost.ts"],
+            "@intentic/api-contract": ["../../_shared/api-contract/src/index.ts"],
+            // This app's half of the shell (src/host.ts, This device) is drawn in the kit, read from source as src/ reads it.
+            "@intentic/ui": ["../../_editor/ui/src/index.ts"],
+            "@intentic/ui/i18n": ["../../_editor/ui/src/i18n/index.ts"]
         }
     },
     "extends": "@intentic/tsconfig/tsconfig.vue.json",

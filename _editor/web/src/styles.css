@@ -19,6 +19,8 @@
 /* The WRITING half of the same picture, and it loads on the same terms and for the same reason. */
 @import "../../../_editor/ui/src/styles/opt-in/markdown-editing.css";
 @import "./features/chat/panel/chat.css";
+/* The icon rail, which the sandbox shell and a desktop window on a local folder both draw; before the skins that repaint it. */
+@import "./shell/rail/iconRail.css";
 
 /* SKINS — whole-interface looks, each scoped to a `data-skin` attribute on <html> and therefore inert until one is selected in Appearance. */
 @import "./skins/sanctum.css";

@@ -655,7 +655,7 @@ fn project_event(detail: &serde_json::Value) -> String {
  * on this machine. */
 
 /// The workspace enrolled the parked folder with a hosted sandbox's `/work/<name>`: run the sync script on it here,
-/// with no launcher screen in between, and remember the project once it runs. Nothing parked (the question was
+/// with no screen of the app's in between, and remember the project once it runs. Nothing parked (the question was
 /// asked before a restart of this app) is a folder asked for in a system dialog, and held to the same refusals the
 /// window's own question is.
 pub fn sync_project(app: &AppHandle, args: SyncArgs) {

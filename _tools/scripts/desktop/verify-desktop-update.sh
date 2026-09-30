@@ -60,10 +60,10 @@ export TAURI_SIGNING_PRIVATE_KEY="$(tr -d '\n' <"$WORK/updater.key")"
 # hangs rather than one that fails. The same trap build-desktop.sh documents.
 export TAURI_SIGNING_PRIVATE_KEY_PASSWORD=""
 
-# The launcher UI once, for both builds — `tauri build` would otherwise re-run vue-tsc and vite per pass over
+# The app's own pages once, for both builds — `tauri build` would otherwise re-run vue-tsc and vite per pass over
 # bytes the first pass already produced, which is the same saving build-desktop.sh makes for the same reason.
 bash "$ROOT/_tools/scripts/desktop/stage-desktop-scripts.sh"
-echo "==> building the launcher UI"
+echo "==> building the app's own pages"
 pnpm --filter @intentic/desktop-app build
 
 # linuxdeploy is itself an AppImage and FUSE-mounts by default; NO_STRIP because its bundled strip predates

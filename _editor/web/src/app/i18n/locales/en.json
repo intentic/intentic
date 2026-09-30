@@ -2511,12 +2511,11 @@
             "startsIfStopped": "Starts it if stopped",
             "syncedSandbox": "Synced sandbox",
             "toggleFolder": "Toggle folder",
-            "openFolder": "Open folder",
             "reveal": "Reveal file",
             "withAgent": "Work on this with an agent",
             "openSandbox": "Open this folder's sandbox",
             "askAgent": "Ask an agent",
-            "askAgentHint": "Starts a conversation with an agent about this file",
+            "askAgentHint": "A conversation about this file",
             "closingDiscardsUnsaved": "Closing this window discards their unsaved edits. This can't be undone.",
             "closingTabDiscardsUnsaved": "Closing this tab discards its unsaved edits. This can't be undone."
         },
@@ -2528,6 +2527,41 @@
         "trash": {
             "recycleBin": "Moved to the Recycle Bin",
             "trash": "Moved to the Trash"
+        },
+        "placeSwitcher": {
+            "switchPlace": "Switch folder: {name}",
+            "onThisComputer": "On this computer",
+            "showInFileManager": "Show in file manager",
+            "movedOrDeleted": "Moved or deleted",
+            "hasSandbox": "Synced with its own sandbox",
+            "sandbox": "Sandbox",
+            "forget": "Remove {name} from this list",
+            "goneOffer": "It isn't there any more. Remove it from this list?",
+            "openFolder": "Open a folder…",
+            "openFile": "Open a file…",
+            "workspace": "Your workspace",
+            "workspaceLead": "Agents and sandboxes",
+            "putAgentsToWork": "Put agents to work",
+            "signInLead": "Sign in to set up a sandbox",
+            "switchAnyway": "Switch anyway",
+            "switchingDiscardsUnsaved": "Opening another folder here discards their unsaved edits. This can't be undone.",
+            "reveal": "Reveal folder",
+            "forgetNote": "Only from this list"
+        },
+        "agentsTile": {
+            "workspace": "Your workspace",
+            "putAgentsToWork": "Put agents to work",
+            "workspaceLead": "Your agents and sandboxes are in your workspace. It opens in this window, and this computer's files stay one click away.",
+            "agentsLead": "Agents work in a sandbox: on this computer, in Docker, or on a machine we host. Sign in to set one up.",
+            "finishInBrowser": "Finish signing in in your browser. Your workspace opens here when you're done.",
+            "openWorkspace": "Open workspace",
+            "filesStayHere": "Your files stay on this computer. Nothing here needs an account."
+        },
+        "emptyFolder": {
+            "title": "This folder is empty",
+            "lead": "Anything you put in {name} shows up here. Save or copy files into it, drag them onto the list on the left, or open a folder you already have.",
+            "openFolder": "Open a folder…",
+            "showInFileManager": "Show in file manager"
         }
     },
     "needs": {
@@ -4190,7 +4224,9 @@
             "toAlsoRemoveMachine": "To also remove it from the machine hosting it: including its files, run there:",
             "undoLastUpdate": "Undo last update",
             "update": "Update",
-            "waitingUnknown": "Waiting items unknown"
+            "waitingUnknown": "Waiting items unknown",
+            "thisComputer": "This computer",
+            "thisComputerNote": "Your files, no sandbox needed"
         },
         "sandboxSyncToggles": {
             "filesAndPorts": "Files and ports",
@@ -6685,7 +6721,8 @@
             "stopsCountingEmpty": "Stops counting as empty",
             "technicalHidden": "{count} technical file hidden | {count} technical files hidden",
             "technicalKinds": "Lockfiles, config, dotfiles, builds",
-            "viewingFile": "viewing this file"
+            "viewingFile": "viewing this file",
+            "emptyFolder": "Empty folder."
         },
         "useWorkspaceTree": {
             "couldntOpen": "Couldn't open {path}."

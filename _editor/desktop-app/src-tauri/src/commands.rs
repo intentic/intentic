@@ -20,7 +20,7 @@ pub struct DesktopInfo {
     pub os: String,
     pub app_url: String,
     pub platform_url: String,
-    /// This installation's own id, which the launcher's analytics send their events under — the same value the
+    /// This installation's own id, which This device's analytics send their events under — the same value the
     /// workspace window is marked with, so both faces report as one app (state.rs).
     pub install_id: String,
     /// Seconds a Docker start waits for its engine before it answers `tookTooLong`.
@@ -168,7 +168,7 @@ pub fn take_pending_setup(state: State<'_, AppState>) -> Option<SetupArgs> {
     state.pending.lock().unwrap().take()
 }
 
-/// Taken, not read: a recreate request is consumed by whichever launcher mount picks it up, so a window
+/// Taken, not read: a recreate request is consumed by the main window's This device, which picks it up once, so a window
 /// reopened later does not re-run an update the user already ran.
 #[tauri::command]
 pub fn take_pending_recreate(state: State<'_, AppState>) -> Option<RecreateArgs> {
@@ -299,8 +299,8 @@ pub fn reveal_log(app: AppHandle, path: String) -> CommandResult<()> {
         .map_err(|error| format!("could not open the log folder: {error}"))
 }
 
-/// Open an address in the machine's default browser. This face is a LOCAL page and gets no link handler of its
-/// own (windows.rs `launcher`), so a `target="_blank"` on it opens nothing at all: WebView2 drops that press
+/// Open an address in the machine's default browser. A local window's page is LOCAL content and gets no link
+/// handler of its own (windows.rs `show_files_window`), so a `target="_blank"` on it opens nothing at all: WebView2 drops that press
 /// without raising its new-window event, and the window that would have answered it is the workspace's.
 #[tauri::command]
 pub fn open_url(app: AppHandle, url: String) -> CommandResult<()> {
@@ -843,25 +843,27 @@ pub async fn sandbox_logs(slug: String, tail: u32) -> CommandResult<String> {
     .map_err(|error| error.to_string())?
 }
 
-/// Hand the window back to the workspace — at the app's root, or at a path under it.
+/// The workspace in the main window's place — at the app's root, or at a path under it.
 ///
-/// The path is what makes the manager's own screen reachable from the product: this window and the SPA's
-/// Devices tab manage the same containers on the same machine through two different doors, and until now
-/// neither said the other existed. `show_workspace_at` already navigates an open workspace window, so
-/// "Open in Intentic" is the same swap the footer's other button does, one URL further along.
+/// The path is what makes the workspace's own screens reachable from this computer's: This device and the workspace's
+/// Devices tab manage the same containers on the same machine through two different doors, and a finished setup
+/// hands back to the page that is waiting for it. `show_workspace_at` already navigates an open workspace window.
 #[tauri::command]
 pub fn workspace_open(app: AppHandle, path: Option<String>) {
     crate::windows::show_workspace_at(&app, path.as_deref());
 }
 
-/// What Home needs to know about this install to decide what it offers: whether there is an account to go back to,
-/// which face the app was last used through, and whether this machine hosts a sandbox.
+/// What the local shell and This device need to know about this install to decide what they offer: whether there is
+/// an account to go back to (the way to agents is the workspace, not a sign-in), which face the app was last used
+/// through, whether this machine hosts a sandbox (its Docker is This device's business), and the folder the main
+/// window opens on.
 #[derive(Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct HomeFacts {
     pub account_seen: bool,
     pub last_face: Face,
     pub hosts_sandboxes: bool,
+    pub home_folder: String,
 }
 
 #[tauri::command]
@@ -870,24 +872,18 @@ pub fn home_facts(state: State<'_, AppState>) -> HomeFacts {
         account_seen: state.account_seen(),
         last_face: state.last_face(),
         hosts_sandboxes: state.hosts_sandboxes(),
+        home_folder: state.home_folder().display().to_string(),
     }
 }
 
-/// The launcher's × and Esc: back to the workspace when that is what the app is used through, otherwise into the
-/// tray (windows.rs `close_launcher`, which the platform's own close of this window reaches too).
-#[tauri::command]
-pub fn launcher_close(app: AppHandle) {
-    crate::windows::close_launcher(&app);
-}
-
-/// Ask the OS to point at this window, bringing it back to the front first — a stopped setup that nobody is
-/// looking at is a stopped setup nobody finds out about.
+/// Ask the OS to point at the main window, brought back to the front at This device first — a stopped setup that
+/// nobody is looking at is a stopped setup nobody finds out about.
 #[tauri::command]
 pub fn setup_alert(app: AppHandle) {
     crate::windows::alert_setup(&app);
 }
 
-/* WHERE THE INSTALL HAS GOT TO, as the setup screen draws it (App.vue `progressShown`). */
+/* WHERE THE INSTALL HAS GOT TO, as This device draws it (src/device/useDevice.ts `progressShown`). */
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SetupReport {
@@ -904,8 +900,8 @@ pub struct SetupReport {
     pub step: Option<String>,
 }
 
-/// The setup screen reporting its progress, on every change, for the workspace page (windows.rs
-/// `announce_setup`). Nothing is stored: a page that opens later hears the next tick within a second.
+/// This device reporting a setup's progress, on every change, for the workspace page (windows.rs `announce_setup`).
+/// Nothing is stored: a page that opens later hears the next tick within a second.
 #[tauri::command]
 pub fn setup_progress(app: AppHandle, report: SetupReport) {
     crate::windows::announce_setup(&app, &report);
@@ -1545,17 +1541,24 @@ mod tests {
         assert_eq!(env_of(&plain, "SYNC_PROJECT"), None);
     }
 
-    /// Home's facts on the wire: camelCase, and the face as the word the launcher switches on.
+    /// The shell's facts on the wire: camelCase, the face as the word the page switches on, and the main window's
+    /// folder as the path the place chip shows (src/desktop.ts `HomeFacts`).
     #[test]
-    fn home_is_told_its_facts_in_the_launchers_words() {
+    fn the_shell_is_told_its_facts_in_the_words_it_reads() {
         assert_eq!(
             serde_json::to_value(HomeFacts {
                 account_seen: true,
                 last_face: Face::Home,
                 hosts_sandboxes: false,
+                home_folder: "/home/ada/intentic/local".to_string(),
             })
             .unwrap(),
-            serde_json::json!({ "accountSeen": true, "lastFace": "home", "hostsSandboxes": false })
+            serde_json::json!({
+                "accountSeen": true,
+                "lastFace": "home",
+                "hostsSandboxes": false,
+                "homeFolder": "/home/ada/intentic/local"
+            })
         );
         assert_eq!(
             serde_json::to_value(Face::Workspace).unwrap(),

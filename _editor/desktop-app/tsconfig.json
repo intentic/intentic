@@ -6,7 +6,10 @@
         // Consume the design system straight from source, like the web app does.
         "paths": {
             "@intentic/ui": ["../../_editor/ui/src/index.ts"],
-            "@intentic/ui/i18n": ["../../_editor/ui/src/i18n/index.ts"]
+            "@intentic/ui/i18n": ["../../_editor/ui/src/i18n/index.ts"],
+            // The seam the local face's shell is drawn through: the window's face, and the host this app hands it (host.ts).
+            "@intentic/web/local": ["../../_editor/web/src/app/environments/local.ts"],
+            "@intentic/web/local-host": ["../../_editor/web/src/app/environments/localHost.ts"]
         }
     },
     "extends": "@intentic/tsconfig/tsconfig.vue.json",

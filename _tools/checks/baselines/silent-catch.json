@@ -48,7 +48,6 @@
     "_devices/webext/src/background/tools/page.ts": 4,
     "_devices/webext/src/background/tools/tab-access.ts": 1,
     "_devices/webext/src/background/tools/tabs.ts": 1,
-    "_editor/desktop-app/src/App.vue": 1,
     "_editor/desktop-app/src/desktop.ts": 2,
     "_editor/ui/src/components/brand/brandMark.ts": 1,
     "_editor/ui/src/components/charts/mermaidRender.ts": 1,

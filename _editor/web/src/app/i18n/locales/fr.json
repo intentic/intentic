@@ -5323,7 +5323,6 @@
         "localFiles": {
             "keepsFolderSynced": "Garde ce dossier synchronisé",
             "newSandbox": "Nouveau sandbox",
-            "openFolder": "Ouvrir un dossier",
             "reveal": "Afficher le fichier",
             "startsIfStopped": "La démarre si arrêtée",
             "syncedSandbox": "Sandbox synchronisé",

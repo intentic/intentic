@@ -1,11 +1,14 @@
-//! THE WINDOWS ON THE USER'S OWN DISK: a folder or a document opened from the tray, Home, a double-click or a
-//! second launch, shown by the editor's own file views (the local face, `files/local` in the bundle) and served by
-//! one sidecar process, `intentic-files` (`_devices/local-files`, kept alive by sidecar.rs).
+//! THE WINDOWS ON THE USER'S OWN DISK: the app's main window (windows.rs `HOME`, the shell on a folder of this
+//! computer, `~/intentic/local` at first), and a folder or a document opened from the tray, the shell's place chip, a
+//! double-click or a second launch. Each is the editor's own shell (the local face, `files/local` in the bundle), its
+//! files served by one sidecar process, `intentic-files` (`_devices/local-files`, kept alive by sidecar.rs).
 //!
 //! The sidecar listens on a loopback port and serves only what this module grants it on its stdin: one grant per
 //! window, a random token that decides the folder. A page presents its token and nothing else, so no page, the
-//! window's own included, can widen what it reads. The window holds no capability at all (see `setup_link.rs`
-//! `Source::Files` for the two links it is heard on).
+//! window's own included, can widen what it reads. What else a window may do is the app's commands its capability
+//! names (capabilities/local.json): the shell's places and This device. The documents it draws can do none of it:
+//! the page runs no script but the bundle's own (vite.local.config.ts), the frames a document opens are other
+//! origins, which hold no capability, and a link is heard only as `window` or `local` (`setup_link.rs`).
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -72,7 +75,7 @@ struct Handoff {
 
 /// The hidden files window kept ready for the next open (the warm window): a page that has already loaded the
 /// editor and waits for its face, so the next folder or document appears as soon as it is granted.
-struct Spare {
+struct SpareWindow {
     label: String,
     /// Its page has finished loading: only then can a face evaluated into it land in it.
     loaded: bool,
@@ -86,7 +89,9 @@ pub struct LocalFiles {
     /// Paths an open is working on right now. A second open of one of them is dropped: the first raises its window
     /// when it is ready. Always locked BEFORE `windows`, never after.
     opening: Mutex<HashSet<PathBuf>>,
-    spare: Mutex<Option<Spare>>,
+    spare: Mutex<Option<SpareWindow>>,
+    /// The main window is being built: a second ask meanwhile (a launch and the tray at once) finds it on the way.
+    home_opening: AtomicBool,
     next: AtomicU32,
     next_handoff: AtomicU32,
     /// A local window has been shown this run: the first one is what wants the office editor and starts the spares.
@@ -295,8 +300,15 @@ pub fn rehome(app: &AppHandle, port: u16) {
 
 /// What a local window is told about itself before any of its modules run: the web app's `LocalFace`
 /// (`_editor/web/src/app/environments/local.ts`). `file` is there only for a document opened alone: the face reads an
-/// absent one as a folder, and a `null` would read as a document with no name.
-fn face_of(port: u16, grant: &Grant, granted: &Granted, has_sandbox: bool) -> serde_json::Value {
+/// absent one as a folder, and a `null` would read as a document with no name. `home` marks the main window, the one
+/// the app shows for work of its own (a setup handed over, a sleeping engine), whose page takes that work.
+fn face_of(
+    port: u16,
+    grant: &Grant,
+    granted: &Granted,
+    has_sandbox: bool,
+    home: bool,
+) -> serde_json::Value {
     let mut face = serde_json::json!({
         "daemonUrl": daemon_url(port),
         "token": grant.token,
@@ -307,6 +319,9 @@ fn face_of(port: u16, grant: &Grant, granted: &Granted, has_sandbox: bool) -> se
     });
     if let Some(file) = &granted.file {
         face["file"] = serde_json::Value::String(file.clone());
+    }
+    if home {
+        face["home"] = serde_json::Value::Bool(true);
     }
     face
 }
@@ -338,6 +353,33 @@ fn face_moved(face: &serde_json::Value) -> String {
     format!(
         "(function () {{ try {{ window.sessionStorage.setItem(\"{FACE_KEY}\", JSON.stringify({face})); }} catch (error) {{}} window.location.reload(); }})();"
     )
+}
+
+/// A window pointed at another folder (`point`): its new face is kept, and the page reloads onto the folder's files
+/// rather than onto whatever screen of the old one it was on.
+fn face_pointed(face: &serde_json::Value) -> String {
+    format!(
+        "(function () {{ try {{ window.sessionStorage.setItem(\"{FACE_KEY}\", JSON.stringify({face})); }} catch (error) {{}} window.history.replaceState(null, \"\", window.location.pathname + \"#/workspace\"); window.location.reload(); }})();"
+    )
+}
+
+/// The screen a window's shell opens on when it has none of its own yet (`route`, `/device`): its hash, which the
+/// shell's router reads (the web's router/index.ts), set only on a page that has none, so a reload keeps its own.
+fn route_init(route: &str) -> String {
+    let hash = serde_json::Value::String(format!("#{route}"));
+    format!("(function () {{ if (!window.location.hash) {{ window.history.replaceState(null, \"\", window.location.pathname + {hash}); }} }})();")
+}
+
+/// The app showing an open window for a reason of its own: the shell takes it to `route` (the web's
+/// local/LocalShell.vue, `intentic:navigate`).
+fn navigate_to(route: &str) -> String {
+    let detail = serde_json::json!({ "path": route });
+    format!("window.dispatchEvent(new CustomEvent('intentic:navigate', {{ detail: {detail} }}));")
+}
+
+/// Take a shown window's shell to `route`.
+pub fn navigate(window: &WebviewWindow, route: &str) {
+    let _ = window.eval(navigate_to(route));
 }
 
 /// A document handed to the folder window that holds it (`intentic:open`), at its root-relative path.
@@ -523,7 +565,7 @@ fn open_new(app: &AppHandle, asked: &Path, folder: bool) -> Result<(), Trouble> 
             .projects()
             .iter()
             .any(|project| Path::new(&project.path) == grant.root);
-    grant.face = face_of(port, &grant, &granted, has_sandbox);
+    grant.face = face_of(port, &grant, &granted, has_sandbox, false);
     let title = format!("{} · Intentic", granted.name);
     match take_spare(app) {
         Some(window) => {
@@ -555,7 +597,7 @@ fn open_new(app: &AppHandle, asked: &Path, folder: bool) -> Result<(), Trouble> 
         }
     }
     app.state::<AppState>().remember_recent(asked, folder);
-    shown_one(app);
+    shown_one(app, Spare::Keep);
     Ok(())
 }
 
@@ -563,15 +605,193 @@ fn next_label(files: &LocalFiles) -> String {
     format!("{FILES}{}", files.next.fetch_add(1, Ordering::Relaxed) + 1)
 }
 
+/// Whether a window that came up keeps a spare coming for the next one.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Spare {
+    Keep,
+    /// The main window: it is up on every launch, and a hidden editor built beside it for a second window that most
+    /// runs never open would be memory spent for nothing. The first folder window of a run starts the spares.
+    None,
+}
+
 /// A local window came up. The first of the run is what asks for the office editor (sidecar.rs); every one moves
-/// the idle clock on and keeps a spare coming for the next.
-fn shown_one(app: &AppHandle) {
+/// the idle clock on, and a folder or document window keeps a spare coming for the next.
+fn shown_one(app: &AppHandle, spare: Spare) {
     let files = app.state::<LocalFiles>();
     files.idle.fetch_add(1, Ordering::SeqCst);
     if !files.shown_any.swap(true, Ordering::SeqCst) {
         crate::sidecar::want_office(app);
     }
-    keep_a_spare(app);
+    if spare == Spare::Keep {
+        keep_a_spare(app);
+    }
+}
+
+/* THE MAIN WINDOW (windows.rs `HOME`): the shell on this computer's own folder, where a launch opens. */
+
+/// The folder the main window opens on: the one it was last pointed at, while it is there, else `~/intentic/local`,
+/// made on the way. A folder that cannot be made is said in the reader's words.
+fn home_folder(state: &AppState) -> Result<PathBuf, Trouble> {
+    let remembered = state.home_folder();
+    if remembered.is_dir() {
+        return Ok(remembered);
+    }
+    let fallback = state.default_home().to_path_buf();
+    std::fs::create_dir_all(&fallback).map_err(|error| Trouble::io(&error))?;
+    Ok(fallback)
+}
+
+/// [`open_home`], off the calling thread: it may wait on the sidecar's first start, and the thread asking is often the
+/// one that draws every window (a launch, the tray). What fails is said in a dialog.
+pub fn open_home_later(app: &AppHandle, route: Option<String>) {
+    let app = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        if let Err(trouble) = open_home(&app, route.as_deref()) {
+            eprintln!(
+                "intentic: the main window did not open: {}",
+                trouble.detail()
+            );
+            let folder = app.state::<AppState>().home_folder();
+            say(&app, &trouble.friendly(&shown_name(&folder)));
+        }
+    });
+}
+
+/// Build the main window on its folder, at `route` when given, in the frame the workspace holds when it is on
+/// screen (windows.rs). Never twice: a second caller while the first is still building finds it being built.
+fn open_home(app: &AppHandle, route: Option<&str>) -> Result<(), Trouble> {
+    let files = app.state::<LocalFiles>();
+    if files.home_opening.swap(true, Ordering::SeqCst) {
+        return Ok(());
+    }
+    let opened = build_home(app, route);
+    files.home_opening.store(false, Ordering::SeqCst);
+    opened
+}
+
+fn build_home(app: &AppHandle, route: Option<&str>) -> Result<(), Trouble> {
+    if app.get_webview_window(crate::windows::HOME).is_some() {
+        return Ok(());
+    }
+    let state = app.state::<AppState>();
+    let folder =
+        plain(std::fs::canonicalize(home_folder(&state)?).map_err(|error| Trouble::io(&error))?);
+    let port = crate::sidecar::ensure(app)?;
+    let files = app.state::<LocalFiles>();
+    let (grant, name) = granted_folder(app, port, &folder, true)?;
+    files
+        .windows
+        .lock()
+        .unwrap()
+        .insert(crate::windows::HOME.to_string(), grant.clone());
+    let init = format!(
+        "{}{}",
+        face_init(Some(&grant.face)),
+        route.map(route_init).unwrap_or_default()
+    );
+    if let Err(error) = crate::windows::show_files_window(
+        app,
+        crate::windows::HOME,
+        &format!("{name} · Intentic"),
+        &init,
+        FilesWindow::Home,
+    ) {
+        files.windows.lock().unwrap().remove(crate::windows::HOME);
+        let _ = crate::sidecar::send(app, &revoke_line(&grant.token));
+        return Err(Trouble::Failed(error));
+    }
+    state.remember_recent(&folder, true);
+    state.remember_home_folder(&folder);
+    shown_one(app, Spare::None);
+    Ok(())
+}
+
+/// A grant of `folder` for one window, answered by the sidecar, and the face that window is told: the folder's own
+/// name, whether it has a sandbox of its own (project.rs), whether the window is the main one.
+fn granted_folder(
+    app: &AppHandle,
+    port: u16,
+    folder: &Path,
+    home: bool,
+) -> Result<(Grant, String), Trouble> {
+    let mut grant = Grant {
+        token: token(),
+        id: id_of(folder),
+        asked: folder.to_path_buf(),
+        folder: true,
+        root: folder.to_path_buf(),
+        file: None,
+        face: serde_json::Value::Null,
+    };
+    let granted =
+        crate::sidecar::grant(app, &grant.token, &grant_line(&grant)).map_err(|trouble| {
+            match trouble {
+                Trouble::Refused(detail) if !folder.exists() => Trouble::Gone(detail),
+                other => other,
+            }
+        })?;
+    grant.root = PathBuf::from(&granted.root);
+    let has_sandbox = app
+        .state::<AppState>()
+        .projects()
+        .iter()
+        .any(|project| Path::new(&project.path) == grant.root);
+    grant.face = face_of(port, &grant, &granted, has_sandbox, home);
+    Ok((grant, granted.name))
+}
+
+/* POINTING A WINDOW AT ANOTHER FOLDER — the place chip's folders (the web's local/LocalPlaceSwitcher.vue). */
+
+/// Show `path`, a folder, in the window `label`, in place of the folder it shows: a grant of its own, the old one
+/// revoked, the page reloaded onto the new face. A folder another window already shows is that window's, which is
+/// raised instead: two windows on one folder would each keep their own unsaved copy of its documents. The main
+/// window remembers where it was pointed, so the next launch opens there.
+pub fn point(app: &AppHandle, label: &str, path: &Path) -> Result<(), Trouble> {
+    let asked = plain(std::fs::canonicalize(path).map_err(|error| Trouble::io(&error))?);
+    if !std::fs::metadata(&asked)
+        .map_err(|error| Trouble::io(&error))?
+        .is_dir()
+    {
+        return open_path(app, &asked);
+    }
+    let files = app.state::<LocalFiles>();
+    let shown = files
+        .windows
+        .lock()
+        .unwrap()
+        .iter()
+        .find(|(_, grant)| grant.asked == asked)
+        .map(|(shows, _)| shows.clone());
+    if let Some(shows) = shown {
+        if shows != label {
+            if let Some(window) = app.get_webview_window(&shows) {
+                crate::windows::raise_window(&window);
+            }
+        }
+        return Ok(());
+    }
+    let window = app
+        .get_webview_window(label)
+        .ok_or_else(|| Trouble::Failed(format!("{label} is not open")))?;
+    let port = crate::sidecar::ensure(app)?;
+    let home = label == crate::windows::HOME;
+    let (grant, name) = granted_folder(app, port, &asked, home)?;
+    let replaced = files
+        .windows
+        .lock()
+        .unwrap()
+        .insert(label.to_string(), grant.clone());
+    if let Some(old) = replaced {
+        let _ = crate::sidecar::send(app, &revoke_line(&old.token));
+    }
+    let _ = window.set_title(&format!("{name} · Intentic"));
+    let _ = window.eval(face_pointed(&grant.face));
+    let state = app.state::<AppState>();
+    state.remember_recent(&asked, true);
+    if home {
+        state.remember_home_folder(&asked);
+    }
+    Ok(())
 }
 
 /* THE WARM WINDOW — one hidden files window, already loaded, that the next open wears. */
@@ -599,7 +819,7 @@ fn build_spare(app: &AppHandle) {
             return;
         }
         let label = next_label(&files);
-        *spare = Some(Spare {
+        *spare = Some(SpareWindow {
             label: label.clone(),
             loaded: false,
         });
@@ -647,7 +867,17 @@ fn take_spare(app: &AppHandle) -> Option<WebviewWindow> {
     app.get_webview_window(&label)
 }
 
-/// The last local window closed: the spare goes too if nothing opens for [`SPARE_IDLE`].
+/// Whether any window is open beside the main one: a folder or a document opened on its own, the windows a spare is
+/// kept for. The main window alone keeps none, however long it is open.
+fn beside_home(windows: &HashMap<String, Grant>) -> bool {
+    windows.keys().any(|label| label != crate::windows::HOME)
+}
+
+fn opened_beside_home(files: &LocalFiles) -> bool {
+    beside_home(&files.windows.lock().unwrap())
+}
+
+/// The last folder or document window closed: the spare goes too if nothing opens for [`SPARE_IDLE`].
 fn retire_spare_later(app: &AppHandle) {
     let epoch = app
         .state::<LocalFiles>()
@@ -658,7 +888,7 @@ fn retire_spare_later(app: &AppHandle) {
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(SPARE_IDLE).await;
         let files = app.state::<LocalFiles>();
-        if files.idle.load(Ordering::SeqCst) != epoch || !files.windows.lock().unwrap().is_empty() {
+        if files.idle.load(Ordering::SeqCst) != epoch || opened_beside_home(&files) {
             return;
         }
         let label = files.spare.lock().unwrap().take().map(|held| held.label);
@@ -680,7 +910,7 @@ pub fn window_closed(app: &AppHandle, label: &str) {
     let (removed, none_left) = {
         let mut windows = files.windows.lock().unwrap();
         let removed = windows.remove(label);
-        (removed, windows.is_empty())
+        (removed, !beside_home(&windows))
     };
     if let Some(grant) = removed {
         let _ = crate::sidecar::send(app, &revoke_line(&grant.token));
@@ -917,14 +1147,69 @@ fn handoff_path(port: u16, token: &str, granted: &Granted) -> String {
     )
 }
 
-/* THE LAUNCHER'S COMMANDS (Home). */
+/* THE SHELL'S COMMANDS: its place chip, from a local window's page (the web's localHost.ts, this app's src/host.ts). */
 
+/// The system dialog, then what was chosen: a folder shown in the window that asked, in place of its own (`point`), a
+/// document opened where [`open`] puts it. Nothing chosen changes nothing; what fails is said in a dialog, since the
+/// answer comes long after the press.
 #[tauri::command]
-pub fn local_open(app: AppHandle, folder: bool) {
-    pick(&app, folder);
+pub fn local_pick(app: AppHandle, window: WebviewWindow, folder: bool) {
+    let label = window.label().to_string();
+    let handle = app.clone();
+    let chosen = move |path: Option<tauri_plugin_dialog::FilePath>| {
+        let Some(path) = path.and_then(|path| path.into_path().ok()) else {
+            return;
+        };
+        if !folder {
+            open_later(&handle, path);
+            return;
+        }
+        let app = handle.clone();
+        tauri::async_runtime::spawn_blocking(move || {
+            if let Err(trouble) = point(&app, &label, &path) {
+                eprintln!(
+                    "intentic: could not show {}: {}",
+                    path.display(),
+                    trouble.detail()
+                );
+                say(&app, &trouble.friendly(&shown_name(&path)));
+            }
+        });
+    };
+    let dialog = app.dialog().file().set_parent(&window);
+    if folder {
+        dialog.pick_folder(chosen);
+    } else {
+        dialog.pick_file(chosen);
+    }
 }
 
-/// Home's own open: what fails comes back as the sentence Home shows under the row, so no dialog is raised.
+/// The place chip's folder: shown in the window that asked, in place of its own. What fails comes back as the
+/// sentence the chip shows under the row, so no dialog is raised.
+#[tauri::command]
+pub async fn local_point(
+    app: AppHandle,
+    window: WebviewWindow,
+    path: String,
+) -> Result<(), String> {
+    let label = window.label().to_string();
+    tauri::async_runtime::spawn_blocking(move || {
+        let path = PathBuf::from(&path);
+        point(&app, &label, &path).map_err(|trouble| {
+            eprintln!(
+                "intentic: could not show {}: {}",
+                path.display(),
+                trouble.detail()
+            );
+            trouble.friendly(&shown_name(&path))
+        })
+    })
+    .await
+    .map_err(|error| format!("opening stopped: {error}"))?
+}
+
+/// The place chip's document, or a folder asked for by name: what fails comes back as the sentence the chip shows
+/// under the row, so no dialog is raised.
 #[tauri::command]
 pub async fn local_open_path(app: AppHandle, path: String) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || open(&app, Path::new(&path)))
@@ -1041,7 +1326,7 @@ mod tests {
             name: "app".into(),
             file: None,
         };
-        let face = face_of(4100, &grant, &folder, true);
+        let face = face_of(4100, &grant, &folder, true, false);
         assert_eq!(face["daemonUrl"], "http://127.0.0.1:4100");
         assert_eq!(face["sandbox"], true);
         assert!(face.get("file").is_none(), "{face}");
@@ -1051,8 +1336,35 @@ mod tests {
             file: Some("brief.docx".into()),
         };
         assert_eq!(
-            face_of(4100, &grant, &document, false)["file"],
+            face_of(4100, &grant, &document, false, false)["file"],
             "brief.docx"
+        );
+    }
+
+    /// Only the main window is told it is one, and a folder window is told nothing of it at all: the page reads an
+    /// absent `home` as any other window, the one that leaves the app's parked work alone.
+    #[test]
+    fn the_main_window_alone_is_told_it_is_the_main_window() {
+        let grant = grant("/home/me/intentic/local", true, "/home/me/intentic/local");
+        let folder = Granted {
+            root: "/home/me/intentic/local".into(),
+            name: "local".into(),
+            file: None,
+        };
+        assert_eq!(face_of(4100, &grant, &folder, false, true)["home"], true);
+        let other = face_of(4100, &grant, &folder, false, false);
+        assert!(other.get("home").is_none(), "{other}");
+    }
+
+    /// A window opened for a screen of its own starts there, and a reload keeps whatever screen it moved to since.
+    #[test]
+    fn a_window_opened_for_this_device_starts_there_but_a_reload_keeps_its_own_screen() {
+        let init = route_init("/device");
+        assert!(init.contains("if (!window.location.hash)"), "{init}");
+        assert!(init.contains("\"#/device\""), "{init}");
+        assert_eq!(
+            navigate_to("/device"),
+            "window.dispatchEvent(new CustomEvent('intentic:navigate', { detail: {\"path\":\"/device\"} }));"
         );
     }
 

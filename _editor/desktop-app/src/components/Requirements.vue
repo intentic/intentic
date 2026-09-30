@@ -118,7 +118,7 @@ const sessionNote = computed(() => {
         </p>
 
         <ul class="flex flex-col gap-2.5">
-            <li v-for="requirement in requirements" :key="requirement.id" class="entry-card p-3.5">
+            <li v-for="requirement in requirements" :key="requirement.id" class="rounded-lg border border-line bg-canvas p-3.5">
                 <div class="flex items-start gap-3">
                     <!-- Live state overrides the static action icon once something is actually happening. -->
                     <Icon v-if="stateOf(requirement.id)?.state === `running`" name="spinner" spin class="mt-0.5 shrink-0 text-link" />

@@ -13,6 +13,7 @@ import {
     vAction,
 } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
+import { localFace } from "../../../app/environments/local";
 import { mapPool } from "@intentic/base/async";
 import { computed, nextTick, ref, watch } from "vue";
 import { useVocabulary } from "../../../core-views/vocabulary";
@@ -537,7 +538,13 @@ defineExpose({ focusTree });
                 </template>
             </div>
             <p v-if="visibleRows.length === 0 && edit.kind !== 'creating'" class="px-3 py-3 text-center text-2xs text-subtle">
-                {{ filter.trim() ? t(`workspace.workspaceTree.noMatchingFiles`) : t(`workspace.workspaceTree.emptyWorkspace`) }}
+                {{
+                    filter.trim()
+                        ? t(`workspace.workspaceTree.noMatchingFiles`)
+                        : localFace() === undefined
+                          ? t(`workspace.workspaceTree.emptyWorkspace`)
+                          : t(`workspace.workspaceTree.emptyFolder`)
+                }}
             </p>
             <!-- The technical switch's own receipt: a press here is the way back, so the hidden files are never a mystery. Not
                  under a cover, which lists no file at all, so the switch it offers would change nothing in sight. -->

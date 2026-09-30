@@ -198,8 +198,8 @@ export const sandboxPower = (slug: string, action: PowerAction): Promise<void> =
 export const sandboxRecreate = (slug: string, hash?: string, rollback = false): Promise<void> => invoke(`sandbox_recreate`, { slug, hash, rollback });
 // Same recreate shim with --shape/-Shape: `ic sandbox shape`, a whole shape now or for the next restart through ic,
 // or (no shape) forgetting the one saved. Streams under `recreate:<slug>`.
-export const sandboxShape = (slug: string, shape: ResourcesForm | undefined, when: `now` | `nextRestart`): Promise<void> =>
-    invoke(`sandbox_shape`, { slug, shape: shape ?? null, when });
+export const sandboxResize = (slug: string, form: ResourcesForm | undefined, when: `now` | `nextRestart`): Promise<void> =>
+    invoke(`sandbox_shape`, { slug, shape: form ?? null, when });
 export const dockerEngine = (): Promise<DockerEngine | null> => invoke(`docker_engine`);
 export const sandboxRemove = (slug: string): Promise<void> => invoke(`sandbox_remove`, { slug });
 export const sandboxLogs = (slug: string, tail: number): Promise<string> => invoke(`sandbox_logs`, { slug, tail });
@@ -212,11 +212,11 @@ export const deviceStatus = async (): Promise<DeviceStatus | undefined> => {
 // Stop and start this device's agent loop — the two commands this window used to print for someone to type on the
 // computer it is running on. Resolves with whatever the agent itself said.
 export const deviceAgentRestart = (): Promise<string> => invoke(`machine_restart`);
-// Hands the window back to the workspace, at its root or a path under it — how this window reaches the SPA's
-// Devices tab for the same machine.
+// The workspace in the main window's place, at its root or a path under it: how This device reaches the workspace's
+// Devices tab for the same machine, and how a finished setup hands back.
 export const workspaceOpen = (path?: string): Promise<void> => invoke(`workspace_open`, { path: path ?? null });
-// Brings this window to the front, for a run that stopped while nobody was looking (windows.rs takes the frame
-// back rather than opening beside it).
+// Brings the main window to the front at This device, for a run that stopped while nobody was looking (windows.rs takes
+// the frame back rather than opening beside it).
 export const setupAlert = (): Promise<void> => invoke(`setup_alert`);
 /* Setup progress is shared with the workspace bar. */
 export interface SetupReport {
@@ -237,46 +237,47 @@ export const revealLog = (path: string): Promise<void> => invoke(`reveal_log`, {
 /** The only way out of this face: a `target="_blank"` on a local page opens nothing (commands.rs `open_url`). */
 export const openUrl = (url: string): Promise<void> => invoke(`open_url`, { url });
 
-// A folder or a document of this computer, in a window of its own (src-tauri/src/local.rs): no sandbox, no sign-in.
-// `recent` is newest first, as the app remembers them (state.rs `Recent`).
+// A folder or a document of this computer (src-tauri/src/local.rs): no sandbox, no sign-in. `recent` is newest first,
+// as the app remembers them (state.rs `Recent`), in the shape the shell reads (the web's localHost.ts `LocalPlace`).
 export interface LocalRecent {
     path: string;
     folder: boolean;
-    // When it was last opened: Unix seconds as state.rs keeps them, or an ISO 8601 instant. Read it through
-    // home.ts `openedAtMs`, which takes either, rather than as a number.
+    // When it was last opened: Unix seconds as state.rs keeps them, or an ISO 8601 instant. Read it through the web's
+    // local/places.ts `openedAtMs`, which takes either, rather than as a number.
     openedAt: number | string;
     // Whether the path is still there, asked as the list is read: a recent that has moved is drawn as moved.
     exists: boolean;
     // Whether the folder has a sandbox of its own (projects.json, src-tauri/src/project.rs).
     sandbox: boolean;
 }
-// The system dialog, then a window for what was chosen; nothing chosen opens nothing.
-export const localOpen = (folder: boolean): Promise<void> => invoke(`local_open`, { folder });
+// The system dialog, then what was chosen: a folder shown in the window that asked, in place of its own; a document
+// opened where the app puts it. Nothing chosen changes nothing.
+export const localPick = (folder: boolean): Promise<void> => invoke(`local_pick`, { folder });
+// The folder at `path` shown in the window that asks, in place of the one it shows (local.rs `point`).
+export const localPoint = (path: string): Promise<void> => invoke(`local_point`, { path });
 // Rejects with a sentence written for the reader ("isn't there any more", "isn't allowed"), shown beside the row.
 export const localOpenPath = (path: string): Promise<void> => invoke(`local_open_path`, { path });
 export const localRecents = (): Promise<LocalRecent[]> => invoke(`local_recents`);
 /** Takes one entry off the recents, wherever it is in them; the folder or file itself is not touched. */
 export const localForgetRecent = (path: string): Promise<void> => invoke(`local_forget_recent`, { path });
 
-/* WHAT HOME IS DRAWN FROM: three facts the app keeps across launches (src-tauri/src/state.rs). */
+/* WHAT THE SHELL AND THIS DEVICE ARE DRAWN FROM: facts the app keeps across launches (src-tauri/src/state.rs). */
 
-// Which face the app last showed by the user's own choice: what a launch opens onto, and where the launcher's ×
-// goes.
+// Which face the app last showed by the user's own choice: what a launch opens onto. `home` is the main local window,
+// the shell on this computer's folder; `workspace` the hosted workspace.
 export type LastFace = `home` | `workspace`;
 
 export interface HomeFacts {
-    // A sign-in has completed in this install (or the workspace was shown, before that was remembered): Home offers
-    // the workspace instead of signing in.
+    // A sign-in has completed in this install (or the workspace was shown, before that was remembered): the way to
+    // agents is the workspace, not a sign-in.
     accountSeen: boolean;
     lastFace: LastFace;
-    // A sandbox has been set up on this machine, so its Docker and its agent are this window's business.
+    // A sandbox has been set up on this machine, so its Docker and its agent are This device's business.
     hostsSandboxes: boolean;
+    // The folder the main window opens on (`~/intentic/local` until another is shown there).
+    homeFolder: string;
 }
 export const homeFacts = (): Promise<HomeFacts> => invoke(`home_facts`);
-// The launcher's × and Esc: back to the workspace when that is the face the user came from, else the card goes
-// and the app stays in the tray. Unlike `workspaceOpen`, it never makes the workspace the face the next launch
-// opens.
-export const launcherClose = (): Promise<void> => invoke(`launcher_close`);
 // Platform sign-in in the default browser (auth.rs); the account comes back over `intentic://auth`.
 export const signIn = (): Promise<void> => invoke(`sign_in`);
 // `remember` makes this answer the × from now on and retires the dialog; otherwise it applies once.

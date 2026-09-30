@@ -1,7 +1,8 @@
 //! `intentic://fix`: `ic`'s own repair of a sandbox on this machine that the workspace cannot reach (Docker Desktop
 //! not started after a reboot, a stopped container, a full disk). The recovery panel's button parks the request here
-//! and brings the launcher forward; the launcher runs it and draws it from `ic`'s `intentic-fix:` lines
-//! (`src/fixReport.ts`). `ic` reports each run to the platform itself, so nothing here talks to the platform.
+//! and brings This device forward in the main window; its page runs it and draws it from `ic`'s `intentic-fix:` lines
+//! (`src/device/fix.ts`, `src/fixReport.ts`). `ic` reports each run to the platform itself, so nothing here talks to
+//! the platform.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, PoisonError};
@@ -13,17 +14,17 @@ use tauri::{AppHandle, Emitter};
 use crate::scripts;
 use crate::setup_link::{is_fix_code, is_slug, FixArgs};
 
-/// The run id the launcher follows. One fix runs at a time, so one id is enough.
+/// The run id This device follows. One fix runs at a time, so one id is enough.
 pub const RUN: &str = "fix";
 
 /// How long a fix may run before it is stopped with everything it started: starting Docker Desktop alone is
 /// given five minutes (scripts.rs `ENGINE_LIMIT`), and the checks and repairs after it need room too.
 pub const LIMIT: Duration = Duration::from_secs(600);
 
-/// Told to the launcher when a request is parked for it to take.
+/// Told to the main window when a request is parked for it to take.
 const PENDING_EVENT: &str = "desktop://pending-fix";
 
-/// The request the launcher has not taken yet. Taken, not read, as every parked request is (commands.rs).
+/// The request the main window has not taken yet. Taken, not read, as every parked request is (commands.rs).
 static PENDING: Mutex<Option<FixArgs>> = Mutex::new(None);
 
 /// Whether an `ic sandbox fix` is running now.
@@ -43,7 +44,7 @@ pub fn is_check_id(id: &str) -> bool {
 }
 
 /// `ic sandbox fix <slug> [--code <code>] --source app --json [--accept <id>,…]`, with every value held to its shape
-/// first. `--json` keeps stdout to the machine lines the launcher reads; `--source app` is what the report says ran
+/// first. `--json` keeps stdout to the machine lines This device reads; `--source app` is what the report says ran
 /// it. `accept` is the user's yes to the consent checks it names, the click that stands in for a terminal's.
 pub fn fix_args(slug: &str, code: Option<&str>, accept: &[String]) -> Result<Vec<String>, String> {
     if !is_slug(slug) {
@@ -70,20 +71,21 @@ pub fn fix_args(slug: &str, code: Option<&str>, accept: &[String]) -> Result<Vec
     Ok(args)
 }
 
-/// The link landing (windows.rs `handle_link`): park it and bring the launcher forward. While a fix runs, a second
-/// link only brings the launcher forward, onto the run already going.
+/// The link landing (windows.rs `handle_link`): park it and bring This device forward. While a fix runs, a second
+/// link only brings This device forward, onto the run already going.
 pub fn requested(app: &AppHandle, args: FixArgs) {
     let parked = !RUNNING.load(Ordering::SeqCst);
     if parked {
         *PENDING.lock().unwrap_or_else(PoisonError::into_inner) = Some(args);
     }
-    crate::windows::show_launcher(app);
+    crate::windows::show_device(app);
     if parked {
         let _ = app.emit(PENDING_EVENT, ());
     }
 }
 
-/// Taken, not read: a request is run by whichever launcher mount picks it up first, and only once.
+/// Taken, not read: a request is run by whichever read of the main window's picks it up first (the event or its mount's
+/// own), and only once.
 #[tauri::command]
 pub fn take_pending_fix() -> Option<FixArgs> {
     PENDING
@@ -92,7 +94,7 @@ pub fn take_pending_fix() -> Option<FixArgs> {
         .take()
 }
 
-/// How a fix ended, for the launcher's verdict: `ic`'s exit code (0 healthy or fixed, 1 something left, 3 a consent
+/// How a fix ended, for This device's verdict: `ic`'s exit code (0 healthy or fixed, 1 something left, 3 a consent
 /// with no terminal to ask it in, 4 a restart or sign-out to finish), or none when it was stopped.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]

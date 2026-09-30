@@ -39,6 +39,7 @@ import { useWorkspaceTree } from "../../workspace/explorer/useWorkspaceTree";
 import { manageDeviceSandbox, useHostRunning } from "../devices/useDevices";
 import HostedRollbackDialog from "../overview/version/HostedRollbackDialog.vue";
 import { bashCommand, psCommand } from "../../../app/environments/scriptCommand";
+import { DESKTOP_LAUNCHER_LINK, desktopApp, openDesktopLink } from "../../../app/environments/desktop";
 import { homeViewId, PROJECTS_VIEW_ID } from "../../../core-views/registry";
 import { useEndpoint } from "../secrets/useEndpoint";
 import { addChoices, removalTakes } from "./switcherRows";
@@ -193,6 +194,16 @@ const resumeSetup = (option: SandboxSummary) => ({ path: `/setup`, query: { sand
 // What "add" offers (switcherRows.ts): a project or folder first while the owner's active sandbox runs on this very
 // computer, which only the loopback shortcut proves; another sandbox is the quieter row under it.
 const { usingLocal } = useEndpoint();
+// THIS COMPUTER, the desktop app's other face: its own window on a folder of this computer, with This device beside it
+// (the app's local shell). Offered only inside the app, whose workspace window this page then is; the app swaps the
+// two in one frame, so this list names every place the window can show. An app older than the local shell opens its
+// own card for the same link, which is this computer too.
+const inDesktopApp = desktopApp() !== undefined;
+const toThisComputer = (): void => {
+    open.value = false;
+    openDesktopLink(`${DESKTOP_LAUNCHER_LINK}?to=files`);
+};
+
 const adds = computed(() =>
     addChoices({ runsHere: usingLocal.value && sandbox.active.value?.role === `owner`, projectsHome: homeViewId() === PROJECTS_VIEW_ID }),
 );
@@ -490,6 +501,21 @@ const confirmRemove = async (): Promise<void> => {
                     v-tooltip.top="option.role === 'owner' ? t(`ui.action.remove`) : t(`ui.action.leave`)"
                     class="shrink-0 text-xs opacity-0 transition-opacity hover:text-danger group-hover:opacity-60"
                 />
+            </button>
+
+            <!-- The app's other face, as a place beside the sandboxes: this computer's own folder, no sandbox needed. -->
+            <button
+                v-if="inDesktopApp"
+                type="button"
+                class="group flex items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors hover:bg-content/5"
+                v-tooltip.right="{ title: t(`sandbox.sandboxSwitcher.thisComputer`), note: t(`sandbox.sandboxSwitcher.thisComputerNote`) }"
+                @click="toThisComputer"
+            >
+                <span class="flex h-5 w-5 shrink-0 items-center justify-center text-muted">
+                    <Icon name="desktop" class="text-sm" />
+                </span>
+                <span class="min-w-0 flex-1 truncate text-content">{{ t(`sandbox.sandboxSwitcher.thisComputer`) }}</span>
+                <Icon name="arrow-up-right" class="shrink-0 text-2xs text-subtle" />
             </button>
 
             <!-- One add, or two where this computer already runs the sandbox: the second is quieter. -->
