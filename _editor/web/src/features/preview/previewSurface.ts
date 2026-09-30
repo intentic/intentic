@@ -18,7 +18,7 @@ const targetKey = (sandboxId: string | undefined): string => `intentic-preview-t
 const addressKey = (sandboxId: string | undefined): string => `intentic-preview-address:${sandboxId ?? ``}`;
 
 // A switch closes the parked panel rather than keep the outgoing sandbox's app loaded, and brings back the incoming
-// one's own last target. A floating window re-marks itself opened on arrival (pages/FloatingSection.vue).
+// one's own last target. A floating window re-marks itself opened on arrival (shell/window/FloatingSection.vue).
 const opened = sandboxRef(() => false);
 const selectedId = sandboxRef<string | undefined>(() => storedValue(targetKey(useSandbox().activeSandboxId.value)));
 const address = sandboxRef<string | undefined>(() => storedValue(addressKey(useSandbox().activeSandboxId.value)));
