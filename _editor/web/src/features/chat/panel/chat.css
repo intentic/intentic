@@ -289,42 +289,39 @@
     border-radius: 9999px;
     background-color: var(--color-card);
 }
-/* HOW WHAT A MARK STANDS FOR ARRIVES (the Transition in ChatAsideLane). */
-.chat-mark-reveal-enter-active,
-.chat-mark-reveal-leave-active {
+/* HOW WHAT A MARK STANDS FOR ARRIVES (the Transition in ChatAsideLane): at its full height at once, its words fading in
+   as they settle the last few pixels down, and gone at once when shut. Folding the height (grid rows 0fr to 1fr) laid
+   the transcript out again every frame, on a thread a live turn keeps busy, and every frame of it moved the
+   stick-to-bottom scroll and re-measured the pinned prompts; opacity and translate are drawn on the compositor. */
+.chat-mark-reveal-enter-active {
     transition:
-        grid-template-rows 160ms ease-out,
-        opacity 160ms ease-out;
-}
-.chat-mark-reveal-enter-from,
-.chat-mark-reveal-leave-to {
-    grid-template-rows: 0fr;
-    opacity: 0;
-}
-.chat-mark-reveal-enter-to,
-.chat-mark-reveal-leave-from {
-    grid-template-rows: 1fr;
-    opacity: 1;
-}
-/* Material kept in the page while shut (hidden="until-found", ChatAsideLane) folds here, not in that Transition, which
-   would unmount it. `allow-discrete` keeps it painted until the fold ends. */
-.chat-mark-material {
-    display: grid;
-    grid-template-rows: 1fr;
-    transition:
-        grid-template-rows 160ms ease-out,
         opacity 160ms ease-out,
-        content-visibility 160ms ease-out allow-discrete;
+        translate 160ms ease-out;
+}
+.chat-mark-reveal-enter-from {
+    opacity: 0;
+    translate: 0 -4px;
+}
+/* Material kept in the page while shut (hidden="until-found", ChatAsideLane) arrives the same way, here rather than in
+   that Transition, which would unmount it. Shutting takes the shut state's `none`, so it goes at once. */
+.chat-mark-material {
+    transition:
+        opacity 160ms ease-out,
+        translate 160ms ease-out;
 }
 .chat-mark-material[hidden] {
-    grid-template-rows: 0fr;
     opacity: 0;
+    translate: 0 -4px;
+    transition: none;
 }
 @media (prefers-reduced-motion: reduce) {
     .chat-mark-reveal-enter-active,
-    .chat-mark-reveal-leave-active,
     .chat-mark-material {
-        transition-property: opacity, content-visibility;
+        transition-property: opacity;
+    }
+    .chat-mark-reveal-enter-from,
+    .chat-mark-material[hidden] {
+        translate: none;
     }
 }
 /* Opened by find-in-page, which scrolls to the match at once and would miss it mid-fold. */

@@ -4,11 +4,13 @@ import { type App, createApp, defineComponent, h, nextTick, ref, shallowRef } fr
 import type { FleetLane } from "../../fleet/agentStatus";
 import { NO_ATTENTION } from "../../fleet/agentStatus";
 import type { FleetAgent } from "../../fleet/useAgents-fleet";
+import { FOLD_MS } from "./foldMotion";
 import { cardMove, laneHolding, useLaneMotion } from "./laneMotion";
 
 // Pins how cards move across a render: one that changes lanes flies from where it stood while its old copy is hidden,
-// the cards it left close ranks unless a filter is on, the card in the pointer's hand and a reader who asked for less
-// motion get none, and a card is scrolled to once it is drawn.
+// the cards it left close ranks unless a filter is on, as do the cards below a tray that opened or shut, each carrying
+// its tray; the card in the pointer's hand and a reader who asked for less motion get none, and a card is scrolled to
+// once it is drawn.
 
 const card = (id: string): FleetAgent => ({
     id,
@@ -50,7 +52,16 @@ describe(`how a card moved`, () => {
 
 describe(`cards moving across a render`, () => {
     const animations: { card: string | null; keyframes: Keyframe[]; options: KeyframeAnimationOptions }[] = [];
+    // What moved and from where: the flight's `transform`, a slide's `translate`, and nothing for the flight's lift.
+    const moved = () =>
+        animations.map(({ card: id, keyframes, options }) => ({
+            id,
+            from: keyframes[0]![`transform`] ?? keyframes[0]![`translate`],
+            duration: options.duration,
+        }));
     let app: App | undefined;
+    // Where the fake layout stands an element; a test may redraw it.
+    let place: (el: Element) => { left: number; top: number };
 
     beforeEach(() => {
         animations.length = 0;
@@ -62,10 +73,15 @@ describe(`cards moving across a render`, () => {
                 return { onfinish: null } as unknown as Animation;
             },
         });
+        place = (el) => {
+            const section = el.closest<HTMLElement>(`section[data-lane]`);
+            return {
+                left: LANES.indexOf(section?.dataset[`lane`] as FleetLane) * 300,
+                top: section === null ? 0 : [...section.children].indexOf(el) * 100,
+            };
+        };
         jest.spyOn(Element.prototype, `getBoundingClientRect`).mockImplementation(function (this: Element) {
-            const section = this.closest<HTMLElement>(`section[data-lane]`);
-            const left = LANES.indexOf(section?.dataset[`lane`] as FleetLane) * 300;
-            const top = section === null ? 0 : [...section.children].indexOf(this) * 100;
+            const { left, top } = place(this);
             return { left, top, right: left + 300, bottom: top + 100, width: 300, height: 100, x: left, y: top, toJSON: () => ({}) };
         });
     });
@@ -127,9 +143,11 @@ describe(`cards moving across a render`, () => {
 
         expect([leaving.style.opacity, leaving.style.pointerEvents]).toEqual([`0`, `none`]);
         expect(motion.isMovingLane(`a1`)).toBe(false);
-        expect(animations.map(({ card: id, keyframes, options }) => ({ id, from: keyframes[0]![`transform`], duration: options.duration }))).toEqual([
+        expect(moved()).toEqual([
             { id: `a1`, from: `translate3d(-300px, 0px, 0) scale(1.02)`, duration: 260 },
-            { id: `a2`, from: `translate3d(0, 100px, 0)`, duration: 220 },
+            // The lift, on an effect of its own, so the flight's transform stays on the compositor.
+            { id: `a1`, from: undefined, duration: 260 },
+            { id: `a2`, from: `0 100px`, duration: FOLD_MS },
         ]);
     });
 
@@ -153,6 +171,53 @@ describe(`cards moving across a render`, () => {
         await nextTick();
 
         expect(animations).toEqual([]);
+    });
+
+    it(`slides the cards below a tray that opened, each carrying the rows riding under it`, async () => {
+        const open = ref(false);
+        const host = {
+            lanes: shallowRef(lanesOf([`a1`, `a2`], [])),
+            filtering: ref(false),
+            drag: { draggedId: ref<string | undefined>(undefined), dragging: ref(false) },
+            folds: () => String(open.value),
+        };
+        const Card = defineComponent({
+            props: { id: { type: String, required: true } },
+            setup: (props) => () => h(`div`, { "aria-label": props.id }),
+        });
+        // Each card heads its unit, as AgentsView draws it; a2's child rides in a2's tray, a row below its card.
+        const Board = defineComponent({
+            setup() {
+                const own = useLaneMotion(host);
+                return () =>
+                    h(
+                        `section`,
+                        { "data-lane": `active` },
+                        host.lanes.value.active.map((agent) =>
+                            h(`div`, { key: agent.id, "data-fold-unit": ``, "aria-label": `unit ${agent.id}`, "data-open": String(open.value) }, [
+                                h(Card, { id: agent.id, ref: (el) => own.setCardEl(agent.id, el) }),
+                                ...(agent.id === `a2` ? [h(Card, { id: `a2 child`, ref: (el) => own.setCardEl(`a2 child`, el) })] : []),
+                            ]),
+                        ),
+                    );
+            },
+        });
+        // a1's tray, once open, stands a2's unit 50 lower; a2's child row sits 30 under its card, and moves with it.
+        place = (el) => {
+            const unit = el.closest(`[data-fold-unit]`);
+            const index = unit === null ? 0 : [...unit.parentElement!.children].indexOf(unit);
+            const opened = unit?.getAttribute(`data-open`) === `true` && index > 0 ? 50 : 0;
+            return { left: 300, top: index * 100 + opened + (el.getAttribute(`aria-label`) === `a2 child` ? 30 : 0) };
+        };
+        const root = document.createElement(`div`);
+        document.body.appendChild(root);
+        app = createApp(Board);
+        app.mount(root);
+
+        open.value = true;
+        await nextTick();
+
+        expect(moved()).toEqual([{ id: `unit a2`, from: `0 -50px`, duration: FOLD_MS }]);
     });
 
     it(`scrolls a card into view once it is drawn, leaving a visible one where it is`, async () => {

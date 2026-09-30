@@ -1,10 +1,11 @@
 import { nextTick, onBeforeUpdate, onMounted, onUpdated, type Ref } from "vue";
 import type { FleetLane } from "../../fleet/agentStatus";
 import type { FleetAgent } from "../../fleet/useAgents-fleet";
+import { lessMotion, slideFrom, stopSlide } from "./foldMotion";
 
 // Where the cards stand on screen and how they move between renders: a card changing lanes flies from where it stood,
-// with elevation and a landing pulse, and the cards it left close ranks. Measured across the render that moved them
-// (FLIP), the only moment that knows both places.
+// with elevation and a landing pulse, and the cards it left close ranks, as do the cards below a tray that opened or
+// shut (foldMotion). Measured across the render that moved them (FLIP), the only moment that knows both places.
 
 // Where a card stands: its box on screen and the lane it is in.
 export interface CardPlace {
@@ -49,25 +50,16 @@ export const laneOrder = (lanes: Record<FleetLane, readonly FleetAgent[]>): stri
 
 const laneOfEl = (el: HTMLElement): FleetLane | undefined => el.closest<HTMLElement>(`section[data-lane]`)?.dataset[`lane`] as FleetLane | undefined;
 
+// The flight itself is `transform` alone, so the compositor carries it through whatever the landing render costs the
+// main thread; the lift (shadow, stacking) and the landing pulse are paint, on effects of their own, and the shadow has
+// only a first keyframe, so it eases into the card's own at rest rather than snapping to none and back.
 const flyCard = (el: HTMLElement, dx: number, dy: number): void => {
+    const timing = { duration: 260, easing: `cubic-bezier(0.2, 0, 0, 1)` };
     const animation = el.animate(
-        [
-            {
-                transform: `translate3d(${dx}px, ${dy}px, 0) scale(1.02)`,
-                boxShadow: `0 12px 28px -4px rgba(0, 0, 0, 0.28), 0 8px 10px -4px rgba(0, 0, 0, 0.2)`,
-                zIndex: 40,
-            },
-            {
-                transform: `translate3d(0, 0, 0) scale(1)`,
-                boxShadow: `none`,
-                zIndex: 40,
-            },
-        ],
-        {
-            duration: 260,
-            easing: `cubic-bezier(0.2, 0, 0, 1)`,
-        },
+        [{ transform: `translate3d(${dx}px, ${dy}px, 0) scale(1.02)` }, { transform: `translate3d(0, 0, 0) scale(1)` }],
+        timing,
     );
+    el.animate([{ boxShadow: `0 12px 28px -4px rgba(0, 0, 0, 0.28), 0 8px 10px -4px rgba(0, 0, 0, 0.2)`, zIndex: 40 }, { zIndex: 40 }], timing);
     animation.onfinish = () => {
         el.animate(
             [
@@ -82,12 +74,11 @@ const flyCard = (el: HTMLElement, dx: number, dy: number): void => {
     };
 };
 
-const closeRanks = (el: HTMLElement, dy: number): void => {
-    el.animate([{ transform: `translate3d(0, ${dy}px, 0)` }, { transform: `translate3d(0, 0, 0)` }], {
-        duration: 220,
-        easing: `cubic-bezier(0.2, 0, 0, 1)`,
-    });
-};
+// A card and the tray riding under it move as one unit (AgentsView's `data-fold-unit` wrapper, the card first in it), so
+// a card closing ranks carries its children rather than leaving them to jump; a child's row, registered here too
+// (setRowEl), rides inside its card's unit.
+const unitOf = (el: HTMLElement): HTMLElement | undefined => el.closest<HTMLElement>(`[data-fold-unit]`) ?? undefined;
+const heads = (el: HTMLElement, unit: HTMLElement | undefined): unit is HTMLElement => unit?.firstElementChild === el;
 
 export interface MotionHost {
     // The board's lanes, where each card is about to stand.
@@ -95,6 +86,8 @@ export interface MotionHost {
     readonly filtering: Readonly<Ref<boolean>>;
     // The card in the pointer's hand (useAgentDrag) moves with the ghost, not here.
     readonly drag: { readonly draggedId: Readonly<Ref<string | undefined>>; readonly dragging: Readonly<Ref<boolean>> };
+    // What opens and shuts the trays under the cards (ChildRows): a render that moves it moves the cards below a tray.
+    readonly folds?: () => string;
 }
 
 // The cards' elements for the component that draws them: registered through each card's `:ref`, snapshotted before
@@ -124,16 +117,20 @@ export const useLaneMotion = (host: MotionHost) => {
         const nextLane = laneHolding(host.lanes.value, id);
         return prevLane !== undefined && nextLane !== undefined && prevLane !== nextLane;
     };
-    // The order last drawn, against which a render is asked whether anything can have moved.
+    // The order and folds last drawn, against which a render is asked whether anything can have moved.
+    const motionKey = (): string => `${laneOrder(host.lanes.value)}#${host.folds?.() ?? ``}`;
     let drawn: string | undefined;
     onMounted(() => {
-        drawn = laneOrder(host.lanes.value);
+        drawn = motionKey();
     });
+    // Every read before any write, here and after the render, so a render that moves cards is laid out once, not once
+    // per card.
     onBeforeUpdate(() => {
         before.clear();
-        if (laneOrder(host.lanes.value) === drawn) {
+        if (motionKey() === drawn) {
             return;
         }
+        const leaving: HTMLElement[] = [];
         for (const [id, el] of cardEls) {
             if (!el.isConnected) {
                 cardEls.delete(id);
@@ -146,39 +143,59 @@ export const useLaneMotion = (host: MotionHost) => {
             before.set(id, { rect: el.getBoundingClientRect(), lane: currentLane });
             const nextLane = laneHolding(host.lanes.value, id);
             if (nextLane !== undefined && nextLane !== currentLane) {
-                el.style.opacity = `0`;
-                el.style.pointerEvents = `none`;
+                leaving.push(el);
             }
+        }
+        for (const el of leaving) {
+            el.style.opacity = `0`;
+            el.style.pointerEvents = `none`;
         }
     });
     const canAnimate = (id: string, el: HTMLElement): boolean =>
         el.isConnected && !(host.drag.draggedId.value === id && host.drag.dragging.value) && typeof el.animate === `function`;
-    const animate = (id: string, el: HTMLElement): void => {
-        if (!canAnimate(id, el)) {
-            return;
-        }
-        const prev = before.get(id);
-        const lane = laneOfEl(el);
-        if (!prev || !lane) {
-            return;
-        }
-        const move = cardMove(prev, { rect: el.getBoundingClientRect(), lane }, host.filtering.value);
-        if (move?.kind === `flight`) {
-            flyCard(el, move.dx, move.dy);
-        }
-        if (move?.kind === `reflow`) {
-            closeRanks(el, move.dy);
-        }
-    };
     onUpdated(() => {
-        drawn = laneOrder(host.lanes.value);
+        drawn = motionKey();
         if (before.size === 0) {
             return;
         }
-        const prefersReducedMotion = typeof window !== `undefined` && window.matchMedia?.(`(prefers-reduced-motion: reduce)`).matches;
-        if (!prefersReducedMotion) {
-            for (const [id, el] of cardEls) {
-                animate(id, el);
+        if (!lessMotion()) {
+            const moving = [...cardEls].filter(([id, el]) => before.has(id) && canAnimate(id, el));
+            // A slide still running would be read as where the card now stands.
+            for (const [, el] of moving) {
+                stopSlide(el);
+                const unit = unitOf(el);
+                if (unit !== undefined) {
+                    stopSlide(unit);
+                }
+            }
+            const moves = moving.map(([id, el]) => {
+                const lane = laneOfEl(el);
+                return [
+                    el,
+                    lane === undefined ? undefined : cardMove(before.get(id)!, { rect: el.getBoundingClientRect(), lane }, host.filtering.value),
+                ] as const;
+            });
+            // What each unit's card slides it by, which every row inside it is carried by already.
+            const carried = new Map<HTMLElement, number>();
+            for (const [el, move] of moves) {
+                const unit = unitOf(el);
+                if (move?.kind === `reflow` && heads(el, unit)) {
+                    carried.set(unit, move.dy);
+                }
+            }
+            for (const [el, move] of moves) {
+                if (move?.kind === `flight`) {
+                    flyCard(el, move.dx, move.dy);
+                }
+                const unit = unitOf(el);
+                if (move?.kind === `reflow` && heads(el, unit)) {
+                    slideFrom(unit, move.dy);
+                } else if (move?.kind === `reflow`) {
+                    const own = move.dy - (unit === undefined ? 0 : (carried.get(unit) ?? 0));
+                    if (Math.abs(own) >= 0.5) {
+                        slideFrom(el, own);
+                    }
+                }
             }
         }
         before.clear();

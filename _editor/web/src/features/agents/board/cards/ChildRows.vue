@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { useT } from "@intentic/ui/i18n";
-import { type ComponentPublicInstance, computed, inject, ref } from "vue";
+import { type ComponentPublicInstance, computed, inject } from "vue";
 import { agentDisplayTitle } from "../../fleet/agentStatus";
 import type { FleetAgent } from "../../fleet/useAgents-fleet";
 import { FINISHED_FOLD, inProcess, type TrayChild, trayOf } from "../view/childFold";
+import { trayFold } from "../view/foldMotion";
 import ChildGroupRow from "./ChildGroupRow.vue";
 import ChildRow from "./ChildRow.vue";
 import { CHILD_ROWS } from "./childRows";
@@ -19,7 +20,7 @@ import { CHILD_ROWS } from "./childRows";
 //
 // OPEN ONLY UNDER THE CARD BEING LOOKED AT. Drawn under every card, the trays turned each lane into a list of lists, and
 // every helper an unwatched card's runtime started or finished pushed a row in or out and shook every card below it.
-// So a tray opens, fading in and leaving at once, only under the card the reader is on (`focused`), under a card
+// So a tray opens, folding out from under the card (foldMotion), only under the card the reader is on (`focused`), under a card
 // whose child is on screen (the ring must be on something drawn), and under every card while a filter is on (a result
 // set must not hide its own matches). Every other card counts its family on itself instead (ChildCount), which moves no
 // card's height. The one exception is a child asking what only the reader can give: that is news, not history, and a
@@ -78,57 +79,10 @@ const menu = (child: TrayChild, event: MouseEvent): void => {
         board?.menu?.(child, event);
     }
 };
-// THE FOLD. Grid rows (0fr to 1fr) re-resolved the track from its content every frame, and a CSS transition's clock
-// starts on the frame the class lands, which is the same frame the chat switches cards: the switch ate the first
-// frames and the fold arrived half done, then stuttered. So the height is measured once and animated in pixels, with
-// the start held two frames, past the switch's render, and the box contains its own layout and paint so a frame
-// reflows the rows' box, not the rows.
-const EASE = `cubic-bezier(0.4, 0, 0.2, 1)`;
-const afterPaint = (run: () => void): void => {
-    requestAnimationFrame(() => requestAnimationFrame(run));
-};
-const reduced = (): boolean => window.matchMedia(`(prefers-reduced-motion: reduce)`).matches;
-const animateHeight = (el: Element, to: (box: HTMLElement) => number, duration: number, done: () => void): void => {
-    // A page without the Web Animations API (a test DOM) folds at once.
-    if (!(el instanceof HTMLElement) || !(`animate` in el)) {
-        done();
-        return;
-    }
-    const opening = to(el) > 0;
-    const from = opening ? 0 : el.offsetHeight;
-    const target = opening ? el.scrollHeight : 0;
-    el.style.overflow = `hidden`;
-    el.style.contain = `layout paint`;
-    el.style.height = `${from}px`;
-    el.style.opacity = opening ? `0` : `1`;
-    afterPaint(() => {
-        const frames = reduced()
-            ? [{ opacity: opening ? 0 : 1 }, { opacity: opening ? 1 : 0 }]
-            : [
-                  { height: `${from}px`, opacity: opening ? 0 : 1 },
-                  { height: `${target}px`, opacity: opening ? 1 : 0 },
-              ];
-        const run = el.animate(frames, { duration, easing: EASE, fill: `forwards` });
-        run.addEventListener(`finish`, () => {
-            el.style.cssText = ``;
-            run.cancel();
-            done();
-        });
-    });
-};
-// A shut tray with nothing in it is not drawn at all, not drawn zero tall: on a wallpaper its frosted strip
-// (wallpapers.css) still painted a sliver under the card. `folding` keeps it drawn while the fold closes.
-const folding = ref(false);
-const fold = {
-    enter: (el: Element, done: () => void): void => animateHeight(el, (box) => box.scrollHeight || 1, 260, done),
-    leave: (el: Element, done: () => void): void => {
-        folding.value = true;
-        animateHeight(el, () => 0, 220, () => {
-            folding.value = false;
-            done();
-        });
-    },
-};
+// A shut tray with nothing in it draws nothing: not its frosted strip on a wallpaper (wallpapers.css), which on an empty
+// box still painted a sliver under the card. Worn from the render that shuts the fold, so a shutting fold, pinned
+// outside the flow (trayFold), has already left the column its final height.
+const drawn = computed(() => shown.value || (tray.value?.asks.length ?? 0) > 0);
 // Where the rows start: the card's title edge (its border, padding, identity tile and the gap after it) less a row's
 // own `px-2`, so the glyph, not the hover wash, lines up with the title. RailCard: 1 + 12 + 24 + 8; AgentCard: 1 + 14
 // (16 live) + 28 + 10.
@@ -138,10 +92,10 @@ const inset = computed(() => (props.rail ? `ml-9.25` : props.live ? `ml-11.75` :
 <template>
     <div
         v-if="board !== undefined && tray !== undefined"
-        :role="shown || tray.asks.length > 0 ? `group` : undefined"
+        :role="drawn ? `group` : undefined"
         :aria-label="label"
-        class="child-tray flex flex-col"
-        :class="[inset, { hidden: !shown && !folding && tray.asks.length === 0 }]"
+        class="relative flex flex-col"
+        :class="[inset, { 'child-tray': drawn }]"
     >
         <!-- A child asking the reader keeps its row under any card: the one row that is news whichever card is looked at. -->
         <div v-if="tray.asks.length > 0" class="flex flex-col pt-1">
@@ -160,13 +114,29 @@ const inset = computed(() => (props.rail ? `ml-9.25` : props.live ? `ml-11.75` :
                 @menu="(event) => menu(child, event)"
             />
         </div>
-        <!-- The rest folds open and shut (useFold): measured pixel heights on the Web Animations clock, started a frame late. -->
-        <Transition :css="false" @enter="fold.enter" @leave="fold.leave">
+        <!-- The rest folds open and shut (trayFold): the box takes its height at once and the rows slide out from under the card, on the compositor. -->
+        <Transition :css="false" @enter="trayFold.enter" @leave="trayFold.leave">
             <div v-if="shown">
-                <div>
-                    <div class="flex flex-col" :class="tray.asks.length === 0 ? `pt-1` : ``">
+                <div class="flex flex-col" :class="tray.asks.length === 0 ? `pt-1` : ``">
+                    <ChildRow
+                        v-for="child in tray.lead"
+                        :key="child.id"
+                        :ref="(el) => setRow(child, el)"
+                        :child="child"
+                        :selected="selected(child)"
+                        :provider="agent.provider"
+                        :needle="board.needle.value"
+                        :match-case="board.matchCase.value"
+                        :menus="board.menu !== undefined"
+                        @open="(event) => open(child, event)"
+                        @review="review(child)"
+                        @menu="(event) => menu(child, event)"
+                    />
+                    <template v-for="group in tray.groups" :key="group.key">
+                        <!-- One child alone is its own row: a fold of one would be a press to read a single line. -->
+                        <ChildGroupRow v-if="group.members.length > 1" :group="group" :parent="title" @toggle="board?.toggle(agent, group.key)" />
                         <ChildRow
-                            v-for="child in tray.lead"
+                            v-for="child in group.shown"
                             :key="child.id"
                             :ref="(el) => setRow(child, el)"
                             :child="child"
@@ -179,50 +149,32 @@ const inset = computed(() => (props.rail ? `ml-9.25` : props.live ? `ml-11.75` :
                             @review="review(child)"
                             @menu="(event) => menu(child, event)"
                         />
-                        <template v-for="group in tray.groups" :key="group.key">
-                            <!-- One child alone is its own row: a fold of one would be a press to read a single line. -->
-                            <ChildGroupRow v-if="group.members.length > 1" :group="group" :parent="title" @toggle="board?.toggle(agent, group.key)" />
-                            <ChildRow
-                                v-for="child in group.shown"
-                                :key="child.id"
-                                :ref="(el) => setRow(child, el)"
-                                :child="child"
-                                :selected="selected(child)"
-                                :provider="agent.provider"
-                                :needle="board.needle.value"
-                                :match-case="board.matchCase.value"
-                                :menus="board.menu !== undefined"
-                                @open="(event) => open(child, event)"
-                                @review="review(child)"
-                                @menu="(event) => menu(child, event)"
-                            />
-                        </template>
-                        <!-- The fold, in the rows' own glyph column: a chevron where a row has its standing, so the count reads as one more row. -->
-                        <button
-                            v-if="tray.folded > 0"
-                            type="button"
-                            class="ui-row-select flex min-h-7 w-full min-w-0 items-center gap-2 rounded-md px-2 text-left text-2xs text-subtle max-md:min-h-10"
-                            :aria-expanded="tray.open"
-                            @click="board.toggle(agent, FINISHED_FOLD)"
-                        >
-                            <Icon :name="tray.open ? `chevron-down` : `chevron-right`" class="shrink-0 text-xs" />
-                            <span class="min-w-0 flex-1 truncate">{{ t(`agents.childRows.finished`, { count: tray.folded }, tray.folded) }}</span>
-                        </button>
-                        <ChildRow
-                            v-for="child in tray.tail"
-                            :key="child.id"
-                            :ref="(el) => setRow(child, el)"
-                            :child="child"
-                            :selected="selected(child)"
-                            :provider="agent.provider"
-                            :needle="board.needle.value"
-                            :match-case="board.matchCase.value"
-                            :menus="board.menu !== undefined"
-                            @open="(event) => open(child, event)"
-                            @review="review(child)"
-                            @menu="(event) => menu(child, event)"
-                        />
-                    </div>
+                    </template>
+                    <!-- The fold, in the rows' own glyph column: a chevron where a row has its standing, so the count reads as one more row. -->
+                    <button
+                        v-if="tray.folded > 0"
+                        type="button"
+                        class="ui-row-select flex min-h-7 w-full min-w-0 items-center gap-2 rounded-md px-2 text-left text-2xs text-subtle max-md:min-h-10"
+                        :aria-expanded="tray.open"
+                        @click="board.toggle(agent, FINISHED_FOLD)"
+                    >
+                        <Icon :name="tray.open ? `chevron-down` : `chevron-right`" class="shrink-0 text-xs" />
+                        <span class="min-w-0 flex-1 truncate">{{ t(`agents.childRows.finished`, { count: tray.folded }, tray.folded) }}</span>
+                    </button>
+                    <ChildRow
+                        v-for="child in tray.tail"
+                        :key="child.id"
+                        :ref="(el) => setRow(child, el)"
+                        :child="child"
+                        :selected="selected(child)"
+                        :provider="agent.provider"
+                        :needle="board.needle.value"
+                        :match-case="board.matchCase.value"
+                        :menus="board.menu !== undefined"
+                        @open="(event) => open(child, event)"
+                        @review="review(child)"
+                        @menu="(event) => menu(child, event)"
+                    />
                 </div>
             </div>
         </Transition>

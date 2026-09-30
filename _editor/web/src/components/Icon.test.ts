@@ -2,6 +2,7 @@ import "@intentic/testing/dom";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import Icon from "@intentic/ui/icon";
+import { setDeveloperBuild } from "@intentic/ui/reduced-motion";
 import ViewBadgeChip from "../core-views/ViewBadgeChip.vue";
 import { glyphBody } from "../../../ui/src/icons/glyph.js";
 import { sectionIcon, ICONS, isIconName, type IconName } from "../../../ui/src/icons/iconSets.js";
@@ -116,6 +117,20 @@ it(`turns the whole glyph on the compositor on a touch screen`, async () => {
 
     expect(host.querySelector(`animateTransform, animatetransform`)).toBeNull();
     expect(host.querySelector(`svg`)?.classList.contains(`ui-icon-turning`)).toBe(true);
+});
+
+// OUTSIDE A DEVELOPER'S BUILD a desktop pointer turns it on the compositor too: SMIL is kept only where a DevTools Styles
+// editor is open to be rebuilt (useCompositedLoops).
+it(`turns the whole glyph on the compositor under a desktop pointer outside a developer's build`, async () => {
+    setDeveloperBuild(false);
+    try {
+        const host = await spinner(true);
+
+        expect(host.querySelector(`animateTransform, animatetransform`)).toBeNull();
+        expect(host.querySelector(`svg`)?.classList.contains(`ui-icon-turning`)).toBe(true);
+    } finally {
+        setDeveloperBuild(true);
+    }
 });
 
 it(`keeps a still icon still on a touch screen`, async () => {

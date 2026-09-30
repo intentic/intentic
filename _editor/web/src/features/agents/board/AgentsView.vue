@@ -104,7 +104,10 @@ const lanes = useBoardLanes({ view, scope, filter, drag, agents, roster, selecte
 const { cardsFor, runsFor, needingYou, archivedCards, archiveSize, archiveHidden, hiddenFinished, archivedHits, laneDropClass } = lanes;
 const { childrenOf, subagentsOf, callOf, familyOf, familyIds } = lanes;
 const { beyondVisible, beyondLabel, matchTally, noMatches, clearable, screen } = lanes;
-const { setCardEl, isMovingLane, revealCard } = useLaneMotion({ lanes: scope.boardLanes, filtering, drag });
+// What opens and shuts the trays under the cards (ChildRows' `shown`): the ring, the panes beside it, a subagent's
+// transcript on screen. A render that moves any of it is one the lanes' motion measures across.
+const folds = (): string => `${highlightId.value}|${chatStrip.value.panes.join(`,`)}|${subagentShown.value?.id}`;
+const { setCardEl, isMovingLane, revealCard } = useLaneMotion({ lanes: scope.boardLanes, filtering, drag, folds });
 const focus = useCardFocus({
     ring,
     lanes,
@@ -497,8 +500,8 @@ const starters = computed(() => boardStarters(workspaceRepos.value.length, works
                             :name="isMovingLane(agent.id) ? undefined : 'lane'"
                             :css="!isMovingLane(agent.id)"
                         >
-                            <!-- A card and the children riding under it (ChildRows), one unit to the lane: they arrive, leave and space as one. -->
-                            <div class="flex flex-col">
+                            <!-- A card and the children riding under it (ChildRows), one unit to the lane: they arrive, leave, space and slide as one (laneMotion). -->
+                            <div class="flex flex-col" data-fold-unit>
                                 <AgentCard
                                     :ref="(el) => setCardEl(agent.id, el)"
                                     :agent="agent"

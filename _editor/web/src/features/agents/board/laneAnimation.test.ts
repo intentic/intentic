@@ -110,18 +110,21 @@ it(`animates cross-lane flight with elevation and fast-deceleration easing when 
     await settle();
 
     expect(laneCalls).toBeGreaterThan(0);
-    const flight = animations.find((anim) => anim.options.duration === 260);
+    const flight = animations.find((anim) => anim.options.duration === 260 && anim.keyframes[0]?.[`transform`] !== undefined);
     expect(flight?.options).toMatchObject({
         duration: 260,
         easing: `cubic-bezier(0.2, 0, 0, 1)`,
     });
     expect(flight?.keyframes[0]).toMatchObject({
         transform: `translate3d(-400px, -50px, 0) scale(1.02)`,
-        zIndex: 40,
     });
     expect(flight?.keyframes[1]).toMatchObject({
         transform: `translate3d(0, 0, 0) scale(1)`,
     });
+    // The elevation rides on an effect of its own, on the same clock, so the flight's transform stays on the compositor.
+    const lift = animations.find((anim) => anim.element === flight?.element && anim.keyframes[0]?.[`zIndex`] !== undefined);
+    expect(lift?.options).toMatchObject({ duration: 260 });
+    expect(lift?.keyframes[0]).toMatchObject({ zIndex: 40 });
 });
 
 it(`skips translation physics when reduced motion is requested`, async () => {
@@ -185,15 +188,17 @@ it(`animates sibling reflow within the same lane when a neighboring card leaves`
     setAgents([agent(`a1`, `landed`), agent(`a2`, `running`)], 2);
     await settle();
 
+    // The card's unit slides, carrying the tray under it, on `translate` so a transform of the card's own runs beside it.
     const reflow = animations.find((anim) => anim.options.duration === 220);
+    expect(reflow?.element.hasAttribute(`data-fold-unit`)).toBe(true);
     expect(reflow?.options).toMatchObject({
         duration: 220,
         easing: `cubic-bezier(0.2, 0, 0, 1)`,
     });
     expect(reflow?.keyframes[0]).toMatchObject({
-        transform: `translate3d(0, 120px, 0)`,
+        translate: `0 120px`,
     });
     expect(reflow?.keyframes[1]).toMatchObject({
-        transform: `translate3d(0, 0, 0)`,
+        translate: `0 0`,
     });
 });

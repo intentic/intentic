@@ -1,6 +1,7 @@
 import "@intentic/testing/dom";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick } from "vue";
+import { setDeveloperBuild } from "@intentic/ui/reduced-motion";
 import ThinkingRosette from "./ThinkingRosette.vue";
 
 let app: App | undefined;
@@ -91,6 +92,20 @@ it(`stretches the breath for reduced motion instead of holding still`, async () 
     app!.unmount();
     app = undefined;
     expect(remove).toHaveBeenCalledWith(`change`, expect.any(Function));
+});
+
+// OUTSIDE A DEVELOPER'S BUILD a desktop pointer gets the composited flower too: SMIL is kept only where a DevTools Styles
+// editor is open to be rebuilt (useCompositedLoops).
+it(`draws the flower from composited boxes under a desktop pointer outside a developer's build`, async () => {
+    setDeveloperBuild(false);
+    try {
+        const host = await mount();
+
+        expect(host.querySelector(`animate, animateTransform, animatetransform`)).toBeNull();
+        expect(host.querySelectorAll(`.rosette-petal`)).toHaveLength(8);
+    } finally {
+        setDeveloperBuild(true);
+    }
 });
 
 // ON A TOUCH SCREEN the same flower is drawn from composited boxes: no SMIL at all, which would re-style and re-paint the

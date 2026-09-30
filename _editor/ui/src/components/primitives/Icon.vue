@@ -2,7 +2,7 @@
 <script setup lang="ts">
 import { computed, useAttrs } from "vue";
 import { ICONS, type IconName } from "../../icons/iconSets.js";
-import { useReducedMotion, useTouchMotion } from "../../composables/useReducedMotion.js";
+import { useCompositedLoops, useReducedMotion } from "../../composables/useReducedMotion.js";
 import type { Glyph } from "../../icons/glyph.js";
 
 const { name, spin = false } = defineProps<{ name: IconName; spin?: boolean }>();
@@ -24,11 +24,12 @@ const drawing = computed<Glyph>(() => ICONS[name]);
 const isSpinner = computed(() => name === `spinner`);
 const SPINNER_STROKE = 2.5;
 
-// A touch screen turns the whole glyph as a CSS animation on the compositor; a desktop pointer keeps SMIL, which leaves
-// DevTools' Styles editor alone (useTouchMotion says why each). The reduced-motion query is only asked while SMIL turns.
-const touch = useTouchMotion();
-const turnsOnCompositor = computed(() => spin && touch.value);
-const reducedMotion = useReducedMotion(() => spin && !touch.value);
+// The whole glyph turns as a CSS animation on the compositor, save under a desktop pointer in a developer's build, which
+// keeps SMIL and so leaves DevTools' Styles editor alone (useCompositedLoops says why each). The reduced-motion query is
+// only asked while SMIL turns.
+const composited = useCompositedLoops();
+const turnsOnCompositor = computed(() => spin && composited.value);
+const reducedMotion = useReducedMotion(() => spin && !composited.value);
 </script>
 
 <template>
@@ -82,7 +83,7 @@ svg {
     flex: none;
 }
 
-/* THE SPINNER ON A TOUCH SCREEN: the whole glyph turns as one composited layer, rasterised once and rotated off the main
+/* THE SPINNER ON THE COMPOSITOR (useCompositedLoops): the whole glyph turns as one composited layer, rasterised once and rotated off the main
    thread. Its track is a full circle about the centre, so turning it with the arc changes nothing the eye can see.
    Reduced motion slows it to the SMIL spinner's 3s rather than stopping it: a still mark beside live work reads as hung. */
 .ui-icon-turning {

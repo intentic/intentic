@@ -1,4 +1,4 @@
-import { onBeforeUnmount, readonly, ref, watch, type Ref } from "vue";
+import { computed, onBeforeUnmount, readonly, ref, watch, type Ref } from "vue";
 
 // Whether the reader asked for less motion, for the glyphs that move: they slow down rather than stop, since a still
 // mark beside a live turn reads as a hung one. Per-component and not a module singleton on purpose — the listener has
@@ -38,13 +38,13 @@ export function useReducedMotion(active: () => boolean = () => true): Readonly<R
 }
 
 // WHERE A LOOPING GLYPH MAY RUN, as a question about the screen: true on a touch-first one (a phone, a tablet), where
-// the glyph turns as a CSS animation on its own compositor layer, and false under a desktop pointer, where it stays SMIL.
-// SMIL is the desktop's answer because Chrome DevTools rebuilds an open Styles editor whenever a CSS animation starts or
-// stops (reducedMotion.test.ts), and a spinner starts on every request. It is the wrong answer on a phone: SMIL runs on
-// the main thread and re-styles, re-lays-out and re-paints the page every frame it is on screen — measured on the /agents
-// board at 4× CPU throttle, nine spinners held the main thread 56% busy with nothing happening, and 3% once they turned
-// as CSS transforms. Nobody edits styles in DevTools on the phone itself; device emulation matches too, which is the one
-// place the two answers meet.
+// the glyph turns as a CSS animation on its own compositor layer, and false under a desktop pointer, where a developer's
+// build keeps it SMIL (useCompositedLoops). SMIL is that build's answer because Chrome DevTools rebuilds an open Styles
+// editor whenever a CSS animation starts or stops (reducedMotion.test.ts), and a spinner starts on every request. It is
+// the wrong answer anywhere else: SMIL runs on the main thread and re-styles, re-lays-out and re-paints the page every
+// frame it is on screen — measured on the /agents board at 4× CPU throttle, nine spinners held the main thread 56% busy
+// with nothing happening, and 3% once they turned as CSS transforms. Nobody edits styles in DevTools on the phone
+// itself; device emulation matches too, which is the one place the two answers meet.
 //
 // One shared query, bound on first use rather than at import: a test that stubs `window.matchMedia` gets a fresh binding
 // on its next mount, and the previous one lets go of its listener.
@@ -67,4 +67,20 @@ export function useTouchMotion(): Readonly<Ref<boolean>> {
         touchList.addEventListener(`change`, onTouchChange);
     }
     return readonly(touchState);
+}
+
+// WHETHER THIS IS A DEVELOPER'S BUILD, which only the app's bundler knows: told once at boot (the app's main.ts), before
+// anything is drawn. Until told, it is one, so a host that never says keeps SMIL on a desktop pointer, as before.
+// allow(module-state): one answer about the build for every glyph in the window, not about a sandbox.
+let developerBuild = true;
+export const setDeveloperBuild = (developer: boolean): void => {
+    developerBuild = developer;
+};
+
+// WHERE A LOOPING GLYPH TURNS ON THE COMPOSITOR rather than as SMIL: on a touch screen (useTouchMotion), and in every
+// build but a developer's. SMIL is kept for a desktop pointer in a developer's build alone, the one place a Styles editor
+// is open to be rebuilt; anywhere else it cost the main thread every frame the glyph was on screen.
+export function useCompositedLoops(): Readonly<Ref<boolean>> {
+    const touch = useTouchMotion();
+    return computed(() => touch.value || !developerBuild);
 }

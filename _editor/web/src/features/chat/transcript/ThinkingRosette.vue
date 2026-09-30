@@ -1,6 +1,6 @@
 <!-- The mark beside a live turn's status word: a lotus rosette whose petals light in a wave while the flower breathes. -->
 <script setup lang="ts">
-import { useReducedMotion, useTouchMotion } from "@intentic/ui/reduced-motion";
+import { useCompositedLoops, useReducedMotion } from "@intentic/ui/reduced-motion";
 import { computed } from "vue";
 
 // Drawn on the icon pack's 24×24 box at 1em and reaching r=10 like the spinner's outer edge, so swapping the two moves
@@ -15,13 +15,13 @@ const DIM = 0.2;
 // Rounded before it reaches the attribute: unrounded thirds of a second render as `-0.22499999999999998s`.
 const seconds = (value: number): string => `${Number(value.toFixed(3))}s`;
 
-// A touch screen draws the same flower from composited layers (the second template below); a desktop pointer keeps
-// SMIL, which leaves DevTools' Styles editor alone. useTouchMotion says why each.
-const touch = useTouchMotion();
+// The same flower is drawn from composited layers (the first template below), save under a desktop pointer in a
+// developer's build, which keeps SMIL and so leaves DevTools' Styles editor alone. useCompositedLoops says why each.
+const composited = useCompositedLoops();
 
 // Seconds per breath, stretched rather than stopped when the reader asked for less motion. Only SMIL reads it here: the
 // composited flower takes the same two values from CSS (`--rosette-cycle` below).
-const reduced = useReducedMotion(() => !touch.value);
+const reduced = useReducedMotion(() => !composited.value);
 const cycle = computed(() => (reduced.value ? 6.5 : 2.4));
 const dur = computed(() => seconds(cycle.value));
 
@@ -38,9 +38,9 @@ const petals = computed(() =>
 </script>
 
 <template>
-    <!-- ON A TOUCH SCREEN every moving part is its own box: the breath scales the whole flower and each petal fades as its
+    <!-- ON THE COMPOSITOR every moving part is its own box: the breath scales the whole flower and each petal fades as its
          own layer, all of it opacity and transform, which the compositor runs without the page's main thread. -->
-    <span v-if="touch" class="rosette relative inline-block size-[1em] flex-none align-[-0.125em]" aria-hidden="true">
+    <span v-if="composited" class="rosette relative inline-block size-[1em] flex-none align-[-0.125em]" aria-hidden="true">
         <span class="rosette-breath absolute inset-0">
             <svg
                 v-for="petal in petals"

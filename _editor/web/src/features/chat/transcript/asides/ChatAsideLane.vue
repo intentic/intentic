@@ -62,7 +62,7 @@ const said = computed(() => slots[`default`] !== undefined);
                 </button>
             </div>
         </div>
-        <!-- Other material uses an in-flow transition and is absent when closed. -->
+        <!-- Other material fades in where it lands (chat-mark-reveal) and is absent when closed. -->
         <Transition name="chat-mark-reveal">
             <div v-if="opened !== undefined && !findable.some((mark) => mark.key === opened)" class="grid">
                 <div class="min-h-0 overflow-hidden">

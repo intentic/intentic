@@ -2,6 +2,7 @@
 // stable style set before the app mounts.
 import { installDevStyles } from "virtual:intentic-dev-styles";
 import { installChunkRecovery, installUi } from "@intentic/ui";
+import { setDeveloperBuild } from "@intentic/ui/reduced-motion";
 import { highlightInWorker } from "@intentic/ui/markdown";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { createApp } from "vue";
@@ -36,6 +37,10 @@ dropOutdatedMirrors();
 
 // Runs in every window; must follow the purge, so a wipe here is never misread as a preference.
 installDocumentAppearance();
+
+// Spinners and the thinking mark turn on the compositor everywhere but a developer's build under a desktop pointer,
+// which keeps SMIL so an open DevTools Styles editor is not rebuilt with every request (useCompositedLoops).
+setDeveloperBuild(import.meta.env.DEV);
 
 // Code blocks in chat and documents are coloured in a worker, off the thread a reader's taps land on (code.ts).
 highlightInWorker();

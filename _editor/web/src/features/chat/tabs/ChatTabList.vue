@@ -12,7 +12,8 @@ import RailLane from "../../../components/RailLane.vue";
 import type { OpenChat } from "./cardView";
 import { useChatTrays } from "./chatTrays";
 import { CHILD_ROWS } from "../../agents/board/cards/childRows";
-import { closeSubagent } from "../panel/subagent/subagentView";
+import { closeSubagent, subagentOnScreen } from "../panel/subagent/subagentView";
+import { useFoldFlip } from "../../agents/board/view/foldMotion";
 import ChatRowList from "./ChatRowList.vue";
 import { laneOrdered, steadyLanes } from "./laneOrder";
 import { personaOfAgent, personaOfTab, tabsInLane, tabsOfPersona } from "./tabs";
@@ -231,6 +232,16 @@ watch(
 // Scrolls the active card into view (`nearest`) on activeId or tabReveal changes, and immediately at mount for
 // the docked sheet; a scope just picked starts at the top of its lanes.
 const scroller = ref<HTMLElement | null>(null);
+// What opens and shuts the trays under the cards (ChildRows' `shown`): the chats selected here and a subagent shown in
+// one's column. A render that moves it makes room below a tray by sliding what stands there (the `data-fold-unit`s).
+useFoldFlip(
+    scroller,
+    () =>
+        `${conversations.value
+            .filter((conversation) => actions.isSelected(conversation.conversationId))
+            .map((conversation) => conversation.conversationId)
+            .join(`,`)}|${subagentOnScreen.value?.id}`,
+);
 watch(scoped, async () => {
     await nextTick();
     if (scroller.value !== null) {
@@ -274,7 +285,7 @@ defineExpose({ beginRename: actions.beginRename });
             class="flex min-h-0 flex-1 flex-col items-stretch gap-4 overflow-y-auto"
         >
             <!-- An empty lane isn't drawn at all (see occupiedLanes). -->
-            <RailLane v-for="lane in occupiedLanes" :key="lane.key" :label="lane.label">
+            <RailLane v-for="lane in occupiedLanes" :key="lane.key" :label="lane.label" data-fold-unit>
                 <!-- Closing a chat is lossless in every lane. -->
                 <template #actions>
                     <Button
@@ -326,6 +337,7 @@ defineExpose({ beginRename: actions.beginRename });
                     :live="turnInFlight(agent) ? liveOf(agent) : undefined"
                     :attention="lane.key === `attention`"
                     quiet
+                    data-fold-unit
                     @click="openAgent(agent, `peek`)"
                 />
                 <!-- Not a pager — the count itself is the point ("12 more open"), one press away rather than gone. -->
@@ -333,6 +345,7 @@ defineExpose({ beginRename: actions.beginRename });
                     v-if="lane.key === 'finished' && hiddenFinished > 0"
                     type="button"
                     :class="ui.addTile(`gap-1 rounded-lg py-1.5 text-2xs`)"
+                    data-fold-unit
                     @click="showAllFinished = !showAllFinished"
                 >
                     <Icon :name="showAllFinished ? 'chevron-up' : 'chevron-down'" class="text-2xs" />
