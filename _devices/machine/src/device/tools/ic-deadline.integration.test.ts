@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -38,14 +39,25 @@ afterAll(async () => {
     await rm(home, { recursive: true, force: true });
 });
 
+// Whether the process still runs. A zombie does not: the killed `sleep` is an orphan, re-parented to PID 1, and a CI job
+// container's PID 1 (`tail -f /dev/null`) never reaps it, so it stays in the table where kill(0) still finds it
+// (verify-core in run 36740950862). Its state is read off /proc where there is one; elsewhere kill(0) answers alone.
 const alive = (pid: number): boolean => {
     try {
         process.kill(pid, 0);
-        return true;
     } catch {
         // allow(silent-catch): ESRCH is the answer: no such process
         return false;
     }
+    let stat: string;
+    try {
+        stat = readFileSync(`/proc/${String(pid)}/stat`, "utf8");
+    } catch {
+        // allow(silent-catch): no /proc (macOS), or it went between the two reads: kill(0) has answered
+        return true;
+    }
+    // The state is the first field after the parenthesised name, which may itself hold spaces or parentheses.
+    return stat.charAt(stat.lastIndexOf(")") + 2) !== "Z";
 };
 
 test.skipIf(!posix.runs)(posix.title("a run past its deadline is stopped with the children it started, and says so"), async () => {
