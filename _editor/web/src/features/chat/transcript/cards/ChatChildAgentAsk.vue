@@ -69,8 +69,9 @@ const choose = async (): Promise<void> => {
 <template>
     <div class="flex min-w-0 flex-col gap-1.5">
         <span v-if="ask.task" class="text-xs leading-relaxed text-content/85">{{ ask.task }}</span>
-        <!-- The parent's own words to it, since "send this" names nothing by itself. -->
-        <p v-if="ask.message" class="line-clamp-6 whitespace-pre-wrap border-l-2 border-line pl-2 text-2xs leading-relaxed text-content/85">
+        <!-- The parent's own words to it, since "send this" names nothing by itself: set apart as quoted by a soft inset, not a
+             rule down its left edge. -->
+        <p v-if="ask.message" class="line-clamp-6 whitespace-pre-wrap rounded-md bg-content/5 px-2 py-1.5 text-2xs leading-relaxed text-content/85">
             {{ ask.message }}
         </p>
 

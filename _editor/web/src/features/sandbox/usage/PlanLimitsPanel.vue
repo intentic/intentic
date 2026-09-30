@@ -228,13 +228,10 @@ const roster = computed(() => {
         <RowNote variant="block">
             <div class="flex flex-col gap-6">
                 <div v-for="group in groups" :key="group.provider" class="flex gap-2">
-                    <!-- Rail: the mark plus a line showing how far the provider reaches. -->
-                    <div class="flex w-5 shrink-0 flex-col items-center gap-1.5">
-                        <span class="flex size-5 items-center justify-center rounded-md bg-content/10 text-content">
-                            <ProviderLogo :provider="group.provider" class="text-xs" />
-                        </span>
-                        <span class="w-px flex-1 bg-line-strong" aria-hidden="true" />
-                    </div>
+                    <!-- The mark alone, no rule under it: the column it leaves empty is what says the accounts belong to it. -->
+                    <span class="flex size-5 shrink-0 items-center justify-center rounded-md bg-content/10 text-content">
+                        <ProviderLogo :provider="group.provider" class="text-xs" />
+                    </span>
 
                     <div class="flex min-w-0 flex-1 flex-col gap-2">
                         <!-- `min-h-5` matches the mark's height, so the name's line holds steady whatever the metadata wraps to. -->
@@ -250,8 +247,8 @@ const roster = computed(() => {
                             }}</span>
                         </div>
 
-                        <!-- Indented one step from the provider's name; smaller, lighter, and markless, so an account heading can't read as another provider. -->
-                        <div class="flex flex-col gap-3 pb-1 pl-3">
+                        <!-- Flush with the provider's name, not indented past it; smaller, lighter and markless, so an account heading can't read as another provider. -->
+                        <div class="flex flex-col gap-3 pb-1">
                             <!-- Small provider: the meters themselves. Nothing that fits is folded away. -->
                             <template v-if="isInline(group)">
                                 <div v-for="row in group.rows" :key="row.id" class="flex flex-col gap-1.5">

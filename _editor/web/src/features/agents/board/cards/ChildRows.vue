@@ -8,14 +8,14 @@ import ChildGroupRow from "./ChildGroupRow.vue";
 import ChildRow from "./ChildRow.vue";
 import { CHILD_ROWS } from "./childRows";
 
-// THE AGENTS A CARD STARTED, hung from it on a rail rather than standing beside it as cards of their own (childFold):
-// the conversations it spawned and the subagents its runtime ran in-process alike. The rail drops from the card's
-// identity tile, so the rows read as the card's before a word of them is read, and it is the only chrome they get: no
-// border, no fill at rest, one line each. Top to bottom: a child asking what only the reader can give, wearing its ask;
-// the working ones, always in sight; then one row per thing the stopped ones stopped on, since fifteen children refused
-// by one provider are one fact about that provider, not fifteen; and the settled ones behind one quiet toggle, since an
-// orchestrator's thirty finished helpers are its history, not its news. Draws nothing on a board that provides no trays
-// (CHILD_ROWS), or for a card with nothing riding under it.
+// THE AGENTS A CARD STARTED, hung under it rather than standing beside it as cards of their own (childFold): the
+// conversations it spawned and the subagents its runtime ran in-process alike. Each row's first glyph starts under the
+// card's title, so the rows read as the card's before a word of them is read, and they get no chrome at all: no rule
+// down the left, no border, no fill at rest, one line each. Top to bottom: a child asking what only the reader can
+// give, wearing its ask; the working ones, always in sight; then one row per thing the stopped ones stopped on, since
+// fifteen children refused by one provider are one fact about that provider, not fifteen; and the settled ones behind
+// one quiet toggle, since an orchestrator's thirty finished helpers are its history, not its news. Draws nothing on a
+// board that provides no trays (CHILD_ROWS), or for a card with nothing riding under it.
 //
 // OPEN ONLY UNDER THE CARD BEING LOOKED AT. Drawn under every card, the trays turned each lane into a list of lists, and
 // every helper an unwatched card's runtime started or finished pushed a row in or out and shook every card below it.
@@ -78,7 +78,6 @@ const menu = (child: TrayChild, event: MouseEvent): void => {
         board?.menu?.(child, event);
     }
 };
-// Where the rail drops from: the middle of the card's identity tile, whichever card it hangs from.
 // THE FOLD. Grid rows (0fr to 1fr) re-resolved the track from its content every frame, and a CSS transition's clock
 // starts on the frame the class lands, which is the same frame the chat switches cards: the switch ate the first
 // frames and the fold arrived half done, then stuttered. So the height is measured once and animated in pixels, with
@@ -117,8 +116,8 @@ const animateHeight = (el: Element, to: (box: HTMLElement) => number, duration: 
         });
     });
 };
-// A shut tray with nothing in it is not drawn at all, not drawn zero tall: its rail's border still painted a sliver
-// under the card. `folding` keeps it drawn while the fold closes.
+// A shut tray with nothing in it is not drawn at all, not drawn zero tall: on a wallpaper its frosted strip
+// (wallpapers.css) still painted a sliver under the card. `folding` keeps it drawn while the fold closes.
 const folding = ref(false);
 const fold = {
     enter: (el: Element, done: () => void): void => animateHeight(el, (box) => box.scrollHeight || 1, 260, done),
@@ -130,7 +129,10 @@ const fold = {
         });
     },
 };
-const inset = computed(() => (props.rail ? `ml-6` : props.live ? `ml-7.5` : `ml-7`));
+// Where the rows start: the card's title edge (its border, padding, identity tile and the gap after it) less a row's
+// own `px-2`, so the glyph, not the hover wash, lines up with the title. RailCard: 1 + 12 + 24 + 8; AgentCard: 1 + 14
+// (16 live) + 28 + 10.
+const inset = computed(() => (props.rail ? `ml-9.25` : props.live ? `ml-11.75` : `ml-11.25`));
 </script>
 
 <template>
@@ -138,7 +140,7 @@ const inset = computed(() => (props.rail ? `ml-6` : props.live ? `ml-7.5` : `ml-
         v-if="board !== undefined && tray !== undefined"
         :role="shown || tray.asks.length > 0 ? `group` : undefined"
         :aria-label="label"
-        class="child-tray flex flex-col border-l border-line pl-1"
+        class="child-tray flex flex-col"
         :class="[inset, { hidden: !shown && !folding && tray.asks.length === 0 }]"
     >
         <!-- A child asking the reader keeps its row under any card: the one row that is news whichever card is looked at. -->

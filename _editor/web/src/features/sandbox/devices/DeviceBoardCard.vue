@@ -34,8 +34,8 @@ const lone = computed(() => (manySided(machine) ? undefined : machine.environmen
 
 <template>
     <RouterLink :to="deviceRoute(machine.key)" class="block">
-        <!-- `spine` hangs the sandbox lines off the machine's own mark, so a card reads as one machine's worth. -->
-        <Row :interactive="true" :chevron="true" :spine="hasBelow">
+        <!-- `indent` starts the sandbox lines under the machine's name, so a card reads as one machine's worth. -->
+        <Row :interactive="true" :chevron="true" :indent="hasBelow">
             <template #lead="{ mark }">
                 <span
                     class="flex shrink-0 items-center justify-center rounded-md bg-content/10 text-content"

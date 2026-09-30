@@ -35,7 +35,8 @@ const faqEntries = page.faq.map((entry) => ({ question: entry.question, answer: 
                 <a href={guidesHref("")} class="eyebrow transition-colors hover:text-link">Guides</a>
                 <h1 class="display mt-3 max-w-3xl text-3xl leading-tight font-semibold sm:text-4xl">{page.question}</h1>
 
-                <div class="mt-7 border-l-2 border-primary-600/50 pl-5 lg:pl-6">
+                {/* Flush with the question: its own eyebrow names it the answer, so no rule down its left. */}
+                <div class="mt-7">
                     <div class="eyebrow text-primary-400">The short answer</div>
                     <p class="mt-2 max-w-copy text-lg leading-relaxed text-content sm:text-xl">{page.answer}</p>
                 </div>

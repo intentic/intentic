@@ -79,12 +79,12 @@ const since = computed(() =>
 </script>
 
 <template>
-    <!-- The run rows' own left stripe, in the one tone a failing branch wears; the faint wash says this line speaks for all of them. -->
+    <!-- The faint danger wash, no edge stripe, says this line speaks for all the runs under it; its glyph sits on the rows' own left edge. -->
     <section
         :data-main-failure="`${failure.repo}:${failure.branch}`"
         :data-state="view.state"
         :aria-label="t(`mainFailure.title`, { branch: failure.branch })"
-        class="flex flex-col gap-1.5 border-l-4 border-l-danger bg-danger/5 py-2.5 pr-3 pl-4"
+        class="flex flex-col gap-1.5 bg-danger/5 py-2.5 pr-3 pl-4"
     >
         <div class="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
             <!-- What fails, and since when. `flex-auto`, not `flex-1`: sized by its words, so a narrow pane wraps the press

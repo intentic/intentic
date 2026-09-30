@@ -330,12 +330,8 @@ const { payload } = Astro.props;
         vertical-align: top;
         color: var(--color-muted);
     }
-    /* Nested content follows the cell's padding, not the table frame. */
-    .api-table td[data-depth="1"],
-    .api-table td[data-depth="2"],
-    .api-table td[data-depth="3"] {
-        border-left: 1px solid var(--color-line);
-    }
+    /* Nested content follows the cell's padding, not the table frame: the indent alone says a field sits inside the one
+       above it, with no rule down the left edge. */
     .api-table td[data-depth="1"] {
         padding-left: 1.65rem;
     }

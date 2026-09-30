@@ -165,7 +165,8 @@ const wrapperSelect = computed(() => (disabled ? `` : `ui-row-select`));
                 <template v-if="$slots[`meta`]" #meta><slot name="meta" /></template>
                 <template v-if="$slots[`control`]" #control><slot name="control" /></template>
 
-                <!-- The rail: inside <Row>'s padding so it aligns with the row above, offset by a hidden copy of the toggle cluster so it starts under the title. -->
+                <!-- The rail: inside <Row>'s padding so it aligns with the row above, offset by a hidden copy of the toggle cluster so it starts
+                     flush under the title. No rule beside it: the open row's wash and that indent already say whose evidence it is. -->
                 <template v-if="open && body === `rail`" #below>
                     <div class="flex" :class="gap">
                         <!-- Runs the full height of an open row so it can be clicked to close, not only from the header line above. -->
@@ -176,7 +177,7 @@ const wrapperSelect = computed(() => (disabled ? `` : `ui-row-select`));
                             </span>
                         </span>
                         <!-- `.stop`: this sits inside <Row>, whose row-wide handler would otherwise read a press on the evidence as "close what you just opened.". -->
-                        <div :id="bodyId" class="min-w-0 flex-1 cursor-auto border-l border-line-strong pl-3" @click.stop>
+                        <div :id="bodyId" class="min-w-0 flex-1 cursor-auto" @click.stop>
                             <slot name="below" />
                         </div>
                     </div>

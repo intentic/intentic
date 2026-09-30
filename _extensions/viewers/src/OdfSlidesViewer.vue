@@ -220,15 +220,20 @@ onBeforeUnmount(release);
     color: var(--color-muted);
     font-size: 0.7rem;
 }
+/* Speaker notes, set apart from the slide's label by a soft inset rather than a rule down their left edge. */
 .odf-deck :deep(.odf-slide-notes) {
     margin-top: 0.35rem;
-    border-left: 2px solid var(--color-line);
-    padding-left: 0.6rem;
+    border-radius: 0.375rem;
+    padding: 0.4rem 0.6rem;
+    background: color-mix(in srgb, var(--color-content) 5%, transparent);
     max-width: 48rem;
     color: var(--color-muted);
     font-size: 0.75rem;
 }
 .odf-deck :deep(.odf-slide-notes p) {
     margin: 0 0 0.2em;
+}
+.odf-deck :deep(.odf-slide-notes p:last-child) {
+    margin-bottom: 0;
 }
 </style>

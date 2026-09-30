@@ -51,19 +51,18 @@ export const summarizeOrigins = (
 export interface OriginHue {
     readonly text: string;
     readonly chip: string;
-    readonly rail: string;
 }
 
 // Full class strings, never interpolated: Tailwind's scanner only sees literals.
 export const ORIGIN_HUES: readonly OriginHue[] = [
-    { text: `text-file-code`, chip: `bg-file-code/15 text-file-code`, rail: `bg-file-code` },
-    { text: `text-file-style`, chip: `bg-file-style/15 text-file-style`, rail: `bg-file-style` },
-    { text: `text-file-config`, chip: `bg-file-config/15 text-file-config`, rail: `bg-file-config` },
-    { text: `text-file-data`, chip: `bg-file-data/15 text-file-data`, rail: `bg-file-data` },
-    { text: `text-file-image`, chip: `bg-file-image/15 text-file-image`, rail: `bg-file-image` },
-    { text: `text-file-doc`, chip: `bg-file-doc/15 text-file-doc`, rail: `bg-file-doc` },
-    { text: `text-file-shell`, chip: `bg-file-shell/15 text-file-shell`, rail: `bg-file-shell` },
-    { text: `text-file-archive`, chip: `bg-file-archive/15 text-file-archive`, rail: `bg-file-archive` },
+    { text: `text-file-code`, chip: `bg-file-code/15 text-file-code` },
+    { text: `text-file-style`, chip: `bg-file-style/15 text-file-style` },
+    { text: `text-file-config`, chip: `bg-file-config/15 text-file-config` },
+    { text: `text-file-data`, chip: `bg-file-data/15 text-file-data` },
+    { text: `text-file-image`, chip: `bg-file-image/15 text-file-image` },
+    { text: `text-file-doc`, chip: `bg-file-doc/15 text-file-doc` },
+    { text: `text-file-shell`, chip: `bg-file-shell/15 text-file-shell` },
+    { text: `text-file-archive`, chip: `bg-file-archive/15 text-file-archive` },
 ];
 
 export const originHue = (id: string): OriginHue => {

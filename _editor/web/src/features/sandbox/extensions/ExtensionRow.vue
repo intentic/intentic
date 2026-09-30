@@ -123,21 +123,16 @@ const consequences = computed<string[]>(() => {
     return [...deferred, `${entry.dependents.length} configured connection${plural} (${named}) keep their config but lose their Capabilities card`];
 });
 
-// A left-edge accent, not a full tint: a bare `border-danger` would repaint this list's row divider too, since that's a
-// border on the row itself.
-const ACCENT: Record<string, string> = { danger: `border-l-danger/70`, warning: `border-l-warning/70` };
-const accent = computed(() => (entry.state.attention ? ACCENT[entry.state.variant] : undefined));
-
 // Muted by default: anything the host explained without ranking as an exception is a fact, not an alarm.
 const TONE: Record<string, string> = { danger: `text-danger`, warning: `text-warning` };
 const tone = computed(() => TONE[entry.state.variant] ?? `text-muted`);
 </script>
 
 <template>
-    <!-- Open extensions share one tinted header and detail block. -->
+    <!-- Open extensions share one tinted header and detail block. A row that needs attention says so with its badge, its
+         tinted detail and the section pinned above the rest, not with an edge stripe as well. -->
     <DisclosureRow
-        class="@container border-l-2"
-        :class="accent ?? `border-l-transparent`"
+        class="@container"
         body="drawer"
         :open="expanded"
         @update:open="emit(`update:expanded`, !expanded)"

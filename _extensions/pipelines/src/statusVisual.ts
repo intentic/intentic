@@ -17,8 +17,6 @@ export interface StatusTone {
     readonly circle: string;
     // Wash behind a job card in the graph. DagGraph owns the card's border, so this is fill only.
     readonly tint: string;
-    // The run row's left accent stripe.
-    readonly rowBorder: string;
     // A solid dot/stripe fill.
     readonly bar: string;
 }
@@ -34,8 +32,6 @@ export const STATUS_TONE: Record<PipelineStatus, StatusTone> = {
         text: `text-muted`,
         circle: `border-dashed border-muted/60 bg-transparent text-muted`,
         tint: `bg-transparent`,
-        // Full opacity, unlike canceled/skipped's /40: a queued run must stay findable down the left edge.
-        rowBorder: `border-l-muted`,
         bar: `bg-muted`,
     },
     success: {
@@ -46,7 +42,6 @@ export const STATUS_TONE: Record<PipelineStatus, StatusTone> = {
         text: `text-success`,
         circle: `border-success bg-success/20 text-success`,
         tint: `bg-success/5`,
-        rowBorder: `border-l-success`,
         bar: `bg-success`,
     },
     failed: {
@@ -57,7 +52,6 @@ export const STATUS_TONE: Record<PipelineStatus, StatusTone> = {
         text: `text-danger`,
         circle: `border-danger bg-danger/20 text-danger`,
         tint: `bg-danger/5`,
-        rowBorder: `border-l-danger`,
         bar: `bg-danger`,
     },
     running: {
@@ -68,7 +62,6 @@ export const STATUS_TONE: Record<PipelineStatus, StatusTone> = {
         text: `text-info`,
         circle: `border-info bg-info/20 text-info`,
         tint: `bg-info/5`,
-        rowBorder: `border-l-info`,
         bar: `bg-info`,
     },
     canceled: {
@@ -79,7 +72,6 @@ export const STATUS_TONE: Record<PipelineStatus, StatusTone> = {
         text: `text-subtle`,
         circle: `border-subtle/60 bg-subtle/10 text-subtle`,
         tint: `bg-transparent`,
-        rowBorder: `border-l-subtle/40`,
         bar: `bg-subtle`,
     },
     skipped: {
@@ -90,7 +82,6 @@ export const STATUS_TONE: Record<PipelineStatus, StatusTone> = {
         text: `text-subtle`,
         circle: `border-subtle/60 bg-subtle/10 text-subtle`,
         tint: `bg-transparent`,
-        rowBorder: `border-l-subtle/40`,
         bar: `bg-subtle`,
     },
 };

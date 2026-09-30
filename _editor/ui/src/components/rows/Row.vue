@@ -57,9 +57,10 @@ const {
     // part of the row's press target. Judged by what the click landed on, so a title that stops being a
     // link can't leave this stale.
     headlineGuard?: boolean;
-    // Hangs `#below` off a spine under the row's own lead mark, not the text column, so a sub-block reads as
-    // belonging to this row. Width comes from a hidden second copy of the lead, never a typed number.
-    spine?: boolean;
+    // Starts `#below` under the row's title rather than at its edge, so a sub-block reads as belonging to this row
+    // by where it begins, with no rule drawn beside it. Width comes from a hidden second copy of the lead, never a
+    // typed number.
+    indent?: boolean;
 }>();
 
 const emit = defineEmits<{ headerClick: [event: MouseEvent] }>();
@@ -194,15 +195,12 @@ const picked = as === `button`;
             <!-- The `#before` column, mirrored and hidden, so `#below` aligns under the headline instead of a typed number going stale. -->
             <span v-if="$slots[`before`]" class="invisible flex shrink-0 items-center" inert aria-hidden="true"><slot name="before" /></span>
             <div :class="$slots[`before`] ? `min-w-0 flex-1` : `contents`">
-                <!-- The spine's own lead mirror, absolutely positioned to centre on that column without adding to its height. -->
-                <div v-if="spine" class="flex" :class="TIERS[tier].gap">
-                    <div class="relative flex shrink-0 justify-center">
-                        <span class="invisible flex items-center" :class="TIERS[tier].gap" inert aria-hidden="true">
-                            <slot name="lead" :mark="mark" :icon-class="TIERS[tier].icon" />
-                            <Icon v-if="icon !== undefined" :name="icon" :class="TIERS[tier].icon" />
-                        </span>
-                        <span class="absolute inset-y-0 w-px bg-line-strong" aria-hidden="true" />
-                    </div>
+                <!-- The lead, mirrored and hidden, so the block starts where the title does. -->
+                <div v-if="indent" class="flex" :class="TIERS[tier].gap">
+                    <span class="invisible flex shrink-0 items-center" :class="TIERS[tier].gap" inert aria-hidden="true">
+                        <slot name="lead" :mark="mark" :icon-class="TIERS[tier].icon" />
+                        <Icon v-if="icon !== undefined" :name="icon" :class="TIERS[tier].icon" />
+                    </span>
                     <div class="min-w-0 flex-1"><slot name="below" /></div>
                 </div>
                 <slot v-else name="below" />

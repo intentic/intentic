@@ -822,20 +822,21 @@ const seamWidth = computed<number>({
                                         v-for="file in bucket.rows"
                                         :key="file.key"
                                         :ref="(el) => setRowEl(file.key, el)"
-                                        class="group/file flex items-center border-l-2 transition-colors"
+                                        class="group/file flex items-center transition-colors"
                                         :class="[
+                                            // Tint only, no edge stripe: the same way the workspace's Changes list marks its picked row.
                                             file.key === selectedKey
-                                                ? 'border-primary-500 bg-primary-600/10'
+                                                ? 'bg-primary-600/10'
                                                 : file.blocked !== undefined
-                                                  ? 'border-warning/70 bg-warning/5 hover:bg-overlay'
-                                                  : 'border-transparent hover:border-line-strong hover:bg-overlay',
+                                                  ? 'bg-warning/5 hover:bg-overlay'
+                                                  : 'hover:bg-overlay',
                                             // Under a header the rows step in, so the module reads as holding them.
                                             viewOf(group.repo).named ? 'pl-2' : '',
                                         ]"
                                     >
                                         <button
                                             type="button"
-                                            class="flex min-w-0 flex-1 items-center gap-2 py-1.5 pl-2 pr-1.5 text-left max-md:min-h-11"
+                                            class="flex min-w-0 flex-1 items-center gap-2 py-1.5 pl-2.5 pr-1.5 text-left max-md:min-h-11"
                                             :class="isViewed(file) ? 'opacity-50' : ''"
                                             @click="select(file)"
                                         >

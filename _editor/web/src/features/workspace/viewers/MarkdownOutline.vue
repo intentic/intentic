@@ -53,13 +53,15 @@ watch(
         />
 
         <div ref="list" class="ui-softscroll -mr-1 min-h-0 flex-1 overflow-y-auto pr-1">
+            <!-- Only the section being read is marked on the left edge; a rule down every row would be a track with nothing on it
+                 but that one mark. The transparent edge holds its width so the mark never shifts the text. -->
             <button
                 v-for="row in rows"
                 :key="row.index"
                 :data-outline-row="row.index"
                 type="button"
-                class="block w-full cursor-pointer border-l py-1 pr-2 text-left text-xs leading-snug transition-[color,border-color] duration-[90ms] ease-out hover:border-line-strong hover:text-content focus-visible:border-primary-500 focus-visible:text-content focus-visible:outline-none"
-                :class="row.index === active ? `border-link text-content` : `border-line text-subtle`"
+                class="block w-full cursor-pointer border-l py-1 pr-2 text-left text-xs leading-snug transition-[color,border-color] duration-[90ms] ease-out hover:text-content focus-visible:border-primary-500 focus-visible:text-content focus-visible:outline-none"
+                :class="row.index === active ? `border-link text-content` : `border-transparent text-subtle`"
                 :style="{ paddingLeft: inset(row.heading) }"
                 :aria-current="row.index === active ? `true` : undefined"
                 @click="emit(`jump`, row.index)"

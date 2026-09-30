@@ -293,14 +293,6 @@ const showRowOrigins = (repo: RepoChanges, path: string): boolean => {
     return !(ids.length === 1 && ids[0] === originFilter.value);
 };
 
-// Indent guide and origin rail share one column, stretched to the row's full height so a run of one agent's
-// files reads as one block. `bg-content/15`, not `border-line`, which measured near-invisible on this panel's
-// background.
-const railClass = (repo: RepoChanges, path: string): string => {
-    const first = originsOf(repo, path)[0];
-    return first === undefined ? `bg-content/15` : originHue(first).rail;
-};
-
 // Sides in git's order (conflicts block everything, then staged, then unstaged); an empty section renders
 // nothing. The origin filter is applied here once, so every row, verb and count downstream inherits it for free.
 interface SideView {
@@ -1634,11 +1626,11 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                                         rowIndent(group, section.side),
                                     ]"
                                 >
-                                    <!-- The indent guide and origin rail share one full-height column. -->
-                                    <span class="w-0.5 shrink-0 self-stretch rounded-full" :class="railClass(group, change.path)"></span>
+                                    <!-- No indent guide or origin rail down the left: the status mark sits under its heading's first letter, and
+                                         the origin chips below carry which agent touched the file. -->
                                     <button
                                         type="button"
-                                        class="flex min-w-0 flex-1 items-center gap-1.5 py-0.5 pl-0.5 text-left max-md:min-h-11"
+                                        class="flex min-w-0 flex-1 items-center gap-1.5 py-0.5 pl-2 text-left max-md:min-h-11"
                                         @click="clickRow({ repo: group.repo, side: section.side, path: change.path }, change, $event)"
                                         @dblclick="openDiff(group.repo, section.side, change, 'keep')"
                                     >

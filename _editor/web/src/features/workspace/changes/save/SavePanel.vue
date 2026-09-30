@@ -225,12 +225,12 @@ const ROW_ACTION = `opacity-0 transition-opacity focus-visible:opacity-100 group
                         t(`workspace.savePanel.fileCount`, { count: group.files.length }, group.files.length)
                     }}</span>
                 </div>
-                <!-- The rail is the other half of the heading: it says these rows belong to the name above them, which
-                     indentation alone stops saying the moment a heading scrolls off. -->
+                <!-- Each file's mark starts under the heading's name (`pl-7`: the heading's `px-2`, its icon and its `gap-2`),
+                     which with the sticky heading says whose files these are; no rule down the left to say it again. -->
                 <div
                     v-for="file in group.files"
                     :key="file.key"
-                    class="cv-file group/file ml-3.5 flex min-w-0 items-start gap-2 border-l border-line py-1.5 pl-2 pr-1 transition-colors hover:bg-overlay"
+                    class="cv-file group/file flex min-w-0 items-start gap-2 py-1.5 pl-7 pr-1 transition-colors hover:bg-overlay"
                 >
                     <button
                         type="button"

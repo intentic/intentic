@@ -13,7 +13,9 @@ const { headings, variant } = Astro.props;
 const worthIt = headings.length >= 3;
 
 const rowBase = "block border-l py-1 text-xs leading-snug transition-colors";
-const rowIdle = "border-line text-subtle hover:border-line-strong hover:text-content";
+// Idle rows keep a transparent edge, so only the section being read is marked on the left and the mark never shifts
+// the text; the same active-only edge as the sidebar (DocsSidebar), not a track down every row.
+const rowIdle = "border-transparent text-subtle hover:text-content";
 // Which row is current is applied by the scroll-spy script, not here: it depends on scroll position.
 const indent = (heading: DocsHeading): string => (heading.level === 3 ? "pl-5" : "pl-3");
 ---

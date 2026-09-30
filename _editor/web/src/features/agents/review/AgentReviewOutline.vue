@@ -45,7 +45,7 @@ const NAME_WIDTHS = [`w-40`, `w-28`, `w-52`, `w-36`, `w-44`, `w-24`, `w-48`];
                 <div
                     v-for="index in rows"
                     :key="index"
-                    class="flex items-center gap-2 border-l-2 border-transparent py-1.5 pl-2 pr-1.5 max-md:min-h-11"
+                    class="flex items-center gap-2 py-1.5 pl-2.5 pr-1.5 max-md:min-h-11"
                 >
                     <!-- Status mark, file glyph, name, size: the four things every row in this list carries. -->
                     <span class="skeleton block h-2.5 w-2.5 shrink-0" />

@@ -422,12 +422,12 @@ const pickedTier = ref(`collaborator`);
                     <RowGroup label="Loading">
                         <SkeletonRows :rows="4" description control />
                     </RowGroup>
-                    <!-- Default `#below` is full-width; `spine` hangs it off the row's mark for a block, not a continuing sentence. -->
-                    <RowGroup label="Below: flush, and on a spine">
+                    <!-- Default `#below` is full-width; `indent` starts it under the row's name, for a block rather than a continuing sentence. -->
+                    <RowGroup label="Below: flush, and indented">
                         <Row icon="sitemap" title="Flush" description="The default: the block starts at the group's edge">
                             <template #below><p class="text-2xs text-muted">A sentence continuing the description wants this.</p></template>
                         </Row>
-                        <Row spine icon="credit-card" title="On a spine" description="Hangs off the row's name, under its mark">
+                        <Row indent icon="credit-card" title="Indented" description="Starts under the row's name, no rule beside it">
                             <template #below>
                                 <Verdict tone="content" value="10" unit="of 40 turns judged simple" evidence="4 down-routed · 2 vetoed" />
                             </template>

@@ -271,11 +271,11 @@ watch(
     color: var(--ink-subtle);
 }
 
+/* The ember wash alone marks it, a shade deeper for having no edge stripe to lean on. */
 .gate-error {
     margin-bottom: 1.25rem;
     padding: 0.7rem 0.9rem;
-    border-left: 2px solid var(--ember);
-    background: color-mix(in srgb, var(--ember) 8%, transparent);
+    background: color-mix(in srgb, var(--ember) 12%, transparent);
     font-size: 0.8125rem;
     line-height: 1.5;
     text-align: left;

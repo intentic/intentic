@@ -93,13 +93,13 @@
         box-shadow: var(--wallpaper-card-drop);
     }
 
-    /* A card's tray of children is rows, not a card: a frosted strip under them, open on its rule side, so a row's
-       small type never lands on the brightest part of the picture. */
+    /* A card's tray of children is rows, not a card: a frosted strip under them, so a row's small type never lands on
+       the brightest part of the picture. */
     [data-wallpaper] .agents-board .child-tray {
         background-color: var(--wallpaper-tray);
         -webkit-backdrop-filter: blur(10px);
         backdrop-filter: blur(10px);
-        border-radius: 0 0.5rem 0.5rem 0;
+        border-radius: 0.5rem;
         padding-bottom: 0.25rem;
     }
 }
