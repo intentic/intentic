@@ -165,7 +165,8 @@ it(`carries the subagents its runtime ran in-process in the same tray, and a spa
     expect(cards(board)).toEqual([`Focus agent: ship the release`]);
     expect(rows(board)).toEqual([
         expect.stringMatching(/^rotate the keys/),
-        expect.stringMatching(/^map the UI.*Explore/),
+        // Its kind is the title's hover now, not a word on the row (childLook.test.ts asserts it).
+        expect.stringMatching(/^map the UI/),
         expect.stringMatching(/^port the parser/),
     ]);
     expect(fold(board)?.textContent?.trim()).toBe(t(`agents.childRows.finished`, { count: 3 }));
@@ -173,7 +174,7 @@ it(`carries the subagents its runtime ran in-process in the same tray, and a spa
     fold(board)?.click();
     await settle();
     expect(rows(board).slice(3)).toEqual([
-        expect.stringMatching(/^scan the logsExplore/),
+        expect.stringMatching(/^scan the logs/),
         expect.stringMatching(/^write the notes/),
         expect.stringMatching(/^audit the deps/),
     ]);
@@ -186,9 +187,11 @@ it(`shows an in-process subagent's transcript in its parent's chat from its row`
     roster([inProcess(`call-map`, { description: `map the UI`, model: `claude-opus-x`, effort: `low` })]);
     const board = await mountBoard();
 
-    // Its kind and what it runs on, in words on the row's second line: the model it was served and the tier's word.
-    // The kind now sits beside the clock on the title row (ChildRow), so the facts line follows the clock.
-    expect(rows(board)).toEqual([expect.stringMatching(/^map the UIExplore.*Claude Opus XLow$/)]);
+    // What it runs on: the model it was served, right of the title on a wide row and under it on a narrow one (the row's
+    // container query shows one, which this DOM does not apply, so both are read), and the tier as the ladder's rungs,
+    // whose word is the ladder's label rather than text on the line. Its kind is the title's hover (childLook.test.ts).
+    expect(rows(board)).toEqual([expect.stringMatching(/^map the UIClaude Opus X.*Claude Opus X$/)]);
+    expect(tray(board)?.querySelector(`[aria-label="${t(`shared.effort`)}: Low"]`)).not.toBeNull();
     const row = tray(board)?.querySelector<HTMLButtonElement>(`button`);
     row?.click();
     await settle();
