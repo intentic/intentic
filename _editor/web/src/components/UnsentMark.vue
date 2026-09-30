@@ -12,8 +12,10 @@ import { useT } from "@intentic/ui/i18n";
 const t = useT();
 
 const props = defineProps<{
-    // Opening words of the unsent message; absent for an attachment or queued message, hover then omits the words.
-    preview?: string;
+    // Opening words of the unsent message, or how to read them; absent for an attachment or queued message, hover then
+    // omits the words. A reader keeps the read in this mark: a composer's words change on every keystroke, and read in
+    // the slot of the card that holds the mark (ChatTabRow), each one redrew the whole card and everything on it.
+    preview?: string | (() => string | undefined);
     // When the composer first held it (Conversation.draftAt); absent for a chat restored with no stamp.
     at?: number;
 }>();
@@ -26,13 +28,14 @@ const aged = computed(() => Math.floor(now.value / AGE_STEP_MS) * AGE_STEP_MS);
 
 // Reports what the card doesn't show: how long it has sat, and its opening words; a missing part drops out.
 const age = computed(() => (props.at === undefined ? undefined : relativeTime(props.at, aged.value)));
+const words = computed(() => (typeof props.preview === `function` ? props.preview() : props.preview));
 const hint = computed<Tip>(() => ({
     title: t(`common.unsentMark.notSent`),
     rows: [{ label: t(`common.unsentMark.written`), value: age.value ?? `` }],
-    note: props.preview,
+    note: words.value,
 }));
 // The same parts in one line, since a tooltip itself isn't announced.
-const spoken = computed(() => [t(`common.unsentMark.notSent`), age.value, props.preview].filter((part) => part !== undefined).join(`, `));
+const spoken = computed(() => [t(`common.unsentMark.notSent`), age.value, words.value].filter((part) => part !== undefined).join(`, `));
 </script>
 
 <template>
