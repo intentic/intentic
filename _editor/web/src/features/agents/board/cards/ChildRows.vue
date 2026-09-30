@@ -19,7 +19,7 @@ import { CHILD_ROWS } from "./childRows";
 //
 // OPEN ONLY UNDER THE CARD BEING LOOKED AT. Drawn under every card, the trays turned each lane into a list of lists, and
 // every helper an unwatched card's runtime started or finished pushed a row in or out and shook every card below it.
-// So a tray opens, with a short fold rather than a jump, only under the card the reader is on (`focused`), under a card
+// So a tray opens, fading in and leaving at once, only under the card the reader is on (`focused`), under a card
 // whose child is on screen (the ring must be on something drawn), and under every card while a filter is on (a result
 // set must not hide its own matches). Every other card counts its family on itself instead (ChildCount), which moves no
 // card's height. The one exception is a child asking what only the reader can give: that is news, not history, and a
@@ -79,6 +79,48 @@ const menu = (child: TrayChild, event: MouseEvent): void => {
     }
 };
 // Where the rail drops from: the middle of the card's identity tile, whichever card it hangs from.
+// THE FOLD. Grid rows (0fr to 1fr) re-resolved the track from its content every frame, and a CSS transition's clock
+// starts on the frame the class lands, which is the same frame the chat switches cards: the switch ate the first
+// frames and the fold arrived half done, then stuttered. So the height is measured once and animated in pixels, with
+// the start held two frames, past the switch's render, and the box contains its own layout and paint so a frame
+// reflows the rows' box, not the rows.
+const EASE = `cubic-bezier(0.4, 0, 0.2, 1)`;
+const afterPaint = (run: () => void): void => {
+    requestAnimationFrame(() => requestAnimationFrame(run));
+};
+const reduced = (): boolean => window.matchMedia(`(prefers-reduced-motion: reduce)`).matches;
+const animateHeight = (el: Element, to: (box: HTMLElement) => number, duration: number, done: () => void): void => {
+    // A page without the Web Animations API (a test DOM) folds at once.
+    if (!(el instanceof HTMLElement) || !(`animate` in el)) {
+        done();
+        return;
+    }
+    const opening = to(el) > 0;
+    const from = opening ? 0 : el.offsetHeight;
+    const target = opening ? el.scrollHeight : 0;
+    el.style.overflow = `hidden`;
+    el.style.contain = `layout paint`;
+    el.style.height = `${from}px`;
+    el.style.opacity = opening ? `0` : `1`;
+    afterPaint(() => {
+        const frames = reduced()
+            ? [{ opacity: opening ? 0 : 1 }, { opacity: opening ? 1 : 0 }]
+            : [
+                  { height: `${from}px`, opacity: opening ? 0 : 1 },
+                  { height: `${target}px`, opacity: opening ? 1 : 0 },
+              ];
+        const run = el.animate(frames, { duration, easing: EASE, fill: `forwards` });
+        run.addEventListener(`finish`, () => {
+            el.style.cssText = ``;
+            run.cancel();
+            done();
+        });
+    });
+};
+const fold = {
+    enter: (el: Element, done: () => void): void => animateHeight(el, (box) => box.scrollHeight || 1, 260, done),
+    leave: (el: Element, done: () => void): void => animateHeight(el, () => 0, 220, done),
+};
 const inset = computed(() => (props.rail ? `ml-6` : props.live ? `ml-7.5` : `ml-7`));
 </script>
 
@@ -107,18 +149,10 @@ const inset = computed(() => (props.rail ? `ml-6` : props.live ? `ml-7.5` : `ml-
                 @menu="(event) => menu(child, event)"
             />
         </div>
-        <!-- The rest folds open and shut on its grid row's height (0fr to 1fr), so the cards below slide rather than jump; only the fade is kept for a reader who asked for less motion. -->
-        <Transition
-            enter-active-class="transition-[grid-template-rows,opacity] duration-200 ease-out *:overflow-hidden motion-reduce:transition-opacity"
-            leave-active-class="transition-[grid-template-rows,opacity] duration-150 ease-in *:overflow-hidden motion-reduce:transition-opacity"
-            enter-from-class="grid-rows-[0fr] opacity-0"
-            enter-to-class="grid-rows-[1fr]"
-            leave-from-class="grid-rows-[1fr]"
-            leave-to-class="grid-rows-[0fr] opacity-0"
-        >
-            <div v-if="shown" class="grid">
-                <!-- Two boxes, so the padding is inside what the fold clips: a box's own padding is never squeezed, and would jump in and out. -->
-                <div class="min-h-0">
+        <!-- The rest folds open and shut (useFold): measured pixel heights on the Web Animations clock, started a frame late. -->
+        <Transition :css="false" @enter="fold.enter" @leave="fold.leave">
+            <div v-if="shown">
+                <div>
                     <div class="flex flex-col" :class="tray.asks.length === 0 ? `pt-1` : ``">
                         <ChildRow
                             v-for="child in tray.lead"
