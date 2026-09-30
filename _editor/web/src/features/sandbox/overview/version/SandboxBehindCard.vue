@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { machinesOf } from "@intentic/sandbox-contract";
-import { Button, Code, CopyButton, DisclosureRow, Notice, Row, RowGroup, RowNote, StatusBadge } from "@intentic/ui";
+import { Button, Code, CopyButton, DisclosureRow, Notice, Row, RowGroup, RowNote, StatusBadge, type Tip } from "@intentic/ui";
 import { computed, ref, watchEffect } from "vue";
 import {
     appBehind,
@@ -12,7 +12,7 @@ import {
     missingRoutes,
     unknownDaemonRoutes,
 } from "../useDaemonRoutes";
-import { agreementLine, appParty, driftAreas, KIND_BADGE, KIND_ICON, KIND_TONE, kindImpact, kindTag, sandboxParty } from "./driftReport";
+import { appParty, driftAreas, KIND_BADGE, KIND_ICON, KIND_TONE, kindImpact, kindTag, sandboxParty } from "./driftReport";
 import { contractUncompiled, readContractFreshness, uncompiledRoutes } from "../contractFreshness";
 import { useEnvironment } from "../../environment/useEnvironment";
 import { runSeveringDeviceCommand, useDevices, useHostHolding } from "../../devices/useDevices";
@@ -67,6 +67,21 @@ const hubWork = useHubWork();
 const restarting = ref(false);
 const restarted = ref(false);
 const failed = ref<string | undefined>(undefined);
+// What the button does, on hover rather than as two lines under it. The note heads off the other button: the Update
+// card's "Rebuild from checkout" builds a whole new image and takes minutes, and this gap doesn't need it.
+const restartTip = computed<Tip | undefined>(() =>
+    hostId.value === undefined || restarting.value || restarted.value
+        ? undefined
+        : {
+              title: t(`sandbox.sandboxBehindCard.restartTipTitle`),
+              rows: [
+                  { label: t(`sandbox.sandboxBehindCard.restartTipOn`), value: hostId.value },
+                  { label: t(`sandbox.sandboxBehindCard.restartTipTakes`), value: t(`sandbox.sandboxBehindCard.restartTipAboutMinute`) },
+                  { label: t(`sandbox.sandboxBehindCard.restartTipKeeps`), value: t(`sandbox.sandboxBehindCard.restartTipKeepsWhat`) },
+              ],
+              note: t(`sandbox.sandboxBehindCard.restartTipNote`),
+          },
+);
 // A refusal (an older container with no checkout recorded, a device with commands switched off) hands the command
 // back, since the button has just proved it cannot do this here.
 const showCommand = computed(() => hostId.value === undefined || failed.value !== undefined);
@@ -187,15 +202,6 @@ const kindsOf = (area: (typeof areas.value)[number]) =>
                 />
             </template>
         </Row>
-        <!-- The one reassuring line here, and only where something drifted: on a card about features the sandbox
-             simply lacks, "everything else lines up" is about the wrong set and contradicts the heading above it. -->
-        <Row
-            v-if="daemonDrifted && !wholesaleNote && agreementLine"
-            icon="check"
-            tone="success"
-            :title="agreementLine.label"
-            :description="agreementLine.what"
-        />
         <RowNote v-if="wholesaleNote" icon="arrows-h" tone="warning">{{ wholesaleNote }}</RowNote>
 
         <!-- One row per part of the app, not per route: one shared piece of code reaches dozens of routes across
@@ -233,21 +239,18 @@ const kindsOf = (area: (typeof areas.value)[number]) =>
                             v-if="hostId"
                             :label="restarting ? t(`sandbox.sandboxBehindCard.restarting`) : t(`sandbox.sandboxBehindCard.restartSandbox`)"
                             size="small"
+                            v-tooltip.top="restartTip"
                             :loading="restarting"
                             @click="void restartOnDevice()"
                         >
                             <template #icon><Icon name="refresh" /></template>
                         </Button>
-                        <span v-if="hostId" class="text-2xs text-subtle">
+                        <!-- Only while it's happening or done: what the button does, before it's pressed, lives in its hover card. -->
+                        <span v-if="hostId && (restarted || restarting)" class="text-2xs text-subtle">
                             <template v-if="restarted">{{ t(`sandbox.sandboxBehindCard.rebuiltOnReloadPage`, { hostId }) }}</template>
-                            <template v-else-if="restarting">{{ t(`sandbox.sandboxBehindCard.restartingOn`, { hostId }) }}</template>
-                            <template v-else>{{ t(`sandbox.sandboxBehindCard.rebuildsYourCodeOn`, { hostId }) }}</template>
+                            <template v-else>{{ t(`sandbox.sandboxBehindCard.restartingOn`, { hostId }) }}</template>
                         </span>
                     </div>
-                    <!-- THE OTHER BUTTON, NAMED BEFORE IT IS FOUND. The Update card on this tab carries "Rebuild from
-                         checkout", which builds a whole new image and takes minutes; this one restarts the sandbox that
-                         is already running, and the quick one is the right answer to a version gap. -->
-                    <p v-if="!restarted" class="text-2xs text-subtle">{{ t(`sandbox.sandboxBehindCard.restartIsQuicker`) }}</p>
                     <Notice v-if="failed" tone="warning" class="text-2xs">{{ failed }}</Notice>
                     <div v-if="showCommand" class="flex flex-wrap items-center gap-2">
                         <span class="text-2xs text-subtle">{{

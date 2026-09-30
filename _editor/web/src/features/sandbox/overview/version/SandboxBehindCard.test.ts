@@ -123,8 +123,6 @@ it(`names both sides in words that don't assume you built this`, () => {
     expect(text).toContain(`the editor you're looking at, in this browser tab`);
     expect(text).toContain(`Your sandbox`);
     expect(text).toContain(`the machine running your code`);
-    expect(text).toContain(`Everything else`);
-    expect(text).toContain(`the rest of this page and your sandbox understand each other`);
 });
 
 // The vocabulary rule, enforced rather than trusted: these are the words that made two earlier versions of this card

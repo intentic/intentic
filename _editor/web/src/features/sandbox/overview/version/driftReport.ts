@@ -1,6 +1,6 @@
 import { t } from "@intentic/ui/i18n";
 import { computed } from "vue";
-import { appBehind, comparedRouteCount, daemonBehind, driftedRoutes, missingRoutes, unknownDaemonRoutes } from "../useDaemonRoutes";
+import { appBehind, daemonBehind, driftedRoutes, missingRoutes, unknownDaemonRoutes } from "../useDaemonRoutes";
 
 // WHO IS FAILING TO TALK TO WHOM, IN WORDS SOMEONE WHO DID NOT WRITE THIS WOULD USE. The raw diff is three lists of
 // dotted route names (`agent.send`, `sessions.list`), which on its own says "7 routes disagree" — a sentence about the
@@ -207,11 +207,3 @@ export const sandboxParty = (where: string | undefined): DriftParty => ({
     age: ages().sandbox,
 });
 
-// The only reassuring thing on the card, and worth saying: most of what these two do together is fine, so this is a
-// few features misbehaving rather than a broken sandbox. Silent when the two sides never compared enough to know.
-// A full row, not a one-line note: it answers the same question as the rows around it (which parts, and how they are).
-export const agreementLine = computed<{ label: string; what: string } | undefined>(() =>
-    comparedRouteCount.value === 0
-        ? undefined
-        : { label: t(`sandbox.driftReport.agreementLabel`), what: t(`sandbox.driftReport.agreementWhat`) },
-);
