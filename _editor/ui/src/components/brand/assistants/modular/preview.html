@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Persona avatar assets · Intentic</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="preview.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <div><p class="eyebrow">INTENTIC / AVATAR ASSETS</p><h1>A familiar face.<br />A clear specialty.</h1></div>
+        <button id="theme" type="button">Light background</button>
+      </header>
+      <section class="workbench" aria-label="Mix and match preview">
+        <div class="hero"><div id="selected-avatar"></div><span id="selection-label"></span></div>
+        <div class="controls">
+          <p class="eyebrow">MIX & MATCH</p>
+          <h2>One body. Your combination.</h2>
+          <p class="intro">Choose a color and an accessory. The friendly face and gold crown stay familiar.</p>
+          <label class="field-label" for="color">01 / Body color</label>
+          <div id="swatches" class="swatches" role="group" aria-label="Color presets"></div>
+          <div class="custom-color"><input id="color" type="color" value="#8db7d8" /><label for="color">Custom color</label><output id="hex">#8DB7D8</output></div>
+          <label class="field-label" for="accessory">02 / Handheld accessory</label>
+          <select id="accessory"></select>
+          <p class="note">Artwork preview. Persona matching comes later.</p>
+        </div>
+      </section>
+      <section aria-labelledby="library-title">
+        <div class="section-heading"><h2 id="library-title">Accessory library</h2><span>Every accessory works with every color</span></div>
+        <div id="library" class="library"></div>
+      </section>
+      <section class="sizes-section" aria-labelledby="size-title">
+        <div><p class="eyebrow">AT A GLANCE</p><h2 id="size-title">Actual display sizes</h2><p class="intro">Props lead at card size. Color and silhouette carry the smallest faces.</p></div>
+        <div id="sizes" class="sizes"></div>
+      </section>
+      <footer>Separate transparent artwork layers · Shared color treatment · No persona assignments</footer>
+    </main>
+    <script type="module" src="preview.mjs"></script>
+  </body>
+</html>

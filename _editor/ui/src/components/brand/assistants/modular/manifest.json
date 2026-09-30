@@ -1,0 +1,402 @@
+{
+  "version": 1,
+  "canvas": [
+    1024,
+    1024
+  ],
+  "description": "One shared clay companion, independently chosen body color and handheld accessory. No persona-name mapping.",
+  "layerOrder": [
+    "body",
+    "crown",
+    "accessory",
+    "hands"
+  ],
+  "colorization": {
+    "space": "sRGB",
+    "grayscale": true,
+    "tableInput": [
+      0,
+      0.25,
+      0.5,
+      0.75,
+      1
+    ],
+    "tableOutput": [
+      "0",
+      "0.10",
+      "channel * 0.60",
+      "channel",
+      "1"
+    ],
+    "appliesTo": [
+      "body",
+      "hands"
+    ]
+  },
+  "palette": [
+    {
+      "id": "coral",
+      "label": "Coral",
+      "hex": "#E59891"
+    },
+    {
+      "id": "amber",
+      "label": "Amber",
+      "hex": "#DDB465"
+    },
+    {
+      "id": "sage",
+      "label": "Sage",
+      "hex": "#9BB58D"
+    },
+    {
+      "id": "teal",
+      "label": "Teal",
+      "hex": "#70B8AE"
+    },
+    {
+      "id": "sky",
+      "label": "Sky",
+      "hex": "#8DB7D8"
+    },
+    {
+      "id": "periwinkle",
+      "label": "Periwinkle",
+      "hex": "#A1A2D9"
+    },
+    {
+      "id": "orchid",
+      "label": "Orchid",
+      "hex": "#BE96CB"
+    },
+    {
+      "id": "sand",
+      "label": "Sand",
+      "hex": "#CFB792"
+    }
+  ],
+  "layers": {
+    "body": {
+      "src": "layers/body.png",
+      "sourceSize": [
+        1254,
+        1254
+      ],
+      "sourceRect": [
+        175,
+        230,
+        899,
+        959
+      ],
+      "placement": [
+        150,
+        192,
+        724,
+        773
+      ],
+      "tint": true
+    },
+    "crown": {
+      "src": "layers/crown.png",
+      "sourceSize": [
+        1254,
+        1254
+      ],
+      "sourceRect": [
+        35,
+        186,
+        1185,
+        877
+      ],
+      "placement": [
+        357,
+        34,
+        310,
+        230
+      ],
+      "tint": false
+    },
+    "leftHand": {
+      "src": "layers/hands.png",
+      "sourceSize": [
+        1254,
+        1254
+      ],
+      "sourceRect": [
+        31,
+        540,
+        411,
+        219
+      ],
+      "placement": [
+        170,
+        716,
+        184,
+        98
+      ],
+      "tint": true
+    },
+    "rightHand": {
+      "src": "layers/hands.png",
+      "sourceSize": [
+        1254,
+        1254
+      ],
+      "sourceRect": [
+        814,
+        540,
+        411,
+        219
+      ],
+      "placement": [
+        670,
+        716,
+        184,
+        98
+      ],
+      "tint": true
+    }
+  },
+  "accessories": [
+    {
+      "id": "terminal",
+      "label": "Code",
+      "object": "Terminal laptop",
+      "src": "accessories/terminal.png",
+      "sourceSize": [
+        1484,
+        1060
+      ],
+      "sourceRect": [
+        71,
+        92,
+        1343,
+        884
+      ],
+      "placement": [
+        240,
+        556,
+        544,
+        356
+      ],
+      "tint": false
+    },
+    {
+      "id": "palette",
+      "label": "Design",
+      "object": "Paint palette",
+      "src": "accessories/palette.png",
+      "sourceSize": [
+        1402,
+        1122
+      ],
+      "sourceRect": [
+        59,
+        99,
+        1298,
+        929
+      ],
+      "placement": [
+        260,
+        548,
+        510,
+        371
+      ],
+      "tint": false
+    },
+    {
+      "id": "magnifier",
+      "label": "Research",
+      "object": "Magnifying glass",
+      "src": "accessories/magnifier.png",
+      "sourceSize": [
+        1254,
+        1254
+      ],
+      "sourceRect": [
+        105,
+        86,
+        1080,
+        1085
+      ],
+      "placement": [
+        290,
+        548,
+        442,
+        370
+      ],
+      "tint": false,
+      "hands": {
+        "left": [
+          212,
+          698,
+          180,
+          96
+        ],
+        "right": [
+          632,
+          792,
+          180,
+          96
+        ]
+      }
+    },
+    {
+      "id": "scroll",
+      "label": "Writing",
+      "object": "Parchment scroll",
+      "src": "accessories/scroll.png",
+      "sourceSize": [
+        1508,
+        1043
+      ],
+      "sourceRect": [
+        28,
+        91,
+        1452,
+        846
+      ],
+      "placement": [
+        242,
+        576,
+        540,
+        319
+      ],
+      "tint": false
+    },
+    {
+      "id": "book",
+      "label": "Learning",
+      "object": "Open book",
+      "src": "accessories/book.png",
+      "sourceSize": [
+        1508,
+        1043
+      ],
+      "sourceRect": [
+        22,
+        101,
+        1464,
+        881
+      ],
+      "placement": [
+        240,
+        568,
+        544,
+        346
+      ],
+      "tint": false
+    },
+    {
+      "id": "compass",
+      "label": "Planning",
+      "object": "Compass",
+      "src": "accessories/compass.png",
+      "sourceSize": [
+        1254,
+        1254
+      ],
+      "sourceRect": [
+        148,
+        24,
+        955,
+        1161
+      ],
+      "placement": [
+        335,
+        546,
+        354,
+        374
+      ],
+      "tint": false,
+      "hands": {
+        "left": [
+          200,
+          718,
+          208,
+          110
+        ],
+        "right": [
+          616,
+          718,
+          208,
+          110
+        ]
+      }
+    },
+    {
+      "id": "sprout",
+      "label": "Growth",
+      "object": "Potted sprout",
+      "src": "accessories/sprout.png",
+      "sourceSize": [
+        1254,
+        1254
+      ],
+      "sourceRect": [
+        52,
+        114,
+        1159,
+        1050
+      ],
+      "placement": [
+        310,
+        550,
+        404,
+        372
+      ],
+      "tint": false,
+      "hands": {
+        "left": [
+          204,
+          766,
+          210,
+          111
+        ],
+        "right": [
+          610,
+          766,
+          210,
+          111
+        ]
+      }
+    },
+    {
+      "id": "shield",
+      "label": "Safety",
+      "object": "Shield",
+      "src": "accessories/shield.png",
+      "sourceSize": [
+        1254,
+        1254
+      ],
+      "sourceRect": [
+        114,
+        58,
+        1026,
+        1140
+      ],
+      "placement": [
+        335,
+        548,
+        354,
+        392
+      ],
+      "tint": false,
+      "hands": {
+        "left": [
+          198,
+          700,
+          200,
+          106
+        ],
+        "right": [
+          626,
+          700,
+          200,
+          106
+        ]
+      }
+    }
+  ]
+}

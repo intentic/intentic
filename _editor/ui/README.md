@@ -63,6 +63,38 @@ flowchart LR
   `components/brand/assistants/` depicts soft clay mascots with Khmer lotus crowns and individual props; its
   `generation.json` records the prompts. Larger faces gently bob and breathe; toolbar faces stay still and
   `prefers-reduced-motion` stops animation. Browse the characters and actual sizes at `/kit#assistants`.
+  A separate, asset-only [modular set](src/components/brand/assistants/modular/manifest.json) prepares the next
+  version: one tintable body, matching foreground hands, a fixed gold crown and interchangeable large props.
+  The application still uses the original illustrations; the modular set has no persona-name assignments.
+
+## Modular avatar artwork
+
+The transparent PNG masters live in `src/components/brand/assistants/modular/`: `layers/` holds the shared
+body, crown and hands; `accessories/` holds the terminal laptop, palette, magnifier, scroll, book, compass,
+sprout and shield. [generation.json](src/components/brand/assistants/modular/generation.json) records the
+built-in image generator's prompts. The neutral body and hands accept any hex color; the manifest includes
+a starting palette. Gold and accessory colors remain independent of that choice.
+
+The manifest is the assembly specification. Coordinates use a 1024-square canvas. For each layer,
+`sourceSize` describes the unchanged PNG, `sourceRect` selects its artwork and `placement` is the destination
+rectangle, all in pixels (`x, y, width, height`). Preserve aspect ratio and center the selected rectangle in
+the destination. Draw body, crown, accessory, then hands; accessory `hands` positions override the shared
+pose when needed. Colorize only body and hands: first desaturate, then apply the manifest's per-channel
+five-stop transfer table in sRGB, preserving alpha. This keeps highlights and dark facial features while
+changing the clay color. Each hand samples one half of the same hands PNG.
+
+The [interactive asset catalogue](src/components/brand/assistants/modular/preview.html) demonstrates the
+composition without importing application code. Serve this directory over HTTP (the page fetches its
+manifest); for example, from this package:
+
+```sh
+python3 -m http.server 47159 --bind 127.0.0.1 --directory src/components/brand/assistants/modular
+# Open http://127.0.0.1:47159/preview.html
+```
+
+Use the color swatches or custom picker, switch accessories and backgrounds, and inspect the 22/36/64/96px
+samples. Card-size props carry the specialty; the smallest toolbar faces primarily carry color and silhouette.
+The [visual overview](src/components/brand/assistants/modular/overview.png) shows every preset combination.
 
 ## Layout
 
