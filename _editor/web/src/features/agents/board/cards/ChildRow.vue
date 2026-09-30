@@ -12,8 +12,8 @@ import RunFacts from "./RunFacts.vue";
 // One child riding under its parent's card (childFold), in two lines. The first says which child and how it stands: its
 // glyph, its title, and how long it has worked or when it settled, or its ask, in the card's own pill, when it asks what
 // only the reader can give (its one press opens its chat, where the ask is answered). The second, quieter, says what it
-// is: the kind or provider that tells it apart, and what it runs on (RunFacts), the model and tier a reader otherwise
-// could not tell from its parent's; on a row wide enough for both (the button's own @container), it rides the first
+// is: what it runs on (RunFacts), the model and tier a reader otherwise
+// could not tell from its parent's (its kind or provider is only the title's hover, childLook); on a row wide enough for both (the button's own @container), it rides the first
 // line, right of the title, and the row stays one line tall. Everything else — the branch, the cost, the diff — is its own chat's to say, one
 // press away. Either kind of child draws here, from one reading (childLook): a subagent its parent's runtime ran
 // in-process has no chat of its own, so its press shows its transcript in its parent's, and it has no review or menu.
@@ -75,8 +75,6 @@ const menu = (event: MouseEvent): void => {
             <span class="min-w-0 flex-1 truncate text-xs" :class="look.quiet ? 'text-muted' : 'text-content'" v-tooltip.top="look.titleHint">
                 <span v-for="(run, at) in titleRuns" :key="at" :class="run.hit ? 'rounded-sm bg-primary-600/30 text-content' : ''">{{ run.text }}</span>
             </span>
-            <!-- Beside the clock, not on a line of its own: the kind is a quiet aside, and gives way before the title. -->
-            <span v-if="look.tag !== undefined" class="max-w-24 shrink truncate text-2xs text-subtle">{{ look.tag }}</span>
             <!-- Right of the title when the row has room for both; the title still gives way first. -->
             <span v-if="look.run !== undefined" class="hidden shrink-0 items-center text-2xs text-subtle @md:flex">
                 <RunFacts :run="look.run" />

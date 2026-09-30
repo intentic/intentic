@@ -5,7 +5,6 @@ import {
     ChangeStatusMark,
     ui,
     explorerColorClass,
-    formatDayMonth,
     iconForEntry,
     ResizeSeam,
     SegmentedControl,
@@ -43,6 +42,7 @@ import ChangeRowName from "../../../components/ChangeRowName.vue";
 import ModuleLabel from "../../../components/ModuleLabel.vue";
 import AgentConflictReport from "./AgentConflictReport.vue";
 import AgentScratchReport from "./AgentScratchReport.vue";
+import AgentHistoryStrip from "./AgentHistoryStrip.vue";
 import AgentReviewOutline from "./AgentReviewOutline.vue";
 import DiffSkeleton from "../../workspace/viewers/DiffSkeleton.vue";
 import ReviewGroupCheck from "./ReviewGroupCheck.vue";
@@ -229,9 +229,6 @@ const absorbedNote = computed(() => {
 // The committed work: clicking a row here reads it directly instead of pushing a workspace tab and hunting
 // through a commit graph. The graph is still offered as a secondary act for questions a file list can't answer
 // (what else was in that commit, what came before).
-// Through the kit rather than a formatter built here: these dates have to move with the app's language like every
-// other one on screen, and a hand-built `Intl` instance is frozen at whatever the locale was when the module loaded.
-const historyStamp = (authored: number): string => formatDayMonth(authored);
 // Shown only with several commits; with one the summary above has already named it.
 const manyCommits = computed(() => history.commits.value.length > 1);
 
@@ -704,44 +701,15 @@ const seamWidth = computed<number>({
             </p>
         </div>
 
-        <!-- Where the committed work went, shown only while `history` is the active filter, since it isn't what the reader is doing otherwise. -->
-        <div
+        <!-- Where the committed work went, shown only while `history` is the active filter, since it isn't what the reader is doing otherwise. One line; the rest opens over the list on hover. -->
+        <AgentHistoryStrip
             v-if="filter === 'history' && history.commits.value.length > 0"
-            class="mx-2 mt-2 flex shrink-0 flex-col gap-1 rounded-md border border-success/40 bg-success/10 px-2 py-1.5"
-        >
-            <span class="inline-flex items-center gap-1 text-2xs font-medium text-success">
-                <Icon name="check" class="text-2xs" />{{ t(`agents.agentReviewPanel.in`) }}
-                {{ remoteName === undefined ? "your" : `${remoteName}'s` }} {{ t(`agents.agentReviewPanel.history`) }}
-            </span>
-            <p class="text-2xs text-muted">
-                {{ t(`agents.agentReviewPanel.committedWorkNotDifference`) }}
-            </p>
-            <button
-                v-for="commit in history.commits.value"
-                :key="commit.sha"
-                type="button"
-                class="flex items-center gap-1.5 rounded px-1 py-0.5 text-left transition-colors"
-                :class="graphs.get(commit.repo) === undefined ? 'cursor-default' : 'hover:bg-overlay'"
-                :disabled="graphs.get(commit.repo) === undefined"
-                @click="openGitHistory(commit.repo)"
-                v-tooltip.bottom="graphs.get(commit.repo) === undefined ? undefined : t(`agents.agentReviewPanel.gitHistory`)"
-            >
-                <span class="shrink-0 rounded bg-overlay px-1 py-px font-mono text-2xs text-muted">{{ commit.short }}</span>
-                <span class="min-w-0 flex-1 truncate text-2xs text-content" v-tooltip.bottom.overflow="commit.subject">{{ commit.subject }}</span>
-                <span class="shrink-0 text-2xs text-subtle">{{
-                    t(
-                        `agents.agentReviewPanel.commitLine`,
-                        { author: commit.author, when: historyStamp(commit.at), count: commit.changes.length },
-                        commit.changes.length,
-                    )
-                }}</span>
-                <Icon v-if="graphs.get(commit.repo) !== undefined" name="sitemap" class="shrink-0 text-2xs text-subtle" />
-            </button>
-            <!-- Absorbed but unattributable: reached main by no commit here; said explicitly, not silently dropped. -->
-            <p v-if="history.unaccounted.value > 0" class="text-2xs text-subtle">
-                {{ t(`agents.agentReviewPanel.unaccounted`, { count: history.unaccounted.value }, history.unaccounted.value) }}
-            </p>
-        </div>
+            :commits="history.commits.value"
+            :unaccounted="history.unaccounted.value"
+            :remote-name="remoteName"
+            :graphs="graphs"
+            @open-graph="openGitHistory"
+        />
 
         <!-- History loads only once absorbed work is reported, skipping a flash of "nothing here" first. -->
         <template v-if="waiting">

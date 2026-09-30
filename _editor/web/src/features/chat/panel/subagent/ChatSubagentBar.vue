@@ -17,7 +17,7 @@ import { relativeTime } from "../../models/catalog";
 //   whose it is: the parent, as the way back, a breadcrumb above the rest;
 //   which it is and how it stands: its title, with its standing and clock in one pill at the end (childLook, the same
 //   glyph and clock its row in the parent's tray wears);
-//   what it is: its kind, and the model and tier it runs on (RunFacts), where the composer's picker would name them;
+//   what it is: the model and tier it runs on (RunFacts; its kind is only the title's hover), where the composer's picker would name them;
 //   what the reader can do: one short line on why there is no box, and the presses there are instead.
 //
 // A spawned subagent is a conversation of its own, so the reader may still speak to it directly ("Write to it") and stop
@@ -39,8 +39,6 @@ const t = useT();
 const look = computed(() => childLook(props.child, props.provider));
 const now = useNow(() => look.value.working);
 const spawned = computed(() => !inProcess(props.child));
-// The kind of subagent it ran as, or the provider a spawned child runs on when no model chip's mark says it (childLook).
-const kind = computed(() => look.value.tag);
 // The clock the pill carries: how long it has worked, else when it settled.
 const clock = computed(() =>
     look.value.working && look.value.since !== undefined && look.value.since > 0
@@ -66,7 +64,7 @@ const clock = computed(() =>
             </button>
             <!-- Which it is, and how it stands: the title leads, its standing and clock close the line in one pill. -->
             <div class="flex min-w-0 items-center gap-2">
-                <span class="min-w-0 flex-1 truncate text-sm font-medium text-content">{{ look.title }}</span>
+                <span class="min-w-0 flex-1 truncate text-sm font-medium text-content" v-tooltip.top="look.titleHint">{{ look.title }}</span>
                 <span
                     class="ui-status-pill flex shrink-0 items-center gap-1.5 text-2xs tabular-nums"
                     :class="look.working ? 'bg-link/10 font-medium text-link' : 'bg-content/5 text-subtle'"
@@ -83,13 +81,9 @@ const clock = computed(() =>
                     <span>{{ clock ?? look.glyph.label }}</span>
                 </span>
             </div>
-            <!-- What it is: its kind and what it runs on, each a chip, where the composer's picker would name them. A spawned
-                 child's tag names only its provider, whose mark the model chip already wears. -->
-            <div v-if="kind !== undefined || look.run !== undefined" class="flex min-w-0 flex-wrap items-center gap-1.5 pt-0.5">
-                <span v-if="kind !== undefined" class="ui-status-pill flex shrink-0 items-center gap-1 bg-content/5 text-2xs text-muted">
-                    <Icon name="robot" class="shrink-0 text-2xs text-subtle" aria-hidden="true" />{{ kind }}
-                </span>
-                <RunFacts v-if="look.run !== undefined" :run="look.run" chips />
+            <!-- What it runs on, each a chip, where the composer's picker would name them. -->
+            <div v-if="look.run !== undefined" class="flex min-w-0 flex-wrap items-center gap-1.5 pt-0.5">
+                <RunFacts :run="look.run" chips />
             </div>
         </div>
         <!-- What the reader can do instead of typing: why there is no box, and the presses there are. -->

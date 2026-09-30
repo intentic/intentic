@@ -24,8 +24,9 @@ import { inProcess, subagentTitle, type TrayChild } from "../view/childFold";
 
 export interface ChildLook {
     readonly title: string;
-    // The title's hover, for the one row whose press does not open its own chat: an in-process subagent has none, and
-    // its work is in its parent's, on the card of the call that started it.
+    // The title's hover: the short word that tells it apart (the kind of subagent an in-process one ran as, or the
+    // provider a spawned child runs on when that is not its parent's), which no row or bar draws on its own line, and
+    // for an in-process subagent where its press goes, having no chat of its own.
     readonly titleHint: Tip | undefined;
     // Its standing, in the card's own glyphs (agentStatusMeta, subagentStatusMeta); settled rows in the ledger's ink.
     readonly glyph: { readonly icon: IconName; readonly spin?: boolean; readonly label: string; readonly class: string };
@@ -43,9 +44,6 @@ export interface ChildLook {
     readonly doing: string;
     // When it last moved, for a row that is not working.
     readonly at: number;
-    // The short word after the title that tells it apart: the provider a spawned child runs on when that is not its
-    // parent's and no recorded model already says so, or the kind of subagent an in-process one ran as.
-    readonly tag: string | undefined;
     // What it runs on, in words on the row and the bar alike, never behind a hover: the one fact a reader cannot guess
     // from the parent, since a child may run on any model at any tier. Only what was recorded; absent says nothing.
     readonly run: RunLook | undefined;
@@ -97,11 +95,14 @@ export const childLook = (child: TrayChild, provider: AgentProvider): ChildLook 
         const live = subagentLive(child);
         const meta = subagentStatusMeta(child.status);
         const title = subagentTitle(child) ?? t(`shared.subagent`);
-        // Claude's default type says nothing a row needs: only a chosen type (Explore, Plan…) earns the second line.
+        // Claude's default type says nothing worth a hover: only a chosen type (Explore, Plan…) is named.
         const tag = child.agentType === `general-purpose` ? undefined : (child.agentType ?? t(`shared.subagent`));
         return {
             title,
-            titleHint: { title: t(`agents.childRows.inProcess`), note: t(`agents.childRows.opensInThisChat`) },
+            titleHint: {
+                title: tag === undefined || tag === title ? t(`agents.childRows.inProcess`) : `${t(`agents.childRows.inProcess`)} · ${tag}`,
+                note: t(`agents.childRows.opensInThisChat`),
+            },
             glyph: live ? meta : { ...meta, class: `text-subtle` },
             hint: child.error ?? meta.label,
             ask: undefined,
@@ -110,7 +111,6 @@ export const childLook = (child: TrayChild, provider: AgentProvider): ChildLook 
             since: child.startedAt,
             doing: child.lastTool ?? t(`ui.status.working`),
             at: child.endedAt ?? child.activityAt,
-            tag: tag === title ? undefined : tag,
             // Its parent's provider: an in-process subagent runs inside the parent's own runtime.
             run: runLook(provider, child.model, child.effort, undefined),
         };
@@ -133,7 +133,7 @@ export const childLook = (child: TrayChild, provider: AgentProvider): ChildLook 
     const run = runLook(child.provider, child.model, child.effort, child.thinking);
     return {
         title: agentDisplayTitle(child),
-        titleHint: undefined,
+        titleHint: child.provider === provider ? undefined : { title: providerLabel(child.provider) },
         glyph,
         hint: child.failure ?? glyph.label,
         ask,
@@ -142,8 +142,6 @@ export const childLook = (child: TrayChild, provider: AgentProvider): ChildLook 
         since: child.startedAt,
         doing: activityLine(child) ?? t(`ui.status.working`),
         at: child.updatedAt,
-        // Named only when nothing else says it: a recorded model's name already tells the provider apart.
-        tag: child.provider === provider || run !== undefined ? undefined : providerLabel(child.provider),
         run,
     };
 };

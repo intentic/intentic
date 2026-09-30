@@ -1,4 +1,4 @@
-import type { SubagentSession } from "@intentic/sandbox-contract";
+import { providerLabel, type SubagentSession } from "@intentic/sandbox-contract";
 import { NO_ATTENTION } from "../../fleet/agentStatus";
 import type { FleetAgent } from "../../fleet/useAgents-fleet";
 import { childLook, runLook } from "./childLook";
@@ -50,12 +50,13 @@ describe(`what a child says it runs on`, () => {
     it(`reads a spawned child's own turn, on its own provider`, () => {
         const look = childLook(spawned({ provider: `codex`, model: `gpt-x`, effort: `low` }), `claude`);
         expect(look.run).toMatchObject({ provider: `codex`, modelId: `gpt-x`, effort: { label: `Low`, rung: 0 } });
-        expect(look.titleHint).toBeUndefined();
+        expect(look.titleHint).toEqual({ title: providerLabel(`codex`) });
+        expect(childLook(spawned({ provider: `claude` }), `claude`).titleHint).toBeUndefined();
     });
 
-    it(`drops Claude's default subagent type from the row, keeping a chosen one`, () => {
-        expect(childLook(inProcess({ description: `Scan`, agentType: `general-purpose` }), `claude`).tag).toBeUndefined();
-        expect(childLook(inProcess({ description: `Scan` }), `claude`).tag).toBe(`Explore`);
+    it(`names only a chosen subagent type, and only in the title's hover`, () => {
+        expect(childLook(inProcess({ description: `Scan`, agentType: `general-purpose` }), `claude`).titleHint?.title).toBe(`In-process`);
+        expect(childLook(inProcess({ description: `Scan` }), `claude`).titleHint?.title).toBe(`In-process · Explore`);
     });
 
     it(`reads an in-process subagent's served model and tier on its parent's provider, keeping the note on where it opens`, () => {
