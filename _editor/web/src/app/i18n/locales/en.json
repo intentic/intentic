@@ -4058,7 +4058,6 @@
             "addAnotherSandbox": "Add another sandbox",
             "addProjectOrFolder": "Add a project or folder",
             "alsoDelete": "Also delete it from",
-            "anotherSandboxSeparate": "A separate machine, with its own files, accounts and chats.",
             "cleanupCommand": "Cleanup command",
             "containerFilesHistoryGone": "— its container there stops, and its files and history are kept for a week before they are deleted.",
             "inProgress": "In progress",

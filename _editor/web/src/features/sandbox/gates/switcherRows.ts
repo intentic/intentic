@@ -6,8 +6,6 @@ import { t } from "@intentic/ui/i18n";
 export interface AddChoice {
     readonly to: string;
     readonly label: string;
-    // One line under a choice that needs it: what makes a second sandbox a different thing from a second project.
-    readonly note?: string;
     // The first, louder row; the other is the quieter alternative under it.
     readonly primary: boolean;
 }
@@ -26,7 +24,6 @@ export const addChoices = (input: { readonly runsHere: boolean; readonly project
         {
             to: `/setup`,
             label: t(`sandbox.sandboxSwitcher.addAnotherSandbox`),
-            note: t(`sandbox.sandboxSwitcher.anotherSandboxSeparate`),
             primary: false,
         },
     ];

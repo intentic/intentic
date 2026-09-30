@@ -492,7 +492,7 @@ const confirmRemove = async (): Promise<void> => {
                 />
             </button>
 
-            <!-- One add, or two where this computer already runs the sandbox: the second is quieter and says why it differs. -->
+            <!-- One add, or two where this computer already runs the sandbox: the second is quieter. -->
             <RouterLink
                 v-for="add in adds"
                 :key="add.label"
@@ -504,10 +504,7 @@ const confirmRemove = async (): Promise<void> => {
                 <span class="flex h-5 w-5 shrink-0 items-center justify-center">
                     <Icon :name="add.primary ? `plus` : `server`" :class="add.primary ? `text-base text-muted` : `text-xs text-subtle`" />
                 </span>
-                <span class="flex min-w-0 flex-1 flex-col self-center">
-                    <span>{{ add.label }}</span>
-                    <span v-if="add.note" class="text-2xs text-subtle">{{ add.note }}</span>
-                </span>
+                <span class="min-w-0 flex-1 self-center">{{ add.label }}</span>
             </RouterLink>
 
             <!-- Setups that were never finished, as their own section below Add sandbox, since they're errands, not places to go. -->

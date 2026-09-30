@@ -8,13 +8,12 @@ describe(`addChoices`, () => {
         expect(addChoices({ runsHere: false, projectsHome: true })).toEqual([{ to: `/setup`, label: `Add sandbox`, primary: true }]);
     });
 
-    it(`offers a project first, and another sandbox second with the line that says how it differs, on this computer`, () => {
+    it(`offers a project first and another sandbox second on this computer`, () => {
         expect(addChoices({ runsHere: true, projectsHome: true })).toEqual([
             { to: `/ext/projects`, label: `Add a project or folder`, primary: true },
             {
                 to: `/setup`,
                 label: `Add another sandbox`,
-                note: `A separate machine, with its own files, accounts and chats.`,
                 primary: false,
             },
         ]);
