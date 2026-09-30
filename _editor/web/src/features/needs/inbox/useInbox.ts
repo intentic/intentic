@@ -1,6 +1,6 @@
 import { roleAtLeast } from "@intentic/sandbox-contract";
 import { computed } from "vue";
-import { viewAsks } from "../../../core-views/registry";
+import { viewAsks } from "../../../lib/viewAsks";
 import { awaitingUser } from "../../agents/fleet/agentStatus";
 import { useAgents } from "../../agents/fleet/useAgents";
 import { useExtensions } from "../../extensions/useExtensions";

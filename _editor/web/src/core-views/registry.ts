@@ -1,11 +1,14 @@
-import type { Activation, CapabilityFacts, Disposable, RepoFacts, ViewAsk, ViewBadge, ViewRegistration } from "@intentic/extension-api";
+import type { Activation, CapabilityFacts, Disposable, RepoFacts, ViewBadge, ViewRegistration } from "@intentic/extension-api";
 import { computed, shallowRef } from "vue";
 import { type Audience, useAudience } from "../app/useAudience";
 import { useRole } from "../features/sandbox/secrets/useRole";
+import { registerViewAsksGatherer, viewAsks, type ViewAsks } from "../lib/viewAsks";
 import { guestAllowedPath } from "../shell/guestPaths";
 import { coreViews } from "./coreViews";
 import { badgeSpeaks } from "./viewBadge";
 import { t } from "@intentic/ui/i18n";
+
+export { viewAsks, type ViewAsks };
 
 // Runtime extension registry: core views seed it at load, third-party bundles join via api.views.register.
 // Module-level singleton ref, so every host (rail, mobile menu, ExtensionHost, DirectoryOperator) recomputes
@@ -252,11 +255,7 @@ export const detectActivations = (repos: readonly RepoFacts[], capabilities: rea
 // What each registered view says a person owes it (ViewRegistration.asks), for the Needs you inbox. Contained like
 // detect(): a throwing asks() costs that view its rows, not the inbox. Every registration, detected or not: an ask is
 // owed whatever the rail is showing, and a view whose extension is switched off is not registered at all.
-export interface ViewAsks {
-    readonly view: ViewRegistration;
-    readonly asks: readonly ViewAsk[];
-}
-export const viewAsks = (): readonly ViewAsks[] =>
+registerViewAsksGatherer(() =>
     views.value.flatMap(({ owner, registration }) => {
         if (registration.asks === undefined) {
             return [];
@@ -268,7 +267,8 @@ export const viewAsks = (): readonly ViewAsks[] =>
             console.error(`extension ${owner}/${registration.id}: asks() failed`, error);
             return [];
         }
-    });
+    }),
+);
 
 // An element's badge, contained like detect(): a throwing badge costs its own tile, not the whole rail.
 // Normalizes to undefined when there's nothing to draw, so callers only test for presence. `badgeSpeaks`
