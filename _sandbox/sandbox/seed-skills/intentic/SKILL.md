@@ -55,9 +55,11 @@ What the daemon does around you:
   turn waits, and a gated connected account is not loaded into your turn at all, so it can look unconnected.
   `secrets gates` says what is gated and by whom; `secrets request <id> --why "…"` asks for an account or
   connector. A secret may also have its **host guard** on (a connector's own credential starts with it on, set to
-  its service's hosts): it goes unasked only in one plain `curl`, `wget` or `git` command whose every URL is on its
-  list, and anything else that uses it waits for a person's click, whatever the safety judge thinks. `secrets gates`
-  shows both on one line per secret; `secrets hosts` shows and edits the guard.
+  its service's hosts): it goes unasked only when every host the command names is on its list and the reader can follow
+  where it goes — a `curl`, `wget` or `git` command, piped into a reader like `jq` or `head`, or joined to more by `&&`
+  or `;` — while a script, an interpreter, a subshell, `curl -L` or a host from a shell variable waits for a person's
+  click, whatever the safety judge thinks. `secrets gates` shows both on one line per secret; `secrets hosts` shows and
+  edits the guard.
 - **Needs** are what a conversation has asked people for: a connection, a secret, a grant, a release, a tool
   for the image. Each is a card in its chat, pinned above the composer and listed under **Needs you**; it
   outlives the turn that raised it, and its answer continues the conversation by itself. `needs` lists this

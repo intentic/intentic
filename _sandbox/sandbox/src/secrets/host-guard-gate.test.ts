@@ -139,15 +139,24 @@ describe("the decision table", () => {
         });
     });
 
-    it("asks when the destination cannot be read, and says why", async () => {
+    it("lets a use go by itself when it pipes into a utility that connects nowhere", async () => {
         const { deps, frames } = fake([GITHUB]);
-        const piped = `curl -H "x: {{secret:GITHUB_TOKEN}}" https://api.github.com/user | jq .login`;
+        const verdict = await createHostGuardGate(deps).check(
+            asked(command(`curl -H "Authorization: Bearer {{secret:GITHUB_TOKEN}}" https://api.github.com/user | jq .login`)),
+        );
+        expect(verdict).toEqual({ allow: true });
+        expect(frames).toEqual([]);
+    });
+
+    it("asks when a stage runs a program whose destination cannot be read, and says why", async () => {
+        const { deps, frames } = fake([GITHUB]);
+        const piped = `curl -H "x: {{secret:GITHUB_TOKEN}}" https://api.github.com/user | python3 -c 'import sys'`;
         const pending = createHostGuardGate(deps).check(asked(command(piped)));
         await answer(frames, "deny");
         expect(await pending).toEqual({
             allow: false,
             reason:
-                `${LISTS}, and where this command sends it cannot be read from it: it pipes into another command. ` +
+                `${LISTS}, and where this command sends it cannot be read from it: it runs \`python3\`, and where that sends things is not in the command's text. ` +
                 "The person declined: it was not used. Do not retry, and do not look for another way to send it there.",
         });
         expect(frames[0]).toMatchObject({ kind: "permission", title: "Send GITHUB_TOKEN where its host guard can't check?" });
@@ -234,7 +243,7 @@ describe("nobody to ask", () => {
             reason:
                 `${LISTS}, and this command would send it to evil.example. ` +
                 "There is no live conversation to ask in: it was not used. Do not retry: carry on without it, and say what you left undone. " +
-                "To use it without a card, write one curl, wget or git command whose every URL is on its list (`secrets hosts` shows it).",
+                "To use it without a card, keep every host the command names on its list (`secrets hosts` shows it) and let the reader follow where it goes: a curl, wget or git command — piped into a reader like `jq` or `head`, or joined to more by `&&` or `;` — is read, but a script, an interpreter (`python -c`, `node -e`), a subshell, `curl -L`, or a host that is a shell variable is not.",
         });
         expect(frames).toEqual([]);
     });

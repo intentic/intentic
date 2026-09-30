@@ -79,10 +79,10 @@ describe("readHosts", () => {
     });
 
     it("carries why a destination cannot be read", () => {
-        expect(readHosts(guards, ["GITHUB_TOKEN"], commandDestination("echo {{secret:GITHUB_TOKEN}}"))).toEqual({
+        expect(readHosts(guards, ["GITHUB_TOKEN"], commandDestination("node -e {{secret:GITHUB_TOKEN}}"))).toEqual({
             destination: "unreadable",
             guarded: [{ name: "GITHUB_TOKEN", hosts: ["api.github.com"] }],
-            why: "it runs `echo`, and where that sends things is not in the command's text",
+            why: "it runs `node`, and where that sends things is not in the command's text",
         });
     });
 });

@@ -10,13 +10,19 @@ be reached the command went through. So each secret's "Needs approval" section h
 must release it, and its host guard. The guard carries a list of hosts: exact ones (`api.github.com`) or every host
 under a domain (`*.githubusercontent.com`, which does not include `githubusercontent.com` itself).
 
-With the guard on, a use goes on its own only when its text is one plain `curl`, `wget` or `git` command whose every
-URL is on the list. Anything the check cannot read with confidence (a pipe, a shell variable, a script, a program it
-does not know, a flag that follows redirects or sends through a proxy) is treated like a host off the list: a card in
-the conversation names the secret, its hosts and where this use would send it, and the value goes nowhere until
-somebody clicks, whatever the safety judge said and whether or not it could be asked. A secret typed into a web page is
-held to the page's host. With nobody to ask, in an unattended turn, it is refused, and the agent is told how to use the
-secret without a card. On with no hosts listed, every use asks.
+With the guard on, a use goes on its own only when every host its text names is on the list and the reader can follow
+where the value goes. It reads the command a stage at a time — stages split on `|`, `&`, `;` and newline — and trusts
+one only when every stage is one it can account for: a `curl`, `wget` or `git` command whose destination is written out,
+a bare literal assignment (`H="Authorization: Bearer …"`), a redirection to `/dev/null` or between the command's own
+streams (`2>&1`), or a utility that opens no socket and runs nothing (`jq`, `head`, `grep`, `cd`, `echo`). So a `curl`
+piped into `jq`, a `cd` before it, and two of them joined by `&&` all go on their own; the value reaches a host only
+through the stage that spells it, and every host every stage names is on the list. Anything the check cannot read with
+confidence — a shell variable standing in for a host, a `$(…)` or a subshell, a script, an interpreter (`python -c`,
+`node -e`), a program it does not know, a flag that follows redirects or sends through a proxy — is treated like a host
+off the list: a card in the conversation names the secret, its hosts and where this use would send it, and the value
+goes nowhere until somebody clicks, whatever the safety judge said and whether or not it could be asked. A secret typed
+into a web page is held to the page's host. With nobody to ask, in an unattended turn, it is refused, and the agent is
+told how to use the secret without a card. On with no hosts listed, every use asks.
 
 With the guard off, it never asks: a command using the secret is left to the safety judge, as before, which lets it
 through when it cannot be reached. That is the right setting for a key an unattended automation sends on a schedule.
@@ -39,7 +45,7 @@ agent's judgement decides; it is not a firewall.
 ## Acceptance criteria
 
 - [ ] Each secret's row on the Secrets view has one "Needs approval" section with two switches: a named approver, and the host guard with its hosts (exact or `*.domain`)
-- [ ] With the guard on, a command using the secret goes without a card only when it is one plain `curl`, `wget` or `git` command whose every URL is on the list
+- [ ] With the guard on, a command using the secret goes without a card only when every host it names is on the list and every stage of it is one the reader can follow — a `curl`/`wget`/`git` command, a bare literal assignment, a redirection to `/dev/null` or between its own streams, or a socketless utility like `jq` — so a `curl` piped into `jq` or two joined by `&&` pass, and a pipe into an interpreter, a `$(…)`, a variable host or an unknown program still asks
 - [ ] With the guard on, a use aimed off the list, or whose destination cannot be read from its text, raises a card naming the secret, its hosts and the destination, whatever the safety judge said and whether or not it was reachable
 - [ ] With the guard on, a script that uses the secret always asks, a secret typed into a web page is checked against the page's host, and with no hosts listed every use asks
 - [ ] With the guard on, an unattended turn is refused rather than let through, and told how to use the secret without a card

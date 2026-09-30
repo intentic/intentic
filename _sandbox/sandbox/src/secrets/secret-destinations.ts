@@ -2,13 +2,17 @@ import { normalizeHost } from "@intentic/sandbox-contract";
 
 // Where one use of a secret would send it, read from the reference-form text before anything runs, for the host limit
 // (host-guard-gate.ts). Heuristic by nature, so it reads the other way round from a classifier: it proves nothing, and
-// every doubt is an answer of its own. `certain` is only ever said of one simple command run by a program whose
-// destination sits in its arguments (curl, wget, git), with every host it names readable and no shell feature that could
-// change them at run time. That is "every host the text names is these", never "this is safe"; the owner's list decides
-// the rest. The machine is not read at all: a .curlrc, a git config or /etc/hosts can still point a named host elsewhere.
+// every doubt is an answer of its own. `certain` is only ever said when a line splits into stages the reader can account
+// for one by one — a program whose destination sits in its arguments (curl, wget, git), a bare literal assignment, or a
+// utility that opens no socket and runs nothing (jq, grep, head, cd, echo, …) — joined by the plain separators `|`, `&`,
+// `;` and newline. A value reaches a host only through the stage that spells it, so a line every stage of which the
+// reader can name sends nowhere it does not name: `certain` collects the hosts of every stage, and one unreadable stage
+// (an interpreter, a subshell, a redirect, a run-time expansion in the wrong place) leaves the whole line unreadable.
+// That is "every host the text names is these", never "this is safe"; the owner's list decides the rest. The machine is
+// not read at all: a .curlrc, a git config or /etc/hosts can still point a named host elsewhere.
 
 export type Destination =
-    // Every host the use names; never empty.
+    // Every host the use names; empty when every stage is read and none connects anywhere (a value that stays inside).
     | { readonly certain: true; readonly hosts: readonly string[] }
     // Why it cannot be read, as a clause that finishes "…because ": the card and the refusal both say it.
     | { readonly certain: false; readonly why: string };
@@ -32,20 +36,49 @@ interface Word {
     readonly dynamic: boolean;
 }
 
-// Characters that end a simple command or send its input or output somewhere else, outside quotes.
+// Characters that break a line into separate stages, outside quotes: a pipe, a background `&`, a `;`, a newline. Each
+// run of them (so `&&`, `||`, `|&` too) ends the current stage and starts the next; each stage is read on its own. A
+// stage that names no host it would connect to cannot send the value anywhere, so a pipe into `jq` or a `cd` before a
+// `curl` no longer makes the destination unreadable — the stage itself is read, and only an unreadable stage refuses.
+const SEPARATORS: ReadonlySet<string> = new Set(["|", "&", ";", "\n"]);
+
+// Characters that run a command inside the command or open a scope its text no longer follows: each leaves the
+// destination unreadable, since what crosses them cannot be read from the words. A redirection (`<`, `>`) is read on its
+// own (readRedirect), since the common ones send nothing anywhere new.
 const OPERATORS: ReadonlyMap<string, string> = new Map([
-    ["|", "it pipes into another command"],
-    ["&", "it runs more than one command"],
-    [";", "it runs more than one command"],
-    ["\n", "it runs more than one command"],
-    ["<", "it redirects input or output"],
-    [">", "it redirects input or output"],
     ["(", "it opens a subshell"],
     [")", "it opens a subshell"],
     ["`", "it runs a command inside the command"],
     ["{", "it uses brace expansion"],
     ["}", "it uses brace expansion"],
 ]);
+
+const REDIRECTS = "it redirects input or output";
+
+// A redirection that sends nothing anywhere new: output or input joined to /dev/null (discarded), or one of the process's
+// own streams duplicated onto another (`2>&1`, `>&2`, `<&0`, `>&-`). Any other target — a file, `/dev/tcp/host/port`, a
+// heredoc (`<<`), a process substitution — is left unread, since what it writes there cannot be followed. The optional
+// leading `&` covers `&>`/`&>>` (both streams); a numeric file descriptor before the operator (`2>`) is stripped by the
+// caller, since it is not a word.
+const SAFE_REDIRECT = /^(?:(?:&?>>?|<>?)[ \t]*\/dev\/null(?![\w/])|[<>]&(?:\d+|-))/;
+
+// Reads a redirection at the cursor. A digit being built as a word is the file descriptor it applies to (`2` in `2>&1`),
+// not an argument, so it is dropped; any other word already built is a real argument and is kept. Returns undefined when
+// the redirection sends nothing anywhere new (the cursor has moved past it), else why it cannot be read.
+const readRedirect = (state: LexState): string | undefined => {
+    if (state.source.charAt(state.index) !== "&" && state.started && /^\d+$/.test(state.text)) {
+        state.text = "";
+        state.started = false;
+    } else {
+        finishWord(state);
+    }
+    const match = SAFE_REDIRECT.exec(state.source.slice(state.index));
+    if (match === null) {
+        return REDIRECTS;
+    }
+    state.index += match[0].length;
+    return undefined;
+};
 
 const SUBSTITUTES = "it runs a command inside the command";
 const EXPANDS = "a shell variable or expansion in it is only filled in when it runs";
@@ -54,10 +87,11 @@ const UNCLOSED = "a quote in it never closes";
 // A `$` that starts an expansion: a name, a positional or special parameter, `${`, `$(` or `$'`.
 const EXPANSION_START = /[A-Za-z_0-9{(@*#?$!'-]/;
 
-// The lexer's position and the word it is building.
+// The lexer's position, the word it is building, the stage's words so far, and every stage a separator has closed.
 interface LexState {
     readonly source: string;
-    readonly words: Word[];
+    readonly segments: Word[][];
+    words: Word[];
     index: number;
     text: string;
     dynamic: boolean;
@@ -71,6 +105,16 @@ const finishWord = (state: LexState): void => {
     state.text = "";
     state.dynamic = false;
     state.started = false;
+};
+
+// Closes the current stage at a separator or the end of the line; an empty run between separators (`&&`, a leading `;`)
+// adds no stage.
+const finishSegment = (state: LexState): void => {
+    finishWord(state);
+    if (state.words.length > 0) {
+        state.segments.push(state.words);
+        state.words = [];
+    }
 };
 
 // A single-quoted run: no escapes, no expansions.
@@ -154,6 +198,14 @@ const lexStep = (state: LexState): string | typeof COMMENT | undefined => {
     if (char === "#" && !state.started) {
         return COMMENT;
     }
+    if (char === "<" || char === ">" || (char === "&" && state.source.charAt(state.index + 1) === ">")) {
+        return readRedirect(state);
+    }
+    if (SEPARATORS.has(char)) {
+        finishSegment(state);
+        state.index += 1;
+        return undefined;
+    }
     const operator = OPERATORS.get(char);
     if (operator !== undefined) {
         return operator;
@@ -165,10 +217,10 @@ const lexStep = (state: LexState): string | typeof COMMENT | undefined => {
     return (READERS.get(char) ?? plainChar)(state);
 };
 
-// Splits one command into words the way a shell would, or says which shell feature makes that impossible to trust.
-// Deliberately narrower than a shell: anything this does not model is a reason, not a guess.
-const lex = (source: string): { readonly words: readonly Word[] } | Unreadable => {
-    const state: LexState = { source, words: [], index: 0, text: "", dynamic: false, started: false };
+// Splits one line into its stages, each a list of words the way a shell would, or says which shell feature makes that
+// impossible to trust. Deliberately narrower than a shell: anything this does not model is a reason, not a guess.
+const lex = (source: string): { readonly segments: readonly (readonly Word[])[] } | Unreadable => {
+    const state: LexState = { source, segments: [], words: [], index: 0, text: "", dynamic: false, started: false };
     while (state.index < source.length) {
         const step = lexStep(state);
         if (step === COMMENT) {
@@ -178,8 +230,8 @@ const lex = (source: string): { readonly words: readonly Word[] } | Unreadable =
             return { why: step };
         }
     }
-    finishWord(state);
-    return { words: state.words };
+    finishSegment(state);
+    return { segments: state.segments };
 };
 
 // The host a URL names, past the scheme and any userinfo (a token spelled before an `@` is not the host), before the port
@@ -665,20 +717,37 @@ const PROGRAMS: ReadonlyMap<string, (args: readonly Word[]) => Reach> = new Map(
     ["git", gitReach],
 ]);
 
+// Programs a stage may run and still send the value nowhere: they open no socket, run no other program, and change no
+// setting (a proxy, a config file, an alias, a PATH) a later stage's curl, wget or git would read. A stage of one of
+// these adds no host and hides none, so it neither carries the value out nor sets up a later stage to. What is left out
+// is deliberate: an interpreter (`python`, `node`, `perl`, `ruby`), a shell (`sh`, `bash`, `eval`, `source`), `awk` and
+// `sed` (each runs a command or opens a socket in some form), `xargs`, `find`, `env`, `tee`, `nc`, `ssh`, `docker` and
+// `gh` all stay unread, so a line that uses one still asks. A name not here is unknown, and leaves the line unreadable.
+const INERT_PROGRAMS: ReadonlySet<string> = new Set(['cd', 'pwd', 'echo', 'printf', 'true', 'false', ':', 'test', '[', 'sleep', 'date', 'mkdir', 'ls', 'dirname', 'basename', 'cat', 'head', 'tail', 'wc', 'cut', 'tr', 'sort', 'uniq', 'nl', 'rev', 'tac', 'fold', 'column', 'base64', 'grep', 'egrep', 'fgrep', 'rg', 'jq', 'comm']);
+
 // Every URL written anywhere in the text, a header or a body included: a list is a claim about every host the command
 // names, not only the one the program is pointed at.
 const URL_ANYWHERE = /[a-z][a-z0-9+.-]*:\/\/[^\s'"`)]*/gi;
 
 const ENV_ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
 
-// The program the command runs and what its arguments reach, or why neither can be trusted.
+// The program one stage runs and what its arguments reach, or why neither can be trusted.
 const programReach = (words: readonly Word[]): Reach => {
     const [program, ...args] = words;
     if (program === undefined) {
         return { why: "it runs nothing" };
     }
     if (ENV_ASSIGNMENT.test(program.text)) {
-        return { why: "it sets environment variables for the program, which can change where it connects" };
+        // A stage that is only `NAME=value` literals sets shell variables and runs nothing, so it sends nothing and
+        // steers nothing (an unexported name reaches no later program's environment). One with a program after the
+        // assignments puts them in that program's environment, which can change where it connects; a value filled in at
+        // run time (`A="$B"`) is not a literal the reader can stand behind.
+        return words.every((word) => ENV_ASSIGNMENT.test(word.text) && !word.dynamic)
+            ? { hosts: [] }
+            : { why: "it sets environment variables for the program, which can change where it connects" };
+    }
+    if (!program.dynamic && INERT_PROGRAMS.has(program.text)) {
+        return { hosts: [] };
     }
     const reach = program.dynamic ? undefined : PROGRAMS.get(program.text);
     if (reach === undefined) {
@@ -688,16 +757,26 @@ const programReach = (words: readonly Word[]): Reach => {
     return reach(args);
 };
 
-// Where a shell command would send what it carries: every host it names when its shape is simple enough to trust, else
-// why not.
+// Where a shell command would send what it carries: every host it names when every stage is one the reader can account
+// for, else why not. One unreadable stage answers for the whole line, since what it does with the value cannot be read.
 export const commandDestination = (command: string): Destination => {
     const text = command.trim().replace(REFERENCE, STAND_IN);
     const lexed = lex(text);
-    const reach = "why" in lexed ? lexed : programReach(lexed.words);
-    if ("why" in reach) {
-        return unreadable(reach.why);
+    if ("why" in lexed) {
+        return unreadable(lexed.why);
     }
-    const hosts = new Set(reach.hosts);
+    const hosts = new Set<string>();
+    for (const segment of lexed.segments) {
+        const reach = programReach(segment);
+        if ("why" in reach) {
+            return unreadable(reach.why);
+        }
+        for (const host of reach.hosts) {
+            hosts.add(host);
+        }
+    }
+    // A URL written anywhere — a header, a body, an argument of an inert stage — counts as a host the line names, so a
+    // value the reader cannot follow to it is still not sent there unasked.
     for (const match of text.matchAll(URL_ANYWHERE)) {
         const host = urlHost(match[0]);
         if (host === undefined) {

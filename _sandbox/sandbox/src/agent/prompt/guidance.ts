@@ -402,16 +402,19 @@ const ENTRIES: readonly GuidanceEntry[] = [
             "into your turn at all, so it can look unconnected: `secrets gates` says what is gated and by whom, and " +
             '`secrets request <id> --why "…"` asks for an account or connector for the rest of the conversation. ' +
             "A secret can also have its host guard on (`secrets gates` shows it beside any approver, `secrets hosts` " +
-            "lists the hosts). Such a secret goes by itself only in a single plain curl, wget or git command whose every " +
-            "URL is on its list; a pipe, a variable, a script, another program or another host puts a card in front of " +
-            "a person first, whatever the safety judge says, and waits for their answer, so aim a guarded secret " +
-            "straight at its own hosts.",
+            "lists the hosts). Such a secret goes by itself only when every host the command names is on its list and the " +
+            "reader can follow where it goes: a curl, wget or git command — piped into a reader like `jq` or `head`, or " +
+            "joined to more of them by `&&` or `;` — is read, but a script, an interpreter (`python -c`, `node -e`), a " +
+            "subshell, `curl -L`, a host that is a shell variable, or a host off the list puts a card in front of a " +
+            "person first, whatever the safety judge says, so aim a guarded secret straight at its own hosts.",
         lean:
             "Stored secrets appear as `{{secret:name}}`. Use that token in commands, where it is substituted at execution, " +
             "and keep it as-is in files; never write a raw value or ask the user to paste one. `mcp__secrets__type_secret` " +
             "types one into a focused web field. A gated secret or account raises an approval card: if it is refused, " +
             "carry on without it and say what you left undone (`secrets gates` lists what is gated). One whose host guard " +
-            "is on goes unasked only in one plain curl, wget or git command to its own hosts (`secrets hosts`).",
+            "is on goes unasked only when every host it names is on its list (`secrets hosts`) and the line is a curl, " +
+            "wget or git command: a pipe into a reader like `jq` is fine, a script, an interpreter or a host from a " +
+            "variable is not.",
     },
     {
         id: "needs",
