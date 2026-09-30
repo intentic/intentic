@@ -7,7 +7,7 @@ import type { AgentEvent, ProjectInstallMode } from "@intentic/sandbox-contract"
 import type { ParkedCards } from "../../conversations/actor/parked-cards.js";
 import { inWorktree, type IsolationPlan, type TurnPlacement } from "../../conversations/worktrees/isolation.js";
 import { opt } from "../../opt.js";
-import type { ProjectInstall } from "./agent-installs.js";
+import { agentCommand, classifyImageInstalls, type ProjectInstall, projectInstallsOf } from "./agent-installs.js";
 
 // An agent's own project install is judged by where it writes, not by being an install, and judged in one place for
 // every runtime: the command gate (guard/command-guard.ts) asks this before anything else, whether the command came
@@ -61,6 +61,18 @@ export interface ProjectInstallGate {
     readonly canInstall: boolean;
     // Absent for a turn with no conversation to hold a grant; its card then offers no "for this conversation".
     readonly grants: InstallGrants | undefined;
+    // The rule itself (PROJECT_INSTALL_RULE), carried with what it judges by: the gate applying it lives in guard/, which
+    // agent/ already imports, so guard/command-guard.ts reaches it through this field instead of importing back.
+    readonly rule: ProjectInstallRule;
+}
+
+// How a shell command is read for installs and a project install decided: agent-installs.ts's readers and the consult
+// below, as the one value every gate carries.
+export interface ProjectInstallRule {
+    readonly agentCommand: typeof agentCommand;
+    readonly classifyImageInstalls: typeof classifyImageInstalls;
+    readonly projectInstallsOf: typeof projectInstallsOf;
+    readonly consult: typeof consultProjectInstall;
 }
 
 // How the gate asks: the card it parks on, the turn's signal a parked card settles with, and whether this runtime can
@@ -324,3 +336,5 @@ export async function* consultProjectInstall(
     yield { kind: "install", reach: gate.placement.kind === "shared" ? "main-tree" : "own-copy", projects: await projectsOf(gate.placement, gate.root, installs) };
     return { allow: true, note: gate.placement.kind === "shared" ? SHARED_NOTE : PRIVATE_NOTE, unprepared };
 }
+
+export const PROJECT_INSTALL_RULE: ProjectInstallRule = { agentCommand, classifyImageInstalls, projectInstallsOf, consult: consultProjectInstall };

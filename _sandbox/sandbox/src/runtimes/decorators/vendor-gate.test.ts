@@ -1,4 +1,5 @@
 import type { AgentRequest, TurnHooks } from "../../agent/providers/agent-request.js";
+import { PROJECT_INSTALL_RULE } from "../../agent/providers/project-installs.js";
 import { parkedCards } from "../../conversations/actor/parked-cards.js";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { consultWith, vendorSubject } from "../../guard/command-guard.js";
@@ -31,6 +32,7 @@ const installRule = (mode: "automatic" | "never"): NonNullable<TurnHooks["projec
     mode,
     canInstall: true,
     grants: undefined,
+    rule: PROJECT_INSTALL_RULE,
 });
 
 test("a vendor turn's gate meets an install with the same rule as Claude Code's hook", async () => {

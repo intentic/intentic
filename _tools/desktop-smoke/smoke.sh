@@ -220,8 +220,16 @@ case "$KIND" in
 
         # Read the package name off the archive rather than assuming the bundler's productName transform.
         PACKAGE="$(dpkg-deb -f "$artifact" Package)"
-        BINARY="$(dpkg -L "$PACKAGE" | grep -E '^/usr/bin/' | head -1 || true)"
         DESKTOP_ENTRY="$(dpkg -L "$PACKAGE" | grep -E '\.desktop$' | head -1 || true)"
+        # The program the package's own desktop entry starts, which is what a launcher and the link handler run,
+        # rather than the first file under /usr/bin: the deb installs the intentic-files sidecar (tauri externalBin)
+        # there too, and the smoke launched that instead, which printed its usage and exited 2 (desktop-verify in
+        # run 36693968498). Only the first word of Exec, unquoted, and only the name, looked up in the package.
+        EXEC_PROGRAM=""
+        if [ -n "$DESKTOP_ENTRY" ] && [ -f "$DESKTOP_ENTRY" ]; then
+            EXEC_PROGRAM="$(sed -n 's/^Exec="\{0,1\}\([^" ]*\).*/\1/p' "$DESKTOP_ENTRY" | head -1)"
+        fi
+        BINARY="$(dpkg -L "$PACKAGE" | grep -Fx "/usr/bin/${EXEC_PROGRAM##*/}" || true)"
         SCRIPTS_DIR="$(dpkg -L "$PACKAGE" | grep -E '/scripts/connect\.sh$' | head -1 || true)"
         SCRIPTS_DIR="${SCRIPTS_DIR%/connect.sh}"
         LAUNCH=("$BINARY")

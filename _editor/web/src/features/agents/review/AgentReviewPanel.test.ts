@@ -184,7 +184,9 @@ it(`shows work the user has committed, under the commit that carries it`, async 
                             short: `a3f9c21`,
                             subject: `fix: tighten the land anchor`,
                             author: `Radarsu`,
-                            at: Date.parse(`2026-08-30T10:00:00Z`),
+                            // Noon where the test runs, so the card's local date reads Aug 30 in every zone verify-clocks
+                            // tries: 10:00 UTC is still Aug 29 at UTC-11 and already Aug 31 at UTC+14.
+                            at: new Date(2026, 7, 30, 12).getTime(),
                             changes: [
                                 { path: `src/auth/session.ts`, status: `modified`, additions: 12, deletions: 3 },
                                 { path: `src/config.ts`, status: `modified`, additions: 2, deletions: 1 },

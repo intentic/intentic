@@ -3,7 +3,7 @@ import type { Services } from "../../../composition.js";
 import type { CommandGuardOptions } from "../../../guard/command-guard.js";
 import { opt } from "../../../opt.js";
 import type { TurnBase } from "../../providers/agent-request.js";
-import { installGrantsOf, installPlacementOf } from "../../providers/project-installs.js";
+import { installGrantsOf, installPlacementOf, PROJECT_INSTALL_RULE } from "../../providers/project-installs.js";
 
 // What every runtime's command gate is built with, set once above the provider split so Claude Code, Codex and Cursor
 // are judged alike: the owner's safety policy and its judge, what caused the turn, the install rule with the
@@ -75,6 +75,7 @@ export const withTurnSafety = async (deps: TurnSafetyDeps, input: TurnSafetyInpu
                 mode: settings.projectInstalls,
                 canInstall: base.policy.dependencyInstallAllowed === true,
                 grants: conversationId === undefined ? undefined : installGrantsOf(deps.conversationGrants, conversationId),
+                rule: PROJECT_INSTALL_RULE,
             },
         },
     };

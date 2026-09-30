@@ -1,4 +1,4 @@
-import { vendorShellEnv } from "../decorators/vendor-shell-env.js";
+import { vendorShellEnv } from "../../agent/run/vendor-shell-env.js";
 import { type AgentEvent, type AgentReply, type AskQuestion, CODEX, type ToolCallContent, type ToolCallLocation } from "@intentic/sandbox-contract";
 import { type SteeringChannel, steeringRelay } from "../../agent/checkpoints/agent-steering.js";
 import type { AgentRequest, CodexCredential, TurnTools } from "../../agent/providers/agent-request.js";

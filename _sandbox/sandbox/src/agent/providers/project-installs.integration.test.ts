@@ -17,6 +17,7 @@ import {
     installGrantsOf,
     installRootOf,
     type InstallPlacement,
+    PROJECT_INSTALL_RULE,
     type ProjectInstallGate,
     type ProjectInstallVerdict,
 } from "./project-installs.js";
@@ -51,6 +52,7 @@ const gateOf = (placement: InstallPlacement, over: Partial<ProjectInstallGate> =
     mode: "automatic",
     canInstall: true,
     grants: installGrantsOf(grantsStore, `c-${Math.random().toString(36).slice(2)}`),
+    rule: PROJECT_INSTALL_RULE,
     ...over,
 });
 
