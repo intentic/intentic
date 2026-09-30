@@ -111,7 +111,7 @@ describe(`a sandbox notice, as the chat says it`, () => {
         const rows = [...FOLDED, ...DAEMON, ...RESUMED, ...UNSPOKEN];
         expect(rows.map((row) => noticeLine(row, `developer`))).toEqual(rows.map((row) => row.text));
         // Nothing slipped through uncoded: every row above is worded by the chat, none falls back to its text.
-        expect(RESUMED).toHaveLength(10);
+        expect(RESUMED).toHaveLength(11);
         expect(rows.filter((row) => row.noticeCode === undefined && row.watchWake === undefined && row.needWake === undefined && row.agentWords === undefined)).toEqual([]);
     });
 
