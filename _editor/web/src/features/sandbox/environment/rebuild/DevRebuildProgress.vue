@@ -156,7 +156,8 @@ const logLabel = computed(() => (showLog.value ? `Hide the build log` : `Show th
 </script>
 
 <template>
-    <div class="flex flex-col gap-3 rounded-lg border border-line bg-card p-3">
+    <!-- No card of its own: it is drawn inside a group that is already a surface, and a second border there is chrome. -->
+    <div class="flex flex-col gap-3">
         <!-- One line for the whole run: what it is, and how long it has been going. -->
         <div class="flex items-baseline gap-2">
             <span class="flex-1 text-xs font-medium text-content">{{ heading }}</span>

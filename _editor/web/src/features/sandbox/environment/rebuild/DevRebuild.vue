@@ -122,6 +122,9 @@ const execute = async (): Promise<void> => {
 // Nothing to show until a rebuild exists: one started here, one found already running, or one whose outcome hasn't
 // been dismissed yet.
 const following = computed(() => run.phase !== `idle`);
+// Told to the parent, which moves what sits beside the button to the progress's foot once there is progress to draw.
+const followingModel = defineModel<boolean>(`following`, { default: false });
+watch(following, (now) => (followingModel.value = now), { immediate: true });
 
 // WHAT THE RESTART WILL COST, COUNTED AT THE MOMENT OF ASKING. The build itself interrupts nothing, so the number
 // that matters is read now rather than when the swap lands — by then it is a surprise instead of a decision, and

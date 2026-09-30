@@ -257,6 +257,8 @@ const quietHeading = computed(() => {
     return planRefused.value ? t(`sandbox.sandboxUpdateCard.updateHeldBack`) : t(`sandbox.sandboxUpdateCard.sandboxImage`);
 });
 
+// Whether the checkout rebuild is drawing a run (progress, outcome) rather than only its button.
+const rebuildFollowing = ref(false);
 // "Having trouble?" joins the checkout rebuild's row when nothing would sit between them at the group's foot.
 const troubleBesideRebuild = computed(
     () => canRollBack.value && !plan.value.rollbackWhy && localImage.value !== undefined && !serverManaged.value && !updateAvailable.value,
@@ -475,13 +477,20 @@ const finePrint = computed(
                     <div v-if="slug && !serverManaged && (localImage || planRefused)" :id="UPDATE_ACTION_ANCHOR" class="flex flex-col gap-2">
                         <!-- A sandbox on a checkout-built base is not updated from the registry: a pull would REPLACE its image with a published build, not refresh it. -->
                         <template v-if="localImage">
-                            <!-- One row with "Having trouble?" rather than two: nothing sits between them on this sandbox. -->
-                            <div class="flex flex-wrap items-start justify-between gap-2">
-                                <DevRebuild class="min-w-0 flex-1" :slug="slug" :base="localImage.base" :root="localImage.root" />
+                            <!-- One row with "Having trouble?" rather than two while it is only a button; once a rebuild draws its
+                                 progress, the link drops to the foot so the bar keeps the full width and the timer its own edge. -->
+                            <div :class="rebuildFollowing ? `flex flex-col gap-3` : `flex flex-wrap items-start justify-between gap-2`">
+                                <DevRebuild
+                                    v-model:following="rebuildFollowing"
+                                    class="min-w-0 flex-1"
+                                    :slug="slug"
+                                    :base="localImage.base"
+                                    :root="localImage.root"
+                                />
                                 <button
                                     v-if="troubleBesideRebuild"
                                     type="button"
-                                    :class="ui.textAction(`text-2xs text-subtle`)"
+                                    :class="ui.textAction(`text-2xs text-subtle ${rebuildFollowing ? `self-end` : ``}`)"
                                     :aria-expanded="rollbackOpen"
                                     @click="toggleRollback"
                                 >
