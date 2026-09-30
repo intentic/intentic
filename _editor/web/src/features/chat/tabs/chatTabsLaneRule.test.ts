@@ -60,7 +60,7 @@ afterEach(() => {
 const laneOfRow = (id: string): string | undefined =>
     [...host!.querySelectorAll(`section`)]
         .filter((section) => section.querySelector(`[data-chat-tab="${id}"]`) !== null)
-        .map((section) => section.querySelectorAll(`header span`)[1]?.textContent?.trim())[0];
+        .map((section) => section.querySelector(`header span`)?.textContent?.trim())[0];
 
 it(`puts a refused turn where its standing does, not where its message count does`, async () => {
     const conversation = useChat().active.value;

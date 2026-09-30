@@ -97,7 +97,7 @@ const openFromBoard = (id: string): void => {
 const lanesOnScreen = (el: HTMLElement): string[] =>
     [...el.querySelectorAll(`section`)]
         .filter((section) => section instanceof HTMLElement && section.style.display !== `none`)
-        .map((section) => section.querySelectorAll(`header span`)[1]?.textContent?.trim() ?? ``);
+        .map((section) => section.querySelector(`header span`)?.textContent?.trim() ?? ``);
 
 // Chats visible under those lanes, to check a clicked card actually appears.
 const cardsOnScreen = (el: HTMLElement): string[] =>
@@ -175,7 +175,7 @@ const tailRow = (el: HTMLElement): HTMLButtonElement | undefined =>
 // Clear inside one named lane: every lane carries one, so matching on the word alone would hit whichever lane
 // happened to draw first rather than the one under test.
 const clearButton = (el: HTMLElement, lane: string): HTMLButtonElement | undefined => {
-    const section = [...el.querySelectorAll(`section`)].find((held) => held.querySelectorAll(`header span`)[1]?.textContent?.trim() === lane);
+    const section = [...el.querySelectorAll(`section`)].find((held) => held.querySelector(`header span`)?.textContent?.trim() === lane);
     return [...(section?.querySelectorAll(`button`) ?? [])].find((button) => button.textContent?.trim() === `Clear`);
 };
 
