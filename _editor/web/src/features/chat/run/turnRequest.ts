@@ -144,10 +144,12 @@ export const turnRequestBody = (input: {
     readonly editorContext: EditorContext | undefined;
     // What the words are for when this window composed them (an errand), which the row they open carries.
     readonly errand?: TurnErrand | undefined;
+    // A scheduled send's instant (ms): the daemon holds the words in the queue until then rather than starting a turn.
+    readonly sendAt?: number | undefined;
 }): ProcedureInput<`agent.run`> => {
     // Whether this body targets this sandbox; fields scoped to another box's store are dropped otherwise.
     const here = input.box === undefined;
-    return {
+    const body: ProcedureInput<`agent.run`> = {
         messageId: input.messageId,
         prompt: input.text,
         // Seeds a fresh registry entry's title; an existing entry keeps its own.
@@ -186,4 +188,8 @@ export const turnRequestBody = (input: {
         // Opt-in file/selection chip; a path in this workspace, so it stays here.
         ...(here && input.editorContext !== undefined ? { editorContext: input.editorContext } : {}),
     };
+    if (input.sendAt !== undefined) {
+        body.sendAt = input.sendAt;
+    }
+    return body;
 };

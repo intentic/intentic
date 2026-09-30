@@ -77,11 +77,11 @@ it(`schedules only a send that would start a turn on a spent account`, () => {
     expect(sendable(chat(spent), `scheduled`, undefined)).toBe(false);
 });
 
-it(`says when a scheduled send goes, and that it replaces a turn already waiting`, () => {
+it(`says when a scheduled send goes, and that a turn already waiting goes ahead of it`, () => {
     const words = { ...WORDS, reopens: `Sun 08:20` };
     expect(placeholderFor(`scheduled`, words)).toContain(`Sun 08:20`);
     expect(JSON.stringify(sendHintFor(`scheduled`, words))).toContain(`Sun 08:20`);
-    expect(sendHintFor(`scheduled`, { ...words, replacesWaiting: true })).not.toEqual(sendHintFor(`scheduled`, words));
+    expect(sendHintFor(`scheduled`, { ...words, followsWaiting: true })).not.toEqual(sendHintFor(`scheduled`, words));
 });
 
 it(`gives every intent its own sentence in both slots`, () => {

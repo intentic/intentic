@@ -32,6 +32,7 @@ import {
     removed,
     rerouted,
     returned,
+    scheduled,
     taken,
     type TurnQueue,
 } from "./conversation-queue.js";
@@ -169,6 +170,8 @@ export type ConversationEvent =
     | { readonly kind: "workflow-shown"; readonly workflow: NonNullable<AgentSummary["workflow"]> }
     // A message joins the queue: it arrived while a turn that could not take it ran, or behind others waiting.
     | { readonly kind: "queue-joined"; readonly item: Omit<QueuedItem, "revision"> }
+    // A person's scheduled send joins the queue, and everything in it waits until `until` (a spent allowance's reopen).
+    | { readonly kind: "queue-scheduled"; readonly item: Omit<QueuedItem, "revision">; readonly until: number }
     // A turn delivered these waiting messages: it started with them, or they were said into it.
     | { readonly kind: "queue-taken"; readonly ids: readonly string[] }
     // A refusal at the door handed these back: at the head again, held.
@@ -728,6 +731,7 @@ const HANDLERS: { readonly [K in ConversationEvent["kind"]]: Handler<K> } = {
             state.steers.slots.map((box) => box.checkpoint),
         ),
     "queue-joined": (state, event) => withQueue(state, joined(state.queue, event.item), undefined),
+    "queue-scheduled": (state, event) => withQueue(state, scheduled(state.queue, event.item, event.until), undefined),
     "queue-taken": (state, event) => withQueue(state, taken(state.queue, event.ids), undefined),
     "queue-returned": (state, event) => withQueue(state, returned(state.queue, event.items), undefined),
     "queue-removed": (state, event) => {

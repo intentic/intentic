@@ -86,7 +86,8 @@ export const steerPerson = async (services: Services, conversationId: string, st
 
 // The message as the queue keeps it, named: a sender that gave no id gets one, since the queue and a rewind name it.
 const named = (said: Said): Omit<QueuedItem, "revision"> => {
-    const { actor, owner, areas, unseenRuns: _unseen, speaker, ...turn } = said.turn;
+    // The booking is the admission's to act on (bookedFor), never a field the started turn carries.
+    const { actor, owner, areas, unseenRuns: _unseen, speaker, sendAt: _booked, ...turn } = said.turn;
     const id = turn.messageId ?? randomUUID();
     return {
         id,
@@ -142,6 +143,30 @@ const goesFirst = (services: Services, conversationId: string): boolean => {
 // the person's own call.
 const heldBehindLimit = (services: Services, conversationId: string, voices: readonly QueuedItem["voice"][]): boolean =>
     voices.every((voice) => voice !== "person") && windowShut(services.conversations.state(conversationId)?.resume.held, Date.now());
+
+// How far ahead a scheduled send may be booked: past the longest allowance window a provider names (a week), a booking
+// is a mistake, not an appointment.
+const LONGEST_BOOKING_MS = 8 * 24 * 60 * 60 * 1000;
+
+/**
+ * When a person's scheduled send waits until, or undefined when it goes the ordinary way: an instant already past, a
+ * turn live or a recovery going first (the message is for that, and waits behind it anyway), or a conversation not on
+ * record yet, whose queue has no entry to be kept on across a restart and no card to be seen on. Clamped, not refused:
+ * the person asked for it to wait, and a week is the longest wait there is.
+ */
+const bookedFor = (services: Services, said: Said, now: number): number | undefined => {
+    const { sendAt, conversationId } = said.turn;
+    if (said.voice !== "person" || sendAt === undefined || sendAt <= now) {
+        return undefined;
+    }
+    if (services.agents.entry(conversationId) === undefined || goesFirst(services, conversationId)) {
+        return undefined;
+    }
+    if (liveRunOf(services.conversations, conversationId) !== undefined || services.conversations.state(conversationId)?.phase.kind === "running") {
+        return undefined;
+    }
+    return Math.min(sendAt, now + LONGEST_BOOKING_MS);
+};
 
 // Whether the live turn takes words now: not being stopped, and not parked on a card, whose answer comes first.
 const takesWords = (services: Services, conversationId: string): boolean => {
@@ -418,6 +443,15 @@ export const createAdmission = (
                     return earlier;
                 }
                 const item = named(said);
+                // A scheduled send is booked, not delivered: it waits in the queue, where every window draws it as
+                // scheduled, and the resume pass lets it go at its instant (turn-resume.ts, releaseBooked).
+                const until = bookedFor(services(), said, Date.now());
+                if (until !== undefined) {
+                    services().conversations.send(conversationId, { kind: "queue-scheduled", item, until });
+                    const booked: MessageReceipt = { delivered: "queued" };
+                    kept(conversationId, new Map([[item.id, booked]]));
+                    return booked;
+                }
                 const receipt = await admit(item);
                 if ("delivered" in receipt) {
                     kept(conversationId, new Map([[item.id, receipt]]));

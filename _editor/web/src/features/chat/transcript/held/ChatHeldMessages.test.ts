@@ -269,3 +269,36 @@ describe(`the other holds, drawn the same way`, () => {
         expect(element.querySelector(`button[aria-label="Take back waiting message"]`)?.tagName).toBe(`BUTTON`);
     });
 });
+
+// The composer's scheduled send, booked for when a spent allowance reopens: the reader's own choice, so it reads as a
+// booking with its time, not as a message that failed, and its one press sends it sooner.
+describe(`a scheduled send`, () => {
+    it(`reads as scheduled with the time it goes, with no warning and nothing about a refusal`, async () => {
+        const until = Date.now() + 40 * 60 * 1_000 + 30_000;
+        const element = mount(chatHolding({ items: [held({ attachments: [] })], paused: `scheduled`, until }, SENT));
+        await nextTick();
+
+        expect(element.querySelector(`.chat-surface-held`)?.textContent?.trim()).toBe(`We should be consistent and always use the same icon for "attention".`);
+        expect(statusLine(element)).toMatch(/^Scheduled · sends in about 4[01] min$/u);
+        expect(element.querySelector(`.text-warning`)).toBeNull();
+    });
+
+    it(`offers Send now, which lets it go before its time, saying the allowance may still refuse it`, async () => {
+        const chat = chatHolding({ items: [held({ attachments: [] })], paused: `scheduled`, until: Date.now() + 60_000 }, SENT);
+        const resume = jest.spyOn(chat.turn, `resume`).mockResolvedValue(undefined);
+        const element = mount(chat);
+        await nextTick();
+
+        const [press] = pressNamed(element, `Send now`);
+        expect(tips.get(press!)).toEqual({ title: `Send it now instead`, note: `The allowance may still be spent, and refuse it` });
+        press!.click();
+        expect(resume).toHaveBeenCalledTimes(1);
+    });
+
+    it(`says it is going once its time has come, while the sandbox lets it go`, async () => {
+        const element = mount(chatHolding({ items: [held({ attachments: [] })], paused: `scheduled`, until: Date.now() - 1 }, SENT));
+        await nextTick();
+
+        expect(statusLine(element)).toBe(`Scheduled · sends in a moment`);
+    });
+});

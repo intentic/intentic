@@ -515,6 +515,38 @@ describe(`saying something`, () => {
         expect(host.transcript.messages.value.map((message) => message.text)).toEqual([`the other window's ask`]);
     });
 
+    // A scheduled send opens no turn: no bubble, no working line, nothing followed. The words are the queue's, drawn at
+    // the ack as scheduled, until the daemon's own queue (the same revision) replaces them.
+    it(`books a scheduled send into the queue, drawing no turn`, async () => {
+        const { client, host } = clientOf();
+        host.registered.value = true;
+        answers({ delivered: `queued` });
+        const at = Date.now() + 60 * 60 * 1_000;
+
+        await client.schedule(`ship it`, at, [FILE]);
+
+        expect(run.mock.calls.map(([body]) => ({ prompt: body.prompt, sendAt: body.sendAt }))).toEqual([{ prompt: `ship it`, sendAt: at }]);
+        expect(attach).not.toHaveBeenCalled();
+        expect(client.streaming.value).toBe(false);
+        expect(host.transcript.messages.value).toEqual([]);
+        expect(host.queue.value).toMatchObject({
+            items: [{ text: `ship it`, attachments: [FILE.path], voice: `person`, revision: 1 }],
+            revision: 1,
+            paused: `scheduled`,
+            until: at,
+        });
+    });
+
+    // Nothing to hold it on: the daemon would start it anyway, so it goes the ordinary way, drawn as any send is.
+    it(`sends a scheduled message the ordinary way in a chat the daemon has no record of yet`, async () => {
+        const { client } = clientOf();
+        answers({ delivered: `queued` });
+
+        await client.schedule(`ship it`, Date.now() + 60_000);
+
+        expect(run.mock.calls.map(([body]) => body.sendAt)).toEqual([undefined]);
+    });
+
     it(`sends a nudge behind a waiting nudge nowhere, and anything else as ever`, async () => {
         const { client, host } = parked();
         host.queue.value = { items: [{ id: `m-go`, text: `Continue`, voice: `person`, queuedAt: 1_000, revision: 1 }], revision: 1 };

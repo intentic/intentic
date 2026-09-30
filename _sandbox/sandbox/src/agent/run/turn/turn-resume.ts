@@ -481,6 +481,20 @@ const wakesReopened = (services: Services, conversationId: string, held: HeldRec
     !windowShut(held, now) &&
     services.conversations.queued(conversationId).items.some((item) => item.voice !== "person");
 
+// A person's scheduled sends whose instant has come (turn-admission.ts, bookedFor): the hold is let go and what waits
+// goes out as the ordinary turn it would have been. Should the allowance still be spent, that turn is refused like any
+// other, and the conversation's limit answer (which the composer arms to resend) takes it from there.
+const releaseBooked = async (services: Services, now: number): Promise<void> => {
+    for (const { conversationId, until } of services.conversations.booked()) {
+        if (until > now) {
+            continue;
+        }
+        services.conversations.send(conversationId, { kind: "queue-released" }, now);
+        services.logger.info({ conversationId }, "resume pass: a scheduled send's time came, what waited goes out");
+        await services.turns.drain(conversationId);
+    }
+};
+
 // One pass over every held turn, oldest first; snapshotted, since every rung stamps or drops the records it walks.
 export const createTurnResumeScheduler = (services: Services, intervalMs = 5_000): TurnResumeScheduler => {
     let timer: NodeJS.Timeout | undefined;
@@ -493,6 +507,7 @@ export const createTurnResumeScheduler = (services: Services, intervalMs = 5_000
                 await services.turns.drain(conversationId);
             }
         }
+        await releaseBooked(services, now);
     };
 
     return {

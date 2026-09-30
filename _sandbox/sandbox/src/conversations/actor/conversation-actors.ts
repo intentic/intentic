@@ -81,6 +81,9 @@ export interface ConversationActors {
     readonly turnActive: (conversationId: string) => boolean;
     // Every held turn, first recorded first (a re-record keeps its place); a snapshot, since the pass moves what it reads.
     readonly stranded: () => readonly Stranded[];
+    // Every queue holding a person's scheduled send, with its instant: what the resume pass lets go when that comes. Read
+    // off the actors, which every conversation with anything waiting has once boot has drained the queues it kept.
+    readonly booked: () => readonly Booked[];
     // One kind of what conversations hold beside their state, each conversation's share on its actor.
     readonly holdings: <V>(kind: Holding<V>) => Holdings<V>;
     // What still holds anything of this conversation's, by name: its actor, a stranded record, a holding's item held by
@@ -88,6 +91,11 @@ export interface ConversationActors {
     readonly traces: (conversationId: string) => readonly string[];
     // Every piece of these conversations' in-memory state, then their entries: the one way a conversation leaves.
     readonly dispose: (conversationIds: readonly string[]) => Promise<void>;
+}
+
+export interface Booked {
+    readonly conversationId: string;
+    readonly until: number;
 }
 
 export interface Stranded {
@@ -134,6 +142,14 @@ const archivedIn =
     (books: Pick<ConversationBooks, "entry">) =>
     (id: string): boolean =>
         refusesArchived(books.entry(id));
+
+// The scheduled queues among the actors, each with its instant (ConversationActors.booked).
+const bookedIn =
+    (actors: ReadonlyMap<string, Actor>) =>
+    (): readonly Booked[] =>
+        [...actors].flatMap(([conversationId, { state }]) =>
+            state.queue.paused === "scheduled" && state.queue.until !== undefined ? [{ conversationId, until: state.queue.until }] : [],
+        );
 
 export const createConversationActors = (books: ConversationBooks): ConversationActors => {
     const actors = new Map<string, Actor>();
@@ -274,6 +290,7 @@ export const createConversationActors = (books: ConversationBooks): Conversation
                 const record = actors.get(conversationId)?.state.resume.held;
                 return record === undefined ? [] : [{ conversationId, record }];
             }),
+        booked: bookedIn(actors),
         holdings: holdings.holdings,
         traces: (id) => [...(actors.has(id) ? ["actor"] : []), ...(strandedOrder.has(id) ? ["stranded"] : []), ...holdings.traces(id)],
         dispose: async (ids) => {

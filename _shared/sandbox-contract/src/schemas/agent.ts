@@ -304,6 +304,16 @@ const AgentTurnFieldsSchema = z.object({
     editorContext: EditorContextSchema.optional().describe(
         'What the user has open in their editor, folded into the prompt so that pointing words like "this" resolve.',
     ),
+    // The composer's scheduled send: a person who knows the account is spent books the message for its reopen instead of
+    // sending it into a refusal. Held in the conversation's queue, never started early; the queue's `until` is this.
+    sendAt: z
+        .number()
+        .int()
+        .positive()
+        .optional()
+        .describe(
+            "Hold this message until then (epoch milliseconds) instead of starting a turn now, for an allowance you know is spent. It waits in the conversation's queue, where it can be sent early, reworded or removed, and goes by itself at that instant. Ignored when already past, or when a turn is running.",
+        ),
 });
 export const AgentTurnSchema = AgentTurnFieldsSchema
     // An attachment-only send (no text) is legal; an entirely empty turn is not.
@@ -473,7 +483,7 @@ export const QueuedMessageSchema = z.object({
 });
 export type QueuedMessage = z.infer<typeof QueuedMessageSchema>;
 // Why a queue holds its messages rather than letting them go when the conversation is free.
-export const QueuePauseSchema = z.enum(["stopped", "refused"]);
+export const QueuePauseSchema = z.enum(["stopped", "refused", "scheduled"]);
 export type QueuePause = z.infer<typeof QueuePauseSchema>;
 // What waits for a conversation's next turn: messages that arrived while a turn that could not take them ran, and
 // held ones. Conversation state, the same for every window and kept across a restart.
@@ -481,8 +491,12 @@ export const ConversationQueueSchema = z.object({
     items: z.array(QueuedMessageSchema).describe("What waits, in the order it goes out."),
     revision: z.number().int().nonnegative().describe("Moves with every change to the queue, so of two copies the higher is the newer."),
     paused: QueuePauseSchema.optional().describe(
-        "Why nothing goes out by itself: somebody stopped the turn, or the turn these messages started was refused before it ran. Resuming, or sending another message, lets them go.",
+        "Why nothing goes out by itself: somebody stopped the turn, the turn these messages started was refused before it ran, or they were scheduled for later. Resuming lets them go, and so does sending another message unless they are scheduled.",
     ),
+    until: z
+        .number()
+        .optional()
+        .describe("When scheduled messages go out by themselves, in milliseconds. Only on a queue paused as `scheduled`."),
 });
 export type ConversationQueue = z.infer<typeof ConversationQueueSchema>;
 // What resuming a queue did: started a turn with what waited, when nothing else ran.

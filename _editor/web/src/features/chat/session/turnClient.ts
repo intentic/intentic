@@ -237,6 +237,25 @@ export class TurnClient {
         await this.deliverTurn(this.openTurn(trimmed, attachments, settings), trimmed, attachments, settings, editorContext);
     }
 
+    /**
+     * A scheduled send: the words wait in the conversation's queue until `sendAt` (a spent allowance's reopen), drawn there
+     * as scheduled in every window, and nothing starts or reaches the provider before then. Nothing is drawn here either:
+     * no bubble, no working line, since no turn opens. Where there is nothing to hold them on (a chat the daemon has no
+     * record of yet, a turn live here) they go the ordinary way, which the daemon would do with them anyway.
+     */
+    async schedule(text: string, sendAt: number, attachments: readonly ChatAttachment[] = [], editorContext?: EditorContext): Promise<void> {
+        const trimmed = text.trim();
+        this.host.peek.value = false;
+        if (trimmed.length === 0 && attachments.length === 0) {
+            return;
+        }
+        if (!this.host.registered.value || this.streaming.value || this.unwinding) {
+            await this.say(trimmed, attachments, editorContext);
+            return;
+        }
+        await this.sayInto(trimmed, attachments, editorContext, sendAt);
+    }
+
     // An app errand whose words need a read first: the turn opens at the call, its row and the working line drawn, and
     // `compose` fills it in (undefined: no turn after all). Resolves with whether the daemon took it, not at its end.
     async startErrand(opening: string, compose: (signal: AbortSignal) => Promise<string | undefined>): Promise<boolean> {
@@ -470,7 +489,12 @@ export class TurnClient {
 
     // Words for the turn this window follows: the daemon says them into it where it takes words, or queues them behind
     // it; nothing is drawn here, since the daemon's own row, or the queue every window shows, is where they appear.
-    private async sayInto(text: string, attachments: readonly ChatAttachment[], editorContext: EditorContext | undefined): Promise<void> {
+    private async sayInto(
+        text: string,
+        attachments: readonly ChatAttachment[],
+        editorContext: EditorContext | undefined,
+        sendAt: number | undefined = undefined,
+    ): Promise<void> {
         const { host } = this;
         const settings = host.selection.turnSettings();
         const session = host.session.value;
@@ -495,6 +519,7 @@ export class TurnClient {
                     attachmentPaths,
                     mentionedPaths: mentionPaths(text).filter((path) => !attachmentPaths.includes(path)),
                     editorContext,
+                    sendAt,
                 }),
                 new AbortController().signal,
             );
@@ -503,11 +528,33 @@ export class TurnClient {
             } else if (receipt.delivered === `started`) {
                 // The turn it was typed into ended meanwhile, so these words opened one of their own on the settings.
                 this.ranOn(settings);
+                // A scheduled send the daemon started after all (its time came, or nothing held it): this window follows it.
+                if (sendAt !== undefined) {
+                    await this.reattach();
+                }
+            } else if (sendAt !== undefined && receipt.delivered === `queued`) {
+                this.booked({ id: messageId, text, attachments: attachmentPaths }, sendAt);
             }
         } catch (err) {
             this.giveBack(sent, messageId);
             host.error.value = `${errorMessage(err, `Chat failed.`)} Your message is back in the composer, send it again to deliver it.`;
         }
+    }
+
+    // The scheduled words as the queue will hold them, drawn at the ack rather than on a roster frame that may come late
+    // (a busy sandbox, another box whose roster is polled). The daemon's own queue, at the same revision, replaces it.
+    private booked(message: { readonly id: string; readonly text: string; readonly attachments: readonly string[] }, until: number): void {
+        const { host } = this;
+        const held = host.queue.value ?? { items: [], revision: 0 };
+        if (held.items.some((item) => item.id === message.id)) {
+            return;
+        }
+        const revision = held.revision + 1;
+        const item: QueuedMessage = { id: message.id, text: message.text, voice: `person`, queuedAt: Date.now(), revision };
+        if (message.attachments.length > 0) {
+            item.attachments = [...message.attachments];
+        }
+        host.queue.value = { items: [...held.items, item], revision, paused: `scheduled`, until };
     }
 
     // Where a sent turn's request or stream threw. A user-initiated Stop aborts the fetch, which is expected, not an error

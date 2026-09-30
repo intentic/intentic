@@ -18,7 +18,7 @@ defineProps<{
 
 const t = useT();
 const { queued, streaming, resumeQueue } = usePaneView();
-const { held, notice, reason, detail } = useHeldQueue();
+const { held, notice, reason, detail, until } = useHeldQueue();
 
 // The one press, worded for what it overrides: a warning it goes past, a refusal it tries again, a stop it undoes. All
 // three let the queue go (TurnClient.resume): a low-memory hold warns a person once a spell, so the next try runs.
@@ -33,6 +33,9 @@ const press = computed((): HeldPress => {
             return { label: t(`chat.chatHeld.sendAnyway`), hint: sendAnywayTip() };
         case `stopped`:
             return { label: t(`chat.chatQueue.sendNow`) };
+        // Sooner than booked: the allowance it waits on may still be spent, which is the one thing worth a hover.
+        case `scheduled`:
+            return { label: t(`chat.chatQueue.sendNow`), hint: { title: t(`chat.chatHeld.sendNowTitle`), note: t(`chat.chatHeld.sendNowSpent`) } };
         default:
             return { label: t(`agents.words.sendAgain`) };
     }
@@ -47,8 +50,8 @@ const press = computed((): HeldPress => {
         :class="compact ? `rounded-xl border border-line-strong bg-card px-3 py-2` : `items-end pt-1`"
     >
         <ChatHeldBubble v-for="message in queued" :key="message.id" :message="message" :compact="compact" />
-        <ChatHeldStatus :reason="reason" :detail="detail" :spread="compact">
-            <!-- Held means nothing goes by itself, even after a turn running now: the press lets it go, after that turn if one runs. -->
+        <ChatHeldStatus :reason="reason" :detail="detail" :until="until" :spread="compact">
+            <!-- Held means nothing goes by itself (a scheduled send only at its time), even after a turn running now: the press lets it go, after that turn if one runs. -->
             <span class="flex flex-wrap items-center justify-end gap-x-3 gap-y-1">
                 <Button size="small" v-tooltip.top="press.hint" @click="resumeQueue()">{{ press.label }}</Button>
                 <!-- Only a hold that named its ceiling can be raised past (a stall names none), and never under a live turn, which the restart would kill. -->

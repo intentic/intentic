@@ -9,6 +9,7 @@ import {
     removed,
     rerouted,
     returned,
+    scheduled,
     taken,
     type TurnQueue,
 } from "./conversation-queue.js";
@@ -46,6 +47,30 @@ describe("a conversation's queue", () => {
         expect(stopped.paused).toBe("stopped");
         expect(joined(stopped, message("w1", "Watch fired", { voice: "sandbox" })).paused).toBe("stopped");
         expect(joined(stopped, message("m2", "two")).paused).toBeUndefined();
+    });
+
+    it("holds a scheduled send until its instant, keeps it through edits, and lets it go with the rest", () => {
+        const booked = scheduled(NO_QUEUE, message("m1", "one"), 5_000);
+        expect(booked).toMatchObject({ paused: "scheduled", until: 5_000 });
+        expect(queueView(booked)).toMatchObject({ paused: "scheduled", until: 5_000 });
+        // A second scheduled send joins it, on the newest reading of when the allowance reopens.
+        const both = scheduled(booked, message("m2", "two"), 6_000);
+        expect(both.items.map((item) => item.id)).toEqual(["m1", "m2"]);
+        expect(both.until).toBe(6_000);
+        const reworded = edited(both, "m1", 1, "one, better");
+        expect(reworded.queue).toMatchObject({ paused: "scheduled", until: 6_000 });
+        // A plain send is the person saying "now", the way it is for any other hold.
+        expect(joined(both, message("m3", "three"))).not.toHaveProperty("until");
+        expect(joined(both, message("m3", "three")).paused).toBeUndefined();
+        expect(released(both)).not.toHaveProperty("until");
+        // Emptied, nothing is left scheduled.
+        expect(removed(booked, "m1", 1).queue).toEqual({ items: [], revision: 2 });
+    });
+
+    it("carries an instant only on a scheduled hold", () => {
+        const booked = scheduled(NO_QUEUE, message("m1", "one"), 5_000);
+        expect(hold(released(booked), "stopped")).not.toHaveProperty("until");
+        expect(returned(booked, [message("m0", "zero")])).not.toHaveProperty("until");
     });
 
     it("holds nothing when nothing waits, and forgets its hold once what it held is gone", () => {

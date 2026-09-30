@@ -67,8 +67,10 @@ describe(`a scheduled send`, () => {
     // Half a minute short of the half hour, so the label's round-up lands on 30 whichever way the seconds fell.
     const inHalfAnHour = (): number => Math.round(Date.now() / 1_000) + 1_770;
 
-    it(`goes now and sets the limit answer, so the daemon fires it when the allowance reopens`, () => {
-        const { chat, host, say, send } = composerOf(inHalfAnHour());
+    it(`is booked for the reopen rather than tried now, with the limit answer set for a reopen named too early`, () => {
+        const reopens = inHalfAnHour();
+        const { chat, host, say, send } = composerOf(reopens);
+        const schedule = jest.spyOn(chat.turn, `schedule`).mockResolvedValue(undefined);
         chat.draft.value = `ship it`;
 
         expect(send.intent.value).toBe(`scheduled`);
@@ -76,7 +78,24 @@ describe(`a scheduled send`, () => {
         send.submit();
 
         expect(host.armLimitResend).toHaveBeenCalledTimes(1);
-        expect(say.mock.calls).toEqual([[`ship it`, [], undefined]]);
+        expect(schedule.mock.calls).toEqual([[`ship it`, reopens * 1_000, [], undefined]]);
+        expect(say).not.toHaveBeenCalled();
+        // The box is spent as for any send: the words now wait in the queue.
+        expect(chat.draft.value).toBe(``);
+    });
+
+    it(`does not let a scheduled queue go on an empty press: the button reads as a time, not as now`, () => {
+        const { chat, say, send } = composerOf(inHalfAnHour());
+        chat.queue.value = {
+            items: [{ id: `m1`, text: `ship it`, voice: `person`, queuedAt: 1, revision: 1 }],
+            revision: 1,
+            paused: `scheduled`,
+            until: Date.now() + 60_000,
+        };
+
+        expect(send.canSend.value).toBe(false);
+        send.submit();
+        expect(say).not.toHaveBeenCalled();
     });
 
     it(`sends without arming anything when the caller has just made room itself`, () => {

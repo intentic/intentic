@@ -7,8 +7,11 @@ import type { ChatMessage } from "../transcript";
 // kept the turn whole with its message above (`sandboxHeld`). Either way the reader sees their message, that it was not
 // sent, and one press, instead of a notice, a bar and a card that each said part of it.
 
-/** Why what waits is held, in the chat's words: low memory, another refusal at the door, or a stop. */
-export type HoldReason = `memory` | `refused` | `stopped`;
+/**
+ * Why what waits is held, in the chat's words: low memory, another refusal at the door, a stop, or a scheduled send
+ * waiting for a spent allowance to reopen (the one hold the reader asked for, and the one that ends by itself).
+ */
+export type HoldReason = `memory` | `refused` | `stopped` | `scheduled`;
 
 /** The row a low-memory refusal leaves (transcript-fold's memoryPress): the only refusal the chat can word itself. */
 export const isMemoryHold = (message: ChatMessage): boolean =>
@@ -39,7 +42,7 @@ const standing = (messages: readonly ChatMessage[], message: ChatMessage): boole
  * so the transcript draws it there and not a second time as a notice.
  */
 export const useHeldQueue = () => {
-    const { messages, queued, queuePaused, lastFailure } = usePaneView();
+    const { conversation, messages, queued, queuePaused, lastFailure } = usePaneView();
     const held = computed(() => queuePaused.value !== undefined && queued.value.length > 0);
     const notice = computed(() => {
         const last = lastSaid(messages.value);
@@ -49,6 +52,9 @@ export const useHeldQueue = () => {
     // board's card is the one place left that says it was memory: its failure, which the next run clears.
     const cardMemory = computed(() => (queuePaused.value === `refused` && lastFailure.value?.code === `sandbox-memory-low` ? lastFailure.value : undefined));
     const reason = computed<HoldReason>(() => {
+        if (queuePaused.value === `scheduled`) {
+            return `scheduled`;
+        }
         if (notice.value !== undefined || cardMemory.value !== undefined) {
             return `memory`;
         }
@@ -59,7 +65,9 @@ export const useHeldQueue = () => {
         const said = notice.value?.text ?? cardMemory.value?.text;
         return said === undefined ? undefined : memoryReading(said);
     });
-    return { held, notice, reason, detail };
+    // When a scheduled send goes by itself (ms); only while the queue is scheduled.
+    const until = computed(() => (queuePaused.value === `scheduled` ? conversation.value.queue.value?.until : undefined));
+    return { held, notice, reason, detail, until };
 };
 
 /**

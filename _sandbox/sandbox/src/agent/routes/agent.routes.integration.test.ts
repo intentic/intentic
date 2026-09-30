@@ -11,6 +11,7 @@ import { clientFor, collect, errorCode } from "../../harness/route-client.testin
 import { gitOut, realCheckout } from "../../harness/route-fakes.testing.js";
 import { codexConnectedProxy, services, withTranslator } from "../../harness/route-services.testing.js";
 import { attachedRows, runAgentTurn, startedRun } from "../../harness/route-turns.testing.js";
+import { createTurnResumeScheduler } from "../run/turn/turn-resume.js";
 import { FIRST_RECHECK_MS, type SeatProbe } from "../../runtimes/claude/claude-seat-check.js";
 import { BACK_ON, memorySeats, scriptedSeatCheck, STILL_OFF } from "../../runtimes/claude/claude-seat-check.testing.js";
 
@@ -258,6 +259,49 @@ describe("the conversation's queue", () => {
         gates[0]?.();
         await waitFor(() => expect(gates).toHaveLength(2), SETTLES);
         expect(prompts[1]).toContain("and the changelog\n\nthen tag it");
+        gates[1]?.();
+    });
+
+    // The composer's scheduled send, for an allowance the person knows is spent: nothing starts, nothing reaches the
+    // provider, and the words wait on the card, scheduled, until the resume pass lets them go at their instant.
+    it("holds a scheduled send on the card without starting a turn, and lets it go when its time comes", async () => {
+        const { gates, prompts, services: turns } = unsteerableTurns();
+        const client = clientFor(createApp(turns));
+        await startedRun(client, { prompt: "draft the release notes", conversationId: "conv-at", agent: "grok" });
+        await waitFor(() => expect(gates).toHaveLength(1), SETTLES);
+        gates[0]?.();
+        await collect(await client.agent.attach({ conversationId: "conv-at" }));
+
+        const at = Date.now() + 60 * 60 * 1000;
+        expect(await client.agent.run({ prompt: "and the changelog", conversationId: "conv-at", agent: "grok", messageId: "m-at", sendAt: at })).toEqual({
+            delivered: "queued",
+        });
+        expect(await queueOf(client, "conv-at")).toMatchObject({ items: [{ id: "m-at", text: "and the changelog" }], paused: "scheduled", until: at });
+        expect(gates).toHaveLength(1);
+
+        const pass = createTurnResumeScheduler(turns);
+        await pass.tick(at - 1);
+        expect(gates).toHaveLength(1);
+        await pass.tick(at);
+        await waitFor(() => expect(gates).toHaveLength(2), SETTLES);
+        expect(prompts[1]).toContain("and the changelog");
+        expect((await queueOf(client, "conv-at"))?.items).toEqual([]);
+        gates[1]?.();
+    });
+
+    it("sends a scheduled message at once where there is nothing to hold it on: a conversation not on record yet, or a time already past", async () => {
+        const { gates, services: turns } = unsteerableTurns();
+        const client = clientFor(createApp(turns));
+        expect(await client.agent.run({ prompt: "first words", conversationId: "conv-new-at", agent: "grok", sendAt: Date.now() + 60_000 })).toMatchObject({
+            delivered: "started",
+        });
+        await waitFor(() => expect(gates).toHaveLength(1), SETTLES);
+        gates[0]?.();
+        await collect(await client.agent.attach({ conversationId: "conv-new-at" }));
+        expect(await client.agent.run({ prompt: "late", conversationId: "conv-new-at", agent: "grok", sendAt: Date.now() - 1 })).toMatchObject({
+            delivered: "started",
+        });
+        await waitFor(() => expect(gates).toHaveLength(2), SETTLES);
         gates[1]?.();
     });
 

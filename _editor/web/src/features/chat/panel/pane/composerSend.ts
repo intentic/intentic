@@ -24,6 +24,7 @@ import type { ChatRouting } from "../../routing/chatRoute";
 import { pickUpReady, pickUpShort } from "../../run/pickUp";
 import { formatReset } from "../../session/usageStatus";
 import { planFeedback } from "../../session/cardReplies";
+import { track } from "../../../../app/analytics";
 import { invalidateAgentTranscript } from "../../transcript/agentTranscript";
 import type { ChatAttachment, ChatMessage } from "../../transcript/transcript";
 import type { ConversationView } from "../useChat-view";
@@ -55,9 +56,9 @@ export interface SendHost {
     readonly refocus: () => void;
     // What a press with nothing to send with does instead: opens the model list.
     readonly openModels: () => void;
-    // Sets this conversation's limit answer to resend, unless something already arms it: what makes a scheduled send
-    // fire by itself when the allowance reopens. Runs beside the send, never ahead of it (a chat's first message is what
-    // registers it), which is safe because the daemon asks the answer afresh when the window opens.
+    // Sets this conversation's limit answer to resend, unless something already arms it: what sends a scheduled message
+    // again when the reopen it was booked for came too early and was refused. Runs beside the send, never ahead of it (a
+    // chat's first message is what registers it), which is safe because the daemon asks the answer afresh at the refusal.
     readonly armLimitResend: () => Promise<void>;
 }
 
@@ -139,14 +140,14 @@ export const useComposerSend = (host: SendHost) => {
         const at = view.spentReopensAt.value;
         return at === undefined || at * 1_000 <= paneNow.value ? undefined : at * 1_000;
     });
-    // The pane's words, plus what only a scheduled send says: when, and whether it replaces a turn already waiting.
+    // The pane's words, plus what only a scheduled send says: when, and whether a turn already waiting goes ahead of it.
     const words = computed<ComposerWords>(() => {
         const until = spentUntil.value;
         if (until === undefined) {
             return host.words.value;
         }
         const waiting = pickUp.value?.reason === `limit` && pickUp.value.held !== undefined;
-        return { ...host.words.value, reopens: formatReset(Math.round(until / 1_000), paneNow.value), replacesWaiting: waiting };
+        return { ...host.words.value, reopens: formatReset(Math.round(until / 1_000), paneNow.value), followsWaiting: waiting };
     });
     // One snapshot of the composer for the ladder; the pane supplies only what a mounted chat alone has.
     const situation = computed<ComposerSituation>(() => ({
@@ -164,6 +165,7 @@ export const useComposerSend = (host: SendHost) => {
         // Read against the clock here: the pure ladder (PickUpSituation) must not ask what time it is.
         pickUp: pickUp.value === undefined ? undefined : { ready: pickUpReady(pickUp.value, paneNow.value) },
         queued: queued.value.length,
+        queueScheduled: view.queuePaused.value === `scheduled`,
         connected: connected.value,
         spentUntil: spentUntil.value,
     }));
@@ -222,8 +224,9 @@ export const useComposerSend = (host: SendHost) => {
     };
 
     // One path whether or not a turn runs (TurnClient.enqueue); typed during a pending plan, the words reject it as
-    // revision feedback instead. The chips go with the message, which owns their thumbnails from here.
-    const sendDraft = (): void => {
+    // revision feedback instead. The chips go with the message, which owns their thumbnails from here. `sendAt` books
+    // the words for later instead (a scheduled send): they wait in the queue, and no turn opens.
+    const sendDraft = (sendAt?: number): void => {
         const text = draft.value.trim();
         const plan = planMessage.value?.plan;
         if (plan !== undefined) {
@@ -238,8 +241,12 @@ export const useComposerSend = (host: SendHost) => {
             const context = editorContext.forSend();
             // A routed chat's opening message waits for its one reading, so the card and model are on for the turn that
             // decides the tree; every other send goes now.
-            const readings = host.route.beforeSend(text, editorContext.include.value);
-            if (readings === undefined) {
+            const readings = sendAt === undefined ? host.route.beforeSend(text, editorContext.include.value) : undefined;
+            if (sendAt !== undefined) {
+                // The funnel's milestone all the same: a booked message is a sent one, as the reader meant it.
+                track(`message_sent`, { agent: view.conversation.value.selection.provider.value, scheduled: true });
+                void view.conversation.value.turn.schedule(text, sendAt, snapshot, context);
+            } else if (readings === undefined) {
                 void view.send(text, snapshot, context);
             } else {
                 void readings.then(() => view.send(text, snapshot, context));
@@ -283,9 +290,12 @@ export const useComposerSend = (host: SendHost) => {
         if (!canSend.value) {
             return;
         }
-        // A scheduled send is an ordinary send with the limit answer set: the daemon tries it, turns it away at the door
-        // for free, and fires it when the window opens. A failed write leaves the card's own control saying `wait`.
-        if (intent.value === `scheduled` && options.now !== true) {
+        // A scheduled send is booked, not tried: the words wait in the queue, drawn as scheduled, and the sandbox lets them
+        // go when the window reopens; nothing reaches the provider before, so there is no refusal to show. The limit answer
+        // is set to resend as well, for a reopen the provider named too early (that turn is refused, and goes again at the
+        // next one) and for a Continue pressed here. A failed write leaves the card's own control saying `wait`.
+        const booking = intent.value === `scheduled` && options.now !== true ? spentUntil.value : undefined;
+        if (booking !== undefined) {
             // allow(silent-catch): the write is optimistic and rolls back on failure, so the card's control saying `wait` is the report.
             void host.armLimitResend().catch(() => undefined);
         }
@@ -294,7 +304,7 @@ export const useComposerSend = (host: SendHost) => {
             continueTurn();
             return;
         }
-        sendDraft();
+        sendDraft(booking);
     };
 
     return {

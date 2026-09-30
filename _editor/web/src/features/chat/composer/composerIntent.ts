@@ -9,9 +9,9 @@ import { t } from "@intentic/ui/i18n";
 //  - `place`, the agent's voice is armed: words go into the transcript as the agent's own, no turn.
 //  - `edit`, a message is being replaced: the send rewinds to it and asks again.
 //  - `plan`, a plan is waiting on an answer: typing revises it rather than starting anything.
-//  - `scheduled`, nothing is running but the account the turn would run on is spent: the send still goes (the daemon
-//    turns it away before any request, for free) with this conversation's limit answer set to resend, so it fires by
-//    itself when the allowance reopens. Never wrong: a reading that went stale just lets it run now.
+//  - `scheduled`, nothing is running but the account the turn would run on is spent: the send is booked, not tried. The
+//    words wait in the conversation's queue, drawn as scheduled, and the sandbox lets them go when the allowance
+//    reopens; nothing reaches the provider before, so there is no refusal to show for a wait the reader chose knowingly.
 //  - `idle`, nothing is running: the ordinary send.
 //  - `parked`, a turn is live but stopped on a card: the message waits for the card to be answered. Also a chat the
 //    agents list says waits on a person while this window has not drawn the card yet: the composer must not read as
@@ -54,6 +54,11 @@ export interface ComposerSituation {
     readonly pickUp: PickUpSituation | undefined;
     /** Messages written mid-turn that haven't reached the agent yet. */
     readonly queued: number;
+    /**
+     * Those messages are a scheduled send, waiting for their instant: an empty press does not let them go, since the
+     * button reads as a time and not as "now"; the held bubble's own Send now does.
+     */
+    readonly queueScheduled?: boolean;
     /** There is an account to send with. */
     readonly connected: boolean;
     /**
@@ -74,8 +79,8 @@ export interface ComposerWords {
     readonly editDropped: number;
     /** When the spent allowance reopens, as the button and the limit card both say it (pickUpWhen); `scheduled` only. */
     readonly reopens?: string;
-    /** A turn already waits on the limit here, which the next send replaces rather than joins (the daemon supersedes it). */
-    readonly replacesWaiting?: boolean;
+    /** A turn already waits on the limit here: it goes first when the allowance reopens, and the booked message after it. */
+    readonly followsWaiting?: boolean;
 }
 
 export const sendIntentOf = (situation: ComposerSituation): SendIntent => {
@@ -125,11 +130,11 @@ const SEND_HINT: Record<SendIntent, (words: ComposerWords) => TooltipValue> = {
             ? t(`chat.composerIntent.hintEditOne`)
             : { title: t(`chat.composerIntent.hintEditOne`), rows: [{ label: t(`chat.composerIntent.alsoReplaced`), value: words.editDropped - 1 }] },
     plan: () => ({ title: t(`chat.composerIntent.hintPlan`), note: t(`chat.composerIntent.hintPlanNote`) }),
-    // Promises the one thing the daemon guarantees: it tries now, and books the reopen only if that is refused.
+    // Promises the one thing the sandbox guarantees: nothing goes before the reopen, unless the reader says so.
     scheduled: (words) => ({
         title: t(`chat.composerIntent.hintScheduled`),
         rows: [{ label: t(`chat.composerIntent.sendsAt`), value: words.reopens ?? `` }],
-        note: words.replacesWaiting === true ? t(`chat.composerIntent.hintScheduledReplaces`) : t(`chat.composerIntent.triesNowFirst`),
+        note: words.followsWaiting === true ? t(`chat.composerIntent.hintScheduledAfter`) : t(`chat.composerIntent.hintScheduledHeld`),
     }),
     idle: () => t(`chat.composerIntent.hintIdle`),
     // Says whether Send reaches the running turn or waits, so identical buttons don't mean different things.
@@ -231,7 +236,8 @@ export const continueVisible = (situation: ComposerSituation): boolean =>
 export const continueOffered = (situation: ComposerSituation): boolean => continueVisible(situation) && situation.pickUp?.ready === true;
 
 // A bare press with nothing typed, sending the messages written while the agent was busy.
-const queueFlushable = (situation: ComposerSituation): boolean => situation.queued > 0 && !situation.streaming && !situation.pendingPlan;
+const queueFlushable = (situation: ComposerSituation): boolean =>
+    situation.queued > 0 && !situation.streaming && !situation.pendingPlan && situation.queueScheduled !== true;
 
 // Whether the press lands at all; a mid-turn message is never refused; only whether there's something
 // to send and something stopping it.

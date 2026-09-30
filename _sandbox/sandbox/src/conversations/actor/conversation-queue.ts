@@ -44,6 +44,8 @@ export const TurnQueueSchema = z.object({
     items: z.array(QueuedItemSchema),
     revision: z.number(),
     paused: QueuePauseSchema.optional(),
+    // When a `scheduled` hold lets its messages go by itself (ms); nothing else carries an instant.
+    until: z.number().optional(),
 });
 export type TurnQueue = z.infer<typeof TurnQueueSchema>;
 
@@ -52,11 +54,13 @@ export const NO_QUEUE: TurnQueue = { items: [], revision: 0 };
 // What an edit or a removal found: done, the message changed since it was read, or it is no longer waiting.
 export type QueueChange = "done" | "stale" | "missing";
 
-// The next queue: its revision moved, and no hold left over a queue with nothing in it to hold.
-const next = (queue: TurnQueue, items: readonly QueuedItem[], paused: QueuePause | undefined): TurnQueue => ({
+// The next queue: its revision moved, and no hold left over a queue with nothing in it to hold. A scheduled hold keeps
+// its instant unless one is given; any other hold has none.
+const next = (queue: TurnQueue, items: readonly QueuedItem[], paused: QueuePause | undefined, until: number | undefined = queue.until): TurnQueue => ({
     items: [...items],
     revision: queue.revision + 1,
     ...(paused === undefined || items.length === 0 ? {} : { paused }),
+    ...opt("until", paused === "scheduled" && items.length > 0 ? until : undefined),
 });
 
 /** Joins the end of the queue; a person's message lets a held queue go, since sending again is them saying so. */
@@ -65,6 +69,16 @@ export const joined = (queue: TurnQueue, item: Omit<QueuedItem, "revision">): Tu
         return queue;
     }
     return next(queue, [...queue.items, { ...item, revision: queue.revision + 1 }], item.voice === "person" ? undefined : queue.paused);
+};
+
+/**
+ * Joins the end of the queue and holds everything in it until `until`: a person's scheduled send, booked for when a
+ * spent allowance reopens. The latest booking's instant wins, since it is the newest reading of when that is.
+ */
+export const scheduled = (queue: TurnQueue, item: Omit<QueuedItem, "revision">, until: number): TurnQueue => {
+    const present = queue.items.some((waiting) => waiting.id === item.id);
+    const items = present ? queue.items : [...queue.items, { ...item, revision: queue.revision + 1 }];
+    return next(queue, items, "scheduled", until);
 };
 
 /** Takes out what a turn just delivered. */
@@ -162,4 +176,5 @@ export const queueView = (queue: TurnQueue): ConversationQueue => ({
     })),
     revision: queue.revision,
     ...(queue.paused === undefined ? {} : { paused: queue.paused }),
+    ...opt("until", queue.paused === "scheduled" ? queue.until : undefined),
 });
