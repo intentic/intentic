@@ -10,6 +10,12 @@ import { localFace } from "../../../app/environments/local";
 
 export const HANDOFF_QUERY = `handoff`;
 export const HANDOFF_KEY = `intentic.localHandoff`;
+
+// THE OTHER `handoff`: the desktop sign-in lands at this path with `?handoff=<row id>&verifier=…` (desktop-app auth.rs
+// `complete_path`), naming the parked sign-in rather than a file. Taking it off the address there left the page with a
+// verifier and nothing to redeem, so every desktop sign-in ended on "This sign-in link is incomplete."
+export const SIGN_IN_COMPLETE_PATH = `/desktop-auth/complete`;
+
 // Past this a kept handoff is dropped unread: its token has long expired, and a file nobody has been waiting on for a
 // quarter of an hour is not news.
 export const HANDOFF_STALE_MS = 15 * 60_000;
@@ -128,10 +134,12 @@ let lookedForKept = false;
  * The router's half, for every navigation: a `handoff` query is kept (when it validates) and the navigation replayed
  * without it, every other key riding along, so the bearer never sits in the address bar, the history or a sign-in's
  * return address. True for a navigation with nothing to take. Inert in a local window, which is never where the app
- * hands a file. `signedIn` says whether someone is, for the arrival to wait on.
+ * hands a file, and on the desktop sign-in's landing, whose `handoff` is its own (SIGN_IN_COMPLETE_PATH); a handoff
+ * kept before that sign-in is looked for on the navigation after it. `signedIn` says whether someone is, for the
+ * arrival to wait on.
  */
 export const receiveHandoff = (to: Pick<RouteLocationNormalized, `path` | `query` | `hash`>, signedIn: () => boolean): true | RouteLocationRaw => {
-    if (localFace() !== undefined) {
+    if (localFace() !== undefined || to.path === SIGN_IN_COMPLETE_PATH) {
         return true;
     }
     const raw = to.query[HANDOFF_QUERY];

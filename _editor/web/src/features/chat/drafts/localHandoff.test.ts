@@ -137,6 +137,27 @@ describe(`the router's half`, () => {
         expect(arrivals).toEqual([]);
     });
 
+    /* THE REGRESSION: the desktop sign-in's own `handoff` was taken off its landing, and no desktop sign-in could finish. */
+    it(`leaves the desktop sign-in's landing alone, whose handoff is the parked sign-in rather than a file`, async () => {
+        const to = { path: `/desktop-auth/complete`, query: { handoff: `cm1row0id`, verifier: `v`.repeat(64), profile: `desk` }, hash: `` };
+        expect(receiveHandoff(to, signedIn)).toBe(true);
+        expect(handoffWaiting()).toBe(false);
+        await settle();
+        expect(arrivals).toEqual([]);
+    });
+
+    it(`brings a file handed over before the sign-in in on the navigation after its landing`, async () => {
+        const reloaded = await freshImport<typeof import("./localHandoff")>(`./localHandoff`, import.meta.url);
+        reloaded.keepHandoff(handoff);
+        const landing = { path: `/desktop-auth/complete`, query: { handoff: `cm1row0id`, verifier: `v` }, hash: `` };
+        expect(reloaded.receiveHandoff(landing, signedIn)).toBe(true);
+        await settle();
+        expect(arrivals).toEqual([]);
+        expect(reloaded.receiveHandoff({ path: `/`, query: {}, hash: `` }, signedIn)).toBe(true);
+        await settle();
+        expect(arrivals).toEqual([`arrive`]);
+    });
+
     it(`looks once, on a page's first navigation, for a handoff kept before a reload`, async () => {
         const reloaded = await freshImport<typeof import("./localHandoff")>(`./localHandoff`, import.meta.url);
         reloaded.keepHandoff(handoff);
