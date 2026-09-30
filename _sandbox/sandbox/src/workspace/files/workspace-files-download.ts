@@ -26,8 +26,16 @@ const MIME_BY_EXT: Record<string, string> = {
     weba: "audio/webm",
     flac: "audio/flac",
     m4a: "audio/mp4",
+    m4b: "audio/mp4",
     aac: "audio/aac",
-    // Last three are containers no browser decodes natively; typed anyway so the player reports its own error.
+    // From here on, formats only some browsers decode (AIFF and CAF in Safari, Matroska outside it) or none do (WMA,
+    // AMR, AVI, WMV, MPEG, FLV); typed anyway so the player tries, and reports its own error where it can't.
+    aif: "audio/aiff",
+    aiff: "audio/aiff",
+    caf: "audio/x-caf",
+    mka: "audio/x-matroska",
+    wma: "audio/x-ms-wma",
+    amr: "audio/amr",
     mp4: "video/mp4",
     m4v: "video/mp4",
     webm: "video/webm",
@@ -37,6 +45,10 @@ const MIME_BY_EXT: Record<string, string> = {
     mkv: "video/x-matroska",
     avi: "video/x-msvideo",
     wmv: "video/x-ms-wmv",
+    mpg: "video/mpeg",
+    mpeg: "video/mpeg",
+    "3g2": "video/3gpp2",
+    flv: "video/x-flv",
 };
 export const contentTypeForPath = (absPath: string): string => MIME_BY_EXT[extname(absPath).slice(1).toLowerCase()] ?? "application/octet-stream";
 

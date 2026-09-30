@@ -4,6 +4,7 @@ import { useDevice } from "@intentic/ui";
 import { computed, onMounted, onUnmounted, useTemplateRef, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { closeOwnWindow } from "../../../app/environments/desktop";
+import { useExtensionHost } from "../../../extension-host/useExtensionHost";
 import { useKeybindings } from "../../../shell/commands/useKeybindings";
 import { useShellCommands } from "../../../shell/commands/useShellCommands";
 import { claimFloating, type FloatingPanel } from "../../../shell/window/floating";
@@ -87,6 +88,10 @@ useKeybindings();
 // window behind this one. Under the phone breakpoint there is no room beside, and references go to the main window.
 const { mobile } = useDevice();
 if (panel === `chat`) {
+    // What that panel draws a file with is an extension's viewer (video, audio, pictures, PDF, Office), and a side view
+    // may be one too: without a host of its own this window has none, and every such file opens on "Preview isn't
+    // available". Idempotent, and exclusive with the shell's by route, like the commands above.
+    useExtensionHost();
     const coreSideViews = registerCoreSideViews();
     watch(mobile, (narrow) => (sideDocked.value = !narrow), { immediate: true });
     onUnmounted(() => {

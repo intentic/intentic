@@ -1,5 +1,6 @@
 import type { IntenticApi, ViewerRegistration } from "@intentic/extension-api";
 import * as viewers from "@intentic/ext-viewers";
+import { formatOf } from "@intentic/ui/file-format";
 
 // Exercises ext-viewers by calling activate() against a minimal fake IntenticApi, proving it registers every viewer its
 // manifest declares.
@@ -70,7 +71,19 @@ describe(`ext-viewers`, () => {
     it(`declares audio and video as one streaming viewer`, () => {
         const media = (viewers.manifest.contributes?.viewers ?? []).find((viewer) => viewer.id === `media`);
         expect(media?.fetch).toBe(`url`);
-        expect(media?.extensions).toEqual(expect.arrayContaining([`mp3`, `wav`, `flac`, `m4a`, `mp4`, `webm`, `mov`, `mkv`]));
+        expect(media?.extensions).toEqual(
+            expect.arrayContaining([`mp3`, `wav`, `flac`, `m4a`, `aiff`, `wma`, `mp4`, `webm`, `mov`, `mkv`, `avi`, `mpg`, `flv`]),
+        );
+    });
+
+    // The player takes a format this browser can't decode too, and says so over a Download button; what it must not do
+    // is claim one the file tree calls something else, so the icon, the home's group and the tab all agree it's a
+    // recording.
+    it(`claims only what the format table calls audio or video`, () => {
+        const media = (viewers.manifest.contributes?.viewers ?? []).find((viewer) => viewer.id === `media`);
+        for (const extension of media?.extensions ?? []) {
+            expect([`audio`, `video`], extension).toContain(formatOf(`clip.${extension}`).category);
+        }
     });
 
     it(`registers a compare component for the format whose manifest entry declares one, and for no other`, () => {

@@ -22,7 +22,14 @@
                     "opus",
                     "weba",
                     "m4a",
+                    "m4b",
                     "aac",
+                    "aif",
+                    "aiff",
+                    "caf",
+                    "mka",
+                    "wma",
+                    "amr",
                     "mp4",
                     "m4v",
                     "webm",
@@ -31,7 +38,11 @@
                     "3gp",
                     "mkv",
                     "avi",
-                    "wmv"
+                    "wmv",
+                    "mpg",
+                    "mpeg",
+                    "3g2",
+                    "flv"
                 ],
                 "fetch": "url"
             },
