@@ -108,7 +108,11 @@ export const createOffloadRoutes = (deps: OffloadDeps) => {
         // The rules the queue applies, less the ones that exempt a line from it (a search, a dev server): those never
         // queue, so they are never heavy work to send anywhere.
         kinds: i.kinds.handler(async () => ({
-            kinds: (await deps.heavyCommands.read()).rules.filter((rule) => rule.exempt !== true).map(({ id, pattern }) => ({ id, pattern })),
+            // Never an install: it writes this sandbox's own dependencies, and a runner installs into its copy and hands
+            // back only a patch, so the tree here would stay uninstalled.
+            kinds: (await deps.heavyCommands.read()).rules
+                .filter((rule) => rule.exempt !== true && rule.pool !== "install")
+                .map(({ id, pattern }) => ({ id, pattern })),
         })),
     };
 };

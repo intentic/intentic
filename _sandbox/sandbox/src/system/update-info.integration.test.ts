@@ -27,13 +27,22 @@ const sandbox = () => {
     return { historyRoot, client };
 };
 
-// GitHub, answering the newest release and the page of recent ones.
+// GitHub, answering the newest release and the page of recent ones, and the registry, whose `:stable` already names
+// that release's image: a release is offered only once it is there (version-check.ts).
 const github = (latest: string, releases: readonly unknown[] = []): void => {
-    stubGlobal("fetch", async (url: string | URL) =>
-        String(url).endsWith("/releases/latest")
-            ? new Response(JSON.stringify({ tag_name: `v${latest}` }), { status: 200 })
-            : new Response(JSON.stringify(releases), { status: 200 }),
-    );
+    stubGlobal("fetch", async (url: string | URL) => {
+        const address = String(url);
+        if (address.endsWith("/releases/latest")) {
+            return new Response(JSON.stringify({ tag_name: `v${latest}` }), { status: 200 });
+        }
+        if (address.includes("ghcr.io/token")) {
+            return new Response(JSON.stringify({ token: "read-only" }), { status: 200 });
+        }
+        if (address.includes("ghcr.io/v2/")) {
+            return new Response(null, { status: 200, headers: { "docker-content-digest": `sha256:${latest}` } });
+        }
+        return new Response(JSON.stringify(releases), { status: 200 });
+    });
 };
 
 test("what the host last did about the version is passed on as it wrote it, and nothing when it wrote nothing", async () => {

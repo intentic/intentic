@@ -129,7 +129,8 @@ describe.skipIf(!kernel.runs)(kernel.title("a native program behind its wrapper"
         const wrapper = join(shims, "bun");
         const heavy = JSON.parse((await run(wrapper, ["test", "x.test.ts"], { env: common })).stdout.trim()) as Record<string, unknown>;
         expect(heavy).toEqual({ argv: ["test", "x.test.ts"], oom: KLASS.oomScoreAdj, nice: 19, held: "package-script", slot: null });
-        const light = JSON.parse((await run(wrapper, ["install"], { env: common })).stdout.trim()) as Record<string, unknown>;
-        expect(light).toMatchObject({ argv: ["install"], oom: inherited, held: null });
+        // A line no rule names; an install is no longer one, it queues in the `dependency-install` lane.
+        const light = JSON.parse((await run(wrapper, ["--version"], { env: common })).stdout.trim()) as Record<string, unknown>;
+        expect(light).toMatchObject({ argv: ["--version"], oom: inherited, held: null });
     });
 });
