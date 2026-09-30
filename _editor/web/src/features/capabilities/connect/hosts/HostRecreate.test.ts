@@ -8,8 +8,10 @@ import type { EnvironmentRebuildWait } from "@intentic/sandbox-contract";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import PrimeVue from "primevue/config";
 import { type App, computed, createApp, defineComponent, h, nextTick, ref } from "vue";
+import { useOsPreference } from "@intentic/ui";
 import { IconStub } from "@intentic/ui/testing";
 import * as useDevicesOriginal from "../../../sandbox/devices/useDevices";
+import { bashCommand } from "../../../../app/environments/scriptCommand";
 
 const reachable = ref(true);
 const fleet = ref<{ id: string; title: string; status: string }[]>([]);
@@ -27,7 +29,9 @@ const answering: Answering = { version: `1.316.0` };
 jest.mock(`./swapLanding`, () => ({ appliedHash: async () => answering.hash, runningVersion: async () => answering.version }));
 const swapServingSandbox = jest.fn(async (_hostId: string, _slug: string, _op: string): Promise<string | undefined> => undefined);
 // Imported statically and spread: a module loaded inside a mock factory deadlocks bun's link of the graph naming it.
-jest.mock(`../../../sandbox/devices/useDevices`, () => ({ ...useDevicesOriginal, swapServingSandbox, useHostRunning: () => ref(`host-1`) }));
+// The machine this page can ask directly; undefined is one it cannot reach, where the command is the way.
+const hostRunning = ref<string | undefined>(`host-1`);
+jest.mock(`../../../sandbox/devices/useDevices`, () => ({ ...useDevicesOriginal, swapServingSandbox, useHostRunning: () => hostRunning }));
 jest.mock(`../../../sandbox/client/useSandbox`, () => ({ useSandbox: () => ({ activeSandboxId: ref(`sb1`), reachable }) }));
 jest.mock(`../../../sandbox/devices/ConnectDeviceHint.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 // The rebuild the sandbox holds for idle agents, and whether it can: off, as an older sandbox answers.
@@ -55,12 +59,12 @@ const settleFaked = async (): Promise<void> => {
     await nextTick();
 };
 
-// The button, mounted and not yet pressed. A hash makes it a rebuild of that overlay.
-const mount = (hash?: string): HTMLElement => {
+// The button, mounted and not yet pressed. A hash makes it a rebuild of that overlay; `gilded` is the update card's.
+const mount = (hash?: string, gilded = false): HTMLElement => {
     const el = document.createElement(`div`);
     document.body.append(el);
     const action = hash === undefined ? `Update` : `Rebuild`;
-    app = createApp({ render: () => h(HostRecreate, { slug: `work`, action, hash, onBack: () => (backs += 1) }) });
+    app = createApp({ render: () => h(HostRecreate, { slug: `work`, action, hash, gilded, onBack: () => (backs += 1) }) });
     app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.use(PrimeVue);
@@ -105,6 +109,7 @@ afterEach(() => {
     app?.unmount();
     app = undefined;
     backs = 0;
+    hostRunning.value = `host-1`;
     reachable.value = true;
     fleet.value = [];
     autoResume.value = false;
@@ -352,4 +357,40 @@ it(`says a rebuild that waited did not go through, until dismissed`, async () =>
     buttonNamed(`Dismiss`)?.click();
     await settle();
     expect(cancelIdle).toHaveBeenCalledTimes(1);
+});
+
+it(`folds a gilded update's command behind its gold button on a machine this page cannot reach`, async () => {
+    hostRunning.value = undefined;
+    useOsPreference().cmdOs.value = `unix`;
+    const el = mount(undefined, true);
+    const button = buttonNamed(`Update now`);
+    expect(button?.classList.contains(`ui-button-gilded`)).toBe(true);
+    // Nothing to run is printed at whoever opens the page; the press is what asks for it.
+    expect(el.querySelector(`pre`)).toBeNull();
+    expect(button?.getAttribute(`aria-expanded`)).toBe(`false`);
+    button?.click();
+    await nextTick();
+    expect(shown()).toContain(`Run this in a terminal on the computer that runs your sandbox:`);
+    expect(el.querySelector(`pre`)?.textContent).toBe(bashCommand(`update`, ``, `work`));
+    expect(buttonNamed(`Update now`)?.getAttribute(`aria-expanded`)).toBe(`true`);
+    buttonNamed(`Update now`)?.click();
+    await nextTick();
+    expect(el.querySelector(`pre`)).toBeNull();
+});
+
+it(`prints the command at once where the button is not the update card's, with what it costs under it`, () => {
+    hostRunning.value = undefined;
+    useOsPreference().cmdOs.value = `unix`;
+    const el = mount();
+    expect(el.querySelector(`pre`)?.textContent).toBe(bashCommand(`update`, ``, `work`));
+    expect(shown()).toContain(`It downloads and builds first, which interrupts nothing, then restarts your sandbox for about half a minute.`);
+});
+
+it(`carries the gold from the update card's button into the confirmation that takes it`, async () => {
+    mount(undefined, true);
+    buttonNamed(`Update now`)?.click();
+    await nextTick();
+    const buttons = [...document.body.querySelectorAll(`button`)].filter((button) => button.textContent?.trim() === `Update now`);
+    // The card's own and the dialog's, both gold.
+    expect(buttons.map((button) => button.classList.contains(`ui-button-gilded`))).toEqual([true, true]);
 });

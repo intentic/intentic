@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, Code, commandLang, CopyButton, Notice, type NoticeModel, RowGroup, RowNote, StatusBadge, ui, useOsPreference } from "@intentic/ui";
+import { Button, Code, commandLang, CopyButton, type IconName, Notice, type NoticeModel, RowGroup, RowNote, StatusBadge, ui, useOsPreference } from "@intentic/ui";
 import { useAsyncAction, useNow } from "@intentic/ui/async";
 import { computed, ref } from "vue";
 import DevRebuild from "../../environment/rebuild/DevRebuild.vue";
@@ -9,6 +9,8 @@ import { useAgents } from "../../../agents/fleet/useAgents";
 import { useSandbox } from "../../client/useSandbox";
 import { expectRestart, type RestartQuiet } from "../../live/sandboxRestart";
 import HostedRollbackDialog from "./HostedRollbackDialog.vue";
+import UpdateRollbackPanel from "./UpdateRollbackPanel.vue";
+import UpdateWhatsNew from "./UpdateWhatsNew.vue";
 import { updateCardPlan } from "./updateOutcome";
 import { useSandboxVersion } from "./useSandboxVersion";
 import { UPDATE_ACTION_ANCHOR } from "./updateAnchor";
@@ -21,6 +23,14 @@ import { useT } from "@intentic/ui/i18n";
 // something to say about the version that runs (what the machine last did about it, a release withdrawn after it
 // shipped, a release skipped) or a way back to offer, and splits download from apply so it can offer a bounded restart
 // once staged. Which of its actions apply is decided in one place (updateOutcome.ts).
+//
+// AN UPDATE ON OFFER IS GOOD NEWS, AND IS DRAWN AS SOME. It used to be a wall: two full terminal walkthroughs (one of
+// them for the secondary "download first"), the same cost sentence twice, three paragraphs of reassurance, the release
+// notes as one run of large text, and the developer notes in a red box under a heading that called the whole update a
+// danger. Now the offer is its own card, in reading order: what you get (the version, and how much is in it), the one
+// gold button that takes it, what it costs and keeps as three short facts, then what is new. Everything a reader might
+// need but most never do (the command for a machine this page cannot reach, downloading first, what developers must
+// change, the way back) is one line that opens.
 
 const t = useT();
 
@@ -84,9 +94,6 @@ const restartHosted = (): Promise<void> =>
         t(`sandbox.sandboxUpdateCard.couldntRestart`),
     );
 
-// A breaking update gets a danger badge and its detailed notes remain available below the action.
-const breaking = computed(() => updateAvailable.value && breakingNotes.value.length > 0);
-
 // Offered on every OS: recreate.ps1 takes -Rollback exactly as recreate.sh takes --rollback, and HostRecreate prints
 // whichever the reader's OS spells.
 const rollbackTo = computed(() => info.value?.previousImage);
@@ -135,6 +142,10 @@ const openRollback = (): void => {
     }
     rollbackOpen.value = true;
 };
+// The sentence the way back opens with, when the owner went looking for it rather than a withdrawn release sending them.
+const rollbackLead = computed(() =>
+    plan.value.rollbackWhy ? undefined : [t(`sandbox.sandboxUpdateCard.troubleLead`), plan.value.news?.ready].filter(Boolean).join(` `),
+);
 
 // The owner's "not this one", and taking it back.
 const { notice: skipNotice, run: runSkip } = useAsyncAction();
@@ -173,67 +184,89 @@ const newsNotice = computed<NoticeModel | undefined>(() => {
 const { fleet } = useAgents();
 const midTurn = computed(() => fleet.value.filter(turnInFlight).length);
 
-// Neutral on a checkout-built sandbox: the two versions still differ and the badge still says so, but an amber "take
-// this" on a card telling you not to would be the card arguing with itself.
 // The files the downloaded build converts on its first boot, read off its own pre-flight; empty when it converts none.
 const convertedFiles = computed(() => stagedPlan.value?.steps ?? []);
 
 // The downloaded build's pre-flight refuses this sandbox's files, so the swap would stop before touching anything:
-// the update is not offered, and the refusal above says why.
+// the update is not offered, and the refusal says why.
 const planRefused = computed(() => updateAvailable.value && stagedPlan.value?.ok === false && localImage.value === undefined);
 
-// The update is actually on offer from this card right now, which is where the reassurance under it belongs.
+// The update is actually on offer from this card right now: the offer's own card, rather than the quiet group.
 const offering = computed(() => updateAvailable.value && localImage.value === undefined && !planRefused.value);
 // The previous version stays parked for a day only where `ic` does the swap: not on a hosted machine, not under a deploy.
 const throughIc = computed(() => hosted.value === undefined && !serverManaged.value);
 const retryLabel = computed(() => (plan.value.retry ? t(`sandbox.sandboxUpdateCard.tryAgain`) : undefined));
 
-const versionBadge = computed(() => (localImage.value !== undefined ? `neutral` : breaking.value ? `danger` : `warning`));
+// How much is in it: every note in the gap, including the ones the daemon held back for the changelog.
+const improvements = computed(() => updateNotes.value.length + moreUpdateNotes.value);
 
-const updateHeading = computed(() => {
+// WHAT TAKING IT COSTS AND KEEPS, as three facts short enough to read at a glance beside the button; the sentence each
+// one stands for is on hover. Nothing here promises the machine goes back by itself.
+interface Fact {
+    readonly icon: IconName;
+    readonly label: string;
+    readonly tip: string;
+}
+const facts = computed((): Fact[] => {
+    const downtimeTip = hosted.value
+        ? t(`sandbox.sandboxUpdateCard.restartToUpdatePlatform`)
+        : updateStaged.value
+          ? t(`capabilities.hostRecreate.costRestartOnlyShort`)
+          : t(`capabilities.hostRecreate.costBuildThenRestartShort`);
+    return [
+        // A deploy decides its own restart, so what it costs is not this card's to say.
+        ...(serverManaged.value ? [] : [{ icon: `clock` as const, label: t(`sandbox.sandboxUpdateCard.factDowntime`), tip: downtimeTip }]),
+        { icon: `shield`, label: t(`sandbox.sandboxUpdateCard.factFilesStay`), tip: t(`sandbox.sandboxUpdateCard.filesStay`) },
+        ...(throughIc.value ? [{ icon: `undo` as const, label: t(`sandbox.sandboxUpdateCard.factUndo`), tip: t(`sandbox.sandboxUpdateCard.previousStaysReady`) }] : []),
+    ];
+});
+
+// ONE FOLDED STEP OPEN AT A TIME, under the button: the command a machine this page cannot reach needs (HostRecreate's
+// own fold), or downloading first. Two blocks of shell open at once is the page this card used to be.
+const folded = ref<`command` | `download` | undefined>(undefined);
+const commandOpen = computed({
+    get: () => folded.value === `command`,
+    set: (open: boolean) => {
+        folded.value = open ? `command` : undefined;
+    },
+});
+const toggleDownload = (): void => {
+    folded.value = folded.value === `download` ? undefined : `download`;
+};
+
+// The quiet group's heading, for everything that is not an offer.
+const quietHeading = computed(() => {
     // A checkout-built sandbox has no update on offer here at all: what it runs comes from a working tree, and the
     // published release below is named as what it would be traded for.
     if (localImage.value !== undefined) {
         return t(`sandbox.sandboxUpdateCard.builtFromCheckout`);
     }
-    if (planRefused.value) {
-        return t(`sandbox.sandboxUpdateCard.updateHeldBack`);
-    }
-    if (breaking.value) {
-        return t(`sandbox.sandboxUpdateCard.updateAvailableBreaking`);
-    }
-    if (updateAvailable.value) {
-        return updateStaged.value ? t(`sandbox.sandboxUpdateCard.updateReady`) : t(`sandbox.sandboxUpdateCard.updateAvailable`);
-    }
-    return t(`sandbox.sandboxUpdateCard.sandboxImage`);
+    return planRefused.value ? t(`sandbox.sandboxUpdateCard.updateHeldBack`) : t(`sandbox.sandboxUpdateCard.sandboxImage`);
 });
 
-// "Having trouble?" joins the checkout rebuild's row when nothing would sit between them at the card's foot.
+// "Having trouble?" joins the checkout rebuild's row when nothing would sit between them at the group's foot.
 const troubleBesideRebuild = computed(
-    () => canRollBack.value && !plan.value.rollbackWhy && localImage.value !== undefined && !serverManaged.value && !updateAvailable.value && !offering.value,
+    () => canRollBack.value && !plan.value.rollbackWhy && localImage.value !== undefined && !serverManaged.value && !updateAvailable.value,
+);
+// The foot's own "Having trouble?": wherever the way back is offered and nothing else already opens it.
+const troubleAtFoot = computed(() => canRollBack.value && !plan.value.rollbackWhy && !troubleBesideRebuild.value);
+// The way back, open: only while there is one, however it was opened.
+const rollbackShown = computed(() => canRollBack.value && rollbackOpen.value);
+// The developer notes, the stored-file conversions and the way back: the offer's fine print, below what is new.
+const finePrint = computed(
+    () => breakingNotes.value.length > 0 || convertedFiles.value.length > 0 || stagedPlan.value?.downgrade === true || troubleAtFoot.value || rollbackShown.value,
 );
 </script>
 
 <template>
-    <RowGroup v-if="plan.visible" :label="updateHeading">
-        <template #actions>
-            <div class="flex flex-wrap items-center justify-end gap-2">
-                <StatusBadge v-if="plan.withdrawn" variant="warning" :label="t(`sandbox.sandboxUpdateCard.withdrawnBadge`)" dot />
-                <StatusBadge
-                    v-if="updateAvailable && updateStaged && !breaking && !planRefused"
-                    variant="success"
-                    :label="t(`sandbox.sandboxUpdateCard.downloaded`)"
-                    dot
-                />
-                <StatusBadge v-if="updateAvailable" :variant="versionBadge" :label="`${installed ?? '?'} → ${latest}`" dot />
-                <StatusBadge v-else-if="plan.skipped" variant="neutral" :label="t(`sandbox.sandboxUpdateCard.skippedBadge`)" />
-                <StatusBadge v-else-if="channel === `stable` && !plan.withdrawn" variant="success" :label="t(`shared.upToDate`)" dot />
-                <StatusBadge v-else-if="channel && !plan.withdrawn" variant="neutral" :label="channel" />
-            </div>
-        </template>
+    <div v-if="plan.visible">
+        <!-- THE OFFER. Its own card, lit from one corner with a gold hairline along its top: the one piece of good news
+             on this page, and the reading order is the order of the decision. -->
+        <section v-if="offering" class="ui-card relative isolate flex flex-col overflow-hidden p-0" :aria-label="t(`sandbox.sandboxUpdateCard.updateAvailable`)">
+            <div aria-hidden="true" class="pointer-events-none absolute -right-24 -top-36 -z-10 h-80 w-80 rounded-full bg-primary-500/15 blur-3xl" />
+            <div aria-hidden="true" class="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-primary-500/60 to-transparent" />
 
-        <RowNote variant="block">
-            <div class="flex flex-col gap-4">
+            <div class="flex flex-col gap-5 p-5 sm:p-6">
                 <!-- What there is to know about the version that runs, before what there is to take. -->
                 <Notice v-if="withdrawnNotice" :of="withdrawnNotice" />
                 <div v-if="newsNotice" class="flex flex-col gap-1.5">
@@ -245,23 +278,198 @@ const troubleBesideRebuild = computed(
                         <CopyButton :text="plan.news.log" />
                     </p>
                 </div>
-                <p v-if="plan.skipped" class="flex flex-wrap items-center gap-x-2 text-xs text-muted">
-                    <span>{{ t(`sandbox.sandboxUpdateCard.skippedLine`, { version: plan.skipped }) }}</span>
-                    <button type="button" :class="ui.textAction()" @click="skip(null)">{{ t(`sandbox.sandboxUpdateCard.showItAgain`) }}</button>
-                </p>
                 <Notice v-if="skipNotice" :of="skipNotice" />
 
-                <!-- THE STEP FIRST: the button, then the one or two sentences that go with it, and only then what the
-                     release changes. The developer notes are folded away below it and gate nothing. The switcher's
-                     update row points at this block by id, and focuses the button in it. -->
-                <div :id="UPDATE_ACTION_ANCHOR" class="flex flex-col gap-2">
-                    <template v-if="serverManaged">
-                        <p v-if="updateAvailable" class="text-2xs text-subtle">
-                            {{ t(`sandbox.sandboxUpdateCard.sandboxUpdatesOnNext`) }} <span class="font-mono">intentic deploy apply</span>
-                            {{ t(`sandbox.sandboxUpdateCard.againstHost`) }}
+                <!-- WHAT YOU GET: the version, where it takes you from, and how much is in it. -->
+                <header class="flex items-start gap-3.5">
+                    <span
+                        class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary-500/10 text-base text-primary-500 ring-1 ring-inset ring-primary-500/25"
+                        aria-hidden="true"
+                    >
+                        <Icon name="sparkles" />
+                    </span>
+                    <div class="flex min-w-0 flex-col gap-1">
+                        <p
+                            class="flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-wider"
+                            :class="updateStaged ? `text-success` : `text-link`"
+                        >
+                            <Icon v-if="updateStaged" name="check-circle" aria-hidden="true" />
+                            {{ updateStaged ? t(`sandbox.sandboxUpdateCard.updateReady`) : t(`sandbox.sandboxUpdateCard.updateAvailable`) }}
                         </p>
+                        <h2 class="text-xl font-semibold leading-tight tracking-tight text-content">{{ t(`sandbox.sandboxUpdateCard.offerTitle`, { version: latest }) }}</h2>
+                        <p class="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-muted">
+                            <span class="inline-flex items-center gap-1.5 font-mono text-2xs">
+                                <span class="rounded bg-content/5 px-1.5 py-0.5 text-subtle">{{ installed ?? `?` }}</span>
+                                <Icon name="arrow-right" class="text-subtle" aria-hidden="true" />
+                                <span class="rounded bg-primary-500/10 px-1.5 py-0.5 font-medium text-link">{{ latest }}</span>
+                            </span>
+                            <span v-if="improvements > 0">{{ t(`sandbox.sandboxUpdateCard.improvementCount`, { count: improvements }, improvements) }}</span>
+                        </p>
+                    </div>
+                </header>
+
+                <!-- THE STEP: the button, then what it costs and keeps. The switcher's update row points at this block by
+                     id and focuses the first button in it, which is the gold one. -->
+                <div :id="UPDATE_ACTION_ANCHOR" class="flex flex-col gap-3.5">
+                    <p v-if="serverManaged" class="text-xs text-muted">
+                        {{ t(`sandbox.sandboxUpdateCard.sandboxUpdatesOnNext`) }} <span class="font-mono text-content">intentic deploy apply</span>
+                        {{ t(`sandbox.sandboxUpdateCard.againstHost`) }}
+                    </p>
+                    <template v-else-if="hosted">
+                        <!-- Own block so the column's stretch doesn't draw the button at full width. -->
+                        <div>
+                            <Button :label="t(`sandbox.sandboxUpdateCard.restartUpdate`)" class="ui-button-loud ui-button-gilded" :loading="restarting" @click="restartHosted">
+                                <template #icon><Icon name="arrow-circle-up" /></template>
+                            </Button>
+                        </div>
+                        <Notice v-if="restartNotice" :of="restartNotice" />
                     </template>
+                    <!-- Downloaded already: what is left is the restart, so there is nothing to download first. -->
+                    <HostRecreate v-else-if="slug && updateStaged" :slug="slug" action="Update" ready gilded bare keeps-said :label="retryLabel" />
                     <template v-else-if="slug">
+                        <HostRecreate v-model:open="commandOpen" :slug="slug" action="Update" gilded bare keeps-said :label="retryLabel">
+                            <template #beside>
+                                <!-- The way to keep the restart for later: say what it does on hover, and open the step on press. -->
+                                <button
+                                    v-tooltip.top="{ title: t(`capabilities.hostRecreate.inBackground`), note: t(`capabilities.hostRecreate.nothingRestarts`) }"
+                                    type="button"
+                                    :class="ui.textAction()"
+                                    :aria-expanded="folded === `download`"
+                                    @click="toggleDownload"
+                                >
+                                    <Icon name="download" aria-hidden="true" />{{ t(`sandbox.sandboxUpdateCard.downloadFirst`) }}
+                                </button>
+                            </template>
+                        </HostRecreate>
+                        <div v-if="folded === `download`" class="rounded-lg border border-line-subtle bg-canvas/50 p-3.5">
+                            <HostRecreate :slug="slug" action="Download" />
+                        </div>
+                    </template>
+
+                    <ul class="flex flex-wrap gap-x-5 gap-y-1.5">
+                        <li v-for="fact in facts" :key="fact.icon" v-tooltip.top="fact.tip" class="flex items-center gap-1.5 text-2xs text-muted">
+                            <Icon :name="fact.icon" class="shrink-0 text-subtle" aria-hidden="true" />{{ fact.label }}
+                            <!-- The sentence behind the fact, for a reader who never hovers. -->
+                            <span class="sr-only">{{ fact.tip }}</span>
+                        </li>
+                    </ul>
+
+                    <!-- Only the restart costs a turn, so the way out is downloading first. -->
+                    <p v-if="midTurn > 0" class="flex gap-1.5 text-2xs text-warning">
+                        <Icon name="exclamation-triangle" class="mt-px shrink-0" aria-hidden="true" />
+                        <span>
+                            {{ t(`sandbox.sandboxUpdateCard.midTurnRestart`, { count: midTurn }, midTurn) }}
+                            <template v-if="!updateStaged">{{ t(`sandbox.sandboxUpdateCard.downloadCostsNothing`, { count: midTurn }, midTurn) }}</template>
+                            <template v-else>{{ t(`sandbox.sandboxUpdateCard.waitFleetToSettle`) }}</template>
+                        </span>
+                    </p>
+                    <!-- A staged update a newer release overtook; still worth saying, since applying now hands over the older image. -->
+                    <p v-if="stagedBehind" class="text-2xs text-muted">
+                        {{ t(`sandbox.sandboxUpdateCard.alreadyDownloadedHereReleased`, { stagedBehind, latest, stagedBehind2: stagedBehind }) }}
+                    </p>
+                </div>
+            </div>
+
+            <!-- WHAT IS NEW, for whoever weighs it: under the button, never in the way of it. -->
+            <UpdateWhatsNew
+                v-if="updateNotes.length > 0"
+                :notes="updateNotes"
+                :more="moreUpdateNotes"
+                class="border-t border-line-subtle px-5 py-5 sm:px-6"
+            />
+
+            <!-- THE FINE PRINT: each a line that opens. The developer notes gate nothing and are for whoever builds on
+                 the sandbox's API or config, so they are named, counted and folded, not painted as a danger. -->
+            <div v-if="finePrint" class="flex flex-col gap-3 border-t border-line-subtle px-5 py-4 sm:px-6">
+                <details v-if="convertedFiles.length > 0" class="group">
+                    <summary :class="ui.textAction(`w-full list-none [&::-webkit-details-marker]:hidden`)">
+                        <Icon name="file-edit" class="shrink-0 text-subtle" aria-hidden="true" />
+                        <span class="flex-1">{{ t(`sandbox.sandboxUpdateCard.updateConvertsStoredFiles`, { count: convertedFiles.length }, convertedFiles.length) }}</span>
+                        <Icon name="chevron-right" class="shrink-0 text-subtle transition-transform group-open:rotate-90" aria-hidden="true" />
+                    </summary>
+                    <div class="flex flex-col gap-1.5 pb-1 pl-6 pt-1">
+                        <ul class="flex flex-col gap-1">
+                            <li v-for="step in convertedFiles" :key="`${step.document}:${step.change}`" class="text-2xs text-muted">
+                                <span class="font-mono text-content">{{ step.document }}</span>: {{ step.change }}
+                            </li>
+                        </ul>
+                        <p class="text-2xs text-subtle">{{ t(`sandbox.sandboxUpdateCard.convertedFilesKeptAside`) }}</p>
+                    </div>
+                </details>
+                <p v-if="stagedPlan?.downgrade" class="text-2xs text-muted">
+                    {{ t(`sandbox.sandboxUpdateCard.newerVersionConvertedTheseFiles`) }}
+                </p>
+                <details v-if="breakingNotes.length > 0" class="group">
+                    <summary :class="ui.textAction(`w-full list-none [&::-webkit-details-marker]:hidden`)">
+                        <Icon name="code" class="shrink-0 text-warning" aria-hidden="true" />
+                        <span class="flex-1">{{ t(`sandbox.sandboxUpdateCard.developerChanges`, { count: breakingNotes.length }, breakingNotes.length) }}</span>
+                        <Icon name="chevron-right" class="shrink-0 text-subtle transition-transform group-open:rotate-90" aria-hidden="true" />
+                    </summary>
+                    <div class="flex flex-col gap-2.5 pb-1 pl-6 pt-1">
+                        <p class="text-2xs text-muted">
+                            {{ t(`sandbox.sandboxUpdateCard.developerChangesLead`) }}
+                            <a href="https://intentic.dev/docs/updates/" target="_blank" rel="noopener" class="text-link hover:underline">{{
+                                t(`sandbox.sandboxUpdateCard.whatUpdatesNeverBreak`)
+                            }}</a
+                            >.
+                        </p>
+                        <ul class="flex flex-col gap-1.5">
+                            <li v-for="note in breakingNotes" :key="note" class="flex gap-2 text-2xs text-content">
+                                <span class="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-warning/70" aria-hidden="true" />
+                                <span>{{ note }}</span>
+                            </li>
+                        </ul>
+                    </div>
+                </details>
+                <!-- The way back, tucked away: there for whoever comes looking and never pitched to whoever doesn't. -->
+                <button v-if="troubleAtFoot" type="button" :class="ui.textAction(`self-end text-2xs text-subtle`)" :aria-expanded="rollbackOpen" @click="toggleRollback">
+                    {{ t(`sandbox.sandboxUpdateCard.havingTrouble`) }}
+                </button>
+                <UpdateRollbackPanel
+                    v-if="rollbackShown"
+                    :lead="rollbackLead"
+                    :mid-turn="midTurn"
+                    :digest="rollbackDigest"
+                    :hosted="hosted !== undefined"
+                    :slug="slug"
+                    @hosted-rollback="hostedRollingBack = true"
+                />
+            </div>
+        </section>
+
+        <!-- NO OFFER: the version that runs, and what there is to know or do about it, as a quiet group like the rest of the page. -->
+        <RowGroup v-else :label="quietHeading">
+            <template #actions>
+                <div class="flex flex-wrap items-center justify-end gap-2">
+                    <StatusBadge v-if="plan.withdrawn" variant="warning" :label="t(`sandbox.sandboxUpdateCard.withdrawnBadge`)" dot />
+                    <!-- Neutral on a checkout-built sandbox: the two versions still differ and the badge still says so, but an
+                         amber "take this" on a card telling you not to would be the card arguing with itself. -->
+                    <StatusBadge v-if="updateAvailable" :variant="localImage ? `neutral` : `warning`" :label="`${installed ?? '?'} → ${latest}`" dot />
+                    <StatusBadge v-else-if="plan.skipped" variant="neutral" :label="t(`sandbox.sandboxUpdateCard.skippedBadge`)" />
+                    <StatusBadge v-else-if="channel === `stable` && !plan.withdrawn" variant="success" :label="t(`shared.upToDate`)" dot />
+                    <StatusBadge v-else-if="channel && !plan.withdrawn" variant="neutral" :label="channel" />
+                </div>
+            </template>
+
+            <RowNote variant="block">
+                <div class="flex flex-col gap-4">
+                    <!-- What there is to know about the version that runs, before what there is to do. -->
+                    <Notice v-if="withdrawnNotice" :of="withdrawnNotice" />
+                    <div v-if="newsNotice" class="flex flex-col gap-1.5">
+                        <Notice :of="newsNotice" />
+                        <p v-if="plan.news?.log" class="flex min-w-0 items-center gap-1.5 text-2xs text-subtle">
+                            <span class="shrink-0">{{ t(`sandbox.sandboxUpdateCard.fullLogOnMachine`) }}</span>
+                            <span class="min-w-0 truncate font-mono">{{ plan.news.log }}</span>
+                            <CopyButton :text="plan.news.log" />
+                        </p>
+                    </div>
+                    <p v-if="plan.skipped" class="flex flex-wrap items-center gap-x-2 text-xs text-muted">
+                        <span>{{ t(`sandbox.sandboxUpdateCard.skippedLine`, { version: plan.skipped }) }}</span>
+                        <button type="button" :class="ui.textAction()" @click="skip(null)">{{ t(`sandbox.sandboxUpdateCard.showItAgain`) }}</button>
+                    </p>
+                    <Notice v-if="skipNotice" :of="skipNotice" />
+
+                    <div v-if="slug && !serverManaged && (localImage || planRefused)" :id="UPDATE_ACTION_ANCHOR" class="flex flex-col gap-2">
                         <!-- A sandbox on a checkout-built base is not updated from the registry: a pull would REPLACE its image with a published build, not refresh it. -->
                         <template v-if="localImage">
                             <!-- One row with "Having trouble?" rather than two: nothing sits between them on this sandbox. -->
@@ -289,164 +497,51 @@ const troubleBesideRebuild = computed(
                             </template>
                         </template>
                         <!-- Held back by its own pre-flight: not offered, and skipping it is the one thing left to decide. -->
-                        <template v-else-if="planRefused">
+                        <template v-else>
                             <p class="text-2xs text-subtle">{{ t(`sandbox.sandboxUpdateCard.notOfferedUntilFixed`) }}</p>
                             <button v-if="skipServed && latest" type="button" :class="ui.textAction()" @click="skip(latest)">
                                 {{ t(`sandbox.sandboxUpdateCard.skipThisVersion`) }}
                             </button>
                         </template>
-                        <!-- One offer when the image is already staged, two when it isn't (download-only, or download-and-restart). -->
-                        <template v-else-if="updateAvailable && hosted">
-                            <p class="text-xs font-medium text-content">
-                                {{ t(`sandbox.sandboxUpdateCard.restartToUpdatePlatform`) }}
-                            </p>
-                            <!-- Own block so the column's stretch doesn't draw a small button at full width. -->
-                            <div>
-                                <Button :label="t(`sandbox.sandboxUpdateCard.restartUpdate`)" size="small" :loading="restarting" @click="restartHosted" />
-                            </div>
-                            <Notice v-if="restartNotice" :of="restartNotice" />
-                        </template>
-                        <template v-else-if="updateAvailable && updateStaged">
-                            <p class="text-xs font-medium text-content">{{ t(`sandbox.sandboxUpdateCard.applyRestartsSandbox`) }}</p>
-                            <HostRecreate :slug="slug" action="Update" ready keeps-said :label="retryLabel" />
-                        </template>
-                        <template v-else-if="updateAvailable">
-                            <div class="flex flex-col gap-2">
-                                <div class="flex flex-wrap items-center justify-between gap-2">
-                                    <HostRecreate :slug="slug" action="Update" bare keeps-said :label="retryLabel" />
-                                    <HostRecreate :slug="slug" action="Download" text bare />
-                                </div>
-                                <p class="text-2xs text-subtle">{{ t(`capabilities.hostRecreate.costBuildThenRestartShort`) }}</p>
-                            </div>
-                        </template>
-                    </template>
-                </div>
+                    </div>
 
-                <!-- Only the restart costs a turn, so the way out is downloading first. -->
-                <p v-if="midTurn > 0 && offering" class="text-2xs text-warning">
-                    {{ t(`sandbox.sandboxUpdateCard.midTurnRestart`, { count: midTurn }, midTurn) }}
-                    <template v-if="!updateStaged">{{ t(`sandbox.sandboxUpdateCard.downloadCostsNothing`, { count: midTurn }, midTurn) }}</template>
-                    <template v-else>{{ t(`sandbox.sandboxUpdateCard.waitFleetToSettle`) }}</template>
-                </p>
+                    <!-- The downloaded build's pre-flight over this sandbox's own files: a refusal is said before anyone takes it. -->
+                    <div v-if="planRefused" class="flex flex-col gap-1.5 rounded-lg border border-danger/40 bg-danger/10 p-3">
+                        <p class="text-xs font-medium text-danger">{{ t(`sandbox.sandboxUpdateCard.updateWouldStopBeforeTouching`) }}</p>
+                        <ul class="flex flex-col gap-1">
+                            <li v-for="failure in stagedPlan?.failures ?? []" :key="failure.document" class="text-2xs text-content">
+                                <span class="font-mono">{{ failure.document }}</span>: {{ failure.detail }}
+                            </li>
+                        </ul>
+                    </div>
 
-                <!-- What an update keeps, beside the button that takes it: true of every install. The second line only
-                     where ic does the swap, since that is what keeps the version before it parked. Nothing here
-                     promises the machine goes back by itself. -->
-                <div v-if="offering" class="flex flex-col gap-0.5 text-2xs text-subtle">
-                    <p>{{ t(`sandbox.sandboxUpdateCard.filesStay`) }}</p>
-                    <p v-if="throughIc">{{ t(`sandbox.sandboxUpdateCard.previousStaysReady`) }}</p>
-                </div>
-
-                <p v-if="breaking && !localImage" class="text-xs text-muted">
-                    {{ t(`sandbox.sandboxUpdateCard.updateRemovesChangesThings`) }}
-                    <a href="https://intentic.dev/docs/updates/" target="_blank" rel="noopener" class="underline hover:text-content">{{
-                        t(`sandbox.sandboxUpdateCard.whatUpdatesNeverBreak`)
-                    }}</a
-                    >.
-                </p>
-                <p v-else-if="updateStaged && updateAvailable && !localImage && !planRefused" class="text-xs text-muted">
-                    {{ t(`sandbox.sandboxUpdateCard.alreadyDownloadedBuiltOn`) }}
-                </p>
-
-                <!-- What the update brings, in the words of the people it is for: under the button, for whoever weighs it first. -->
-                <div v-if="updateAvailable && updateNotes.length > 0 && !localImage" class="flex flex-col gap-2">
-                    <ul class="flex flex-col gap-2">
-                        <li v-for="note in updateNotes" :key="note" class="flex gap-2.5 text-sm text-content">
-                            <span class="mt-2 h-1 w-1 shrink-0 rounded-full bg-primary-500" />
-                            <span>{{ note }}</span>
-                        </li>
-                    </ul>
-                    <!-- Tail of a long gap as a count, not more bullets, so an old sandbox doesn't bury the rest of the page. -->
-                    <p v-if="moreUpdateNotes > 0" class="text-xs text-subtle">
-                        {{ t(`sandbox.sandboxUpdateCard.andMore`, { count: moreUpdateNotes }) }}
-                        <a href="https://intentic.dev/changelog/" target="_blank" rel="noopener" class="underline hover:text-content">{{
-                            t(`sandbox.sandboxUpdateCard.readChangelog`)
-                        }}</a>
-                    </p>
-                </div>
-
-                <!-- The downloaded build's pre-flight over this sandbox's own files: a refusal is said before anyone takes it. -->
-                <div v-if="planRefused" class="flex flex-col gap-1.5 rounded-lg border border-danger/40 bg-danger/10 p-3">
-                    <p class="text-xs font-medium text-danger">{{ t(`sandbox.sandboxUpdateCard.updateWouldStopBeforeTouching`) }}</p>
-                    <ul class="flex flex-col gap-1">
-                        <li v-for="failure in stagedPlan?.failures ?? []" :key="failure.document" class="text-2xs text-content">
-                            <span class="font-mono">{{ failure.document }}</span>: {{ failure.detail }}
-                        </li>
-                    </ul>
-                </div>
-                <div v-else-if="updateAvailable && convertedFiles.length > 0 && !localImage" class="flex flex-col gap-1.5">
-                    <p class="text-xs font-medium text-content">
-                        {{ t(`sandbox.sandboxUpdateCard.updateConvertsStoredFiles`, { count: convertedFiles.length }, convertedFiles.length) }}
-                    </p>
-                    <ul class="flex flex-col gap-1">
-                        <li v-for="step in convertedFiles" :key="`${step.document}:${step.change}`" class="text-2xs text-muted">
-                            <span class="font-mono">{{ step.document }}</span>: {{ step.change }}
-                        </li>
-                    </ul>
-                    <p class="text-2xs text-subtle">{{ t(`sandbox.sandboxUpdateCard.convertedFilesKeptAside`) }}</p>
-                </div>
-                <p v-if="updateAvailable && stagedPlan?.downgrade && !localImage" class="text-2xs text-muted">
-                    {{ t(`sandbox.sandboxUpdateCard.newerVersionConvertedTheseFiles`) }}
-                </p>
-
-                <!-- A staged update a newer release overtook; still worth saying, since applying now hands over the older image. -->
-                <p v-if="updateAvailable && stagedBehind" class="text-2xs text-muted">
-                    {{ t(`sandbox.sandboxUpdateCard.alreadyDownloadedHereReleased`, { stagedBehind, latest, stagedBehind2: stagedBehind }) }}
-                </p>
-
-                <details v-if="breaking" class="rounded-lg border border-danger/40 bg-danger/10 p-3">
-                    <summary class="cursor-pointer text-xs font-medium text-danger">{{ t(`sandbox.sandboxUpdateCard.whatChanges`) }}</summary>
-                    <ul class="mt-2 flex flex-col gap-1">
-                        <li v-for="note in breakingNotes" :key="note" class="flex gap-2 text-2xs text-content">
-                            <span class="mt-1.5 h-0.5 w-0.5 shrink-0 rounded-full bg-danger" />
-                            <span>{{ note }}</span>
-                        </li>
-                    </ul>
-                </details>
-
-                <!-- The way back, tucked away: a quiet "Having trouble?" at the foot of the card that opens it, so it is
-                     there for whoever comes looking and never pitched to whoever doesn't. A withdrawn release opens the
-                     same panel from its notice instead. When "Having trouble?" already sits beside the checkout rebuild,
-                     skip this shell while closed — an empty flex child still earns a gap-4 above the block's foot. -->
-                <div v-if="canRollBack && ((!plan.rollbackWhy && !troubleBesideRebuild) || rollbackOpen)" class="flex flex-col gap-2">
-                    <button
-                        v-if="!plan.rollbackWhy && !troubleBesideRebuild"
-                        type="button"
-                        :class="ui.textAction(`self-end text-2xs text-subtle`)"
-                        :aria-expanded="rollbackOpen"
-                        @click="toggleRollback"
-                    >
-                        {{ t(`sandbox.sandboxUpdateCard.havingTrouble`) }}
-                    </button>
-                    <div v-if="rollbackOpen" class="flex flex-col gap-2 rounded-lg border border-line bg-card p-3">
-                        <p v-if="!plan.rollbackWhy" class="text-xs text-muted">
-                            {{ t(`sandbox.sandboxUpdateCard.troubleLead`) }}
-                            <template v-if="plan.news?.ready">{{ plan.news.ready }}</template>
-                        </p>
-                        <p v-if="midTurn > 0" class="text-2xs text-warning">
-                            {{ t(`sandbox.sandboxUpdateCard.midTurnRollback`, { count: midTurn }, midTurn) }}
-                        </p>
-                        <p class="text-2xs text-subtle">
-                            <template v-if="rollbackDigest && !hosted"
-                                >{{ t(`sandbox.sandboxUpdateCard.rollsBackTo`) }} <span class="font-mono">…{{ rollbackDigest }}</span>.
-                            </template>
-                            {{ t(`sandbox.sandboxUpdateCard.filesStay`) }}
-                        </p>
-                        <!-- Own block so the column's stretch doesn't draw a small button at full width. -->
-                        <div v-if="hosted">
-                            <Button
-                                :label="t(`sandbox.sandboxUpdateCard.rollBackToPrevious`)"
-                                size="small"
-                                severity="secondary"
-                                @click="hostedRollingBack = true"
-                            />
-                        </div>
-                        <HostRecreate v-else-if="slug" :slug="slug" action="Roll back" />
+                    <!-- The way back, tucked away behind a quiet "Having trouble?" at the foot; a withdrawn release opens the
+                         same panel from its notice instead. When "Having trouble?" already sits beside the checkout rebuild,
+                         skip this shell while closed — an empty flex child still earns a gap-4 above the block's foot. -->
+                    <div v-if="troubleAtFoot || rollbackShown" class="flex flex-col gap-2">
+                        <button
+                            v-if="troubleAtFoot"
+                            type="button"
+                            :class="ui.textAction(`self-end text-2xs text-subtle`)"
+                            :aria-expanded="rollbackOpen"
+                            @click="toggleRollback"
+                        >
+                            {{ t(`sandbox.sandboxUpdateCard.havingTrouble`) }}
+                        </button>
+                        <UpdateRollbackPanel
+                            v-if="rollbackShown"
+                            :lead="rollbackLead"
+                            :mid-turn="midTurn"
+                            :digest="rollbackDigest"
+                            :hosted="hosted !== undefined"
+                            :slug="slug"
+                            @hosted-rollback="hostedRollingBack = true"
+                        />
                     </div>
                 </div>
-            </div>
+            </RowNote>
+        </RowGroup>
 
-            <HostedRollbackDialog :sandbox="hostedRollingBack ? active : undefined" @close="hostedRollingBack = false" />
-        </RowNote>
-    </RowGroup>
+        <HostedRollbackDialog :sandbox="hostedRollingBack ? active : undefined" @close="hostedRollingBack = false" />
+    </div>
 </template>

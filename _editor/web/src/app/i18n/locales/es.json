@@ -778,17 +778,14 @@
         "hostRecreate": {
             "actionHeader": "¿{action} este sandbox?",
             "becomesButtonHere": "{action} se convierte aquí en un botón.",
-            "command": "Comando de {action}",
             "confirmBuildThenRestart": "{work} — tu sandbox sigue funcionando mientras tanto — y luego tu sandbox se reinicia durante medio minuto aproximadamente, tras lo cual esta página se reconecta sola.",
             "confirmRestartOnly": "La actualización ya está descargada, así que esto es solo el reinicio: tu sandbox está caído medio minuto aproximadamente, y luego esta página se reconecta sola.",
             "confirmRollBack": "Tu sandbox se reinicia sobre la imagen que tenía antes de su última actualización: medio minuto aproximadamente de parada, y luego esta página se reconecta sola.",
-            "copyRunCommandBelow": "Copia y ejecuta el comando de abajo. {cost}",
             "costBuildThenRestart": "Primero descarga y compila, lo que no interrumpe nada, y luego reinicia tu sandbox durante medio minuto aproximadamente. Tus archivos (en /work) se conservan.",
             "costDownload": "Descarga y compila la actualización en segundo plano. No se reinicia nada y no se interrumpe nada: tu sandbox sigue funcionando todo el tiempo.",
             "costRebuild": "Compila la receta aprobada sobre la imagen que este sandbox ya ejecuta, lo que no interrumpe nada, y luego reinicia tu sandbox durante medio minuto aproximadamente. Tus archivos (en /work) se conservan.",
             "costRestartOnly": "Ya está descargada, así que esto es solo el reinicio: medio minuto aproximadamente. Tus archivos (en /work) se conservan.",
             "doesButton": "hace esto con un botón.",
-            "downloadOnly": "Solo descargar",
             "downloadVerb": "Descargar",
             "environmentApprovedBeingSwapped": "El entorno que aprobaste se está intercambiando: medio minuto aproximadamente, y luego esta página se reconecta sola. Tus archivos en /work se conservan.",
             "inBackground": "Se compila en segundo plano",
@@ -796,7 +793,6 @@
             "nothingRestarts": "Nada se reinicia",
             "now": "{action} ahora",
             "onlySandboxRestartsNothing": "Solo se reinicia el sandbox: nada más de ese dispositivo se toca. Tus archivos (en /work) se conservan.",
-            "openTerminalOnDevice": "Abre un terminal en el dispositivo que ejecuta tu sandbox.",
             "rebuildVerb": "Reconstruir",
             "restartingOntoImageRan": "Se está reiniciando sobre la imagen que tenía antes de su última actualización: medio minuto aproximadamente, y luego esta página se reconecta sola. Tus archivos en /work se conservan.",
             "restartingOntoRebuiltEnvironment": "Reiniciando sobre tu entorno reconstruido",
@@ -817,7 +813,8 @@
             "workingDownload": "Descargando la actualización",
             "workingRebuild": "Reconstruyendo este sandbox",
             "workingRollBack": "Revirtiendo este sandbox",
-            "workingUpdate": "Actualizando este sandbox"
+            "workingUpdate": "Actualizando este sandbox",
+            "runInTerminal": "Ejecuta esto en un terminal del ordenador que ejecuta tu sandbox:"
         },
         "normalize": {
             "sMailServer993": "El servidor de correo de {domain} es {host}:993, rellenado por ti."
@@ -3312,15 +3309,11 @@
         },
         "sandboxUpdateCard": {
             "againstHost": "frente a su host.",
-            "alreadyDownloadedBuiltOn": "Ya está descargada y compilada en el dispositivo que ejecuta este sandbox. Aplicarla reinicia tu sandbox durante medio minuto aproximadamente: tus archivos (en /work) se conservan.",
             "alreadyDownloadedHereReleased": "{stagedBehind} ya está descargada aquí, pero desde entonces se ha publicado {latest}. Actualizar ahora te da {stagedBehind2}, o descarga primero la más nueva.",
-            "applyRestartsSandbox": "Aplícala: esto reinicia tu sandbox:",
             "downloadCostsNothing": "Descargarla ahora no cuesta nada, y el reinicio puede esperar. | Descargarlas ahora no cuesta nada, y el reinicio puede esperar.",
-            "downloaded": "descargada",
             "midTurnRestart": "Hay un agente a mitad de turno ahora mismo; reiniciar el sandbox interrumpe su trabajo. | Hay {count} agentes a mitad de turno ahora mismo; reiniciar el sandbox interrumpe su trabajo.",
             "midTurnRollback": "Hay un agente a mitad de turno ahora mismo; revertir interrumpe su trabajo. | Hay {count} agentes a mitad de turno ahora mismo; revertir interrumpe su trabajo.",
             "publishedNewerThanWhat": "La {latest} publicada es más reciente que lo que informa este sandbox, pero tomarla descarta la imagen construida desde tu checkout. En el dispositivo que lo ejecuta:",
-            "readChangelog": "lee el registro de cambios",
             "restartToUpdatePlatform": "Reinicia para actualizar: la plataforma arranca tu sandbox sobre la imagen nueva, con los archivos intactos.",
             "restartUpdate": "Reiniciar y actualizar",
             "restartingOntoNewImage": "Reiniciando sobre la imagen nueva",
@@ -3332,11 +3325,18 @@
             "troubleLead": "Si algo dejó de funcionar tras la última actualización, puedes volver a la versión que este sandbox usaba antes.",
             "takePublishedImageInstead": "Tomar la imagen publicada en su lugar",
             "updateAppliedReplacesSandboxs": "La actualización que aplicaste reemplaza el contenedor de este sandbox: medio minuto aproximadamente, y luego esta página se reconecta sola. Tus archivos en /work se conservan.",
-            "updateRemovesChangesThings": "Esta actualización quita o cambia cosas de las que puede que dependas: lee abajo qué cambia antes de tomarla. Tus archivos (en /work) se conservan en cualquier caso, y después puedes revertir:",
             "waitFleetToSettle": "Espera a que la flota se asiente, o continúa si te parece aceptable.",
-            "whatChanges": "Qué cambia",
             "whatUpdatesNeverBreak": "qué no rompen nunca las actualizaciones",
-            "andMore": "…y {count} más:"
+            "offerTitle": "Intentic {version} ya está aquí",
+            "improvementCount": "una mejora | {count} mejoras",
+            "factDowntime": "Unos 30 segundos sin servicio",
+            "factFilesStay": "Archivos y conversaciones se conservan",
+            "factUndo": "Se puede deshacer durante 24 horas",
+            "whatsNew": "Novedades",
+            "moreInChangelog": "Una más en el registro de cambios | {count} más en el registro de cambios",
+            "downloadFirst": "Descargar primero",
+            "developerChanges": "Un cambio para desarrolladores e integraciones | {count} cambios para desarrolladores e integraciones",
+            "developerChangesLead": "Si un script, una integración o un ajuste tuyo depende de alguno de estos, revísalo antes de actualizar. Tus archivos (en /work) se conservan en cualquier caso, y después puedes revertir:"
         },
         "sandboxHours": {
             "awakeHours": "Horas despierto",

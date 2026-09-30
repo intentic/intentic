@@ -14,6 +14,8 @@ const info = ref<Info>({ version: `1.53.0`, latest: LATEST, updateAvailable: tru
 const localImage = ref<Environment[`localImage`]>(undefined);
 const stagedPlan = ref<StagedUpdate[`plan`]>(undefined);
 const breakingNotes = ref<string[]>([]);
+const updateNotes = ref<string[]>([]);
+const moreUpdateNotes = ref(0);
 const skipServed = ref(true);
 const skipVersion = jest.fn(async (_version: string | null): Promise<void> => undefined);
 jest.mock(`./useSandboxVersion`, () => ({
@@ -22,8 +24,8 @@ jest.mock(`./useSandboxVersion`, () => ({
         installed: computed(() => info.value.version),
         latest: computed(() => info.value.latest),
         updateAvailable: computed(() => info.value.updateAvailable === true),
-        updateNotes: ref([]),
-        moreUpdateNotes: ref(0),
+        updateNotes,
+        moreUpdateNotes,
         breakingNotes,
         updateStaged: computed(() => stagedPlan.value !== undefined),
         stagedBehind: ref(undefined),
@@ -40,12 +42,22 @@ type ActiveRow = { id: string; role: string; hosted?: { region: string; warm: bo
 const active = ref<ActiveRow>({ id: `sb1`, role: `owner` });
 jest.mock(`../../client/useSandbox`, () => ({ useSandbox: () => ({ active }) }));
 jest.mock(`../../../../lib/useApi`, () => ({ apiClient: { sandbox: { hostedRestart: async () => undefined } } }));
-// Marked, not mounted: which executor the card chose is the whole subject, and each reaches a device on its own.
+// Marked, not mounted: which executor the card chose is the whole subject, and each reaches a device on its own. It
+// draws what the card lays in its row (`beside`), and a press on its own fold stands in for the command it would open.
 jest.mock(`../../../capabilities/connect/hosts/HostRecreate.vue`, () => ({
     default: defineComponent({
-        props: { action: { type: String, default: `` }, label: { type: String, default: undefined } },
+        props: {
+            action: { type: String, default: `` },
+            label: { type: String, default: undefined },
+            gilded: { type: Boolean, default: false },
+            open: { type: Boolean, default: false },
+        },
+        emits: [`update:open`],
         render(): ReturnType<typeof h> {
-            return h(`div`, { "data-recreate": this.action, "data-label": this.label });
+            return h(`div`, { "data-recreate": this.action, "data-label": this.label, "data-gilded": String(this.gilded), "data-open": String(this.open) }, [
+                h(`button`, { type: `button`, onClick: () => this.$emit(`update:open`, !this.open) }, `${this.action} command`),
+                this.$slots[`beside`]?.(),
+            ]);
         },
     }),
 }));
@@ -98,6 +110,8 @@ afterEach(() => {
     localImage.value = undefined;
     stagedPlan.value = undefined;
     breakingNotes.value = [];
+    updateNotes.value = [];
+    moreUpdateNotes.value = 0;
     skipServed.value = true;
     skipVersion.mockClear();
     active.value = { id: `sb1`, role: `owner` };
@@ -107,21 +121,74 @@ afterEach(() => {
     document.body.innerHTML = ``;
 });
 
-it(`offers the published update on a sandbox that follows the registry`, () => {
+it(`offers the published update on a sandbox that follows the registry, in gold, with downloading first folded beside it`, async () => {
     const el = mount();
-    expect(recreates(el)).toEqual([`Update`, `Download`]);
+    expect(recreates(el)).toEqual([`Update`]);
+    expect(el.querySelector(`[data-recreate="Update"]`)?.getAttribute(`data-gilded`)).toBe(`true`);
     expect(el.querySelector(`[data-executor="checkout"]`)).toBeNull();
+    await press(el, `Download first`);
+    expect(recreates(el)).toEqual([`Update`, `Download`]);
+    // The secondary step keeps its own plain button: gold is for the one that moves the version.
+    expect(el.querySelector(`[data-recreate="Download"]`)?.getAttribute(`data-gilded`)).toBe(`false`);
 });
 
-it(`offers an update before developer notes and folds those notes away`, () => {
+it(`keeps one folded step open at a time, so two blocks of shell are never on the card at once`, async () => {
+    const el = mount();
+    await press(el, `Download first`);
+    await press(el, `Update command`);
+    expect(recreates(el)).toEqual([`Update`]);
+    expect(el.querySelector(`[data-recreate="Update"]`)?.getAttribute(`data-open`)).toBe(`true`);
+    await press(el, `Download first`);
+    expect(recreates(el)).toEqual([`Update`, `Download`]);
+    expect(el.querySelector(`[data-recreate="Update"]`)?.getAttribute(`data-open`)).toBe(`false`);
+});
+
+it(`leads with the version it takes you to and how much is in it, then what is new, the rest a link away`, () => {
+    updateNotes.value = [
+        `Approve a waiting plan from the bar above the composer; those buttons no longer appear on the plan card.`,
+        `Desktop sign-in completes again instead of showing an incomplete link.`,
+    ];
+    moreUpdateNotes.value = 5;
+    const el = mount();
+    expect(el.querySelector(`h2`)?.textContent).toBe(`Intentic 1.54.0 is here`);
+    expect(el.textContent).toContain(`7 improvements`);
+    const heading = [...el.querySelectorAll(`h3`)].find((node) => node.textContent === `What's new`)!;
+    // Each change as its own line, what it replaced a line of its own under it.
+    const items = [...heading.nextElementSibling!.querySelectorAll(`li`)];
+    expect(items.map((item) => [...item.lastElementChild!.children].map((line) => line.textContent))).toEqual([
+        [`Approve a waiting plan from the bar above the composer`, `Those buttons no longer appear on the plan card.`],
+        [`Desktop sign-in completes again instead of showing an incomplete link`],
+    ]);
+    const changelog = el.querySelector<HTMLAnchorElement>(`a[href="https://intentic.dev/changelog/"]`);
+    expect(changelog?.textContent?.trim()).toBe(`5 more in the changelog`);
+    // What is new sits under the button, never in the way of it.
+    expect(el.querySelector(`[data-recreate="Update"]`)!.compareDocumentPosition(heading)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+});
+
+it(`offers an update before developer notes, and names and folds those notes rather than calling the update a danger`, () => {
     breakingNotes.value = [`A migration detail for developers.`];
     const el = mount();
     const action = el.querySelector(`[data-recreate="Update"]`)!;
     const notes = el.querySelector(`details`)!;
-    expect(recreates(el)).toEqual([`Update`, `Download`]);
+    expect(recreates(el)).toEqual([`Update`]);
     expect(notes.open).toBe(false);
+    expect(notes.querySelector(`summary`)?.textContent?.trim()).toBe(`One change for developers and integrations`);
+    expect(notes.textContent).toContain(`A migration detail for developers.`);
     expect(action.compareDocumentPosition(notes)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(el.textContent).not.toContain(`changes how things work`);
+    expect(el.querySelector(`.text-danger`)).toBeNull();
     expect([...el.querySelectorAll(`button`)].map((button) => button.textContent).join(` `)).not.toContain(`I've read what changes`);
+});
+
+it(`offers a hosted sandbox its update as the platform's restart, in the same gold`, async () => {
+    active.value = { id: `sb1`, role: `owner`, hosted: { region: `ams`, warm: true } };
+    const el = mount();
+    const button = [...el.querySelectorAll(`button`)].find((node) => node.textContent?.trim() === `Restart and update`);
+    expect(button?.classList.contains(`ui-button-gilded`)).toBe(true);
+    expect(recreates(el)).toEqual([]);
+    // No host keeps the version before parked for a day on the platform's machines, so that fact is not claimed.
+    expect(el.textContent).toContain(`About 30 seconds of downtime`);
+    expect(el.textContent).not.toContain(`Undo within 24 hours`);
 });
 
 it(`offers the checkout's rebuild instead of the pull on a sandbox built from one`, () => {
@@ -146,6 +213,7 @@ it(`names each stored file the downloaded build converts, before anyone takes th
     };
     const el = mount();
     expect(el.textContent).toContain(`this update converts 2 stored files`);
+    expect(el.querySelector(`details summary`)?.textContent?.trim()).toBe(`On its first boot, this update converts 2 stored files`);
     expect(el.textContent).toContain(`drops 2 retired settings`);
     expect(el.textContent).toContain(`renames model to modelRef`);
     // Said, not asked: the update is still offered, applied from the download.
@@ -171,6 +239,10 @@ it(`holds an update back when its own pre-flight refuses this sandbox's files, a
 
 it(`says what an update keeps beside the button, and that the version before stays ready for a day`, () => {
     const el = mount();
+    expect(el.textContent).toContain(`About 30 seconds of downtime`);
+    expect(el.textContent).toContain(`Files and conversations stay`);
+    expect(el.textContent).toContain(`Undo within 24 hours`);
+    // The sentence each fact stands for, there for a reader who never hovers.
     expect(el.textContent).toContain(`Your files and conversations stay.`);
     expect(el.textContent).toContain(`The previous version stays ready on this machine for 24 hours afterwards, so going back takes seconds.`);
     expect(el.textContent).not.toContain(`by itself`);

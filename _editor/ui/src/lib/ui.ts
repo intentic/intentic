@@ -5,7 +5,9 @@ import { twMerge } from "tailwind-merge";
 // the caller always wins.
 
 // The action button is <Button>, in four ranked tiers and two sizes (primeng.css); no other `button*` recipe exists.
-// - loud (`ui-button-loud`): solid accent fill, the paid-relationship action. At most one per page.
+// - loud (`ui-button-loud`): solid accent fill, the paid-relationship action. At most one per page. Cast in the house
+//   gold as `ui-button-loud ui-button-gilded` for the one action that moves the workspace up a version (the update
+//   card's), and nowhere else: gold spent on everything stops meaning anything.
 // - accent (plain <Button>): tinted accent, the commit action (New, Create, Land).
 // - boring (`severity="secondary"`): neutral fill, accent's silhouette.
 // - quiet (`:text="true"`): no chrome (Cancel, Dismiss).

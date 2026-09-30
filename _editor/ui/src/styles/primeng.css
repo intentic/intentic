@@ -116,6 +116,81 @@
         color: var(--color-fill-content);
     }
 
+/* THE GILDED LOUD TIER — `ui-button-loud ui-button-gilded`: the loud button cast in the house gold (house.css, the site's
+   own download plaque), for the one moment the workspace itself moves up a version. Sanctum already casts every loud
+   button in that metal with its cut corners, so this rule stands down there and the pair reads as loud; the other
+   looks keep their own radius and get the same bronze body, bevel and a sheen that crosses it under the pointer. */
+    :root:not([data-skin="sanctum"]) .p-button.ui-button-gilded:where(:not(:disabled), .p-button-loading) {
+        position: relative;
+        isolation: isolate;
+        overflow: hidden;
+        color: var(--house-bronze-ink);
+        text-shadow: var(--house-bronze-ink-lip);
+        background-color: var(--house-bronze-fill);
+        background-image: var(--house-bronze-sweep), var(--house-bronze-grain), var(--house-bronze-body);
+        background-size: 100% 100%;
+        background-repeat: no-repeat;
+        border-color: rgb(122 78 24 / 0.55);
+        box-shadow: var(--house-bronze-bevel), 0 1px 2px rgb(60 32 6 / 0.28);
+        letter-spacing: 0.01em;
+        transition: box-shadow 0.2s ease;
+    }
+    /* Paper wants the deeper body the site's light skin uses; the dark looks keep house.css's brighter one. */
+    html:not([data-mode="dark"]) .p-button.ui-button-gilded {
+        --house-bronze-fill: #c69444;
+        --house-bronze-body: linear-gradient(180deg, #d6aa5e 0%, #c69444 52%, #b58136 100%);
+    }
+    /* The sheen: one layer between the metal and the label (the button is its own stacking context), parked off the
+       right edge and drawn across on hover or focus. */
+    :root:not([data-skin="sanctum"]) .p-button.ui-button-gilded::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        z-index: -1;
+        pointer-events: none;
+        background: var(--house-bronze-sheen);
+        background-size: 220% 100%;
+        background-position: 100% 0;
+        transition:
+            background-position 0.65s ease,
+            opacity 0.2s ease;
+    }
+    :root:not([data-skin="sanctum"]) .p-button.ui-button-gilded:enabled:hover,
+    :root:not([data-skin="sanctum"]) .p-button.ui-button-gilded:focus-visible {
+        color: var(--house-bronze-ink);
+        background-color: var(--house-bronze-fill);
+        background-image: var(--house-bronze-sweep), var(--house-bronze-grain), var(--house-bronze-body);
+        border-color: rgb(122 78 24 / 0.7);
+        box-shadow:
+            var(--house-bronze-bevel-lit),
+            0 0 0 3px rgb(206 156 80 / 0.16),
+            0 6px 18px -6px rgb(206 156 80 / 0.6);
+    }
+    :root:not([data-skin="sanctum"]) .p-button.ui-button-gilded:enabled:hover::after,
+    :root:not([data-skin="sanctum"]) .p-button.ui-button-gilded:focus-visible::after {
+        background-position: 0% 0;
+    }
+    :root:not([data-skin="sanctum"]) .p-button.ui-button-gilded:enabled:active {
+        color: var(--house-bronze-ink);
+        background-color: var(--house-bronze-fill);
+        background-image: var(--house-bronze-grain), var(--house-bronze-body);
+        box-shadow: var(--house-bronze-bevel-pressed);
+    }
+    :root:not([data-skin="sanctum"]) .p-button.ui-button-gilded:enabled:active::after {
+        opacity: 0;
+    }
+    /* Inside the metal, where no outer ring can be clipped by a card's `overflow: hidden`. */
+    :root:not([data-skin="sanctum"]) .p-button.ui-button-gilded:focus-visible {
+        outline: 2px solid var(--house-bronze-ink);
+        outline-offset: -4px;
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .p-button.ui-button-gilded,
+        .p-button.ui-button-gilded::after {
+            transition: none;
+        }
+    }
+
 /* Compact touch controls use a 26px visual height. */
     @media (pointer: coarse) {
         .p-button.ui-button-thumb {

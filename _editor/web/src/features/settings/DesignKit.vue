@@ -211,6 +211,7 @@ const policyOnDisk = ref(POLICY);
 // Order is the rank, top to bottom; the last three are tones, not ranks, and any of them can carry any rank. `warn`,
 // not `warning`: PrimeVue 4's spelling — the old one silently paints the brand colour.
 const BUTTON_TIERS = [
+    { name: `Gilded`, spelling: `class="ui-button-loud ui-button-gilded"`, props: { class: `ui-button-loud ui-button-gilded` } },
     { name: `Loud`, spelling: `class="ui-button-loud"`, props: { class: `ui-button-loud` } },
     { name: `Accent`, spelling: `<Button>`, props: {} },
     { name: `Boring`, spelling: `severity="secondary"`, props: { severity: `secondary` } },

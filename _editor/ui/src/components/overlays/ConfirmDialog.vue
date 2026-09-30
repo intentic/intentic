@@ -17,6 +17,7 @@ const {
     confirmIcon,
     items,
     destructive = true,
+    gilded = false,
     loading = false,
     size = `sm`,
     appendTo,
@@ -31,6 +32,9 @@ const {
     items?: readonly T[];
     /** False for a confirm that commits rather than destroys: see above. */
     destructive?: boolean;
+    /** The confirm of a gold button (`ui-button-gilded`, the update card's), cast in the same metal so the step that
+     * takes it reads as the same one. Never with `destructive`. */
+    gilded?: boolean;
     /** Keeps the danger button spinning while the teardown runs: removal often hits the network. */
     loading?: boolean;
     /** <Modal>'s size scale. `sm` fits a question; widen only for a confirm that has to spell out consequences. */
@@ -81,7 +85,14 @@ const titleId = useId();
             <!-- A second way to go ahead (do it later, say), drawn a tier below the confirm it sits beside. -->
             <slot name="actions" />
             <!-- autofocus on the CONFIRM button is deliberate and is what the call sites already did: the dialog is dismissable by mask, Esc and Cancel. -->
-            <Button :label="confirmLabel" :severity="destructive ? `danger` : undefined" autofocus :loading="loading" @click="emit(`confirm`)">
+            <Button
+                :label="confirmLabel"
+                :severity="destructive ? `danger` : undefined"
+                :class="gilded && !destructive ? `ui-button-loud ui-button-gilded` : undefined"
+                autofocus
+                :loading="loading"
+                @click="emit(`confirm`)"
+            >
                 <template v-if="confirmIcon !== undefined" #icon><Icon :name="confirmIcon" /></template>
             </Button>
         </template>

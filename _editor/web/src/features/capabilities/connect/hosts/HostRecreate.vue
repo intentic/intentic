@@ -7,6 +7,7 @@ import {
     commandLang,
     ConfirmDialog,
     DeviceRunLog,
+    type IconName,
     Notice,
     type NoticeModel,
     SegmentedControl,
@@ -14,7 +15,7 @@ import {
 } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import Checkbox from "primevue/checkbox";
-import { computed, onBeforeUnmount, ref, watch } from "vue";
+import { computed, onBeforeUnmount, ref, type VNode, watch } from "vue";
 import { type DeviceSandboxPayload, manageDeviceSandbox, swapServingSandbox, useHostRunning } from "../../../sandbox/devices/useDevices";
 import { useSandbox } from "../../../sandbox/client/useSandbox";
 import { expectRestart, type RestartQuiet } from "../../../sandbox/live/sandboxRestart";
@@ -68,9 +69,19 @@ const props = defineProps<{
     // The caller says what the swap keeps (the update card's reassurance under its button), so the cost here says only
     // what it costs rather than saying the files are kept a second time.
     keepsSaid?: boolean;
+    // The update card's own button: cast in the house gold at full size, since it is the one thing that page asks of
+    // anyone. The caller states the cost beside it, so no line here repeats it, and on a machine this page cannot reach
+    // the command waits behind the button (`open`) instead of being printed at whoever opens the page.
+    gilded?: boolean;
 }>();
 // The sandbox answered again after a swap this ran: the caller's moment to say how it went.
 const emit = defineEmits<{ back: [] }>();
+// Whether a gilded button's folded command is showing; a caller binds it to keep one panel open at a time.
+const open = defineModel<boolean>(`open`, { default: false });
+defineSlots<{
+    // Laid out in the button's own row, whichever of the three renderings draws it: the caller's secondary step.
+    beside?: () => VNode[];
+}>();
 
 const { cmdOs } = useOsPreference();
 const { activeSandboxId, reachable } = useSandbox();
@@ -84,6 +95,13 @@ const OP: Record<Action, DeviceSandboxOp> = { Download: `prepare`, Update: `upda
 // members are not the words on screen: every label takes this instead.
 const VERBS: Record<Action, string> = { Download: `download`, Update: `update`, Rebuild: `rebuild`, "Roll back": `rollBack` };
 const verb = computed(() => t(`capabilities.hostRecreate.${VERBS[props.action]}Verb` as `capabilities.hostRecreate.updateVerb`));
+
+// The loud tier in the house gold (primeng.css); gold stands for moving up a version, so it goes on nothing else.
+const GILDED = `ui-button-loud ui-button-gilded`;
+// The glyph says where the press goes: up a version, down into the machine, or the older swap's bolt.
+const icon = computed<IconName>(() => (props.action === DOWNLOAD ? `download` : props.gilded ? `arrow-circle-up` : `bolt`));
+// The button's row, shared with the caller's `beside` step; the gilded one sits a little further from its neighbour.
+const row = computed(() => (props.gilded ? `flex flex-wrap items-center gap-x-4 gap-y-2` : `flex flex-wrap items-center gap-2`));
 
 // What this action costs, read by all four renderings: the sandbox stays up through the download and rebuild, and
 // only the final restart interrupts anything.
@@ -501,28 +519,24 @@ const command = computed(() => {
 </script>
 
 <template>
-    <div :class="bare ? undefined : `flex flex-col gap-2`">
+    <div :class="gilded ? `flex flex-col gap-3` : bare ? undefined : `flex flex-col gap-2`">
         <!-- Machine is reachable from here, so this is a button wherever you're reading it, even a phone elsewhere. -->
         <template v-if="hostId">
-            <Button
-                v-tooltip.top="text && action === DOWNLOAD ? { title: t(`capabilities.hostRecreate.inBackground`), note: t(`capabilities.hostRecreate.nothingRestarts`) } : undefined"
-                :label="
-                    text && action === DOWNLOAD
-                        ? t(`capabilities.hostRecreate.downloadOnly`)
-                        : running
-                          ? t(`capabilities.hostRecreate.running`, { action: verb })
-                          : (label ?? t(`capabilities.hostRecreate.now`, { action: verb }))
-                "
-                size="small"
-                class="self-start"
-                :severity="text || action === DOWNLOAD ? `secondary` : undefined"
-                :text="text"
-                :loading="running || awaiting || idleWait?.phase === `rebuilding`"
-                @click="runOnMachine"
-            >
-                <template v-if="!text" #icon><Icon :name="action === DOWNLOAD ? `download` : `bolt`" /></template>
-            </Button>
-            <p v-if="!bare" class="text-2xs text-subtle">{{ t(`capabilities.hostRecreate.runsOnDeviceHosting`, { cost }) }}</p>
+            <div :class="row">
+                <Button
+                    :label="running ? t(`capabilities.hostRecreate.running`, { action: verb }) : (label ?? t(`capabilities.hostRecreate.now`, { action: verb }))"
+                    :size="gilded ? undefined : `small`"
+                    :class="gilded ? GILDED : undefined"
+                    :severity="!gilded && (text || action === DOWNLOAD) ? `secondary` : undefined"
+                    :text="text"
+                    :loading="running || awaiting || idleWait?.phase === `rebuilding`"
+                    @click="runOnMachine"
+                >
+                    <template v-if="!text" #icon><Icon :name="icon" /></template>
+                </Button>
+                <slot name="beside" />
+            </div>
+            <p v-if="!bare && !gilded" class="text-2xs text-subtle">{{ t(`capabilities.hostRecreate.runsOnDeviceHosting`, { cost }) }}</p>
             <DeviceRunLog
                 v-if="running || lines.length > 0"
                 :lines="lines"
@@ -561,8 +575,10 @@ const command = computed(() => {
                 :open="confirming"
                 :header="confirmHeader"
                 :confirm-label="t(`capabilities.hostRecreate.now`, { action: verb })"
-                confirm-icon="bolt"
+                :confirm-icon="icon"
+                :header-icon="gilded ? `sparkles` : undefined"
                 :destructive="false"
+                :gilded="gilded"
                 @cancel="confirming = false"
                 @confirm="execute"
             >
@@ -586,42 +602,62 @@ const command = computed(() => {
 
         <!-- Desktop deep link covers all three swaps including rollback. -->
         <template v-else-if="desktop && action !== DOWNLOAD">
-            <Button
-                :label="label ?? t(`capabilities.hostRecreate.now`, { action: verb })"
-                size="small"
-                class="self-start"
-                @click="openDesktopLink(desktopRecreateLink(slug, hash, action === `Roll back`))"
-            >
-                <template #icon><Icon name="bolt" /></template>
-            </Button>
-            <p class="text-2xs text-subtle">{{ t(`capabilities.hostRecreate.runsHereOnDevice`, { cost }) }}</p>
+            <div :class="row">
+                <Button
+                    :label="label ?? t(`capabilities.hostRecreate.now`, { action: verb })"
+                    :size="gilded ? undefined : `small`"
+                    :class="gilded ? GILDED : undefined"
+                    @click="openDesktopLink(desktopRecreateLink(slug, hash, action === `Roll back`))"
+                >
+                    <template #icon><Icon :name="icon" /></template>
+                </Button>
+                <slot name="beside" />
+            </div>
+            <p v-if="!bare && !gilded" class="text-2xs text-subtle">{{ t(`capabilities.hostRecreate.runsHereOnDevice`, { cost }) }}</p>
         </template>
 
         <template v-else>
-            <ol class="ml-4 list-decimal text-2xs text-subtle">
-                <li>{{ t(`capabilities.hostRecreate.openTerminalOnDevice`) }}</li>
-                <li>{{ t(`capabilities.hostRecreate.copyRunCommandBelow`, { cost }) }}</li>
-            </ol>
-            <SegmentedControl
-                v-model="cmdOs"
-                size="sm"
-                class="self-start"
-                :options="[
-                    { label: `Linux / macOS`, value: `unix` },
-                    { label: `Windows`, value: `windows` },
-                ]"
-            />
-            <Code :code="command" :lang="commandLang(cmdOs)" :label="t(`capabilities.hostRecreate.command`, { action: verb })" :wrap="true" />
-            <!-- The cheaper way out where it exists: the machine is already talking to this sandbox, and one tile turns that into the button above. -->
-            <ConnectDeviceHint :slug="slug" :gains="t(`capabilities.hostRecreate.becomesButtonHere`, { action: verb })" />
-            <!-- Offered here, not just at setup, since this is the moment reaching for the app repeatedly starts to pay off. -->
-            <p class="flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-subtle">
-                <span>{{ t(`capabilities.hostRecreate.skipTerminalNextTime`) }}</span>
-                <a :href="DESKTOP_DOWNLOADS.windows" class="text-link hover:underline">{{ t(`capabilities.hostRecreate.intenticWindows`) }}</a>
-                <span>·</span>
-                <a :href="DESKTOP_DOWNLOADS.linuxAppImage" class="text-link hover:underline">Linux</a>
-                <span>{{ t(`capabilities.hostRecreate.doesButton`) }}</span>
-            </p>
+            <!-- Gilded, the button still leads and the command is the step it opens: what to run is for whoever is
+                 about to run it, not a block of shell at the top of the page for everyone who opens it. -->
+            <div v-if="gilded" :class="row">
+                <Button
+                    :label="label ?? t(`capabilities.hostRecreate.now`, { action: verb })"
+                    :class="GILDED"
+                    :aria-expanded="open"
+                    @click="open = !open"
+                >
+                    <template #icon><Icon :name="icon" /></template>
+                </Button>
+                <slot name="beside" />
+            </div>
+            <div
+                v-if="!gilded || open"
+                :class="gilded ? `flex flex-col gap-2.5 rounded-lg border border-line-subtle bg-canvas/50 p-3.5` : `flex flex-col gap-2`"
+            >
+                <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
+                    <p class="text-xs text-content">{{ t(`capabilities.hostRecreate.runInTerminal`) }}</p>
+                    <SegmentedControl
+                        v-model="cmdOs"
+                        size="xs"
+                        :options="[
+                            { label: `Linux / macOS`, value: `unix` },
+                            { label: `Windows`, value: `windows` },
+                        ]"
+                    />
+                </div>
+                <Code :code="command" :lang="commandLang(cmdOs)" :wrap="true" />
+                <p v-if="!gilded" class="text-2xs text-subtle">{{ cost }}</p>
+                <!-- The cheaper way out where it exists: the machine is already talking to this sandbox, and one tile turns that into the button above. -->
+                <ConnectDeviceHint :slug="slug" :gains="t(`capabilities.hostRecreate.becomesButtonHere`, { action: verb })" />
+                <!-- Offered here, not just at setup, since this is the moment reaching for the app repeatedly starts to pay off. -->
+                <p class="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-2xs text-subtle">
+                    <span>{{ t(`capabilities.hostRecreate.skipTerminalNextTime`) }}</span>
+                    <a :href="DESKTOP_DOWNLOADS.windows" class="text-link hover:underline">{{ t(`capabilities.hostRecreate.intenticWindows`) }}</a>
+                    <span>·</span>
+                    <a :href="DESKTOP_DOWNLOADS.linuxAppImage" class="text-link hover:underline">Linux</a>
+                    <span>{{ t(`capabilities.hostRecreate.doesButton`) }}</span>
+                </p>
+            </div>
         </template>
     </div>
 </template>

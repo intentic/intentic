@@ -774,17 +774,14 @@
         "hostRecreate": {
             "actionHeader": "{action} ce sandbox ?",
             "becomesButtonHere": "{action} devient un bouton ici.",
-            "command": "Commande {action}",
             "confirmBuildThenRestart": "{work} — votre sandbox continue de fonctionner pendant ce temps — puis votre sandbox redémarre pendant une demi-minute environ, après quoi cette page se reconnecte toute seule.",
             "confirmRestartOnly": "La mise à jour est déjà téléchargée : il ne reste que le redémarrage. Votre sandbox est indisponible une demi-minute environ, puis cette page se reconnecte toute seule.",
             "confirmRollBack": "Votre sandbox redémarre sur l'image qu'il avait avant sa dernière mise à jour — une demi-minute d'arrêt environ, puis cette page se reconnecte toute seule.",
-            "copyRunCommandBelow": "Copiez et lancez la commande ci-dessous. {cost}",
             "costBuildThenRestart": "Elle télécharge et construit d'abord, ce qui n'interrompt rien, puis redémarre votre sandbox pendant une demi-minute environ. Vos fichiers (dans /work) sont conservés.",
             "costDownload": "Elle télécharge et construit la mise à jour en arrière-plan. Rien ne redémarre et rien n'est interrompu : votre sandbox continue de fonctionner tout du long.",
             "costRebuild": "Elle construit la recette approuvée sur l'image que ce sandbox fait déjà tourner, ce qui n'interrompt rien, puis redémarre votre sandbox pendant une demi-minute environ. Vos fichiers (dans /work) sont conservés.",
             "costRestartOnly": "Elle est déjà téléchargée : il ne reste que le redémarrage, une demi-minute environ. Vos fichiers (dans /work) sont conservés.",
             "doesButton": "fait cela avec un bouton.",
-            "downloadOnly": "Télécharger seulement",
             "downloadVerb": "Télécharger",
             "environmentApprovedBeingSwapped": "L'environnement que vous avez approuvé est en train d'être échangé — une demi-minute environ, puis cette page se reconnecte toute seule. Vos fichiers dans /work sont conservés.",
             "inBackground": "Compile en arrière-plan",
@@ -792,7 +789,6 @@
             "nothingRestarts": "Rien ne redémarre",
             "now": "{action} maintenant",
             "onlySandboxRestartsNothing": "Seul le sandbox redémarre — rien d'autre n'est touché sur cet appareil. Vos fichiers (dans /work) sont conservés.",
-            "openTerminalOnDevice": "Ouvrez un terminal sur l'appareil qui fait tourner votre sandbox.",
             "rebuildVerb": "Reconstruire",
             "restartingOntoImageRan": "Il redémarre sur l'image qu'il avait avant sa dernière mise à jour — une demi-minute environ, puis cette page se reconnecte toute seule. Vos fichiers dans /work sont conservés.",
             "restartingOntoRebuiltEnvironment": "Redémarrage sur votre environnement reconstruit",
@@ -813,7 +809,8 @@
             "workingDownload": "Téléchargement de la mise à jour",
             "workingRebuild": "Reconstruction de ce sandbox",
             "workingRollBack": "Retour en arrière de ce sandbox",
-            "workingUpdate": "Mise à jour de ce sandbox"
+            "workingUpdate": "Mise à jour de ce sandbox",
+            "runInTerminal": "Exécutez ceci dans un terminal sur l'ordinateur qui fait tourner votre sandbox :"
         },
         "normalize": {
             "sMailServer993": "Le serveur de messagerie de {domain} est {host}:993, rempli pour vous."
@@ -3297,15 +3294,11 @@
         },
         "sandboxUpdateCard": {
             "againstHost": "face à son hôte.",
-            "alreadyDownloadedBuiltOn": "Elle est déjà téléchargée et construite sur l'appareil qui fait tourner ce sandbox. L'appliquer redémarre votre sandbox pendant une demi-minute environ : vos fichiers (dans /work) sont conservés.",
             "alreadyDownloadedHereReleased": "{stagedBehind} est déjà téléchargée ici, mais {latest} est sortie depuis. Mettre à jour maintenant vous donne {stagedBehind2}, ou téléchargez d'abord la plus récente.",
-            "applyRestartsSandbox": "Appliquez-la : cela redémarre votre sandbox :",
             "downloadCostsNothing": "La télécharger maintenant ne coûte rien, et le redémarrage peut attendre. | Les télécharger maintenant ne coûte rien, et le redémarrage peut attendre.",
-            "downloaded": "téléchargée",
             "midTurnRestart": "Un agent est en plein tour en ce moment, redémarrer le sandbox interrompt son travail. | {count} agents sont en plein tour en ce moment, redémarrer le sandbox interrompt leur travail.",
             "midTurnRollback": "Un agent est en plein tour en ce moment, revenir en arrière interrompt son travail. | {count} agents sont en plein tour en ce moment, revenir en arrière interrompt leur travail.",
             "publishedNewerThanWhat": "La {latest} publiée est plus récente que ce que rapporte ce sandbox, mais la prendre jette l'image construite depuis votre checkout. Sur l'appareil qui le fait tourner :",
-            "readChangelog": "lire le journal des changements",
             "restartToUpdatePlatform": "Redémarrez pour mettre à jour : la plateforme démarre votre sandbox sur la nouvelle image, fichiers conservés.",
             "restartUpdate": "Redémarrer et mettre à jour",
             "restartingOntoNewImage": "Redémarrage sur la nouvelle image",
@@ -3317,11 +3310,18 @@
             "troubleLead": "Si quelque chose a cessé de fonctionner après la dernière mise à jour, vous pouvez revenir à la version que ce sandbox utilisait avant.",
             "takePublishedImageInstead": "Prendre l'image publiée à la place",
             "updateAppliedReplacesSandboxs": "La mise à jour que vous avez appliquée remplace le conteneur de ce sandbox — une demi-minute environ, puis cette page se reconnecte toute seule. Vos fichiers dans /work sont conservés.",
-            "updateRemovesChangesThings": "Cette mise à jour retire ou change des choses dont vous dépendez peut-être : lisez ci-dessous ce qui change avant de la prendre. Vos fichiers (dans /work) sont conservés dans tous les cas, et vous pouvez revenir en arrière ensuite :",
             "waitFleetToSettle": "Attendez que la flotte se calme, ou continuez si cela vous convient.",
-            "whatChanges": "Ce qui change",
             "whatUpdatesNeverBreak": "ce que les mises à jour ne cassent jamais",
-            "andMore": "…et {count} de plus :"
+            "offerTitle": "Intentic {version} est là",
+            "improvementCount": "une amélioration | {count} améliorations",
+            "factDowntime": "Environ 30 secondes d'interruption",
+            "factFilesStay": "Fichiers et conversations conservés",
+            "factUndo": "Annulable pendant 24 heures",
+            "whatsNew": "Nouveautés",
+            "moreInChangelog": "Une de plus dans le journal des modifications | {count} de plus dans le journal des modifications",
+            "downloadFirst": "Télécharger d'abord",
+            "developerChanges": "Un changement pour les développeurs et les intégrations | {count} changements pour les développeurs et les intégrations",
+            "developerChangesLead": "Si un script, une intégration ou un réglage de votre part dépend de l'un d'eux, vérifiez-le avant de mettre à jour. Vos fichiers (dans /work) sont conservés dans tous les cas, et vous pouvez revenir en arrière ensuite :"
         },
         "sandboxHours": {
             "awakeHours": "Heures d'éveil",
