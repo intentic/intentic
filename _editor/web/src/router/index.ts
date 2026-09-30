@@ -167,7 +167,7 @@ const routes: RouteRecordRaw[] = [
         path: `/floating/:panel(chat|terminal|preview)`,
         name: `floating`,
         beforeEnter: [requireAuth, requireSetup],
-        component: () => import(`../features/chat/panel/FloatingSection.vue`),
+        component: () => import(`../shell/window/FloatingSection.vue`),
     },
     {
         // Persistent workspace shell (rail + shared chat + area outlet). Guarded: signed in and sandbox connected;

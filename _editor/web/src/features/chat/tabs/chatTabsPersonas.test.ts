@@ -113,7 +113,7 @@ const rows = (el: HTMLElement): string[] => [...el.querySelectorAll(`[data-chat-
 const row = (el: HTMLElement, id: string): HTMLElement => el.querySelector<HTMLElement>(`[data-chat-tab="${id}"]`)!;
 // A lane's drawn text, found by its heading, as the lanes suite reads one.
 const laneText = (el: HTMLElement, lane: string): string =>
-    [...el.querySelectorAll(`section`)].find((section) => section.querySelectorAll(`header span`)[1]?.textContent?.trim() === lane)?.textContent ?? ``;
+    [...el.querySelectorAll(`section`)].find((section) => section.querySelector(`header span`)?.textContent?.trim() === lane)?.textContent ?? ``;
 const pressKey = async (el: HTMLElement, key: string): Promise<void> => {
     personaList(el)!.dispatchEvent(new KeyboardEvent(`keydown`, { key, bubbles: true, cancelable: true }));
     await settle();
