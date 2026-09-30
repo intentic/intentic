@@ -580,3 +580,43 @@ describe("a routed turn Google refused until an account is verified", () => {
         expect(native.asked.some(([question]) => question === "awaitingVerification")).toBe(false);
     });
 });
+
+// The provider's safety classifier stopped the turn: nothing re-runs it by itself, whatever the conversation answers
+// for a stopped turn, and the hold keeps where the session is cut back to for the person's press.
+describe("a turn the safety classifier stopped", () => {
+    const flagged: ErrorFrame = {
+        kind: "error",
+        code: "safeguard-flagged",
+        message: "API Error: Opus 5.5's safeguards flagged this message.",
+        refusal: { category: "cyber", resumeAt: "entry-7" },
+    };
+
+    test("is held for a press with its resume point, offered and never scheduled, asking no policy", async () => {
+        const queries = answering({ policy: "retry", rung: 1_800_000_060_500 });
+        const plan = await classifyFailure(flagged, context(), queries);
+        expect(plan.frame).toStrictEqual({ ...flagged, held: { ran: true, contextTokens: 9_000 }, autoResume: "available" });
+        expect(plan.held).toStrictEqual({
+            input,
+            reason: "flagged",
+            sessionId: "s-1",
+            ran: true,
+            standing,
+            contextTokens: 9_000,
+            resumeAt: "entry-7",
+        });
+        expect(plan.writes).toStrictEqual([]);
+        expect(plan.log.level).toBe("warn");
+        expect(queries.asked).toStrictEqual([]);
+    });
+
+    test("with no resume point the CLI named is held for a plain resume", async () => {
+        const plan = await classifyFailure({ ...flagged, refusal: { category: "cyber" } }, context(), answering());
+        expect(plan.held).toStrictEqual({ input, reason: "flagged", sessionId: "s-1", ran: true, standing, contextTokens: 9_000 });
+    });
+
+    test("goes out bare without a conversation to hold it on", async () => {
+        const plan = await classifyFailure(flagged, context({ turn: { agent: "claude", harness: "native", prompt: "ship it" } }), answering());
+        expect(plan.frame).toBe(flagged);
+        expect(plan.held).toBeUndefined();
+    });
+});

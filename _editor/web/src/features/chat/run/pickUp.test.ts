@@ -105,6 +105,12 @@ describe(`pickUpStatus`, () => {
         expect(pickUpStatus({ reason: `limit`, held: { ran: true }, readyAt: NOW - 1 }, NOW)).toBe(`Limit reached · work kept`);
     });
 
+    // The safety classifier stopping a turn names the model's safeguards, not a stop or a limit, since the way on differs.
+    it(`names the model's safeguards for a flagged turn, and whether its work was kept`, () => {
+        expect(pickUpStatus({ reason: `flagged`, held: { ran: true } }, NOW)).toBe(`Stopped by the model's safeguards · work kept`);
+        expect(pickUpStatus({ reason: `flagged`, held: { ran: false } }, NOW)).toBe(`Stopped by the model's safeguards before any work`);
+    });
+
     it(`says why Continue rests after a refusal where nothing ran`, () => {
         expect(pickUpStatus(cooledPickUp({ reason: `limit`, held: { ran: false } }, NOW), NOW + 1_000)).toBe(
             `Limit reached · nothing ran · reset time unknown · Continue opens again in a minute`,

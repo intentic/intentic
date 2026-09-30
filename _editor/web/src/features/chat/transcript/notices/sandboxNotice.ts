@@ -61,6 +61,7 @@ const RESUMED = {
     refused: () => t(`chat.sandboxNotice.resumed.refused`),
     door: () => t(`chat.sandboxNotice.resumed.door`),
     overflow: () => t(`chat.sandboxNotice.resumed.overflow`),
+    flagged: () => t(`chat.sandboxNotice.resumed.flagged`),
 } as const satisfies Readonly<Record<ResumeNoticeReason, () => string>>;
 
 const WATCH_WAKE = {

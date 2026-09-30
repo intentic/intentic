@@ -1386,6 +1386,7 @@
             "continueOn": "Continue on {model}",
             "continueOnFresh": "Continue on {model}, in a fresh session",
             "continueOnKeepingSession": "Continue on {fallback}, keeping this session",
+            "continueOnOther": "Continue on…",
             "freshSessionShortHandoff": "A fresh session on their allowance, seeded with a short hand-off of the record and the measured state; detail not in the record is lost.",
             "freshSessionSizedHandoff": "A fresh session on their allowance, seeded with a ~{tokens}-token hand-off of the record and the measured state; detail not in the record is lost.",
             "handoff": "Hand-off",
@@ -1394,6 +1395,8 @@
             "mayBeatReset": "May work before reset",
             "oneWeeklyReset": "1 weekly reset",
             "otherAccounts": "Other accounts",
+            "otherModelNote": "The conversation stays on the model you pick.",
+            "otherModelTitle": "Another model",
             "otherWaysOn": "Other ways on",
             "outdatedMissing": "Until it updates, a turn held by a spent allowance can't move to another of your accounts from here. Continue waits for this one.",
             "pickUp": "Pick up",
@@ -1403,6 +1406,9 @@
             "resetSpends": "Spends",
             "resetting": "Resetting…",
             "resetTitle": "Reopen session",
+            "retryNote": "Sent again without the response its safeguards stopped.",
+            "retryOn": "Retry on {model}",
+            "retryTitle": "Same model",
             "weeklyUntouched": "Weekly allowance untouched"
         },
         "chatDocumentBody": {
@@ -1494,7 +1500,8 @@
                 "carried": "Sent again on the switched account after the allowance ran out mid-turn, carrying the session with it.",
                 "refused": "Sent again after the allowance refused it: nothing had run.",
                 "door": "Sent again: the first attempt was turned away before anything ran.",
-                "overflow": "Sent again in a fresh session after the last one outgrew the model's context window."
+                "overflow": "Sent again in a fresh session after the last one outgrew the model's context window.",
+                "flagged": "Sent again after the model's safeguards stopped it, without the stopped response."
             },
             "watchWake": {
                 "met": "{note} — the watch fired after {elapsed}.",
@@ -2169,6 +2176,8 @@
         "turnBreak": {
             "anotherAccount": "another account",
             "backWhen": "back {when}",
+            "flaggedStatus": "Stopped by the model's safeguards before any work",
+            "flaggedStatusKept": "Stopped by the model's safeguards · work kept",
             "goesAt": "Goes by itself {when}",
             "goesSoon": "Goes by itself shortly",
             "ladderSpent": "Stood down after {max} tries that got nowhere · Continue sends it again",

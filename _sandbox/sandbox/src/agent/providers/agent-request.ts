@@ -56,6 +56,9 @@ export interface TurnSpec {
     readonly isolation?: TurnPlacement;
     // Resume a prior turn's session for multi-message conversations.
     readonly sessionId?: string;
+    // With `sessionId`: resume it only up to this entry, dropping what came after (a response the provider's safety
+    // classifier stopped). Only the Claude Code loop can cut a session; every other runtime resumes it whole.
+    readonly resumeAt?: string;
     // This conversation's runtime session store, where its checklist is read back from (sessions/session-store.ts).
     readonly sessionStore?: string;
     // Defaults to the account/subscription default; override with INTENTIC_AGENT_MODEL.

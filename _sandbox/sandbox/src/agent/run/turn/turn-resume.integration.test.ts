@@ -1283,6 +1283,92 @@ test("a press that names the routing the turn already had resumes its session", 
     clearPendingResume(services, "lim-same");
 });
 
+// A turn the safety classifier stopped waits for the person, who either sends it again on the same model or picks
+// another. Either way it resumes its own session cut back to before the stopped response, so the model never reads it.
+const cutDone: AgentEvent = { kind: "done" };
+const cutWake = (turns: TurnInput[]): TurnStarter["stream"] =>
+    async function* (input) {
+        turns.push(input);
+        yield cutDone;
+    };
+const flaggedHold = (conversationId: string, change: Partial<HeldTurn> = {}): HeldTurn => ({
+    reason: "flagged",
+    input: { prompt: "ship the parser", conversationId, isolated: true, model: "claude-opus-5-5" },
+    sessionId: "s-real",
+    ran: true,
+    resumeAt: "entry-7",
+    ...change,
+});
+
+test("a flagged turn pressed again resumes its own session cut before the stopped response, on the same model", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "held-")));
+    const turns: TurnInput[] = [];
+    recordHeldTurn(services, flaggedHold("flag-same"));
+
+    await fireHeldResume(drivenBy(services, cutWake(turns)), "flag-same");
+    await settle(services, "flag-same");
+
+    expect(turns).toHaveLength(1);
+    expect(turns[0]!.sessionId).toBe("s-real");
+    expect(turns[0]!.resumeAt).toBe("entry-7");
+    expect(turns[0]!.resume).toBe("flagged");
+    expect(turns[0]!.model).toBe("claude-opus-5-5");
+    expect(turns[0]!.prompt).toMatch(/safety classifier stopped the previous attempt/i);
+    expect(turns[0]!.prompt).toContain("ship the parser");
+
+    clearPendingResume(services, "flag-same");
+});
+
+test("a flagged turn pressed on another model keeps its session and its cut, on the model picked", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "held-")));
+    const turns: TurnInput[] = [];
+    recordHeldTurn(services, flaggedHold("flag-other"));
+
+    await fireHeldResume(drivenBy(services, cutWake(turns)), "flag-other", { agent: "claude", harness: "native", model: "claude-opus-4-8" });
+    await settle(services, "flag-other");
+
+    expect(turns[0]!.model).toBe("claude-opus-4-8");
+    expect(turns[0]!.sessionId).toBe("s-real");
+    expect(turns[0]!.resumeAt).toBe("entry-7");
+
+    clearPendingResume(services, "flag-other");
+});
+
+test("a flagged turn with no cut named resumes its session whole, and a cut never outlives the turn it was made for", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "held-")));
+    const turns: TurnInput[] = [];
+    recordHeldTurn(services, flaggedHold("flag-whole", { resumeAt: undefined }));
+    await fireHeldResume(drivenBy(services, cutWake(turns)), "flag-whole");
+    await settle(services, "flag-whole");
+    expect(turns[0]!.sessionId).toBe("s-real");
+    expect(turns[0]!.resumeAt).toBeUndefined();
+    clearPendingResume(services, "flag-whole");
+
+    // The retry itself ran out of allowance after doing more work: its cut pointed at the session as it stood then.
+    recordHeldTurn(services, {
+        reason: "limit",
+        input: { prompt: "ship the parser", conversationId: "flag-then-limit", isolated: true, sessionId: "s-real", resumeAt: "entry-7" },
+        sessionId: "s-real",
+        ran: true,
+    });
+    await fireHeldResume(drivenBy(services, cutWake(turns)), "flag-then-limit");
+    await settle(services, "flag-then-limit");
+    expect(turns[1]!.sessionId).toBe("s-real");
+    expect(turns[1]!.resumeAt).toBeUndefined();
+    clearPendingResume(services, "flag-then-limit");
+});
+
+test("the resume pass never sends a flagged turn again by itself, whatever the conversation answers for a stopped one", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "held-")));
+    await services.sandboxSettings.set({ ...(await services.sandboxSettings.get()), stopPolicy: "retry" });
+    const prompts: string[] = [];
+    recordHeldTurn(services, flaggedHold("flag-pass"), 0);
+    await createTurnResumeScheduler(drivenBy(services, fakeWake(prompts))).tick(10 * 60_000);
+    expect(prompts).toEqual([]);
+    expect(heldTurn(services, "flag-pass")?.reason).toBe("flagged");
+    clearPendingResume(services, "flag-pass");
+});
+
 test("a press on a switched account still says nothing ran, when nothing ran", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "held-")));
     const turns: AgentTurn[] = [];

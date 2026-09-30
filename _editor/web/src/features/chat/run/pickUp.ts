@@ -1,4 +1,4 @@
-import type { AccountState, RetryLadder, TurnBreak, TurnBreakPolicy, TurnEnding } from "@intentic/sandbox-contract";
+import type { AccountState, HeldEnding, RetryLadder, TurnBreakPolicy, TurnEnding } from "@intentic/sandbox-contract";
 import { formatClock, formatWeekdayTime } from "@intentic/ui/format";
 import { t } from "@intentic/ui/i18n";
 import { formatReset, formatWait } from "../session/usageStatus";
@@ -13,8 +13,8 @@ import { formatReset, formatWait } from "../session/usageStatus";
 // switch elsewhere says off.
 
 export interface PickUp {
-    /** Which wall left the work here. */
-    readonly reason: TurnBreak;
+    /** Which wall left the work here; `flagged` is the one no standing answer covers, asked about each time. */
+    readonly reason: HeldEnding;
     /** When the named allowance is due to reopen (ms); only a spent allowance has one. */
     readonly readyAt?: number;
     /** When the daemon's own booking fires (ms), as the failure frame stated it; absent means it fires on the next pass. */
@@ -147,6 +147,9 @@ const retriedSoFar = (pickUp: PickUp): string =>
     pickUp.retries === undefined || pickUp.retries.made === 0 ? `` : ` · ${t(`chat.turnBreak.retriedOf`, { ...pickUp.retries })}`;
 
 export const pickUpStatus = (pickUp: PickUp, now: number = Date.now()): string => {
+    if (pickUp.reason === `flagged`) {
+        return survived(pickUp) ? t(`chat.turnBreak.flaggedStatusKept`) : t(`chat.turnBreak.flaggedStatus`);
+    }
     if (pickUp.reason === `outage`) {
         return `${t(`chat.turnBreak.outageStatus`)}${retriedSoFar(pickUp)}`;
     }

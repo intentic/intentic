@@ -38,6 +38,8 @@ const HANDLED_FAILURE_CODES: ReadonlySet<string> = new Set([
     "claude-not-entitled",
     // Filed against the model (model-refusals.json); happens once, since the picker stops offering it after.
     "model-unavailable",
+    // The provider's classifier, not this sandbox: held for a person with the vendor's own words.
+    "safeguard-flagged",
 ]);
 
 // Codes filed as a durable refusal against the provider, whose `kind` reads the sentence rather than the code.
@@ -342,6 +344,14 @@ const dressOverflow = (event: ErrorFrame, context: FailureContext, conversationI
     return { frame, held: holding(context, conversationId, "overflow", leftBy(context)), writes: [] };
 };
 
+// The provider's safety classifier stopped the turn partway: held whole for a person, never re-run by a clock (the owner
+// asked to choose each time), with the entry a press resumes the session at so the stopped response is not sent again.
+const dressFlagged = (event: ErrorFrame, context: FailureContext, conversationId: string): Dressed => {
+    const frame: ErrorFrame = { ...event, held: { ran: context.answered, ...opt("contextTokens", context.contextTokens) }, autoResume: "available" };
+    const held = holding(context, conversationId, "flagged", { ...leftBy(context), ...opt("resumeAt", event.refusal?.resumeAt) });
+    return { frame, held, writes: [] };
+};
+
 // Held whole for a press; a carry refused unanswered moves fresh at once; an unanswered `stopped` resume is not held again.
 const dressDeath = async (event: ErrorFrame, context: FailureContext, conversationId: string, queries: FailureQueries): Promise<Dressed> => {
     const { turn, answered } = context;
@@ -385,6 +395,9 @@ const dress = async (event: ErrorFrame, context: FailureContext, queries: Failur
     }
     if (event.code === "context-overflow") {
         return dressOverflow(event, context, conversationId);
+    }
+    if (event.code === "safeguard-flagged") {
+        return dressFlagged(event, context, conversationId);
     }
     return event.code === undefined ? dressDeath(event, context, conversationId, queries) : bare(event);
 };

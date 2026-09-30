@@ -42,8 +42,9 @@ import type { VerificationStanding } from "../../verification/agent-verification
 // that conversation's own policy (turn-break.ts), because a re-run spends the reader's budget on a turn they sent once.
 // What is pending lives in each conversation's actor; a new turn on the conversation supersedes it.
 
-// The wall a held turn stopped at; `stopped` is a death with nothing to repair, `door` a refusal before the model saw it.
-export type HeldReason = "limit" | "stopped" | "overflow" | "door" | "outage" | "auth";
+// The wall a held turn stopped at; `stopped` is a death with nothing to repair, `door` a refusal before the model saw it,
+// `flagged` the provider's safety classifier stopping it partway.
+export type HeldReason = "limit" | "stopped" | "overflow" | "door" | "outage" | "auth" | "flagged";
 
 // A turn a wall stranded, held for a press (however long it takes) or the resume pass (RUNGS).
 export interface HeldTurn {
@@ -72,6 +73,9 @@ export interface HeldTurn {
     readonly carryRefused?: boolean | undefined;
     // An auth hold's credential: the account to re-mint, and the refused token the rotation must supersede, not replay.
     readonly remint?: { readonly account: string; readonly refusedToken: string } | undefined;
+    // A flagged hold's session entry before the stopped response (refusal-fork.ts): the re-run resumes there, so the
+    // model never reads what the classifier stopped. Absent when the CLI named no such point: a plain resume then.
+    readonly resumeAt?: string | undefined;
 }
 
 // Where a press sends the held turn, by the one routing rule (agent/providers/accounts/routing.ts), with the held turn's own
@@ -146,6 +150,10 @@ const rerunNote = (held: HeldTurn, routing: ResumeRouting | undefined): RerunNot
         // The one wall whose own session is the obstacle: fresh whatever ran, with the hand-off the record seeds.
         case "overflow":
             return { reason: "overflow", fresh: true, restate: true };
+        // Its own session, cut back to before the stopped response, whichever model the press named; fresh only if the
+        // press moved runtimes, which no session crosses.
+        case "flagged":
+            return retiresSession(held.input, routing) ? { reason: "flagged", fresh: true, restate: true } : { reason: "flagged", restate: true };
         default:
             return wallNote(held, routing);
     }
@@ -155,7 +163,8 @@ const rerunNote = (held: HeldTurn, routing: ResumeRouting | undefined): RerunNot
 // model never saw.
 const rerunOf = (held: HeldTurn, routing?: ResumeRouting): TurnInput & { conversationId: string } => {
     const turn = resumedTurn({ input: reroutedInput(held.input, routing), sessionId: held.sessionId }, rerunNote(held, routing));
-    return held.run === undefined ? turn : { ...turn, unseenRuns: [...(held.input.unseenRuns ?? []), held.run] };
+    const cut = turn.sessionId === undefined || held.resumeAt === undefined ? turn : { ...turn, resumeAt: held.resumeAt };
+    return held.run === undefined ? cut : { ...cut, unseenRuns: [...(held.input.unseenRuns ?? []), held.run] };
 };
 
 // Undefined when nothing a press answers for is held (an outage or a refused credential is the pass's), a turn runs, or
@@ -199,8 +208,9 @@ const resumedTurn = (
     failure: { readonly input: TurnInput & { conversationId: string }; readonly sessionId?: string | undefined },
     { reason, fresh, restate }: RerunNote,
 ): TurnInput & { conversationId: string } => {
-    // Destructured out first so `fresh` can unset it, rather than leaving the carried session in place via a spread.
-    const { sessionId: carried, ...rest } = failure.input;
+    // Destructured out first so `fresh` can unset it, rather than leaving the carried session in place via a spread. The
+    // failed turn's own cut goes too: it named a point in the session as it stood then, and the work since is kept.
+    const { sessionId: carried, resumeAt: _cut, ...rest } = failure.input;
     const sessionId = fresh === true ? undefined : (failure.sessionId ?? carried);
     const resume = restate === true ? reason : (failure.input.resume ?? reason);
     return {

@@ -1,7 +1,7 @@
 // Normalizes the SDK's message stream onto AgentEvents: sdkTurns finds the turn boundary in streaming-input mode, and
 // TurnFold maps each message onto typed frames. An SDK message with no mapping is dropped; the terminal `done` frame is
 // emitted by runAgent, not here.
-import type { Options, SDKAssistantMessage, SDKMessage, SDKUserMessage, SlashCommand, TerminalReason } from "@anthropic-ai/claude-agent-sdk";
+import type { Options, Query, SDKAssistantMessage, SDKMessage, SDKUserMessage, SlashCommand, TerminalReason } from "@anthropic-ai/claude-agent-sdk";
 import { sdk } from "../../engines/claude-sdk.js";
 import {
     type AgentEvent,
@@ -16,7 +16,8 @@ import { agentSessionName, browserSessionName } from "@intentic/sandbox-contract
 import { browserServerOfTool } from "../../browser/sessions/browser-sessions.js";
 import { localCommandText, unknownCommandName } from "../providers/agent-commands.js";
 import type { SteeringQueue } from "../checkpoints/agent-steering.js";
-import { contextOverflowFrame, errorFrame, modelUnavailableFrame, rateLimitFrame, retryStormFrame, trialRetryFrame } from "./error-frames.js";
+import { contextOverflowFrame, errorFrame, modelUnavailableFrame, rateLimitFrame, retryStormFrame, safeguardFrame, trialRetryFrame } from "./error-frames.js";
+import { isSafeguardRefusal, RefusalFork } from "./refusal-fork.js";
 import { probeRoutedEndpoint, type RoutedEndpoint } from "../providers/routed-refusal.js";
 import type { TurnAllowance } from "../providers/harness-credentials.js";
 import { opt } from "../../opt.js";
@@ -33,6 +34,8 @@ import { type CalledTool, editDiffContent, mayShowPicture, resultContent, toolLo
 // optional since a fake stream used in tests has none.
 export type AgentQuery = AsyncIterable<SDKMessage> & {
     readonly supportedCommands?: () => Promise<readonly SlashCommand[]>;
+    // Stops the running request loop where it stands; the stream still ends on its own result.
+    readonly interrupt?: Query["interrupt"];
 };
 
 // The SDK `query` injected so tests can drive a fake message stream with no API calls and no bundled binary.
@@ -318,6 +321,10 @@ class TurnFold {
     private spentUsd: number;
     // Whether this turn already said its session outgrew the window; the result's ending repeats the assistant's error.
     private overflowed = false;
+    // Where a turn the safety classifier stops can resume from, and whether it has stopped: said once, and the interrupted
+    // result after it is that same ending, not another.
+    private readonly fork = new RefusalFork();
+    private flagged = false;
 
     constructor(args: StreamSdkArgs, session: AgentQuery) {
         this.args = args;
@@ -334,6 +341,7 @@ class TurnFold {
             yield { kind: "session", sessionId };
             this.adoptChecklist(sessionId);
         }
+        this.fork.note(message);
         // Frames produced inside a subagent (Task tool) carry its id so the UI can group them.
         const parent = (message as { parent_tool_use_id?: string | null }).parent_tool_use_id ?? undefined;
         switch (message.type) {
@@ -441,6 +449,10 @@ class TurnFold {
     // Text and thinking already streamed as deltas above; here only tool calls surface (including checklist verbs,
     // rendered as their own live list).
     private async *onAssistant(message: SDKAssistantMessage, sessionId: unknown, parent: string | undefined): AsyncGenerator<AgentEvent> {
+        if (message.error !== undefined && parent === undefined && isSafeguardRefusal(message)) {
+            yield* this.onFlagged(message);
+            return;
+        }
         if (message.error !== undefined) {
             const failure = await errorFrame(message, this.args.allowance, this.args.trial);
             this.overflowed ||= failure.code === "context-overflow";
@@ -455,6 +467,19 @@ class TurnFold {
                 yield* this.onToolUse(call, sessionId, parent);
             }
         }
+    }
+
+    // The safety classifier stopped the turn: said once, held for a person (classify-failure.ts), and the CLI interrupted,
+    // since left alone it answers the stopped response's tool call and asks again into the same refusal, over and over
+    // (a real CLI sent 18 more requests in half a second). The stream then ends on the interrupted run's own result.
+    private async *onFlagged(message: SDKAssistantMessage): AsyncGenerator<AgentEvent> {
+        if (this.flagged) {
+            return;
+        }
+        this.flagged = true;
+        yield safeguardFrame(message, this.fork.point());
+        // allow(silent-catch): a CLI that cannot take the interrupt still ends the turn on its result, only later.
+        await this.session.interrupt?.().catch(() => undefined);
     }
 
     private *onToolUse(block: ToolUseBlock, sessionId: unknown, parent: string | undefined): Generator<AgentEvent> {
@@ -786,7 +811,8 @@ class TurnFold {
             this.overflowed = true;
             return repeated ? undefined : contextOverflowFrame(`agent stopped: the session no longer fits the model's context window (${message.terminal_reason})`);
         }
-        if (this.overflowed || message.subtype === "success") {
+        // A turn the classifier stopped was interrupted on purpose: its ending is the flag already said.
+        if (this.overflowed || this.flagged || message.subtype === "success") {
             return undefined;
         }
         return {

@@ -35,6 +35,10 @@ const failureEnding = (deps: EndingDeps, id: string, summary: AgentSummary): Tur
     if (summary.failureCode === "provider-outage") {
         return { reason: "outage" };
     }
+    // Held for the person to route, the one coded failure a press answers: the same model again, or another.
+    if (summary.failureCode === "safeguard-flagged") {
+        return { reason: "flagged", ...heldOn(deps, id) };
+    }
     // A coded failure names something to repair first, so no offer beats a press that would only re-fail.
     // Uncoded is stopped work: nothing to repair, so the press just carries on.
     return summary.failureCode === undefined ? { reason: "stopped", ...heldOn(deps, id) } : undefined;

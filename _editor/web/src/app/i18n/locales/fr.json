@@ -989,10 +989,13 @@
             "continueOn": "Continuer sur {model}",
             "continueOnFresh": "Continuer sur {model}, dans une nouvelle session",
             "continueOnKeepingSession": "Continuer sur {fallback}, en gardant cette session",
+            "continueOnOther": "Continuer sur…",
             "handoff": "Passation",
             "mayBeatReset": "Peut passer avant la réinit.",
             "oneWeeklyReset": "1 réinit. hebdo",
             "otherAccounts": "Autres comptes",
+            "otherModelNote": "La conversation reste sur le modèle choisi.",
+            "otherModelTitle": "Autre modèle",
             "otherWaysOn": "Autres façons sur",
             "outdatedMissing": "Tant qu'il n'est pas mis à jour, un tour retenu par un quota épuisé ne peut pas passer d'ici sur un autre de vos comptes. Continuer attend celui-ci.",
             "pickUp": "Reprendre",
@@ -1002,6 +1005,9 @@
             "resetSpends": "Coûte",
             "resetting": "Réinitialisation…",
             "resetTitle": "Rouvrir la session",
+            "retryNote": "Renvoyé sans la réponse que ses garde-fous ont arrêtée.",
+            "retryOn": "Réessayer sur {model}",
+            "retryTitle": "Même modèle",
             "weeklyUntouched": "Quota hebdo intact"
         },
         "chatDocumentBody": {
@@ -1720,6 +1726,8 @@
             "stopVoice": "Arrêter la voix"
         },
         "turnBreak": {
+            "flaggedStatus": "Arrêté par les garde-fous du modèle avant tout travail",
+            "flaggedStatusKept": "Arrêté par les garde-fous du modèle · travail conservé",
             "moveBrief": "Bascule, même fournisseur",
             "resendBrief": "Envoie au retour du quota",
             "retryOutageBrief": "Réessaie pendant la panne",

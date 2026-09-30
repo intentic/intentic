@@ -995,10 +995,13 @@
             "continueOn": "Continuar en {model}",
             "continueOnFresh": "Continuar en {model}, en una sesión nueva",
             "continueOnKeepingSession": "Continuar en {fallback}, conservando esta sesión",
+            "continueOnOther": "Continuar en…",
             "handoff": "Traspaso",
             "mayBeatReset": "Puede ir antes del reinicio",
             "oneWeeklyReset": "1 reinicio semanal",
             "otherAccounts": "Otras cuentas",
+            "otherModelNote": "La conversación se queda en el modelo que elijas.",
+            "otherModelTitle": "Otro modelo",
             "otherWaysOn": "Otras formas en",
             "outdatedMissing": "Hasta que se actualice, un turno retenido por un cupo agotado no puede pasar desde aquí a otra de tus cuentas. Continuar espera a esta.",
             "pickUp": "Retomar",
@@ -1008,6 +1011,9 @@
             "resetSpends": "Gasta",
             "resetting": "Reiniciando…",
             "resetTitle": "Reabrir sesión",
+            "retryNote": "Se envía de nuevo sin la respuesta que detuvieron sus salvaguardas.",
+            "retryOn": "Reintentar en {model}",
+            "retryTitle": "Mismo modelo",
             "weeklyUntouched": "Cupo semanal intacto"
         },
         "chatDocumentBody": {
@@ -1728,6 +1734,8 @@
             "stopVoice": "Detener voz"
         },
         "turnBreak": {
+            "flaggedStatus": "Detenido por las salvaguardas del modelo antes de hacer nada",
+            "flaggedStatusKept": "Detenido por las salvaguardas del modelo · trabajo conservado",
             "moveBrief": "Cambia ya, mismo proveedor",
             "resendBrief": "Envía al volver el cupo",
             "retryOutageBrief": "Reintenta durante la caída",

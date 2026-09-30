@@ -411,6 +411,8 @@ const baseRequestOf = (
             ...opt("spawnDepth", input.conversationId === undefined ? undefined : spawnDepthOf(services.conversations, input.conversationId)),
             ...opt("isolation", turn.isolation),
             ...opt("sessionId", turn.resumed),
+            // Only onto the session it was cut from: a session the runtime no longer holds opened fresh instead.
+            ...opt("resumeAt", turn.resumed !== undefined && turn.resumed === input.sessionId ? input.resumeAt : undefined),
             ...opt("model", input.model),
             ...opt("effort", input.effort),
             // Rides the same path as `effort`: through turn-plan's own gates, not straight to an adapter.

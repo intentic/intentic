@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import type { TurnBreakPolicy } from "@intentic/sandbox-contract";
+import { isTurnBreak, type TurnBreakPolicy } from "@intentic/sandbox-contract";
 import { Button, formatTokens, Icon, type IconName, ResponsiveOverlay, SegmentedControl, type Tip, type TooltipValue, useDevice } from "@intentic/ui";
 import { errorMessage, useNow } from "@intentic/ui/async";
 import { computed, ref, watch } from "vue";
 import { useAgents } from "../../agents/fleet/useAgents";
 import SandboxOutdatedNotice from "../../sandbox/overview/version/SandboxOutdatedNotice.vue";
 import { accountsOutdated } from "../accounts/accountsOutdated";
+import { modelLabelFor, modelOptionsFor } from "../accounts/providerCatalog";
 import { fallbackAccount, fallbackLabel } from "../session/limitFallback";
 import { askLimitReset, claimLimitReset, limitResetFor, limitResetNote } from "../session/limitReset";
 import { pickUpNext, pickUpStatus, pressCost } from "../run/pickUp";
@@ -33,7 +34,7 @@ const props = defineProps<{
 // The press, and whether it keeps the provider session across an account change (the menu's carrying variant).
 const emit = defineEmits<{ (event: "continue", options?: { readonly carry?: boolean }): void }>();
 
-const { conversation, connected, pickUp, provider, model, account, accounts } = usePaneView();
+const { conversation, connected, pickUp, provider, model, account, accounts, selectModel } = usePaneView();
 const { reachable } = useSandbox();
 const { settings } = useSandboxSettings();
 const { mobile } = useDevice();
@@ -75,6 +76,36 @@ const continueHint = computed((): TooltipValue => {
     return { title: t(`chat.chatContinueStrip.pickUp`), keys };
 });
 
+// The provider's safety classifier stopped the turn. No standing answer: each time, the person sends it again on this
+// model (the daemon cuts the stopped response out of the session first) or picks another, which the conversation then
+// stays on, as a pick in the picker would.
+const flagged = computed(() => ending.value === `flagged`);
+const modelLabel = computed(() => modelLabelFor(provider.value, model.value));
+const otherModels = computed(() =>
+    flagged.value ? modelOptionsFor(provider.value).filter((option) => option.value !== model.value && option.helperOnly === undefined) : [],
+);
+const continueKeys = computed(() => (!mobile.value && props.ready ? t(`ui.keys.enter`) : undefined));
+const retryHint = computed((): Tip => ({ title: t(`chat.chatContinueStrip.retryTitle`), keys: continueKeys.value, note: t(`chat.chatContinueStrip.retryNote`) }));
+const otherModelHint = computed((): Tip => ({ title: t(`chat.chatContinueStrip.otherModelTitle`), note: t(`chat.chatContinueStrip.otherModelNote`) }));
+const modelsOpen = ref(false);
+const modelsAnchor = ref<HTMLElement>();
+watch(
+    () => props.visible && flagged.value,
+    (open) => {
+        if (!open) {
+            modelsOpen.value = false;
+        }
+    },
+);
+const continueOnModel = (value: string): void => {
+    modelsOpen.value = false;
+    if (!reachable.value) {
+        return;
+    }
+    selectModel({ provider: provider.value, value });
+    emit(`continue`);
+};
+
 // What the reset press spends: a once-a-week grant, said before it is gone.
 const resetTip = computed(
     (): Tip => ({
@@ -98,7 +129,11 @@ const outdated = computed(() => ending.value === `limit` && accountsOutdated.val
 // The one question, and this conversation's current answer to it. Read through the same fold every other surface uses
 // (this agent's override, else the sandbox-wide policy), so the card, the settings row and this control cannot
 // disagree about what is armed.
-const answers = computed(() => (ending.value === undefined ? [] : breakAnswers(ending.value, fallback.value === undefined ? undefined : fallbackLabel(fallback.value))));
+const answers = computed(() =>
+    ending.value === undefined || !isTurnBreak(ending.value)
+        ? []
+        : breakAnswers(ending.value, fallback.value === undefined ? undefined : fallbackLabel(fallback.value)),
+);
 // Each pill's hover: its own name and the one consequence that tells it from the others.
 const answerOptions = computed(() =>
     answers.value.map((answer) => ({ label: answer.label, value: answer.value, icon: answer.icon, title: { title: answer.label, note: answer.brief } })),
@@ -113,12 +148,16 @@ watch(ending, () => {
     answerRefused.value = undefined;
 });
 const answer = computed<TurnBreakPolicy>({
-    get: () => pending.value ?? (ending.value === undefined ? `wait` : effectivePolicy(ending.value, agentById(conversation.value.conversationId), settings.value)),
+    get: () =>
+        pending.value ??
+        (ending.value === undefined || !isTurnBreak(ending.value)
+            ? `wait`
+            : effectivePolicy(ending.value, agentById(conversation.value.conversationId), settings.value)),
     set: (next) => void choose(next),
 });
 const choose = async (next: TurnBreakPolicy): Promise<void> => {
     const wall = ending.value;
-    if (wall === undefined || !reachable.value) {
+    if (wall === undefined || !isTurnBreak(wall) || !reachable.value) {
         return;
     }
     pending.value = next;
@@ -277,8 +316,27 @@ const waysRows = computed((): readonly { key: string; icon: IconName; title: str
                         resetting ? t(`chat.chatContinueStrip.resetting`) : t(`chat.chatContinueStrip.resetLimitNow`)
                     }}
                 </Button>
+                <!-- A flagged turn's two ways on, both a press: the same model again, or another one picked here. -->
+                <template v-if="flagged">
+                    <span ref="modelsAnchor" class="flex">
+                        <Button
+                            v-if="otherModels.length > 0"
+                            size="small"
+                            severity="secondary"
+                            :disabled="!reachable || !ready"
+                            :aria-expanded="modelsOpen"
+                            v-tooltip.top="otherModelHint"
+                            @click="modelsOpen = !modelsOpen"
+                        >
+                            {{ t(`chat.chatContinueStrip.continueOnOther`) }}<Icon name="chevron-down" class="ml-1 text-2xs" />
+                        </Button>
+                    </span>
+                    <Button size="small" :disabled="!reachable || !ready" v-tooltip.top="retryHint" @click="emit(`continue`)">
+                        {{ t(`chat.chatContinueStrip.retryOn`, { model: modelLabel }) }}
+                    </Button>
+                </template>
                 <!-- The card's one solid press: every other control here decides WHEN, this one does it now. -->
-                <Button size="small" :disabled="!reachable || !ready" v-tooltip.top="continueHint" @click="emit(`continue`)">
+                <Button v-else size="small" :disabled="!reachable || !ready" v-tooltip.top="continueHint" @click="emit(`continue`)">
                     {{ t(`ui.action.continue`) }}
                 </Button>
                 <Button
@@ -317,6 +375,27 @@ const waysRows = computed((): readonly { key: string; icon: IconName; title: str
         <!-- A sandbox too old to move a conversation: no other account is offered, and this says why and how to update. -->
         <SandboxOutdatedNotice v-if="outdated" :missing="t(`chat.chatContinueStrip.outdatedMissing`)" />
     </div>
+    <!-- The models a flagged turn can go on with: picking one switches the conversation to it and sends the turn again. -->
+    <ResponsiveOverlay
+        v-model="modelsOpen"
+        :anchor="modelsAnchor"
+        cross="end"
+        :header="t(`chat.chatContinueStrip.continueOnOther`)"
+        panel-class="w-72 p-1"
+    >
+        <div class="flex max-h-80 flex-col overflow-y-auto p-1">
+            <button
+                v-for="option in otherModels"
+                :key="option.value"
+                type="button"
+                class="ui-row-select flex flex-col rounded-lg px-2.5 py-1.5 text-left max-md:py-3"
+                @click="continueOnModel(option.value)"
+            >
+                <span class="truncate text-sm text-content md:text-xs">{{ option.label }}</span>
+                <span v-if="option.description !== undefined" class="truncate text-2xs text-subtle">{{ option.description }}</span>
+            </button>
+        </div>
+    </ResponsiveOverlay>
     <!-- The press's variants, shown in the dropdown when another account could take this turn. -->
     <ResponsiveOverlay v-model="waysOpen" :anchor="waysAnchor" cross="end" :header="t(`chat.chatContinueStrip.otherWaysOn`)" panel-class="w-80 p-1">
         <div class="flex flex-col p-1">

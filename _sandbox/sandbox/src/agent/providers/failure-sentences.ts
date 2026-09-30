@@ -178,3 +178,10 @@ const CONTEXT_OVERFLOW_MARKERS = [
 // A session that outgrew the model's context window, in whichever provider's words; every runtime's failure rules read
 // this one list, since resuming such a session only overflows again.
 export const isContextOverflowText = (text: string): boolean => CONTEXT_OVERFLOW_MARKERS.some((marker) => text.toLowerCase().includes(marker));
+
+// The Claude CLI's sentence for a response its provider's safety classifier stopped ("Opus 5.5's safeguards flagged this
+// message", "… flagged this session", "… stopped the response above"). The structured `stop_reason: "refusal"` is read
+// first (error-frames.ts); this is the fallback for a CLI that says it only in prose.
+const SAFEGUARD_FLAG = /safeguards (flagged this (message|session)|stopped the response)/i;
+
+export const isSafeguardFlagText = (text: string): boolean => SAFEGUARD_FLAG.test(text);

@@ -987,10 +987,13 @@
             "continueOn": "Auf {model} fortsetzen",
             "continueOnFresh": "Auf {model} fortsetzen, in einer frischen Session",
             "continueOnKeepingSession": "Auf {fallback} fortsetzen, diese Session behalten",
+            "continueOnOther": "Fortsetzen auf…",
             "handoff": "Übergabe",
             "mayBeatReset": "Klappt evtl. vor dem Reset",
             "oneWeeklyReset": "1 Wochen-Reset",
             "otherAccounts": "Andere Konten",
+            "otherModelNote": "Die Unterhaltung bleibt beim gewählten Modell.",
+            "otherModelTitle": "Anderes Modell",
             "otherWaysOn": "Andere Wege auf",
             "outdatedMissing": "Bis zur Aktualisierung kann ein durch ein aufgebrauchtes Kontingent angehaltener Zug von hier aus nicht auf ein anderes deiner Konten wechseln. Fortsetzen wartet auf dieses.",
             "pickUp": "Fortsetzen",
@@ -1000,6 +1003,9 @@
             "resetSpends": "Kostet",
             "resetting": "Wird zurückgesetzt…",
             "resetTitle": "Sitzung öffnen",
+            "retryNote": "Erneut gesendet, ohne die von den Schutzmechanismen gestoppte Antwort.",
+            "retryOn": "Erneut auf {model}",
+            "retryTitle": "Gleiches Modell",
             "weeklyUntouched": "Wochenkontingent bleibt"
         },
         "chatDocumentBody": {
@@ -1720,6 +1726,8 @@
             "stopVoice": "Sprache stoppen"
         },
         "turnBreak": {
+            "flaggedStatus": "Von den Schutzmechanismen des Modells gestoppt, bevor Arbeit anfiel",
+            "flaggedStatusKept": "Von den Schutzmechanismen des Modells gestoppt · Arbeit behalten",
             "moveBrief": "Wechselt sofort, gleicher Anbieter",
             "resendBrief": "Sendet, sobald Kontingent zurück",
             "retryOutageBrief": "Wiederholt beim Ausfall",

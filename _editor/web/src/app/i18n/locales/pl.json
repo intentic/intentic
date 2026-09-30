@@ -1386,6 +1386,7 @@
             "continueOn": "Kontynuuj na {model}",
             "continueOnFresh": "Kontynuuj na {model}, w świeżej sesji",
             "continueOnKeepingSession": "Kontynuuj na {fallback}, zachowując tę sesję",
+            "continueOnOther": "Kontynuuj na…",
             "freshSessionShortHandoff": "Świeża sesja na limicie tamtego konta, zaczęta od krótkiego przekazania zapisu i zmierzonego stanu; szczegóły, których nie ma w zapisie, przepadają.",
             "freshSessionSizedHandoff": "Świeża sesja na limicie tamtego konta, zaczęta od przekazania zapisu i zmierzonego stanu (~{tokens} tokenów); szczegóły, których nie ma w zapisie, przepadają.",
             "handoff": "Przekazanie",
@@ -1394,6 +1395,8 @@
             "mayBeatReset": "Może zadziałać przed resetem",
             "oneWeeklyReset": "1 reset tygodniowy",
             "otherAccounts": "Inne konta",
+            "otherModelNote": "Rozmowa zostaje przy wybranym modelu.",
+            "otherModelTitle": "Inny model",
             "otherWaysOn": "Inne sposoby na",
             "outdatedMissing": "Do czasu aktualizacji tury wstrzymanej przez wyczerpany limit nie da się stąd przenieść na inne Twoje konto. Kontynuuj czeka na to konto.",
             "pickUp": "Kontynuuj",
@@ -1403,6 +1406,9 @@
             "resetSpends": "Zużywa",
             "resetting": "Resetowanie…",
             "resetTitle": "Otwórz sesję",
+            "retryNote": "Wysłane ponownie bez odpowiedzi zatrzymanej przez zabezpieczenia.",
+            "retryOn": "Ponów na {model}",
+            "retryTitle": "Ten sam model",
             "weeklyUntouched": "Limit tygodniowy bez zmian"
         },
         "chatDocumentBody": {
@@ -1494,7 +1500,8 @@
                 "carried": "Wysłano ponownie na innym koncie po tym, jak limit skończył się w trakcie tury, razem z dotychczasową sesją.",
                 "refused": "Wysłano ponownie po tym, jak limit ją odrzucił: nic się wcześniej nie wykonało.",
                 "door": "Wysłano ponownie: pierwsza próba została odrzucona, zanim cokolwiek się wykonało.",
-                "overflow": "Wysłano ponownie w nowej sesji, bo poprzednia przerosła okno kontekstu modelu."
+                "overflow": "Wysłano ponownie w nowej sesji, bo poprzednia przerosła okno kontekstu modelu.",
+                "flagged": "Wysłane ponownie po zatrzymaniu przez zabezpieczenia modelu, bez zatrzymanej odpowiedzi."
             },
             "watchWake": {
                 "met": "{note} — obserwacja zadziałała po {elapsed}.",
@@ -2253,6 +2260,8 @@
         "turnBreak": {
             "anotherAccount": "inne konto",
             "backWhen": "odnawia się {when}",
+            "flaggedStatus": "Zatrzymane przez zabezpieczenia modelu przed jakąkolwiek pracą",
+            "flaggedStatusKept": "Zatrzymane przez zabezpieczenia modelu · praca zachowana",
             "goesAt": "Ruszy sama {when}",
             "goesSoon": "Ruszy sama za chwilę",
             "ladderSpent": "Przerwano po {max} próbach bez postępu · Kontynuuj wyśle turę ponownie",

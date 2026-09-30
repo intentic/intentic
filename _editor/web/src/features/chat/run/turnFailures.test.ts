@@ -76,6 +76,31 @@ describe(`a turn that outgrew the model's window`, () => {
     });
 });
 
+// The provider's safety classifier stopped the turn: held for the person, who picks the way on each time from the card.
+describe(`a turn the safety classifier stopped`, () => {
+    it(`is the held card's pick-up, not the error line, and nothing is watched for`, async () => {
+        jest.useFakeTimers();
+        const host = hostOf();
+        const failures = new TurnFailures(host);
+        host.error.value = `an earlier sentence in the same turn`;
+        failures.apply({
+            kind: `error`,
+            code: `safeguard-flagged`,
+            message: `API Error: Opus 5.5's safeguards flagged this message.`,
+            refusal: { category: `cyber`, resumeAt: `entry-7` },
+            autoResume: `available`,
+            held: { ran: true, contextTokens: 9_000 },
+        });
+
+        expect(host.error.value).toBeNull();
+        expect(host.pickUp.value).toEqual({ reason: `flagged`, held: { ran: true, contextTokens: 9_000 } });
+        failures.armRenewalProbe();
+        await advanceTimersByTimeAsync(40_000);
+        expect(host.reattach).toHaveBeenCalledTimes(0);
+        jest.useRealTimers();
+    });
+});
+
 // The sandbox keeps one hold per turn and each failure replaces it: a Claude 401 promised "continues automatically", a
 // stop came a second later, and the chat kept the promise, a renewal clock and, 76 s on, a "reconnect the account"
 // banner of its own making, while the account went on answering for two hours.

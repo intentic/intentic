@@ -27,6 +27,10 @@ export const RESUME_NOTES = {
     // The session outgrew the model's window, so the re-run opens fresh with the hand-off, as `switched` does.
     overflow:
         "This conversation's session grew larger than the model's context window can hold, which stopped this turn, and it has been sent again in a fresh session. The conversation so far has been carried across above, including the part of the request that was already completed, and the sandbox has measured where the work actually stands (the files changed on this branch, what was verified, what the checklist still holds) in the note headed 'Where the work stands': trust that note over anything recalled, then continue from that point instead of starting over. Keep this session small: read large files and long command output in parts rather than whole.",
+    // The provider's safety classifier stopped the turn partway, usually a false positive on ordinary work. Re-run in
+    // the same session with the stopped response cut away, so the model sees none of it, on whichever model the press
+    // named.
+    flagged: `The model provider's safety classifier stopped the previous attempt at this request partway, and it has been sent again after the person looking at this conversation chose to go on. The stopped response has been removed from this session. ${REPEATED}`,
     // A turn parked on the user when the daemon died; what follows the note is their actual answer, not a repeat.
     answered:
         "The sandbox restarted while this conversation was waiting for the user to respond; it is back, and their response follows below: continue from where the session left off.",
@@ -66,6 +70,7 @@ const RESUME_DISCLOSURES: Record<ResumeReason, ResumeDisclosure> = {
     refused: notice("refused", "Sent again after the allowance refused it: nothing had run."),
     door: notice("door", "Sent again: the first attempt was turned away before anything ran."),
     overflow: notice("overflow", "Sent again in a fresh session after the last one outgrew the model's context window."),
+    flagged: notice("flagged", "Sent again after the model's safeguards stopped it, without the stopped response."),
     answered: { kind: "note", note: { title: "Picked back up after a sandbox restart", text: RESUME_NOTES.answered } },
 };
 

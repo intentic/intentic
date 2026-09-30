@@ -381,6 +381,33 @@ test("the transcript reports an uncoded error as stopped, so a window that never
     expect(transcript.ending).toEqual({ reason: "stopped", held: { ran: false } });
 });
 
+// The safety classifier stopping a turn is the one coded failure a press answers: the card offers the same model again
+// or another, on the turn the daemon holds, to a window that never saw it happen too.
+test("the transcript reports a turn the safety classifier stopped as a flagged, held ending", async () => {
+    const client = clientFor(
+        createApp(
+            services({
+                async *agent() {
+                    yield { kind: "session", sessionId: "sess-flagged" };
+                    yield { kind: "delta", text: "Reading the parser first." };
+                    yield {
+                        kind: "error",
+                        code: "safeguard-flagged",
+                        message: "API Error: Opus 5.5's safeguards flagged this message.",
+                        refusal: { category: "reasoning_extraction", resumeAt: "entry-7" },
+                    };
+                    yield { kind: "done" };
+                },
+            }),
+        ),
+    );
+
+    await runAgentTurn(client, { prompt: "rewrite the reconcile engine", conversationId: "conv-flagged" });
+
+    const transcript = await client.agents.transcript({ id: "conv-flagged" });
+    expect(transcript.ending).toEqual({ reason: "flagged", held: { ran: true } });
+});
+
 test("agents.search reads the daemon transcript for a provider with no SDK prompt store", async () => {
     const codexSearchTranscript = (id: string) =>
         id === "codex-search"

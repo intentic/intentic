@@ -285,7 +285,20 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
                 "harness-incomplete",
                 // The installed engine is too old for the model; the provider names the version required, on `engine`.
                 "engine-version-floor",
+                // The provider's safety classifier stopped the turn partway, often a false positive on ordinary work.
+                // Held for a person: retry on the same model without the stopped response, or go on with another.
+                "safeguard-flagged",
             ])
+            .optional(),
+        // safeguard-flagged only: what the classifier named, and where a retry resumes the session from.
+        refusal: z
+            .object({
+                category: z.string().optional().describe("The classifier's category as the provider named it (cyber, bio, reasoning_extraction, …), when it did."),
+                resumeAt: z
+                    .string()
+                    .optional()
+                    .describe("The last session entry before the stopped response: a retry resumes the session there, so the model never sees what was stopped."),
+            })
             .optional(),
         // Which engine, the version refused, and the floor the provider requires; lets the client offer an install.
         engine: z

@@ -41,6 +41,9 @@ export type TurnInput = AgentTurn & {
     readonly unseenRuns?: readonly string[];
     // Which re-run this turn is, set where the re-run is made; its prompt opens with the matching note for the model.
     readonly resume?: ResumeReason | undefined;
+    // With `sessionId`: resume that session only up to this entry, dropping what came after it (a response the provider's
+    // safety classifier stopped, turn-resume.ts). Set by the daemon's re-run alone.
+    readonly resumeAt?: string | undefined;
     // Whose words `title` is when they are not a head cut from the prompt: `model`, a name an agent chose (a parent's
     // description of the child it spawns), which the naming pass keeps. Read only by the turn that opens the conversation.
     readonly titleSource?: "model";

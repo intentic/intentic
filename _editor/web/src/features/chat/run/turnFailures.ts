@@ -110,6 +110,9 @@ export class TurnFailures {
             case `provider-outage`:
                 this.applyOutageError(error);
                 return;
+            case `safeguard-flagged`:
+                this.applyFlaggedError(error);
+                return;
             case `trial-unavailable`:
             case `trial-model-unavailable`:
             case `trial-exhausted`:
@@ -199,6 +202,14 @@ export class TurnFailures {
                 }
             }, until - Date.now());
         }
+    }
+
+    // The provider's safety classifier stopped the turn: the daemon holds it, and the card asks the person each time
+    // whether to send it again on this model or go on with another. The transcript's own line carries the provider's
+    // words, so no error line repeats them above a card that already offers the way on.
+    private applyFlaggedError(error: TurnError): void {
+        this.host.error.value = null;
+        this.host.pickUp.value = error.held === undefined ? { reason: `flagged` } : { reason: `flagged`, held: error.held };
     }
 
     // Provider outage with a resume in flight: muted notice naming when it retries, not the error line, since it

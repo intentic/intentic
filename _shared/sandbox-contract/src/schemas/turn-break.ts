@@ -13,6 +13,15 @@ import { z } from "zod";
 export const TurnBreakSchema = z.enum(["limit", "outage", "stopped"]);
 export type TurnBreak = z.infer<typeof TurnBreakSchema>;
 
+// Every ending that leaves a held turn behind: the three above, plus the provider's safety classifier stopping a turn
+// partway. That one has no standing answer and never re-runs by itself: the person picks, each time, between the same
+// model again and another one (2026-09-30, the owner's call over an automatic model switch).
+export const HeldEndingSchema = z.enum([...TurnBreakSchema.options, "flagged"]);
+export type HeldEnding = z.infer<typeof HeldEndingSchema>;
+
+/** Whether this ending takes a standing answer (turn-break policy), which `flagged` never does. */
+export const isTurnBreak = (ending: HeldEnding): ending is TurnBreak => ending !== "flagged";
+
 // `move` implies `resend`: an account with room is tried at once, and the reset appointment stands as its fallback.
 // There is deliberately no "move, else hold" — a reader willing to spend a second account is willing to wait.
 export const LimitPolicySchema = z.enum(["wait", "resend", "move"]);

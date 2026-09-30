@@ -11,6 +11,7 @@ import {
     versionFloorOf,
 } from "../providers/failure-sentences.js";
 import { opt } from "../../opt.js";
+import type { RefusalPoint } from "./refusal-fork.js";
 
 type ErrorEvent = Extract<AgentEvent, { kind: "error" }>;
 
@@ -105,6 +106,13 @@ export const unsentParameterFrame = (explained: string): ErrorEvent => ({
     code: "provider-outage",
     message: `${explained} This parameter was not sent by intentic. Usually clears on retry; work so far is kept.`,
 });
+
+// The provider's safety classifier stopped the turn, in the CLI's own words: coded so the daemon holds it for a person
+// rather than sending it again into the session that still carries the stopped response (classify-failure.ts).
+export const safeguardFrame = (message: SDKAssistantMessage, point: RefusalPoint): ErrorEvent => {
+    const frame: ErrorEvent = { kind: "error", code: "safeguard-flagged", message: apiErrorMessage(message) };
+    return point.category === undefined && point.resumeAt === undefined ? frame : { ...frame, refusal: point };
+};
 
 // A platform-owned trial turn's failure: the pool's own refusals, then a session past its window, which a fresh session
 // on the same model can hold; anything else is a model the trial cannot run.

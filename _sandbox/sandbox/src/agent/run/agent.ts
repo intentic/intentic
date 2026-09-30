@@ -156,6 +156,10 @@ const CHECKLIST_ENV: Record<string, string> = {
     CLAUDE_CODE_ENABLE_TASKS: "1",
 };
 
+// Turns off the CLI's own switch to another model when the provider's safety classifier stops a response, so a flagged
+// turn ends for the person to choose (2026-09-30: asked every time, the owner's call over switching automatically).
+const REFUSAL_ENV = { CLAUDE_CODE_DISABLE_REFUSAL_FALLBACK: "1" } as const;
+
 // Hides CLI skills with no daemon equivalent: loop/schedule need a live process, keybindings-help/update-config target
 // the CLI's own UI.
 const HEADLESS_SETTINGS: Exclude<NonNullable<Options["settings"]>, string> = {
@@ -196,6 +200,11 @@ const keepWarmOptions = (request: HarnessRequest): Partial<Options> => ({
     hooks: REFUSE_EVERY_TOOL,
     settings: { ...turnSettings(request), disableAllHooks: true },
 });
+
+// The session a turn resumes, cut back to `resumeAt` when its re-run names one (a response the provider's safety
+// classifier stopped, refusal-fork.ts): the cut means nothing without the session it was made in.
+const resumeOptions = (spec: HarnessRequest["spec"]): Pick<Options, "resume" | "resumeSessionAt"> =>
+    spec.sessionId === undefined ? {} : { resume: spec.sessionId, ...opt("resumeSessionAt", spec.resumeAt) };
 
 // A new session is titled with the user's own words, since the SDK's list would otherwise title it by its first prompt
 // flattened and cut at 200 characters: the daemon's notes, with the words past the cut. A resumed one keeps its title.
@@ -345,6 +354,9 @@ const baseOptions = (
             ...subagentEnv(request),
             // Checklist tools the prompt advertises and the task list needs; not owner-tunable, see CHECKLIST_ENV.
             ...CHECKLIST_ENV,
+            // A response the safety classifier stops is the person's to route (retry or another model, from the chat's
+            // card), never a model the CLI swaps in by itself. Its one retry on the same model within the turn stays.
+            ...REFUSAL_ENV,
             // Where tmux-run talks to tmux: the daemon's namespace, not the turn's, so it starts a server there if
             // needed.
             ...(request.spec.isolation?.anchor !== undefined ? { [TMUX_NS_ENV]: daemonMountNs } : {}),
@@ -447,7 +459,7 @@ const baseOptions = (
             depsNoticeHooks(request.hooks.dependencyIssue ?? (async () => undefined), request.policy.dependencyInstallAllowed === true),
         ),
         ...opt("model", request.spec.model),
-        ...opt("resume", request.spec.sessionId),
+        ...resumeOptions(request.spec),
         ...sessionTitle(request),
         ...opt(
             "plugins",

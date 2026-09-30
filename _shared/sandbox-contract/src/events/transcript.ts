@@ -4,7 +4,7 @@ import { ShareDetailSchema } from "../schemas/share.js";
 import { TurnErrandSchema, TurnSpeakerSchema } from "../schemas/speaker.js";
 import { SubagentKindSchema, SubagentStatusSchema, SubagentVerificationSchema } from "../schemas/terminal.js";
 import { NeedSchema } from "../schemas/needs.js";
-import { RetryLadderSchema } from "../schemas/turn-break.js";
+import { HeldEndingSchema, RetryLadderSchema } from "../schemas/turn-break.js";
 import { NoticeCodeSchema } from "./sandbox-notice.js";
 import type { ToolCallContent, ToolCallLocation, ToolCallStatus, ToolKind} from "./requests.js";
 import { browserHelpRequest, capabilityOfferRequest, CapabilityOutcomeSchema, credentialOfferRequest, CredentialReceiptSchema, paymentOfferRequest, PaymentReceiptSchema, PermissionAskSchema, permissionRequest, planRequest, questionRequest, terminalHelpRequest, TodoItemSchema, ToolCallContentSchema, ToolCallLocationSchema, ToolCallStatusSchema, ToolKindSchema } from "./requests.js";
@@ -385,11 +385,9 @@ export const SessionTranscriptSchema = z.object({
 // How a turn that left work behind ended, folded straight into pickup state (chat/pickUp.ts). `held` makes a press
 // re-run the turn instead of appending a message; `scheduled` means it's already coming back.
 export const TurnEndingSchema = z.object({
-    reason: z
-        .enum(["stopped", "limit", "outage"])
-        .describe(
-            "Which ending left the work here: a Stop or a daemon killed under the turn, a spent usage allowance, or a provider that refused it.",
-        ),
+    reason: HeldEndingSchema.describe(
+        "Which ending left the work here: a Stop or a daemon killed under the turn, a spent usage allowance, a provider that refused it, or the provider's safety classifier stopping it partway.",
+    ),
     resetsAt: z
         .number()
         .optional()

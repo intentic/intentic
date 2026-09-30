@@ -2639,3 +2639,76 @@ test("a plan rejected without notes still says to keep planning", async () => {
 
     expect(result).toEqual({ behavior: "deny", message: "The user rejected the plan. Revise it. Still do not execute it." });
 });
+
+// The provider's safety classifier stopped the turn. Left alone, the real CLI answers the stopped response's tool call
+// and asks again into the same refusal, so the turn interrupts it; the flag is said once, with the entry a retry
+// resumes the session at, and the interrupted result after it is that same ending rather than a second failure.
+test("a turn the safety classifier stopped is said once, where it resumes, and the CLI is interrupted", async () => {
+    withoutTmux();
+    const interrupts: string[] = [];
+    const flag = {
+        type: "assistant",
+        session_id: "s",
+        uuid: "synthetic",
+        parent_tool_use_id: null,
+        error: "invalid_request",
+        message: {
+            id: "synthetic",
+            stop_reason: "refusal",
+            stop_details: { type: "refusal", category: "cyber", explanation: "blocked" },
+            content: [{ type: "text", text: "API Error: Opus 5.5's safeguards flagged this session." }],
+        },
+    };
+    const messages = [
+        { type: "assistant", session_id: "s", uuid: "good", parent_tool_use_id: null, message: { id: "msg_1", content: [] } },
+        { type: "user", session_id: "s", uuid: "good-result", parent_tool_use_id: null, message: { role: "user", content: [] } },
+        { type: "assistant", session_id: "s", uuid: "stopped", parent_tool_use_id: null, message: { id: "msg_2", content: [] } },
+        { type: "system", subtype: "model_refusal_no_fallback", session_id: "s", api_refusal_category: "cyber", refused_user_message_uuid: "prompt" },
+        flag,
+        flag,
+        { type: "result", subtype: "error_during_execution", session_id: "s" },
+    ];
+    const queryFn: QueryFn = () =>
+        Object.assign(
+            (async function* () {
+                for (const message of messages) {
+                    // SAFETY: each fixture carries the fields the fold reads, as the real CLI (2.1.283) sent them.
+                    yield message as SDKMessage;
+                }
+            })(),
+            {
+                interrupt: async () => {
+                    interrupts.push("interrupt");
+                    return undefined;
+                },
+            },
+        );
+    const events = await collect(request, queryFn);
+    expect(events).toEqual([
+        { kind: "session", sessionId: "s" },
+        {
+            kind: "error",
+            code: "safeguard-flagged",
+            message: "API Error: Opus 5.5's safeguards flagged this session.",
+            refusal: { category: "cyber", resumeAt: "good-result" },
+        },
+        { kind: "done" },
+    ]);
+    expect(interrupts).toEqual(["interrupt"]);
+});
+
+test("a flagged turn asks the CLI not to switch models by itself, and a cut resume names its entry", async () => {
+    withoutTmux();
+    let seen: Options | undefined;
+    const queryFn: QueryFn = (args) => {
+        seen = args.options;
+        return fakeQuery({ type: "result", subtype: "success", session_id: "s" })(args);
+    };
+    await collect({ ...request, spec: { ...request.spec, sessionId: "s", resumeAt: "good-result" } }, queryFn);
+    expect(seen?.env?.["CLAUDE_CODE_DISABLE_REFUSAL_FALLBACK"]).toBe("1");
+    expect(seen?.resume).toBe("s");
+    expect(seen?.resumeSessionAt).toBe("good-result");
+    await collect({ ...request, spec: { ...request.spec, resumeAt: "good-result" } }, queryFn);
+    // No session to cut: the entry means nothing without the session it was cut from.
+    expect(seen?.resumeSessionAt).toBeUndefined();
+});
