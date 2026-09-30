@@ -3,14 +3,18 @@ import { errnoCode } from "@intentic/base/errors";
 import type { Logger } from "pino";
 import { forkedExec } from "@intentic/scaffold";
 
-// tmux's answer for "no sessions exist": no binary, no socket, or nothing listening on it. Any other failure left the
-// question unanswered and must not read as "nothing is running".
+// tmux's answer for "no sessions exist": no binary, no socket, nothing listening on it, or a server holding no session.
+// The last is the daemon's own normal state between boot and the first terminal (pinTmuxServer keeps an emptied server
+// alive), and tmux 3.5a answers every lookup there, `list-panes -a` and an exact `-t =name` alike, with "no current
+// target". Any other failure left the question unanswered and must not read as "nothing is running".
 export const isNoTmuxServer = (error: unknown): boolean => {
     if (errnoCode(error) === "ENOENT") {
         return true;
     }
     const stderr = typeof error === "object" && error !== null ? (error as { stderr?: unknown }).stderr : undefined;
-    return typeof stderr === "string" && /no server running on |error connecting to .* \(No such file or directory\)/.test(stderr);
+    return (
+        typeof stderr === "string" && /no server running on |error connecting to .* \(No such file or directory\)|^no current target$/m.test(stderr)
+    );
 };
 
 // A tmux client that finds no server forks one, keeping the forker's mount namespace for every pane it holds; an

@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { createLogger } from "../logger.js";
-import { pinTmuxServer, tmuxServerLeaked } from "./tmux-server.js";
+import { isNoTmuxServer, pinTmuxServer, tmuxServerLeaked } from "./tmux-server.js";
 
 // Runs against a real tmux server (src/testing/tmux-fence.ts's private `-S` shim), exercising the pin and proving the
 // fence: nothing here can reach the daemon's socket even though every call is bare `tmux`.
@@ -29,6 +29,23 @@ test("a second pin is a no-op rather than an error, so a daemon restart inside a
 
     // Same server: `new-session -A` attached instead of erroring; nothing forked a second one.
     expect(await tmux("display", "-p", "#{pid}")).toBe(first);
+});
+
+// The pinned, empty server is what every reader sees until the first terminal opens; each listing must read it as no
+// sessions rather than as a failed question.
+test("the pinned server's answers to a listing and to an exact target both read as no sessions", async () => {
+    await pinTmuxServer(logger);
+
+    for (const args of [
+        ["list-panes", "-a", "-F", "#{session_name}"],
+        ["list-panes", "-s", "-t", "=panel-docker:", "-F", "#{pane_pid}"],
+    ]) {
+        const failure: unknown = await execFileAsync("tmux", args).then(
+            () => undefined,
+            (error: unknown) => error,
+        );
+        expect(isNoTmuxServer(failure)).toBe(true);
+    }
 });
 
 // This process forked the server, so they share a namespace and the check must stay quiet; it only flags a server the

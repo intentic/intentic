@@ -42,8 +42,13 @@ export const startBootRestores = (phase: BootPhase): void => {
     // Connector side effects lived in HOME and die with the container.
     void restoreConnectorHooks(services.capabilities, services.logger);
     const bootCtx = capabilityCtx(services);
-    void startDockerdIfEnabled(bootCtx);
-    void startLocalModelsIfEnabled(bootCtx);
+    // Named here, or a failed start is an anonymous unhandled rejection and the only trace is a capability in error.
+    void startDockerdIfEnabled(bootCtx).catch((error: unknown) =>
+        logger.warn({ err: error }, "docker: the engine could not be restored at boot, saving the Docker capability starts it"),
+    );
+    void startLocalModelsIfEnabled(bootCtx).catch((error: unknown) =>
+        logger.warn({ err: error }, "localmodel: model servers could not be restored at boot"),
+    );
     void startTranslatorIfPacked(phase).catch((error: unknown) => logger.warn({ err: error }, "translator: start gate failed"));
     // Provider gateways (e.g. ext-discord) are extension processes, so the daemon holds no gateway of its own to restore.
     void startAllExtensionProcesses(services);

@@ -9,6 +9,12 @@ test("no server, no socket and no tmux binary all mean no sessions", () => {
     expect(isNoTmuxServer(Object.assign(new Error("spawn tmux ENOENT"), { code: "ENOENT" }))).toBe(true);
 });
 
+// The pinned server between boot and the first terminal: alive, empty, and answering every lookup this way. Read as a
+// failure, it kept the boot restore from starting dockerd and the local model server.
+test("a running server that holds no session means no sessions too", () => {
+    expect(isNoTmuxServer(exited("no current target\n"))).toBe(true);
+});
+
 test("a listing that failed for any other reason is not an empty answer", () => {
     expect(isNoTmuxServer(exited("error connecting to /tmp/tmux-0/default (Permission denied)\n"))).toBe(false);
     expect(isNoTmuxServer(Object.assign(new Error("spawn tmux EAGAIN"), { code: "EAGAIN" }))).toBe(false);
