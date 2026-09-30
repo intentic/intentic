@@ -1,31 +1,27 @@
 <script setup lang="ts">
 import type { TurnNote } from "@intentic/sandbox-contract";
-import { computed, ref } from "vue";
-import ChatAsideLane from "./ChatAsideLane.vue";
-import type { ChatAsideMark } from "./chatAsides";
+import { ref } from "vue";
+import ChatSpineNode from "./ChatSpineNode.vue";
 import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
 
-// The context the sandbox added to a message, as one mark in the lane. Opened, it is the LIST of what was added, each
-// note opening to its own words: the titles answer "what went with this" without charging the reader for the text of
-// five notes to find out. A paperclip, not a text mark — these are things attached to the message, not words the user
-// wrote.
+// The context the sandbox added to a message, as one figure on the spine: a paperclip and a count standing in the
+// left gutter beside the message it went out with (`.chat-notes-node` in chat.css), since these are things attached to
+// that message, not words the user wrote. Opened, it is the LIST of what was added, each note opening to its own
+// words: the titles answer "what went with this" without charging the reader for the text of five notes to find out.
 
-const props = defineProps<{ notes: readonly TurnNote[] }>();
+defineProps<{ notes: readonly TurnNote[] }>();
 
-const marks = computed((): readonly ChatAsideMark[] => [
-    {
-        key: `notes`,
-        icon: `paperclip`,
-        label: t(`chat.chatNotes.sentMessage`),
-        tip: t(`chat.chatNotes.addedContext`),
-        count: props.notes.length,
-        findable: true,
-    },
-]);
+const open = ref(false);
+// The list find-in-page opened: shown at once, since the browser scrolls to the match before a reveal would finish.
+const found = ref(false);
+const toggleList = (): void => {
+    found.value = false;
+    open.value = !open.value;
+};
 
-// One note open at a time: the list is what the mark is for, and two open notes bury it.
+// One note open at a time: the list is what the figure is for, and two open notes bury it.
 const opened = ref<string>();
 const toggle = (title: string): void => {
     opened.value = opened.value === title ? undefined : title;
@@ -36,8 +32,28 @@ const body = (text: string): string => text.replace(/^#{1,6} .*(\n|$)/, ``).trim
 </script>
 
 <template>
-    <ChatAsideLane :marks="marks">
-        <template #notes>
+    <div class="flex w-full flex-col">
+        <div class="chat-spine-bar">
+            <ChatSpineNode
+                class="chat-notes-node"
+                icon="paperclip"
+                :count="notes.length"
+                :open="open"
+                :label="t(`chat.chatNotes.sentMessage`)"
+                :tip="t(`chat.chatNotes.addedContext`)"
+                @toggle="toggleList"
+            />
+        </div>
+        <!-- Shut until found rather than absent, so find-in-page reaches the list, and a note inside it, and opens both. -->
+        <div
+            class="chat-mark-material chat-spine-material"
+            :class="found && `chat-mark-found`"
+            :hidden.attr="open ? undefined : `until-found`"
+            @beforematch="
+                found = true;
+                open = true;
+            "
+        >
             <div class="chat-inset flex w-full flex-col overflow-hidden text-2xs leading-relaxed">
                 <div v-for="note in notes" :key="note.title" class="flex flex-col">
                     <button
@@ -57,6 +73,6 @@ const body = (text: string): string => text.replace(/^#{1,6} .*(\n|$)/, ``).trim
                     </div>
                 </div>
             </div>
-        </template>
-    </ChatAsideLane>
+        </div>
+    </div>
 </template>

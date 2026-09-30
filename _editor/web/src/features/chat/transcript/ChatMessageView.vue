@@ -578,7 +578,12 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
     </div>
 
     <!-- Its own row, not part of the bubble above: a pinned prompt charges its whole height against reading room. -->
-    <div v-if="message.notes?.length" class="chat-message chat-stack flex flex-col" :class="{ 'chat-doomed': doomed }">
+    <!-- `chat-notes-row`: shut, no row at all, its paperclip standing up beside the message in the left gutter (chat.css). -->
+    <div
+        v-if="message.notes?.length"
+        class="chat-message chat-notes-row chat-stack flex flex-col"
+        :class="{ 'chat-doomed': doomed, 'chat-notes-row-trailed': trailer }"
+    >
         <ChatNotes :notes="message.notes" />
     </div>
 </template>

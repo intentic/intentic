@@ -3,17 +3,18 @@ import { computed, ref } from "vue";
 import type { TipRow, TooltipValue } from "@intentic/ui";
 import type { TranscriptTool } from "@intentic/sandbox-contract";
 import ChatToolRows from "../../tools/ChatToolRows.vue";
+import ChatSpineNode from "./ChatSpineNode.vue";
 import { useToolCalls } from "../../tools/useToolCalls";
 import { summarizeRun, type RunKind } from "../../tools/toolRun";
 import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
 
-// What an assistant row thought and did before its words, as ONE node on the turn's spine: the thread down the left
-// gutter, where the eye starts every line (`.chat-spine` in chat.css). The node stands beside the first line of the
-// words the run led to and costs the row no height; pressed, the thought and the calls open in place under it. The
-// right edge is left to what the reader can DO (fork, edit): the left is what the agent did. Tool calls the reader
-// asked to SEE are rows, never counted on a node, since that setting is the whole of the question the node asks.
+// What an assistant row thought and did before its words, as ONE figure on the spine down the column's left edge
+// (`.chat-spine` in chat.css): a glyph and a count in the seam between the paragraph before and the words the run led
+// to, costing the row no height. Pressed, the thought and the calls open in place under it. The right edge is left to
+// what the reader can DO (fork, edit): the left is what the agent did. Tool calls the reader asked to SEE are rows,
+// never counted on a figure, since that setting is the whole of the question the figure asks.
 
 const props = defineProps<{
     thinking?: string;
@@ -86,32 +87,30 @@ const tip = computed((): TooltipValue => {
 </script>
 
 <template>
-    <!-- The row's first child, so its zero-height bar sits on the row's top edge and the node hangs beside the first
-         line under it. Shut, the whole of it costs the row nothing (chat.css cancels the gap after it). -->
+    <!-- The row's first child, so its zero-height bar sits on the row's top edge and the figure centres on the seam above
+         the row's words. Shut, the whole of it costs the row nothing (chat.css cancels the gap after it). -->
     <div
         v-if="thought !== undefined || run !== undefined"
         class="chat-spine flex w-full flex-col gap-1"
         :class="shown ? `chat-spine-open` : `chat-spine-shut`"
     >
         <div class="chat-spine-bar">
-            <button
-                type="button"
-                class="chat-spine-node touch-target"
-                :class="{ 'chat-spine-node-on': shown, 'chat-spine-node-failed': (run?.failed ?? 0) > 0, 'chat-spine-node-live': live }"
-                :aria-expanded="shown !== undefined"
-                :aria-label="label"
-                v-tooltip.left="tip"
-                @click="toggle"
-            >
-                <Icon v-if="thought !== undefined" name="sparkles" class="text-3xs" />
-                <template v-if="run">{{ run.count }}</template>
-            </button>
+            <ChatSpineNode
+                :icon="thought === undefined ? undefined : `sparkles`"
+                :count="run?.count"
+                :open="shown !== undefined"
+                :label="label"
+                :tip="tip"
+                :failed="(run?.failed ?? 0) > 0"
+                :live="live"
+                @toggle="toggle"
+            />
         </div>
         <!-- One node open or shut: beforematch reveals the element it fired on, and a swapped-in copy would lose the
              match. Cheap text, so it stays in the page while shut for find-in-page to reach. -->
         <div
             v-if="thought !== undefined"
-            class="chat-mark-material"
+            class="chat-mark-material chat-spine-material"
             :class="found && `chat-mark-found`"
             :hidden.attr="shown ? undefined : `until-found`"
             @beforematch="onFound"
@@ -120,7 +119,7 @@ const tip = computed((): TooltipValue => {
         </div>
         <!-- The calls are not text worth the page's weight: absent until pressed, and faded in where they land. -->
         <Transition name="chat-mark-reveal">
-            <div v-if="shown === `all` && run" class="flex flex-col gap-1">
+            <div v-if="shown === `all` && run" class="chat-spine-material flex flex-col gap-1">
                 <ChatToolRows :tools="tools ?? []" :live="live" />
             </div>
         </Transition>

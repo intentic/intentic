@@ -962,6 +962,17 @@ describe(`ChatMessageView added-notes mark`, () => {
         expect(shownText(element)).not.toContain(`It opens with a slash but names no command.`);
     });
 
+    it(`stands on the spine as a figure, in a row of its own that shut costs the column nothing`, () => {
+        const element = mount({ id: 8, role: `user`, text: `fix the bug`, notes });
+
+        const mark = element.querySelector(`[aria-expanded]`)!;
+        // The left edge's one language (ChatSpineNode), not a chip in the lane past the column.
+        expect(mark.classList.contains(`chat-spine-node`)).toBe(true);
+        expect(mark.classList.contains(`chat-notes-node`)).toBe(true);
+        expect(element.querySelector(`.chat-mark-bar`)).toBeNull();
+        expect(mark.closest(`.chat-notes-row`)).not.toBeNull();
+    });
+
     it(`sits outside the prompt, so it never rides in the pinned band`, () => {
         const element = mount({ id: 6, role: `user`, text: `fix the bug`, notes });
 
