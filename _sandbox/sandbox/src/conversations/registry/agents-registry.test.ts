@@ -2549,6 +2549,50 @@ it("an arrival takes in only the conversations it brought, replacing those whole
     expect(registry.get("c1")).toMatchObject({ limitHeld: true, limitScheduled: true });
 });
 
+// The resume pass asks a held limit's answer again at the reset, so the card's booking follows a changed answer: "Resume
+// all when it's back" armed every held turn while every card went on reading as waiting on a press.
+it("re-books a held spent allowance from the answer the resume pass will now read", async () => {
+    const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
+    await registry.init();
+    await beginTurn(conversations, turn(), 1_000);
+    conversations.send("c1", {
+        kind: "frame",
+        frame: { kind: "error", code: "rate_limit", message: "spent", autoResume: "available", resetsAt: 9_000, held: { ran: true } },
+    });
+    await conversations.send("c1", { kind: "settle" }, 2_000).settled;
+    expect(registry.get("c1")).toMatchObject({ limitHeld: true });
+    expect(registry.get("c1")?.limitScheduled).toBeUndefined();
+
+    expect(await registry.setBreakPolicy("c1", "limit", "resend", "resend")).toMatchObject({ limitPolicy: "resend", limitScheduled: true });
+    // Cleared to a sandbox default that waits: nothing goes at the reset any more.
+    expect((await registry.setBreakPolicy("c1", "limit", null, "wait"))?.limitScheduled).toBeUndefined();
+    // Another ending's answer leaves the limit's booking alone.
+    await registry.setBreakPolicy("c1", "limit", "resend", "resend");
+    expect((await registry.setBreakPolicy("c1", "outage", "wait", "wait"))?.limitScheduled).toBe(true);
+});
+
+// A booked move goes only while the answer is still `move` (turn-resume.ts runRung withdraws it otherwise); a held turn
+// with no published reset has no instant to be booked at.
+it("withdraws a booked move the answer no longer gives, and books nothing without a reset", async () => {
+    const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
+    await registry.init();
+    await beginTurn(conversations, turn(), 1_000);
+    conversations.send("c1", {
+        kind: "frame",
+        frame: { kind: "error", code: "rate_limit", message: "spent", autoResume: "scheduled", resetsAt: 9_000, held: { ran: true, moving: "acct-2" } },
+    });
+    await conversations.send("c1", { kind: "settle" }, 2_000).settled;
+    expect(registry.get("c1")).toMatchObject({ limitScheduled: true, limitMoving: "acct-2" });
+    const resent = await registry.setBreakPolicy("c1", "limit", "resend", "resend");
+    expect(resent).toMatchObject({ limitScheduled: true });
+    expect(resent?.limitMoving).toBeUndefined();
+
+    await beginTurn(conversations, turn({ conversationId: "c2" }), 3_000);
+    conversations.send("c2", { kind: "frame", frame: { kind: "error", code: "rate_limit", message: "spent", held: { ran: true } } });
+    await conversations.send("c2", { kind: "settle" }, 4_000).settled;
+    expect((await registry.setBreakPolicy("c2", "limit", "resend", "resend"))?.limitScheduled).toBeUndefined();
+});
+
 // A spent allowance's hold, booking and move are memory of the process that made them; the refusal itself persists.
 it("a restarted fleet reads a spent allowance back without the hold, the booking or the move", async () => {
     const store = memoryStore();

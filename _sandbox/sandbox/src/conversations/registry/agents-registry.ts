@@ -3,6 +3,7 @@ import {
     type AgentReaction,
     type AgentStatus,
     type AgentSummary,
+    breakArmed,
     deriveTitle,
     isTurnBreakPolicy,
     keepWarmCap,
@@ -409,6 +410,26 @@ const restored = (entry: PersistedAgent): PersistedAgent =>
         ? { ...entry, ending: { kind: "limited", ...opt("failure", entry.ending.failure), ...opt("resetsAt", entry.ending.resetsAt), held: false, scheduled: false } }
         : entry;
 
+// A held limit's booking, read again from the answer the resume pass will now give it. The pass asks that answer fresh
+// at the reset (turn-resume.ts breakPolicyFor), so a booking read once at the failure would go on saying whatever was
+// true then: "Resume all when it's back" armed every held turn and every card still read as waiting on a press. The
+// frame's own rule (classify-failure.ts limitFrame): a held turn with a published reset goes by itself under any armed
+// answer, and a booked move stands only while the answer is still `move`, as the pass withdraws it otherwise.
+const rebooked = (ending: Ending, policy: TurnBreakPolicy): Ending => {
+    if (ending.kind !== "limited" || !ending.held) {
+        return ending;
+    }
+    const moving = policy === "move" ? ending.moving : undefined;
+    return {
+        kind: "limited",
+        ...opt("failure", ending.failure),
+        ...opt("resetsAt", ending.resetsAt),
+        held: true,
+        scheduled: moving !== undefined || (ending.resetsAt !== undefined && breakArmed(policy)),
+        ...opt("moving", moving),
+    };
+};
+
 // Written onto the entry at every change, so a conversation no actor has heard of since a restart shows it too.
 const queueClause = ({ queue }: PersistedAgent): Pick<AgentSummary, "queue"> => (queue === undefined ? {} : { queue: queueView(queue) });
 
@@ -525,7 +546,14 @@ export interface AgentsRegistry {
     // Same grammar as `setAutoLand`, once for all three endings: read by the resume pass after the turn has already
     // died, so arming it mid-unwind is the ordinary case, and a limit's press is often made on a card whose turn died
     // hours ago. Refuses an answer the ending does not allow rather than persisting one no pass would ever read.
-    readonly setBreakPolicy: (id: string, ending: TurnBreak, policy: TurnBreakPolicy | null) => Promise<AgentSummary | undefined>;
+    // `effective` is the answer the pass will now read (this one, or the sandbox's it inherits on null); a held limit's
+    // booking is re-read from it, so the card says what the pass will do. Absent leaves the booking as it stood.
+    readonly setBreakPolicy: (
+        id: string,
+        ending: TurnBreak,
+        policy: TurnBreakPolicy | null,
+        effective?: TurnBreakPolicy,
+    ) => Promise<AgentSummary | undefined>;
     // Points the conversation at another account of the provider it runs on: the one write that moves who pays
     // (switchAccount). The session goes with the caller's say, separately (`session-cleared`). Leaves `updatedAt` alone.
     // `limit` re-times a spent-allowance ending to the new account's reopen (absent: it reads unspent), so the card states
@@ -1225,7 +1253,7 @@ export const createFleet = (
                 const { autoLand: _cleared, ...held } = entry.postures;
                 return { ...entry, postures: autoLand === null ? held : { ...held, autoLand } };
             }),
-        setBreakPolicy: async (id, ending, policy) => {
+        setBreakPolicy: async (id, ending, policy, effective) => {
             // An answer the ending cannot take is refused here rather than stored: no pass would ever read it, and a card
             // showing a policy nothing acts on is worse than one showing none.
             if (policy !== null && !isTurnBreakPolicy(ending, policy)) {
@@ -1235,7 +1263,11 @@ export const createFleet = (
             // named ending's key moves; the other two carry through untouched.
             return amend(id, (entry) => {
                 const { [ending]: _cleared, ...held } = entry.postures;
-                return { ...entry, postures: (policy === null ? held : { ...held, [ending]: policy }) as Postures };
+                return {
+                    ...entry,
+                    postures: (policy === null ? held : { ...held, [ending]: policy }) as Postures,
+                    ...(ending === "limit" && effective !== undefined ? { ending: rebooked(entry.ending, effective) } : {}),
+                };
             });
         },
         switchAccount: (id, account, limit) =>

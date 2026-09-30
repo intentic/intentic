@@ -262,7 +262,8 @@ const failureOf = (event: Extract<AgentEvent, { kind: "error" }>): FailedEnding 
         ...opt("failure", failure),
         ...opt("resetsAt", event.resetsAt),
         held: event.held !== undefined,
-        // The daemon's own verdict for this failure; the firing pass reads the same value, so card and schedule agree.
+        // The daemon's own verdict at the failure; the firing pass asks the answer again at the reset, so a changed
+        // answer re-books it (agents-registry `rebooked`) to keep card and schedule in agreement.
         scheduled: event.autoResume === "scheduled",
         ...opt("moving", event.held?.moving),
     };

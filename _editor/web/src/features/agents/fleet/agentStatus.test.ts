@@ -423,8 +423,8 @@ describe("watchLine", () => {
     });
 });
 
-// A spent allowance arrives as `status: "error"` and is a wait rather than a fault, a stall the reader is shown whether
-// or not a resend is booked at the reset.
+// A spent allowance arrives as `status: "error"` and is a wait rather than a fault, a stall the reader is shown until
+// something is booked to carry it on.
 const SHUT = { failureCode: `rate_limit`, limitResetsAt: (NOW + 4 * 60 * 60 * 1000) / 1000 };
 const OPEN = { failureCode: `rate_limit`, limitResetsAt: (NOW - 60 * 60 * 1000) / 1000 };
 describe("a spent allowance", () => {
@@ -436,15 +436,18 @@ describe("a spent allowance", () => {
         expect(blocked({ status: `error`, attention: none, ...SHUT })).toBe(true);
     });
 
-    // Booked to go again at the reset, it still stands still until then, for hours, and the way around the wait (an
-    // account with room) is the reader's: Active would read as work in progress and hide that.
-    it("stays in attention with a resend booked at the reset", () => {
+    // Booked to go again at the reset, nothing is owed: counted as a call, it held the badge and the tab title up for
+    // hours over a question the reader had already answered. Active, as an armed watch is, and the card keeps its
+    // "Usage limit" chip, so the stall is still in sight.
+    it("leaves attention once a resend is booked at the reset", () => {
         const booked = { status: `error`, attention: none, ...SHUT, limitScheduled: true } as const;
-        expect(blocked(booked)).toBe(true);
-        expect(laneOf(booked)).toBe(`attention`);
-        expect(unfinishedMark(booked)?.label).toBe(`Usage limit`);
-        // An armed watch beside it changes nothing: the watch cannot run a turn through a shut window either.
-        expect(laneOf({ ...booked, awaitingWake: true })).toBe(`attention`);
+        expect(blocked(booked)).toBe(false);
+        expect(laneOf(booked)).toBe(`active`);
+        expect(unfinishedMark(booked)?.label).toBe(`Resend booked`);
+        expect(attentionReason(booked)).toBe(`Usage limit`);
+        expect(laneOf({ ...booked, awaitingWake: true })).toBe(`active`);
+        // Unbooked, the same card is the reader's again.
+        expect(laneOf({ ...booked, limitScheduled: false })).toBe(`attention`);
     });
 
     // The one spent allowance already under way: the policy is carrying the held turn to another account on the resume

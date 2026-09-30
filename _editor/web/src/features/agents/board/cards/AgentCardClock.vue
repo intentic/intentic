@@ -40,8 +40,8 @@ const watch = computed(() => (props.working ? undefined : watchLine(props.agent,
 // happened, this says when.
 // Undefined once the window is open or the provider gave no instant; the corner then falls back to the ordinary date.
 const limitBackAt = computed(() => limitCountdown(props.agent, now.value));
-// A booked resend sits in Attention beside cards waiting on a press, so the corner is what tells the two apart: this
-// one goes again by itself at that hour, the other only comes back within reach.
+// A booked resend leaves Attention for Active (limitScheduled), and the corner says why a card that is not running is
+// there: it goes again by itself at that hour, where one still in Attention only comes back within reach.
 const limitBooked = computed(() => limitScheduled(props.agent));
 // Its hover from the facts the card holds (whose limit, when it reopens) rather than the provider's refusal sentence;
 // a booked resend says it goes by itself then, so nothing needs pressing.

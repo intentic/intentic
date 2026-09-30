@@ -184,9 +184,11 @@ export const breakPolicyFor = async (
     ending: TurnBreak,
 ): Promise<TurnBreakPolicy> => {
     const override = services.agents.entry(conversationId)?.postures[ending];
-    if (override !== undefined) {
-        return override;
-    }
+    return override ?? (await sandboxBreakPolicy(services, ending));
+};
+
+// The sandbox-wide answer, which a conversation with no answer of its own inherits.
+export const sandboxBreakPolicy = async (services: Pick<Services, "sandboxSettings">, ending: TurnBreak): Promise<TurnBreakPolicy> => {
     const settings = await services.sandboxSettings.get();
     return ending === "limit" ? settings.limitPolicy : ending === "outage" ? settings.outagePolicy : settings.stopPolicy;
 };

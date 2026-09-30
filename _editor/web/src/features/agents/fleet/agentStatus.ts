@@ -79,8 +79,9 @@ export const limitClosed = (agent: AgentStanding, now: number = Date.now()): boo
     limited(agent) && agent.limitResetsAt !== undefined && agent.limitResetsAt * 1_000 > now;
 
 // A booked fire needs no press: the held turn goes again at the reset by itself. Only where this conversation's answer
-// for the limit says so (`resend` or `move`); that answer starts at `wait`. It changes what the card says, not its lane:
-// until the reset the work is stalled, for hours, and moving it to an account with room is often the reader's to do.
+// for the limit says so (`resend` or `move`); that answer starts at `wait`. Nothing is owed then, so it leaves Attention
+// for Active, as an armed watch does: a card counted in the badge and the tab title for the hours until a reset the
+// reader already answered was a call nobody could answer. The stall still shows, on the card's own chip and clock.
 export const limitScheduled = (agent: AgentStanding): boolean => limited(agent) && agent.limitScheduled === true;
 
 // Agents one provider's spent allowance stopped, each holding its refused turn and none booked to go again, gathered
@@ -121,7 +122,7 @@ export const limitGroups = (
 };
 
 // A booked move: the owner's policy is already carrying the held turn to another account, on the resume pass's next
-// beat, seconds away. The one spent allowance that is not a stall, so the one kept out of Attention.
+// beat, seconds away, so the card names where it is going rather than when it goes.
 export const limitMoveBooked = (agent: AgentStanding): boolean => limitScheduled(agent) && agent.limitMoving !== undefined;
 
 // A refused land nothing the agent does can clear: every blocker left is a file the user has uncommitted edits on,
@@ -280,8 +281,7 @@ export const writingNow = (agent: AgentStanding): boolean => agent.status === `r
 // `stopped`/`interrupted` leave a half-written worktree only a new message can carry forward; `stopping` is
 // counted the moment the press lands rather than once the unwind finishes, since it settles in the same lane
 // either way; `failed` is the same kind of dead end one step earlier, before a worktree existed. A spent allowance
-// counts even with a resend booked: nothing is owed, but the work stands still for hours, and the way around it (an
-// account with room, a reset spent early) is the reader's. A booked move is the one exception: it is already going.
+// counts until something is booked to carry it on (limitScheduled): a resend at the reset, or a move now.
 const BLOCKING_ENDINGS: ReadonlySet<AgentStatus | ClientAgentStatus> = new Set([`error`, `interrupted`, `stopping`, `stopped`, `failed`]);
 
 // A land that broke and still stands: its work is stuck on the branch, whatever the turn after it did, so the card is
@@ -289,7 +289,7 @@ const BLOCKING_ENDINGS: ReadonlySet<AgentStatus | ClientAgentStatus> = new Set([
 export const landBroken = (agent: AgentStanding): boolean => agent.landFailure !== undefined && !turnInFlight(agent);
 
 export const blocked = (agent: AgentStanding): boolean =>
-    limitMoveBooked(agent)
+    limitScheduled(agent)
         ? false
         : agent.attention.plan ||
           agent.attention.question ||
@@ -497,7 +497,7 @@ export const NO_ATTENTION: AgentAttention = {
 // "finished" needs no explicit timer since auto-land already flips a cleanly-completed turn to landed/idle within
 // ms, and any follow-up message moves the card back to active. Unread stays a badge, not a lane.
 export const laneOf = (agent: AgentStanding): FleetLane => {
-    // A spent allowance reaches Attention through `blocked` alone, no branch of its own, booked resend or not, and ahead
+    // A spent allowance nothing is booked for reaches Attention through `blocked` alone, no branch of its own, and ahead
     // of the `watching` branch below: a watch is the agent's own plan for waiting, a spent allowance an obstacle in
     // the way of it, and a watch firing into a shut window runs nothing (turn-admission.ts holds its words back).
     if (blocked(agent) || agent.status === `awaiting` || agent.status === `conflict`) {
@@ -521,10 +521,10 @@ export const laneOf = (agent: AgentStanding): FleetLane => {
     if (watching(agent)) {
         return `active`;
     }
-    // A stranded turn already being moved to another account is Active: it runs again on the resume pass's next beat.
-    // Reached only because `blocked` let it through (a booked move is its one exception); stated explicitly or the
-    // card would fall through to Finished for those seconds.
-    if (limitMoveBooked(agent)) {
+    // A stranded turn booked to go again is Active: at the reset, or on the resume pass's next beat for a move to another
+    // account. Reached only because `blocked` let it through; stated explicitly or the card would fall through to
+    // Finished, which would announce as over work that resumes by itself.
+    if (limitScheduled(agent)) {
         return `active`;
     }
     // `landed`/`idle`/`ready` all finish here: `ready` is work held on the branch because auto-land is off, still
@@ -678,13 +678,17 @@ export const unfinishedMark = (agent: AgentStanding | undefined): { dot: string;
           { dot: `bg-primary-500`, label: attentionReason(agent) ?? t(`agents.agentStatus.waitingOn`) };
 };
 
-// "Working" would be wrong for the two Active cards that aren't: one is waiting on the world, one is being carried to
-// another account. Both restart themselves, so the label says which kind of unfinished rather than claiming work.
+// "Working" would be wrong for the three Active cards that aren't: one is waiting on the world, one on a spent
+// allowance's reset, one is being carried to another account. All restart themselves, so the label says which kind of
+// unfinished rather than claiming work.
 const activeLabel = (agent: AgentStanding): string => {
     // A booked move names its destination.
     const moving = limitMoveBooked(agent) ? agent.limitMoving : undefined;
     if (moving !== undefined) {
         return t(`agents.agentStatus.movingTo`, { account: moving });
+    }
+    if (limitScheduled(agent)) {
+        return t(`agents.agentCard.resendBooked`);
     }
     return watching(agent) && !turnInFlight(agent) ? t(`agents.agentStatus.waitingOnCondition`) : t(`agents.agentStatus.stillWorking`);
 };
