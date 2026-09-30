@@ -1,51 +1,34 @@
-<script lang="ts">
-import type { ExperimentVerdict } from "../../usage/savingsChart";
-
-// Plain <script> block only to export these types; `<script setup>` can't carry an export.
-
-/** One arm of the comparison: how many samples it holds, and its reading when the metric has a mean. */
-export interface PanelArm {
-    readonly turns: number;
-    readonly mean?: number;
-}
-
-export interface PanelReading {
-    readonly verdict: ExperimentVerdict;
-    readonly on: PanelArm;
-    readonly off: PanelArm;
-    /** What the two means count ("listings/turn"); present exactly when they are. */
-    readonly meanUnit?: string;
-}
-</script>
-
 <script setup lang="ts">
 import { computed } from "vue";
-import { Verdict, VERDICT_TONES } from "@intentic/ui";
-import { commitPercent } from "./numberInputs";
+import type { Tip } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
+import { formatCompact } from "../../usage/usageChart";
+import { commitPercent } from "./numberInputs";
+import { type Outcome, type ResultRow, type ResultTable, shortfallOf } from "./experimentReadings";
 
-// The measured half of a setting that runs a holdout (iq search teaching, the project map, the output cleaners), in
-// one fixed order: what it found, the arms it found it over, the same experiment's other readings, then the holdout
-// that split them. The knob is last and quietest because it configures the method, and a method drawn at a setting's
-// weight reads as a second setting.
+// The measured half of a setting that holds some of its work back for comparison (iq search, the project map, the field
+// notes, the guidance form, the output cleaners). One table, every reading a row of the same shape: what it counts, each
+// group's average, and the change. A clear difference is always in the last column, in the same colour, whichever
+// reading found it. The statistics behind a row (its likely range, the sample still owed) are a hover away, in words.
+// The comparison share closes the block because it configures the method, not the setting.
 
 const t = useT();
 
 const {
+    table,
     percent,
-    readings,
     note,
     onLabel,
     offLabel,
     disabled = false,
 } = defineProps<{
-    /** Holdout percent (0-100). */
+    /** Undefined until the daemon has an experiment to report. */
+    table: ResultTable | undefined;
+    /** Share of work held back for comparison, 0-100. */
     percent: number;
-    /** First entry is the headline; empty until the daemon has an experiment to report. */
-    readings: readonly PanelReading[];
-    /** Completes the sentence the percent box starts: "10% …of conversations open without it, as a control." */
+    /** Finishes the sentence the percent box starts: "10% of conversations run without iq". */
     note: string;
-    /** Arm labels in the reader's words, e.g. "taught" / "cold". */
+    /** Column heads in the reader's words: "With iq" / "Without", "Short" / "Long". */
     onLabel: string;
     offLabel: string;
     disabled?: boolean;
@@ -53,72 +36,150 @@ const {
 
 const emit = defineEmits<{ commit: [fraction: number] }>();
 
-const headline = computed<PanelReading | undefined>(() => readings[0]);
+const count = (value: number): string => value.toLocaleString();
+const average = (value: number | undefined): string => (value === undefined ? `–` : value.toLocaleString(undefined, { maximumFractionDigits: 1 }));
 
-// Treated first: the row above is about the treatment, so the arm it names leads and the control is the thing
-// compared against. Bars share one scale (the larger mean), since two scales would make equal arms look different.
-const arms = computed(() => {
-    const reading = headline.value;
-    const on = reading?.on.mean;
-    const off = reading?.off.mean;
-    if (reading === undefined || reading.meanUnit === undefined || on === undefined || off === undefined) {
-        return [];
+// The cleaners' one row is an amount of text, not a count of calls: "less", not "fewer".
+const change = (row: ResultRow, outcome: Outcome & { kind: `lower` | `higher` }): string =>
+    outcome.kind === `higher`
+        ? `↑ ${t(`sandbox.measurementPanel.more`, { pct: outcome.pct })}`
+        : `↓ ${row.key === `outputReached` ? t(`sandbox.measurementPanel.less`, { pct: outcome.pct }) : t(`sandbox.measurementPanel.fewer`, { pct: outcome.pct })}`;
+
+interface Line {
+    readonly key: string;
+    readonly label: string;
+    readonly on: string;
+    readonly off: string;
+    readonly result: string;
+    /** Whether the row reached an answer; an open one greys its figures, since they are not yet a finding. */
+    readonly settled: boolean;
+    readonly mark: string;
+    readonly tip: Tip | undefined;
+}
+
+// A measured change is a tinted chip, the one filled thing in the table, so a win is found by colour AND shape in the
+// same column on every row; an open row is plain grey words. The chip's padding is pulled back into the gutter so its
+// text still lines up with the column head.
+const MARKS = {
+    lower: `-ml-1.5 rounded-sm bg-success/10 px-1.5 py-px font-medium text-success`,
+    higher: `-ml-1.5 rounded-sm bg-warning/10 px-1.5 py-px font-medium text-warning`,
+    unclear: `text-subtle`,
+    early: `text-subtle`,
+} as const satisfies Record<Outcome["kind"], string>;
+
+const tipOf = (row: ResultRow, unit: ResultTable["unit"]): Tip | undefined => {
+    const { outcome } = row;
+    if (outcome.kind === `unclear`) {
+        return outcome.within === undefined
+            ? undefined
+            : {
+                  title: t(`sandbox.measurementPanel.anyDifferenceUnder`, { within: outcome.within }),
+                  note:
+                      outcome.needed === undefined || unit === `commands`
+                          ? undefined
+                          : t(`sandbox.measurementPanel.moreWouldSettle.${unit}`, { needed: formatCompact(outcome.needed) }),
+              };
     }
-    const max = Math.max(on, off, Number.EPSILON);
-    return [
-        { key: `on`, label: onLabel, mean: on, turns: reading.on.turns, width: `${(on / max) * 100}%`, fill: `bg-primary-500` },
-        { key: `off`, label: offLabel, mean: off, turns: reading.off.turns, width: `${(off / max) * 100}%`, fill: `bg-series-other` },
-    ];
-});
+    if (outcome.kind === `early` || outcome.low === undefined || outcome.high === undefined) {
+        return undefined;
+    }
+    const range = { low: outcome.low, high: outcome.high };
+    return {
+        title: outcome.kind === `lower` ? t(`sandbox.measurementPanel.likelyFewer`, range) : t(`sandbox.measurementPanel.likelyMore`, range),
+        note:
+            outcome.saved === undefined || row.key === `outputReached`
+                ? undefined
+                : t(`sandbox.measurementPanel.savedSoFar.${row.key}`, { count: outcome.saved.toLocaleString() }),
+    };
+};
 
-// The arms as one line, for an experiment that publishes no mean to draw (the cleaners compare shares of commands).
-const sample = computed<string>(() => {
-    const reading = headline.value;
-    return reading === undefined ? `` : `${reading.on.turns.toLocaleString()} ${onLabel} · ${reading.off.turns.toLocaleString()} ${offLabel}`;
-});
+const lines = computed<Line[]>(() =>
+    (table?.rows ?? []).map((row) => {
+        const { outcome } = row;
+        const settled = outcome.kind === `lower` || outcome.kind === `higher`;
+        return {
+            key: row.key,
+            label: t(`sandbox.measurementPanel.metric.${row.key}`),
+            on: average(row.on),
+            off: average(row.off),
+            result: settled
+                ? change(row, outcome)
+                : outcome.kind === `unclear`
+                  ? t(`sandbox.measurementPanel.noClearDifference`)
+                  : t(`sandbox.measurementPanel.tooEarly`),
+            settled,
+            // Only a measured drop earns green; a measured rise is a finding to act on, so it is not left grey either.
+            mark: MARKS[outcome.kind],
+            tip: tipOf(row, table?.unit ?? `turns`),
+        };
+    }),
+);
+
+const shortfall = computed<number>(() => (table === undefined ? 0 : shortfallOf(table)));
 </script>
 
 <template>
-    <!-- No background or border of its own: the row's `#below` spine and the group's `divide-y` already provide the boundaries. -->
-    <div class="flex flex-col gap-3">
-        <div v-if="headline !== undefined" class="flex flex-col gap-2.5">
-            <!-- The answer, at the block's only display size; no `evidence`, since the arms below carry the sample. -->
-            <Verdict
-                :value="headline.verdict.value"
-                :unit="headline.verdict.unit"
-                :tone="headline.verdict.tone"
-                :detail="headline.verdict.detail"
-            />
+    <!-- No background or border of its own: the row's `#below` spine and the group's `divide-y` already provide the boundaries.
+         Capped: on a wide pane an uncapped table strands its figures a hand's width from the names they belong to. -->
+    <div class="flex max-w-xl flex-col gap-3">
+        <!-- Fixed columns, not sized to content: the section stacks several of these tables, and columns that moved from
+             one to the next would make the same "With" figure sit in a different place under each setting. -->
+        <table v-if="table !== undefined" class="w-full table-fixed border-collapse text-xs tabular-nums">
+            <colgroup>
+                <col />
+                <col class="w-20" />
+                <col class="w-20" />
+                <col class="w-40" />
+            </colgroup>
+            <thead>
+                <tr class="text-2xs text-subtle">
+                    <th scope="col" class="pb-1.5 text-left font-medium">{{ t(`sandbox.measurementPanel.effect`) }}</th>
+                    <th scope="col" class="pb-1.5 pl-4 text-right font-medium">{{ onLabel }}</th>
+                    <th scope="col" class="pb-1.5 pl-4 text-right font-medium">{{ offLabel }}</th>
+                    <th scope="col" class="pb-1.5 pl-6 text-left font-medium">{{ t(`sandbox.measurementPanel.change`) }}</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- How much each column stands on, as a row of the table rather than an "n=" beside every figure. -->
+                <tr class="border-t border-line-subtle text-subtle">
+                    <th scope="row" class="py-1.5 text-left font-normal">{{ t(`sandbox.measurementPanel.sample.${table.unit}`) }}</th>
+                    <td class="py-1.5 pl-4 text-right">{{ count(table.on) }}</td>
+                    <td class="py-1.5 pl-4 text-right">{{ count(table.off) }}</td>
+                    <td class="py-1.5 pl-6" />
+                </tr>
+                <tr v-for="line in lines" :key="line.key" class="border-t border-line-subtle">
+                    <th scope="row" class="py-1.5 pr-2 text-left font-normal text-muted">{{ line.label }}</th>
+                    <td class="py-1.5 pl-4 text-right" :class="line.settled ? `text-content` : `text-muted`">{{ line.on }}</td>
+                    <td class="py-1.5 pl-4 text-right" :class="line.settled ? `text-content` : `text-muted`">{{ line.off }}</td>
+                    <td class="whitespace-nowrap py-1.5 pl-6 text-left">
+                        <!-- The statistics behind the words (the likely range, the sample still owed) are a hover away for
+                             whoever asks, not printed for everyone; a dotted underline on an open row says so. -->
+                        <span
+                            v-tooltip.top="line.tip"
+                            :tabindex="line.tip === undefined ? undefined : 0"
+                            class="inline-block"
+                            :class="[
+                                line.mark,
+                                line.tip === undefined ? `` : `cursor-help`,
+                                line.tip !== undefined && !line.settled ? `underline decoration-line-strong decoration-dotted underline-offset-[3px]` : ``,
+                            ]"
+                            >{{ line.result }}</span
+                        >
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+        <p v-else class="text-xs text-subtle">{{ t(`sandbox.measurementPanel.noResultsYet`) }}</p>
 
-            <!-- The two arms' means, drawn, so the headline's "↓63.7%" is shown rather than asserted. The bar column is
-                 capped and the grid starts at the left: a bar run to the pane's edge outweighs the verdict it serves,
-                 and the comparison being made is between the two bars, not against the card. -->
-            <div v-if="arms.length > 0" class="grid grid-cols-[auto_minmax(0,9rem)_auto] items-center justify-start gap-x-2.5 gap-y-1.5">
-                <template v-for="arm in arms" :key="arm.key">
-                    <span class="text-2xs text-muted">{{ arm.label }}</span>
-                    <!-- Track is drawn, not implied: a thin arm must still look measured, not missing. -->
-                    <span class="h-1.5 overflow-hidden rounded-full bg-canvas">
-                        <span class="block h-full min-w-px rounded-full" :class="arm.fill" :style="{ width: arm.width }" />
-                    </span>
-                    <span class="text-2xs tabular-nums text-subtle">{{ arm.mean }} {{ headline.meanUnit }} · n={{ arm.turns }}</span>
-                </template>
-            </div>
-            <p v-else class="text-2xs tabular-nums text-subtle">{{ sample }}</p>
+        <!-- Said once for the whole table, not as "Too early" plus a reason on every row. -->
+        <p v-if="table?.minimum !== undefined && shortfall > 0" class="text-2xs text-subtle">
+            {{ t(`sandbox.measurementPanel.resultsAppearAt`, { minimum: table.minimum, shortfall }) }}
+        </p>
 
-            <!-- Other readings of the SAME experiment: named on the left, answered on the right, so a two-metric
-                 experiment reads as one answer with a footnote instead of two competing headlines. -->
-            <dl v-if="readings.length > 1" class="flex flex-col gap-1 border-t border-line-subtle pt-2">
-                <div v-for="more in readings.slice(1)" :key="more.verdict.subject" class="flex items-baseline justify-between gap-3">
-                    <dt class="min-w-0 text-2xs text-muted">{{ more.verdict.subject }}</dt>
-                    <dd class="shrink-0 text-2xs font-medium tabular-nums" :class="VERDICT_TONES[more.verdict.tone]">{{ more.verdict.value }}</dd>
-                </div>
-            </dl>
-        </div>
-        <p v-else class="text-2xs text-subtle">{{ t(`sandbox.measurementPanel.nothingMeasuredYet`) }}</p>
-
-        <!-- The holdout as the sentence it is: the box is the subject, `note` finishes it, so the number needs no label
-             of its own. Unfilled, unlike a form's fields: a filled box is the loudest thing on a block of 11px type. -->
-        <p class="flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-line-subtle pt-3 text-2xs text-muted">
+        <!-- The holdout as the sentence it is: a label naming it as a setting, then the box, then `note`. Unfilled,
+             unlike a form's fields, so the one input in a block of figures does not read as the loudest figure. -->
+        <p class="flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-line-subtle pt-3 text-xs text-muted">
+            <span class="text-subtle">{{ t(`sandbox.measurementPanel.comparisonGroup`) }}</span>
             <span class="ui-field-shell inline-flex items-center gap-0.5 bg-transparent px-1.5 py-0.5">
                 <input
                     type="number"

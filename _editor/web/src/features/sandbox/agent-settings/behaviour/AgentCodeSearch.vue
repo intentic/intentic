@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { FIELD_NOTES_FILE } from "@intentic/constants";
-import { Row, RowGroup, ui } from "@intentic/ui";
+import { Row, RowGroup } from "@intentic/ui";
+import { formatDayMonth } from "@intentic/ui/format";
 import { RouterLink } from "vue-router";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed } from "vue";
@@ -8,9 +9,9 @@ import { useSavings } from "../../usage/useSavings";
 import { useSandboxSettings } from "../../overview/useSandboxSettings";
 import { useSidecarStatus } from "../../../workspace/files/useSidecarStatus";
 import { useFieldNotes } from "./useFieldNotes";
-import { commitCount,asPercent } from "../models/numberInputs";
-import MeasurementPanel, { type PanelReading } from "../models/MeasurementPanel.vue";
-import { readingsOf } from "../models/experimentReadings";
+import { commitCount, asPercent } from "../models/numberInputs";
+import MeasurementPanel from "../models/MeasurementPanel.vue";
+import { type ResultTable, tableOf } from "../models/experimentReadings";
 import { useT } from "@intentic/ui/i18n";
 
 // Four composing settings, ordered by when each acts: iq search (on demand), the project map (before there's
@@ -24,29 +25,34 @@ const { savings } = useSavings({});
 
 // Session state: the holdout flips whole conversations, never individual turns.
 const iqSearchHoldoutPercent = computed<number>(() => asPercent(settings.value?.iqSearchHoldout));
-
-const searchReadings = computed<PanelReading[]>(() => readingsOf(savings.value?.search));
+const searchTable = computed<ResultTable | undefined>(() => tableOf(savings.value?.search));
 
 // Same holdout behaviour as the search teaching above: flips whole conversations, read on their opening turn.
 const mapHoldoutPercent = computed<number>(() => asPercent(settings.value?.workspaceMapHoldout));
-const mapReadings = computed<PanelReading[]>(() => readingsOf(savings.value?.map));
+const mapTable = computed<ResultTable | undefined>(() => tableOf(savings.value?.map));
 
 // The field notes report two things no setting can: whether the file the switch composes exists at all, and whether
 // anything is scheduled to keep it current. A switch left on over a brief nothing maintains is the failure to show.
 const notesHoldoutPercent = computed<number>(() => asPercent(settings.value?.fieldNotesHoldout));
-const notesReadings = computed<PanelReading[]>(() => readingsOf(savings.value?.notes));
+const notesTable = computed<ResultTable | undefined>(() => tableOf(savings.value?.notes));
 const { status: notes } = useFieldNotes();
 const NOTES_BUDGET = { min: 500, max: 20000 } as const;
-// The pair, never the first number alone: "5 of 12" separates a tight budget from a short file, and "5" cannot.
+// The pair, never the first number alone: "top 5 of 12" separates a tight limit from a short file, and "5" cannot.
 const notesReach = computed<string>(() =>
     notes.value?.ranksTotal === undefined
         ? ``
-        : t(`sandbox.agentCodeSearch.sendingRanks`, {
+        : t(`sandbox.agentCodeSearch.briefReach`, {
               sent: notes.value.ranksSent ?? 0,
               total: notes.value.ranksTotal,
-              chars: notes.value.chars ?? 0,
+              chars: (notes.value.chars ?? 0).toLocaleString(),
           }),
 );
+const notesSchedule = computed<string>(() => {
+    const next = notes.value?.nextRunAt;
+    return next === undefined
+        ? t(`sandbox.agentCodeSearch.rewrittenMonthly`)
+        : t(`sandbox.agentCodeSearch.rewrittenMonthlyNext`, { when: formatDayMonth(next) });
+});
 
 // The background pass reports itself, since nothing else can: it makes no request and owns no page.
 const { status: shadowStatus } = useSidecarStatus();
@@ -83,11 +89,11 @@ const shadowSummary = computed<string>(() => {
             </template>
             <template v-if="settings?.iqSearch === true" #below>
                 <MeasurementPanel
+                    :table="searchTable"
                     :percent="iqSearchHoldoutPercent"
-                    :readings="searchReadings"
                     :note="t(`sandbox.agentCodeSearch.ofConversationsRunWithout`)"
-                    on-label="taught"
-                    off-label="cold"
+                    :on-label="t(`sandbox.agentCodeSearch.withIq`)"
+                    :off-label="t(`sandbox.measurementPanel.without`)"
                     @commit="(iqSearchHoldout: number) => patch({ iqSearchHoldout })"
                 />
             </template>
@@ -110,11 +116,11 @@ const shadowSummary = computed<string>(() => {
             <!-- Holdout flips whole conversations here too: the map is sent once, on the conversation's opening turn. -->
             <template v-if="settings?.workspaceMap === true" #below>
                 <MeasurementPanel
+                    :table="mapTable"
                     :percent="mapHoldoutPercent"
-                    :readings="mapReadings"
                     :note="t(`sandbox.agentCodeSearch.ofConversationsOpenWithout`)"
-                    on-label="mapped"
-                    off-label="unmapped"
+                    :on-label="t(`sandbox.agentCodeSearch.withMap`)"
+                    :off-label="t(`sandbox.measurementPanel.without`)"
                     @commit="(workspaceMapHoldout: number) => patch({ workspaceMapHoldout })"
                 />
             </template>
@@ -137,58 +143,89 @@ const shadowSummary = computed<string>(() => {
                 />
             </template>
             <template v-if="settings?.fieldNotes === true" #below>
-                <!-- Two facts no setting can hold: whether the file this switch composes exists, and whether anything
-                     is scheduled to keep it current. A switch left on over a brief nothing maintains is the failure. -->
-                <p v-if="notes?.unreadable !== undefined" class="text-2xs text-warning">
-                    {{ t(`sandbox.agentCodeSearch.briefUnreadable`, { why: notes.unreadable }) }}
-                </p>
-                <!-- One line: what is being sent, and the way to the file it came from. Two lines read as two
-                     findings, and the link is not one. -->
-                <p v-else class="flex items-center gap-2 text-2xs text-subtle">
-                    <span>{{ notes?.present === false ? t(`sandbox.agentCodeSearch.noBriefYet`) : notesReach }}</span>
-                    <RouterLink v-if="notes?.present === true" :to="`/workspace/${FIELD_NOTES_FILE}`" class="underline">{{
-                        t(`sandbox.agentCodeSearch.openTheBrief`)
-                    }}</RouterLink>
-                </p>
-                <p v-if="notes?.automation === `missing`" class="text-2xs text-subtle">
-                    <RouterLink to="/ext/automations" class="underline">{{ t(`sandbox.agentCodeSearch.setUpTheAutomation`) }}</RouterLink>
-                </p>
-                <p v-else-if="notes?.automation === `disabled`" class="text-2xs text-warning">
-                    {{ t(`sandbox.agentCodeSearch.automationOff`) }}
-                </p>
-                <!-- Characters, not sections: the file's own ranking picks WHICH, this picks HOW MANY fit, and raising
-                     it buys more of the tail rather than a fuller version of the same thing. -->
-                <label class="flex items-center gap-2 text-2xs text-subtle">
-                    <span>{{ t(`sandbox.agentCodeSearch.budget`) }}</span>
-                    <input
-                        type="number"
-                        :min="NOTES_BUDGET.min"
-                        :max="NOTES_BUDGET.max"
-                        :step="100"
-                        :value="settings?.fieldNotesBudget ?? 4000"
-                        :disabled="settings === undefined"
-                        :class="ui.inputSm(`w-24 text-right`)"
-                        @change="
-                            (event: Event) =>
-                                commitCount(event, settings?.fieldNotesBudget ?? 4000, NOTES_BUDGET, (fieldNotesBudget: number) =>
-                                    patch({ fieldNotesBudget }),
-                                )
-                        "
+                <div class="flex flex-col gap-4">
+                    <!-- The brief's own state as labelled facts, one per line on one grid: what is sent, the limit that
+                         decides how much of it, and what keeps it current. A switch left on over a brief nothing
+                         maintains is the failure to show, so the schedule gets a line even when it is fine. -->
+                    <dl class="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-6 gap-y-2.5 text-xs">
+                        <dt class="text-subtle">{{ t(`sandbox.agentCodeSearch.brief`) }}</dt>
+                        <dd class="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
+                            <span v-if="notes?.unreadable !== undefined" class="text-warning">
+                                {{ t(`sandbox.agentCodeSearch.briefUnreadable`, { why: notes.unreadable }) }}
+                            </span>
+                            <span v-else-if="notes?.present === false" class="text-muted">{{ t(`sandbox.agentCodeSearch.noBriefYet`) }}</span>
+                            <template v-else-if="notes?.present === true">
+                                <span class="tabular-nums text-content">{{ notesReach }}</span>
+                                <RouterLink :to="`/workspace/${FIELD_NOTES_FILE}`" class="text-link hover:underline">{{
+                                    t(`sandbox.agentCodeSearch.openTheBrief`)
+                                }}</RouterLink>
+                            </template>
+                        </dd>
+
+                        <!-- Characters, not sections: the file's own ranking picks WHICH, this picks HOW MANY fit, and
+                             raising it buys more of the tail rather than a fuller version of the same thing. -->
+                        <dt class="text-subtle">
+                            <label for="field-notes-budget">{{ t(`sandbox.agentCodeSearch.lengthLimit`) }}</label>
+                        </dt>
+                        <dd class="flex items-center gap-2 text-muted">
+                            <span class="ui-field-shell inline-flex items-center bg-transparent px-1.5 py-0.5">
+                                <input
+                                    id="field-notes-budget"
+                                    type="number"
+                                    :min="NOTES_BUDGET.min"
+                                    :max="NOTES_BUDGET.max"
+                                    :step="100"
+                                    :value="settings?.fieldNotesBudget ?? 4000"
+                                    :disabled="settings === undefined"
+                                    class="field-bare w-14 p-0 text-right text-xs tabular-nums"
+                                    @change="
+                                        (event: Event) =>
+                                            commitCount(event, settings?.fieldNotesBudget ?? 4000, NOTES_BUDGET, (fieldNotesBudget: number) =>
+                                                patch({ fieldNotesBudget }),
+                                            )
+                                    "
+                                />
+                            </span>
+                            {{ t(`sandbox.agentCodeSearch.characters`) }}
+                        </dd>
+
+                        <dt class="text-subtle">{{ t(`sandbox.agentCodeSearch.updates`) }}</dt>
+                        <dd class="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
+                            <template v-if="notes?.automation === `missing`">
+                                <span class="text-muted">{{ t(`sandbox.agentCodeSearch.notScheduled`) }}</span>
+                                <RouterLink to="/ext/automations" class="text-link hover:underline">{{
+                                    t(`sandbox.agentCodeSearch.setUpTheAutomation`)
+                                }}</RouterLink>
+                            </template>
+                            <template v-else-if="notes?.automation === `disabled`">
+                                <span class="text-warning">{{ t(`sandbox.agentCodeSearch.automationOff`) }}</span>
+                                <RouterLink to="/ext/automations" class="text-link hover:underline">{{
+                                    t(`sandbox.agentCodeSearch.openAutomations`)
+                                }}</RouterLink>
+                            </template>
+                            <span v-else-if="notes?.automation === `enabled`" class="text-content">{{ notesSchedule }}</span>
+                        </dd>
+                    </dl>
+
+                    <MeasurementPanel
+                        :table="notesTable"
+                        :percent="notesHoldoutPercent"
+                        :note="t(`sandbox.agentCodeSearch.ofConversationsRunWithoutNotes`)"
+                        :on-label="t(`sandbox.agentCodeSearch.withNotes`)"
+                        :off-label="t(`sandbox.measurementPanel.without`)"
+                        @commit="(fieldNotesHoldout: number) => patch({ fieldNotesHoldout })"
                     />
-                </label>
-                <MeasurementPanel
-                    :percent="notesHoldoutPercent"
-                    :readings="notesReadings"
-                    :note="t(`sandbox.agentCodeSearch.ofConversationsRunWithoutNotes`)"
-                    on-label="briefed"
-                    off-label="cold"
-                    @commit="(fieldNotesHoldout: number) => patch({ fieldNotesHoldout })"
-                />
+                </div>
             </template>
         </Row>
 
         <!-- Background pass that pre-renders binary files (docx, pdf, images, audio) as markdown as they land, so a later read is a file open, not a parse. -->
-        <Row icon="file" :title="t(`sandbox.agentCodeSearch.documentShadows`)" :description="t(`sandbox.agentCodeSearch.keepDocumentsImagesAudio`)">
+        <Row
+            spine
+            icon="file"
+            :title="t(`sandbox.agentCodeSearch.documentShadows`)"
+            :description="t(`sandbox.agentCodeSearch.keepDocumentsImagesAudio`)"
+        >
             <template #control>
                 <ToggleSwitch
                     :model-value="settings?.sidecars ?? false"
@@ -199,7 +236,7 @@ const shadowSummary = computed<string>(() => {
             <!-- Work with no request behind it and no page of its own; without this line the only way to know whether it
                  is keeping up is to open a file and find out. -->
             <template v-if="settings?.sidecars === true && shadowStatus !== undefined" #below>
-                <p class="flex items-center gap-2 text-2xs text-subtle">
+                <p class="flex items-center gap-2 text-xs text-muted">
                     <Icon v-if="shadowBusy" name="spinner" spin class="text-[0.7rem]" />
                     <Icon v-else-if="shadowStatus.broken" name="exclamation-triangle" class="text-[0.7rem] text-warning" />
                     <span :class="shadowStatus.broken ? `text-warning` : undefined">{{ shadowSummary }}</span>

@@ -1912,21 +1912,42 @@
             "yourOwnClockIs": "Was „09:00“ bei einer Automatisierung bedeutet. Dein Rechner läuft auf {zone}, die Zeiten hier stimmen also nicht mit dem überein, was du dort abliest."
         },
         "agentCodeSearch": {
+            "automationOff": "Die monatliche Neufassung ist ausgeschaltet",
+            "brief": "Notiz",
+            "briefReach": "Die ersten {sent} von {total} Abschnitten · {chars} Zeichen",
+            "characters": "Zeichen",
             "codeSearch": "Codesuche",
             "documentShadows": "Dokumentschatten",
             "iqCodeSearch": "iq-Codesuche",
             "keepDocumentsImagesAudio": "Dokumente, Bilder, Audio und Archive als Text vorgerendert halten, aktualisiert, während Dateien sich ändern. Öffnen Sie eines davon im Workspace, um zu lesen, was ein Agent liest.",
+            "lengthLimit": "Längenlimit",
+            "noBriefYet": "Noch nicht geschrieben. Die monatliche Automatisierung schreibt die erste.",
+            "notScheduled": "Nicht geplant",
+            "ofConversationsOpenWithout": "der Unterhaltungen beginnen ohne die Karte",
+            "ofConversationsRunWithout": "der Unterhaltungen laufen ohne iq",
+            "ofConversationsRunWithoutNotes": "der Unterhaltungen laufen ohne die Feldnotizen",
+            "openAutomations": "Automatisierungen öffnen",
+            "openTheBrief": "Öffnen",
             "projectMap": "Projektkarte",
             "provideProjectStructureOverview": "Neuen Unterhaltungen einen Überblick über die Projektstruktur geben.",
-            "useIqSearchCli": "Die iq-Such-CLI statt grep/find/glob verwenden."
+            "rewrittenMonthly": "Monatlich neu geschrieben",
+            "rewrittenMonthlyNext": "Monatlich neu geschrieben, nächstes Mal am {when}",
+            "setUpTheAutomation": "Automatisierung einrichten",
+            "updates": "Aktualisierung",
+            "useIqSearchCli": "Die iq-Such-CLI statt grep/find/glob verwenden.",
+            "withIq": "Mit iq",
+            "withMap": "Mit Karte",
+            "withNotes": "Mit Notizen"
         },
         "agentCommandOutput": {
             "cleanCommandOutput": "Befehlsausgabe säubern",
-            "cleanedCommandsAgainstRaw": "gesäuberte Befehle gegenüber den rohen, die die Kontrollgruppe behalten hat",
+            "cleaned": "Gereinigt",
             "cleaners": "Säuberer",
             "commandOutput": "Befehlsausgabe",
             "ledgerFillsAssistantRuns": "Das Register füllt sich, während der Assistent Shell-Befehle ausführt, eine Zeile pro Befehl.",
+            "ofCommandsRunUncleaned": "der Befehle laufen ungereinigt",
             "outputSavings": "Ausgabe-Ersparnis",
+            "raw": "Roh",
             "tokensSavedAllTime": "Tokens gespart, insgesamt",
             "tokensStillReachingAssistant": "Tokens, die den Assistenten weiterhin erreichen",
             "trimNoisyShellOutput": "Lärmende Shell-Ausgabe kürzen, bevor sie den Assistenten erreicht.",
@@ -1956,11 +1977,13 @@
             "intenticsOwnPromptTuned": "Intentics eigener Prompt, auf diese App abgestimmt.",
             "leanGuidance": "Kurze Anleitung",
             "leanGuidanceDescription": "Sag dem Agenten nur, was er nicht selbst herausfinden kann, statt eines Absatzes für jede Gewohnheit, bei der er einmal ertappt wurde.",
+            "longForm": "Lang",
             "notCopyKeptBy": ", keine Kopie, die diese App aufbewahrt. Wählen Sie Claude, und er wird mit der Sandbox weiter aktualisiert; forken Sie ihn, und er gehört von da an Ihnen.",
-            "ofConversationsKeepFullGuidance": "der Unterhaltungen behalten die lange Fassung, als Kontrolle.",
+            "ofConversationsKeepFullGuidance": "der Unterhaltungen behalten die lange Anleitung",
             "onAddedToPrompt": "Bei {adds} wird er stattdessen ihrem Prompt hinzugefügt.",
             "ownPromptAgentRuns": "Ihr eigener Prompt: der Agent läuft allein auf diesem Text.",
             "readingSandbox": "Wird aus Ihrer Sandbox gelesen…",
+            "shortForm": "Kurz",
             "startClaudes": "Von Claudes ausgehen",
             "startIntentics": "Von Intentics ausgehen",
             "viewPrompt": "Prompt ansehen",
@@ -2702,7 +2725,45 @@
             "rename": "Umbenennen"
         },
         "measurementPanel": {
-            "controlGroupPercentage": "Kontrollgruppe, in Prozent"
+            "anyDifferenceUnder": "Ein möglicher Unterschied liegt bisher unter {within} %",
+            "change": "Änderung",
+            "comparisonGroup": "Vergleichsgruppe",
+            "controlGroupPercentage": "Vergleichsgruppe in Prozent",
+            "effect": "Wirkung auf den Agenten",
+            "fewer": "{pct} % weniger",
+            "less": "{pct} % weniger",
+            "likelyFewer": "Wahrscheinlich zwischen {low} % und {high} % weniger",
+            "likelyMore": "Wahrscheinlich zwischen {low} % und {high} % mehr",
+            "metric": {
+                "callsBeforeTarget": "Tool-Aufrufe bis zur richtigen Datei",
+                "failedCalls": "Fehlgeschlagene Tool-Aufrufe pro Runde",
+                "openingListings": "Verzeichnisauflistungen in der ersten Runde",
+                "openingSearches": "Suchen vor dem ersten Öffnen einer Datei",
+                "outputReached": "Ausgabe, die den Agenten erreicht",
+                "searchCalls": "Suchen pro Runde"
+            },
+            "more": "{pct} % mehr",
+            "moreWouldSettle": {
+                "conversations": "Etwa {needed} weitere Unterhaltungen in der Vergleichsgruppe würden es klären.",
+                "turns": "Etwa {needed} weitere Runden in der Vergleichsgruppe würden es klären."
+            },
+            "noClearDifference": "Kein klarer Unterschied",
+            "noResultsYet": "Noch keine Ergebnisse. Sie füllen sich, während der Agent arbeitet.",
+            "resultsAppearAt": "Ergebnisse erscheinen, sobald jede Gruppe mindestens {minimum} hat; noch {shortfall}.",
+            "sample": {
+                "commands": "Befehle",
+                "conversations": "Unterhaltungen",
+                "turns": "Runden"
+            },
+            "savedSoFar": {
+                "callsBeforeTarget": "Bisher etwa {count} Tool-Aufrufe weniger.",
+                "failedCalls": "Bisher etwa {count} fehlgeschlagene Aufrufe weniger.",
+                "openingListings": "Bisher etwa {count} Verzeichnisauflistungen weniger.",
+                "openingSearches": "Bisher etwa {count} Suchen weniger.",
+                "searchCalls": "Bisher etwa {count} Suchen weniger."
+            },
+            "tooEarly": "Noch zu früh",
+            "without": "Ohne"
         },
         "modelGroupRow": {
             "addModelEveryJob": "Ein Modell für jeden {toLowerCase}-Job hinzufügen",
@@ -3321,8 +3382,6 @@
             "dedupeRepeats": "Wiederholungen entdoppeln",
             "directoryListings": "Verzeichnislisten",
             "fileLists": "Dateilisten",
-            "needsPerArmMore": "braucht {minTurns} {sampleUnit} pro Arm, {shortfall} mehr auf dem kürzeren",
-            "pp95": "±{marginPct} Pp (95 %) · {wait}",
             "redactSecrets": "Geheimnisse schwärzen",
             "searchHits": "Suchtreffer",
             "testRunners": "Testrunner"

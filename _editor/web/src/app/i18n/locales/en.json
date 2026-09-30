@@ -2716,34 +2716,45 @@
             "yourOwnClockIs": "What an automation's \"09:00\" means. Your own machine is on {zone}, so times here will not match what you read on it."
         },
         "agentCodeSearch": {
-            "automationOff": "Its monthly rewrite is switched off.",
+            "automationOff": "The monthly rewrite is switched off",
+            "brief": "Brief",
+            "briefReach": "Top {sent} of {total} sections · {chars} characters",
             "briefUnreadable": "The brief is there but cannot be sent: {why}",
-            "budget": "Budget",
+            "characters": "characters",
             "codeSearch": "Code search",
             "documentShadows": "Document shadows",
             "fieldNotes": "Field notes",
             "iqCodeSearch": "iq code search",
             "keepDocumentsImagesAudio": "Keep documents, images, audio and archives pre-rendered as text, updated as files change. Open any of them in Workspace to read what an agent reads.",
-            "noBriefYet": "No brief yet. Set up the monthly Field notes automation and it writes the first one.",
-            "ofConversationsOpenWithout": "of conversations open without the map, as a control.",
-            "ofConversationsRunWithout": "of conversations run without iq, as a control.",
-            "ofConversationsRunWithoutNotes": "of conversations run without the brief, as a control.",
-            "openTheBrief": "Open the brief",
+            "lengthLimit": "Length limit",
+            "noBriefYet": "Not written yet. The monthly automation writes the first one.",
+            "notScheduled": "Not scheduled",
+            "ofConversationsOpenWithout": "of conversations start without the map",
+            "ofConversationsRunWithout": "of conversations run without iq",
+            "ofConversationsRunWithoutNotes": "of conversations run without the field notes",
+            "openAutomations": "Open automations",
+            "openTheBrief": "Open",
             "projectMap": "Project map",
             "provideProjectStructureOverview": "Provide project structure overview to new conversations.",
-            "sendingRanks": "Sending ranks 1-{sent} of {total} · {chars} characters",
+            "rewrittenMonthly": "Rewritten monthly",
+            "rewrittenMonthlyNext": "Rewritten monthly, next on {when}",
             "setUpTheAutomation": "Set up the automation",
+            "updates": "Updates",
             "useIqSearchCli": "Use iq search CLI instead of grep/find/glob.",
-            "whatSessionsLearned": "What sessions here had to learn the hard way, ranked and rewritten monthly, carried into every turn."
+            "whatSessionsLearned": "What sessions here had to learn the hard way, ranked and rewritten monthly, carried into every turn.",
+            "withIq": "With iq",
+            "withMap": "With map",
+            "withNotes": "With notes"
         },
         "agentCommandOutput": {
             "cleanCommandOutput": "Clean command output",
-            "cleanedCommandsAgainstRaw": "cleaned commands against the raw ones the holdout kept",
+            "cleaned": "Cleaned",
             "cleaners": "Cleaners",
             "commandOutput": "Command output",
             "ledgerFillsAssistantRuns": "The ledger fills as the assistant runs shell commands, one row per command.",
-            "ofCommandsRunUncleaned": "of commands run uncleaned, as a control.",
+            "ofCommandsRunUncleaned": "of commands run uncleaned",
             "outputSavings": "Output savings",
+            "raw": "Raw",
             "tokensSavedAllTime": "tokens saved, all time",
             "tokensStillReachingAssistant": "tokens still reaching the assistant",
             "trimNoisyShellOutput": "Trim noisy shell output before it reaches the assistant.",
@@ -2774,21 +2785,23 @@
             "intenticsOwnPromptTuned": "Intentic's own prompt, tuned for this app.",
             "leanGuidance": "Short guidance",
             "leanGuidanceDescription": "Tell the agent only what it cannot find out by looking, instead of a paragraph for every habit it was once caught in.",
-            "ofConversationsKeepFullGuidance": "of conversations keep the long form, as a control.",
+            "longForm": "Long",
             "notCopyKeptBy": ", not a copy kept by this app. Choose Claude and it keeps updating with the sandbox; fork it and you own it from here.",
+            "ofConversationsKeepFullGuidance": "of conversations keep the long guidance",
             "onAddedToPrompt": "On {adds} it is added to their prompt instead.",
+            "ownPromptAgentRuns": "Your own prompt: the agent runs on this text alone.",
             "promptReachAdds": "Added to",
             "promptReachReplaces": "Replaces",
-            "ownPromptAgentRuns": "Your own prompt: the agent runs on this text alone.",
             "readingSandbox": "Reading it from your sandbox…",
             "replace": "Replace",
             "replaceYourText": "Replace your text?",
             "replaceYourTextDetail": "The built-in prompt takes the place of everything written here now. Copy your text first if you want to keep it.",
+            "shortForm": "Short",
             "startClaudes": "Start from Claude's",
             "startIntentics": "Start from Intentic's",
             "viewPrompt": "View prompt",
-            "writeAssistantsSystemPrompt": "Write the assistant's system prompt, or start from one of the built-in prompts below.",
-            "wholePromptOn": "Your text becomes the whole prompt on {replaces}: including what this app tells the assistant about its own questions, checklist panel and browser tools."
+            "wholePromptOn": "Your text becomes the whole prompt on {replaces}: including what this app tells the assistant about its own questions, checklist panel and browser tools.",
+            "writeAssistantsSystemPrompt": "Write the assistant's system prompt, or start from one of the built-in prompts below."
         },
         "agentRun": {
             "comingBack": "Waiting for its agent to come back…",
@@ -3582,8 +3595,45 @@
             "rename": "Rename it"
         },
         "measurementPanel": {
-            "controlGroupPercentage": "Control group, as a percentage",
-            "nothingMeasuredYet": "Nothing measured yet."
+            "anyDifferenceUnder": "Any difference is under {within}% so far",
+            "change": "Change",
+            "comparisonGroup": "Comparison group",
+            "controlGroupPercentage": "Comparison group, as a percentage",
+            "effect": "Effect on the agent",
+            "fewer": "{pct}% fewer",
+            "less": "{pct}% less",
+            "likelyFewer": "Likely between {low}% and {high}% fewer",
+            "likelyMore": "Likely between {low}% and {high}% more",
+            "metric": {
+                "callsBeforeTarget": "Tool calls before the right file",
+                "failedCalls": "Failed tool calls per turn",
+                "openingListings": "Directory listings on the first turn",
+                "openingSearches": "Searches before opening a file",
+                "outputReached": "Output reaching the agent",
+                "searchCalls": "Searches per turn"
+            },
+            "more": "{pct}% more",
+            "moreWouldSettle": {
+                "conversations": "About {needed} more conversations in the comparison group would settle it.",
+                "turns": "About {needed} more turns in the comparison group would settle it."
+            },
+            "noClearDifference": "No clear difference",
+            "noResultsYet": "No results yet. They fill in as the agent works.",
+            "resultsAppearAt": "Results show once each group has at least {minimum}; {shortfall} more to go.",
+            "sample": {
+                "commands": "Commands",
+                "conversations": "Conversations",
+                "turns": "Turns"
+            },
+            "savedSoFar": {
+                "callsBeforeTarget": "About {count} fewer tool calls so far.",
+                "failedCalls": "About {count} fewer failed calls so far.",
+                "openingListings": "About {count} fewer directory listings so far.",
+                "openingSearches": "About {count} fewer searches so far.",
+                "searchCalls": "About {count} fewer searches so far."
+            },
+            "tooEarly": "Too early to tell",
+            "without": "Without"
         },
         "modelGroupRow": {
             "addModelEveryJob": "Add a model for every {toLowerCase} job",
@@ -4218,8 +4268,6 @@
             "dedupeRepeats": "dedupe repeats",
             "directoryListings": "directory listings",
             "fileLists": "file lists",
-            "needsPerArmMore": "needs {minTurns} {sampleUnit} per arm, {shortfall} more on the shorter one",
-            "pp95": "±{marginPct}pp (95%) · {wait}",
             "redactSecrets": "redact secrets",
             "searchHits": "search hits",
             "testRunners": "test runners"
@@ -6447,8 +6495,7 @@
             "toggleExplorer2": "Toggle Explorer",
             "toggleIgnoredFiles": "Toggle Ignored Files",
             "toggleTestFiles": "Toggle Test Files",
-            "viewing": "Viewing as",
-            "clearEsc": "Clear (Esc)"
+            "viewing": "Viewing as"
         },
         "workspaceEmptyState": {
             "askAgentToFetch": "Ask an agent to fetch it",

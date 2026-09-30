@@ -1911,21 +1911,42 @@
             "yourOwnClockIs": "Ce que « 09:00 » veut dire pour une automatisation. Votre machine est sur {zone} : les heures indiquées ici ne correspondront donc pas à celles que vous y lisez."
         },
         "agentCodeSearch": {
+            "automationOff": "La réécriture mensuelle est désactivée",
+            "brief": "Note",
+            "briefReach": "Les {sent} premières sections sur {total} · {chars} caractères",
+            "characters": "caractères",
             "codeSearch": "Recherche de code",
             "documentShadows": "Ombres de documents",
             "iqCodeSearch": "Recherche de code iq",
             "keepDocumentsImagesAudio": "Garder documents, images, audio et archives pré-rendus en texte, mis à jour à mesure que les fichiers changent. Ouvrez-en un dans l'espace de travail pour lire ce que lit un agent.",
+            "lengthLimit": "Longueur max.",
+            "noBriefYet": "Pas encore écrite. L'automatisation mensuelle écrit la première.",
+            "notScheduled": "Non planifiée",
+            "ofConversationsOpenWithout": "des conversations commencent sans la carte",
+            "ofConversationsRunWithout": "des conversations tournent sans iq",
+            "ofConversationsRunWithoutNotes": "des conversations tournent sans les notes de terrain",
+            "openAutomations": "Ouvrir les automatisations",
+            "openTheBrief": "Ouvrir",
             "projectMap": "Carte du projet",
             "provideProjectStructureOverview": "Donner aux nouvelles conversations un aperçu de la structure du projet.",
-            "useIqSearchCli": "Utiliser la CLI de recherche iq au lieu de grep/find/glob."
+            "rewrittenMonthly": "Réécrite chaque mois",
+            "rewrittenMonthlyNext": "Réécrite chaque mois, prochaine fois le {when}",
+            "setUpTheAutomation": "Configurer l'automatisation",
+            "updates": "Mise à jour",
+            "useIqSearchCli": "Utiliser la CLI de recherche iq au lieu de grep/find/glob.",
+            "withIq": "Avec iq",
+            "withMap": "Avec carte",
+            "withNotes": "Avec notes"
         },
         "agentCommandOutput": {
             "cleanCommandOutput": "Nettoyer la sortie des commandes",
-            "cleanedCommandsAgainstRaw": "commandes nettoyées face aux brutes que le témoin a gardées",
+            "cleaned": "Nettoyées",
             "cleaners": "Nettoyeurs",
             "commandOutput": "Sortie des commandes",
             "ledgerFillsAssistantRuns": "Le registre se remplit à mesure que l'assistant lance des commandes shell, une ligne par commande.",
+            "ofCommandsRunUncleaned": "des commandes tournent sans nettoyage",
             "outputSavings": "Économies de sortie",
+            "raw": "Brutes",
             "tokensSavedAllTime": "jetons économisés, en tout",
             "tokensStillReachingAssistant": "jetons qui atteignent encore l'assistant",
             "trimNoisyShellOutput": "Élaguer la sortie shell bruyante avant qu'elle n'atteigne l'assistant.",
@@ -1955,11 +1976,13 @@
             "intenticsOwnPromptTuned": "La consigne propre à Intentic, affinée pour cette application.",
             "leanGuidance": "Consignes courtes",
             "leanGuidanceDescription": "Ne dire à l'agent que ce qu'il ne peut pas découvrir seul, au lieu d'un paragraphe pour chaque habitude qu'on lui a un jour reprochée.",
+            "longForm": "Longues",
             "notCopyKeptBy": ", pas une copie conservée par cette application. Choisissez Claude et elle continuera d'évoluer avec le sandbox ; bifurquez-la et elle vous appartient à partir de là.",
-            "ofConversationsKeepFullGuidance": "des conversations gardent la version longue, comme témoin.",
+            "ofConversationsKeepFullGuidance": "des conversations gardent les consignes longues",
             "onAddedToPrompt": "Sur {adds}, elle est ajoutée à leur consigne à la place.",
             "ownPromptAgentRuns": "Votre propre consigne : l'agent tourne sur ce texte seul.",
             "readingSandbox": "Lecture depuis votre sandbox…",
+            "shortForm": "Courtes",
             "startClaudes": "Partir de celle de Claude",
             "startIntentics": "Partir de celle d'Intentic",
             "viewPrompt": "Voir la consigne",
@@ -2704,7 +2727,45 @@
             "rename": "La renommer"
         },
         "measurementPanel": {
-            "controlGroupPercentage": "Groupe témoin, en pourcentage"
+            "anyDifferenceUnder": "Tout écart reste pour l'instant sous {within} %",
+            "change": "Écart",
+            "comparisonGroup": "Groupe de comparaison",
+            "controlGroupPercentage": "Groupe de comparaison, en pourcentage",
+            "effect": "Effet sur l'agent",
+            "fewer": "{pct} % de moins",
+            "less": "{pct} % de moins",
+            "likelyFewer": "Probablement entre {low} % et {high} % de moins",
+            "likelyMore": "Probablement entre {low} % et {high} % de plus",
+            "metric": {
+                "callsBeforeTarget": "Appels d'outils avant le bon fichier",
+                "failedCalls": "Appels d'outils échoués par tour",
+                "openingListings": "Listages de dossiers au premier tour",
+                "openingSearches": "Recherches avant d'ouvrir un fichier",
+                "outputReached": "Sortie qui parvient à l'agent",
+                "searchCalls": "Recherches par tour"
+            },
+            "more": "{pct} % de plus",
+            "moreWouldSettle": {
+                "conversations": "Environ {needed} conversations de plus dans le groupe de comparaison trancheraient.",
+                "turns": "Environ {needed} tours de plus dans le groupe de comparaison trancheraient."
+            },
+            "noClearDifference": "Pas d'écart net",
+            "noResultsYet": "Pas encore de résultats. Ils arrivent à mesure que l'agent travaille.",
+            "resultsAppearAt": "Les résultats s'affichent dès que chaque groupe en compte au moins {minimum} ; il en manque {shortfall}.",
+            "sample": {
+                "commands": "Commandes",
+                "conversations": "Conversations",
+                "turns": "Tours"
+            },
+            "savedSoFar": {
+                "callsBeforeTarget": "Environ {count} appels d'outils de moins jusqu'ici.",
+                "failedCalls": "Environ {count} appels échoués de moins jusqu'ici.",
+                "openingListings": "Environ {count} listages de dossiers de moins jusqu'ici.",
+                "openingSearches": "Environ {count} recherches de moins jusqu'ici.",
+                "searchCalls": "Environ {count} recherches de moins jusqu'ici."
+            },
+            "tooEarly": "Trop tôt pour le dire",
+            "without": "Sans"
         },
         "modelGroupRow": {
             "addModelEveryJob": "Ajouter un modèle pour chaque tâche {toLowerCase}",
@@ -3320,8 +3381,6 @@
             "dedupeRepeats": "dédupliquer les répétitions",
             "directoryListings": "listings de répertoires",
             "fileLists": "listes de fichiers",
-            "needsPerArmMore": "nécessite {minTurns} {sampleUnit} par bras, {shortfall} de plus sur le plus court",
-            "pp95": "±{marginPct} pp (95 %) · {wait}",
             "redactSecrets": "caviarder les secrets",
             "searchHits": "résultats de recherche",
             "testRunners": "lanceurs de tests"

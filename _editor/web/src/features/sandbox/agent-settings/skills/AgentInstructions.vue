@@ -20,8 +20,8 @@ import { computed, ref } from "vue";
 import { sandboxRpc } from "../../client/sandboxRpc";
 import { useSandboxSettings } from "../../overview/useSandboxSettings";
 import { useSavings } from "../../usage/useSavings";
-import MeasurementPanel, { type PanelReading } from "../models/MeasurementPanel.vue";
-import { readingsOf } from "../models/experimentReadings";
+import MeasurementPanel from "../models/MeasurementPanel.vue";
+import { type ResultTable, tableOf } from "../models/experimentReadings";
 import { asPercent } from "../models/numberInputs";
 import { useTrimmedDraft } from "../../../../lib/useDraft";
 import { promptReach, spokenList } from "./promptReach";
@@ -101,7 +101,7 @@ const confirmReplace = (): void => {
 // The holdout keeps whole conversations on the long form, since the guidance rides the prompt for the whole session.
 const { savings } = useSavings({});
 const guidanceHoldoutPercent = computed<number>(() => asPercent(settings.value?.leanGuidanceHoldout));
-const guidanceReadings = computed<PanelReading[]>(() => readingsOf(savings.value?.guidance));
+const guidanceTable = computed<ResultTable | undefined>(() => tableOf(savings.value?.guidance));
 
 const reach = promptReach();
 const viewPromptTip = computed((): Tip => ({
@@ -186,10 +186,10 @@ const viewPromptTip = computed((): Tip => ({
             <template v-if="settings?.leanGuidance === true" #below>
                 <MeasurementPanel
                     :percent="guidanceHoldoutPercent"
-                    :readings="guidanceReadings"
+                    :table="guidanceTable"
                     :note="t(`sandbox.agentInstructions.ofConversationsKeepFullGuidance`)"
-                    on-label="short"
-                    off-label="long"
+                    :on-label="t(`sandbox.agentInstructions.shortForm`)"
+                    :off-label="t(`sandbox.agentInstructions.longForm`)"
                     @commit="(leanGuidanceHoldout: number) => patch({ leanGuidanceHoldout })"
                 />
             </template>

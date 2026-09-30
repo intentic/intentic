@@ -2552,34 +2552,45 @@
             "yourOwnClockIs": "Co znaczy „09:00” w automatyzacji. Twój komputer jest w strefie {zone}, więc te godziny nie będą się zgadzać z tym, co na nim widzisz."
         },
         "agentCodeSearch": {
-            "automationOff": "Jej comiesięczne przepisywanie jest wyłączone.",
+            "automationOff": "Comiesięczne przepisywanie jest wyłączone",
+            "brief": "Notatka",
+            "briefReach": "Pierwsze {sent} z {total} sekcji · znaków: {chars}",
             "briefUnreadable": "Notatka jest na miejscu, ale nie da się jej wysłać: {why}",
-            "budget": "Budżet",
+            "characters": "znaków",
             "codeSearch": "Wyszukiwanie kodu",
             "documentShadows": "Cienie dokumentów",
             "fieldNotes": "Notatki z terenu",
             "iqCodeSearch": "Wyszukiwanie kodu iq",
             "keepDocumentsImagesAudio": "Trzymaj dokumenty, obrazy, audio i archiwa wstępnie wyrenderowane jako tekst, aktualizowane w miarę zmian plików. Otwórz dowolne z nich w przestrzeni roboczej, żeby przeczytać to, co czyta agent.",
-            "noBriefYet": "Nie ma jeszcze notatki. Skonfiguruj comiesięczną automatyzację Notatki z terenu, a napisze pierwszą.",
-            "ofConversationsOpenWithout": "rozmów zaczyna się bez mapy, jako grupa kontrolna.",
-            "ofConversationsRunWithout": "rozmów działa bez iq, jako grupa kontrolna.",
-            "ofConversationsRunWithoutNotes": "rozmów działa bez notatki, jako grupa kontrolna.",
-            "openTheBrief": "Otwórz notatkę",
+            "lengthLimit": "Limit długości",
+            "noBriefYet": "Jeszcze niespisana. Pierwszą napisze comiesięczna automatyzacja.",
+            "notScheduled": "Nie zaplanowano",
+            "ofConversationsOpenWithout": "rozmów zaczyna się bez mapy",
+            "ofConversationsRunWithout": "rozmów działa bez iq",
+            "ofConversationsRunWithoutNotes": "rozmów działa bez notatek z terenu",
+            "openAutomations": "Otwórz automatyzacje",
+            "openTheBrief": "Otwórz",
             "projectMap": "Mapa projektu",
             "provideProjectStructureOverview": "Dawaj nowym rozmowom przegląd struktury projektu.",
-            "sendingRanks": "Wysyłane pozycje 1–{sent} z {total} · znaków: {chars}",
+            "rewrittenMonthly": "Przepisywana co miesiąc",
+            "rewrittenMonthlyNext": "Przepisywana co miesiąc, następnym razem {when}",
             "setUpTheAutomation": "Skonfiguruj automatyzację",
+            "updates": "Aktualizacje",
             "useIqSearchCli": "Używaj CLI wyszukiwania iq zamiast grep/find/glob.",
-            "whatSessionsLearned": "To, czego sesje tutaj musiały nauczyć się na własnej skórze, uszeregowane i przepisywane co miesiąc, dołączane do każdej tury."
+            "whatSessionsLearned": "To, czego sesje tutaj musiały nauczyć się na własnej skórze, uszeregowane i przepisywane co miesiąc, dołączane do każdej tury.",
+            "withIq": "Z iq",
+            "withMap": "Z mapą",
+            "withNotes": "Z notatkami"
         },
         "agentCommandOutput": {
             "cleanCommandOutput": "Czyść wyjście poleceń",
-            "cleanedCommandsAgainstRaw": "oczyszczonych poleceń wobec surowych, które zachowała grupa kontrolna",
+            "cleaned": "Czyszczone",
             "cleaners": "Czyściciele",
             "commandOutput": "Wyjście poleceń",
             "ledgerFillsAssistantRuns": "Rejestr zapełnia się, gdy asystent uruchamia polecenia powłoki — jeden wiersz na polecenie.",
-            "ofCommandsRunUncleaned": "poleceń działa bez czyszczenia, jako grupa kontrolna.",
+            "ofCommandsRunUncleaned": "poleceń działa bez czyszczenia",
             "outputSavings": "Oszczędność wyjścia",
+            "raw": "Surowe",
             "tokensSavedAllTime": "zaoszczędzonych tokenów, łącznie",
             "tokensStillReachingAssistant": "tokenów wciąż docierających do asystenta",
             "trimNoisyShellOutput": "Przycinaj hałaśliwe wyjście powłoki, zanim dotrze do asystenta.",
@@ -2610,21 +2621,23 @@
             "intenticsOwnPromptTuned": "Własny prompt Intentic, dostrojony do tej aplikacji.",
             "leanGuidance": "Krótkie wskazówki",
             "leanGuidanceDescription": "Mów agentowi tylko to, czego nie ustali sam, zamiast akapitu na każdy nawyk, na którym kiedyś go przyłapano.",
+            "longForm": "Długie",
             "notCopyKeptBy": ", nie kopia trzymana przez tę aplikację. Wybierz Claude, a będzie dalej aktualizowany razem z sandboxem; rozgałęź go, a od tej chwili należy do Ciebie.",
-            "ofConversationsKeepFullGuidance": "rozmów zostaje przy długiej wersji, jako grupa kontrolna.",
+            "ofConversationsKeepFullGuidance": "rozmów zachowuje długie wskazówki",
             "onAddedToPrompt": "Przy {adds} jest zamiast tego dokładany do ich promptu.",
+            "ownPromptAgentRuns": "Twój własny prompt: agent działa wyłącznie na tym tekście.",
             "promptReachAdds": "Dokładany do",
             "promptReachReplaces": "Zastępuje",
-            "ownPromptAgentRuns": "Twój własny prompt: agent działa wyłącznie na tym tekście.",
             "readingSandbox": "Odczytywanie go z Twojego sandboxa…",
             "replace": "Zastąp",
             "replaceYourText": "Zastąpić twój tekst?",
             "replaceYourTextDetail": "Wbudowany prompt zajmie miejsce wszystkiego, co jest tu teraz napisane. Jeśli chcesz zachować swój tekst, najpierw go skopiuj.",
+            "shortForm": "Krótkie",
             "startClaudes": "Wyjdź od Claude'a",
             "startIntentics": "Wyjdź od Intentic",
             "viewPrompt": "Zobacz prompt",
-            "writeAssistantsSystemPrompt": "Napisz prompt systemowy asystenta albo wyjdź od jednego z wbudowanych promptów poniżej.",
-            "wholePromptOn": "Twój tekst staje się całym promptem na {replaces}: łącznie z tym, co ta aplikacja mówi asystentowi o swoich pytaniach, panelu listy zadań i narzędziach przeglądarki."
+            "wholePromptOn": "Twój tekst staje się całym promptem na {replaces}: łącznie z tym, co ta aplikacja mówi asystentowi o swoich pytaniach, panelu listy zadań i narzędziach przeglądarki.",
+            "writeAssistantsSystemPrompt": "Napisz prompt systemowy asystenta albo wyjdź od jednego z wbudowanych promptów poniżej."
         },
         "agentRun": {
             "comingBack": "Czekam, aż jego agent wróci…",
@@ -3426,8 +3439,45 @@
             "rename": "Zmień nazwę"
         },
         "measurementPanel": {
-            "controlGroupPercentage": "Grupa kontrolna, w procentach",
-            "nothingMeasuredYet": "Jeszcze nic nie zmierzono."
+            "anyDifferenceUnder": "Ewentualna różnica jest na razie poniżej {within}%",
+            "change": "Zmiana",
+            "comparisonGroup": "Grupa porównawcza",
+            "controlGroupPercentage": "Grupa porównawcza, w procentach",
+            "effect": "Wpływ na agenta",
+            "fewer": "{pct}% mniej",
+            "less": "{pct}% mniej",
+            "likelyFewer": "Prawdopodobnie od {low}% do {high}% mniej",
+            "likelyMore": "Prawdopodobnie od {low}% do {high}% więcej",
+            "metric": {
+                "callsBeforeTarget": "Wywołania narzędzi przed właściwym plikiem",
+                "failedCalls": "Nieudane wywołania narzędzi na turę",
+                "openingListings": "Listowania katalogów w pierwszej turze",
+                "openingSearches": "Wyszukiwania przed otwarciem pliku",
+                "outputReached": "Wyjście docierające do agenta",
+                "searchCalls": "Wyszukiwania na turę"
+            },
+            "more": "{pct}% więcej",
+            "moreWouldSettle": {
+                "conversations": "Około {needed} kolejnych rozmów w grupie porównawczej to rozstrzygnie.",
+                "turns": "Około {needed} kolejnych tur w grupie porównawczej to rozstrzygnie."
+            },
+            "noClearDifference": "Brak wyraźnej różnicy",
+            "noResultsYet": "Nie ma jeszcze wyników. Pojawią się, gdy agent popracuje.",
+            "resultsAppearAt": "Wyniki pojawią się, gdy każda grupa będzie miała co najmniej {minimum}; brakuje jeszcze {shortfall}.",
+            "sample": {
+                "commands": "Polecenia",
+                "conversations": "Rozmowy",
+                "turns": "Tury"
+            },
+            "savedSoFar": {
+                "callsBeforeTarget": "Dotąd około {count} wywołań narzędzi mniej.",
+                "failedCalls": "Dotąd około {count} nieudanych wywołań mniej.",
+                "openingListings": "Dotąd około {count} listowań katalogów mniej.",
+                "openingSearches": "Dotąd około {count} wyszukiwań mniej.",
+                "searchCalls": "Dotąd około {count} wyszukiwań mniej."
+            },
+            "tooEarly": "Za wcześnie, by ocenić",
+            "without": "Bez"
         },
         "modelGroupRow": {
             "addModelEveryJob": "Dodaj model do każdego zadania: {toLowerCase}",
@@ -4118,8 +4168,6 @@
             "dedupeRepeats": "usuwaj duplikaty",
             "directoryListings": "listingi katalogów",
             "fileLists": "listy plików",
-            "needsPerArmMore": "potrzebuje {minTurns} {sampleUnit} na ramię, {shortfall} więcej na krótszym",
-            "pp95": "±{marginPct} pp (95%) · {wait}",
             "redactSecrets": "zamazuj sekrety",
             "searchHits": "trafienia wyszukiwania",
             "testRunners": "uruchamiacze testów"
@@ -6268,8 +6316,7 @@
             "toggleExplorer2": "Przełącz eksplorator",
             "toggleIgnoredFiles": "Przełącz ignorowane pliki",
             "toggleTestFiles": "Przełącz pliki testowe",
-            "viewing": "Widok jako",
-            "clearEsc": "Wyczyść (Esc)"
+            "viewing": "Widok jako"
         },
         "workspaceEmptyState": {
             "askAgentToFetch": "Poproś agenta, żeby to pobrał",

@@ -1,7 +1,6 @@
 import type { FigureAccent } from "@intentic/ui/markdown";
 import { seriesColor } from "@intentic/ui/series";
-import type { InputSavings, TurnExperiment, TurnMetricReading } from "@intentic/sandbox-contract";
-import { formatCompact } from "./usageChart";
+import type { InputSavings } from "@intentic/sandbox-contract";
 import { t } from "@intentic/ui/i18n";
 
 // Every number and mark on the Savings surfaces, as pure functions over the daemon's savings report (same split
@@ -100,104 +99,6 @@ export const compositionOf = (input: InputSavings): Composition => {
     });
 
     return { segments, rawTokens: input.rawTokens, footerTokens: footer === undefined ? 0 : Math.max(0, -footer.savedTokens) };
-};
-
-// the turn experiments
-
-// Metric labels in three lengths (unit/mean/total) for different display spots; never decoration alone.
-// `searchCalls`/`openingSearches` are worded near-identically (one is a prefix of the other); the map metrics are not,
-// and must not be conflated (compliance vs. outcome).
-const METRICS = {
-    searchCalls: { unit: `searches per turn`, mean: `searches/turn`, total: `searches` },
-    openingSearches: { unit: `searches before the first file`, mean: `searches/turn`, total: `searches` },
-    openingListings: { unit: `directory listings opening a conversation`, mean: `listings/turn`, total: `listings` },
-    callsBeforeTarget: { unit: `calls before the file it edits`, mean: `calls`, total: `calls` },
-    // A call that came back an error, not a turn that failed: the field notes claim to prevent the first, and a turn
-    // that recovers from three of them still had three.
-    failedCalls: { unit: `tool calls that came back an error`, mean: `failures/turn`, total: `failures` },
-} satisfies Record<TurnMetricReading["metric"], { unit: string; mean: string; total: string }>;
-
-// What a reading's per-turn mean counts, for a surface drawing the two arms beside each other; the mean itself is
-// the arm's own number, so this is the unit alone, said once for the pair.
-export const meanUnit = (reading: TurnMetricReading): string => METRICS[reading.metric].mean;
-
-const savedLabel = (reading: TurnMetricReading): string => `${Math.round(reading.saved ?? 0)} ${METRICS[reading.metric].total}`;
-
-// One shape for both experiments' headline: a verdict, what it's about, and the qualifying detail. A verdict can
-// be a word ("Measuring") at the same size as a figure, so the row reads in one scan.
-export interface ExperimentVerdict {
-    readonly value: string;
-    readonly unit: string;
-    // The metric alone, for a surface that NAMES a reading before answering it (the panel's footnote rows, where
-    // `unit` would read as "measurable in searches per turn — No effect"). `unit` still leads with the answer.
-    readonly subject: string;
-    // Only a measured saving earns `success`; an increase is stated plainly, not alarmed about.
-    readonly tone: "success" | "content" | "muted";
-    // Qualifier the figure needs to mean anything (margin, payoff, or shortfall); never optional.
-    readonly detail: string;
-}
-
-// ONE READING'S verdict, and only what that reading can answer for.
-export const readingVerdict = (
-    reading: TurnMetricReading,
-    minTurns: number,
-    sampleUnit: NonNullable<TurnExperiment["sampleUnit"]> = `turns`,
-): ExperimentVerdict => {
-    const unit = METRICS[reading.metric].unit;
-
-    // Margin arrives once both arms clear minTurns; the delta waits for the margin to exclude zero.
-    if (reading.marginPct === undefined) {
-        const shortfall = Math.max(minTurns - reading.on.turns, minTurns - reading.off.turns);
-        return {
-            value: `Measuring`,
-            unit,
-            subject: unit,
-            tone: `muted`,
-            detail: t(`sandbox.savingsChart.needsPerArmMore`, { minTurns, sampleUnit, shortfall }),
-        };
-    }
-    // Distinct from "Measuring": the arms are big enough, the effect is just smaller than the noise, and the
-    // reader's next move differs (wait vs. question the mechanism).
-    if (reading.deltaPct === undefined) {
-        // Rounded hard to an order of magnitude: the daemon's estimate is coarse by construction
-        // (turn-experiments.ts), and without one a near-answer looks identical to a holdout too small to ever resolve.
-        const wait =
-            reading.controlTurnsNeeded === undefined
-                ? `keep collecting`
-                : `~${formatCompact(reading.controlTurnsNeeded)} more control ${sampleUnit} would settle it`;
-        // Same grammar as the measured verdict's detail: margin, then the qualifier, joined by a middot. The framing is
-        // carried by the headline above it, so nothing is lost by dropping it here.
-        return {
-            value: `No effect`,
-            unit: `measurable in ${unit}`,
-            subject: unit,
-            tone: `muted`,
-            detail: t(`sandbox.savingsChart.pp95`, { marginPct: reading.marginPct, wait }),
-        };
-    }
-
-    return {
-        // Direction is spelled with an arrow AND a sign, so it never rests on colour.
-        value: `${reading.deltaPct < 0 ? `↓` : `↑`}${Math.abs(reading.deltaPct)}%`,
-        unit,
-        subject: unit,
-        tone: reading.deltaPct < 0 ? `success` : `content`,
-        detail: `±${reading.marginPct}pp (95%)${(reading.saved ?? 0) > 0 ? ` · ~${savedLabel(reading)} saved in this range` : ``}`,
-    };
-};
-
-// Splits an experiment's readings into the card's headline slot and the rest, so "exactly one headline" isn't
-// rediscovered per call site with `[0]`. `undefined` (not running) is a verdict like any other, in the same three-slot
-// shape.
-export const verdictsOf = (experiment: TurnExperiment | undefined): { headline: ExperimentVerdict; also: ExperimentVerdict[] } => {
-    if (experiment === undefined) {
-        return { headline: { value: `Off`, unit: `not being measured`, subject: `not being measured`, tone: `muted`, detail: `` }, also: [] };
-    }
-    const [first, ...rest] = experiment.metrics;
-    return {
-        headline: readingVerdict(first, experiment.minTurns, experiment.sampleUnit),
-        also: rest.map((reading) => readingVerdict(reading, experiment.minTurns, experiment.sampleUnit)),
-    };
 };
 
 // Per-cleaner savings this window; a missing id means it hasn't run or saved anything (stated, not zeroed).

@@ -7,7 +7,8 @@ import { useSavings } from "../../usage/useSavings";
 import { useSandboxSettings } from "../../overview/useSandboxSettings";
 import { allCleanerIds, cleanerOptions, savedByCleaner } from "../../usage/savingsChart";
 import { asPercent } from "../models/numberInputs";
-import MeasurementPanel, { type PanelReading } from "../models/MeasurementPanel.vue";
+import MeasurementPanel from "../models/MeasurementPanel.vue";
+import type { ResultTable } from "../models/experimentReadings";
 import { useT } from "@intentic/ui/i18n";
 
 // Shell-output filter: master toggle, per-cleaner checklist, measurement holdout, and realized savings, as one
@@ -70,29 +71,21 @@ const toggleCleaner = (id: string, on: boolean): void => {
 // Percentage [0,100] of commands whose output bypasses cleaning, stored as a fraction [0,1].
 const holdoutPercent = computed<number>(() => asPercent(settings.value?.outputHoldout));
 
-// Not through `verdictsOf`: this experiment compares whole commands as a share, not turn-level means. No
-// reading until `measuredSavedPct` exists, since an early "0%" would look like a measurement rather than a gap.
-const cleanerReadings = computed<PanelReading[]>(() => {
+// Not through `tableOf`: this experiment compares whole commands as a share, not turn-level means, so its one row has
+// no averages and its change is already the measured share. No table until `measuredSavedPct` exists, since an early
+// "0%" would look like a measurement rather than a gap.
+const cleanerTable = computed<ResultTable | undefined>(() => {
     const holdout = savings.value?.input.holdout;
     if (holdout?.measuredSavedPct === undefined) {
-        return [];
+        return undefined;
     }
-    return [
-        {
-            verdict: {
-                value: `${holdout.measuredSavedPct}%`,
-                unit: `of command output removed`,
-                subject: `command output removed`,
-                // Only the measured figure earns `success`; the estimate above it stays muted.
-                tone: holdout.measuredSavedPct > 0 ? `success` : `muted`,
-                detail: t(`sandbox.agentCommandOutput.cleanedCommandsAgainstRaw`),
-            },
-            // No means to draw: this experiment compares shares of command output, not a per-turn rate, so the
-            // panel falls back to naming the two arms' sizes.
-            on: { turns: holdout.cleaned },
-            off: { turns: holdout.heldOut },
-        },
-    ];
+    const pct = Math.round(holdout.measuredSavedPct);
+    return {
+        unit: `commands`,
+        on: holdout.cleaned,
+        off: holdout.heldOut,
+        rows: [{ key: `outputReached`, outcome: pct > 0 ? { kind: `lower`, pct } : { kind: `unclear` } }],
+    };
 });
 
 // All-time estimate across every cleaned command, vs. the holdout's measured slice. Lives in a `Verdict` slot,
@@ -168,10 +161,10 @@ const savedTokens = computed(() => savedByCleaner(savings.value?.input));
                     <MeasurementPanel
                         class="mt-3"
                         :percent="holdoutPercent"
-                        :readings="cleanerReadings"
+                        :table="cleanerTable"
                         :note="t(`sandbox.agentCommandOutput.ofCommandsRunUncleaned`)"
-                        on-label="cleaned"
-                        off-label="raw"
+                        :on-label="t(`sandbox.agentCommandOutput.cleaned`)"
+                        :off-label="t(`sandbox.agentCommandOutput.raw`)"
                         @commit="(outputHoldout: number) => patch({ outputHoldout })"
                     />
                 </div>
