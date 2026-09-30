@@ -463,6 +463,14 @@ export const SandboxSettingsSchema = z.object({
         .describe(
             "Whether main's CI failing is repaired without asking. The first job that fails on main starts one fix agent, without waiting for the rest of the run, and every later failure on main goes to that same agent until a run passes. It gets a few turns; when they are spent, or it finishes without changing anything (a failure that is not in the code), the failure waits for you. A failure on the CI fleet itself is re-run once instead. Off, all of it is only reported.",
         ),
+    // What another writer pushes reaches the main tree within minutes instead of at the owner's next pull
+    // (git/remote/follow-origin.ts), so an agent whose work clashes with it meets the clash at its own land.
+    followOrigin: z
+        .boolean()
+        .default(true)
+        .describe(
+            "Whether each workspace repo keeps up with the remote branch it tracks. Every couple of minutes it is fetched, and what arrived is brought into the main tree: a fast-forward when you have no commits of your own, else a merge commit. Only while it is quiet (no turn working in the main tree, no merge or rebase of yours open), and never half-way: a conflict, or an uncommitted file in the way, leaves the repo exactly as it was until the next try. Nothing is ever pushed. Off, nothing is fetched.",
+        ),
     // Where heavy work runs: a runner (the same image, on one of the owner's machines) instead of this sandbox. Keyed by
     // the heavy-command rule an agent's command matched (system/resources/heavy-commands.ts), each naming a runner id. A
     // runner that is offline, outdated or full hands the work back here, which the command's output says. Never pushed

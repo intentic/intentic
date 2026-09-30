@@ -8,6 +8,7 @@ import { approvalsExecutorFor } from "../approvals/approvals-executor.js";
 import { createAutomationsScheduler } from "../automations/scheduler.js";
 import { fixerSettled, resumeMainFixer } from "../ci/main-fixer.js";
 import { createCiPoller } from "../ci/poller.js";
+import { createOriginFollow, type OriginFollowDeps } from "../git/remote/follow-origin.js";
 import { autoKeepWarm, stopKeepWarm } from "../agent/run/turn/cache-keepwarm.js";
 import type { BootPhase } from "./boot-phase.js";
 import { subscribeRepoChanges } from "../workspace/watch/repo-watch.js";
@@ -29,6 +30,17 @@ const childReportDeps = (services: BootPhase["services"], logger: BootPhase["log
     },
     killNote: (childId, failure) => childKillNote(services, childId, failure),
     landingOf: (childId) => childLandingWords(services.agents, childId),
+});
+
+// What following the remote reads off the daemon (git/remote/follow-origin.ts): the switch, and whether a turn is
+// working in the main tree, whose files must not move under it.
+const originFollowDeps = (services: BootPhase["services"], logger: BootPhase["logger"]): OriginFollowDeps => ({
+    workspace: services.workspace,
+    enabled: async () => (await services.sandboxSettings.get()).followOrigin,
+    mainTreeBusy: () => services.agents.ids().some((id) => services.conversations.running(id) && services.agents.entry(id)?.placement.kind !== "worktree"),
+    agentWorktrees: services.agentWorktrees,
+    history: services.history,
+    logger,
 });
 
 // Each scheduler registers its stop whether or not this role starts it, so every role unwinds cleanly.
@@ -92,10 +104,16 @@ export const startBootSchedulers = ({ role, services, logger, shutdown }: BootPh
         ciPoller.start();
     }
 
+    // Each workspace repo keeps up with the remote branch it tracks, so another writer's push reaches main within
+    // minutes rather than at the owner's next pull; `followOrigin` off, nothing is fetched.
+    const originFollow = createOriginFollow(originFollowDeps(services, logger));
+    shutdown.push(originFollow.stop);
+
     if (role.container) {
         // Both idle-only, allowed to fail, unref'd; the probe runner also waits out the boot's own pnpm install.
         services.probeRunner.start();
         services.driftSweep.start();
+        originFollow.start();
     }
 
     startRuntimeHealth(services);

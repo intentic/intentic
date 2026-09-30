@@ -124,7 +124,8 @@ export const pullRemote = async (dir: string, author: Author, git: GitRunner = d
     return replayOnto(dir, tracked.branch, tracked.upstream, ahead, author, git);
 };
 
-const trackedBranch = async (dir: string, git: GitRunner): Promise<{ branch: string; upstream: string; remote: string } | undefined> => {
+// The checked-out branch and what it tracks; undefined when detached, unborn or tracking nothing.
+export const trackedBranch = async (dir: string, git: GitRunner = defaultGit): Promise<{ branch: string; upstream: string; remote: string } | undefined> => {
     const branch = (await git(dir, ["branch", "--show-current"]).catch(() => undefined))?.stdout.trim();
     if (branch === undefined || branch === "") {
         return undefined;

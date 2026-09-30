@@ -1938,6 +1938,8 @@
             "archiveQuietAgentsReclaim": "Archiver les agents silencieux et récupérer leurs worktrees (les diffs et l'historique sont conservés).",
             "commitWhatEachLanded": "Committer ce que chaque agent intégré a changé, sous un sujet écrit pour lui, et vos propres modifications avant que l'agent suivant ne démarre.",
             "finishedWork": "Travail terminé",
+            "followOrigin": "Suivre le dépôt distant",
+            "followOriginNote": "Toutes les deux minutes environ, récupérer la branche distante de chaque dépôt et intégrer ce que d'autres ont poussé, avec un commit de fusion si vous avez vos propres commits. Un conflit, ou un fichier non commité en travers, laisse le dépôt tel quel. Rien n'est poussé.",
             "n1Day": "1 jour",
             "n1Week": "1 semaine",
             "n3Days": "3 jours"

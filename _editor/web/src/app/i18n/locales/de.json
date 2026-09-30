@@ -1939,6 +1939,8 @@
             "archiveQuietAgentsReclaim": "Stille Agenten archivieren und Worktrees zurückgewinnen (Diffs und Historie bleiben erhalten).",
             "commitWhatEachLanded": "Committen, was jeder gelandete Agent geändert hat, unter einem für ihn geschriebenen Betreff, und Ihre eigenen Änderungen, bevor der nächste Agent startet.",
             "finishedWork": "Fertige Arbeit",
+            "followOrigin": "Mit dem Remote Schritt halten",
+            "followOriginNote": "Alle paar Minuten den Remote-Branch jedes Repos abrufen und übernehmen, was andere gepusht haben, mit einem Merge-Commit, wenn Sie eigene Commits haben. Ein Konflikt oder eine nicht committete Datei im Weg lässt das Repo, wie es war. Gepusht wird nichts.",
             "n1Day": "1 Tag",
             "n1Week": "1 Woche",
             "n3Days": "3 Tage"

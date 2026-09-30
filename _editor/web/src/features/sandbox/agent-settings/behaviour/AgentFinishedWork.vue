@@ -7,8 +7,8 @@ import { useRules } from "../../environment/useRules";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 
-// What happens after an agent stops: whether finished work reaches the user by itself, and how long the agent
-// that produced it keeps its card and checkout.
+// What happens after an agent stops: whether finished work reaches the user by itself, whether it is committed and kept
+// up with what others pushed, and how long the agent that produced it keeps its card and checkout.
 
 const t = useT();
 
@@ -64,6 +64,18 @@ const RETENTION_OPTIONS = computed(() => [
         <Row icon="history" :title="t(`sandbox.words.saveVersionAcceptedWork`)" :description="t(`sandbox.agentFinishedWork.commitWhatEachLanded`)">
             <template #control>
                 <ToggleSwitch :model-value="version()?.enabled ?? false" :disabled="settings === undefined" @update:model-value="setVersion" />
+            </template>
+        </Row>
+
+        <!-- Under the versioner: once work is committed here, what others pushed meanwhile is merged in within minutes, so
+             an agent meets a clash with it at its own land instead of the owner at their next pull. -->
+        <Row icon="sync" :title="t(`sandbox.agentFinishedWork.followOrigin`)" :description="t(`sandbox.agentFinishedWork.followOriginNote`)">
+            <template #control>
+                <ToggleSwitch
+                    :model-value="settings?.followOrigin ?? true"
+                    :disabled="settings === undefined"
+                    @update:model-value="(value: boolean) => patch({ followOrigin: value })"
+                />
             </template>
         </Row>
 
