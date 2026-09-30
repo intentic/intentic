@@ -224,7 +224,9 @@
 @container (min-width: 53rem) {
     .chat-pane .chat-turns {
         --chat-spine-gutter: var(--chat-gutter);
-        --chat-spine-end: -0.25rem;
+/* With a real gutter, the figures stand out in it, clear of rows that start at the column's edge (a job row, a
+   checklist's delta line) rather than at the words' 14px inset. */
+        --chat-spine-end: -0.875rem;
     }
 }
 /* A ROW PAINT-CLIPS AT ITS OWN EDGE (content-visibility), and its figure stands out in the gutter and up in the seam: the
