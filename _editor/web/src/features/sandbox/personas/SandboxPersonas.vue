@@ -6,7 +6,6 @@ import {
     Button,
     ui,
     ConfirmDialog,
-    DisclosureRow,
     InlineRename,
     Notice,
     type NoticeModel,
@@ -19,12 +18,21 @@ import {
 } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import ToggleSwitch from "primevue/toggleswitch";
-import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, ref, useId, watch } from "vue";
+import PersonaTile from "../../../components/PersonaTile.vue";
 import PersonaForm, { type PersonaDraft } from "./PersonaForm.vue";
 import { useBrowserAccounts } from "../../extensions/useBrowserAccounts";
 import { useCapabilities } from "../../capabilities/connect/useCapabilities";
 import { useExtensions } from "../../extensions/useExtensions";
-import { extensionGrantablesFrom, grantablesFrom, omittedNotesOf, type PersonaGrantable, personaSlug, powersDraftOf, storedPowers } from "./personaRules";
+import {
+    extensionGrantablesFrom,
+    grantablesFrom,
+    omittedNotesOf,
+    type PersonaGrantable,
+    personaSlug,
+    powersDraftOf,
+    storedPowers,
+} from "./personaRules";
 import { usePersonas } from "./usePersonas";
 import { useSandboxOutline } from "../overview/useSandboxOutline";
 import { useSandboxSettings } from "../overview/useSandboxSettings";
@@ -65,11 +73,11 @@ const marks = (persona: Persona) => persona.capabilities.map((id) => ({ id, acco
 // that can reach nothing.
 const ready = (persona: Persona): boolean => persona.capabilities.some((id) => isConnected(id));
 
-// Accordion over a settings object: an open persona writes as you change it (no Save button), and the row itself is the
-// disclosure, there's no separate edit affordance. The name stays the row's own title, text until clicked
-// (inlineRename).
+// One selected persona, edited below the grid. Changes save as they are made; selecting a tile is never an edit.
 const draft = ref<PersonaDraft | undefined>(undefined);
 const saveError = ref<NoticeModel | undefined>(undefined);
+const detailsId = useId();
+const selected = computed(() => personas.value.find((persona) => persona.id === draft.value?.original));
 
 const draftOf = (persona: Persona): PersonaDraft => ({
     original: persona.id,
@@ -98,9 +106,12 @@ const quietly = (mutate: () => void): void => {
     });
 };
 
+const newName = ref<string | undefined>(undefined);
+
 const isOpen = (persona: Persona): boolean => draft.value?.original === persona.id;
 const toggleOpen = (persona: Persona): void => {
     saveError.value = undefined;
+    newName.value = undefined;
     if (isOpen(persona)) {
         draft.value = undefined;
         return;
@@ -130,8 +141,6 @@ watch(
 // A name, and nothing else: the persona is written with the schema's own defaults (stored as absent, so the file says
 // nothing about questions nobody was asked), then opens for the rest. The name lives in its own ref rather than a
 // half-built draft, since a draft with no `original` would need every field to be optional-until-saved.
-const newName = ref<string | undefined>(undefined);
-
 const startAdd = (): void => {
     saveError.value = undefined;
     draft.value = undefined;
@@ -212,33 +221,41 @@ const submit = async (): Promise<void> => {
 // Debounced, since several flips or a folder pick are one intent, not one write each; long enough to coalesce a
 // decision, short enough that the spinner has cleared by the time attention moves on.
 let pending: ReturnType<typeof setTimeout> | undefined;
-const persist = async (): Promise<void> => {
-    const state = draft.value;
-    if (state === undefined) {
-        return;
-    }
-    saveError.value = undefined;
+const persist = async (state: PersonaDraft): Promise<void> => {
     try {
         await save.mutateAsync(cardFrom(state));
     } catch (err) {
-        saveError.value = noticeFrom(err, `Could not save this persona.`);
+        if (draft.value === state) {
+            saveError.value = noticeFrom(err, `Could not save this persona.`);
+        }
     }
 };
 watch(
     draft,
-    () => {
-        if (settling || draft.value === undefined) {
+    (state, previous) => {
+        // Finish a queued edit against its own persona before the selection changes.
+        if (state !== previous && pending !== undefined) {
+            clearTimeout(pending);
+            pending = undefined;
+            if (previous !== undefined) {
+                void persist(previous);
+            }
+        }
+        if (settling || state === undefined) {
             return;
         }
         clearTimeout(pending);
-        pending = setTimeout(() => void persist(), 400);
+        saveError.value = undefined;
+        pending = setTimeout(() => {
+            pending = undefined;
+            void persist(state);
+        }, 400);
     },
     { deep: true },
 );
 onBeforeUnmount(() => clearTimeout(pending));
 
-// Writes the whole persona (an upsert), reading from the open draft if there is one so a rename doesn't clobber a switch
-// flipped a moment ago. The edit state is the row's own, inside its <InlineRename>; this is only where the name goes.
+// Renaming includes the open draft so it keeps a switch flipped a moment ago.
 const renameOf =
     (persona: Persona) =>
     async (name: string): Promise<void> => {
@@ -267,7 +284,13 @@ const confirmRemove = async (): Promise<void> => {
     if (removing.value === undefined) {
         return;
     }
-    await remove.mutateAsync(removing.value.id);
+    const id = removing.value.id;
+    clearTimeout(pending);
+    pending = undefined;
+    await remove.mutateAsync(id);
+    if (draft.value?.original === id) {
+        draft.value = undefined;
+    }
     removing.value = undefined;
 };
 </script>
@@ -316,7 +339,7 @@ const confirmRemove = async (): Promise<void> => {
                 </Button>
             </div>
 
-            <RowGroup v-else :label="t(`sandbox.sandboxPersonas.personas`)">
+            <RowGroup v-else :label="t(`sandbox.sandboxPersonas.personas`)" flat undivided>
                 <template #actions>
                     <Button
                         v-if="personas.length > 0 && newName === undefined"
@@ -329,75 +352,79 @@ const confirmRemove = async (): Promise<void> => {
                     </Button>
                 </template>
 
-                <!-- The row is the disclosure, no second affordance. -->
-                <DisclosureRow
-                    v-for="persona in personas"
-                    :key="persona.id"
-                    hit="pair"
-                    body="drawer"
-                    lead="face"
-                    :open="isOpen(persona)"
-                    @update:open="toggleOpen(persona)"
-                >
-                    <!-- `lead="face"` is what makes `mark` the face size rather than a glyph's; the row's height is unchanged. -->
-                    <template #lead="{ mark }">
-                        <PersonaFace :persona :size="mark" />
-                    </template>
+                <div role="group" :aria-label="t(`sandbox.sandboxPersonas.personas`)" class="flex flex-wrap gap-1">
+                    <PersonaTile
+                        v-for="persona in personas"
+                        :key="persona.id"
+                        :persona="persona"
+                        :label="persona.label ?? persona.id"
+                        :selected="isOpen(persona)"
+                        :aria-pressed="isOpen(persona)"
+                        :aria-controls="detailsId"
+                        v-tooltip.bottom="persona.brief"
+                        class="aspect-square w-28"
+                        @click="toggleOpen(persona)"
+                    />
+                </div>
 
-                    <!-- The row's name renames itself: same box, same type, and the row never opens on that press. -->
-                    <!-- Brief sits in the title column, not `#description`, so it shares the rename's inset and stays under the name. -->
-                    <template #title>
-                        <div class="flex min-w-0 flex-col">
-                            <InlineRename
-                                :value="persona.label ?? persona.id"
-                                :write="renameOf(persona)"
-                                :label="t(`sandbox.sandboxPersonas.personaName`)"
-                                :action="t(`sandbox.sandboxPersonas.renamePersona`)"
-                                failure="Couldn't rename this persona."
-                                class="font-medium"
-                            />
-                            <span v-if="persona.brief !== undefined" class="truncate px-1 text-2xs text-muted">{{ persona.brief }}</span>
+                <div :id="detailsId" class="mt-4">
+                    <div v-if="selected && draft" :key="selected.id" class="overflow-hidden rounded-xl border border-line-subtle bg-card">
+                        <Row lead="face">
+                            <template #lead="{ mark }"><PersonaFace :persona="selected" :size="mark" /></template>
+                            <template #title>
+                                <div class="flex min-w-0 flex-col">
+                                    <InlineRename
+                                        :value="selected.label ?? selected.id"
+                                        :write="renameOf(selected)"
+                                        :label="t(`sandbox.sandboxPersonas.personaName`)"
+                                        :action="t(`sandbox.sandboxPersonas.renamePersona`)"
+                                        failure="Couldn't rename this persona."
+                                        class="font-medium"
+                                    />
+                                    <span v-if="selected.brief !== undefined" class="truncate px-1 text-2xs text-muted">{{ selected.brief }}</span>
+                                </div>
+                            </template>
+
+                            <template #meta>
+                                <!-- Marks say "spans platforms" faster than words could. -->
+                                <span v-if="selected.capabilities.length > 0" class="flex items-center gap-1">
+                                    <BrandMark
+                                        v-for="mark in marks(selected)"
+                                        :key="mark.id"
+                                        :size="16"
+                                        :name="mark.account?.site ?? mark.id"
+                                        :logo="mark.account?.logo"
+                                        :icon="mark.account?.icon ?? `globe`"
+                                        :idle="!mark.signedIn"
+                                    />
+                                </span>
+                                <!-- A bounded persona says so here; which shelf is off is the form's business, this is just whether any are. -->
+                                <StatusBadge v-if="selected.powers !== undefined" variant="neutral" size="xs">{{
+                                    personaBounds(selected)
+                                }}</StatusBadge>
+                                <StatusBadge v-if="selected.capabilities.length > 0 && !ready(selected)" variant="neutral" size="xs" dot>
+                                    {{ t(`sandbox.sandboxPersonas.notSignedIn`) }}
+                                </StatusBadge>
+                            </template>
+
+                            <template #control>
+                                <!-- Shown only while the write is in flight, since a lingering tick is one more thing to read on every row. -->
+                                <Icon v-if="save.isPending.value" name="spinner" spin class="text-2xs text-subtle" />
+                                <button
+                                    type="button"
+                                    :class="ui.iconButton('hover:text-danger')"
+                                    :aria-label="t(`sandbox.sandboxPersonas.removePersona`)"
+                                    @click.stop="removing = selected"
+                                >
+                                    <Icon name="trash" class="text-xs" />
+                                </button>
+                            </template>
+                        </Row>
+                        <div class="border-t border-line-subtle p-4">
+                            <PersonaForm :draft="draft" :accounts="accounts" :connected="connected" :grantables="grantables" :error="saveError" />
                         </div>
-                    </template>
-
-                    <template #meta>
-                        <!-- Marks say "spans platforms" faster than words could. -->
-                        <span v-if="persona.capabilities.length > 0" class="flex items-center gap-1">
-                            <BrandMark
-                                v-for="mark in marks(persona)"
-                                :key="mark.id"
-                                :size="16"
-                                :name="mark.account?.site ?? mark.id"
-                                :logo="mark.account?.logo"
-                                :icon="mark.account?.icon ?? `globe`"
-                                :idle="!mark.signedIn"
-                            />
-                        </span>
-                        <!-- A bounded persona says so on its row; which shelf is off is the form's business, this is just whether any are. -->
-                        <StatusBadge v-if="persona.powers !== undefined" variant="neutral" size="xs">{{ personaBounds(persona) }}</StatusBadge>
-                        <StatusBadge v-if="persona.capabilities.length > 0 && !ready(persona)" variant="neutral" size="xs" dot>
-                            {{ t(`sandbox.sandboxPersonas.notSignedIn`) }}
-                        </StatusBadge>
-                    </template>
-
-                    <template #control>
-                        <!-- Shown only while the write is in flight, since a lingering tick is one more thing to read on every row. -->
-                        <Icon v-if="isOpen(persona) && save.isPending.value" name="spinner" spin class="text-2xs text-subtle" />
-                        <button
-                            type="button"
-                            :class="ui.iconButton('hover:text-danger')"
-                            :aria-label="t(`sandbox.sandboxPersonas.removePersona`)"
-                            @click.stop="removing = persona"
-                        >
-                            <Icon name="trash" class="text-xs" />
-                        </button>
-                    </template>
-
-                    <!-- Editing stays inside the persona row. -->
-                    <template #below>
-                        <PersonaForm :draft="draft!" :accounts="accounts" :connected="connected" :grantables="grantables" :error="saveError" />
-                    </template>
-                </DisclosureRow>
+                    </div>
+                </div>
 
                 <!-- Creation asks only for the persona name; other fields have defaults. -->
                 <RowNote v-if="newName !== undefined" v-slot="{ mark }" variant="block" lead="face">

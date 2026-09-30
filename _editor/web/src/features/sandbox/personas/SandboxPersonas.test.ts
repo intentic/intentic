@@ -7,6 +7,7 @@ import type { BrowserAccount } from "../../extensions/useBrowserAccounts";
 import { waitFor } from "@intentic/testing/bun";
 import { type App, computed, createApp, h, nextTick, ref, ref as shallow } from "vue";
 import { IconStub } from "@intentic/ui/testing";
+import PrimeVue from "primevue/config";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 
 (() => {
@@ -105,6 +106,7 @@ const mount = (props: { open?: string } = {}): HTMLElement => {
     const el = document.createElement(`div`);
     document.body.append(el);
     app = createApp({ render: () => h(SandboxPersonas, props) });
+    app.use(PrimeVue);
     // Carries the icon name through as an attribute, so a test can assert which glyph a row wears, not just that it
     // wears one.
     app.component(`Icon`, IconStub);
@@ -119,20 +121,18 @@ const buttonLabelled = (el: HTMLElement, label: string): HTMLButtonElement | und
 const nameField = (el: HTMLElement): HTMLInputElement => el.querySelector<HTMLInputElement>(`input[aria-label="Name this persona"]`)!;
 const byAriaLabel = (el: HTMLElement, label: string): HTMLElement | undefined =>
     el.querySelector<HTMLElement>(`[aria-label="${label}"]`) ?? undefined;
-// A row's name IS its rename control (<InlineRename>): the button reads as the name, with the verb behind it for a
-// screen reader, so that whole string is what identifies the row.
+// Rename lives in the selected persona's details.
 const nameControl = (el: HTMLElement, name: string): HTMLButtonElement =>
     [...el.querySelectorAll(`button`)].find((button) => button.textContent === `${name}, Rename persona`)!;
 
-// Reached through the row's one stable accessible control, since the row itself carries no label; `closest('.group')`
-// finds the header, not the drawer wrapper, since both share the class.
-const rowFor = (el: HTMLElement, id: string): HTMLElement => {
+const tileFor = (el: HTMLElement, id: string): HTMLButtonElement => {
     const persona = personas.value.find((entry) => entry.id === id)!;
-    return nameControl(el, persona.label ?? persona.id).closest(`.group`) as HTMLElement;
+    return [...el.querySelectorAll<HTMLButtonElement>(`[role="group"][aria-label="Your personas"] button`)].find(
+        (button) => button.textContent?.trim() === (persona.label ?? persona.id),
+    )!;
 };
-// Waits for a tab to render rather than a tick count, since opening settles over an unstable number of them.
 const openPersona = async (el: HTMLElement, id: string): Promise<void> => {
-    rowFor(el, id).click();
+    tileFor(el, id).click();
     await waitFor(() => expect(el.querySelector(`[role="tab"]`)).not.toBeNull());
 };
 
@@ -212,20 +212,26 @@ afterEach(() => {
     document.body.innerHTML = ``;
 });
 
-it(`marks a persona whose every account is signed out`, () => {
+it(`marks a persona whose every account is signed out`, async () => {
     personas.value = [{ id: `work`, capabilities: [`reddit-work`, `x-company`] }];
-    expect(text(mount())).toContain(`Not signed in`);
+    const el = mount();
+    await openPersona(el, `work`);
+    expect(text(el)).toContain(`Not signed in`);
 });
 
-it(`does not mark a persona that can reach at least one signed-in account`, () => {
+it(`does not mark a persona that can reach at least one signed-in account`, async () => {
     personas.value = [{ id: `work`, capabilities: [`reddit-work`, `x-company`] }];
     connected.value = [`x-company`];
-    expect(text(mount())).not.toContain(`Not signed in`);
+    const el = mount();
+    await openPersona(el, `work`);
+    expect(text(el)).not.toContain(`Not signed in`);
 });
 
-it(`says nothing about a persona that holds no accounts`, () => {
+it(`says nothing about a persona that holds no accounts`, async () => {
     personas.value = [{ id: `docs`, capabilities: [] }];
-    const rendered = text(mount());
+    const el = mount();
+    await openPersona(el, `docs`);
+    const rendered = text(el);
     expect(rendered).not.toContain(`No accounts`);
     expect(rendered).not.toContain(`can't post`);
 });
@@ -388,15 +394,79 @@ it(`says which areas gain the persona, and that starting nowhere keeps it the ow
     expect(text(el)).toContain(`Anyone granted Handbook can talk to it.`);
 });
 
-it(`opens a persona by clicking its row, and closes it by clicking again`, async () => {
+it(`opens a persona by clicking its tile, and closes it by clicking again`, async () => {
     personas.value = [{ id: `work`, capabilities: [`reddit-work`] }];
     const el = mount();
     expect(text(el)).not.toContain(`Speaks through`);
+    expect(tileFor(el, `work`).getAttribute(`aria-pressed`)).toBe(`false`);
     await openPersona(el, `work`);
     expect(text(el)).toContain(`Speaks through`);
-    rowFor(el, `work`).click();
+    expect(tileFor(el, `work`).getAttribute(`aria-pressed`)).toBe(`true`);
+    tileFor(el, `work`).click();
     await nextTick();
     expect(text(el)).not.toContain(`Speaks through`);
+    expect(tileFor(el, `work`).getAttribute(`aria-pressed`)).toBe(`false`);
+});
+
+it(`switches the details to the picked persona and saves the previous persona's queued edit`, async () => {
+    personas.value = [
+        { id: `work`, label: `Work`, capabilities: [`reddit-work`, `x-company`] },
+        { id: `home`, label: `Home`, capabilities: [`reddit-personal`] },
+    ];
+    const el = mount();
+    await openPersona(el, `work`);
+    byAriaLabel(el, `Stop speaking through reddit-work`)!.click();
+    await nextTick();
+    expect(save).not.toHaveBeenCalled();
+
+    tileFor(el, `home`).click();
+    await nextTick();
+    expect(tileFor(el, `work`).getAttribute(`aria-pressed`)).toBe(`false`);
+    expect(tileFor(el, `home`).getAttribute(`aria-pressed`)).toBe(`true`);
+    expect(el.querySelectorAll(`button[aria-label="Remove this persona"]`)).toHaveLength(1);
+    expect(text(el)).toContain(`reddit-personal`);
+    expect(text(el)).not.toContain(`x-company`);
+
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    expect(save.mock.calls).toEqual([[{ id: `work`, label: `Work`, capabilities: [`x-company`] }]]);
+});
+
+it(`leaves the creation form when an existing persona is picked`, async () => {
+    personas.value = [{ id: `work`, capabilities: [] }];
+    const el = mount();
+    buttonLabelled(el, `Add a persona`)!.click();
+    await nextTick();
+    await type(nameField(el), `Unfinished`);
+
+    await openPersona(el, `work`);
+    expect(nameField(el)).toBeNull();
+    expect(text(el)).toContain(`Speaks through`);
+    expect(save).not.toHaveBeenCalled();
+});
+
+it(`removes the selected persona without saving its queued edit afterwards`, async () => {
+    personas.value = [
+        { id: `work`, capabilities: [`reddit-work`] },
+        { id: `home`, capabilities: [] },
+    ];
+    remove.mockImplementationOnce(async (id) => {
+        personas.value = personas.value.filter((persona) => persona.id !== id);
+        return { ok: true };
+    });
+    const el = mount();
+    await openPersona(el, `work`);
+    byAriaLabel(el, `Stop speaking through reddit-work`)!.click();
+    await nextTick();
+    byAriaLabel(el, `Remove this persona`)!.click();
+    await nextTick();
+    buttonLabelled(document.body, `Remove persona`)!.click();
+    await waitFor(() => expect(remove).toHaveBeenCalledWith(`work`));
+    await nextTick();
+    expect(text(el)).not.toContain(`Speaks through`);
+    expect(personas.value).toEqual([{ id: `home`, capabilities: [] }]);
+
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    expect(save).not.toHaveBeenCalled();
 });
 
 // The chat rail's Edit persona links here naming one; the reader lands on it open, and closing it stays closed.
@@ -409,7 +479,7 @@ it(`lands on the persona a link names already open, once`, async () => {
     await nextTick();
     expect(text(el)).toContain(`Speaks through`);
 
-    rowFor(el, `work`).click();
+    tileFor(el, `work`).click();
     await nextTick();
     personas.value = [...personas.value];
     await nextTick();
@@ -450,6 +520,7 @@ it(`shows the name as text and turns it into a field only when clicked`, async (
     personas.value = [{ id: `work`, label: `Work`, capabilities: [`reddit-work`] }];
     const el = mount();
     expect(el.querySelector(`input[aria-label="Persona name"]`)).toBeNull();
+    await openPersona(el, `work`);
     nameControl(el, `Work`).click();
     await nextTick();
     expect(el.querySelector(`input[aria-label="Persona name"]`)).not.toBeNull();
@@ -459,6 +530,7 @@ it(`shows the name as text and turns it into a field only when clicked`, async (
 it(`renames a persona on Enter, keeping the rest of its persona`, async () => {
     personas.value = [{ id: `work`, label: `Work`, capabilities: [`reddit-work`, `x-company`] }];
     const el = mount();
+    await openPersona(el, `work`);
     nameControl(el, `Work`).click();
     await nextTick();
     const field = el.querySelector<HTMLInputElement>(`input[aria-label="Persona name"]`)!;
@@ -474,6 +546,7 @@ it(`renames a persona on Enter, keeping the rest of its persona`, async () => {
 it(`abandons a rename on Escape without writing`, async () => {
     personas.value = [{ id: `work`, label: `Work`, capabilities: [] }];
     const el = mount();
+    await openPersona(el, `work`);
     nameControl(el, `Work`).click();
     await nextTick();
     const field = el.querySelector<HTMLInputElement>(`input[aria-label="Persona name"]`)!;
@@ -513,7 +586,7 @@ it(`saves no powers block for a persona nobody has bounded`, async () => {
     expect(save.mock.calls[0]![0].workspace).toBeUndefined();
 });
 
-it(`shows how bounded a persona is on its row`, () => {
+it(`shows how bounded a persona is in its selected details`, async () => {
     personas.value = [
         {
             id: `visitor`,
@@ -521,7 +594,9 @@ it(`shows how bounded a persona is on its row`, () => {
             powers: { files: `read`, shell: false, code: false, web: false, browser: false, delegate: false, sandbox: false },
         },
     ];
-    expect(text(mount())).toContain(`Read-only`);
+    const el = mount();
+    await openPersona(el, `visitor`);
+    expect(text(el)).toContain(`Read-only`);
 });
 
 it(`refuses a new persona whose name is already taken`, async () => {
@@ -689,7 +764,10 @@ describe(`the extensions a persona gets`, () => {
         const el = mount();
         await openPowers(el);
         expect(chip(el, `acme.notes`)?.textContent?.replace(/\s+/g, ` `).trim()).toBe(`notes acme.notes`);
-        expect([chip(el, `acme.notes`)?.getAttribute(`aria-pressed`), chip(el, `acme.tasks`)?.getAttribute(`aria-pressed`)]).toEqual([`true`, `false`]);
+        expect([chip(el, `acme.notes`)?.getAttribute(`aria-pressed`), chip(el, `acme.tasks`)?.getAttribute(`aria-pressed`)]).toEqual([
+            `true`,
+            `false`,
+        ]);
         expect(chip(el, `acme.off`)).toBeUndefined();
 
         toggleSwitch(el, `Run commands`);

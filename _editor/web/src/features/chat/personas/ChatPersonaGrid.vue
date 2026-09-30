@@ -1,7 +1,7 @@
 <!-- The chat list's scope: Anyone, then everyone this sandbox can speak as, in a grid that holds still. Picking a tile narrows the lanes below to that persona's chats (usePersonaScope). -->
 <script setup lang="ts">
 import { personaBounds } from "@intentic/sandbox-contract";
-import { ContextMenu, FACE_SIZES, Icon, PersonaFace } from "@intentic/ui";
+import { ContextMenu, Icon, PersonaFace } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, nextTick, ref, useId } from "vue";
@@ -15,6 +15,7 @@ import SandboxOutdatedNotice from "../../sandbox/overview/version/SandboxOutdate
 import { useChat } from "../run/useChat";
 import { laneOfTab, tabsOfPersona } from "../tabs/tabs";
 import { injectChatRowActions } from "../tabs/useChatRowActions";
+import PersonaTile from "../../../components/PersonaTile.vue";
 import { usePersonaScope } from "./usePersonaScope";
 
 // WHO STAYS PUT, WHAT THEY SAY CHANGES: one tile per persona in personas.json's order whether it has chats or not, so
@@ -86,12 +87,24 @@ const HUDDLE_FACE = 40;
 const huddle = computed(() => personas.value.slice(0, 3).map((persona) => ({ id: persona.id, label: persona.label ?? persona.id })));
 const huddleSpot = (index: number, count: number): Record<string, string> => {
     const spots: readonly (readonly [number, number])[] =
-        count === 1 ? [[12, 12]] : count === 2 ? [[1, 6], [23, 18]] : [[0, 3], [24, 3], [12, 24]];
+        count === 1
+            ? [[12, 12]]
+            : count === 2
+              ? [
+                    [1, 6],
+                    [23, 18],
+                ]
+              : [
+                    [0, 3],
+                    [24, 3],
+                    [12, 24],
+                ];
     const [left, top] = spots[index]!;
     return { left: `${left}px`, top: `${top}px`, zIndex: `${index}` };
 };
 // The hover says what the tile holds, then what the persona may do.
-const tileTip = (tile: Tile): string | undefined => [tile.facts, tile.persona?.bounds].filter((line) => line !== undefined && line !== ``).join(`\n`) || undefined;
+const tileTip = (tile: Tile): string | undefined =>
+    [tile.facts, tile.persona?.bounds].filter((line) => line !== undefined && line !== ``).join(`\n`) || undefined;
 const isPicked = (tile: Tile): boolean => tile.persona?.id === scope.value?.id;
 const selected = computed(() => tiles.value.find(isPicked) ?? tiles.value[0]!);
 
@@ -136,7 +149,11 @@ const menuItems = computed<MenuItem[]>(() => {
     return [
         start,
         { separator: true },
-        { label: t(`chat.chatPersonaRail.closeFinishedOf`, { label: tile.label }), disabled: finished.size === 0, command: () => actions.closeSet(finished) },
+        {
+            label: t(`chat.chatPersonaRail.closeFinishedOf`, { label: tile.label }),
+            disabled: finished.size === 0,
+            command: () => actions.closeSet(finished),
+        },
         { label: t(`chat.chatPersonaRail.closeAllOf`, { label: tile.label }), disabled: all.size === 0, command: () => actions.closeSet(all) },
         {
             label: t(`chat.chatPersonaRail.archiveFinishedOf`, { label: tile.label }),
@@ -145,7 +162,11 @@ const menuItems = computed<MenuItem[]>(() => {
             command: () => void archive(archivable),
         },
         { separator: true },
-        { label: t(`chat.chatPersonaRail.editPersona`), icon: `cog`, command: () => void router.push({ path: `/sandbox/personas`, query: { open: persona } }) },
+        {
+            label: t(`chat.chatPersonaRail.editPersona`),
+            icon: `cog`,
+            command: () => void router.push({ path: `/sandbox/personas`, query: { open: persona } }),
+        },
         manage,
     ];
 });
@@ -203,11 +224,14 @@ defineExpose({ selectedTabId: computed(() => `${tabId(selected.value)}-name`) })
             class="grid max-h-[40vh] min-w-0 grid-cols-[repeat(auto-fit,minmax(4.5rem,1fr))] gap-1 overflow-y-auto"
             @keydown="onKey"
         >
-            <button
+            <PersonaTile
                 v-for="tile in tiles"
                 :id="tabId(tile)"
                 :key="tabId(tile)"
-                type="button"
+                :persona="tile.persona"
+                :label="tile.label"
+                :selected="tile === selected"
+                :name-id="`${tabId(tile)}-name`"
                 role="tab"
                 :aria-selected="tile === selected"
                 :aria-controls="props.controls"
@@ -215,16 +239,13 @@ defineExpose({ selectedTabId: computed(() => `${tabId(selected.value)}-name`) })
                 :aria-describedby="tile.facts === `` ? undefined : `${tabId(tile)}-facts`"
                 :tabindex="tile === selected ? 0 : -1"
                 v-tooltip.bottom="tileTip(tile)"
-                class="ui-row-select ui-row-select-horizontal group relative flex min-w-0 flex-col items-center gap-1 rounded-lg px-1 pb-1.5 pt-2.5"
-                :class="{ 'ui-row-select-on': tile === selected }"
                 @click="pick(tile.persona?.id)"
                 @contextmenu.prevent.stop="openMenu(tile, $event)"
             >
                 <!-- What needs you and what works ride on the face as badges, where a glance lands anyway; the chat count is the hover's. -->
-                <span class="relative shrink-0">
-                    <PersonaFace v-if="tile.persona !== undefined" :persona="tile.persona" :size="FACE_SIZES.card" />
+                <template v-if="tile.persona === undefined" #face>
                     <!-- Anyone is everyone here: a huddle of the first few companions beside it. -->
-                    <span v-else-if="huddle.length > 0" class="relative block h-16 w-16" aria-hidden="true">
+                    <span v-if="huddle.length > 0" class="relative block h-16 w-16" aria-hidden="true">
                         <PersonaFace
                             v-for="(face, index) in huddle"
                             :key="face.id"
@@ -238,6 +259,8 @@ defineExpose({ selectedTabId: computed(() => `${tabId(selected.value)}-name`) })
                     <span v-else class="flex h-16 w-16 items-center justify-center rounded-full bg-primary-600/15">
                         <Icon name="users" class="text-lg text-link" />
                     </span>
+                </template>
+                <template #badges>
                     <span
                         v-if="tile.needsYou > 0"
                         aria-hidden="true"
@@ -251,13 +274,7 @@ defineExpose({ selectedTabId: computed(() => `${tabId(selected.value)}-name`) })
                     >
                         <Icon name="spinner" spin class="text-2xs" />
                     </span>
-                </span>
-                <span
-                    :id="`${tabId(tile)}-name`"
-                    class="line-clamp-2 w-full min-w-0 break-words text-center text-xs font-medium leading-tight"
-                    :class="tile === selected ? 'text-content' : 'text-muted'"
-                    >{{ tile.label }}</span
-                >
+                </template>
                 <span v-if="tile.facts !== ``" :id="`${tabId(tile)}-facts`" class="sr-only">{{ tile.facts }}</span>
                 <!-- One press to start as anyone here, without picking them first: in the tile's corner, shown on hover. -->
                 <span
@@ -269,7 +286,7 @@ defineExpose({ selectedTabId: computed(() => `${tabId(selected.value)}-name`) })
                 >
                     <Icon name="plus" class="text-2xs" />
                 </span>
-            </button>
+            </PersonaTile>
         </div>
         <ContextMenu ref="menu" :model="menuItems" :min-width="13" @hide="menuTile = undefined" />
     </div>
