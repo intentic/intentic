@@ -189,7 +189,13 @@ const kindsOf = (area: (typeof areas.value)[number]) =>
         </Row>
         <!-- The one reassuring line here, and only where something drifted: on a card about features the sandbox
              simply lacks, "everything else lines up" is about the wrong set and contradicts the heading above it. -->
-        <RowNote v-if="daemonDrifted && !wholesaleNote && agreementLine" icon="check" tone="success">{{ agreementLine }}</RowNote>
+        <Row
+            v-if="daemonDrifted && !wholesaleNote && agreementLine"
+            icon="check"
+            tone="success"
+            :title="agreementLine.label"
+            :description="agreementLine.what"
+        />
         <RowNote v-if="wholesaleNote" icon="arrows-h" tone="warning">{{ wholesaleNote }}</RowNote>
 
         <!-- One row per part of the app, not per route: one shared piece of code reaches dozens of routes across

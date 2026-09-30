@@ -4790,7 +4790,8 @@
             "sandboxLabel": "Your sandbox",
             "sandboxWhat": "the machine running your code",
             "sandboxWhatOn": "the machine running your code, on {where}",
-            "agreement": "Everything else between them lines up."
+            "agreementLabel": "Everything else",
+            "agreementWhat": "works as usual: the rest of this page and your sandbox understand each other"
         },
         "useAgentMemory": {
             "couldntRead": "Couldn't read {file}.",

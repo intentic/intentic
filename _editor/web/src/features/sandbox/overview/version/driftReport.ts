@@ -209,4 +209,9 @@ export const sandboxParty = (where: string | undefined): DriftParty => ({
 
 // The only reassuring thing on the card, and worth saying: most of what these two do together is fine, so this is a
 // few features misbehaving rather than a broken sandbox. Silent when the two sides never compared enough to know.
-export const agreementLine = computed<string | undefined>(() => (comparedRouteCount.value === 0 ? undefined : t(`sandbox.driftReport.agreement`)));
+// A full row, not a one-line note: it answers the same question as the rows around it (which parts, and how they are).
+export const agreementLine = computed<{ label: string; what: string } | undefined>(() =>
+    comparedRouteCount.value === 0
+        ? undefined
+        : { label: t(`sandbox.driftReport.agreementLabel`), what: t(`sandbox.driftReport.agreementWhat`) },
+);

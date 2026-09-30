@@ -4626,7 +4626,8 @@
             "sandboxLabel": "Twój sandbox",
             "sandboxWhat": "maszyna, na której działa Twój kod",
             "sandboxWhatOn": "maszyna, na której działa Twój kod, na urządzeniu {where}",
-            "agreement": "Cała reszta między nimi się zgadza."
+            "agreementLabel": "Cała reszta",
+            "agreementWhat": "działa normalnie: pozostałe części tej strony i Twój sandbox dobrze się rozumieją"
         },
         "useAgentMemory": {
             "couldntRead": "Nie udało się odczytać pliku {file}.",
