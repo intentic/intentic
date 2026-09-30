@@ -457,7 +457,9 @@ it(`names a wait that has outlasted the busy threshold`, async () => {
     retrying(SANDBOX_BUSY_AFTER_MS + 1_000);
     await settle();
 
-    expect(statusRow()).toContain(`busy, catching up · Manage`);
+    // No diagnosis has seen this sandbox alive, so the wait is named as one: busy is only for a sandbox seen alive
+    // (availability.test.ts tells the two apart).
+    expect(statusRow()).toContain(`not responding · Manage`);
     expect(sendButton().disabled).toBe(true);
 });
 

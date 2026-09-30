@@ -68,6 +68,10 @@ const settingsPages = useSettingsRefusal(
 );
 const chip = computed(() => (props.agent === undefined ? props.view.chip : settingsChip(props.view.chip, props.agent, settingsPages.value)));
 
+// The unsent mark's words, read by the mark itself (UnsentMark): read here, in the #meta slot RailCard invokes, every
+// keystroke redrew the card and all it carries, which is the rail around the draft that chat-typing's budget keeps still.
+const unsentWords = (): string | undefined => draftPreview(props.conversation.draft.value);
+
 // The × and the pin sit inside the card's click target; stop propagation or the press also selects the row.
 // Spelled out per verb: `emit` is an overload set, and a union argument matches none of them.
 const act = (event: Event, verb: "close" | "keep"): void => {
@@ -139,7 +143,7 @@ const act = (event: Event, verb: "close" | "keep"): void => {
         <template v-if="props.view.meta || twinFact !== undefined" #meta>
             <UnsentMark
                 v-if="props.conversation.unsent.value"
-                :preview="draftPreview(props.conversation.draft.value)"
+                :preview="unsentWords"
                 :at="props.conversation.draftAt.value"
             />
             <!-- One glyph, no countdown: the rail says which chat is about to stop being cheap to answer, the board says for how long. -->

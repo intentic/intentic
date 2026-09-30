@@ -19,7 +19,7 @@ import { decideTurn, type TurnDecision } from "./turn-decision.js";
 import type { AdmittedTurnFacts, TurnFacts } from "./turn-facts.js";
 
 // decideTurn over facts stated as values: no services, no disk, no clock. Which reads a turn pays for is
-// turn-facts.test.ts's subject, and that planTurn joins the two up is turn-plan.test.ts's.
+// turn-facts.integration.test.ts's subject, and that planTurn joins the two up is turn-plan.test.ts's.
 
 // An unconfigured workspace: nothing installed, gated, declared or read, and the schema's own settings.
 const FACTS: AdmittedTurnFacts = {
@@ -247,7 +247,7 @@ test.each([
 });
 
 // what runs after the work lands: told to every runtime alike, isolated or not, whenever the facts carry the note (when a
-// turn owes it is turn-facts.test.ts's), and never past a card that dropped it
+// turn owes it is turn-facts.integration.test.ts's), and never past a card that dropped it
 
 // The note as gatherTurnFacts reads it for a turn that owes it, with the main tree passing.
 const LANDING_NOTE = LANDING_CHECKS_NOTE;

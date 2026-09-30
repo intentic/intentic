@@ -35,7 +35,7 @@ interface Held {
 
 // allow(module-state): the one outage being diagnosed, keyed by the sandbox and outage it describes
 const held = shallowRef<Held | undefined>(undefined);
-// allow(module-state): whether the loop is running, flipped by the liveness driver that owns the session
+// Whether the loop is running, flipped by the liveness driver that owns the session.
 let running = false;
 let inflight: Promise<void> | undefined;
 let lastProbeAt = 0;

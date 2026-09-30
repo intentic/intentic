@@ -5,10 +5,11 @@ import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
 import type { AgentSummary } from "@intentic/sandbox-contract";
 import { VueQueryPlugin } from "@tanstack/vue-query";
-import { type App, createApp, h, nextTick, ref } from "vue";
+import { t } from "@intentic/ui/i18n";
+import { type App, type ComponentPublicInstance, createApp, h, nextTick, ref } from "vue";
 import { setAgents } from "../../agents/fleet/useAgents-registry";
 import { useChat } from "../run/useChat";
-import { openAgentConversation } from "../panel/useChat-reveal";
+import { draftConversation, openAgentConversation, reveal } from "../panel/useChat-reveal";
 import { queryClient } from "../../../lib/queryPersistence";
 import { router } from "../../../router";
 import ChatTabList from "./ChatTabList.vue";
@@ -20,6 +21,8 @@ import { IconStub } from "@intentic/ui/testing";
 })();
 
 let app: App | undefined;
+// Re-renders by component name, the unit perf-browser's probe counts in.
+const updates = new Map<string, number>();
 // The list's own rename door, the one F2 reaches it by (ChatTabList.defineExpose).
 const list = ref<{ beginRename: (id: string) => void } | undefined>(undefined);
 
@@ -37,6 +40,15 @@ const mountList = async (): Promise<HTMLElement> => {
     app = createApp({ render: () => h(ChatTabList, { ref: list, onClose: (ids: ReadonlySet<string>) => useChat().closeTabs(ids) }) });
     app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
+    app.mixin({
+        updated(this: ComponentPublicInstance) {
+            const options = this.$options as { readonly __name?: string; readonly name?: string };
+            const name = options.__name ?? options.name;
+            if (name !== undefined) {
+                updates.set(name, (updates.get(name) ?? 0) + 1);
+            }
+        },
+    });
     app.use(router);
     app.use(VueQueryPlugin, { queryClient });
     app.mount(el);
@@ -47,6 +59,7 @@ const mountList = async (): Promise<HTMLElement> => {
 beforeEach(async () => {
     localStorage.clear();
     resetSandboxScope();
+    updates.clear();
     await nextTick();
 });
 
@@ -142,4 +155,31 @@ it(`keeps the field open while its row is on screen, roster frames and all`, asy
     await settle();
 
     expect(fields(el)).toEqual([`New agent`]);
+});
+
+// A keystroke in the composer redraws what shows the draft, not the rail around it: perf-browser's chat-typing budget
+// counts every render a key causes, and the unsent mark's words, read in the slot of the card that carries the mark,
+// put the whole card and everything on it on each key. Here beside the rename, the rail's other per-row state.
+it(`redraws the unsent mark on a keystroke, and not the rail card or row that carry it`, async () => {
+    const typed = useChat().active.value;
+    typed.title.value = `Provider usage limits · audit`;
+    const other = draftConversation();
+    reveal({ verb: `show`, entries: [other], focus: typed.conversationId, caret: false });
+    other.title.value = `Pipeline triggers · implement`;
+    other.draft.value = `kept`;
+    // Already unsent, so the mark is on the card before the first counted key: its arrival is the card's to draw.
+    typed.draft.value = `t`;
+    const el = await mountList();
+    updates.clear();
+
+    for (const key of `he plan looks right`) {
+        typed.draft.value += key;
+        await settle();
+    }
+
+    expect(updates.get(`RailCard`) ?? 0).toBe(0);
+    expect(updates.get(`ChatTabRow`) ?? 0).toBe(0);
+    // The words still follow the draft, to the last key: the mark reads them itself.
+    const mark = el.querySelector(`[data-chat-tab="${typed.conversationId}"] [aria-label^="${t(`common.unsentMark.notSent`)}"]`);
+    expect(mark?.getAttribute(`aria-label`)).toContain(`the plan looks right`);
 });
