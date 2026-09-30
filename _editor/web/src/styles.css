@@ -134,7 +134,7 @@
         cursor: pointer;
         border-color: var(--card-border);
         background-color: var(--card-fill);
-        --card-border: var(--color-line);
+        --card-border: transparent;
 /* The resting fill is the GROUND'S to decide, since only the ground knows whether the card would vanish into it; hover and selection override the fill outright. */
         --card-fill: var(--card-rest, var(--color-card));
         --card-accent: inset 0 0 #0000;
@@ -156,17 +156,15 @@
     @media (hover: hover) {
         .session-card:hover {
             color: var(--color-content);
-            --card-border: var(--color-line-strong);
             --card-fill: var(--color-overlay);
         }
     }
     .session-card:active {
         color: var(--color-content);
-        --card-border: var(--color-line-strong);
         --card-fill: var(--color-overlay);
         transition: none;
     }
-/* SELECTION IS THE FILL ALONE: a coloured edge, ring or lift read as too heavy. */
+/* SELECTION IS THE FILL AND A FAINT INSET TINT: a coloured edge or lift read as too heavy. */
     .session-card.session-card-on {
         color: var(--color-content);
         --card-fill: var(--color-overlay);
