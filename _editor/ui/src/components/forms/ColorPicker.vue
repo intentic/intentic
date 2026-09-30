@@ -6,6 +6,8 @@ import { computed } from "vue";
 
 const t = useT();
 
+const { size = `md` } = defineProps<{ size?: `sm` | `md` }>();
+
 /** The accent, as `#rrggbb`: always one of the swatches below. */
 const model = defineModel<string>({ required: true });
 
@@ -31,7 +33,12 @@ const presets = PRESETS.value.map((preset) => ({ label: preset.label, hex: accen
 
 <template>
     <!-- The swatches form one exclusive, keyboard-focusable choice. -->
-    <div role="radiogroup" :aria-label="t(`ui.colorPicker.accentColour`)" class="flex flex-wrap items-center gap-2.5">
+    <div
+        role="radiogroup"
+        :aria-label="t(`ui.colorPicker.accentColour`)"
+        class="flex flex-wrap items-center"
+        :class="size === `sm` ? `gap-1.5` : `gap-2.5`"
+    >
         <button
             v-for="preset in presets"
             :key="preset.label"
@@ -40,14 +47,17 @@ const presets = PRESETS.value.map((preset) => ({ label: preset.label, hex: accen
             :aria-checked="model === preset.hex"
             :aria-label="preset.label"
             v-tooltip.bottom="preset.label"
-            class="size-7 cursor-pointer rounded-full border transition-transform hover:scale-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60"
+            class="shrink-0 cursor-pointer rounded-full border transition-transform hover:scale-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60"
             :class="
-                model === preset.hex
-                    ? // A ring held OFF the swatch by the row's own background, rather than an outline drawn on
-                      // its edge: half these colours are pale and half are deep, and only a gap reads as
-                      // 'chosen' against both.
-                      `border-transparent ring-2 ring-content ring-offset-2 ring-offset-card`
-                    : `border-line`
+                [
+                    size === `sm` ? `size-6` : `size-7`,
+                    model === preset.hex
+                        ? // A ring held OFF the swatch by the row's own background, rather than an outline drawn on
+                          // its edge: half these colours are pale and half are deep, and only a gap reads as
+                          // 'chosen' against both.
+                          `border-transparent ring-2 ring-content ring-offset-2 ring-offset-card`
+                        : `border-line`,
+                ]
             "
             :style="{ background: preset.hex }"
             @click="model = preset.hex"

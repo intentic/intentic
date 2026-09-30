@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { type Persona } from "@intentic/sandbox-contract";
+import type { Persona } from "@intentic/sandbox-contract";
 import { Avatar, Button, ui, ConfirmDialog, Notice, type NoticeModel, PersonaFace, Row, RowGroup, RowNote, SkeletonRows } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import ToggleSwitch from "primevue/toggleswitch";
@@ -279,8 +279,8 @@ const confirmRemove = async (): Promise<void> => {
 </script>
 
 <template>
-    <div>
-        <RowGroup v-if="settings !== undefined && personas.length > 0" :label="t(`sandbox.sandboxPersonas.newChats`)" class="mb-5">
+    <div class="flex flex-col gap-6">
+        <RowGroup v-if="settings !== undefined && personas.length > 0" :label="t(`sandbox.sandboxPersonas.newChats`)">
             <Row
                 icon="users"
                 :title="t(`sandbox.sandboxPersonas.matchNewChatsTo`)"
@@ -292,7 +292,7 @@ const confirmRemove = async (): Promise<void> => {
             </Row>
         </RowGroup>
 
-        <Notice v-if="listNotice" :of="listNotice" class="mb-4" />
+        <Notice v-if="listNotice" :of="listNotice" />
         <!-- The real empty state must not show before we know whether personas exist; the list's shape stands in while loading. -->
         <!-- The outline is a <RowGroup> like the list itself, so it lands on the same tier as what it stands in for. -->
         <template v-if="isLoading">

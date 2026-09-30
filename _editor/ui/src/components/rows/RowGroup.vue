@@ -23,6 +23,8 @@ const { density = `compact` } = defineProps<{
     caption?: string;
     flat?: boolean;
     undivided?: boolean;
+    /** Equal heights for simple settings rows on desktop. Keep off groups with drawers or below-row content. */
+    equalRows?: boolean;
     /** Leave alone: a group is a list and a list is `compact`. See the note above before overriding. */
     density?: RowDensity;
 }>();
@@ -49,6 +51,7 @@ provideRowDensity(computed(() => density));
             :class="[
                 undivided === true ? `` : `divide-y divide-line-subtle`,
                 flat === true ? `` : `overflow-hidden rounded-xl border border-line-subtle bg-card`,
+                equalRows ? `grid md:auto-rows-fr *:flex *:flex-col *:justify-center` : ``,
             ]"
         >
             <slot />

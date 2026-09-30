@@ -79,7 +79,7 @@ const setAutomationFailureLimit = (event: Event): void => {
 </script>
 
 <template>
-    <RowGroup :label="t(`sandbox.agentRecovery.turnBreaks`)">
+    <RowGroup :label="t(`sandbox.agentRecovery.turnBreaks`)" equal-rows>
         <!-- The default for every conversation; a chat's own control writes an override for that chat alone. -->
         <Row icon="clock" :title="breakLabel(`limit`)" :description="t(`sandbox.agentRecovery.limitPolicyNote`)">
             <template #control>
@@ -153,7 +153,7 @@ const setAutomationFailureLimit = (event: Event): void => {
         </Row>
     </RowGroup>
     <!-- Off by default: each refresh spends the account's allowance on a chat nobody is using yet. -->
-    <RowGroup :label="t(`sandbox.agentRecovery.keepWarmGroup`)">
+    <RowGroup :label="t(`sandbox.agentRecovery.keepWarmGroup`)" equal-rows>
         <Row icon="sun" :title="t(`sandbox.agentRecovery.keepWarm`)" :description="t(`sandbox.agentRecovery.keepWarmNote`)">
             <template #control>
                 <ToggleSwitch

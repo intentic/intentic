@@ -109,9 +109,9 @@ const expandable = (item: EnvironmentItem): boolean =>
 </script>
 
 <template>
-    <!-- `gap-5` separates the sections, since none of them draws its own box any more. -->
+    <!-- Section spacing matches the hub pages, including the outline while the inventory loads. -->
     <!-- `@container`: what fits on a row is a fact about this list's width, and the hub's body is a pane the docked chat can leave far narrower than the window. -->
-    <div class="@container flex flex-col gap-5">
+    <div class="@container flex flex-col gap-6">
         <!-- `flat`: this list already sits inside the Environment group's own frame. -->
         <RowGroup v-for="group in rowGroups" :key="group.origin" flat undivided :label="group.label">
             <!-- Expandable rows keep their disclosure control in the lead slot. -->
@@ -255,7 +255,7 @@ const expandable = (item: EnvironmentItem): boolean =>
         </RowGroup>
 
         <!-- Loading mirrors the loaded sections and staples strip. -->
-        <div v-if="loading && outline" class="flex flex-col gap-5" role="status" aria-busy="true">
+        <div v-if="loading && outline" class="flex flex-col gap-6" role="status" aria-busy="true">
             <span class="sr-only">{{ t(`sandbox.environmentContents.checkingInstalledVersions`) }}</span>
             <!-- Two sections, not three: a sandbox may have no capability group, and an extra one would over-promise height. -->
             <RowGroup v-for="(section, index) in [4, 3]" :key="index" flat undivided>

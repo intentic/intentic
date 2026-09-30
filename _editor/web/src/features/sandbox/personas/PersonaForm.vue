@@ -168,7 +168,7 @@ const configure = (pin: ModelPin): void => {
 
 <template>
     <!-- The form spans the persona row; text fields keep their own reading width. -->
-    <div class="flex max-w-4xl flex-col gap-5">
+    <div class="flex max-w-4xl flex-col gap-6">
         <!-- Section pills rely on the surrounding field frame. -->
         <SegmentedControl v-model="section" :options="SECTIONS" :aria-label="t(`sandbox.personaForm.whatToChangeAbout`)" />
 

@@ -161,7 +161,7 @@ const created = async (extension: { id: string; dir: string; wish: string }): Pr
 </script>
 
 <template>
-    <div class="flex flex-col gap-5">
+    <div class="flex flex-col gap-6">
         <NoticeStack :of="[viewNotice, staleNotice]" />
 
         <!-- The section's instrument, not either half's: pills lead, the search box takes the row's slack, and filters ride #controls. -->

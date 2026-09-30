@@ -30,6 +30,8 @@ flowchart LR
 - **Styling.** `src/styles/index.css` is the one stylesheet import. `theme.ts` points PrimeVue's `--p-*` tokens at
   the CSS variables behind the Tailwind utilities, so light and dark switch at runtime on `[data-mode="dark"]`.
   Class recipes live in `ui` (`src/lib/ui.ts`) and merge through `tailwind-merge`, so the caller's classes win.
+  `RowGroup equal-rows` aligns simple settings rows to the tallest row on desktop; leave it off groups with drawers
+  or below-row content. On phones, rows grow with their own content. `ColorPicker size="sm"` fits a settings row.
 - **Icons.** Every glyph is a native SVG drawing in `src/icons/`. The [patches](patches) route PrimeVue, Mermaid and
   Monaco icons to them, and a suite in web keeps third-party icon packages out of the lockfile.
   Attention and warnings use `exclamation-circle`; legacy `exclamation-triangle` and `exclamation` names resolve

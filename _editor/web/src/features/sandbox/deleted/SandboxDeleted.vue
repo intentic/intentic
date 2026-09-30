@@ -33,7 +33,7 @@ const restore = async (trashId: string): Promise<void> => {
 </script>
 
 <template>
-    <div class="flex flex-col gap-4">
+    <div class="flex flex-col gap-6">
         <Notice v-if="notice" :of="notice" />
 
         <RowGroup v-if="trash.deleted.value === undefined && trash.readError.value === undefined" :label="t(`sandbox.words.recentlyDeleted`)">
@@ -58,6 +58,7 @@ const restore = async (trashId: string): Promise<void> => {
             :label="t(`sandbox.words.recentlyDeleted`)"
             :count="trash.recoverable.value.length"
             :caption="t(`sandbox.sandboxDeleted.keptForDays`, { count: RECOVERY_DAYS }, RECOVERY_DAYS)"
+            equal-rows
         >
             <Row
                 v-for="row in trash.recoverable.value"

@@ -154,7 +154,7 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
         </RowGroup>
 
         <!-- Look: whole-workspace appearance choices. -->
-        <RowGroup :label="t(`settings.appearance.look.group`)">
+        <RowGroup :label="t(`settings.appearance.look.group`)" equal-rows>
             <!-- First in the group: it decides what every other row on this page is written in. -->
             <Row icon="globe" :title="t(`settings.appearance.look.language`)" :description="t(`settings.appearance.look.languageHint`)">
                 <template #control>
@@ -184,7 +184,7 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
             <!-- wide-control lets this wrap to a second line in a narrow pane rather than stretch the row. -->
             <Row icon="palette" :title="t(`settings.appearance.look.colour`)" wide-control>
                 <template #control>
-                    <ColorPicker :model-value="accent" class="justify-end" @update:model-value="setAccent" />
+                    <ColorPicker :model-value="accent" size="sm" class="justify-end" @update:model-value="setAccent" />
                 </template>
             </Row>
             <!-- Above the rail row: this one moves the whole workspace, that one moves a column of it. -->
@@ -207,7 +207,7 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
 
         <!-- File tree: the explorer's look, with its live preview flush under the row (no boxed inset). -->
         <RowGroup :label="t(`settings.appearance.explorer.group`)">
-            <Row icon="sitemap" :title="t(`settings.appearance.explorer.title`)">
+            <Row icon="sitemap" :title="t(`settings.appearance.explorer.title`)" indent>
                 <template #control>
                     <SegmentedControl
                         :model-value="explorerStyle"
@@ -216,7 +216,7 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
                     />
                 </template>
                 <template #below>
-                    <div class="flex flex-col gap-0.5 pl-[1.85rem]">
+                    <div class="flex flex-col gap-0.5">
                         <div v-for="entry in explorerPreview" :key="entry.name" class="flex items-center gap-1.5 py-0.5 text-[0.8125rem]">
                             <span class="flex shrink-0 items-center justify-center" :class="treatPreview(entry).slotClass">
                                 <Icon :name="treatPreview(entry).icon" :class="[treatPreview(entry).sizeClass, treatPreview(entry).colorClass]" />

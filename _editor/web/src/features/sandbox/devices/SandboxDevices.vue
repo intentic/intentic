@@ -93,7 +93,7 @@ watch(
 </script>
 
 <template>
-    <div class="flex flex-col gap-4">
+    <div class="flex flex-col gap-6">
         <!-- Setup faults qualify both device and sandbox screens. -->
         <ContainerHealthCard />
 

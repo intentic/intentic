@@ -25,7 +25,7 @@ const outline = useSandboxOutline(reading);
 </script>
 
 <template>
-    <div class="flex flex-col gap-4">
+    <div class="flex flex-col gap-6">
         <EnvironmentCard />
 
         <div v-if="outline" role="status" aria-busy="true" class="flex flex-col gap-3 rounded-lg border border-line bg-card p-4">

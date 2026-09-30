@@ -180,7 +180,7 @@ const confirmRemove = async (): Promise<void> => {
 </script>
 
 <template>
-    <div class="flex flex-col gap-5">
+    <div class="flex flex-col gap-6">
         <!-- Written in this workspace and not approved in its current shape: nothing of it runs until the yes, so it leads. -->
         <RowGroup
             v-if="waiting.length > 0"

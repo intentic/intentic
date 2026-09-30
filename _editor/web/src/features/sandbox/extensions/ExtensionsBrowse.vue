@@ -215,7 +215,7 @@ const emptyNote = computed<string | undefined>(() => {
 </script>
 
 <template>
-    <div class="flex flex-col gap-5">
+    <div class="flex flex-col gap-6">
         <!-- Where the list came from, stated rather than asked for; changing it is one click, not a blocking field. -->
         <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs">
             <span class="text-subtle">{{ t(`sandbox.words.source`) }}</span>

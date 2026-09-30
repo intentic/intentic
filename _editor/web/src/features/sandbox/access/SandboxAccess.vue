@@ -669,7 +669,7 @@ const revoke = async (target: string): Promise<void> => {
         </RowGroup>
 
         <!-- Machine access other than sign-ins and tokens is listed separately. -->
-        <RowGroup v-if="isOwner" :label="t(`sandbox.sandboxAccess.otherWaysIn`)">
+        <RowGroup v-if="isOwner" :label="t(`sandbox.sandboxAccess.otherWaysIn`)" equal-rows>
             <div v-if="inventoryLoading" role="status" aria-busy="true"><SkeletonRows :rows="3" /></div>
             <template v-else>
                 <Row icon="bolt" :title="t(`sandbox.sandboxAccess.webhooks`)" :description="webhooksLine" />

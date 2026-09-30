@@ -166,7 +166,7 @@ const pushToCi = async (): Promise<void> => {
 </script>
 
 <template>
-    <div class="flex flex-col gap-5">
+    <div class="flex flex-col gap-6">
         <NoticeStack :of="[pushError]" />
 
         <!-- Content waits for inventory; the outline waits for the reveal. -->

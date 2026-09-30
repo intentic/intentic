@@ -59,7 +59,7 @@ const confirmDelete = async (): Promise<void> => {
 
 <template>
     <div class="flex flex-col gap-6">
-        <RowGroup :label="t(`settings.settingsData.dataPrivacy`)">
+        <RowGroup :label="t(`settings.settingsData.dataPrivacy`)" :equal-rows="!confirmingDelete && !deleteError">
             <Row icon="download" :title="t(`settings.settingsData.exportMyData`)">
                 <template #control>
                     <Button :label="t(`settings.settingsData.export`)" severity="secondary" size="small" :loading="exporting" @click="exportData" />

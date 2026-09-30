@@ -258,7 +258,7 @@ const HOSTED_SETUP = { name: `setup`, query: { machine: `hosted` } } as const;
 </script>
 
 <template>
-    <div class="@container flex flex-col gap-4">
+    <div class="@container flex flex-col gap-6">
         <!-- Stripe's own page, standing open in the reader's browser because this window has none of its own to put it
              in. Checkout has a card of its own below, since that one must not be startable twice. -->
         <Notice

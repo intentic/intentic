@@ -70,7 +70,7 @@ const status = computed(() => {
 <template>
     <div class="flex flex-col gap-6">
         <div class="flex flex-col gap-2">
-            <RowGroup :label="t(`settings.settingsNotifications.pushNotifications`)">
+            <RowGroup :label="t(`settings.settingsNotifications.pushNotifications`)" equal-rows>
                 <Row icon="bolt" :title="t(`settings.settingsNotifications.notifyDevice`)" :description="status">
                     <template #control><ToggleSwitch :model-value="enabled" :disabled="!canToggle" @update:model-value="toggle" /></template>
                 </Row>
@@ -82,10 +82,9 @@ const status = computed(() => {
                     </template>
                 </Row>
             </RowGroup>
+            <p v-if="error" class="text-xs text-danger">{{ error }}</p>
+            <p v-else-if="sent" class="text-xs text-muted">{{ sent }}</p>
         </div>
-
-        <p v-if="error" class="text-xs text-danger">{{ error }}</p>
-        <p v-else-if="sent" class="text-xs text-muted">{{ sent }}</p>
 
         <RowGroup :label="t(`settings.settingsNotifications.browserTab`)">
             <Row
@@ -99,7 +98,7 @@ const status = computed(() => {
         </RowGroup>
 
         <div class="flex flex-col gap-2">
-            <RowGroup :label="t(`settings.settingsNotifications.sounds`)">
+            <RowGroup :label="t(`settings.settingsNotifications.sounds`)" equal-rows>
                 <Row
                     as="label"
                     icon="exclamation-circle"
