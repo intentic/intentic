@@ -75,16 +75,17 @@ const menu = (event: MouseEvent): void => {
             <span class="min-w-0 flex-1 truncate text-xs" :class="look.quiet ? 'text-muted' : 'text-content'" v-tooltip.top="look.titleHint">
                 <span v-for="(run, at) in titleRuns" :key="at" :class="run.hit ? 'rounded-sm bg-primary-600/30 text-content' : ''">{{ run.text }}</span>
             </span>
-            <!-- Right of the title when the row has room for both; the title still gives way first. -->
+            <!-- Right of the title when the row has room for both; the title still gives way first. The model, the ladder and
+                 the clock each keep a fixed width, so the rows of a tray read as columns rather than each hugging its own. -->
             <span v-if="look.run !== undefined" class="hidden shrink-0 items-center text-2xs text-subtle @md:flex">
-                <RunFacts :run="look.run" />
+                <RunFacts :run="look.run" columns />
             </span>
             <!-- The card's own pill and tone for an ask, so the reader meets the same word here as on any card that asks. -->
             <span v-if="look.ask !== undefined" class="ui-status-pill shrink-0 bg-warning/15 text-2xs font-semibold text-warning">{{ look.ask }}</span>
-            <span v-if="look.working && look.since !== undefined" v-tooltip.top="look.doing" class="shrink-0 text-2xs font-medium tabular-nums text-link">{{
+            <span v-if="look.working && look.since !== undefined" v-tooltip.top="look.doing" class="min-w-12 shrink-0 text-right text-2xs font-medium tabular-nums text-link">{{
                 formatElapsed(look.since, now)
             }}</span>
-            <span v-else-if="look.ask === undefined && look.at > 0" class="shrink-0 text-2xs text-subtle">{{ relativeTime(look.at) }}</span>
+            <span v-else-if="look.ask === undefined && look.at > 0" class="min-w-12 shrink-0 text-right text-2xs text-subtle">{{ relativeTime(look.at) }}</span>
         </span>
         <!-- Under the title on a narrow row, where the title keeps the first line. -->
         <span v-if="look.run !== undefined" class="flex w-full min-w-0 items-center gap-1.5 pl-5 text-2xs text-subtle @md:hidden">

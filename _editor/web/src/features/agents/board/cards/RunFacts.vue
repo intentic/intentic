@@ -15,6 +15,9 @@ const props = defineProps<{
     run: RunLook;
     // The bar's chips, rather than the row's run of text.
     chips?: boolean;
+    // Fixed widths for the model and the ladder, so rows stacked in a tray line them up as columns whatever the model's
+    // name or however many rungs its provider's ladder has (at most five; a ladder-less tier's word is cut to fit).
+    columns?: boolean;
 }>();
 
 const t = useT();
@@ -31,7 +34,7 @@ const pill = computed(() => (props.chips === true ? `ui-status-pill bg-content/5
     <span class="flex min-w-0 items-center" :class="chips ? 'flex-wrap gap-1.5' : 'gap-1.5'">
         <span
             class="flex min-w-0 items-center gap-1 text-2xs"
-            :class="pill"
+            :class="[pill, columns ? 'w-24 shrink-0' : '']"
             :aria-label="`${t(`shared.model`)}: ${providerLabel(run.provider)} ${run.modelId}`"
         >
             <!-- The provider's own mark on the chip, so the bar needs no chip naming the provider as well. -->
@@ -41,9 +44,9 @@ const pill = computed(() => (props.chips === true ? `ui-status-pill bg-content/5
         <span
             v-if="run.effort !== undefined"
             class="flex shrink-0 items-center gap-1 text-2xs"
-            :class="pill"
+            :class="[pill, columns ? 'w-5' : '']"
             :aria-label="`${t(`shared.effort`)}: ${run.effort.label}`"
-            v-tooltip.top="rungs.length > 0 ? run.effort.label : undefined"
+            v-tooltip.top="rungs.length > 0 || columns ? run.effort.label : undefined"
         >
             <!-- The composer's ladder as a picture, small enough for a line of text: the same rungs, lit the same way. -->
             <span v-if="rungs.length > 0" class="flex items-end gap-px" aria-hidden="true">
@@ -55,7 +58,7 @@ const pill = computed(() => (props.chips === true ? `ui-status-pill bg-content/5
                     :style="fill === undefined ? undefined : { backgroundColor: fill }"
                 ></span>
             </span>
-            <span v-if="rungs.length === 0" aria-hidden="true">{{ run.effort.label }}</span>
+            <span v-if="rungs.length === 0" class="min-w-0 truncate" aria-hidden="true">{{ run.effort.label }}</span>
         </span>
     </span>
 </template>
