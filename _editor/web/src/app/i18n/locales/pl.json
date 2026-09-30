@@ -128,7 +128,6 @@
             "manifestAdds": "dodaje {names}",
             "markReviewed": "Oznacz przejrzane",
             "markReviewed2": "Oznacz {label} jako przejrzane",
-            "moreCommits": "+{count} kolejny | +{count} kolejne | +{count} kolejnych",
             "nextFile": "Następny plik",
             "noBranchAtAll": "żadnej gałęzi",
             "notLanded": "niescalone",

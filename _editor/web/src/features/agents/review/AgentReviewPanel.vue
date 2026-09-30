@@ -42,7 +42,7 @@ import ChangeRowName from "../../../components/ChangeRowName.vue";
 import ModuleLabel from "../../../components/ModuleLabel.vue";
 import AgentConflictReport from "./AgentConflictReport.vue";
 import AgentScratchReport from "./AgentScratchReport.vue";
-import AgentHistoryStrip from "./AgentHistoryStrip.vue";
+import AgentHistoryChip from "./AgentHistoryChip.vue";
 import AgentReviewOutline from "./AgentReviewOutline.vue";
 import DiffSkeleton from "../../workspace/viewers/DiffSkeleton.vue";
 import ReviewGroupCheck from "./ReviewGroupCheck.vue";
@@ -701,16 +701,6 @@ const seamWidth = computed<number>({
             </p>
         </div>
 
-        <!-- Where the committed work went, shown only while `history` is the active filter, since it isn't what the reader is doing otherwise. One line; the rest opens over the list on hover. -->
-        <AgentHistoryStrip
-            v-if="filter === 'history' && history.commits.value.length > 0"
-            :commits="history.commits.value"
-            :unaccounted="history.unaccounted.value"
-            :remote-name="remoteName"
-            :graphs="graphs"
-            @open-graph="openGitHistory"
-        />
-
         <!-- History loads only once absorbed work is reported, skipping a flash of "nothing here" first. -->
         <template v-if="waiting">
             <AgentReviewOutline v-if="outline" :label="waitLabel" />
@@ -752,6 +742,15 @@ const seamWidth = computed<number>({
                         <span class="font-medium text-content">{{ bodyFiles.length }}</span> {{ t(`agents.agentReviewPanel.file`)
                         }}{{ bodyFiles.length === 1 ? "" : "s" }}
                     </span>
+                    <!-- Where the committed work went: a pill in this header rather than a row of its own, shown only while `history` is what the list is showing. The rest opens beside the list on hover. -->
+                    <AgentHistoryChip
+                        v-if="filter === 'history' && history.commits.value.length > 0"
+                        :commits="history.commits.value"
+                        :unaccounted="history.unaccounted.value"
+                        :remote-name="remoteName"
+                        :graphs="graphs"
+                        @open-graph="openGitHistory"
+                    />
                     <Icon v-if="changes.fetching.value" name="spinner" class="shrink-0 text-2xs text-muted" spin />
                     <span class="flex-1"></span>
                     <!-- Totals for the whole review; the code/tests split is now carried by the filter options above instead. -->

@@ -4,9 +4,9 @@ import { useT } from "@intentic/ui/i18n";
 import { computed, onBeforeUnmount, ref } from "vue";
 import type { AgentHistoryEntry } from "../fleet/useAgentHistory";
 
-// Where the agent's committed work went, as one line of plain text over the review list: no box of its own, since the
-// review around it is busy enough. The explanation, the full commit list and the way into the graph wait in a card
-// that opens beside the line on hover, focus or tap. The card is teleported to escape the panel's clipping, and is
+// Where the agent's committed work went, as the same small commit pill the diff toolbar shows, sitting in the file
+// list's header rather than taking a row of its own. The explanation, the full commit list and the way into the graph
+// wait in a card that opens to the right of the list on hover, focus or tap. The card is teleported to escape the panel's clipping, and is
 // interactive (unlike a tooltip) so a commit in it can be clicked.
 
 const {
@@ -26,6 +26,8 @@ const t = useT();
 
 const lead = computed(() => commits[0]);
 const whose = computed(() => (remoteName === undefined ? `your` : `${remoteName}'s`));
+// The pill carries only the SHA, so the card says what it is.
+const heading = computed(() => `${t(`agents.agentReviewPanel.in`)} ${whose.value} ${t(`agents.agentReviewPanel.history`)}`);
 
 const WIDTH = 384;
 const GAP = 8;
@@ -33,8 +35,8 @@ const trigger = ref<HTMLElement | null>(null);
 const card = ref<HTMLElement | null>(null);
 const placement = ref<{ left: number; top: number; maxHeight: number }>();
 
-// Right of the line first, since the review list and diff lie that way; left when a panel sits at the window's right
-// edge; under the line when neither side has room (a phone).
+// Right of the list the pill heads (the diff lies that way, and the list's rows stay readable), then left of it for
+// a panel at the window's right edge, then under the pill when neither side has room (a phone).
 const place = (): void => {
     const el = trigger.value;
     if (el === null) {
@@ -42,19 +44,20 @@ const place = (): void => {
     }
     const win = el.ownerDocument.defaultView ?? globalThis;
     const rect = el.getBoundingClientRect();
+    const column = el.closest(`aside`)?.getBoundingClientRect() ?? rect;
     const top = Math.max(GAP, rect.top - 4);
-    if (win.innerWidth - rect.right - GAP * 2 >= WIDTH) {
-        placement.value = { left: rect.right + GAP, top, maxHeight: win.innerHeight - top - GAP };
-    } else if (rect.left - GAP * 2 >= WIDTH) {
-        placement.value = { left: rect.left - GAP - WIDTH, top, maxHeight: win.innerHeight - top - GAP };
+    if (win.innerWidth - column.right - GAP * 2 >= WIDTH) {
+        placement.value = { left: column.right + GAP, top, maxHeight: win.innerHeight - top - GAP };
+    } else if (column.left - GAP * 2 >= WIDTH) {
+        placement.value = { left: column.left - GAP - WIDTH, top, maxHeight: win.innerHeight - top - GAP };
     } else {
         const below = rect.bottom + GAP;
         placement.value = { left: Math.max(GAP, Math.min(rect.left, win.innerWidth - WIDTH - GAP)), top: below, maxHeight: win.innerHeight - below - GAP };
     }
 };
 
-// Short delays either way: opening on a pointer merely crossing the line would flash the card, and closing the instant
-// the pointer leaves would make the gap between line and card impassable.
+// Short delays either way: opening on a pointer merely crossing the pill would flash the card, and closing the instant
+// the pointer leaves gives it time to reach the card beside the list.
 const OPEN_DELAY = 150;
 const CLOSE_DELAY = 200;
 let timer: ReturnType<typeof setTimeout> | undefined;
@@ -71,7 +74,7 @@ const settle = (next: boolean, delay: number): void => {
     timer = setTimeout(next ? show : close, delay);
 };
 const toggle = (): void => (placement.value === undefined ? show() : close());
-// Keyboard reach: tabbing onto the line opens the card, tabbing out of both the line and the card closes it.
+// Keyboard reach: tabbing onto the pill opens the card, tabbing out of both the line and the card closes it.
 const onFocusOut = (event: FocusEvent): void => {
     const into = event.relatedTarget as Node | null;
     if (into === null || !(trigger.value?.contains(into) || card.value?.contains(into))) {
@@ -82,12 +85,13 @@ onBeforeUnmount(close);
 </script>
 
 <template>
-    <div class="mx-2 mt-1.5 flex shrink-0">
+    <span class="inline-flex shrink-0">
         <button
             ref="trigger"
             type="button"
-            class="group inline-flex min-w-0 max-w-full items-center gap-1.5 rounded px-1 py-0.5 text-left text-2xs text-muted transition-colors hover:text-content"
+            class="inline-flex shrink-0 items-center gap-1 ui-status-pill bg-success/15 font-mono text-2xs font-medium text-success transition-colors hover:bg-success/25"
             :aria-expanded="placement !== undefined"
+            :aria-label="heading"
             @mouseenter="settle(true, OPEN_DELAY)"
             @mouseleave="settle(false, CLOSE_DELAY)"
             @focusin="show"
@@ -95,18 +99,8 @@ onBeforeUnmount(close);
             @keydown.esc="close"
             @click="toggle"
         >
-            <Icon name="check" class="shrink-0 text-2xs text-success" />
-            <span class="shrink-0 underline decoration-dotted decoration-from-font underline-offset-2">
-                {{ t(`agents.agentReviewPanel.in`) }} {{ whose }} {{ t(`agents.agentReviewPanel.history`) }}
-            </span>
-            <template v-if="lead">
-                <span class="shrink-0 text-subtle">·</span>
-                <span class="shrink-0 font-mono text-subtle">{{ lead.short }}</span>
-                <span class="min-w-0 truncate">{{ lead.subject }}</span>
-            </template>
-            <span v-if="commits.length > 1" class="shrink-0 text-subtle">{{
-                t(`agents.agentReviewPanel.moreCommits`, { count: commits.length - 1 }, commits.length - 1)
-            }}</span>
+            <Icon name="check" class="text-2xs" />{{ lead?.short
+            }}<span v-if="commits.length > 1" class="font-sans font-normal opacity-80">+{{ commits.length - 1 }}</span>
         </button>
 
         <Teleport to="body">
@@ -120,7 +114,10 @@ onBeforeUnmount(close);
                 @focusout="onFocusOut"
                 @keydown.esc="close"
             >
-                <p class="text-2xs leading-relaxed text-muted">{{ t(`agents.agentReviewPanel.committedWorkNotDifference`) }}</p>
+                <div class="flex flex-col gap-1">
+                    <p class="inline-flex items-center gap-1 text-xs font-medium text-success"><Icon name="check" class="text-2xs" />{{ heading }}</p>
+                    <p class="text-2xs leading-relaxed text-muted">{{ t(`agents.agentReviewPanel.committedWorkNotDifference`) }}</p>
+                </div>
                 <ul class="-mx-1.5 flex flex-col gap-0.5">
                     <li v-for="commit in commits" :key="commit.sha">
                         <button
@@ -155,5 +152,5 @@ onBeforeUnmount(close);
                 </p>
             </div>
         </Teleport>
-    </div>
+    </span>
 </template>

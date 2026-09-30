@@ -120,7 +120,6 @@
             "manifestAdds": "ajoute {names}",
             "markReviewed": "Marquer relu",
             "markReviewed2": "Marquer {label} comme relu",
-            "moreCommits": "+{count} autre | +{count} autres",
             "nextFile": "Fichier suivant",
             "noBranchAtAll": "aucune branche",
             "notLanded": "non intégré",

@@ -119,7 +119,6 @@
             "manifestAdds": "fügt {names} hinzu",
             "markReviewed": "Als geprüft markieren",
             "markReviewed2": "{label} als geprüft markieren",
-            "moreCommits": "+{count} weiterer | +{count} weitere",
             "nextFile": "Nächste Datei",
             "noBranchAtAll": "gar keinem Branch",
             "notLanded": "nicht gelandet",

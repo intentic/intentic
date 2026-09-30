@@ -122,7 +122,6 @@
             "manifestAdds": "añade {names}",
             "markReviewed": "Marcar revisado",
             "markReviewed2": "Marcar {label} como revisado",
-            "moreCommits": "+{count} más | +{count} más",
             "nextFile": "Archivo siguiente",
             "noBranchAtAll": "ninguna rama",
             "notLanded": "sin integrar",

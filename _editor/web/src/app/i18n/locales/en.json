@@ -129,7 +129,6 @@
             "manifestAdds": "adds {names}",
             "markReviewed": "Mark reviewed",
             "markReviewed2": "Mark {label} as reviewed",
-            "moreCommits": "+{count} more | +{count} more",
             "nextFile": "Next file",
             "notLanded": "not landed",
             "notLanded2": "Not landed {count}",

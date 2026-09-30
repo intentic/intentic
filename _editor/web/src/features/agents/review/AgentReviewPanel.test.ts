@@ -198,10 +198,13 @@ it(`shows work the user has committed, under the commit that carries it`, async 
         },
     );
 
-    // The commit is named, replacing "somewhere in your history" with a place to actually look.
+    // The commit is named, replacing "somewhere in your history" with a place to actually look: its SHA on the
+    // header pill, its subject and size in the card the pill opens.
     expect(el.textContent).toContain(`a3f9c21`);
-    expect(el.textContent).toContain(`fix: tighten the land anchor`);
-    expect(el.textContent).toContain(`2 files`);
+    el.querySelector<HTMLButtonElement>(`button[aria-expanded]`)?.click();
+    await nextTick();
+    expect(document.body.textContent).toContain(`fix: tighten the land anchor`);
+    expect(document.body.textContent).toContain(`Radarsu · Aug 30 · 2 files`);
     // And the work itself is on screen as rows, not merely described.
     expect(rowNames(el).toSorted()).toEqual([`config.ts`, `session.ts`]);
     // Panel opens standing in the committed work; `All 0` isn't offered over nothing left to be all of, so with one
