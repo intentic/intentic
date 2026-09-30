@@ -73,15 +73,15 @@ const pill = (host: HTMLElement, label: string): HTMLElement =>
 test("opens on the setting's own default", () => {
     const host = mount();
     expect(SandboxSettingsSchema.parse({}).commandJudge).toBe(`on`);
-    expect(host.textContent).toContain(`The verdict decides`);
+    expect(host.textContent).not.toContain(`The verdict decides`);
 });
 
-test("moving the switch writes the mode and says what that mode does", async () => {
+test("moving the switch writes the mode", async () => {
     const host = mount();
     pill(host, `Watch`).click();
     await nextTick();
     expect(patch).toHaveBeenCalledWith({ commandJudge: `watch` });
-    expect(host.textContent).toContain(`nothing is ever held`);
+    expect(host.textContent).not.toContain(`nothing is ever held`);
 });
 
 // Which model applies the policy: the account a verdict is billed to, drawn from modelRoles.
@@ -120,12 +120,12 @@ test("reads the safety-judge list rather than another job's", async () => {
     expect(host.textContent).not.toContain(`GPT 5.6 Luna`);
 });
 
-test("names no model in use while the judge is off", async () => {
+test("names no model while the judge is off", async () => {
     settings.value = { ...settings.value, commandJudge: `off` };
     const host = mount();
     await nextTick();
 
-    expect(host.textContent).toContain(`no model is in use`);
+    expect(host.textContent).not.toContain(`no model is in use`);
     expect(host.textContent).not.toContain(`Judged by`);
 });
 

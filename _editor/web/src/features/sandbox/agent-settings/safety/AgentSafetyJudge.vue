@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, Row, RowGroup, RowNote, SegmentedControl } from "@intentic/ui";
+import { Button, Row, RowGroup, SegmentedControl } from "@intentic/ui";
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
 import { modelChoiceLabel } from "../../../chat/models/modelPins";
@@ -38,19 +38,6 @@ const judgeChain = computed<readonly string[]>(() => judge.chain.value.map(model
                     @update:model-value="(commandJudge: string) => patch({ commandJudge: commandJudge as `off` | `watch` | `on` })"
                 />
             </template>
-            <template #below>
-                <div class="flex flex-col gap-2">
-                    <p v-if="mode === `off`" class="text-2xs text-muted">
-                        {{ t(`sandbox.agentSafetyJudge.nothingJudgedNothingRecorded`) }}
-                    </p>
-                    <p v-else-if="mode === `watch`" class="text-2xs text-muted">
-                        {{ t(`sandbox.agentSafetyJudge.everyFlaggedCommandJudged`) }}
-                        <span class="text-content">{{ t(`sandbox.words.recentDecisions`) }}</span>
-                        {{ t(`sandbox.agentSafetyJudge.toSeeWhatPolicy`) }}
-                    </p>
-                    <p v-else class="text-2xs text-muted">{{ t(`sandbox.agentSafetyJudge.verdictDecidesAllowedSilently`) }}</p>
-                </div>
-            </template>
         </Row>
 
         <!-- Read-only here: a reader wants which model applies, not a way to change it; editing happens on Models. -->
@@ -62,10 +49,9 @@ const judgeChain = computed<readonly string[]>(() => judge.chain.value.map(model
                     {{ t(`sandbox.agentSafetyJudge.changeInModels`) }}
                 </Button>
             </template>
-            <template #below>
+            <template v-if="mode !== `off`" #below>
                 <div class="flex flex-col gap-2">
-                    <p v-if="mode === `off`" class="text-2xs text-subtle">{{ t(`sandbox.agentSafetyJudge.nothingJudgesCommandsAt`) }}</p>
-                    <p v-else-if="judgeChain.length > 0" class="text-2xs text-muted">
+                    <p v-if="judgeChain.length > 0" class="text-2xs text-muted">
                         <span class="text-content">{{ t(`sandbox.agentSafetyJudge.judgedBy`) }}</span
                         >: {{ judgeChain.join(t(`sandbox.agentSafetyJudge.then`)) }}.
                     </p>
@@ -73,11 +59,6 @@ const judgeChain = computed<readonly string[]>(() => judge.chain.value.map(model
                     <p v-else-if="settings !== undefined" class="text-2xs text-warning">
                         <span class="font-medium">{{ t(`sandbox.agentSafetyJudge.noModelSetJudge`) }}</span
                         >{{ t(`sandbox.agentSafetyJudge.nothingReadsPolicyEvery`) }}
-                    </p>
-
-                    <!-- The only automatic judge that reads a command whose text may itself be arguing for its own approval. -->
-                    <p v-if="mode !== `off`" class="text-2xs text-subtle">
-                        {{ t(`sandbox.words.worthBetterModelThan`) }}
                     </p>
                 </div>
             </template>
