@@ -24,7 +24,7 @@
           <div class="custom-color"><input id="color" type="color" value="#8db7d8" /><label for="color">Custom color</label><output id="hex">#8DB7D8</output></div>
           <label class="field-label" for="accessory">02 / Handheld accessory</label>
           <select id="accessory"></select>
-          <p class="note">Artwork preview. Persona matching comes later.</p>
+          <p class="note">Artwork preview. Personas get their color from their id and their prop from their name (personaAccessory.ts).</p>
         </div>
       </section>
       <section aria-labelledby="library-title">
@@ -35,7 +35,7 @@
         <div><p class="eyebrow">AT A GLANCE</p><h2 id="size-title">Actual display sizes</h2><p class="intro">Props lead at card size. Color and silhouette carry the smallest faces.</p></div>
         <div id="sizes" class="sizes"></div>
       </section>
-      <footer>Separate transparent artwork layers · Shared color treatment · No persona assignments</footer>
+      <footer>Separate transparent artwork layers · Shared color treatment · The app ships the WebP cuts in web/</footer>
     </main>
     <script type="module" src="preview.mjs"></script>
   </body>

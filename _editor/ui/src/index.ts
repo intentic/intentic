@@ -204,9 +204,16 @@ export { default as PageHeader } from "./components/layout/PageHeader.vue";
 // Escape hatch for a full-screen view; <PageHeader> consumes it, the mobile shell (in the web app) provides it.
 export { type PageBack, providePageBack, usePageBack } from "./components/layout/pageBack.js";
 export { default as AssistantFace } from "./components/brand/AssistantFace.vue";
-export { assistantFace, ASSISTANT_CHARACTERS, type AssistantCharacter } from "./components/brand/assistantFaces.js";
-// A persona's stable id chooses its illustrated companion on every surface.
+export {
+    ASSISTANT_ACCESSORIES,
+    ASSISTANT_COLORS,
+    assistantFace,
+    type AssistantAccessory,
+    type AssistantColor,
+} from "./components/brand/assistantFaces.js";
+// A persona's id picks its companion's color, and its name the prop it holds, on every surface.
 export { default as PersonaFace } from "./components/brand/PersonaFace.vue";
+export { personaAccessory } from "./components/brand/personaAccessory.js";
 export { FACE_SIZES, type PersonaLike } from "./components/brand/personaFace.js";
 // Bordered surface: own header, own interrupting strips, one scrolling body (the min-h-0/overflow-hidden
 // contract). Named for the contract, not the shape; avoids the ambiguous `Panel` name used elsewhere in the app.

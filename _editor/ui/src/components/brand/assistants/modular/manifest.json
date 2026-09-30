@@ -4,7 +4,7 @@
     1024,
     1024
   ],
-  "description": "One shared clay companion, independently chosen body color and handheld accessory. No persona-name mapping.",
+  "description": "One shared clay companion, independently chosen body color and handheld accessory. PNG masters; export-web.py cuts the WebP parts the app ships, and personaAccessory.ts picks a persona's accessory from its name.",
   "layerOrder": [
     "body",
     "crown",

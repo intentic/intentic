@@ -19,6 +19,7 @@ const TRANSLATED = ["_editor/web/src/", "_editor/ui/src/", "_editor/desktop-app/
 // Screens that are not shipped to a reader, so their words are not a translator's problem.
 const NOT_FOR_READERS = new Set([
     "_editor/web/src/features/settings/DesignKit.vue", // the dev-only design kit, mounted behind import.meta.env.DEV
+    "_editor/web/src/features/settings/DesignKitAssistants.vue", // a section of that kit, mounted only inside it
 ]);
 
 const files = subjectFiles("**/*.vue").filter((path) => TRANSLATED.some((dir) => path.startsWith(dir)) && !NOT_FOR_READERS.has(path));

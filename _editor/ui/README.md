@@ -56,18 +56,25 @@ flowchart LR
   tells the app's wording from workspace text (`_editor/web/src/app/replayPrivacy.ts`).
 - **Tests and preview.** The kit's suites live in `_editor/web/src/design-system`. The editor's dev server shows
   every component variant at `/kit`.
-- **Assistant faces.** `PersonaFace` uses a persona's id to select a stable illustrated companion, so renaming it
-  keeps its face. `AssistantFace` accepts a `seed`, accessible `label`, pixel `size`, optional `character`, and
-  `animated` (default true). `ASSISTANT_CHARACTERS` holds the names, descriptions and bundled image URLs;
-  `assistantFace(seed)` resolves the identity and motion phase. The transparent WebP artwork in
-  `components/brand/assistants/` depicts soft clay mascots with Khmer lotus crowns and individual props; its
-  `generation.json` records the prompts. Larger faces gently bob and breathe; toolbar faces stay still and
-  `prefers-reduced-motion` stops animation. Browse the characters and actual sizes at `/kit#assistants`.
-  A separate, asset-only [modular set](src/components/brand/assistants/modular/manifest.json) prepares the next
-  version: one tintable body, matching foreground hands, a fixed gold crown and interchangeable large props.
-  The application still uses the original illustrations; the modular set has no persona-name assignments.
+- **Assistant faces.** Every persona is the same clay companion, told apart by two things. Its body color comes
+  from a hash of the persona's id, so a rename keeps it. The prop it holds comes from its name, because the prop is
+  what says at a glance what the persona helps with. `personaAccessory` reads the name. A project persona still
+  named after its repository codes. Otherwise the rightmost specialty word wins (English job titles end in their
+  head noun: a UX Writer writes, a Code Reviewer reviews). A generic title (engineer, manager, lead) counts only
+  when no specialty was named. Anything else, such as a person's name or a repository's, gets the terminal laptop.
+  Past the project check, the id is read only when there is no label, since a renamed persona keeps its old id.
+  `PersonaFace` does this for a persona. `AssistantFace` takes a `seed` (color and motion phase), an accessible
+  `label`, a pixel `size`, an `accessory`, an optional `color` overriding the seed's, and `animated` (default
+  true). Larger faces bob and breathe; toolbar faces stay still and `prefers-reduced-motion` stops them. Try names
+  at `/kit#assistants`. (2026-09-30: the eight fixed illustrated characters this replaced tied color and prop
+  together, so a persona's prop said nothing about its job.)
 
 ## Modular avatar artwork
+
+The app draws the small WebP parts in `modular/web/`, cut from the PNG masters by
+[export-web.py](src/components/brand/assistants/modular/export-web.py): each part is cropped, fitted into its
+placement and stored at half the canvas, and `web/layout.json` records where it goes. Run it again after changing
+a master or the manifest.
 
 The transparent PNG masters live in `src/components/brand/assistants/modular/`: `layers/` holds the shared
 body, crown and hands; `accessories/` holds the terminal laptop, palette, magnifier, scroll, book, compass,
