@@ -166,20 +166,11 @@
         --card-fill: var(--color-overlay);
         transition: none;
     }
-/* THE SELECTION RING IS INSET, and that is what keeps it whole. */
+/* SELECTION IS THE EDGE AND THE FILL ALONE: an added ring and coloured lift read as too heavy. */
     .session-card.session-card-on {
         color: var(--color-content);
         --card-border: var(--color-primary-500);
         --card-fill: var(--color-overlay);
-        --card-ring: inset 0 0 0 1px var(--color-primary-500);
-/* Offset down and pulled in by its spread, so it is a shadow UNDER the card rather than a glow around it: it reaches barely a pixel above. */
-        --card-lift: 0 1px 3px -1px color-mix(in srgb, var(--color-primary-500) 28%, transparent);
-    }
-/* Hover on a card that already wears the accent deepens the halo instead of recolouring the edge. */
-    @media (hover: hover) {
-        .session-card.session-card-on:hover {
-            --card-lift: 0 1px 6px -1px color-mix(in srgb, var(--color-primary-500) 45%, transparent);
-        }
     }
 /* NO RULE HERE REPAINTS A CHIP ON A SELECTED CARD, and that absence is the fix rather than the gap in it. */
 /* THIS CARD IS WAITING ON YOU: a bar down the left edge, as an inset shadow rather than a wider border. */

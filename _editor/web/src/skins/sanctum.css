@@ -666,13 +666,6 @@
 /* The selected card uses the same metal as the selected row. */
 [data-skin="sanctum"] .session-card.session-card-on {
     --card-border: color-mix(in oklab, var(--sanctum-gold) 66%, transparent);
-    --card-ring: inset 0 0 0 1px rgba(201, 160, 92, 0.28);
-    --card-lift: 0 1px 3px -1px rgba(201, 160, 92, 0.35);
-}
-@media (hover: hover) {
-    [data-skin="sanctum"] .session-card.session-card-on:hover {
-        --card-lift: 0 1px 6px -1px rgba(201, 160, 92, 0.5);
-    }
 }
 
 /* The composer frame belongs to the rounded form, not its textarea. */
