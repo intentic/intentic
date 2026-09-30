@@ -663,11 +663,6 @@
     outline-offset: -2px;
 }
 
-/* The selected card uses the same metal as the selected row. */
-[data-skin="sanctum"] .session-card.session-card-on {
-    --card-border: color-mix(in oklab, var(--sanctum-gold) 66%, transparent);
-}
-
 /* The composer frame belongs to the rounded form, not its textarea. */
 [data-skin="sanctum"] .composer-frame:focus-within {
     border-color: var(--sanctum-gold);

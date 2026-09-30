@@ -166,10 +166,9 @@
         --card-fill: var(--color-overlay);
         transition: none;
     }
-/* SELECTION IS THE EDGE AND THE FILL ALONE: an added ring and coloured lift read as too heavy. */
+/* SELECTION IS THE FILL ALONE: a coloured edge, ring or lift read as too heavy. */
     .session-card.session-card-on {
         color: var(--color-content);
-        --card-border: var(--color-primary-500);
         --card-fill: var(--color-overlay);
     }
 /* NO RULE HERE REPAINTS A CHIP ON A SELECTED CARD, and that absence is the fix rather than the gap in it. */
