@@ -459,8 +459,8 @@ const openCard = (event?: MouseEvent): void => {
     emit(`open`, event);
 };
 
-// Never a side effect of a plain click, nor of a double-click, which is two clicks and opens the chat as they do: the
-// drill-in fires this, and it goes where its label says (useCardFocus.drillIn).
+// Never a side effect of a plain click: the drill-in and a desktop double-click fire this, and it goes where the drill-in's
+// label says (useCardFocus.drillIn). A phone has no drill-in (`review` is undefined there), so a double-tap stays two taps.
 const reviewCard = (): void => {
     if (edit.editing || review.value === undefined) {
         return;
@@ -577,6 +577,7 @@ const grab = (event: PointerEvent): void => {
         @pointerdown="grab"
         @dragstart.prevent
         @click="openCard"
+        @dblclick="reviewCard"
         @keydown.enter.self.prevent="openCard()"
         @keydown.space.self.prevent="openCard()"
     >

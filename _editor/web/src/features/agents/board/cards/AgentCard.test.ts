@@ -526,8 +526,8 @@ it(`names an untitled draft by the words waiting in its composer, and marks them
     expect(el.querySelector(`[aria-label^="Not sent"]`)?.getAttribute(`aria-label`)).toContain(UNSENT_WORDS);
 });
 
-// A double-click is two clicks: it opens the chat as a click does, and no longer walks to the review page (I1).
-it(`opens nothing more on a double-click than its two clicks do`, () => {
+// On desktop a double-click drills in, opening the agent's changes, after its two clicks opened the chat.
+it(`drills in to the review on a double-click`, () => {
     const onOpen = jest.fn();
     const onReview = jest.fn();
     const el = mount(ready(`error`), undefined, { onOpen, onReview });
@@ -535,7 +535,7 @@ it(`opens nothing more on a double-click than its two clicks do`, () => {
     face.click();
     face.click();
     face.dispatchEvent(new MouseEvent(`dblclick`, { bubbles: true }));
-    expect([onOpen.mock.calls.length, onReview.mock.calls.length]).toEqual([2, 0]);
+    expect([onOpen.mock.calls.length, onReview.mock.calls.length]).toEqual([2, 1]);
 });
 
 // TABULARIUM's lands failed on a checkout git no longer recognised, and its card sat in Finished with a check mark (B6).
