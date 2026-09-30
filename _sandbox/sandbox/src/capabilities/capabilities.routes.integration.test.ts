@@ -137,7 +137,7 @@ test("capabilities.add and rename refuse an id that collides with a daemon serve
     expect(await addFailure("komodo")).toBeUndefined();
 });
 
-// The page's own writes are committed as they land (settings/settings-versions.ts): left uncommitted, capabilities.json
+// The page's own writes are committed as they land (seams/settings-versions.ts): left uncommitted, capabilities.json
 // read as the owner's edits and a land touching it was refused.
 test("a connection added or removed on its page is committed on its own, leaving nothing for the owner to save", async () => {
     const workspace = tempWorkspace([]);

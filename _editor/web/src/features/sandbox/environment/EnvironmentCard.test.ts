@@ -102,7 +102,7 @@ const mount = (): HTMLElement => {
     app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     // Renders an anchor so the Sandbox tab link doesn't need a router.
-    app.component(`RouterLink`, defineComponent({ props: { to: { type: String, default: `` } }, setup: (props, { slots }) => () => h(`a`, { href: props.to }, slots.default?.()) }));
+    app.component(`RouterLink`, defineComponent({ props: { to: { type: String, default: `` } }, setup: (props, { slots }) => () => h(`a`, { href: props.to }, slots[`default`]?.()) }));
     app.use(PrimeVue);
     app.mount(el);
     return el;

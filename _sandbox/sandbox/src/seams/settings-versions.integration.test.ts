@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { STATE_DIR } from "@intentic/constants";
 import { SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import { call } from "@orpc/server";
@@ -9,9 +10,10 @@ import type { OrpcContext } from "../app-env.js";
 import type { Services } from "../composition.js";
 import { fileSafetyPolicyStore } from "../safety/safety-policy-store.js";
 import { createSafetyRoutes } from "../safety/safety.routes.js";
-import { createSettingsRoutes } from "./settings.routes.js";
-import { fileSandboxSettingsStore, settingsDocument } from "./settings-store.js";
+import { createSettingsRoutes } from "../settings/settings.routes.js";
+import { fileSandboxSettingsStore, settingsDocument } from "../settings/settings-store.js";
 import { versionedSettingsWrite, versionSettingsWrite } from "./settings-versions.js";
+import { commitOnly } from "../git/changes/changes-index.js";
 
 // A real repository: what matters is what git holds afterwards, a commit of exactly the settings page's write, with the
 // owner's own work around it left dirty and staged just as it was.
@@ -25,13 +27,13 @@ afterAll(() => {
 
 const git = (root: string, ...args: string[]): string => execFileSync("git", args, { cwd: root, encoding: "utf8" });
 
-const PERSONAS = ".intentic/config/personas.json";
+const PERSONAS = `${STATE_DIR}/config/personas.json`;
 
 const workspace = (): string => {
     const root = mkdtempSync(join(tmpdir(), "settings-versions-"));
     roots.push(root);
     git(root, "init", "-q");
-    mkdirSync(join(root, ".intentic", "config"), { recursive: true });
+    mkdirSync(join(root, STATE_DIR, "config"), { recursive: true });
     writeFileSync(join(root, PERSONAS), "[]\n");
     writeFileSync(join(root, "notes.md"), "mine\n");
     git(root, "add", "-A");
@@ -40,7 +42,7 @@ const workspace = (): string => {
 };
 
 const hostOn = (root: string, locked: string[] = []) =>
-    unstubbed<Pick<Services, "agentWorktrees" | "logger">>("services", {
+    unstubbed<Pick<Services, "agentWorktrees" | "git" | "logger">>("services", {
         agentWorktrees: unstubbed<Services["agentWorktrees"]>("agentWorktrees", {
             mainDir: () => root,
             withRepoLock: async (repo, run) => {
@@ -48,6 +50,7 @@ const hostOn = (root: string, locked: string[] = []) =>
                 return run();
             },
         }),
+        git: unstubbed<Services["git"]>("git", { commitOnly }),
         logger: unstubbed<Services["logger"]>("logger", { debug: () => undefined }),
     });
 
@@ -71,7 +74,7 @@ test("a settings write is committed on its own, and the owner's edits stay their
 
 test("a removed persona's kit is committed as gone, and a kit that never existed is left out rather than failing it", async () => {
     const root = workspace();
-    const kit = ".intentic/config/personas/studio";
+    const kit = `${STATE_DIR}/config/personas/studio`;
     mkdirSync(join(root, kit), { recursive: true });
     writeFileSync(join(root, kit, "PROMPT.md"), "You write release notes.\n");
     await versionSettingsWrite(hostOn(root), [kit], "Settings: persona Studio prompt");
@@ -97,7 +100,7 @@ test("nothing changed is nothing committed", async () => {
 test("a workspace that ignores its settings folder keeps the write uncommitted, without failing it", async () => {
     const root = workspace();
     writeFileSync(join(root, ".git", "info", "exclude"), "/.intentic/\n");
-    git(root, "rm", "-r", "-q", "--cached", ".intentic");
+    git(root, "rm", "-r", "-q", "--cached", STATE_DIR);
     git(root, "-c", "user.name=owner", "-c", "user.email=owner@example.com", "commit", "-q", "-m", "untrack settings");
     writeFileSync(join(root, PERSONAS), `[{"id":"studio","capabilities":[]}]\n`);
     const head = git(root, "rev-parse", "HEAD");
@@ -113,6 +116,7 @@ test("an Agent tab save is committed on its own, as a settings page's write", as
     const host = hostOn(root);
     const services = unstubbed<Services>("services", {
         agentWorktrees: host.agentWorktrees,
+        git: host.git,
         sandboxSettings: fileSandboxSettingsStore(join(root, settingsDocument.path)),
         // The baked skills it converges afterwards only warn when they cannot be written.
         logger: unstubbed<Services["logger"]>("logger", { debug: () => undefined, warn: () => undefined }),
@@ -152,7 +156,7 @@ test("a Safety page save is committed on its own too", async () => {
     const routes = createSafetyRoutes(
         unstubbed<Parameters<typeof createSafetyRoutes>[0]>("services", {
             ...host,
-            safetyPolicy: fileSafetyPolicyStore(join(root, ".intentic/config/safety.md")),
+            safetyPolicy: fileSafetyPolicyStore(join(root, STATE_DIR, "config/safety.md")),
         }),
     );
 

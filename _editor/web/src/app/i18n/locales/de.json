@@ -5019,6 +5019,7 @@
         },
         "workspaceDesktop": {
             "anywhere": "Überall",
+            "clearEsc": "Leeren (Esc)",
             "closeAll": "Alle schließen",
             "closeAllTabs": "Alle Tabs schließen",
             "closeAnyway": "Trotzdem schließen",

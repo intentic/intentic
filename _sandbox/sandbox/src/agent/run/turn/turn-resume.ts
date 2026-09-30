@@ -19,7 +19,7 @@ import {
     withRuntimeDefaults,
 } from "@intentic/sandbox-contract";
 import { replaceRejectedToken } from "../../../runtimes/claude/claude-credentials.js";
-import { planRevision } from "../../../runtimes/decorators/plan-mode.js";
+import { planRevision } from "../../prompt/plan-revision.js";
 import type { Services } from "../../../composition.js";
 import { openingRows, openTurnTranscript, recordInterruptedTurn, recordTurnTranscript } from "../../../sessions/turn-transcript.js";
 import { POST_PLAN_MODE } from "../agent.js";

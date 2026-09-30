@@ -8,6 +8,7 @@
     "engines": { "intentic": "^2.3.0" },
     "permissions": {
         "sandbox": [
+            "GET /agents",
             "GET /approvals",
             "POST /approvals",
             "DELETE /approvals/*",

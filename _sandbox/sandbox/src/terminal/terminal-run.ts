@@ -12,14 +12,6 @@ const execFileAsync = promisify(execFile);
 // Baked into the image; absent in local dev/tests, where the runner falls back to a plain invisible `bash -c`.
 export const TMUX_RUN_BIN = "/usr/local/bin/tmux-run";
 
-// The agent's Bash hook wrapper for heavy commands (heavy-commands.json); holds a slot so concurrent test fan-outs take
-// turns. Not used by the runner below, which is single user-triggered ops, not repeated builds.
-export const QUEUE_RUN_BIN = "/usr/local/bin/queue-run";
-
-// Off when the wrapper isn't baked in or the operator opts out; the caller that builds the agent's hooks checks this,
-// same fail-open shape as tmuxRunEnabled.
-export const queueRunEnabled = (): boolean => process.env["INTENTIC_AGENT_QUEUE"] !== "0" && existsSync(QUEUE_RUN_BIN);
-
 // The stdout tail size (full output stays in the pane log), and the execFile buffer ceiling above it.
 const OUTPUT_TAIL_BYTES = 262_144;
 const MAX_BUFFER = 4 * 1024 * 1024;

@@ -27,6 +27,10 @@ export const HISTORY_STATE_FILES: readonly StateFile[] = [
     { path: "blobs/", portability: "carry" },
     // Index of published-page conversations; the pages travel with /work anyway, this makes one withdrawable.
     { path: "shares.json", portability: "carry" },
+    // Each person's own answer to which words their editor uses here (developer or maker), keyed by sign-in address
+    // (settings/member-audience.ts). Carried: it is theirs, and asking again after a move would be a question already
+    // answered.
+    { path: "member-audience.json", portability: "carry" },
     { path: "activity.jsonl", portability: "carry" },
     { path: "usage.jsonl", portability: "carry" },
     { path: "account-usage.json", portability: "carry" },
@@ -83,6 +87,9 @@ export const HISTORY_STATE_FILES: readonly StateFile[] = [
     { path: "update-outcome.json", portability: "derived" },
     { path: "update-skipped.json", portability: "derived" },
     { path: "boot-failure.json", portability: "derived" },
+    // A rebuild's ask that the next boot resume the turns it cuts (restart-resume.ts): about this machine's next boot only,
+    // read once by it, so a moved sandbox starts without one.
+    { path: "restart-resume.json", portability: "derived" },
 
     /* ---- credentials ---- */
 
@@ -91,6 +98,13 @@ export const HISTORY_STATE_FILES: readonly StateFile[] = [
         path: "ssh-hosts/",
         portability: "secret",
         note: "Re-add each ssh host on the Capabilities view, its key does not travel.",
+    },
+    // The container sshd's host key (docker-entrypoint.sh generates it once): the sandbox's SSH identity, which desktop
+    // sync pins. A private key, so it stays; the target makes its own on first boot.
+    {
+        path: "ssh-host-keys/",
+        portability: "secret",
+        note: "Clear this sandbox's old host key from your computer's known_hosts before syncing it again.",
     },
     // The cli-proxy's config, which holds the routed subscriptions' provider tokens.
     {

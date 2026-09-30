@@ -31,6 +31,11 @@ import { createFleetRoutes } from "./conversations/recall/fleet.routes.js";
 import { createChildrenRoutes } from "./agent/subagents/children.routes.js";
 import { resolveHarnessCredentials } from "./agent/providers/harness-credentials.js";
 import { createEnvironmentRoutes } from "./environment/environment.routes.js";
+import { manageDeviceSandbox } from "./hosts/device-reports.js";
+import { agentsMidTurn } from "./hosts/host-restart-guard.js";
+import { createRebuildWhenIdle } from "./hosts/rebuild-when-idle.js";
+import { fileRestartResume } from "./agent/run/turn/restart-resume.js";
+import { sandboxSlugOf } from "@intentic/sandbox-run";
 import { createEnginesRoutes } from "./engines/engines.routes.js";
 import { createBundleRoutes } from "./portability/bundle.routes.js";
 import { createDefinitionRoutes } from "./portability/definition.routes.js";
@@ -341,7 +346,16 @@ export const createApp = (services: Services): Hono<AppEnv> => {
 
     // The agent-proposed overlay Dockerfile: members read, the owner approves, rejects, runtime-installs a line, takes
     // one tool out, or has the rebuild wait until no agent is mid-turn.
-    const environment = createEnvironmentRoutes(services);
+    const environment = createEnvironmentRoutes(
+        services,
+        createRebuildWhenIdle({
+            midTurn: () => agentsMidTurn(services),
+            relay: (host, flow) => manageDeviceSandbox(services, host, flow),
+            restartResume: fileRestartResume(services.config.historyRoot),
+            slug: () => sandboxSlugOf(services.config.sandbox.name),
+            logger: services.logger,
+        }),
+    );
     serve("GET /environment", environment.read);
     serve("GET /environment/contents", environment.contents);
     serve("POST /environment/approve", environment.approve);

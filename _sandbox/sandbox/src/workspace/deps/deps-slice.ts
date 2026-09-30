@@ -2,8 +2,14 @@ import { join } from "node:path";
 import type { Logger } from "pino";
 import type { ManagedProcesses } from "../../processes/managed-processes.js";
 import { shellQuote } from "@intentic/sandbox-run/quote";
-import { fileHeavyCommandsStore, heavyCommandsDocument, heavyEnvPrefix, type HeavyCommandsStore } from "../../system/resources/heavy-commands.js";
-import { QUEUE_RUN_BIN, queueRunEnabled } from "../../terminal/terminal-run.js";
+import {
+    fileHeavyCommandsStore,
+    heavyCommandsDocument,
+    heavyEnvPrefix,
+    type HeavyCommandsStore,
+    QUEUE_RUN_BIN,
+    queueRunEnabled,
+} from "../../system/resources/heavy-commands.js";
 import type { WorkspacePaths } from "../workspace.js";
 import { createDependencyCoordinator, type DependencyCoordinator, dependencyRequestsDocument } from "./reconcile-deps.js";
 

@@ -4995,6 +4995,7 @@
         },
         "workspaceDesktop": {
             "anywhere": "Partout",
+            "clearEsc": "Effacer (Échap)",
             "closeAll": "Tout fermer",
             "closeAllTabs": "Fermer tous les onglets",
             "closeAnyway": "Fermer quand même",

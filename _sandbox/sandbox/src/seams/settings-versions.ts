@@ -2,7 +2,6 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import type { Services } from "../composition.js";
-import { commitOnly } from "../git/changes/changes-index.js";
 import { AGENT_GIT_AUTHOR } from "../git-identity.js";
 
 // A settings page's own write (a persona's card or kit, a connection's manifest entry, the Agent tab's settings.json),
@@ -14,7 +13,9 @@ import { AGENT_GIT_AUTHOR } from "../git-identity.js";
 // Exactly the paths written, never whatever else is dirty or staged, and under the repo lock, so a land queues behind
 // it. Best-effort: a workspace whose own `.git` ignores `.intentic` refuses the stage, and the file stays as it was.
 
-type SettingsVersionHost = Pick<Services, "agentWorktrees" | "logger">;
+// The commit itself goes through the git slice rather than an import of git/: every settings page sits above git/ in
+// the daemon, and git/ reaches back up to most of them.
+type SettingsVersionHost = Pick<Services, "agentWorktrees" | "git" | "logger">;
 
 // Only paths git can stage: one on disk, or one it tracks (a removed kit's deletions). A kit that never existed is
 // neither, and naming it would fail the whole stage.
@@ -31,6 +32,7 @@ const uncommitted = async (services: SettingsVersionHost, paths: readonly string
         const { stdout } = await git(services.agentWorktrees.mainDir("root"), ["status", "--porcelain", "--untracked-files=all", "--", ...paths]);
         return stdout.trim() !== "";
     } catch {
+        // allow(silent-catch): a doubt is the answer here, and the caller acts on it by leaving the write uncommitted
         return true;
     }
 };
@@ -65,7 +67,7 @@ export const versionSettingsWrite = async (
     try {
         const dir = services.agentWorktrees.mainDir("root");
         return await services.agentWorktrees.withRepoLock("root", async () =>
-            commitOnly(dir, await stageable(dir, paths, git), subject, AGENT_GIT_AUTHOR, git),
+            services.git.commitOnly(dir, await stageable(dir, paths, git), subject, AGENT_GIT_AUTHOR, git),
         );
     } catch (error) {
         services.logger.debug({ err: error, paths }, "settings: a settings page's write stays uncommitted");

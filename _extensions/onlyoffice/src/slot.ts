@@ -124,13 +124,10 @@ const heardUnsaved = (event: MessageEvent): void => {
     }
 };
 
-// One listener for every tracked frame, from the first on: a kept frame has no slot listening for it.
-let hearing = false;
+// One listener for every tracked frame, from the first on: a kept frame has no slot listening for it. Adding the same
+// listener again is a no-op, so no flag is kept to say it is on.
 const track = (frame: HTMLIFrameElement, path: string, origin: string): void => {
-    if (!hearing) {
-        hearing = true;
-        window.addEventListener(`message`, heardUnsaved);
-    }
+    window.addEventListener(`message`, heardUnsaved);
     if (!unsaved.value.frames.has(frame)) {
         unsaved.value.frames.set(frame, { path, origin, dirty: false });
     }

@@ -359,7 +359,7 @@ router.beforeResolve(() => overlayBackSettled());
 
 // The desktop app's "Ask an agent about this" arrives as `?handoff=` on whatever route it lands: kept for the chat that
 // takes the file, and out of the address before any other guard reads it (features/chat/drafts/localHandoff.ts).
-router.beforeEach((to) => receiveHandoff(to));
+router.beforeEach((to) => receiveHandoff(to, () => useAuth().user.value !== null));
 
 // A link naming a conversation opens it wherever it lands: the daemon's push notifications point at
 // `/?conversation=<id>`, and a shell that rewrites its entry path before the router runs (the demo does) must not

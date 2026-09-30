@@ -20,7 +20,7 @@ jest.mock(`vue-router`, () => ({
     useRouter: () => ({ push }),
     RouterLink: defineComponent({
         props: { to: { type: String, required: true } },
-        setup: (props, { slots }) => () => h(`a`, { href: props.to }, slots.default?.()),
+        setup: (props, { slots }) => () => h(`a`, { href: props.to }, slots[`default`]?.()),
     }),
 }));
 
@@ -29,7 +29,7 @@ jest.mock(`@intentic/ui`, () => ({
     ...uiOriginal,
     MarkdownDocument: defineComponent({
         props: { modelValue: String, stored: String, placeholder: String, label: String, editable: Boolean, saving: Boolean },
-        setup: (_props, { slots }) => () => h(`div`, { class: `memory-doc` }, slots.note?.()),
+        setup: (_props, { slots }) => () => h(`div`, { class: `memory-doc` }, slots[`note`]?.()),
     }),
 }));
 

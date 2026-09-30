@@ -1,4 +1,5 @@
 import type { AgentCapabilities, AgentEvent } from "@intentic/sandbox-contract";
+import { planRevision } from "../../agent/prompt/plan-revision.js";
 import type { AgentRequest } from "../../agent/providers/agent-request.js";
 
 // Plan mode for a runtime whose capability row holds no approval modes (`permissions: "plan"`): a read-only planning
@@ -32,16 +33,6 @@ export interface EmulatedPlan {
 // already said why, and no plan is proposed from partial output.
 const proposed = (capture: PlanPhaseResult, signal: AbortSignal): string | undefined =>
     capture.errored || capture.planText === undefined || capture.planText.trim() === "" || signal.aborted ? undefined : capture.planText;
-
-// The next planning message after a rejection, carrying what the user said when they said anything. Framed, so notes
-// that read like consent ("proceed", "approved with…") are never taken as leave to execute; the SDK's own plan gate
-// sends the same words as its deny (agent.ts).
-export const planRevision = (feedback: string | undefined): string => {
-    const said = feedback?.trim();
-    return said !== undefined && said !== ""
-        ? `The user rejected the plan with this feedback:\n${said}\n\nRevise the plan. Still do not execute it.`
-        : "The user rejected the plan. Revise it. Still do not execute it.";
-};
 
 async function* emulate(request: Pick<AgentRequest, "spec" | "signal" | "hooks">, emulated: EmulatedPlan): AsyncGenerator<AgentEvent> {
     const { signal } = request;

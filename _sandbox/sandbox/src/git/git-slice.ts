@@ -13,6 +13,7 @@ import {
     defaultGit,
     gitCheckout,
     type GitCloneOptions,
+    type GitRunner,
     gitClone,
     gitCommitAll,
     gitFullHead,
@@ -42,7 +43,7 @@ import {
     revertCommit,
 } from "./changes/changes-commits.js";
 import { commitFileDiff, conflictedFileDiff, refFileDiff, stagedFileDiff, unstagedFileDiff, workingFileDiff } from "./changes/changes-diff.js";
-import { commitIndex, discardPaths, stageAll, stagePaths, unstagePaths } from "./changes/changes-index.js";
+import { commitIndex, commitOnly, discardPaths, stageAll, stagePaths, unstagePaths } from "./changes/changes-index.js";
 import { type ScratchScope, scratchOf } from "./changes/scratch.js";
 import { createBranch, deleteBranch, listBranches, listRemoteBranches } from "./ops/branches.js";
 import { type CommitScope, collectRepoDiff, type RepoDiff } from "./ops/commit-message.js";
@@ -83,6 +84,14 @@ export interface GitSlice {
         readonly scratchOf: (dir: string, scope: ScratchScope) => Promise<ScratchPath[]>;
         readonly unstagePaths: (dir: string, paths: readonly string[]) => Promise<void>;
         readonly commitIndex: (dir: string, message: string, author: { name: string; email: string }) => Promise<boolean>;
+        // Exactly `paths`, whatever else is staged or dirty; false when they match HEAD (seams/settings-versions.ts).
+        readonly commitOnly: (
+            dir: string,
+            paths: readonly string[],
+            message: string,
+            author: { readonly name: string; readonly email: string },
+            git?: GitRunner,
+        ) => Promise<boolean>;
         readonly discardPaths: (dir: string, paths?: readonly string[]) => Promise<void>;
         // Branches and the remote; remote verbs return an ActionResult since 'no remote' is an outcome, not an error.
         readonly listBranches: (dir: string) => Promise<GitBranch[]>;
@@ -168,6 +177,7 @@ export const createGitSlice = (): GitSlice => ({
         scratchOf,
         unstagePaths,
         commitIndex,
+        commitOnly,
         discardPaths,
         listBranches,
         listRemoteBranches,
