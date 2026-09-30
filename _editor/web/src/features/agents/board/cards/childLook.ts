@@ -44,7 +44,7 @@ export interface ChildLook {
     // When it last moved, for a row that is not working.
     readonly at: number;
     // The short word after the title that tells it apart: the provider a spawned child runs on when that is not its
-    // parent's, or the kind of subagent an in-process one ran as.
+    // parent's and no recorded model already says so, or the kind of subagent an in-process one ran as.
     readonly tag: string | undefined;
     // What it runs on, in words on the row and the bar alike, never behind a hover: the one fact a reader cannot guess
     // from the parent, since a child may run on any model at any tier. Only what was recorded; absent says nothing.
@@ -130,6 +130,7 @@ export const childLook = (child: TrayChild, provider: AgentProvider): ChildLook 
         const meta = agentStatusMeta(child.status);
         return lane === `finished` ? { ...meta, class: `text-subtle` } : meta;
     })();
+    const run = runLook(child.provider, child.model, child.effort, child.thinking);
     return {
         title: agentDisplayTitle(child),
         titleHint: undefined,
@@ -141,7 +142,8 @@ export const childLook = (child: TrayChild, provider: AgentProvider): ChildLook 
         since: child.startedAt,
         doing: activityLine(child) ?? t(`ui.status.working`),
         at: child.updatedAt,
-        tag: child.provider === provider ? undefined : providerLabel(child.provider),
-        run: runLook(child.provider, child.model, child.effort, child.thinking),
+        // Named only when nothing else says it: a recorded model's name already tells the provider apart.
+        tag: child.provider === provider || run !== undefined ? undefined : providerLabel(child.provider),
+        run,
     };
 };

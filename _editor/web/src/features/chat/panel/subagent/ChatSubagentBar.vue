@@ -39,9 +39,8 @@ const t = useT();
 const look = computed(() => childLook(props.child, props.provider));
 const now = useNow(() => look.value.working);
 const spawned = computed(() => !inProcess(props.child));
-// The kind of subagent it ran as; a spawned child's tag is its provider, which its model chip's mark says, unless
-// nothing says what it runs on.
-const kind = computed(() => (spawned.value && look.value.run !== undefined ? undefined : look.value.tag));
+// The kind of subagent it ran as, or the provider a spawned child runs on when no model chip's mark says it (childLook).
+const kind = computed(() => look.value.tag);
 // The clock the pill carries: how long it has worked, else when it settled.
 const clock = computed(() =>
     look.value.working && look.value.since !== undefined && look.value.since > 0

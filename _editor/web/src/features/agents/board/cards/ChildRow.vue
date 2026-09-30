@@ -13,7 +13,8 @@ import RunFacts from "./RunFacts.vue";
 // glyph, its title, and how long it has worked or when it settled, or its ask, in the card's own pill, when it asks what
 // only the reader can give (its one press opens its chat, where the ask is answered). The second, quieter, says what it
 // is: the kind or provider that tells it apart, and what it runs on (RunFacts), the model and tier a reader otherwise
-// could not tell from its parent's. Everything else — the branch, the cost, the diff — is its own chat's to say, one
+// could not tell from its parent's; on a row wide enough for both (the button's own @container), it rides the first
+// line, right of the title, and the row stays one line tall. Everything else — the branch, the cost, the diff — is its own chat's to say, one
 // press away. Either kind of child draws here, from one reading (childLook): a subagent its parent's runtime ran
 // in-process has no chat of its own, so its press shows its transcript in its parent's, and it has no review or menu.
 
@@ -55,7 +56,7 @@ const menu = (event: MouseEvent): void => {
 <template>
     <button
         type="button"
-        class="ui-row-select flex min-h-7 w-full min-w-0 flex-col justify-center gap-px rounded-md px-2 text-left max-md:min-h-10"
+        class="ui-row-select @container flex min-h-7 w-full min-w-0 flex-col justify-center gap-px rounded-md px-2 text-left max-md:min-h-10"
         :class="{ 'ui-row-select-on': selected, 'py-1': facts }"
         @click="emit(`open`, $event)"
         @dblclick="review"
@@ -76,6 +77,10 @@ const menu = (event: MouseEvent): void => {
             </span>
             <!-- Beside the clock, not on a line of its own: the kind is a quiet aside, and gives way before the title. -->
             <span v-if="look.tag !== undefined" class="max-w-24 shrink truncate text-2xs text-subtle">{{ look.tag }}</span>
+            <!-- Right of the title when the row has room for both; the title still gives way first. -->
+            <span v-if="look.run !== undefined" class="hidden shrink-0 items-center text-2xs text-subtle @md:flex">
+                <RunFacts :run="look.run" />
+            </span>
             <!-- The card's own pill and tone for an ask, so the reader meets the same word here as on any card that asks. -->
             <span v-if="look.ask !== undefined" class="ui-status-pill shrink-0 bg-warning/15 text-2xs font-semibold text-warning">{{ look.ask }}</span>
             <span v-if="look.working && look.since !== undefined" v-tooltip.top="look.doing" class="shrink-0 text-2xs font-medium tabular-nums text-link">{{
@@ -83,8 +88,8 @@ const menu = (event: MouseEvent): void => {
             }}</span>
             <span v-else-if="look.ask === undefined && look.at > 0" class="shrink-0 text-2xs text-subtle">{{ relativeTime(look.at) }}</span>
         </span>
-        <!-- Under the title: a tray row is narrow, and the title keeps the first line. -->
-        <span v-if="look.run !== undefined" class="flex w-full min-w-0 items-center gap-1.5 pl-5 text-2xs text-subtle">
+        <!-- Under the title on a narrow row, where the title keeps the first line. -->
+        <span v-if="look.run !== undefined" class="flex w-full min-w-0 items-center gap-1.5 pl-5 text-2xs text-subtle @md:hidden">
             <RunFacts :run="look.run" />
         </span>
     </button>

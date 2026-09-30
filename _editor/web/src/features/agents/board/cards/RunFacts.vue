@@ -6,10 +6,10 @@ import ProviderLogo from "../../../chat/accounts/ProviderLogo.vue";
 import { effortRungFill } from "../../../chat/models/run-settings/effortScale";
 import type { RunLook } from "./childLook";
 
-// WHAT A CHILD RUNS ON, IN WORDS: the model by its catalog name and the tier it ran at, drawn on the composer's own
-// ladder (EffortMeter) so a child's tier reads the way the reader set their own, with the tier's word beside it. On a
-// tray row it is a quiet run of text under the title; on the subagent bar, where the composer would say the same thing,
-// each fact is a chip of its own. Nothing here is a hover away: the whole point is that it is on screen.
+// WHAT A CHILD RUNS ON: the model by its catalog name and the tier it ran at, drawn on the composer's own ladder
+// (EffortMeter) so a child's tier reads the way the reader set their own. The lit rungs say the tier; its word is only
+// the ladder's hover, kept off the line. A ladder-less provider has no rungs to draw, so its tier stays a word. On a tray
+// row it is a quiet run of text; on the subagent bar, where the composer would say the same thing, each fact is a chip.
 
 const props = defineProps<{
     run: RunLook;
@@ -43,6 +43,7 @@ const pill = computed(() => (props.chips === true ? `ui-status-pill bg-content/5
             class="flex shrink-0 items-center gap-1 text-2xs"
             :class="pill"
             :aria-label="`${t(`shared.effort`)}: ${run.effort.label}`"
+            v-tooltip.top="rungs.length > 0 ? run.effort.label : undefined"
         >
             <!-- The composer's ladder as a picture, small enough for a line of text: the same rungs, lit the same way. -->
             <span v-if="rungs.length > 0" class="flex items-end gap-px" aria-hidden="true">
@@ -54,7 +55,7 @@ const pill = computed(() => (props.chips === true ? `ui-status-pill bg-content/5
                     :style="fill === undefined ? undefined : { backgroundColor: fill }"
                 ></span>
             </span>
-            <span aria-hidden="true">{{ run.effort.label }}</span>
+            <span v-if="rungs.length === 0" aria-hidden="true">{{ run.effort.label }}</span>
         </span>
     </span>
 </template>
