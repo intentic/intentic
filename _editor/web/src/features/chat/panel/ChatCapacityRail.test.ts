@@ -7,7 +7,8 @@
 //    no Usage tab in this window to check
 import "@intentic/testing/dom";
 import type { OauthAccount, TranslatorAccounts } from "@intentic/sandbox-contract";
-import { type App, createApp, h } from "vue";
+import { type App, createApp, h, nextTick } from "vue";
+import { stubGlobal, unstubAllGlobals, waitFor } from "@intentic/testing/bun";
 import { IconStub } from "@intentic/ui/testing";
 
 // Import chain pulls in app-wide singletons reading browser globals at import time (matchMedia, window.env).
@@ -46,6 +47,7 @@ const mount = (accounts: Partial<OauthAccount>[], routed: TranslatorAccounts = N
 afterEach(() => {
     app?.unmount();
     app = undefined;
+    unstubAllGlobals();
     document.body.innerHTML = ``;
     providerAccounts.value = {};
     translatorAccounts.value = NO_ROUTED;
@@ -359,6 +361,23 @@ it(`moves a lane to a new reading and leaves the spent part as a trail that then
             { name: `g-1`, label: `one@gmail.com`, usage: { measuredAt: MEASURED_AT, windows: [{ kind: `seven_day`, utilization, gates: `all` }] } },
         ],
     });
+    // Frames painted by hand at stamps the test names. On the real clock a loaded runner's 200 ms sleep could come back
+    // before the lane's first frame or after its drain, with no trail on screen either way (desktop-check in run
+    // 36709287326); the lane times itself from its first frame's stamp, so these are the same moments, held still.
+    let frame: FrameRequestCallback | undefined;
+    stubGlobal(`requestAnimationFrame`, (callback: FrameRequestCallback) => {
+        frame = callback;
+        return 1;
+    });
+    stubGlobal(`cancelAnimationFrame`, () => {
+        frame = undefined;
+    });
+    const paintAt = async (stamp: number): Promise<void> => {
+        const next = frame;
+        frame = undefined;
+        next?.(stamp);
+        await nextTick();
+    };
     const el = mount([], gemini(40));
     // First paint is the reading itself: nothing changed, so nothing moves and nothing trails.
     expect(barWidths(el)).toEqual([`60%`]);
@@ -366,14 +385,17 @@ it(`moves a lane to a new reading and leaves the spent part as a trail that then
 
     translatorAccounts.value = gemini(70);
     judgeAccountStores();
-    await new Promise((resolve) => setTimeout(resolve, 200));
+    await waitFor(() => expect(typeof frame).toBe(`function`));
+    await paintAt(0);
+    await paintAt(200);
     // Mid-move: the trail holds the old length while the bar is on its way down.
     expect(el.querySelector<HTMLElement>(`[data-meter-trail]`)?.style.width).toBe(`60%`);
-    const [moving] = barWidths(el).filter((width) => width !== `60%`);
+    const moving = barWidths(el).find((width) => width !== `60%`);
     expect(Number.parseFloat(moving ?? ``)).toBeGreaterThan(30);
     expect(Number.parseFloat(moving ?? ``)).toBeLessThan(60);
 
-    await new Promise((resolve) => setTimeout(resolve, 1_600));
+    await paintAt(2_000);
+    expect(frame).toBeUndefined();
     expect(barWidths(el)).toEqual([`30%`]);
     expect(el.querySelector(`[data-meter-trail]`)).toBeNull();
     expect(drawn(el)).toContain(`30%`);
