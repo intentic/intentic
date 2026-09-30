@@ -43,32 +43,33 @@ const forgeName = computed(() => (repo.value?.host === `gitlab` ? `GitLab` : `Gi
 
 <template>
     <div class="flex min-h-0 flex-1 flex-col bg-canvas">
-        <!-- Which run, and how it went: enough to decide whether to look closer, in two short lines. -->
-        <div v-if="run !== undefined && tone !== undefined" class="flex shrink-0 flex-col gap-1 border-b border-line bg-card px-3 py-2">
-            <div class="flex min-w-0 items-center gap-2">
-                <StatusBadge :variant="tone.variant" :label="tone.label" size="xs" />
-                <span class="min-w-0 flex-1 truncate text-xs font-medium text-content" v-tooltip.bottom.overflow="run.title ?? `#${run.runId}`">
-                    {{ run.title ?? `#${run.runId}` }}
+        <!-- One line leaves the graph room; the tab already names the workflow. -->
+        <div v-if="run !== undefined && tone !== undefined" class="@container flex min-w-0 shrink-0 items-center gap-2 border-b border-line bg-card px-3 py-1.5">
+            <StatusBadge :variant="tone.variant" :label="tone.label" size="xs" class="shrink-0" />
+            <span class="min-w-0 flex-1 truncate text-xs font-medium text-content" v-tooltip.bottom.overflow="run.title ?? `#${run.runId}`">
+                {{ run.title ?? `#${run.runId}` }}
+            </span>
+            <div class="flex min-w-0 max-w-1/2 items-center gap-2 whitespace-nowrap text-2xs text-subtle">
+                <span class="inline-flex min-w-0 max-w-20 items-center gap-1 font-mono @md:max-w-32">
+                    <Icon name="fork" class="shrink-0 text-2xs" /><span class="truncate" v-tooltip.bottom.overflow="run.branch">{{ run.branch }}</span>
                 </span>
-                <a
-                    v-if="page !== undefined"
-                    :href="page"
-                    target="_blank"
-                    rel="noopener"
-                    :class="ui.iconButton(`h-7 w-7 shrink-0 rounded`)"
-                    :aria-label="t(`runSide.openOn`, { forge: forgeName })"
-                    v-tooltip.bottom="t(`runSide.openOn`, { forge: forgeName })"
-                >
-                    <Icon name="arrow-up-right" class="text-xs" />
-                </a>
+                <span class="shrink-0 font-mono" v-tooltip.bottom="{ title: run.sha, note: [formatTimestamp(run.createdAt), duration].filter(Boolean).join(` · `) }">
+                    {{ run.sha.slice(0, 7) }}
+                </span>
+                <span class="hidden shrink-0 @md:inline" v-tooltip.bottom="formatTimestamp(run.createdAt)">{{ timeAgo(run.createdAt) }}</span>
+                <span v-if="duration !== undefined" class="hidden shrink-0 @md:inline">{{ duration }}</span>
             </div>
-            <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-2xs text-subtle">
-                <span v-if="run.workflow !== undefined" class="truncate">{{ run.workflow }}</span>
-                <span class="inline-flex min-w-0 items-center gap-1 font-mono"><Icon name="fork" class="text-2xs" /><span class="truncate">{{ run.branch }}</span></span>
-                <span class="font-mono">{{ run.sha.slice(0, 7) }}</span>
-                <span v-tooltip.bottom="formatTimestamp(run.createdAt)">{{ timeAgo(run.createdAt) }}</span>
-                <span v-if="duration !== undefined">{{ duration }}</span>
-            </div>
+            <a
+                v-if="page !== undefined"
+                :href="page"
+                target="_blank"
+                rel="noopener"
+                :class="ui.iconButton(`h-7 w-7 shrink-0 rounded`)"
+                :aria-label="t(`runSide.openOn`, { forge: forgeName })"
+                v-tooltip.bottom="forgeName"
+            >
+                <Icon name="arrow-up-right" class="text-xs" />
+            </a>
         </div>
 
         <div ref="graphBox" class="relative flex min-h-0 flex-1 flex-col">
