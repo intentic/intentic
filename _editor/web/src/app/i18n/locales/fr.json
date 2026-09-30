@@ -2052,7 +2052,6 @@
             "ask": "Demander d'abord",
             "askNote": "Les agents demandent avant d'installer des paquets. Vous répondez dans le chat, une fois ou pour toute la conversation.",
             "automatic": "Automatique",
-            "automaticNote": "Les agents installent les paquets dont une tâche a besoin et continuent de travailler. Une conversation dans son propre worktree installe dans sa propre copie ; la revue liste chaque dépendance que son travail ajoute avant que vous ne l'intégriez.",
             "never": "Jamais",
             "neverNote": "Les agents n'installent jamais de paquets eux-mêmes. Une dépendance qu'ils ajoutent à un manifeste est installée quand vous intégrez leur travail.",
             "title": "Installations du projet",

@@ -41,15 +41,13 @@ afterEach(() => {
 const pill = (host: HTMLElement, label: string): HTMLElement =>
     [...host.querySelectorAll<HTMLElement>(`button, [role="radio"], [role="tab"]`)].find((element) => element.textContent?.trim() === label)!;
 
-const AUTOMATIC_NOTE = `Agents install the packages a task needs and keep working. A conversation in its own worktree installs into its own copy; the review lists every dependency its work adds before you land it.`;
 const ASK_NOTE = `Agents ask before installing packages. You answer in the chat, once or for the whole conversation.`;
 const NEVER_NOTE = `Agents never install packages themselves. A dependency they add to a manifest is installed when you land their work.`;
 
 // Reads the default off the schema instead of hardcoding it, so a schema change can't silently drift from the test.
-test("opens on the setting's own default and says what it does", () => {
+test("opens on the setting's own default with no note", () => {
     const host = mount();
     expect(SandboxSettingsSchema.parse({}).projectInstalls).toBe(`automatic`);
-    expect(host.textContent).toContain(AUTOMATIC_NOTE);
     expect(host.textContent).not.toContain(ASK_NOTE);
     expect(host.textContent).not.toContain(NEVER_NOTE);
 });
@@ -68,7 +66,6 @@ test("choosing Ask first writes ask and says the answer is given in the chat", a
     await nextTick();
     expect(patch).toHaveBeenCalledWith({ projectInstalls: `ask` });
     expect(host.textContent).toContain(ASK_NOTE);
-    expect(host.textContent).not.toContain(AUTOMATIC_NOTE);
 });
 
 test("choosing Never writes never and says the land installs what was added", async () => {
@@ -85,5 +82,4 @@ test("a stored answer is the one shown", async () => {
     await nextTick();
     expect(pill(host, `Never`).getAttribute(`aria-selected`)).toBe(`true`);
     expect(host.textContent).toContain(NEVER_NOTE);
-    expect(host.textContent).not.toContain(AUTOMATIC_NOTE);
 });

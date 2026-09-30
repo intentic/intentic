@@ -2062,7 +2062,6 @@
             "ask": "Preguntar antes",
             "askNote": "Los agentes preguntan antes de instalar paquetes. Respondes en el chat, una vez o para toda la conversación.",
             "automatic": "Automático",
-            "automaticNote": "Los agentes instalan los paquetes que necesita una tarea y siguen trabajando. Una conversación en su propio worktree instala en su propia copia; la revisión lista cada dependencia que añade su trabajo antes de que lo integres.",
             "never": "Nunca",
             "neverNote": "Los agentes nunca instalan paquetes por su cuenta. Una dependencia que añaden a un manifiesto se instala cuando integras su trabajo.",
             "title": "Instalaciones del proyecto",

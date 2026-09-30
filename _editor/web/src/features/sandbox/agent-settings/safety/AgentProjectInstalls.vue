@@ -21,7 +21,7 @@ const MODES = computed(() => [
 
 const mode = computed<ProjectInstallMode>(() => settings.value?.projectInstalls ?? `automatic`);
 
-// One line per answer, saying what the agent then does and where the owner hears about it.
+// One line per answer when the owner is asked or installs are deferred to land; automatic needs no note.
 const note = computed(() => {
     if (mode.value === `ask`) {
         return t(`sandbox.agentProjectInstalls.askNote`);
@@ -29,7 +29,7 @@ const note = computed(() => {
     if (mode.value === `never`) {
         return t(`sandbox.agentProjectInstalls.neverNote`);
     }
-    return t(`sandbox.agentProjectInstalls.automaticNote`);
+    return undefined;
 });
 </script>
 
@@ -43,7 +43,7 @@ const note = computed(() => {
                     @update:model-value="(projectInstalls: string) => patch({ projectInstalls: projectInstalls as ProjectInstallMode })"
                 />
             </template>
-            <template #below>
+            <template v-if="note" #below>
                 <p class="text-2xs text-muted">{{ note }}</p>
             </template>
         </Row>

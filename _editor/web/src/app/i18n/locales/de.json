@@ -2054,7 +2054,6 @@
             "ask": "Erst fragen",
             "askNote": "Agenten fragen, bevor sie Pakete installieren. Sie antworten im Chat, einmal oder für die ganze Unterhaltung.",
             "automatic": "Automatisch",
-            "automaticNote": "Agenten installieren die Pakete, die eine Aufgabe braucht, und arbeiten weiter. Eine Unterhaltung in ihrem eigenen Worktree installiert in ihre eigene Kopie; die Durchsicht listet jede Abhängigkeit auf, die ihre Arbeit hinzufügt, bevor Sie sie landen.",
             "never": "Nie",
             "neverNote": "Agenten installieren nie selbst Pakete. Eine Abhängigkeit, die sie in ein Manifest eintragen, wird installiert, wenn Sie ihre Arbeit landen.",
             "title": "Projektinstallationen",

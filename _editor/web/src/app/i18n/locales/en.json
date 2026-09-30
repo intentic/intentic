@@ -2904,7 +2904,6 @@
             "ask": "Ask first",
             "askNote": "Agents ask before installing packages. You answer in the chat, once or for the whole conversation.",
             "automatic": "Automatic",
-            "automaticNote": "Agents install the packages a task needs and keep working. A conversation in its own worktree installs into its own copy; the review lists every dependency its work adds before you land it.",
             "never": "Never",
             "neverNote": "Agents never install packages themselves. A dependency they add to a manifest is installed when you land their work.",
             "title": "Project installs",

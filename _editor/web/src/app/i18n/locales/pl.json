@@ -2738,7 +2738,6 @@
             "ask": "Najpierw pytaj",
             "askNote": "Agenty pytają przed instalacją pakietów. Odpowiadasz na czacie, raz albo na całą rozmowę.",
             "automatic": "Automatycznie",
-            "automaticNote": "Agenty instalują pakiety, których potrzebuje zadanie, i pracują dalej. Rozmowa we własnym worktree instaluje do własnej kopii; przegląd wypisuje każdą zależność, którą dodaje jej praca, zanim ją scalisz.",
             "never": "Nigdy",
             "neverNote": "Agenty nigdy same nie instalują pakietów. Zależność, którą dopiszą do manifestu, zostaje zainstalowana, gdy scalisz ich pracę.",
             "title": "Instalacje w projekcie",
