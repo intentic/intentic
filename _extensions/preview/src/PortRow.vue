@@ -40,7 +40,7 @@ const details = computed<string[][]>(() => [
 
 <template>
     <DisclosureRow v-model:open="open" density="compact" hit="pair">
-        <!-- The origin glyph and the port number ride INSIDE the toggle: the pair is the hit area, and a fixed-width number is a wide. -->
+        <!-- The origin glyph and the port number share the lead column; the trailing chevron is the pair's hit area. -->
         <template #lead="{ iconClass }">
             <Icon :name="ORIGIN_ICONS[entry.origin]" class="shrink-0 text-muted" :class="iconClass" />
             <!-- The port number is what the reader came looking for, and a fixed width is what makes a column of them scannable rather than ragged. -->

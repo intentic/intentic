@@ -36,13 +36,11 @@ interface Slots {
 
 interface Harness {
     readonly isOpen: () => boolean;
-    /** The chevron + `#lead` mark: a real <button>, and the row's tab stop under `pair`. */
+    /** The trailing chevron: a real <button> under `pair`, and the row's tab stop there. */
     readonly toggle: () => HTMLElement;
     readonly find: (selector: string) => HTMLElement;
     /** The expanded block, by the id the toggle names as `aria-controls`. */
     readonly evidence: () => HTMLElement;
-    /** The column beside the evidence: the toggle's own, continued down the open row. */
-    readonly gutter: () => HTMLElement;
 }
 
 // Torn down by the runner rather than by each test body, so a test that throws does not leave the document held by a
@@ -99,7 +97,6 @@ const mount = (hit: `header` | `pair`, slots: Slots): Harness => {
         toggle,
         find,
         evidence,
-        gutter: () => evidence().previousElementSibling as HTMLElement,
     };
 };
 
@@ -148,7 +145,7 @@ it(`gives a press on the headline's link to the link, and not to the row`, async
     expect({ visited: row.visits(), open: row.isOpen() }).toEqual({ visited: 1, open: false });
 });
 
-it(`opens from the chevron and mark pair, and from the keyboard on it`, async () => {
+it(`opens from the trailing chevron, and from the keyboard on it`, async () => {
     const row = plain();
     await press(row.toggle());
     expect(row.isOpen()).toBe(true);
@@ -164,9 +161,8 @@ it(`toggles once, not twice, when the header itself is the button`, async () => 
     expect(row.isOpen()).toBe(true);
 });
 
-// Closing: an open row could previously only close from the header line it had pushed up the page. The evidence stops
-// presses (it is there to be read); the column beside it, under the chevron, must not be inert.
-it(`closes from the toggle column beside the open evidence, but not from the evidence itself`, async () => {
+// Closing: the evidence stops presses (it is there to be read); the header and trailing chevron still close the row.
+it(`closes from the trailing chevron and from the headline, but not from the evidence itself`, async () => {
     const row = plain();
     await press(row.toggle());
     expect(row.isOpen()).toBe(true);
@@ -174,7 +170,7 @@ it(`closes from the toggle column beside the open evidence, but not from the evi
     await press(row.find(`.evidence-text`));
     expect(row.isOpen()).toBe(true);
 
-    await press(row.gutter());
+    await press(row.toggle());
     expect(row.isOpen()).toBe(false);
 });
 

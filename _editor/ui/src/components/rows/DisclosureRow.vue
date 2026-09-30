@@ -5,7 +5,7 @@ import { FACE_SIZES } from "../brand/personaFace.js";
 import Icon from "../primitives/Icon.vue";
 import Row from "./Row.vue";
 import type { IconName } from "../../icons/iconSets.js";
-import { ROW_DRAWER_PAD, ROW_TIERS, ROW_TOGGLE_GAPS, ROW_TOGGLE_SIZES, type RowDensity, type RowTone, useRowDensity } from "./row.js";
+import { ROW_DRAWER_PAD, ROW_TIERS, ROW_TOGGLE_SIZES, type RowDensity, type RowTone, useRowDensity } from "./row.js";
 
 const {
     open = false,
@@ -24,8 +24,9 @@ const {
     /** Forwarded to <Row>: `face` sizes `#lead` for a <PersonaFace> and pays for it out of the row's padding. */
     lead?: `icon` | `face`;
     // What the press target is (pressing the row always opens it; this only decides the button's edges).
-    // `header`: chevron + lead + title + description are one button. `pair`: only chevron + lead are; the
-    // headline's own controls (a link, a button) keep their own clicks (see <Row>'s `headlineGuard`).
+    // `header`: lead + title + description are one button; the chevron sits in the trailing cluster like
+    // <Row chevron>. `pair`: only the trailing chevron is; the headline's own controls (a link, a button)
+    // keep their own clicks (see <Row>'s `headlineGuard`).
     hit?: `header` | `pair`;
     /** `rail`: evidence about this row, hangs off its title. `drawer`: a place of its own, full width, own boundary. */
     body?: `rail` | `drawer`;
@@ -70,8 +71,8 @@ const onRowClick = (event: MouseEvent): void => {
     }
 };
 
-// Written out rather than as a `.stop` modifier: in `header` mode the cluster sits inside <Row>'s own
-// button, and a modifier there would swallow the press before that button ever saw it.
+// Written out rather than as a `.stop` modifier: the trailing chevron must not also bubble into the
+// row-wide handler and toggle straight back.
 const onPairClick = (event: MouseEvent): void => {
     if (hit === `header`) {
         return;
@@ -89,7 +90,6 @@ const tier = useRowDensity(() => density);
 // Read from <Row>'s own tier table, so the hidden mirror below stays in step with what it mirrors.
 const gap = computed(() => ROW_TIERS[tier.value].gap);
 const mark = computed(() => (lead === `face` ? FACE_SIZES.row : ROW_TIERS[tier.value].mark));
-const toggleGap = computed(() => ROW_TOGGLE_GAPS[tier.value]);
 const chevronSize = computed(() => ROW_TOGGLE_SIZES[tier.value]);
 
 // The one open-row tint, so every list in the app shades an open row the same colour.
@@ -132,19 +132,26 @@ const wrapperSelect = computed(() => (disabled ? `` : `ui-row-select`));
                 @click="onRowClick"
             >
                 <template #lead>
-                    <!-- In `pair` this cluster IS the keyboard's way into the toggle, since the row-wide click handler only reaches pointers. -->
+                    <!-- The tier's mark size, forwarded so a disclosure row's lead is written exactly like a plain row's. -->
+                    <slot name="lead" :mark="mark" :icon-class="ROW_TIERS[tier].icon" />
+                </template>
+
+                <template v-if="$slots[`title`]" #title><slot name="title" /></template>
+                <template v-if="$slots[`description`]" #description><slot name="description" /></template>
+                <!-- Trailing cluster matches <Row chevron>: facts, then the disclosure mark at the right edge. -->
+                <template v-if="$slots[`meta`] || !disabled" #meta>
+                    <slot name="meta" />
+                    <!-- In `pair` this button IS the keyboard's way into the toggle, since the row-wide click handler only reaches pointers. -->
                     <component
                         :is="hit !== `header` && !disabled ? `button` : `span`"
                         :type="hit !== `header` && !disabled ? `button` : undefined"
                         :aria-expanded="hit !== `header` && !disabled ? open : undefined"
                         :aria-controls="hit !== `header` && !disabled ? bodyId : undefined"
-                        class="flex shrink-0 items-center"
-                        :class="[
-                            toggleGap,
+                        :class="
                             hit !== `header` && !disabled
                                 ? `cursor-pointer rounded-sm text-subtle hover:text-content focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary-500`
-                                : ``,
-                        ]"
+                                : ``
+                        "
                         @click="onPairClick"
                     >
                         <!-- Rotation, not an icon swap: `chevron-up`/`chevron-down` are two names a caller could get backwards. -->
@@ -155,26 +162,18 @@ const wrapperSelect = computed(() => (disabled ? `` : `ui-row-select`));
                             :class="[chevronSize, open ? `rotate-90` : ``]"
                             aria-hidden="true"
                         />
-                        <!-- The tier's mark size, forwarded so a disclosure row's lead is written exactly like a plain row's. -->
-                        <slot name="lead" :mark="mark" :icon-class="ROW_TIERS[tier].icon" />
                     </component>
                 </template>
-
-                <template v-if="$slots[`title`]" #title><slot name="title" /></template>
-                <template v-if="$slots[`description`]" #description><slot name="description" /></template>
-                <template v-if="$slots[`meta`]" #meta><slot name="meta" /></template>
                 <template v-if="$slots[`control`]" #control><slot name="control" /></template>
 
-                <!-- The rail: inside <Row>'s padding so it aligns with the row above, offset by a hidden copy of the toggle cluster so it starts
+                <!-- The rail: inside <Row>'s padding so it aligns with the row above, offset by a hidden copy of the lead so it starts
                      flush under the title. No rule beside it: the open row's wash and that indent already say whose evidence it is. -->
                 <template v-if="open && body === `rail`" #below>
                     <div class="flex" :class="gap">
-                        <!-- Runs the full height of an open row so it can be clicked to close, not only from the header line above. -->
-                        <span class="flex shrink-0 cursor-pointer items-center" aria-hidden="true">
-                            <span class="invisible flex items-center" :class="toggleGap">
-                                <Icon v-if="!disabled" name="chevron-right" class="shrink-0" :class="chevronSize" />
-                                <slot name="lead" :mark="mark" :icon-class="ROW_TIERS[tier].icon" />
-                            </span>
+                        <!-- The lead, mirrored and hidden, so the block starts where the title does. -->
+                        <span class="invisible flex shrink-0 items-center" :class="gap" inert aria-hidden="true">
+                            <slot name="lead" :mark="mark" :icon-class="ROW_TIERS[tier].icon" />
+                            <Icon v-if="icon !== undefined" :name="icon" :class="ROW_TIERS[tier].icon" />
                         </span>
                         <!-- `.stop`: this sits inside <Row>, whose row-wide handler would otherwise read a press on the evidence as "close what you just opened.". -->
                         <div :id="bodyId" class="min-w-0 flex-1 cursor-auto" @click.stop>

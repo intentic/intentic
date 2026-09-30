@@ -60,7 +60,7 @@ export const ROW_TONES = {
     info: `text-link`,
 } as const satisfies Record<RowTone, string>;
 
-// Gap inside the toggle, tighter than the tier's own gap: the chevron and lead mark read as one affordance.
+// Gap inside a row note's own toggle cluster, tighter than the tier's own gap.
 export const ROW_TOGGLE_GAPS = {
     comfortable: `gap-2.5`,
     compact: `gap-2`,
