@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useT } from "@intentic/ui/i18n";
-import { type ComponentPublicInstance, computed, inject } from "vue";
+import { type ComponentPublicInstance, computed, inject, ref } from "vue";
 import { agentDisplayTitle } from "../../fleet/agentStatus";
 import type { FleetAgent } from "../../fleet/useAgents-fleet";
 import { FINISHED_FOLD, inProcess, type TrayChild, trayOf } from "../view/childFold";
@@ -117,9 +117,18 @@ const animateHeight = (el: Element, to: (box: HTMLElement) => number, duration: 
         });
     });
 };
+// A shut tray with nothing in it is not drawn at all, not drawn zero tall: its rail's border still painted a sliver
+// under the card. `folding` keeps it drawn while the fold closes.
+const folding = ref(false);
 const fold = {
     enter: (el: Element, done: () => void): void => animateHeight(el, (box) => box.scrollHeight || 1, 260, done),
-    leave: (el: Element, done: () => void): void => animateHeight(el, () => 0, 220, done),
+    leave: (el: Element, done: () => void): void => {
+        folding.value = true;
+        animateHeight(el, () => 0, 220, () => {
+            folding.value = false;
+            done();
+        });
+    },
 };
 const inset = computed(() => (props.rail ? `ml-6` : props.live ? `ml-7.5` : `ml-7`));
 </script>
@@ -130,7 +139,7 @@ const inset = computed(() => (props.rail ? `ml-6` : props.live ? `ml-7.5` : `ml-
         :role="shown || tray.asks.length > 0 ? `group` : undefined"
         :aria-label="label"
         class="child-tray flex flex-col border-l border-line pl-1"
-        :class="inset"
+        :class="[inset, { hidden: !shown && !folding && tray.asks.length === 0 }]"
     >
         <!-- A child asking the reader keeps its row under any card: the one row that is news whichever card is looked at. -->
         <div v-if="tray.asks.length > 0" class="flex flex-col pt-1">
