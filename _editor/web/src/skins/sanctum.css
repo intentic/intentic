@@ -700,10 +700,3 @@
     letter-spacing: 0.15em;
     color: var(--sanctum-gold);
 }
-
-/* Lane headers reserve one status mark per line. */
-[data-skin="sanctum"] .lane > header > .h-2.w-2,
-[data-skin="sanctum"] [data-drop] > header > .h-2.w-2 {
-    border-radius: 1px;
-    transform: rotate(45deg);
-}

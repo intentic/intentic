@@ -327,8 +327,8 @@ const starters = computed(() => boardStarters(workspaceRepos.value.length, works
                     class="flex min-w-0 flex-col rounded-xl transition-colors"
                     :class="[!dragging && !narrow ? 'min-h-0' : '', laneDropClass(lane.key)]"
                 >
-                    <!-- Finished's header doubles as the archive's window, swapping its dot/label and growing a way back; pinned while scrolling, unless a wallpaper shows through. -->
-                    <LaneHeader :label="lane.label" :dot="lane.dot" class="rounded-t-xl px-1" :class="papered ? '' : 'sticky top-0 z-10 bg-canvas'">
+                    <!-- Finished's header doubles as the archive's window, swapping its label and growing a way back; pinned while scrolling, unless a wallpaper shows through. -->
+                    <LaneHeader :label="lane.label" class="rounded-t-xl px-1" :class="papered ? '' : 'sticky top-0 z-10 bg-canvas'">
                         <template v-if="lane.key === 'finished' && view.archive" #mark>
                             <button
                                 type="button"

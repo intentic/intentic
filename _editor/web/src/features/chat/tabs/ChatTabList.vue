@@ -141,10 +141,10 @@ const lanes = computed<Record<FleetLane, OpenChat[]>>((drawn) => {
     return steadyLanes(laneOrdered(listed), pointerOver.value ? drawn : undefined);
 });
 // The lane's heading, and what becomes of its chats once Clear takes them out of this window.
-const LANES = computed((): readonly { key: FleetLane; label: string; dot: string; keeps: string }[] => [
-    { key: `attention`, label: t(`shared.attention`), dot: `bg-warning`, keeps: t(`chat.chatTabList.keepsAttention`) },
-    { key: `active`, label: t(`shared.active`), dot: `bg-success`, keeps: t(`chat.chatTabList.keepsActive`) },
-    { key: `finished`, label: t(`shared.finished`), dot: `bg-line-strong`, keeps: t(`chat.chatTabList.keepsFinished`) },
+const LANES = computed((): readonly { key: FleetLane; label: string; keeps: string }[] => [
+    { key: `attention`, label: t(`shared.attention`), keeps: t(`chat.chatTabList.keepsAttention`) },
+    { key: `active`, label: t(`shared.active`), keeps: t(`chat.chatTabList.keepsActive`) },
+    { key: `finished`, label: t(`shared.finished`), keeps: t(`chat.chatTabList.keepsFinished`) },
 ]);
 // What Clear closes per lane, counted off the very set the press sends, so the button can't name a number it
 // doesn't close. Includes the chats a run's row folds away: they lane here too, and the lane is the target.
@@ -274,7 +274,7 @@ defineExpose({ beginRename: actions.beginRename });
             class="flex min-h-0 flex-1 flex-col items-stretch gap-4 overflow-y-auto"
         >
             <!-- An empty lane isn't drawn at all (see occupiedLanes). -->
-            <RailLane v-for="lane in occupiedLanes" :key="lane.key" :label="lane.label" :dot="lane.dot">
+            <RailLane v-for="lane in occupiedLanes" :key="lane.key" :label="lane.label">
                 <!-- Closing a chat is lossless in every lane. -->
                 <template #actions>
                     <Button

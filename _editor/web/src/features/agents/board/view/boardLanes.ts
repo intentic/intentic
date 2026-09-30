@@ -18,14 +18,13 @@ import { boardScreen } from "./firstScreen";
 export interface LaneHead {
     readonly key: FleetLane;
     readonly label: string;
-    readonly dot: string;
     readonly empty: string;
 }
 
 export const laneHeads = (): readonly LaneHead[] => [
-    { key: `attention`, label: t(`shared.attention`), dot: `bg-warning`, empty: t(`agents.agentsView.nothingNeedsRightNow`) },
-    { key: `active`, label: t(`shared.active`), dot: `bg-success`, empty: t(`agents.agentsView.noAgentsWorkingStart`) },
-    { key: `finished`, label: t(`shared.finished`), dot: `bg-line-strong`, empty: t(`agents.agentsView.finishedAgentsLandWork`) },
+    { key: `attention`, label: t(`shared.attention`), empty: t(`agents.agentsView.nothingNeedsRightNow`) },
+    { key: `active`, label: t(`shared.active`), empty: t(`agents.agentsView.noAgentsWorkingStart`) },
+    { key: `finished`, label: t(`shared.finished`), empty: t(`agents.agentsView.finishedAgentsLandWork`) },
 ];
 
 // The lanes left to right, which is also the order a Shift+click range walks.
