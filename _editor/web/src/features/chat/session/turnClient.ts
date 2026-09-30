@@ -66,7 +66,7 @@ const repeatsNudge = (message: { readonly text: string; readonly attachments: re
 };
 
 // What a press re-runs a held turn on: the runtime and model the composer holds, the account only as a pick the daemon
-// has not taken or one made by hand for this turn (the same rule a send names it by, accountIntent); naming none leaves
+// has not taken or a hand pick no turn has run on yet (the same rule a send names it by, accountIntent); naming none leaves
 // it to the daemon's record, which also moves the turn off an account that can no longer serve. An empty pick means the daemon keeps the held model.
 // `carry` keeps the provider session across an account change, only when asked; moving to another account is
 // switchAccount's (continueOn).
@@ -169,6 +169,11 @@ export class TurnClient {
 
     // Tool ids this turn has already drawn, so a card's first arrival can be told from its updates; cleared per turn.
     private liveTools = new Set<string>();
+
+    // An account pick the daemon refused to move the conversation to, because a turn held it (one parked on a card
+    // included): asked again as that turn settles (askMoveAgain), so what the daemon then does by itself (a booked
+    // re-run, a wake, a kept turn sent again as it was) runs on the pick too, not only this window's presses.
+    private unmoved: string | undefined;
 
     constructor(private readonly host: TurnHost) {}
 
@@ -421,6 +426,7 @@ export class TurnClient {
             if (elsewhere) {
                 host.transcript.dropLocal(userMessageId);
             } else {
+                this.ranOn(settings);
                 await this.follow(receipt.run, turn, userMessageId, controller);
             }
         } catch (err) {
@@ -494,6 +500,9 @@ export class TurnClient {
             );
             if (receipt instanceof SandboxHttpError) {
                 this.turnedAway(receipt, undefined, sent, messageId);
+            } else if (receipt.delivered === `started`) {
+                // The turn it was typed into ended meanwhile, so these words opened one of their own on the settings.
+                this.ranOn(settings);
             }
         } catch (err) {
             this.giveBack(sent, messageId);
@@ -561,6 +570,7 @@ export class TurnClient {
         host.failures.settled();
         // A switch made while this turn ran held its divider back; the turn's over, so it goes here. No-op otherwise.
         host.selection.apply({ kind: `settled` });
+        this.askMoveAgain();
         host.transcript.persist();
         // A remote conversation has no roster watch to invalidate its cached read, so the turn ending here is the signal.
         if (host.box.value !== undefined) {
@@ -584,9 +594,10 @@ export class TurnClient {
     async resume(): Promise<void> {
         const { host } = this;
         host.error.value = null;
+        const settings = host.selection.turnSettings();
         const released = await orRefusal(
             sandboxRpc.agent.queueResume(
-                { conversationId: host.conversationId, routing: heldRouting(host.selection.turnSettings(), host.session.value, {}) },
+                { conversationId: host.conversationId, routing: heldRouting(settings, host.session.value, {}) },
                 { context: { at: host.box.value } },
             ),
         );
@@ -597,6 +608,7 @@ export class TurnClient {
         // The queue the press left, ahead of a roster frame a busy sandbox may deliver long after the turn it started.
         host.queue.value = newerQueue(host.queue.value, released.queue);
         if (released.run !== undefined) {
+            this.ranOn(settings);
             await this.reattach();
         }
     }
@@ -655,10 +667,16 @@ export class TurnClient {
             await this.stopping;
         }
         // Where it re-runs, and in which session, is the daemon's to say; a new session it names cuts the segment then.
-        const routing = heldRouting(this.host.selection.turnSettings(), this.host.session.value, options);
+        const settings = this.host.selection.turnSettings();
+        const routing = heldRouting(settings, this.host.session.value, options);
         this.host.selection.apply({ kind: `rerun` });
-        if (!(await this.askResume(routing))) {
+        const resumed = await this.askResume(routing);
+        if (resumed === undefined) {
             return false;
+        }
+        // A 409 is a re-run somebody else's press already started, on its own routing, not on this one's.
+        if (resumed === `ran`) {
+            this.ranOn(settings);
         }
         await this.reattach();
         return true;
@@ -667,20 +685,30 @@ export class TurnClient {
     // Asks the daemon to move this conversation to `account` (switchAccount), the one way a conversation it holds changes
     // who pays. It only moves: without `run` a turn the daemon holds stays held, since a pick in the picker is a choice,
     // never a press. A chat it does not hold yet, or another box, leaves the pick to ride the next turn instead
-    // (accountIntent), and so does a turn running now (409): the pick stays on the selection either way. A sandbox too old
-    // for the route is asked nothing: the picker says it needs an update (accountsOutdated).
+    // (accountIntent), and so does a turn running now (409, a card waiting included), which is asked again once that turn
+    // settles: the pick stays on the selection either way. A sandbox too old for the route is asked nothing: the picker
+    // says it needs an update (accountsOutdated).
     moveAccount(account: string): void {
         const { host } = this;
+        this.unmoved = undefined;
         // The card's wait follows the pick at once, off the same reading the composer's schedule uses: the press runs on
         // the pick, and the daemon re-books a held turn there too.
         host.pickUp.value = repointedPickUp(host.pickUp.value, host.selection.servingState.value);
         if (!host.registered.value || host.box.value !== undefined || accountsOutdated.value) {
             return;
         }
-        // A refusal (a turn running) or an unreachable daemon leaves the pick on the selection, where the next turn names it.
-        void orRefusal(sandboxRpc.agent.switchAccount({ conversationId: host.conversationId, account }, { context: { at: host.box.value } })).catch((error: unknown) => {
-            host.error.value = errorMessage(error, `The sandbox did not answer.`);
-        });
+        // A refusal or an unreachable daemon leaves the pick on the selection, where every turn names it until one runs
+        // there. A turn holding the conversation (409) is only a refusal for now: asked again once it settles.
+        void orRefusal(sandboxRpc.agent.switchAccount({ conversationId: host.conversationId, account }, { context: { at: host.box.value } })).then(
+            (answer) => {
+                if (answer instanceof SandboxHttpError && answer.status === 409) {
+                    this.unmoved = account;
+                }
+            },
+            (error: unknown) => {
+                host.error.value = errorMessage(error, `The sandbox did not answer.`);
+            },
+        );
     }
 
     // Continues a held turn on another account: one command, the daemon moving the conversation and re-running the turn
@@ -719,31 +747,61 @@ export class TurnClient {
         return true;
     }
 
-    // Whether the daemon now runs the held turn, re-run by this press or already running (a 409, which following answers);
-    // false when it holds nothing or is unreachable, so the caller continues instead and an offline press still works.
-    private async askResume(routing: ResumeRouting): Promise<boolean> {
+    // Whether the daemon now runs the held turn: re-run by this press (`ran`), or already running (`running`, a 409, which
+    // following answers); undefined when it holds nothing or is unreachable, so the caller continues instead and an
+    // offline press still works.
+    private async askResume(routing: ResumeRouting | undefined): Promise<`ran` | `running` | undefined> {
         try {
-            await sandboxRpc.agent.resume({ conversationId: this.host.conversationId, routing }, { context: { at: this.host.box.value } });
-            return true;
+            await sandboxRpc.agent.resume(
+                { conversationId: this.host.conversationId, ...(routing === undefined ? {} : { routing }) },
+                { context: { at: this.host.box.value } },
+            );
+            return `ran`;
         } catch (error) {
-            return error instanceof SandboxHttpError && error.status === 409;
+            return error instanceof SandboxHttpError && error.status === 409 ? `running` : undefined;
         }
     }
 
     // Send a turn the sandbox kept after the door turned it away (a fix press, a peer's message): the press runs it as
-    // it was started, routing and all. A sandbox that no longer keeps it (a restart since) gets its words as a send.
+    // it was started, routing and all, unless the composer holds an account the daemon has not taken (a pick made since,
+    // or one it refused to move to): the kept turn names its own account, which would win over the move, so the press
+    // names the pick, as Continue does for a held turn. A sandbox that no longer keeps it (a restart since) gets its words
+    // as a send.
     async resendKept(kept: { readonly text: string; readonly attachments: readonly ChatAttachment[] }): Promise<void> {
         if (this.streaming.value) {
             return;
         }
-        this.host.error.value = null;
-        try {
-            await sandboxRpc.agent.resume({ conversationId: this.host.conversationId }, { context: { at: this.host.box.value } });
-        } catch {
+        const { host } = this;
+        host.error.value = null;
+        const settings = host.selection.turnSettings();
+        const named = accountIntent(settings, { registered: true, session: host.session.value }) !== undefined;
+        const resumed = await this.askResume(named ? heldRouting(settings, host.session.value, {}) : undefined);
+        if (resumed === undefined) {
             await this.say(kept.text, kept.attachments);
             return;
         }
+        if (resumed === `ran`) {
+            this.ranOn(settings);
+        }
         await this.reattach();
+    }
+
+    // A turn or press on these settings started at the daemon: a hand-picked account it went out on is honoured, so the
+    // next turn follows the daemon's record again (the selection spends only the pick these settings carried). One that
+    // only queued, or went into the live turn, carried it nowhere yet.
+    private ranOn(settings: TurnSettings): void {
+        this.host.selection.apply({ kind: `accountTaken`, account: settings.account });
+    }
+
+    // The move the daemon refused while a turn held the conversation, asked again now that the turn has settled, while
+    // the pick still stands. Refused again (the queue started the next turn at once), it is asked at that turn's settle.
+    private askMoveAgain(): void {
+        const account = this.unmoved;
+        this.unmoved = undefined;
+        const { selection } = this.host;
+        if (account !== undefined && selection.state.value.accountPicked && selection.account.value === account) {
+            this.moveAccount(account);
+        }
     }
 
     // User-initiated Stop: hard-cancel the turn daemon-side and let its stream draw the rest, the same way everywhere. The

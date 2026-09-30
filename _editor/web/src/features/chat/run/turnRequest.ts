@@ -16,8 +16,8 @@ export interface TurnSettings {
     // The account the person picked, or the daemon's own record of where the conversation runs; undefined is auto (the
     // daemon picks by serviceability). Sent only as intent (accountIntent).
     readonly account: string | undefined;
-    // The person picked `account` by hand for this turn, so the turn names it even where the daemon's record already
-    // does (accountIntent). Absent on every other turn.
+    // `account` is a hand pick no turn has run on yet (Selection.accountPicked), so the turn names it even where the
+    // daemon's record already does (accountIntent).
     readonly accountPicked?: boolean;
     // Persona id the turn acts as; undefined means an ordinary chat with every connected account reachable.
     readonly actsAs: string | undefined;
@@ -81,8 +81,8 @@ export const resumedSessionId = (
 // longer serve (blocked-account.ts), or held when no other can. Named, and so run whatever the account's state, only
 // where the selection holds something that record does not: a chat's first turn (undefined there too is auto), a turn
 // onto another provider than the conversation's, an account other than the one the daemon last reported (a pick the
-// daemon, busy with a turn, refused to move to), or the account the person just picked by
-// hand (`accountPicked`), even the recorded one: picking an account the daemon holds turns off for is an attempt on
+// daemon, busy with a turn, refused to move to), or an account the person picked by hand that no turn has run on
+// yet (`accountPicked`), even the recorded one: picking an account the daemon holds turns off for is an attempt on
 // it, not another hold, and its answer lifts the daemon's mark.
 export const accountIntent = (
     settings: Pick<TurnSettings, "agent" | "account" | "accountPicked">,

@@ -1541,6 +1541,23 @@ describe(`a low-memory hold`, () => {
         expect(raise(element)).toBeUndefined();
     });
 
+    // The reported bug: picking an account under a kept turn draws this window's own "switched" divider below it, and the
+    // press went with it, just when the person wanted the turn sent again on the new account.
+    it(`keeps a kept turn's press under this window's own notices, which say nothing ran since`, () => {
+        const row = kept(`sendAnyway`);
+        const divider: ChatMessage = {
+            id: 22,
+            role: `notice`,
+            text: `Switched to Claude: your next message starts a fresh session with the conversation so far carried over.`,
+            local: true,
+        };
+        pane.messages = [opener, row, divider];
+        const element = mount(row);
+
+        sendAnyway(element)!.click();
+        expect(resendKept).toHaveBeenCalledWith({ text: opener.text, attachments: [] });
+    });
+
     it(`says a kept turn was held, once it is no longer waiting`, () => {
         const row = kept();
         pane.messages = [opener, row, { id: 22, role: `assistant`, text: `Looking at the failing job.` }];

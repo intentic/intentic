@@ -209,13 +209,15 @@ describe(`ComposerSelection`, () => {
         expect(selection.turnSettings().autoPicked).toBeUndefined();
     });
 
-    // A hand pick of the account the conversation already shows changes nothing on screen, but the one turn after it
-    // names that account (accountIntent), which is how a refused account is tried again.
-    it(`names an account picked by hand on the one turn that takes its settings`, () => {
+    // A hand pick of the account the conversation already shows changes nothing on screen, but the turns after it name
+    // that account (accountIntent), which is how a refused account is tried again, until one of them runs there.
+    it(`names an account picked by hand on every turn's settings until one naming it runs`, () => {
         const { selection } = selectionOf();
         selection.apply({ kind: `selectAccount`, account: `acct-a` });
 
-        expect([selection.turnSettings().accountPicked, selection.turnSettings().accountPicked]).toEqual([true, false]);
+        expect([selection.turnSettings().accountPicked, selection.turnSettings().accountPicked]).toEqual([true, true]);
+        selection.apply({ kind: `accountTaken`, account: `acct-a` });
+        expect(selection.turnSettings().accountPicked).toBe(false);
     });
 
     it(`drops the last speed answer when the fast pick changes`, () => {
@@ -267,5 +269,20 @@ describe(`the account the next turn runs on`, () => {
         // The record's account lost its seat: the daemon moves the next turn (blocked-account.ts), so the tick moves too.
         selection.apply({ kind: `bindSession`, session: { ...CLAUDE_SESSION, account: `work` } });
         expect(selection.servingAccount.value).toEqual({ id: `spare`, byAllowance: true });
+    });
+
+    // The reported bug: picked while the turn waited on a card, which the daemon refuses to move; the parked turn's own
+    // session then came back (a reattach, a record read) and the tick, and the next press, went back to the old account.
+    it(`stays on a pick the daemon has not run a turn on, whatever session it reports meanwhile`, () => {
+        const { selection, host } = selectionOf();
+        host.registered.value = true;
+        selection.apply({ kind: `bindSession`, session: { ...CLAUDE_SESSION, account: `personal` } });
+        selection.apply({ kind: `selectAccount`, account: `spare` });
+        selection.apply({ kind: `bindSession`, session: { ...CLAUDE_SESSION, account: `personal` } });
+
+        expect(selection.account.value).toBe(`spare`);
+        expect(selection.accountNamed.value).toBe(true);
+        expect(selection.servingAccount.value).toEqual({ id: `spare`, byAllowance: false });
+        expect(selection.turnSettings()).toMatchObject({ account: `spare`, accountPicked: true });
     });
 });

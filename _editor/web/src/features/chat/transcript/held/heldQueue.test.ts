@@ -74,6 +74,15 @@ describe(`the row a held message's line stands in for`, () => {
         expect(hold.reason.value).toBe(`refused`);
     });
 
+    // This window's own notice (the divider an account pick draws) is not the conversation moving past the refusal.
+    it(`is still the low-memory row under a notice this window drew itself`, () => {
+        const divider: ChatMessage = { id: 4, role: `notice`, text: `Switched to Claude: your next message starts a fresh session.`, local: true };
+        const hold = readHold([MEMORY, divider], { items: [WAITING], paused: `refused` });
+
+        expect(hold.notice.value?.id).toBe(3);
+        expect(hold.reason.value).toBe(`memory`);
+    });
+
     it(`is no row for a turn the sandbox kept, whose row carries its own press`, () => {
         const hold = readHold([{ ...MEMORY, sandboxHeld: true }], { items: [WAITING], paused: `refused` });
 

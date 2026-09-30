@@ -243,17 +243,35 @@ describe(`the session`, () => {
         });
     });
 
-    // A pick went to the daemon as switchAccount the moment it was made, so there is no window-side pick to guard: the
-    // daemon's session is where the conversation runs, and a session already on the pick changes nothing.
-    it(`takes the daemon's word over a pick, and settles quietly when the session already shows it`, () => {
+    // The reported bug: a pick goes to the daemon as switchAccount, but the daemon refuses while a turn holds the
+    // conversation (one parked on a card included), and the move can still be on its way. The session it reports then is
+    // where the conversation RAN, the parked turn's own or a record read before the move: taken over the pick, it sent
+    // the next press back to the account the person had just moved off.
+    it(`keeps a pick over the session the daemon reports, until a turn runs on it`, () => {
         const picked = reduceSelection(SEEDED, { kind: `selectAccount`, account: `second` }, WORLD).selection;
 
         expect(reduceSelection(picked, { kind: `bindSession`, session: CLAUDE_SESSION }, WORLD)).toEqual({
-            selection: { ...picked, account: `claude-account`, accountPicked: false },
+            selection: picked,
+            effects: { session: CLAUDE_SESSION },
+        });
+        // The session already held, read again, is no run on the pick; a new one minted there is.
+        const onPick = { ...CLAUDE_SESSION, account: `second` };
+        expect(reduceSelection(picked, { kind: `bindSession`, session: onPick }, { ...WORLD, session: onPick }).selection).toBe(picked);
+        const ranThere = { ...onPick, id: `s-2` };
+        expect(reduceSelection(picked, { kind: `bindSession`, session: ranThere }, { ...WORLD, session: CLAUDE_SESSION })).toEqual({
+            selection: { ...picked, accountPicked: false },
+            effects: { session: ranThere },
+        });
+    });
+
+    it(`follows the daemon's session again once the pick has run`, () => {
+        const picked = reduceSelection(SEEDED, { kind: `selectAccount`, account: `second` }, WORLD).selection;
+        const ran = reduceSelection(picked, { kind: `accountTaken`, account: `second` }, WORLD).selection;
+
+        expect(reduceSelection(ran, { kind: `bindSession`, session: CLAUDE_SESSION }, WORLD)).toEqual({
+            selection: { ...ran, account: `claude-account` },
             effects: { session: CLAUDE_SESSION, divider: `refresh` },
         });
-        const settled = { ...CLAUDE_SESSION, account: `second` };
-        expect(reduceSelection(picked, { kind: `bindSession`, session: settled }, WORLD)).toEqual({ selection: picked, effects: { session: settled } });
     });
 
     it(`drops a pick made on the provider it leaves: the next one starts on auto`, () => {
@@ -341,13 +359,19 @@ describe(`a turn's own moments`, () => {
     });
 
     // Picking the account the conversation already runs on changes nothing the selection shows, but the next turn names
-    // it (accountIntent): that is how a person tries an account the daemon holds turns off, and only that one turn.
-    it(`marks an account picked by hand, even the one already shown, for the one turn that takes its settings`, () => {
+    // it (accountIntent): that is how a person tries an account the daemon holds turns off, until a turn runs there.
+    it(`marks an account picked by hand, even the one already shown, until a turn naming it runs`, () => {
         const onIt = { ...SEEDED, account: `second` };
         const picked = reduceSelection(onIt, { kind: `selectAccount`, account: `second` }, WORLD).selection;
 
         expect(picked).toEqual({ ...onIt, accountPicked: true });
-        expect(reduceSelection(picked, { kind: `settingsTaken` }, WORLD).selection).toEqual(onIt);
+        // Settings taken are no turn run: words queued behind a card go into the parked turn, on its own account.
+        expect(reduceSelection(picked, { kind: `settingsTaken` }, WORLD).selection).toBe(picked);
+        expect(reduceSelection(picked, { kind: `accountTaken`, account: `second` }, WORLD).selection).toEqual(onIt);
+        // A turn that ran on an earlier pick spends nothing of the one made since.
+        expect(reduceSelection(picked, { kind: `accountTaken`, account: `first` }, WORLD).selection).toBe(picked);
         expect(reduceSelection(picked, { kind: `selectProvider`, provider: `codex` }, WORLD).selection.accountPicked).toBe(false);
+        // Written outright (a restored tab, the fleet's record of the run), an account is nobody's hand pick.
+        expect(reduceSelection(picked, { kind: `set`, picks: { account: `third` } }, WORLD).selection).toEqual({ ...onIt, account: `third` });
     });
 });

@@ -11,13 +11,17 @@ import type { SessionRef } from "../run/turnRequest";
 export interface Selection {
     readonly provider: AgentProvider;
     readonly harness: AgentHarness;
-    // Where the conversation runs as the daemon reports it (bindSession), or, before it has run, the person's pick.
-    // Undefined is auto: never a seeded guess, so a fresh chat's first turn is placed by the daemon's serviceability
-    // pick. A pick on a conversation the daemon holds moves it there (`switchAccount`), never by riding a later turn.
+    // The account the next turn runs on: the person's pick while one stands (`accountPicked`), else where the conversation
+    // runs as the daemon reports it (bindSession). Undefined is auto: never a seeded guess, so a fresh chat's first turn is
+    // placed by the daemon's serviceability pick.
     readonly account: string | undefined;
-    // The person picked `account` by hand since the last turn took its settings: the next turn names it even where the
-    // daemon already runs the conversation there (accountIntent), so picking a refused account again tries it. Describes
-    // ONE turn, spent when that turn takes its settings.
+    // `account` is the person's own pick and no turn has run on it yet. The daemon is asked to move there at the pick
+    // (`switchAccount`), but it refuses while a turn holds the conversation, one parked on a card included, and a move
+    // can still be on its way when the old turn next reports its session. So until a turn starts on the pick, every
+    // turn and press names it (accountIntent), even the account the daemon already runs the conversation on (picking a
+    // refused account again is an attempt on it), and nothing the daemon reports about where the conversation ran
+    // takes it back (bindSession). Spent when a turn naming it starts (`accountTaken`), or when the daemon reports a new
+    // session on it.
     readonly accountPicked: boolean;
     readonly model: string;
     // Provider/model the app moved this chat FROM when it couldn't run there; cleared by restoreProvider or a pick.
@@ -96,6 +100,8 @@ export type PickAction =
     | { readonly kind: `setAuto`; readonly auto: boolean }
     | { readonly kind: `selectAccount`; readonly account: string }
     | { readonly kind: `accountMoved`; readonly account: string }
+    // A turn or a press naming `account` started at the daemon, which is where a pick it carried is honoured.
+    | { readonly kind: `accountTaken`; readonly account: string | undefined }
     | { readonly kind: `selectHarness`; readonly harness: AgentHarness }
     // The session as the daemon has it, bound to this chat.
     | { readonly kind: `bindSession`; readonly session: SessionRef }
@@ -302,7 +308,8 @@ const REDUCERS: Reducers = {
     setFast: (selection, { fast }) => ({ selection: { ...selection, fast }, effects: { fastStale: true } }),
     setAuto: (selection, { auto }, world) => setAuto(selection, auto, world),
     // Allowed while a card waits on the user: the parked turn keeps its credential, and the divider waits for its settle.
-    // The daemon is asked to move the conversation (switchAccount); one that cannot yet takes it on the next turn.
+    // The daemon is asked to move the conversation (switchAccount); where it refuses, the pick stands here and every
+    // turn and press names it until one runs on it (`accountPicked`).
     selectAccount: (selection, { account }, world) =>
         world.generating
             ? unchanged(selection)
@@ -313,6 +320,9 @@ const REDUCERS: Reducers = {
     // The daemon moved the conversation itself, at this window's press (a held turn continued elsewhere): the selection
     // follows, with the divider a switch owes, and nothing asked of the daemon again.
     accountMoved: (selection, { account }) => ({ selection: { ...selection, account, accountPicked: false }, effects: { divider: `refresh` } }),
+    // The pick is honoured once a turn naming it runs; a pick made since (another account) still waits for its own.
+    accountTaken: (selection, { account }) =>
+        selection.accountPicked && selection.account === account ? { selection: { ...selection, accountPicked: false }, effects: {} } : unchanged(selection),
     // Meaningful for codex/grok only. A retired session takes its prompt cache with it, as a provider switch does.
     selectHarness: (selection, { harness }, world) =>
         world.streaming || harness === selection.harness
@@ -325,10 +335,21 @@ const REDUCERS: Reducers = {
     // turn moved off an account that can no longer serve) reaches the composer. It decides nothing: a turn names no
     // account the daemon already holds (accountIntent). A remote box's foreign id and another provider's session are
     // never taken, and a session naming no account says nothing about one.
-    bindSession: (selection, { session }, world) =>
-        world.local && session.provider === selection.provider && session.account !== undefined && session.account !== selection.account
-            ? { selection: { ...selection, account: session.account, accountPicked: false }, effects: { session, divider: `refresh` } }
-            : { selection, effects: { session } },
+    // A standing pick outranks it: the session reported is where the conversation RAN (the parked turn the pick was made
+    // under, a record read before the move landed), not where the next turn goes. Only a new session minted on the pick
+    // says a turn ran there, which honours it.
+    bindSession: (selection, { session }, world) => {
+        if (!world.local || session.provider !== selection.provider || session.account === undefined) {
+            return { selection, effects: { session } };
+        }
+        if (selection.accountPicked) {
+            const ranOnPick = session.account === selection.account && session.id !== world.session?.id;
+            return { selection: ranOnPick ? { ...selection, accountPicked: false } : selection, effects: { session } };
+        }
+        return session.account === selection.account
+            ? { selection, effects: { session } }
+            : { selection: { ...selection, account: session.account }, effects: { session, divider: `refresh` } };
+    },
     // The PICKS, not what they currently clamp to: a fork inherits the user's choice, not one model's ceiling.
     adopt: (selection, { from }) => ({
         selection: {
@@ -363,14 +384,15 @@ const REDUCERS: Reducers = {
         },
         effects: { session: { id: sessionId, provider: `claude`, account: undefined, harness: `native` } },
     }),
-    set: (selection, { picks }) => ({ selection: { ...selection, ...picks }, effects: {} }),
+    // An account written outright (a restored tab, the fleet's record of the run, a route's answer) is nobody's hand pick.
+    set: (selection, { picks }) => ({ selection: { ...selection, ...picks, ...(`account` in picks ? { accountPicked: false } : {}) }, effects: {} }),
     // The divider, if any, is frozen into the record by the segment cut, and this turn is what a swap is measured by.
     sent: (selection) => ({ selection: { ...selection, sentModel: selection.model }, effects: { divider: `freeze` } }),
     rerun: (selection) => ({ selection, effects: { divider: `freeze` } }),
     settled: (selection) => ({ selection: { ...selection, switchedMidTurn: false }, effects: { divider: { settle: selection.switchedMidTurn } } }),
-    // Spends both one-turn marks: Auto's reading and the hand pick of an account.
-    settingsTaken: (selection) =>
-        selection.autoPicked || selection.accountPicked ? { selection: { ...selection, autoPicked: false, accountPicked: false }, effects: {} } : unchanged(selection),
+    // Spends Auto's one-turn mark. Not the account pick: settings taken are not a turn run (words queued behind a card go
+    // into the parked turn, on its account), so the pick waits for `accountTaken`.
+    settingsTaken: (selection) => (selection.autoPicked ? { selection: { ...selection, autoPicked: false }, effects: {} } : unchanged(selection)),
 };
 
 // The table is keyed by the action's own kind, so the entry read always takes the action it is handed.

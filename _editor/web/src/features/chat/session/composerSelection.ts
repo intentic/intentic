@@ -163,8 +163,8 @@ export class ComposerSelection {
     }
 
     // Turn settings a message sends under: this selection as it stands at delivery, not at typing time, which spends the
-    // one-turn Auto mark (it belongs to the turn the judge decided, and the next one on the same model is the user's) and
-    // the hand pick of an account (the turn it names is the attempt; the next one follows the daemon's record again).
+    // one-turn Auto mark (it belongs to the turn the judge decided, and the next one on the same model is the user's). A
+    // hand pick of an account rides along (`accountPicked`) and stays until a turn naming it starts (`accountTaken`).
     turnSettings(): TurnSettings {
         const { state } = this;
         const settings: TurnSettings = {

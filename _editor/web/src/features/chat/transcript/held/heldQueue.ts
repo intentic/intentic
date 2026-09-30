@@ -23,8 +23,15 @@ export const memoryReading = (text: string): string => {
     return end === -1 ? text : text.slice(0, end + 1);
 };
 
+/**
+ * The last row the sandbox wrote. This window's own notices after it (the "switched" divider an account pick draws, a
+ * local "Stopped.") say nothing ran since, so they never take a held row's press away: picking another account under a
+ * kept turn is exactly when its press is wanted.
+ */
+const lastSaid = (messages: readonly ChatMessage[]): ChatMessage | undefined => messages.findLast((entry) => entry.local !== true);
+
 /** Whether a row is still the last thing in its conversation, nothing having run since. */
-const standing = (messages: readonly ChatMessage[], message: ChatMessage): boolean => messages.at(-1)?.id === message.id;
+const standing = (messages: readonly ChatMessage[], message: ChatMessage): boolean => lastSaid(messages)?.id === message.id;
 
 /**
  * The pane's held queue: whether anything is held, the low-memory row it is about, and why. The row is the
@@ -35,7 +42,7 @@ export const useHeldQueue = () => {
     const { messages, queued, queuePaused, lastFailure } = usePaneView();
     const held = computed(() => queuePaused.value !== undefined && queued.value.length > 0);
     const notice = computed(() => {
-        const last = messages.value.at(-1);
+        const last = lastSaid(messages.value);
         return held.value && queuePaused.value === `refused` && last !== undefined && isMemoryHold(last) && last.sandboxHeld !== true ? last : undefined;
     });
     // A chat opened a minute after the refusal has no row for it (a turn that ran nothing is never recorded), so the

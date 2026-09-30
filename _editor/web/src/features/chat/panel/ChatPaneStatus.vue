@@ -130,7 +130,8 @@ const cacheTrigger = ref<HTMLElement>();
 // reading, draining and tinted as the binding pool is spent, keyed by account. Tracks the pool that gates this conversation's
 // model specifically (its card lists all of them).
 const usageChip = computed(() => {
-    // The account the daemon has the conversation on (bindSession); a chat still on auto has none to show yet.
+    // The account the next turn runs on: a hand pick while it stands, else the one the daemon has the conversation on
+    // (bindSession); a chat still on auto has none to show yet.
     const modelRef = model.value === `` ? undefined : { id: model.value };
     const headroom = planHeadroom(usageStatusFor(provider.value, account.value, modelRef), modelRef);
     // No binding pool means nothing measured or everything reset; stays hidden rather than pinning a false "100% left".

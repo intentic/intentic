@@ -64,6 +64,7 @@ jest.mock("../../sandbox/client/sandboxRpc", () => ({
             stop: procedureOf(`agent.stop`),
             resume: procedureOf(`agent.resume`),
             queueResume: procedureOf(`agent.queueResume`),
+            switchAccount: procedureOf(`agent.switchAccount`),
             rewind: procedureOf(`agent.rewind`),
         },
         agents: { place: procedureOf(`agents.place`), transcript: procedureOf(`agents.transcript`) },
@@ -411,9 +412,9 @@ describe(`Conversation`, () => {
 
     // Made at the picker, which is what makes it the user's: an account the app wrote in (a restored tab, a route) is only
     // this window's guess, and the daemon's session replaces it (the test above).
-    // The account a conversation runs on is the daemon's record: what the session frame says it served on is what the
-    // composer shows next, whatever this window had picked.
-    it(`shows the account the daemon reports the session on, over a pick`, async () => {
+    // The account a conversation runs on is the daemon's record once a turn has gone out on the pick: what the session
+    // frame says it served on is what the composer shows next, whatever this window had picked.
+    it(`shows the account the daemon reports the session on, over a pick a turn went out on`, async () => {
         const conversation = new Conversation(`c-pinned`);
         conversation.selection.apply({ kind: `selectAccount`, account: `acct-1` });
         daemon.mockImplementation(turnDaemon([{ kind: `session`, sessionId: `s-1`, account: `acct-2` }, { kind: `done` }]));
@@ -2058,6 +2059,62 @@ describe(`Conversation`, () => {
         expect(turnBodies()).toHaveLength(1);
         expect(conversation.transcript.messages.value.filter((message) => message.role === `user`)).toMatchObject([{ text: `ship the parser` }]);
         expect(conversation.transcript.messages.value.at(-1)).toMatchObject({ role: `assistant`, text: `on it` });
+    });
+
+    // The reported case: the turn waited on a question, the person picked another account, answered, and the turn went
+    // on the old one into its limit. The daemon refuses to move a conversation a turn holds, so the pick was this window's
+    // alone, and the parked turn's own session, read back, took it away: the Continue after ran on the spent account too.
+    it(`keeps an account picked while a card waits, and continues the turn it holds on that account`, async () => {
+        const conversation = new Conversation(`c1`);
+        conversation.registered.value = true;
+        const questions = [{ question: `Which?`, header: `Pick`, multiSelect: false, options: [{ label: `A`, description: `a` }] }];
+        const parkedTurn = turnDaemon([
+            { kind: `session`, sessionId: `s-1`, account: `spent` },
+            { kind: `question`, requestId: `q1`, questions },
+            { kind: `error`, code: `rate_limit`, message: `Claude usage limit reached.`, account: `spent`, held: { ran: true } },
+            { kind: `done` },
+        ]);
+        let moves = 0;
+        daemon.mockImplementation((procedure, input, options) => {
+            if (procedure === `agent.switchAccount`) {
+                moves += 1;
+                // The turn holds the conversation until it settles.
+                return moves === 1 ? Promise.reject(daemonRefusal(409, `a turn is running in that conversation`)) : Promise.resolve({});
+            }
+            return parkedTurn(procedure, input, options);
+        });
+        const turn = conversation.turn.send(`ship the parser`, settings);
+        await waitFor(() => expect(conversation.transcript.awaitingDecision.value).toBe(true));
+
+        conversation.selection.apply({ kind: `selectAccount`, account: `with-room` });
+        // The parked turn's session as a record read or a reattach hands it back: where the chat ran, not where it goes.
+        conversation.selection.apply({ kind: `bindSession`, session: { id: `s-1`, provider: `claude`, account: `spent`, harness: `native` } });
+        await conversation.requests.reply(`q1`, { kind: `question`, answers: { "Which?": [`A`] } });
+        await turn;
+
+        expect(conversation.selection.account.value).toBe(`with-room`);
+        // Refused once while the card held the turn, asked again as it settled.
+        const asked = daemon.mock.calls.filter(([procedure]) => procedure === `agent.switchAccount`).map(([, input]) => wire(input));
+        expect(asked).toEqual([
+            { conversationId: `c1`, account: `with-room` },
+            { conversationId: `c1`, account: `with-room` },
+        ]);
+
+        daemon.mockImplementation(
+            turnDaemon([{ kind: `session`, sessionId: `s-2`, account: `with-room` }, { kind: `delta`, text: `on it` }, { kind: `done` }], {
+                head: () => ({ prompt: withResumeNote(`ship the parser`, RESUME_NOTES.switched), startedAt: Date.now() }),
+            }),
+        );
+        await conversation.turn.continueTurn();
+
+        const press = daemon.mock.calls.find(([procedure]) => procedure === `agent.resume`)!;
+        expect(wire(press[1])).toEqual({
+            conversationId: `c1`,
+            routing: { agent: `claude`, harness: `native`, account: `with-room`, model: `opus` },
+        });
+        // Run there, the pick is spent: the next turn follows the daemon's record, which now says the same.
+        expect(conversation.selection.state.value.accountPicked).toBe(false);
+        expect(conversation.session.value).toMatchObject({ id: `s-2`, account: `with-room` });
     });
 
     // The reported case: refused on one account, then the picker moved the chat to another that reopens sooner. The card

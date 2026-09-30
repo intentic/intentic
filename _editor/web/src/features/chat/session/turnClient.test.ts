@@ -25,6 +25,7 @@ import type { ForkLink, SessionRef, TurnSettings } from "../run/turnRequest";
 import type { ChatMessage } from "../transcript/transcript";
 import type { ComposerSelection } from "./composerSelection";
 import { IDLE } from "./runPhase";
+import type { PickAction, Selection } from "./selectionReducer";
 import { setDaemonRoutes } from "../../sandbox/overview/useDaemonRoutes";
 import { setLocale } from "@intentic/ui/i18n";
 
@@ -98,7 +99,7 @@ const WAITING: ConversationQueue = {
 
 // A TurnClient over a conversation that is only its refs: the transcript is a real one, since a run's rows are drawn
 // there; the selection and the failure policy answer only what a run asks of them.
-const clientOf = (settings: TurnSettings = SETTINGS) => {
+const clientOf = (settings: TurnSettings = SETTINGS, selection: Partial<ComposerSelection> = {}) => {
     const error = ref<string | null>(null);
     const session = ref<SessionRef | undefined>();
     const box = ref<string | undefined>();
@@ -117,6 +118,7 @@ const clientOf = (settings: TurnSettings = SETTINGS) => {
             provider: computed(() => `claude` as const),
             account: computed(() => undefined),
             harness: computed(() => `native` as const),
+            ...selection,
         }),
         failures: unstubbed<TurnFailures>(`failures`, { cancelProbe: jest.fn(), clear: jest.fn(), armRenewalProbe: jest.fn(), settled: jest.fn() }),
         title: ref<string | null>(null),
@@ -614,6 +616,102 @@ describe(`saying something`, () => {
         await client.say(host.draft.value);
 
         expect(run.mock.calls.map(([body]) => body.messageId)).toEqual([sentAs[0]]);
+    });
+});
+
+// A hand pick of an account is this window's until a turn runs on it: the daemon refuses to move a conversation a turn
+// holds (one parked on a card included), and every press after the pick has to name it until one of them runs there.
+describe(`an account picked by hand`, () => {
+    const PICKED: TurnSettings = { ...SETTINGS, account: `acct-b`, accountPicked: true };
+    const ON_A: SessionRef = { id: `s-1`, provider: `claude`, account: `acct-a`, harness: `native` };
+    // A client over a selection whose picks it records, and what it told that selection about the pick: that a turn
+    // naming it ran.
+    const pickedClient = (settings: TurnSettings, selection: Partial<ComposerSelection> = {}) => {
+        const apply = jest.fn<(action: PickAction) => void>();
+        const made = clientOf(settings, { apply, ...selection });
+        const taken = (): PickAction[] => apply.mock.calls.map(([action]) => action).filter((action) => action.kind === `accountTaken`);
+        return { ...made, taken };
+    };
+
+    // Words queued behind a card go into the parked turn once it is answered, on that turn's account: nothing ran there.
+    it(`is spent by a turn that starts naming it, never by words that only wait behind another`, async () => {
+        const queued = pickedClient(PICKED);
+        answers({ delivered: `queued` });
+        attach.mockImplementation(async () => attached(`r-other`, 3_000, `the parked ask`));
+        await queued.client.say(`and the docs too`);
+        expect(run.mock.calls.at(-1)?.[0].account).toBe(`acct-b`);
+        expect(queued.taken()).toEqual([]);
+
+        const started = pickedClient(PICKED);
+        answers({ delivered: `started`, run: `r1` });
+        attach.mockImplementation(async () => attached(`r1`, 4_000, `tidy the docs`));
+        await started.client.say(`tidy the docs`);
+        expect(started.taken()).toEqual([{ kind: `accountTaken`, account: `acct-b` }]);
+    });
+
+    // A kept turn re-runs on the account it was started on, which wins over a move (turn-resume.ts), so the press names
+    // the pick, as Continue does for a held turn. Without one, it runs as it was started.
+    it(`sends a kept turn again on a pick no turn has run on, and as it was started otherwise`, async () => {
+        resume.mockImplementation(async () => ({ run: `r-kept` }));
+        attach.mockImplementation(async () => attached(`r-kept`, 4_000, `fix the pipeline`));
+
+        const picked = pickedClient(PICKED);
+        picked.host.session.value = ON_A;
+        await picked.client.resendKept({ text: `fix the pipeline`, attachments: [] });
+        expect(resume.mock.calls.at(-1)?.[0]).toEqual({
+            conversationId: `c1`,
+            routing: { agent: `claude`, harness: `native`, account: `acct-b`, model: `opus` },
+        });
+        expect(picked.taken()).toEqual([{ kind: `accountTaken`, account: `acct-b` }]);
+
+        const unpicked = clientOf({ ...SETTINGS, account: `acct-a` });
+        unpicked.host.session.value = ON_A;
+        await unpicked.client.resendKept({ text: `fix the pipeline`, attachments: [] });
+        expect(resume.mock.calls.at(-1)?.[0]).toEqual({ conversationId: `c1` });
+        expect(run).not.toHaveBeenCalled();
+    });
+
+    // A re-run another press already started (409) went out on that press's routing, not this one's.
+    it(`is not spent by a Continue whose held turn somebody else already re-ran`, async () => {
+        resume.mockImplementation(async () => {
+            throw new SandboxHttpError(409, `a turn is already running in that conversation`);
+        });
+        attach.mockImplementation(async () => attached(`r-theirs`, 4_000, `clean the sandbox`));
+        const { client, host, taken } = pickedClient(PICKED);
+        host.pickUp.value = { reason: `limit`, held: { ran: true } };
+
+        expect(await client.resumeHeldTurn()).toBe(true);
+        expect(taken()).toEqual([]);
+    });
+
+    // Refused while a card held the conversation, the move is asked again as that turn settles, so what the daemon does
+    // by itself from then on (a booked re-run, a wake) goes to the pick too, not only this window's presses.
+    it(`asks the daemon again for a move it refused while a turn held the conversation, once that turn settles`, async () => {
+        switchAccount.mockReset();
+        switchAccount.mockImplementationOnce(async () => {
+            throw new SandboxHttpError(409, `a turn is running in that conversation: move it once the turn ends`);
+        });
+        switchAccount.mockImplementation(async () => ({}));
+        const { client, host } = clientOf(PICKED, {
+            state: shallowRef({ accountPicked: true } as Selection),
+            account: computed(() => `acct-b`),
+        });
+        host.registered.value = true;
+
+        client.moveAccount(`acct-b`);
+        await waitFor(() => expect(switchAccount).toHaveBeenCalledTimes(1));
+        await new Promise((settled) => setTimeout(settled, 0));
+        attach.mockImplementation(async () => attached(`r-parked`, 4_000, `clean the sandbox`));
+        await client.reattach();
+
+        expect(switchAccount.mock.calls.map(([input]) => input)).toEqual([
+            { conversationId: `c1`, account: `acct-b` },
+            { conversationId: `c1`, account: `acct-b` },
+        ]);
+        // Taken the second time: the settle after asks nothing more.
+        attach.mockImplementation(async () => attached(`r-next`, 5_000, `and then`));
+        await client.reattach();
+        expect(switchAccount).toHaveBeenCalledTimes(2);
     });
 });
 
