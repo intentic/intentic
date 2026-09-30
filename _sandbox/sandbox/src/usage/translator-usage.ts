@@ -22,6 +22,8 @@ export interface TranslatorAuthFile {
     readonly status?: string;
     readonly status_message?: string;
     readonly next_retry_after?: string;
+    // When the proxy last changed this credential's state (RFC 3339): for a benched one, the instant of the bench.
+    readonly updated_at?: string;
 }
 
 // Longest the proxy's own words can be and still be a row's reason. Past it, `status_message` is a pasted upstream

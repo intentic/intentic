@@ -6,6 +6,8 @@ import { dirname, join } from "node:path";
 import { createBackoff } from "@intentic/base/async";
 import { errorMessage } from "@intentic/base/errors";
 import {
+    type AccountUsage,
+    bindingWindow,
     cliProxyIdOf,
     humanizeModelId,
     type KeyedProvider,
@@ -13,6 +15,7 @@ import {
     type Model,
     providerLabel,
     reportsPlanLimits,
+    SPENT_UTILIZATION,
     type TranslatorAccounts,
     type TranslatorStatus,
 } from "@intentic/sandbox-contract";
@@ -529,6 +532,31 @@ export const createCliProxyClient = (params: {
                 ),
             );
 
+    // The proxy benches a credential that hit its limit until the reset the provider quoted, and asks nothing upstream
+    // before then. A limit that reopens early (a reset spent on the provider's own page, a plan upgraded) leaves every
+    // turn refused locally with a `model_cooldown` 429 for days, while the provider would serve. A reading taken after
+    // the bench with room in every pool is the provider's later word, so the bench is dropped: `reset-quota` clears the
+    // proxy's routing state for that one credential and nothing upstream. An operator's switch, a bench only a person
+    // can lift (`verify`), and a reading that still shows a full pool are left alone; a bench undated by the listing
+    // is too. Best effort: a lift that fails leaves the bench standing, and the next reading tries again.
+    const liftStaleBench = async (file: TranslatorAuthFile, usage: AccountUsage): Promise<void> => {
+        const cooling = authFileCooling(file);
+        if (cooling === undefined || file.disabled === true || cooling.verify !== undefined || file.auth_index === undefined) {
+            return;
+        }
+        const benchedAt = Date.parse(file.updated_at ?? "");
+        const binding = bindingWindow(usage);
+        if (!(usage.measuredAt > benchedAt) || binding === undefined || binding.utilization >= SPENT_UTILIZATION) {
+            return;
+        }
+        await fetchFn(`${managementUrl}/reset-quota`, {
+            method: "POST",
+            headers: { ...auth, "content-type": "application/json" },
+            body: JSON.stringify({ auth_index: file.auth_index }),
+            // allow(silent-catch): an unanswered lift leaves the bench as it was, and the next reading retries it.
+        }).catch(() => undefined);
+    };
+
     const headroom: HeadroomSource = {
         targets: async () =>
             readableFiles(await listFiles()).map((entry) => ({
@@ -536,7 +564,11 @@ export const createCliProxyClient = (params: {
                 provider: entry.provider,
                 read: async () => {
                     const read = await fetchTranslatorUsage({ fetchFn, managementUrl, managementToken: token, provider: entry.provider, file: entry.file });
-                    return "usage" in read ? { windows: read.usage.windows } : { windows: [], failure: read.failure };
+                    if (!("usage" in read)) {
+                        return { windows: [], failure: read.failure };
+                    }
+                    await liftStaleBench(entry.file, read.usage);
+                    return { windows: read.usage.windows };
                 },
             })),
     };

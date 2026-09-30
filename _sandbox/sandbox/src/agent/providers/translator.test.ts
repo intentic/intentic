@@ -722,3 +722,81 @@ describe("translator subscription usage", () => {
         expect(calls.some((call) => call.url.endsWith("/auth-files?name=google-a.json"))).toBe(true);
     });
 });
+
+// The proxy benches a spent credential until the reset the provider quoted and never asks upstream before then, so a
+// limit reset early (spent from the provider's own page) left every turn refused locally with `model_cooldown` for days.
+describe("a bench the provider's later reading contradicts", () => {
+    const BENCHED_AT = "2026-09-30T11:15:03Z";
+    const benchedCodex = (extra: Record<string, unknown>) => ({
+        name: "codex-team.json",
+        provider: "codex",
+        email: "team@example.com",
+        auth_index: "team-index",
+        unavailable: true,
+        status: "error",
+        status_message: "usage limit reached",
+        next_retry_after: "2026-10-03T10:38:27Z",
+        updated_at: BENCHED_AT,
+        ...extra,
+    });
+
+    const proxyWith = (file: Record<string, unknown>, weeklyUsed: number, calls: { url: string; body?: unknown }[]) =>
+        (async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+            const url = String(input);
+            calls.push({ url, ...(typeof init?.body === "string" ? { body: JSON.parse(init.body) as unknown } : {}) });
+            if (url.endsWith("/auth-files")) {
+                return Response.json({ files: [file] });
+            }
+            if (url.endsWith("/reset-quota")) {
+                return Response.json({ status: "ok" });
+            }
+            return Response.json({
+                status_code: 200,
+                body: JSON.stringify({
+                    rate_limit: {
+                        primary_window: { used_percent: 0, limit_window_seconds: 18_000 },
+                        secondary_window: { used_percent: weeklyUsed, limit_window_seconds: 604_800 },
+                    },
+                }),
+            });
+        }) as typeof fetch;
+
+    const readAll = async (file: Record<string, unknown>, weeklyUsed: number): Promise<{ url: string; body?: unknown }[]> => {
+        const calls: { url: string; body?: unknown }[] = [];
+        const client = createCliProxyClient({
+            managementUrl: "http://cliproxy.test",
+            token: "management-secret",
+            configPath: "/tmp/config",
+            authDir: "/tmp/does-not-exist-authdir",
+            usageStore: memoryStore().store,
+            fetchFn: proxyWith(file, weeklyUsed, calls),
+        });
+        for (const target of await client.headroom.targets()) {
+            await target.read();
+        }
+        return calls.filter((call) => call.url.endsWith("/reset-quota"));
+    };
+
+    test("lifts the proxy's bench once a reading taken after it shows room in every pool", async () => {
+        const lifts = await readAll(benchedCodex({}), 0);
+
+        expect(lifts).toEqual([{ url: "http://cliproxy.test/reset-quota", body: { auth_index: "team-index" } }]);
+    });
+
+    test("leaves the bench while the reading still shows a spent pool", async () => {
+        expect(await readAll(benchedCodex({}), 100)).toEqual([]);
+    });
+
+    test("leaves an operator's switch, and a bench the listing does not date", async () => {
+        expect(await readAll(benchedCodex({ disabled: true }), 0)).toEqual([]);
+        expect(await readAll(benchedCodex({ updated_at: undefined }), 0)).toEqual([]);
+    });
+
+    test("leaves a bench set after the reading was taken", async () => {
+        expect(await readAll(benchedCodex({ updated_at: "2999-01-01T00:00:00Z" }), 0)).toEqual([]);
+    });
+
+    test("asks nothing of a credential the proxy is not benching", async () => {
+        expect(await readAll(benchedCodex({ unavailable: false, next_retry_after: undefined }), 0)).toEqual([]);
+    });
+});
