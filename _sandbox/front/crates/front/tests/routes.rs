@@ -5,7 +5,9 @@ mod support;
 
 use std::convert::Infallible;
 use std::sync::Arc;
+use std::time::Duration;
 
+use browser_wire::{NodeLink, SandboxVitals};
 use bytes::Bytes;
 use front_wire::{
     Certificate, Endpoint, FromNode, ListenConfig, Page, PreviewRoute, Scheme, Upstream,
@@ -27,12 +29,19 @@ struct Answer {
 }
 
 async fn get(port: u16, host: &str, path: &str, extra: &[(&str, &str)]) -> Answer {
+    send(port, "GET", host, path, extra).await
+}
+
+async fn send(port: u16, method: &str, host: &str, path: &str, extra: &[(&str, &str)]) -> Answer {
     let stream = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
     let (mut sender, connection) = hyper::client::conn::http1::handshake(TokioIo::new(stream))
         .await
         .unwrap();
     tokio::spawn(connection);
-    let mut request = Request::builder().uri(path).header("host", host);
+    let mut request = Request::builder()
+        .method(method)
+        .uri(path)
+        .header("host", host);
     for (name, value) in extra {
         request = request.header(*name, *value);
     }
@@ -332,4 +341,103 @@ async fn the_loopback_port_speaks_h2_over_tls_once_it_holds_a_certificate() {
     )
     .unwrap();
     assert_eq!(body, format!("node saw {name}:28123 /info mark=-"));
+}
+
+// Far below the 30 s a request for a restarting Node waits before its 503, and far above any answer the front makes
+// itself: a vitals request that waited for Node fails here instead of passing late.
+const WITHOUT_NODE: Duration = Duration::from_secs(10);
+
+async fn vitals(port: u16, host: &str) -> (Answer, SandboxVitals) {
+    let answer = tokio::time::timeout(WITHOUT_NODE, get(port, host, "/system/vitals", &[]))
+        .await
+        .expect("the front answers its vitals without waiting for Node");
+    assert_eq!(answer.status, 200, "{}", answer.body);
+    let vitals = serde_json::from_str(&answer.body).unwrap();
+    (answer, vitals)
+}
+
+// Until the front's view of Node settles on `node`: a hello and a new connection land asynchronously.
+async fn vitals_once(
+    port: u16,
+    host: &str,
+    settled: impl Fn(&SandboxVitals) -> bool,
+) -> SandboxVitals {
+    for _ in 0..250 {
+        let (_, read) = vitals(port, host).await;
+        if settled(&read) {
+            return read;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    panic!("the vitals never settled");
+}
+
+#[tokio::test]
+async fn the_front_answers_its_vitals_itself_whatever_state_node_is_in() {
+    let harness = Harness::start("vitals", Arc::new(|_: &str, _| support::nothing_here())).await;
+    let (daemon, preview, loopback) = (free_port(), free_port(), free_port());
+    harness
+        .send(&FromNode::Listen {
+            config: config(daemon, preview, loopback),
+        })
+        .await;
+    bound(daemon).await;
+    let own = format!("sandbox-{SANDBOX_ID}.sbx.test");
+
+    // Node has handed over its ports and not said hello.
+    let (answer, starting) = vitals(daemon, &own).await;
+    assert_eq!(
+        (starting.node, starting.lag_ms, starting.restarts),
+        (NodeLink::Starting, None, 0)
+    );
+    assert_eq!(answer.headers["content-type"], "application/json");
+    assert_eq!(answer.headers["cache-control"], "no-store");
+    assert_eq!(answer.headers["access-control-allow-origin"], "*");
+    assert!(
+        answer
+            .headers
+            .get("access-control-allow-credentials")
+            .is_none()
+    );
+
+    // Up, and pinged at once: the stand-in answers every ping.
+    harness.hello().await;
+    let up = vitals_once(daemon, &own, |read| read.lag_ms.is_some()).await;
+    assert_eq!(up.node, NodeLink::Up);
+    let preflight = send(
+        daemon,
+        "OPTIONS",
+        &own,
+        "/system/vitals",
+        &[
+            ("origin", "https://app.example"),
+            ("access-control-request-method", "GET"),
+            ("access-control-request-headers", "authorization"),
+        ],
+    )
+    .await;
+    assert_eq!(preflight.status, 204);
+    assert_eq!(preflight.headers["access-control-allow-origin"], "*");
+    assert_eq!(
+        preflight.headers["access-control-allow-headers"],
+        "authorization"
+    );
+    // The daemon's name on the tunnel's port is the daemon's too; a preview's app keeps its own path of that name.
+    assert_eq!(vitals(preview, &own).await.1.node, NodeLink::Up);
+    let web = format!("preview-web-{SANDBOX_ID}.sbx.test");
+    let previewed = get(preview, &web, "/system/vitals", &[]).await;
+    assert_eq!(
+        (previewed.status, previewed.body.as_str()),
+        (404, "no preview here")
+    );
+
+    // A new connection replaces Node's (a restarted Node), and is not up until it says hello.
+    let _next = tokio::net::UnixStream::connect(harness.dir.join("front.sock"))
+        .await
+        .unwrap();
+    let restarting = vitals_once(daemon, &own, |read| read.node != NodeLink::Up).await;
+    assert_eq!(
+        (restarting.node, restarting.lag_ms),
+        (NodeLink::Restarting, None)
+    );
 }

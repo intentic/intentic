@@ -21,8 +21,9 @@ export interface RestartQuiet {
     readonly detail: string;
 }
 
-/** The four buttons that end in a swapped container; one record each, however many surfaces hold it. */
-export type RestartProducer = "dev-rebuild" | "hosted-build" | "update" | "recreate";
+/** The buttons that end in a swapped container; one record each, however many surfaces hold it. `recovery` is the
+ * recovery panel's restart of a hosted machine that stopped answering. */
+export type RestartProducer = "dev-rebuild" | "hosted-build" | "update" | "recreate" | "recovery";
 
 export interface RestartWork {
     /** Platform id of the sandbox this restarts: one box's rebuild never explains another's silence. */

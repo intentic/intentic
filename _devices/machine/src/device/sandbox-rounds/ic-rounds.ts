@@ -1,7 +1,7 @@
 import { errorMessage } from "@intentic/base/errors";
 import { plural } from "@intentic/base/format";
 import type { Log } from "@intentic/local-agent";
-import { holdIcFlow, icInFlight } from "../tools/sandboxes.js";
+import { holdIcFlow, type IcRun, icInFlight } from "../tools/sandboxes.js";
 
 // THE SHAPE OF EVERY BACKGROUND `ic` ROUND this agent runs over its sandboxes (auto-prepare.ts, auto-backup.ts,
 // probation-watch.ts): one slug at a time, never one a person's flow is touching, and a slug that keeps failing sits out
@@ -23,10 +23,7 @@ export interface RoundState {
 
 export const newRoundState = (): RoundState => ({ failures: new Map(), waits: new Map() });
 
-export interface IcRun {
-    readonly code: number;
-    readonly output: string;
-}
+export type { IcRun } from "../tools/sandboxes.js";
 
 // One job of a round: what it is called in the log, the `ic` run for one slug, and what a run that exited 0 says (a
 // success may say nothing, which is the watch's usual answer).
@@ -93,6 +90,8 @@ export const runRound = async (state: RoundState, targets: readonly string[], jo
 
 export interface Rounds {
     readonly stop: () => void;
+    // Whether a round is under way right now: the keeper reads the probation watch's, so the two never run ic at once.
+    readonly running: () => boolean;
 }
 
 // A round after `first` ms, then one after each `next()` ms, never two at once: the next is scheduled only once the
@@ -101,14 +100,18 @@ export interface Rounds {
 export const startRounds = (name: string, log: Log, first: number, next: () => number, round: () => Promise<void>): Rounds => {
     let timer: NodeJS.Timeout | undefined;
     let stopped = false;
+    let busy = false;
     const schedule = (delay: number): void => {
         timer = setTimeout(() => void tick(), delay);
     };
     const tick = async (): Promise<void> => {
+        busy = true;
         try {
             await round();
         } catch (error) {
             log(`${name}: skipped this round — ${errorMessage(error)}`);
+        } finally {
+            busy = false;
         }
         if (!stopped) {
             schedule(next());
@@ -120,5 +123,6 @@ export const startRounds = (name: string, log: Log, first: number, next: () => n
             stopped = true;
             clearTimeout(timer);
         },
+        running: () => busy,
     };
 };

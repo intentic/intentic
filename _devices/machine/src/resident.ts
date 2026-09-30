@@ -11,8 +11,11 @@ import { baseDir, runPidPath } from "./config.js";
 import { startAutoBackup } from "./device/sandbox-rounds/auto-backup.js";
 import { startAutoPrepare } from "./device/sandbox-rounds/auto-prepare.js";
 import { type HostLink, LINK_STAMP_MS, type LinkReading, linkStatePath, readLinks, stampLinkStates } from "./device/config.js";
-import { connect } from "./device/connection.js";
+import { connect, reachedOverLoopback } from "./device/connection.js";
+import { hostedSlugs, keeperOn, startKeeper } from "./device/sandbox-rounds/keeper.js";
 import { startProbationWatch } from "./device/sandbox-rounds/probation-watch.js";
+import { readChannelSlugs } from "./device/sandbox-rounds/swap-records.js";
+import { fleet } from "./device/tools/sandboxes.js";
 import { takeOverCommandLedger } from "./device/tools/command-ledger.js";
 import { stopRunningCommands } from "./device/tools/shell.js";
 import { type Children, superviseChildren } from "./environments/children.js";
@@ -62,13 +65,60 @@ const readServed = async (): Promise<Served> => {
 
 const nothingToServe = (served: Served): boolean => served.links.length === 0 && served.pairings === 0 && served.children.length === 0;
 
+/* THE ONE MORE REASON TO STAY: the sandboxes this machine hosts, while the keeper (sandbox-rounds/keeper.ts) is on. With
+   no link, no pairing and no distro the agent used to take its login entry away and exit, and then nothing started
+   Docker Desktop after the next reboot: a sandbox on this machine stayed down until someone came to it. So an agent with
+   nothing else to serve stays while ic lists a sandbox here (or, with Docker down, keeps a record of one) and the keeper
+   is on; `intentic-machine sandbox keeper off` or `uninstall` lets it go. A machine.json that does not read counts as on,
+   since retiring on a guess is the one move here that needs a person to undo it. */
+export const keptSandboxes = async (): Promise<readonly string[]> => {
+    // allow(silent-catch): an unreadable switch keeps the agent, the reversible answer (above)
+    const on = await keeperOn().catch(() => true);
+    return on ? await hostedSlugs(async () => (await fleet({ current: false })).map((box) => box.slug), async () => await readChannelSlugs()) : [];
+};
+
+const keptNote = (kept: readonly string[]): string =>
+    `this machine runs ${plural(kept.length, "sandbox", "sandboxes")} (${kept.join(", ")}), so the agent stays to bring ${kept.length === 1 ? "it" : "them"} back after a restart. \`intentic-machine sandbox keeper off\` lets it go.`;
+
 // The agent after a change it absorbs by itself: started if nothing is running, retired once nothing is left to serve.
-export const ensureResident = async (log: Log): Promise<void> => {
+// `forGood` is `uninstall`, which retires it whatever this machine hosts.
+export const ensureResident = async (log: Log, { forGood = false }: { readonly forGood?: boolean } = {}): Promise<void> => {
     if (nothingToServe(await readServed())) {
-        await retireResident(log);
-        return;
+        const kept = forGood ? [] : await keptSandboxes();
+        if (kept.length === 0) {
+            await retireResident(log);
+            return;
+        }
+        log(`Nothing is linked or paired here any more, but ${keptNote(kept)}`);
     }
     await startResident(log);
+};
+
+// How often an agent with nothing else to serve asks again whether this machine still hosts a sandbox: an ic listing is
+// too dear for every tick, and a sandbox removed a few minutes ago is no reason to hurry.
+const KEPT_RECHECK_MS = 5 * 60_000;
+
+// The last answer and when it was asked; never asked is -Infinity, so the first agent with nothing to serve always asks.
+export interface KeptCheck {
+    at: number;
+    kept: readonly string[];
+}
+
+// The answer, asked again once it is KEPT_RECHECK_MS old; said when the agent starts staying for it.
+export const stillKeeping = async (
+    check: KeptCheck,
+    log: Log,
+    { ask = keptSandboxes, now = Date.now }: { readonly ask?: () => Promise<readonly string[]>; readonly now?: () => number } = {},
+): Promise<boolean> => {
+    if (now() - check.at >= KEPT_RECHECK_MS) {
+        const before = check.kept.length;
+        check.kept = await ask();
+        check.at = now();
+        if (before === 0 && check.kept.length > 0) {
+            log(`nothing is linked or paired here any more, but ${keptNote(check.kept)}`);
+        }
+    }
+    return check.kept.length > 0;
 };
 
 // A supervised distro takes over from whatever copy runs there unsupervised; anything else leaves a live holder alone.
@@ -171,6 +221,7 @@ const startSyncIfDue = (sync: SyncHalf, pairings: number, log: Log): void => {
 interface Runtime {
     readonly connections: Map<string, Connection>;
     readonly sync: SyncHalf;
+    readonly kept: KeptCheck;
     readonly children: Children | undefined;
     readonly autoUpgrade: AutoUpgrade | undefined;
     readonly finish: (code: number) => Promise<never>;
@@ -178,16 +229,20 @@ interface Runtime {
 
 // The machine-wide duties (the one Docker engine's next images, its daily backups and tidy, the sweep over every
 // sandbox, the PC's own upgrades) are the root's alone: a WSL distro shares the Windows side's engine. The probation
-// watch of the swaps this environment's own records name runs everywhere, since only this environment's ic holds them.
-const runtimeOf = (supervised: boolean, trial: Trial, log: Log): Runtime => {
+// watch of the swaps this environment's own records name runs everywhere, since only this environment's ic holds them,
+// and so does the keeper, whose `ic sandbox fix` knows only this environment's sandboxes.
+const runtimeOf = (supervised: boolean, trial: Trial, kept: KeptCheck, log: Log): Runtime => {
     const connections = new Map<string, Connection>();
     const children = WINDOWS_SIDE
         ? superviseChildren(log, async (distro) => void (await updateMachineConfig((config) => withoutChild(config, distro))))
         : undefined;
-    const rounds = [
-        startProbationWatch(log, { sweeps: !supervised }),
-        ...(supervised ? [] : [startAutoPrepare(log), startAutoBackup(log)]),
-    ];
+    const watch = startProbationWatch(log, { sweeps: !supervised });
+    const keeper = startKeeper(log, {
+        links: () => [...connections].map(([url, held]) => ({ url, reading: reading(held.peer) })),
+        loopback: reachedOverLoopback,
+        watching: watch.running,
+    });
+    const rounds = [watch, keeper, ...(supervised ? [] : [startAutoPrepare(log), startAutoBackup(log)])];
     const autoUpgrade = supervised ? undefined : startAutoUpgrade(log);
     const unproven = trial.prove(log);
     const finish = async (code: number): Promise<never> => {
@@ -209,7 +264,7 @@ const runtimeOf = (supervised: boolean, trial: Trial, log: Log): Runtime => {
     for (const signal of ["SIGTERM", "SIGINT", "SIGHUP"] as const) {
         process.on(signal, () => void finish(signalExitCode(signal)));
     }
-    return { connections, sync: { running: undefined, failures: 0, retryAt: 0 }, children, autoUpgrade, finish };
+    return { connections, sync: { running: undefined, failures: 0, retryAt: 0 }, kept, children, autoUpgrade, finish };
 };
 
 // One pass: the lease first, since everything after it acts on this environment as its one agent.
@@ -230,7 +285,7 @@ const tick = async (runtime: Runtime, lease: PidRecord, log: Log): Promise<void>
             runtime.autoUpgrade?.nudge();
         }
         startSyncIfDue(runtime.sync, now.pairings, log);
-        if (nothingToServe(now) && runtime.sync.running === undefined) {
+        if (nothingToServe(now) && runtime.sync.running === undefined && !(await stillKeeping(runtime.kept, log))) {
             log("nothing left to serve: agent exiting. Reconnect from a card in your sandbox.");
             await autostart(MACHINE_AUTOSTART, machineLauncher(), log).unregister();
             await runtime.finish(0);
@@ -240,7 +295,10 @@ const tick = async (runtime: Runtime, lease: PidRecord, log: Log): Promise<void>
 };
 
 // Claims the environment and settles its supervisor; undefined when another agent holds it or nothing is left to serve.
-const begin = async (supervised: boolean, log: Log): Promise<{ readonly served: Served; readonly lease: PidRecord } | undefined> => {
+const begin = async (
+    supervised: boolean,
+    log: Log,
+): Promise<{ readonly served: Served; readonly lease: PidRecord; readonly kept: KeptCheck } | undefined> => {
     const record: PidRecord = { pid: process.pid, build: MACHINE_VERSION };
     if (!(await claim(record, supervised, log))) {
         return undefined;
@@ -249,19 +307,24 @@ const begin = async (supervised: boolean, log: Log): Promise<{ readonly served: 
         await release();
         throw error;
     });
-    if (nothingToServe(served)) {
+    // Asked only of an agent with nothing else to serve, which is the one it decides for; any other has not asked yet.
+    const kept: KeptCheck = nothingToServe(served) ? { at: Date.now(), kept: await keptSandboxes() } : { at: Number.NEGATIVE_INFINITY, kept: [] };
+    if (nothingToServe(served) && kept.kept.length === 0) {
         // Said once: this runs at every login, and a loop over it would say it every few seconds.
         log("nothing to serve: no sandbox is linked to this device and none is paired for sync. Connect one from a card in your sandbox.");
         await autostart(MACHINE_AUTOSTART, machineLauncher(), log).unregister();
         await release();
         return undefined;
     }
+    if (kept.kept.length > 0) {
+        log(`no sandbox is linked to this device and none is paired for sync, but ${keptNote(kept.kept)}`);
+    }
     const lease: PidRecord = { ...record, supervisor: await assertSupervisor(supervised, log) };
     await holdPidFile(runPidPath, baseDir, lease);
     await sweepBin();
     await takeOverCommandLedger(log);
     await retireLegacyAutostart(log);
-    return { served, lease };
+    return { served, lease, kept };
 };
 
 const serving = (served: Served): string =>
@@ -289,7 +352,7 @@ export const runForeground = async (log: Log): Promise<void> => {
         await trial.clean();
         return;
     }
-    const runtime = runtimeOf(supervised, trial, log);
+    const runtime = runtimeOf(supervised, trial, started.kept, log);
     log(`serving ${serving(started.served)}`);
     for (;;) {
         // oxlint-disable-next-line eslint/no-await-in-loop -- the tick loop itself, serial by definition

@@ -17,6 +17,7 @@ import { sandboxQueryPredicate } from "../live/systemEventRouting";
 import { useEndpoint } from "../secrets/useEndpoint";
 import { signalConnection, useSandbox } from "../client/useSandbox";
 import { uuid } from "../../../lib/uuid";
+import { sandboxSeemsAlive, startDiagnosis, stopDiagnosis } from "../diagnosis/useDiagnosis";
 import { t } from "@intentic/ui/i18n";
 
 // Holds one long-lived `/events` stream to the active sandbox daemon and reconnects on failure; transition rules
@@ -26,6 +27,13 @@ import { t } from "@intentic/ui/i18n";
 // No frame this long means the connection silently died; sized to tolerate a few missed heartbeats under real
 // load, not just an idle one.
 const WATCHDOG_MS = 10_000;
+// The daemon's heartbeat is produced on its own event loop, so a sandbox the diagnosis saw alive but slow (its front
+// answering for it, diagnosis/) would trip the ordinary watchdog on every attempt, and each reconnect adds load it has
+// to work through before its first frame. While that holds, a stream is given this long, and a retry waits this long.
+const BUSY_WATCHDOG_MS = 30_000;
+const BUSY_RETRY_MS = 10_000;
+
+const watchdogMs = (): number => (sandboxSeemsAlive() ? BUSY_WATCHDOG_MS : WATCHDOG_MS);
 
 const { daemonUrl, connection, activeSandboxId, refresh } = useSandbox();
 const { daemonBase, usingLocal, resolve: resolveEndpoint, demoteIfUnreachable, reset: resetEndpoint, recheckAfterWake } = useEndpoint();
@@ -55,7 +63,7 @@ const clearWatchdog = (): void => {
     }
 };
 
-const armWatchdog = (delayMs = WATCHDOG_MS): void => {
+const armWatchdog = (delayMs = watchdogMs()): void => {
     clearWatchdog();
     const dueAt = performance.now() + delayMs;
     watchdog = setTimeout(() => {
@@ -231,7 +239,7 @@ const loop = async (): Promise<void> => {
             return;
         }
         // oxlint-disable-next-line eslint/no-await-in-loop -- ditto: the backoff IS the loop
-        await nap(connection.value.retryDelayMs);
+        await nap(sandboxSeemsAlive() ? Math.max(connection.value.retryDelayMs, BUSY_RETRY_MS) : connection.value.retryDelayMs);
         if (!running) {
             return;
         }
@@ -247,11 +255,13 @@ const start = (): void => {
     }
     running = true;
     unwatchWake = watchPageWake(recheckAfterWake);
+    startDiagnosis();
     void loop();
 };
 
 const stop = (): void => {
     running = false;
+    stopDiagnosis();
     unwatchWake?.();
     unwatchWake = undefined;
     signalConnection({ kind: `disconnect` });

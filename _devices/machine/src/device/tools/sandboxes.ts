@@ -1,8 +1,9 @@
-import { execFile, spawn } from "node:child_process";
+import { type ChildProcess, execFile, spawn } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { plural } from "@intentic/base/format";
 import { homeDir } from "@intentic/local-agent";
 import {
     type DeviceSandbox,
@@ -77,9 +78,12 @@ export const fleetFrom = (stdout: string): DeviceSandbox[] => {
 };
 
 // What runs on this machine, as ic answers it. Exported for the auto-prepare tick (../auto-prepare.ts): one producer of
-// "what runs on me", whoever is asking.
-export const fleet = async (): Promise<DeviceSandbox[]> => {
-    await ensureCurrentIc();
+// "what runs on me", whoever is asking. `current: false` asks whatever ic is installed without first fetching a newer
+// one: what a command deciding whether the agent stays needs (resident.ts), where a download would be out of place.
+export const fleet = async ({ current = true }: { readonly current?: boolean } = {}): Promise<DeviceSandbox[]> => {
+    if (current) {
+        await ensureCurrentIc();
+    }
     const candidates = icCandidates(process.platform, homeDir());
     for (const [index, binary] of candidates.entries()) {
         // oxlint-disable-next-line eslint/no-await-in-loop -- candidates are tried in order; ENOENT means try the next
@@ -356,6 +360,42 @@ export const lineSplitter = (onLine: (line: string) => void): LineSplitter => {
     };
 };
 
+// What one `ic` run answered: its exit code, every line it printed on either stream, and whether it outlived the
+// deadline its caller gave it and was stopped.
+export interface IcRun {
+    readonly code: number;
+    readonly output: string;
+    readonly timedOut?: boolean;
+}
+
+// A deadline in the words a log line says it in.
+const spanOf = (ms: number): string => (ms >= 60_000 ? plural(Math.round(ms / 60_000), "minute") : plural(Math.round(ms / 1_000), "second"));
+
+// How long a stopped run's process group has to leave after SIGTERM before it is killed outright.
+const STOP_GRACE_MS = 10_000;
+
+// Ends a run that outlived its deadline, with whatever it started: its process group on POSIX (it leads one, below), its
+// process tree on Windows, where only taskkill reaches the children.
+const stopRun = (child: ChildProcess): void => {
+    const pid = child.pid;
+    if (pid === undefined) {
+        return;
+    }
+    if (process.platform === "win32") {
+        spawn("taskkill", ["/pid", String(pid), "/T", "/F"], { windowsHide: true, stdio: "ignore" }).on("error", () => child.kill());
+        return;
+    }
+    const signal = (name: NodeJS.Signals): void => {
+        try {
+            process.kill(-pid, name);
+        } catch {
+            // allow(silent-catch): the group is already gone, which is what this was for
+        }
+    };
+    signal("SIGTERM");
+    setTimeout(() => signal("SIGKILL"), STOP_GRACE_MS).unref();
+};
+
 // One long child process, narrated as it goes. Every line is handed to `onLine` the moment it arrives, and the same
 // lines are collected into the answer a caller reports at the end. Both streams go to one place: `ic` writes progress
 // to stdout and diagnostics to stderr. `missing` is ENOENT alone — the program isn't there — which the caller answers
@@ -363,13 +403,16 @@ export const lineSplitter = (onLine: (line: string) => void): LineSplitter => {
 // On POSIX the child gets a process group of its own: a signal meant for the agent's group (a supervisor stopping it, a
 // terminal's Ctrl-C) never reaches an ic that has parked a container and not yet started its replacement. Nothing here
 // ever kills it either, when the link or request that asked goes away: the swap finishes, and the probation watch
-// judges it. Windows has no groups to leave, and a detached child there would get a console window.
+// judges it. The one exception is a `deadlineMs` its caller set, which only a background round does (the keeper's fix,
+// where a Docker Desktop that never comes up must not hold every later round): past it the run is stopped and answers
+// `timedOut`. Windows has no groups to leave, and a detached child there would get a console window.
 const runStreamed = (
     binary: string,
     args: readonly string[],
     onLine: (line: string) => void,
     env: Readonly<Record<string, string>>,
-): Promise<{ code: number; output: string } | "missing"> => {
+    deadlineMs: number | undefined,
+): Promise<IcRun | "missing"> => {
     const lines: string[] = [];
     const take = (line: string): void => {
         lines.push(line);
@@ -385,6 +428,21 @@ const runStreamed = (
     return new Promise((resolve) => {
         const child = spawn(binary, [...args], { windowsHide: true, env: { ...process.env, ...env }, detached: process.platform !== "win32" });
         let missing = false;
+        let timedOut = false;
+        const deadline =
+            deadlineMs === undefined
+                ? undefined
+                : setTimeout(() => {
+                      timedOut = true;
+                      stopRun(child);
+                  }, deadlineMs);
+        const answer = (code: number): IcRun => {
+            clearTimeout(deadline);
+            if (timedOut) {
+                lines.push(`ic did not finish within ${spanOf(deadlineMs ?? 0)} and was stopped.`);
+            }
+            return timedOut ? { code, output: lines.join("\n"), timedOut } : { code, output: lines.join("\n") };
+        };
         child.stdout.setEncoding("utf8").on("data", out.push);
         child.stderr.setEncoding("utf8").on("data", err.push);
         // Any error other than ENOENT is a real failure and is reported as the run's own.
@@ -394,26 +452,29 @@ const runStreamed = (
             if (!missing) {
                 take(String(error.message));
             }
-            resolve(missing ? "missing" : { code: 1, output: lines.join("\n") });
+            clearTimeout(deadline);
+            resolve(missing ? "missing" : answer(1));
         });
         child.on("close", (code) => {
             flush();
-            resolve(missing ? "missing" : { code: code ?? 1, output: lines.join("\n") });
+            resolve(missing ? "missing" : answer(code ?? 1));
         });
     });
 };
 
 // An `ic` run, over the install locations in order: ENOENT means that candidate is not installed, so the next one is
-// tried rather than the run being failed. Exported for the auto-prepare tick.
+// tried rather than the run being failed. Exported for the auto-prepare tick. `deadlineMs` bounds a background round's
+// run (see runStreamed); every flow a person or a sandbox asked for leaves it unset.
 export const runIc = async (
     args: readonly string[],
     onLine: (line: string) => void,
     env: Readonly<Record<string, string>> = {},
-): Promise<{ code: number; output: string }> => {
+    { deadlineMs }: { readonly deadlineMs?: number } = {},
+): Promise<IcRun> => {
     await ensureCurrentIc();
     const candidates = icCandidates(process.platform, homeDir());
     for (const [index, binary] of candidates.entries()) {
-        const attempt = await runStreamed(binary, args, onLine, env);
+        const attempt = await runStreamed(binary, args, onLine, env, deadlineMs);
         if (attempt !== "missing") {
             return attempt;
         }
@@ -630,6 +691,35 @@ export const removeSandbox = async (slug: string, scopes: DeviceScopes, onLine: 
         throw new Error(`That removal failed on this device.\n\n${run.output}`);
     }
     return `Removed sandbox "${slug}". Its files and its history are kept for a week — 'ic sandbox restore ${slug}' on this device brings it back.`;
+};
+
+// What `diagnose_sandbox` may name: a container name's characters, never starting with the dash ic would read as a flag.
+const ADDRESSABLE_SLUG = /^[A-Za-z0-9][A-Za-z0-9._-]{0,62}$/;
+
+// A doctor probes a handful of addresses, each bounded by ic; past this it is hung, and a model is waiting.
+const DOCTOR_DEADLINE_MS = 2 * 60_000;
+
+export const icDoctorArgs = (slug: string): string[] => {
+    if (!ADDRESSABLE_SLUG.test(slug)) {
+        throw new Error(`"${slug}" is not a sandbox slug; list_sandboxes names them.`);
+    }
+    return ["sandbox", "doctor", slug, "--json"];
+};
+
+// Every link of one sandbox's reachability chain (Docker, its container, its daemon, its registration, the tunnel),
+// checked by `ic sandbox doctor --json` and answered in ic's own words and JSON. Read-only, and gated like the logs. No
+// `find` first: this is asked most while Docker is down, when the listing cannot answer, and ic refuses a slug it does
+// not know itself. A doctor that found something broken exits non-zero with its report, which is still the answer; one
+// that printed no JSON at all is an ic from before `doctor --json`, said as a failure with ic's own words.
+export const diagnoseSandbox = async (slug: string, scopes: DeviceScopes): Promise<string> => {
+    if (scopes.shell !== "on") {
+        assertScope(scopes, "sandboxes");
+    }
+    const run = await runIc(icDoctorArgs(slug), () => {}, {}, { deadlineMs: DOCTOR_DEADLINE_MS });
+    if (run.code !== 0 && !run.output.includes("{")) {
+        throw new Error(`"${slug}" could not be diagnosed on this device.\n\n${run.output}`);
+    }
+    return run.output;
 };
 
 // How many lines of a container's log to answer with by default, and the ceiling. A log is read to find out why

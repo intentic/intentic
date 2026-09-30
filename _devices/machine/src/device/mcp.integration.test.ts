@@ -63,6 +63,7 @@ test("tools/list is the machine's whole surface, and there is no delete", async 
         "reshape_sandbox",
         "remove_sandbox",
         "sandbox_logs",
+        "diagnose_sandbox",
     ]);
     expect(names).not.toContain("delete_file");
     // remove_sandbox is the one exception to "there is no delete", and is not a file tool: it deletes a sandbox
@@ -107,6 +108,10 @@ test("an argument the schema does not accept is a readable result, and nothing i
     const tooMany = await call("sandbox_logs", { slug: "work", lines: 9000 }, scopes());
     expect(tooMany.isError).toBe(true);
     expect(tooMany.text).toMatch(/lines/);
+    // A slug reaches ic's command line as a positional: one ic would read as a flag is refused before ic runs.
+    const flagSlug = await call("diagnose_sandbox", { slug: "--help" }, scopes());
+    expect(flagSlug.isError).toBe(true);
+    expect(flagSlug.text).toBe('"--help" is not a sandbox slug; list_sandboxes names them.');
     const noPath = await call("read_file", { path: "" }, scopes());
     expect(noPath.isError).toBe(true);
 });
@@ -125,6 +130,10 @@ test("a refused scope comes back as a readable tool RESULT, not a transport erro
     const refused = await call("run_command", { command: "whoami" }, scopes({ shell: "off" }));
     expect(refused.isError).toBe(true);
     expect(refused.text).toMatch(/Run commands.*switched off/);
+    // A diagnosis is a way of seeing, like the logs: either switch opens it, neither refuses it before ic runs.
+    const undiagnosed = await call("diagnose_sandbox", { slug: "work" }, scopes({ shell: "off", sandboxes: "off" }));
+    expect(undiagnosed.isError).toBe(true);
+    expect(undiagnosed.text).toMatch(/Manage sandboxes on this device.*switched off/);
 });
 
 test("writing outside the allowed folders is refused", async () => {
@@ -188,6 +197,7 @@ test("every tool says what a call can do to the device", async () => {
         "screenshot",
         "list_sandboxes",
         "sandbox_logs",
+        "diagnose_sandbox",
     ]);
     expect(tools.filter((entry) => entry.annotations.destructiveHint).map((entry) => entry.name)).toEqual([
         "run_command",

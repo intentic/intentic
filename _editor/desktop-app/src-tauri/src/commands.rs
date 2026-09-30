@@ -25,6 +25,8 @@ pub struct DesktopInfo {
     pub install_id: String,
     /// Seconds a Docker start waits for its engine before it answers `tookTooLong`.
     pub engine_limit_seconds: u64,
+    /// Seconds an `ic sandbox fix` may run before it is stopped (fix.rs).
+    pub fix_limit_seconds: u64,
 }
 
 /// What this build calls itself. `INTENTIC_VERSION` is stamped by build.rs from the release build's own
@@ -50,7 +52,7 @@ pub fn ic_url(version: &str) -> Option<String> {
 /// spawning a child with no window, no console and closed stdin, and a question asked on that run is a run
 /// that never ends. The flag says so outright, and every prompt in `ic` then reads as "no answer" — which is
 /// what each of them already treats as a refusal.
-fn app_env(version: &str) -> Vec<(String, String)> {
+pub(crate) fn app_env(version: &str) -> Vec<(String, String)> {
     let mut env: Vec<(String, String)> = vec![("INTENTIC_NO_PROMPT".into(), "1".into())];
     if let Some(url) = ic_url(version) {
         env.push(("IC_URL".into(), url));
@@ -67,6 +69,7 @@ pub fn desktop_info(state: State<'_, AppState>) -> DesktopInfo {
         platform_url: state.platform_url(),
         install_id: state.install_id(),
         engine_limit_seconds: scripts::ENGINE_LIMIT.as_secs(),
+        fix_limit_seconds: crate::fix::LIMIT.as_secs(),
     }
 }
 

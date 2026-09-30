@@ -1615,6 +1615,9 @@ pub fn handle_link(app: &AppHandle, link: &str, source: Source) {
             show_launcher(app);
             let _ = tauri::Emitter::emit(app, "desktop://pending-recreate", ());
         }
+        // The recovery panel's button: `ic sandbox fix`, run and drawn in the launcher (fix.rs). A link while one
+        // runs brings that run forward instead of starting a second.
+        Some(Link::Fix(args)) => crate::fix::requested(app, args),
         // A folder of this computer becoming a project of a hosted sandbox: bound to the folder this app parked
         // for it and run here, with no launcher screen in between (project.rs `sync_project`).
         Some(Link::Sync(args)) if args.project.is_some() => {

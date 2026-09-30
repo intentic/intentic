@@ -20,7 +20,9 @@ import { newsBetween, type TabFrame, tabMark } from "./tabSignal";
 // when it should ring. The page's own name comes from the router, and tabTitle.ts writes both.
 
 // Past the half minute a reconnect is given in silence (availability.ts), and every ending that waiting will not mend.
-const OFFLINE: ReadonlySet<SandboxAvailability> = new Set([`busy`, `detached`, `removed`, `blocked`]);
+// Not `busy`: a sandbox the diagnosis saw alive is catching up, and a tab that said "Offline" over it was the loudest
+// false alarm the app had.
+const OFFLINE: ReadonlySet<SandboxAvailability> = new Set([`unreachable`, `detached`, `removed`, `blocked`]);
 
 // A Stop the reader pressed files its card in Attention, which is no news to them.
 const endedByHand = (agent: AgentStanding): boolean => agent.status === `stopping` || agent.status === `stopped`;

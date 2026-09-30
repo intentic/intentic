@@ -13,6 +13,7 @@ mod supervise;
 mod term;
 mod tls;
 mod tunnel;
+mod vitals;
 
 use std::ffi::OsString;
 use std::os::unix::fs::PermissionsExt;
@@ -29,10 +30,11 @@ use crate::feed::Feed;
 use crate::link::{Link, Pushed};
 use crate::listen::Listeners;
 use crate::proxy::Front;
-use crate::supervise::NodeCommand;
+use crate::supervise::{NodeCommand, Restarts};
 use crate::term::{Hubs, Terminals, Tmux};
 use crate::tls::CertificateSlot;
 use crate::tunnel::Tunnel;
+use crate::vitals::Vitals;
 
 const USAGE: &str = "usage: intentic-front [--run-dir DIR] -- NODE_COMMAND [ARGS...]";
 
@@ -91,9 +93,20 @@ async fn run(run_dir: PathBuf, program: OsString, args: Vec<OsString>) -> i32 {
         }
     });
 
+    let restarts = Arc::new(Restarts::default());
+    let vitals = Arc::new(Vitals::new(link, restarts.clone()));
+    let pinging = vitals.clone();
+    tokio::spawn(async move { pinging.keep_pinging().await });
+
     let (config_sender, config) = watch::channel(None);
     let terminals = Terminals::new(Hubs::new(Tmux::default()));
-    let front = Arc::new(Front::new(link, http.clone(), config, terminals.clone()));
+    let front = Arc::new(Front::new(
+        link,
+        http.clone(),
+        config,
+        terminals.clone(),
+        vitals,
+    ));
     let certificates = Arc::new(CertificateSlot::default());
     let mut listeners = Listeners::new(front.clone(), certificates.clone());
     let tunnel = Arc::new(Mutex::new(Tunnel::new(front, link)));
@@ -185,7 +198,7 @@ async fn run(run_dir: PathBuf, program: OsString, args: Vec<OsString>) -> i32 {
             (NODE_SOCKET_ENV.into(), http.into_os_string()),
         ],
     };
-    let code = supervise::supervise(command, node_pid, stopping).await;
+    let code = supervise::supervise(command, node_pid, stopping, &restarts).await;
     tunnel.lock().await.shut().await;
     code
 }

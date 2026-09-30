@@ -687,7 +687,8 @@ const autoheal = buildRouteMap({
 // The sync half's teardown, callable from the top-level `uninstall` too. With a selector it unpairs ONE
 // sandbox and leaves every other pairing served; bare, it removes everything, self-revoking each dropped
 // enrollment so a machine walking away cleans up after itself.
-export const syncUninstall = async (out: Log, sandbox?: string): Promise<void> => {
+// `forGood` is the top-level `uninstall`, which retires the agent whatever this machine hosts.
+export const syncUninstall = async (out: Log, sandbox?: string, { forGood = false }: { readonly forGood?: boolean } = {}): Promise<void> => {
     const state = await readState();
     const dropped = selectPairings(state, sandbox);
     const mutagen = await ensureMutagen();
@@ -722,14 +723,14 @@ export const syncUninstall = async (out: Log, sandbox?: string): Promise<void> =
         // sandbox, which is the connection an unpair asked for from a sandbox travels over. Mutagen's daemon is left
         // alone too.
         await writeManagedSshConfig(pairingSshConfig(remaining));
-        await ensureResident(out);
+        await ensureResident(out, { forGood });
         out(`Still syncing ${plural(remaining.length, "sandbox")}: ${remaining.map((pairing) => pairing.sandboxId).join(", ")}`);
         return;
     }
 
     // Nothing left to sync: sync's residue goes (forwards, transport, ssh include); the agent retires only when this
     // environment holds nothing at all.
-    await ensureResident(out);
+    await ensureResident(out, { forGood });
     await teardownAllForwards(mutagen, out);
     await removeManagedSshConfig();
     // Our downloaded Mutagen copy exists only for this agent, so retire its daemon completely. A `mutagen` of the user's

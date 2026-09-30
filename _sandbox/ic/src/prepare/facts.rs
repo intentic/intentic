@@ -173,7 +173,17 @@ pub fn parse(json: &str) -> Result<Facts, String> {
 /// of "is the daemon up" in PowerShell is exactly the drift this module was built to avoid.
 #[cfg(windows)]
 pub fn probe() -> Result<Facts, String> {
-    let output = shell::run(PROBE);
+    read(shell::run(PROBE))
+}
+
+/// The same reading with a deadline: what `ic sandbox fix` asks, on a machine whose WSL may be the thing that hangs.
+#[cfg(windows)]
+pub fn probe_within(limit: std::time::Duration) -> Result<Facts, String> {
+    read(shell::run_within(PROBE, limit))
+}
+
+#[cfg(windows)]
+fn read(output: shell::Output) -> Result<Facts, String> {
     if output.stdout.trim().is_empty() {
         return Err(format!(
             "could not read this PC's configuration{}",

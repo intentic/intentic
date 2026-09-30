@@ -54,6 +54,19 @@ pub fn agent_for(platform_url: &str) -> ureq::Agent {
         .new_agent()
 }
 
+/// The same agent with a shorter deadline, for calls that only narrate (the fix engine's reports) or only probe.
+pub fn agent_within(platform_url: &str, limit: Duration) -> ureq::Agent {
+    ureq::Agent::config_builder()
+        .timeout_global(Some(limit))
+        .tls_config(
+            ureq::tls::TlsConfig::builder()
+                .disable_verification(is_local(platform_url))
+                .build(),
+        )
+        .build()
+        .new_agent()
+}
+
 /// POST `<platform>/setup/claim` with the code.
 pub fn claim(platform_url: &str, code: &str) -> Result<Claim> {
     step("claiming-code", "redeeming the setup code…");

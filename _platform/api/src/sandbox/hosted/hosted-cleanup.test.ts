@@ -289,6 +289,9 @@ describe(`hosted cancellation`, () => {
                 setupReport: Prisma.DbNull,
                 bootReport: Prisma.DbNull,
                 announceRefusal: Prisma.DbNull,
+                fixCode: null,
+                fixCodeExpiresAt: null,
+                hostReport: Prisma.DbNull,
             },
         });
     });

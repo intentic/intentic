@@ -5,12 +5,14 @@ The host-side CLI that starts, updates, diagnoses and removes intentic sandbox c
 ```mermaid
 flowchart LR
     shim["connect.sh · connect.ps1<br/>setup one-liner"] --> ic(["ic"])
+    fixshim["fix.sh · fix.ps1<br/>recovery panel's command"] --> ic
     desktop["Desktop app"] --> ic
     machine["Machine agent<br/>sandbox tools"] --> ic
     hosted["Platform<br/>hosted overlay builds"] --> ic
     ic --> docker["Docker<br/>sandbox containers"]
     ic --> image["Sandbox image<br/>run contract"]
     ic --> claim["Platform<br/>setup-code claim"]
+    ic --> report["Platform<br/>host report"]
 ```
 
 - Runs on the host: a laptop, a server or a hosted machine, never inside a sandbox, which cannot see its siblings.
@@ -76,8 +78,17 @@ flowchart LR
   converted into the record the first time it is read, then deleted.
 - `ic sandbox logs [<slug>] [--tail N]` prints the tail of a sandbox's own log, both streams: what the machine
   agent's Logs button and `sandbox_logs` tool read.
-- `ic sandbox doctor` walks the reachability chain (machine, container, daemon, platform, edge) and names the broken
-  link with its fix, a sandbox an interrupted swap left parked and a probation in progress among them.
+- `ic sandbox fix [<slug>]` ([src/sandbox/fix/mod.rs](src/sandbox/fix/mod.rs)) checks every layer between this
+  machine and a sandbox in order, each with a deadline: Windows prerequisites, Docker Desktop, the engine, WSL, disk,
+  the container, its daemon, its registration, the network, the tunnel and the machine agent. It applies the fixes that
+  are safe unasked (starting Docker Desktop, tidying, starting a sandbox nobody stopped, finishing a cut-off swap,
+  restarting one whose registration gave up), asks on the terminal before the rest, and re-checks after each. Exit 0
+  is healthy or fixed, 1 something is left, 3 a fix needed a yes nobody could give, 4 Windows has to restart or sign
+  out first. `--auto` is the machine agent's run (safe fixes only, nothing asked), `--yes` and `--accept <ids>` give
+  consent in advance, and `--json` prints machine lines for the desktop app. Given the code the browser's recovery
+  panel minted (`--code`, or `FIX_CODE` through the `/fix` shim), or holding a sandbox's report key, it posts its
+  progress to the platform's host report, which the page mirrors. The platform never sends it anything.
+  `ic sandbox doctor` is the same engine, read-only.
 - The image owns its `docker run` flags. `ic` asks the image for its run command (`contract.rs`) instead of
   writing one, so a flag change ships with the image.
 - `ic docker prepare` checks and, with consent, installs what Docker needs; `ic machine enroll` makes the host a deploy

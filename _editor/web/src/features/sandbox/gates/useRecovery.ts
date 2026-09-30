@@ -2,6 +2,8 @@ import { useNow } from "@intentic/ui/async";
 import { computed, onScopeDispose, ref, watch, type ComputedRef } from "vue";
 import { useSandbox } from "../client/useSandbox";
 import { restartExpected } from "../live/sandboxRestart";
+import { useDiagnosis } from "../diagnosis/useDiagnosis";
+import { type DiagnosisNotice, presentDiagnosis } from "../diagnosis/presentation";
 import { recoveryDue } from "./recovery";
 
 // The gate and the recovery card read the same visible outage time. A frozen page may wake minutes later but has
@@ -58,22 +60,41 @@ export const useVisibleOutage = (): { elapsed: ComputedRef<number>; hidden: Comp
     };
 };
 
+// What the diagnosis of the active sandbox's outage says, in words (diagnosis/presentation.ts); undefined while it
+// answers, or while what is wrong is not a silence.
+export const useDiagnosisNotice = (clock: { readonly elapsed: ComputedRef<number> }): ComputedRef<DiagnosisNotice | undefined> => {
+    const { active } = useSandbox();
+    const diagnosis = useDiagnosis(clock);
+    return computed(() => {
+        const box = active.value;
+        const current = diagnosis.value;
+        if (box === undefined || current === undefined) {
+            return undefined;
+        }
+        return presentDiagnosis({
+            diagnosis: current,
+            name: box.name,
+            lane: box.hosted === null ? `own` : `hosted`,
+            owner: box.role === `owner`,
+            canRollBack: box.hosted?.canRollBack === true,
+        });
+    });
+};
+
 // Whether the active sandbox's recovery panel is due, for the connecting gate and notification lane.
-export const useRecoveryDue = (clock = useVisibleOutage()): ComputedRef<boolean> => {
-    const { active, connection, reachable, activeWakeRefused } = useSandbox();
+export const useRecoveryDue = (clock = useVisibleOutage(), notice = useDiagnosisNotice(clock)): ComputedRef<boolean> => {
+    const { active, reachable, activeWakeRefused } = useSandbox();
     const { elapsed, freshFailure } = clock;
     return computed(() => {
         const box = active.value;
         return recoveryDue({
-            failure: connection.value.failure,
             reachable: reachable.value,
             outageMs: elapsed.value,
             restartExpected: restartExpected(box?.id) !== undefined,
             removed: (box?.removedAt ?? null) !== null,
             refused: activeWakeRefused.value !== undefined,
-            hosted: (box?.hosted ?? null) !== null,
-            canRollBack: box?.hosted?.canRollBack === true,
             owner: box?.role === `owner`,
+            notice: notice.value,
         }) && freshFailure.value;
     });
 };

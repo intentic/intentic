@@ -66,6 +66,26 @@ test("answers the front's question under its id and reports the tunnel", async (
     link.close();
 });
 
+// The front times this round trip as the event loop's lag, so the link answers it without asking the daemon's answerer.
+test("answers the front's ping with a pong under its id, without asking the answerer", async () => {
+    const asked: unknown[] = [];
+    const link = await connectFront({
+        path: join(dir, "front.sock"),
+        answer: (question) => {
+            asked.push(question);
+            return Promise.reject(new Error("the answerer was asked"));
+        },
+        onTunnel: () => undefined,
+        onClose: () => undefined,
+    });
+    const socket = await front;
+    const answered = nextMessage(socket);
+    socket.write(toNode({ kind: "ask", id: 12, question: { question: "ping" } }));
+    expect(await answered).toEqual({ kind: "answer", id: 12, answer: { answer: "pong" } });
+    expect(asked).toEqual([]);
+    link.close();
+});
+
 test("a throwing answer goes back as a refusal carrying its message", async () => {
     const link = await connectFront({
         path: join(dir, "front.sock"),

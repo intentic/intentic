@@ -2,13 +2,13 @@ import { once } from "node:events";
 import { rmSync } from "node:fs";
 import { createServer as createHttpServer, type RequestListener } from "node:http";
 import { createAdaptorServer, type WebSocketServerLike } from "@hono/node-server";
-import { type Answer, type FromNode, FRONT_SOCKET_ENV, type ListenConfig, NODE_SOCKET_ENV, type Question } from "@intentic/sandbox-contract/front-wire";
+import { type Answer, type FromNode, FRONT_SOCKET_ENV, type ListenConfig, NODE_SOCKET_ENV } from "@intentic/sandbox-contract/front-wire";
 import { tunnelBulkRoutes } from "@intentic/sandbox-contract";
 import { publicSlotFromToken, sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import type { Logger } from "pino";
 import { WebSocketServer } from "ws";
 import { createApp } from "../app.js";
-import { connectFront, type FrontLink } from "../front/front-link.js";
+import { connectFront, type FrontAsks, type FrontLink } from "../front/front-link.js";
 import { frontCheckoutFeed, useCheckoutFeed } from "../git/feed/checkout-feed.js";
 import { answerPreview, isHandedBackPreview, PREVIEW_PROBE_PATH, type PreviewDeps, previewRoute } from "../panels/preview-routes.js";
 import { type ReachPosture, reachPosture, tunnelUrl } from "../system/listeners/reach-posture.js";
@@ -132,7 +132,7 @@ export const startFrontDoor = async (phase: BootPhase, host: string): Promise<Re
     let tunnelUp = false;
     const link = await connectFront({
         path: controlPath,
-        answer: async (question: Question): Promise<Answer> => {
+        answer: async (question: FrontAsks): Promise<Answer> => {
             switch (question.question) {
                 case "preview":
                     return { answer: "preview", route: await previewRoute(question.host, question.probe, preview) };

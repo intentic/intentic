@@ -14,6 +14,11 @@ curl https://sandbox-<id>.intentic.dev/health
 
 { "ok": true, "sandboxId": "…", "boot": { … }, "announce": { … } }`;
 
+const fixUnix = `# The recovery panel hands you this with your code in it. On the machine the sandbox runs on:
+curl -fsSL https://intentic.dev/fix | sh -s -- <CODE>`;
+
+const fixWin = `$env:FIX_CODE='<CODE>'; irm https://intentic.dev/fix.ps1 | iex`;
+
 const logs = `# What the daemon said while it came up.
 docker logs --tail 200 intentic-sandbox-<SLUG>
 
@@ -39,6 +44,43 @@ docker logs --tail 50 intentic-sandbox-tunnel-<SLUG>`;
     <p>
         Your <a href="/docs/glossary/">slug</a> is the first label of that hostname. In the{" "}
         <a href="/download/">desktop app</a> the same logs are a button, next to start, stop and update.
+    </p>
+
+    <h2 id="stopped-answering">It stopped answering</h2>
+    <p>
+        When the workspace loses its sandbox, the page checks each link before it says anything: this device's connection, Intentic, the
+        sandbox's address, the machine it runs on, and the sandbox itself. It names the one that broke. A sandbox that is alive but slow, in the
+        middle of a big build or short of memory, is shown as <strong>busy</strong>: the tab does not turn to Offline, and a restart is only
+        offered after five minutes. Restarting a busy sandbox throws away the work it is doing, so waiting is usually the fix.
+    </p>
+    <p>
+        The recovery panel appears when the page finds something to do. For a sandbox on your own computer, that is one command, for the shell
+        of that computer:
+    </p>
+    <DocsCodeBlock code={fixUnix} lang="bash" title="macOS, Linux, WSL" />
+    <DocsCodeBlock code={fixWin} lang="powershell" title="Windows · PowerShell" />
+    <p>
+        It runs <code>ic sandbox fix</code>, which checks every layer in order: Windows prerequisites, Docker Desktop, Docker's engine, WSL, disk
+        space, the sandbox's container, its daemon, its registration with Intentic, the network and the tunnel. It fixes what is safe to fix
+        without asking: it starts Docker Desktop, clears images that updates left behind when the disk is full, starts a sandbox that stopped by
+        itself, finishes an interrupted update, and restarts a sandbox that gave up registering with Intentic. Anything that could interrupt other work is asked
+        first, in the same terminal. That covers restarting Docker Desktop (every sandbox on the machine restarts with it), restarting WSL,
+        switching Docker back to Linux containers, rolling back an update, giving the sandbox more memory, and starting a sandbox you stopped
+        yourself. The code in the command lets the page follow the run as it goes, and it expires after 30 minutes; without it the command still
+        fixes, but the page cannot watch.
+    </p>
+    <p>
+        It ends on one sentence and an exit code: <strong>0</strong> healthy or fixed, <strong>1</strong> something is left for you (the last
+        lines say what), <strong>3</strong> a fix needed your yes and there was no terminal to ask in (re-run it with <code>--yes</code>), and{" "}
+        <strong>4</strong> Windows has to restart or sign you out first. <code>ic sandbox doctor</code> makes the same checks and changes
+        nothing.
+    </p>
+    <p>
+        Usually none of this reaches you. The Intentic agent on your computer runs the same checks by itself: half a minute after you sign in,
+        every five minutes after that, and within a minute of losing a sandbox there. It applies only the fixes that need no yes. While it works, the page says what it is doing
+        ("rog is starting Docker Desktop"), including when you are looking from another device. <code>intentic-machine sandbox keeper off</code>{" "}
+        turns that off. In the <a href="/download/">desktop app</a> the command is a button. A sandbox Intentic hosts has no command: its panel
+        offers <strong>Restart</strong>, and <strong>Roll back</strong> when the last update is what broke it.
     </p>
 
     <h2>Bringing one up</h2>

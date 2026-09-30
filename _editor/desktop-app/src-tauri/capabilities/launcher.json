@@ -18,6 +18,8 @@
         "allow-take-pending-docker",
         "allow-take-pending-setup",
         "allow-take-pending-recreate",
+        "allow-take-pending-fix",
+        "allow-sandbox-fix",
         "allow-take-pending-sync",
         "allow-sync-run",
         "allow-folder-entries",

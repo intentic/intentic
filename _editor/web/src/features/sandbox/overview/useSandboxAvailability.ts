@@ -5,6 +5,7 @@ import { sandboxAvailability, type SandboxAvailability } from "./availability";
 import { useSandbox } from "../client/useSandbox";
 import { daemonReady } from "./useDaemonBoot";
 import { useVisibleOutage } from "../gates/useRecovery";
+import { sandboxSeemsAlive } from "../diagnosis/useDiagnosis";
 
 /* Component-scoped because useNow registers disposal with the caller's Vue scope. */
 export const useSandboxAvailability = (established?: MaybeRefOrGetter<boolean>): ComputedRef<SandboxAvailability> => {
@@ -20,5 +21,7 @@ export const useSandboxAvailability = (established?: MaybeRefOrGetter<boolean>):
     const removed = computed(() => (active.value?.removedAt ?? null) !== null);
     // A page woken from sleep spent none of its hidden time waiting, so that time never reads as "busy".
     const { hidden } = useVisibleOutage();
-    return computed(() => sandboxAvailability(connection.value, daemonReady.value, hasEstablishedView.value, now.value, removed.value, hidden.value));
+    return computed(() =>
+        sandboxAvailability(connection.value, daemonReady.value, hasEstablishedView.value, now.value, removed.value, hidden.value, sandboxSeemsAlive(now.value)),
+    );
 };

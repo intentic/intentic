@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { EDGE_VERDICT_HEADER, edgeVerdictOf } from "../protocol/edge-verdict.js";
 import { INGRESS_GRANT_HEADER, INGRESS_TUNNEL_PATH } from "../protocol/ingress-contract.js";
+import { VITALS_PATH } from "../protocol/vitals.js";
 import { EDGE_TRANSPORTS, TERMINAL_PATH, WEBTRANSPORT_PATH } from "./browser-wire.js";
 import { ASK_PATIENCE_MS, FRAME_LENGTH_BYTES, FRONT_SOCKET_ENV, NODE_SOCKET_ENV } from "./front-wire.js";
 
@@ -23,6 +24,7 @@ const socket = manifest("front-wire") as {
 const browser = manifest("browser-wire") as {
     edge: { verdictHeader: string; verdicts: { oneOf: { const: string }[] } };
     terminal: { path: string; upgrade: string };
+    vitals: { path: string; body: { $defs: { NodeLink: { oneOf: { const: string }[] } } } };
     webTransport: { path: string };
 };
 
@@ -57,5 +59,10 @@ describe("the wire outside oRPC, as the Rust crates define it", () => {
             session: browser.webTransport.path,
             upgrade: browser.terminal.upgrade,
         });
+    });
+
+    it("finds the front's vitals where browser-wire says it answers them, in the states it names", () => {
+        expect(VITALS_PATH).toBe(browser.vitals.path);
+        expect(browser.vitals.body.$defs.NodeLink.oneOf.map((state) => state.const)).toEqual(["starting", "up", "restarting"]);
     });
 });

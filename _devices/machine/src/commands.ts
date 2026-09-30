@@ -87,8 +87,9 @@ const uninstall = buildCommand({
     parameters: {},
     async func(this: CommandContext) {
         const out = (message: string): void => void this.process.stdout.write(`${message}\n`);
-        await syncUninstall(out);
-        await deviceUninstall(out);
+        // For good: the agent goes even from a machine that hosts sandboxes, which it would otherwise stay to keep.
+        await syncUninstall(out, undefined, { forGood: true });
+        await deviceUninstall(out, undefined, { forGood: true });
         const still = await readResident();
         out(
             still === undefined

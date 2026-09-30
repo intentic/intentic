@@ -27,6 +27,8 @@ const COMMANDS: &[&str] = &[
     "take_pending_docker",
     "take_pending_setup",
     "take_pending_recreate",
+    "take_pending_fix",
+    "sandbox_fix",
     "take_pending_sync",
     "sync_run",
     "folder_entries",

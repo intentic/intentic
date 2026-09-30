@@ -21,7 +21,10 @@ flowchart LR
   the intentic sandboxes on this machine through the `ic` CLI.
 - The sandbox tools are thin callers of `ic` ([`tools/sandboxes.ts`](src/device/tools/sandboxes.ts)): the listing is
   `ic sandbox list --json` passed through, and start, stop, restart, the swaps, `set-shape`, `forget-shape` and the
-  logs are ic's own verbs, argv spelled by the contract (`icShapeArgs`, `icPowerArgs`). The shape reaches ic as the
+  logs are ic's own verbs, argv spelled by the contract (`icShapeArgs`, `icPowerArgs`). `diagnose_sandbox` is
+  `ic sandbox doctor <slug> --json`, read-only and gated like the logs (`shell` or `sandboxes`), so an agent in another
+  sandbox can find out why one on this device is unreachable; it skips the listing, which cannot answer while Docker is
+  down, and refuses a slug ic would read as a flag. The shape reaches ic as the
   contract's own object (`--set memoryGib=12`), so no flag of ic's is spelled here; the old `reshape` op is carried
   out through the same verb. A rollback's `to` becomes `ic sandbox rollback <slug> --to <version>`. A sandbox an
   interrupted swap left parked is listed under its own slug and found like any other, so start, rollback and update
@@ -201,7 +204,8 @@ folded where the platform folds it). With `--json` each prints exactly one JSON 
 ### Upgrades that can be undone
 
 - **A swap is never cut short by this agent.** `ic` runs in a process group of its own on POSIX, keeps its pipes, and
-  is never killed when the link or request that asked for it goes away. Every restart of the agent (the auto-upgrade
+  is never killed when the link or request that asked for it goes away. The one run it ever stops is the keeper's
+  `sandbox fix` past its deadline (below), which is not a swap. Every restart of the agent (the auto-upgrade
   tick, `upgrade`, `run`, the browser's Update and Restart) waits while any channel record in this environment's ic
   home (`INTENTIC_HOME`, else `~/.intentic`) says `swap_phase=cutover` with `swap_at` in the last 30 minutes, or while
   this process runs a flow that moves a container ([`device/sandbox-rounds/swap-records.ts`](src/device/sandbox-rounds/swap-records.ts)); the tick
@@ -238,8 +242,52 @@ folded where the platform folds it). With `--json` each prints exactly one JSON 
   ([`tools/command-ledger.ts`](src/device/tools/command-ledger.ts)). The login entries of the two agents this one
   replaced on 2026-08-29 (`intentic-host`, the sync mirror) are removed once, at start.
 - `intentic-machine sandbox <verb> [slug]` passes `list`, `start`, `stop`, `restart`, `update`, `rollback [--to]`,
-  `versions`, `logs`, `doctor`, `watch`, `backup` and `backups` straight to ic, in this terminal, with ic's exit code:
-  a sandbox can be looked at and repaired from here when no browser reaches it.
+  `versions`, `logs`, `doctor`, `watch`, `backup`, `backups` and `fix [--code] [--auto] [--yes] [--accept] [--json]
+  [--source]` straight to ic, in this terminal, with ic's exit code: a sandbox can be looked at and repaired from here
+  when no browser reaches it, and `fix` asks here for the yes the keeper never gives.
+
+### The keeper
+
+When a sandbox on this machine stops answering (Docker Desktop not started after a reboot, a stopped container, a
+daemon whose registration gave up, a full disk), the agent heals what is safe to heal by itself and reports the rest
+([`device/sandbox-rounds/keeper.ts`](src/device/sandbox-rounds/keeper.ts)). ic does every fix; the keeper keeps the
+clock.
+
+- **When.** `ic sandbox fix --auto --json --source agent` over every sandbox half a minute after the agent starts (the
+  logon case: Docker Desktop is off by default after a reboot) and every five minutes, and `ic sandbox fix <slug> …` as
+  soon as the agent's link to a sandbox that runs on this machine has failed for a minute. A link's sandbox runs here
+  when this environment's ic has a record of it or listed it (by its hostname's first label or the id in it, as sync's
+  swap pause maps them), or when the agent has reached it over loopback.
+- **What ic does by itself** under `--auto`: starts Docker Desktop and waits for it, starts a sandbox its owner did not
+  stop on purpose, restarts one whose registration gave up, tidies when the disk is low. It posts its report to the
+  platform itself; nothing comes back down to the device (there is no platform-to-device relay).
+- **What the keeper never does**: apply a fix that needs a yes (each is logged with `intentic-machine sandbox fix
+  <slug>`, which asks in a terminal, as the desktop app's buttons and the recovery panel's command do), run two fixes at
+  once, run while the probation watch is running ic, fix a sandbox a swap is moving or one a flow of this agent holds,
+  or start the sweep while any flow runs. Each run holds the sandboxes it may touch as a flow that moves a container,
+  so the other rounds leave them alone and the agent does not restart under it.
+- **Bounded.** A run is stopped after eight minutes (starting Docker Desktop alone can take five), with its process
+  group on POSIX and its process tree on Windows.
+- **Waiting.** A sandbox whose run left something (needs-you, failed, no verdict) waits 3 minutes, then 6, 12, 24 and
+  30 at most, and the wait ends when its link comes back. One ic found healthy or fixed while its link stays down is
+  asked about again after five minutes, not every ten seconds. The sweep's own cadence stretches on the same ladder
+  (never under five minutes) while a sweep leaves something. An ic that cannot fix (one from before `sandbox fix`,
+  which clap refuses with no JSON, or no ic at all) is said once and asked again on the same ladder.
+- **The log** (`~/.intentic/machine/machine.log`, like every round): what ic is doing as it does it, and each
+  sandbox's verdict when it changes (a standing `healthy` or `needs-you` is said once per stretch; `fixed` always).
+- **Where.** Every environment runs its own keeper, since `ic sandbox fix` knows only the sandboxes its own ic keeps
+  records of; a WSL distro's shares the Windows side's Docker Desktop.
+- **The switch** is this environment's `sandboxKeeper` in `machine.json` (absent means on), set by
+  `intentic-machine sandbox keeper on|off` and read by `keeper status`. It is re-read every round.
+- **It keeps the agent resident.** An agent with no link, no pairing and no distro to serve used to take its login
+  entry away and exit, and then nothing started Docker Desktop after the next reboot. It now stays while the keeper is
+  on and this machine hosts a sandbox other than a runner: the ones `ic sandbox list --json` names when Docker answers,
+  else the ones ic keeps a record of (a removed sandbox's record lasts until `ic sandbox tidy` archives it, so the
+  listing wins whenever it answers). The resident asks at start and then every five minutes, and only while it has
+  nothing else to serve. `keeper off` lets it go; `intentic-machine uninstall` retires it whatever this machine hosts,
+  while `device uninstall` and `sync uninstall` leave it running for the sandboxes here and say so (2026-09-30:
+  retiring as before was rejected, since a machine whose last link was revoked kept its sandbox down after every
+  reboot).
 
 ## Key files
 

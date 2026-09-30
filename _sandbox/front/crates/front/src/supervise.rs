@@ -1,8 +1,11 @@
 //! Runs the Node daemon as a child and keeps it running. A crash restarts it with backoff while the front holds every
 //! socket; a deliberate stop (exit 0) or a refused config (exit 78) ends the front too, as they ended the container.
 
+use std::collections::VecDeque;
 use std::ffi::OsString;
 use std::process::ExitStatus;
+use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use relay::Backoff;
@@ -23,17 +26,59 @@ const STOP_GRACE: Duration = Duration::from_secs(25);
 // EX_CONFIG: the daemon refused its configuration, which no restart can fix.
 const REFUSED_CONFIG: i32 = 78;
 
+// How far back the vitals route counts restarts.
+const RESTART_WINDOW: Duration = Duration::from_secs(10 * 60);
+
+/// When the front restarted Node, as far back as `RESTART_WINDOW`, and whether it ever did.
+#[derive(Default)]
+pub struct Restarts {
+    recent: Mutex<VecDeque<Instant>>,
+    ever: AtomicBool,
+}
+
+impl Restarts {
+    pub fn record(&self, at: Instant) {
+        self.ever.store(true, Ordering::Relaxed);
+        let mut recent = self.recent.lock().expect("restarts poisoned");
+        forget_before(&mut recent, at);
+        recent.push_back(at);
+    }
+
+    /// How many restarts fall within `RESTART_WINDOW` of `now`.
+    pub fn within_window(&self, now: Instant) -> u32 {
+        let mut recent = self.recent.lock().expect("restarts poisoned");
+        forget_before(&mut recent, now);
+        u32::try_from(recent.len()).unwrap_or(u32::MAX)
+    }
+
+    pub fn ever(&self) -> bool {
+        self.ever.load(Ordering::Relaxed)
+    }
+}
+
+// Oldest first, so what fell out of the window is always at the front.
+fn forget_before(recent: &mut VecDeque<Instant>, now: Instant) {
+    while recent
+        .front()
+        .is_some_and(|at| now.saturating_duration_since(*at) > RESTART_WINDOW)
+    {
+        recent.pop_front();
+    }
+}
+
 pub struct NodeCommand {
     pub program: OsString,
     pub args: Vec<OsString>,
     pub env: Vec<(OsString, OsString)>,
 }
 
-/// Runs Node until it stops on purpose or `stop` is raised; the answer is the front's own exit code.
+/// Runs Node until it stops on purpose or `stop` is raised; the answer is the front's own exit code. Every start after a
+/// crash or a failed start is recorded in `restarts`.
 pub async fn supervise(
     command: NodeCommand,
     pid: watch::Sender<Option<u32>>,
     mut stop: watch::Receiver<bool>,
+    restarts: &Restarts,
 ) -> i32 {
     let mut backoff = BACKOFF;
     loop {
@@ -42,6 +87,7 @@ pub async fn supervise(
             Ok(child) => child,
             Err(error) => {
                 tracing::error!(%error, "could not start the daemon");
+                restarts.record(Instant::now());
                 if wait_or_stop(backoff.after(started.elapsed()), &mut stop).await {
                     return 1;
                 }
@@ -61,6 +107,7 @@ pub async fn supervise(
             return code;
         }
         tracing::error!(code, ran = ?started.elapsed(), "the daemon crashed; restarting it");
+        restarts.record(Instant::now());
         if wait_or_stop(backoff.after(started.elapsed()), &mut stop).await {
             return code;
         }
@@ -165,18 +212,52 @@ mod tests {
         }
     }
 
+    #[test]
+    fn restarts_are_counted_over_the_last_ten_minutes() {
+        let restarts = Restarts::default();
+        let start = Instant::now();
+        assert_eq!(restarts.within_window(start), 0);
+        restarts.record(start);
+        restarts.record(start + Duration::from_secs(60));
+        restarts.record(start + Duration::from_secs(9 * 60));
+        assert_eq!(
+            restarts.within_window(start + Duration::from_secs(9 * 60)),
+            3
+        );
+        // The window's edge still counts; a second past it does not.
+        assert_eq!(restarts.within_window(start + RESTART_WINDOW), 3);
+        assert_eq!(
+            restarts.within_window(start + RESTART_WINDOW + Duration::from_secs(1)),
+            2
+        );
+        assert_eq!(
+            restarts.within_window(start + Duration::from_secs(9 * 60) + RESTART_WINDOW),
+            1
+        );
+        assert_eq!(
+            restarts.within_window(start + Duration::from_secs(20 * 60)),
+            0
+        );
+        assert!(restarts.ever());
+    }
+
     #[tokio::test]
     async fn a_deliberate_stop_ends_the_front_with_it() {
         let (pid, _) = watch::channel(None);
         let (_stop, stopping) = watch::channel(false);
-        assert_eq!(supervise(sh("exit 0"), pid, stopping).await, 0);
+        let restarts = Restarts::default();
+        assert_eq!(supervise(sh("exit 0"), pid, stopping, &restarts).await, 0);
+        assert!(!restarts.ever());
     }
 
     #[tokio::test]
     async fn a_refused_config_is_not_retried() {
         let (pid, _) = watch::channel(None);
         let (_stop, stopping) = watch::channel(false);
-        assert_eq!(supervise(sh("exit 78"), pid, stopping).await, 78);
+        assert_eq!(
+            supervise(sh("exit 78"), pid, stopping, &Restarts::default()).await,
+            78
+        );
     }
 
     #[tokio::test]
@@ -190,7 +271,10 @@ mod tests {
         );
         let (pid, _) = watch::channel(None);
         let (_stop, stopping) = watch::channel(false);
-        assert_eq!(supervise(sh(&script), pid, stopping).await, 0);
+        let restarts = Restarts::default();
+        assert_eq!(supervise(sh(&script), pid, stopping, &restarts).await, 0);
+        assert_eq!(restarts.within_window(Instant::now()), 1);
+        assert!(restarts.ever());
         let _ = std::fs::remove_file(&marker);
     }
 
@@ -198,11 +282,15 @@ mod tests {
     async fn stop_forwards_sigterm_and_waits_for_the_daemon() {
         let (pid, mut started) = watch::channel(None);
         let (stop, stopping) = watch::channel(false);
-        let running = tokio::spawn(supervise(
-            sh("trap 'exit 0' TERM; while :; do sleep 0.05; done"),
-            pid,
-            stopping,
-        ));
+        let running = tokio::spawn(async move {
+            supervise(
+                sh("trap 'exit 0' TERM; while :; do sleep 0.05; done"),
+                pid,
+                stopping,
+                &Restarts::default(),
+            )
+            .await
+        });
         started.wait_for(Option::is_some).await.unwrap();
         tokio::time::sleep(Duration::from_millis(100)).await;
         stop.send_replace(true);

@@ -67,10 +67,83 @@ pub fn cli_present() -> bool {
         .unwrap_or(false)
 }
 
+/* EVERY QUESTION TO THE ENGINE HAS A DEADLINE. A wedged engine (Docker Desktop after `wsl --shutdown`, a host disk
+that filled) does not fail `docker version`: it never answers it, and an unbounded call parks the flow for good. The
+fleet script learned the bound first (_tools/scripts/ci/setup-wsl-fleet.ps1, "NO PROBE HERE MAY BLOCK"). */
+
+/// How long the engine may take to say who it is before it counts as not answering.
+pub const ENGINE_PROBE: Duration = Duration::from_secs(20);
+
+/// How long a read (`inspect`, `ps`, an exec of curl) may take before it counts as unanswered.
+pub const READ_LIMIT: Duration = Duration::from_secs(20);
+
+/// What the engine said when asked who it is.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Engine {
+    /// It answered, with the kind of container it runs: `linux`, or `windows` on a Docker Desktop switched to
+    /// Windows containers.
+    Up(String),
+    /// There is no docker CLI to ask with.
+    NoCli,
+    /// Nothing is listening: the engine is not running (or, inside WSL, Docker Desktop's integration is absent).
+    Down(String),
+    /// The engine is up and turned this account away: Windows' "Access is denied" on its pipe, or a Unix socket
+    /// this user may not open.
+    Denied(String),
+    /// Something answered, with an error: the 500 a Docker Desktop answers forever once its VM went away.
+    Erroring(String),
+    /// Asked, and no answer came before the deadline: an engine that is blocked rather than down.
+    Silent,
+}
+
+impl Engine {
+    pub fn up(&self) -> bool {
+        matches!(self, Engine::Up(_))
+    }
+}
+
+/// `docker version` with a server format, bounded: one fast round trip that names both whether the engine answers
+/// and what it runs. `docker info` aggregates CLI-plugin data and can hang (docker-scout, buildx), so it is not it.
+pub fn engine(limit: Duration) -> Engine {
+    let Ok(ran) = capture_bounded(&["version", "--format", "{{.Server.Os}}"], limit) else {
+        return Engine::NoCli;
+    };
+    if ran.timed_out {
+        return Engine::Silent;
+    }
+    if ran.code == Some(0) {
+        let os = ran.stdout.trim().to_lowercase();
+        return Engine::Up(if os.is_empty() {
+            "linux".to_string()
+        } else {
+            os
+        });
+    }
+    refusal_kind(&ran.stderr)
+}
+
+/// Which of the three refusals docker's own words describe. Pure. An answer with an error in it outranks the rest:
+/// a pipe that answered 500 is an engine that exists and is broken, which no start fixes. Anything unrecognised is
+/// read as down, the reading whose fix (start it) is the safe one to try.
+pub fn refusal_kind(stderr: &str) -> Engine {
+    let said = stderr.trim().to_string();
+    let lower = said.to_ascii_lowercase();
+    if lower.contains("500 internal server error")
+        || lower.contains("error response from daemon")
+        || lower.contains("request returned 5")
+    {
+        return Engine::Erroring(said);
+    }
+    if lower.contains("access is denied") || lower.contains("permission denied") {
+        return Engine::Denied(said);
+    }
+    Engine::Down(said)
+}
+
 /// `docker info` aggregates CLI-plugin data and can hang (docker-scout/buildx); `docker version` with a
 /// server format does a fast daemon round-trip and fails cleanly when the daemon is unreachable.
 pub fn daemon_reachable() -> bool {
-    ok(&["version", "--format", "{{.Server.Version}}"])
+    engine(ENGINE_PROBE).up()
 }
 
 /// Why the daemon could not be reached, in the CLI's own words — `None` when it answered. The same round
@@ -79,23 +152,61 @@ pub fn daemon_reachable() -> bool {
 /// running, and nothing but this text tells the two apart.
 #[cfg_attr(not(windows), allow(dead_code))]
 pub fn daemon_refusal() -> Option<String> {
-    let output = docker(&["version", "--format", "{{.Server.Version}}"])
-        .stdout(Stdio::null())
-        .output();
-    match output {
-        Ok(output) if output.status.success() => None,
-        Ok(output) => Some(String::from_utf8_lossy(&output.stderr).trim().to_string()),
-        Err(error) => Some(format!("could not run docker: {error}")),
+    match engine(ENGINE_PROBE) {
+        Engine::Up(_) => None,
+        Engine::NoCli => Some("could not run docker: it is not installed".to_string()),
+        Engine::Silent => Some(format!(
+            "docker's engine did not answer within {}s",
+            ENGINE_PROBE.as_secs()
+        )),
+        Engine::Down(said) | Engine::Denied(said) | Engine::Erroring(said) => Some(said),
     }
 }
 
 /// Which kind of container this daemon runs, lowercased — `linux`, or `windows` on a Docker Desktop switched
 /// to Windows containers. `docker version` rather than `docker info` for the reason [`daemon_reachable`]
-/// gives: same fast round-trip, no CLI-plugin aggregation to hang on.
+/// gives: same fast round-trip, no CLI-plugin aggregation to hang on. Read only by the Windows probe (prepare/facts.rs).
+#[cfg_attr(not(windows), allow(dead_code))]
 pub fn server_os() -> Option<String> {
-    try_capture(&["version", "--format", "{{.Server.Os}}"])
-        .map(|value| value.trim().to_lowercase())
-        .filter(|value| !value.is_empty())
+    match engine(ENGINE_PROBE) {
+        Engine::Up(os) => Some(os),
+        _ => None,
+    }
+}
+
+/// What a bounded read came back with: an answer, docker's refusal (a container that does not exist, a daemon that
+/// is down), or nothing before the deadline. The last two lead to different verdicts, so they are kept apart.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Asked {
+    Said(String),
+    Refused(String),
+    Silent,
+}
+
+impl Asked {
+    pub fn said(self) -> Option<String> {
+        match self {
+            Asked::Said(text) => Some(text),
+            _ => None,
+        }
+    }
+}
+
+/// Ask docker something with a deadline. Output trimmed at the end, like every capture here.
+pub fn ask(args: &[&str], limit: Duration) -> Asked {
+    match capture_bounded(args, limit) {
+        Ok(ran) if ran.timed_out => Asked::Silent,
+        Ok(ran) if ran.code == Some(0) => Asked::Said(ran.stdout),
+        Ok(ran) => Asked::Refused(ran.stderr),
+        Err(err) => Asked::Refused(err.0),
+    }
+}
+
+/// Any command with a deadline — the host's own tools (`systemctl`, `tasklist.exe`, `df`) that a diagnosis asks.
+pub fn run_bounded(program: &str, args: &[&str], limit: Duration) -> Result<Bounded> {
+    let mut command = Command::new(program);
+    command.args(args);
+    bounded(command, limit)
 }
 
 /* A sandbox is a Linux container, and until now nothing on any path asked whether the daemon could run one. */
@@ -218,7 +329,7 @@ pub fn capture_bounded(args: &[&str], limit: Duration) -> Result<Bounded> {
 /// The deadline itself, for any command: the helper the desktop app shares (`intentic-bounded`), with the child
 /// left in ic's own process group so a Ctrl-C at the terminal still reaches it. Output is trimmed at the end,
 /// which is how every reader here takes it.
-fn bounded(command: Command, limit: Duration) -> Result<Bounded> {
+pub fn bounded(command: Command, limit: Duration) -> Result<Bounded> {
     let program = command.get_program().to_string_lossy().into_owned();
     let ran = intentic_bounded::capture(command, limit, intentic_bounded::Reach::Child)
         .map_err(|err| Fail(format!("could not run {program}: {err}")))?;
@@ -299,9 +410,15 @@ pub fn stream(args: &[&str], stdin: Option<&[u8]>, shown: Shown, log: &Log) -> R
             .map_err(|err| Fail(format!("could not write to docker's stdin: {err}")))?;
     }
     let said = Said::default();
+    // A run whose stdout is machine output (`ic sandbox fix --json`) keeps docker's chatter off it.
+    let terminal: Box<dyn Write + Send> = if crate::ui::human_on_stderr() {
+        Box::new(std::io::stderr())
+    } else {
+        Box::new(std::io::stdout())
+    };
     let out_thread = pump(
         child.stdout.take().expect("stdout was piped"),
-        std::io::stdout(),
+        terminal,
         shown,
         log,
         &said,

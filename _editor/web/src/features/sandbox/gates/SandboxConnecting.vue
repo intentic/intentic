@@ -7,9 +7,9 @@ import { useSandboxSession } from "../session/sandboxSession";
 import { useSandbox } from "../client/useSandbox";
 import { useGoogleIdentity } from "../../auth/useGoogleIdentity";
 import { restartExpected } from "../live/sandboxRestart";
-import { connectionNotice } from "./connectionNotice";
+import { type ConnectionNotice, connectionNotice, stalledBody } from "./connectionNotice";
 import SandboxRecovery from "./SandboxRecovery.vue";
-import { useRecoveryDue, useVisibleOutage } from "./useRecovery";
+import { useDiagnosisNotice, useRecoveryDue, useVisibleOutage } from "./useRecovery";
 import { stalledPaths } from "../../../app/perf";
 import { DEADLINE_MS } from "../client/sandboxAuthFetch";
 import { useT } from "@intentic/ui/i18n";
@@ -56,6 +56,18 @@ const stalledPath = computed(() =>
     connection.value.unavailableSince === undefined ? undefined : stalledPaths(DEADLINE_MS, outageMs.value)[0],
 );
 
+// What the diagnosis of this silence established, in the gate's own shape. A route this browser watched run out its
+// deadline says more about a busy sandbox than "busy" does, so it keeps its own sentence there.
+const diagnosis = useDiagnosisNotice(outage);
+const diagnosed = computed<ConnectionNotice | undefined>(() => {
+    const found = diagnosis.value;
+    if (found === undefined) {
+        return undefined;
+    }
+    const stalled = found.chain.some((link) => link.id === `sandbox` && link.state === `working`) ? stalledBody(stalledPath.value) : undefined;
+    return { title: found.title, body: stalled ?? found.body, action: undefined, waiting: found.waiting };
+});
+
 const notice = computed(() =>
     connectionNotice({
         ...known.value,
@@ -65,11 +77,14 @@ const notice = computed(() =>
         hoursSpent: refusal.value === `hours`,
         suspended: refusal.value === `suspended`,
         stalledPath: stalledPath.value,
+        diagnosed: diagnosed.value,
     }),
 );
 
-// A silence that has outlasted its patience gets the ways back that need nothing from the sandbox (SandboxRecovery).
-const recovering = useRecoveryDue(outage);
+// A cause with a way back gets the ways that need nothing from the sandbox (SandboxRecovery); any other diagnosis still
+// shows its chain there, so "it's busy" can be seen to be true.
+const recovering = useRecoveryDue(outage, diagnosis);
+const explained = computed(() => notice.value === diagnosed.value && (diagnosis.value?.chain.length ?? 0) > 0);
 
 // Carries the sandbox id so /setup resumes this sandbox rather than offering a blank create form.
 const setupTo = computed(() => ({ path: `/setup`, query: { sandbox: active.value?.id } }));
@@ -108,9 +123,9 @@ const signIn = async (): Promise<void> => {
                 <Button :as="RouterLink" :to="setupTo" :label="t(`sandbox.words.runOnMyComputer`)" severity="secondary" />
             </template>
         </template>
-        <template v-if="recovering" #below>
+        <template v-if="recovering || explained" #below>
             <div class="flex flex-col gap-3 border-t border-line pt-4">
-                <p class="text-left text-sm font-medium text-content">{{ t(`sandbox.sandboxRecovery.gateHeading`) }}</p>
+                <p v-if="recovering" class="text-left text-sm font-medium text-content">{{ t(`sandbox.sandboxRecovery.gateHeading`) }}</p>
                 <SandboxRecovery />
             </div>
         </template>

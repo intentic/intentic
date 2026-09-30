@@ -1,4 +1,6 @@
 import { createHash } from "node:crypto";
+import type { FixCheck, KeeperSeams, LinkView } from "./device/sandbox-rounds/keeper.js";
+import type { IcRun } from "./device/tools/sandboxes.js";
 import { FETCH_PROGRAM, LISTING_PROGRAM, type ProjectRunner, realProjectRunner, type Spawned } from "./sync/project-remote.js";
 
 // The fakes the copy-first project suites share (this repo's `testing.ts` convention, excluded from the build).
@@ -126,6 +128,108 @@ export const fakeProject = (session: FakeSessionState = "running"): FakeProject 
                     exit: started.then(async (spawned) => await spawned.exit),
                 };
             },
+        },
+    };
+    return fake;
+};
+
+/* THE KEEPER'S SEAMS (device/sandbox-rounds/keeper.ts) over one fake machine: a clock that moves only when a test or a
+   fix moves it, links whose outages the test sets, ic's records and listing, and an `ic sandbox fix` that prints what
+   the real one prints (progress lines, prose, one JSON line per sandbox) and records every run. */
+
+// One sandbox's verdict as a fake run reports it.
+export interface FakeVerdict {
+    readonly slug: string;
+    readonly outcome: string;
+    readonly checks?: readonly FixCheck[];
+}
+
+// What `ic sandbox fix --json` prints for these verdicts: `doing` progress lines first, a line of prose among them, then
+// one report per sandbox in the shape ic posts to the platform.
+export const fixRun = (verdicts: readonly FakeVerdict[], { code = 0, doing = [] }: { readonly code?: number; readonly doing?: readonly string[] } = {}): IcRun => ({
+    code,
+    output: [
+        ...doing.map((what) => `intentic-fix: ${JSON.stringify({ report: { stage: "fixing", doing: what, checks: [] } })}`),
+        "intentic: checking this machine…",
+        ...verdicts.map((verdict) =>
+            JSON.stringify({
+                slug: verdict.slug,
+                report: { source: "agent", machine: "test-pc", os: "linux", stage: "done", outcome: verdict.outcome, checks: verdict.checks ?? [] },
+            }),
+        ),
+    ].join("\n"),
+});
+
+export interface FakeKeeper {
+    readonly seams: KeeperSeams;
+    // Every fix run, by the slug it named (undefined for the sweep over every sandbox), and what was held while it ran.
+    readonly asked: (string | undefined)[];
+    readonly heldDuring: string[][];
+    clock: number;
+    // How far the clock moves while a fix runs.
+    fixTakesMs: number;
+    // The switch, or the error reading machine.json throws.
+    on: boolean | Error;
+    links: LinkView[];
+    records: string[];
+    // `ic sandbox list --json`'s slugs, or the error it fails with while Docker is down.
+    listing: string[] | Error;
+    swapping: string[];
+    watching: boolean;
+    readonly busy: Set<string>;
+    readonly loopback: Set<string>;
+    // How the fake ic answers a run; by default every sandbox it was asked about (every record, for the sweep) is healthy.
+    answer: (slug: string | undefined) => Promise<IcRun>;
+}
+
+// A link to `url` that has been failing since `downSince`, or open when that is undefined.
+export const linkView = (url: string, downSince?: number): LinkView =>
+    downSince === undefined
+        ? { url, reading: { state: "open" } }
+        : { url, reading: { state: "connecting", outage: { failures: 3, since: downSince } } };
+
+export const fakeKeeper = (start: number): FakeKeeper => {
+    const held = new Set<string>();
+    const busy = new Set<string>();
+    const loopback = new Set<string>();
+    const fake: FakeKeeper = {
+        asked: [],
+        heldDuring: [],
+        clock: start,
+        fixTakesMs: 0,
+        on: true,
+        links: [],
+        records: [],
+        listing: [],
+        swapping: [],
+        watching: false,
+        busy,
+        loopback,
+        answer: async (slug) => await Promise.resolve(fixRun((slug === undefined ? fake.records : [slug]).map((each) => ({ slug: each, outcome: "healthy" })))),
+        seams: {
+            enabled: async () => (fake.on instanceof Error ? await Promise.reject(fake.on) : fake.on),
+            fix: async (slug, onLine) => {
+                fake.asked.push(slug);
+                fake.heldDuring.push([...held].toSorted());
+                const run = await fake.answer(slug);
+                fake.clock += fake.fixTakesMs;
+                for (const line of run.output.split("\n")) {
+                    onLine(line);
+                }
+                return run;
+            },
+            listing: async () => (fake.listing instanceof Error ? await Promise.reject(fake.listing) : fake.listing),
+            records: async () => await Promise.resolve(fake.records),
+            swapping: async () => await Promise.resolve(fake.swapping),
+            links: () => fake.links,
+            loopback,
+            watching: () => fake.watching,
+            busy,
+            hold: (slug) => {
+                held.add(slug);
+                return () => void held.delete(slug);
+            },
+            now: () => fake.clock,
         },
     };
     return fake;

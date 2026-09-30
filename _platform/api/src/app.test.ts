@@ -1,7 +1,9 @@
-import { createHash } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
+import type { HostReportInput } from "@intentic/api-contract";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { createApp } from "./app.js";
 import { configSchema, type Config } from "./config.js";
+import { HOST_REPORT_INTERVAL_MS } from "./sandbox/host-report.js";
 import { testIngressConfig } from "./testing.js";
 import type { Logger } from "pino";
 import { Prisma, type PrismaClient } from "@intentic/prisma";
@@ -140,6 +142,204 @@ describe(`POST /setup/report`, () => {
         expect((await report(prisma, { code: `abc`, stage: `not-a-stage` })).status).toBe(400);
         expect((await report(prisma, { stage: `preflight` })).status).toBe(400);
         expect(findUnique).not.toHaveBeenCalled();
+    });
+});
+
+// The report key for connect token `tok`, computed here rather than by the code under test. The label is a literal on
+// purpose: `ic` derives the same key on the machine from the same bytes, so a changed label is a broken contract.
+const REPORT_KEY = createHmac(`sha256`, `tok`).update(`intentic/host-report/v1`).digest(`hex`);
+const TOKEN_DIGEST = createHash(`sha256`).update(`tok`).digest(`hex`);
+
+// What `ic sandbox fix` sends mid-repair, with a check it is fixing.
+const fixing: HostReportInput = {
+    source: `agent`,
+    machine: `rog`,
+    os: `windows`,
+    stage: `fixing`,
+    doing: `Starting Docker Desktop`,
+    checks: [
+        { id: `prerequisites`, label: `Prerequisites`, state: `ok` },
+        { id: `docker-app`, label: `Docker Desktop`, state: `fixing`, problem: `Docker Desktop is not running.`, fix: `auto` },
+    ],
+};
+
+// An own-machine sandbox's row as the report route selects it; `hostReport` is whatever the last report stored.
+const reportRow = (hostReport: unknown = null) => ({ id: `s1`, token: `tok`, tokenDigest: TOKEN_DIGEST, hostReport, hosted: null });
+
+// A row holding a live fix code, as the claim selects it.
+const fixRow = () => ({ id: `s1`, tunnelId: TUNNEL_ID, token: `tok`, fixCodeExpiresAt: new Date(Date.now() + 60_000), removedAt: null, hosted: null });
+
+const claimFix = (prisma: PrismaClient, body: unknown) =>
+    createApp(config, prisma, logger).app.request(`/host-report/claim`, {
+        method: `POST`,
+        headers: { "content-type": `application/json` },
+        body: JSON.stringify(body),
+    });
+
+const postHostReport = (prisma: PrismaClient, key: string | undefined, body: unknown) => {
+    const headers = new Headers({ "content-type": `application/json` });
+    if (key !== undefined) {
+        headers.set(`authorization`, `Bearer ${key}`);
+    }
+    return createApp(config, prisma, logger).app.request(`/host-report`, { method: `POST`, headers, body: JSON.stringify(body) });
+};
+
+describe(`POST /host-report/claim`, () => {
+    it(`redeems a live fix code for the sandbox's tunnel id and its report key, and stays redeemable`, async () => {
+        const findUnique = jest.fn().mockResolvedValue(fixRow());
+        const update = jest.fn();
+        const updateMany = jest.fn();
+        const prisma = fakePrisma({ sandbox: { findUnique, update, updateMany } });
+
+        const res = await claimFix(prisma, { code: `Fix0Code123` });
+        expect(res.status).toBe(200);
+        expect(await res.json()).toEqual({ sandbox: TUNNEL_ID, key: REPORT_KEY });
+        expect(findUnique).toHaveBeenCalledWith({
+            where: { fixCode: `Fix0Code123` },
+            select: { id: true, tunnelId: true, token: true, fixCodeExpiresAt: true, removedAt: true, hosted: { select: { id: true } } },
+        });
+        // The owner may run the handed-out command twice: the claim spends nothing, so the second answers the same.
+        const again = await claimFix(prisma, { code: `Fix0Code123` });
+        expect(await again.json()).toEqual({ sandbox: TUNNEL_ID, key: REPORT_KEY });
+        expect(update).not.toHaveBeenCalled();
+        expect(updateMany).not.toHaveBeenCalled();
+    });
+
+    it.each([
+        [`unknown`, null],
+        [`expired a millisecond ago`, { ...fixRow(), fixCodeExpiresAt: new Date(Date.now() - 1) }],
+        [`never minted`, { ...fixRow(), fixCodeExpiresAt: null }],
+        [`on a removed sandbox`, { ...fixRow(), removedAt: new Date() }],
+        [`on a hosted sandbox`, { ...fixRow(), hosted: { id: `h1` } }],
+    ])(`404s a code that is %s, with the same words`, async (_case, row) => {
+        const res = await claimFix(fakePrisma({ sandbox: { findUnique: jest.fn().mockResolvedValue(row) } }), { code: `Fix0Code123` });
+        expect(res.status).toBe(404);
+        expect(await res.text()).toBe(`error: fix code invalid or expired`);
+    });
+
+    it(`400s a body naming no code before touching the database`, async () => {
+        const findUnique = jest.fn();
+        const prisma = fakePrisma({ sandbox: { findUnique } });
+        expect((await claimFix(prisma, {})).status).toBe(400);
+        expect((await claimFix(prisma, { code: `` })).status).toBe(400);
+        expect(findUnique).not.toHaveBeenCalled();
+    });
+});
+
+describe(`POST /host-report`, () => {
+    it(`stores the report under the right key, stamping 'at' server-side`, async () => {
+        const findUnique = jest.fn().mockResolvedValue(reportRow());
+        const updateMany = jest.fn().mockResolvedValue({ count: 1 });
+        const res = await postHostReport(fakePrisma({ sandbox: { findUnique, updateMany } }), REPORT_KEY, { sandbox: TUNNEL_ID, report: fixing });
+
+        expect(res.status).toBe(204);
+        expect(await res.text()).toBe(``);
+        // Found by the public tunnel id the report names; the key is what proves it is this sandbox's machine.
+        expect(findUnique).toHaveBeenCalledWith({
+            where: { tunnelId: TUNNEL_ID },
+            select: { id: true, token: true, tokenDigest: true, hostReport: true, hosted: { select: { id: true } } },
+        });
+        expect(updateMany).toHaveBeenCalledTimes(1);
+        expect(updateMany).toHaveBeenCalledWith({
+            // Pinned to the token the key was checked against, like announce.
+            where: { id: `s1`, tokenDigest: TOKEN_DIGEST },
+            // The platform's own clock: a machine with a wrong one must not narrate from the past.
+            data: { hostReport: { ...fixing, at: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/) } },
+        });
+    });
+
+    it.each([
+        [`another sandbox's key`, createHmac(`sha256`, `other`).update(`intentic/host-report/v1`).digest(`hex`)],
+        [`the key with its last character changed`, `${REPORT_KEY.slice(0, -1)}${REPORT_KEY.endsWith(`0`) ? `1` : `0`}`],
+        [`a prefix of the key`, REPORT_KEY.slice(0, 32)],
+        [`the connect token itself`, `tok`],
+    ])(`401s %s and writes nothing`, async (_case, key) => {
+        const updateMany = jest.fn();
+        const res = await postHostReport(fakePrisma({ sandbox: { findUnique: jest.fn().mockResolvedValue(reportRow()), updateMany } }), key, {
+            sandbox: TUNNEL_ID,
+            report: fixing,
+        });
+        expect(res.status).toBe(401);
+        expect(await res.text()).toBe(`error: that report key is not this sandbox's`);
+        expect(updateMany).not.toHaveBeenCalled();
+    });
+
+    it(`answers an unknown sandbox exactly as a wrong key`, async () => {
+        const res = await postHostReport(fakePrisma({ sandbox: { findUnique: jest.fn().mockResolvedValue(null) } }), REPORT_KEY, {
+            sandbox: `abcdef012345`,
+            report: fixing,
+        });
+        expect(res.status).toBe(401);
+        expect(await res.text()).toBe(`error: that report key is not this sandbox's`);
+    });
+
+    it(`401s a request with no key before reading the body or the database`, async () => {
+        const findUnique = jest.fn();
+        const res = await postHostReport(fakePrisma({ sandbox: { findUnique } }), undefined, { sandbox: TUNNEL_ID, report: fixing });
+        expect(res.status).toBe(401);
+        expect(await res.text()).toBe(`error: missing report key`);
+        expect(findUnique).not.toHaveBeenCalled();
+    });
+
+    it(`refuses a hosted sandbox's report even under its right key`, async () => {
+        const updateMany = jest.fn();
+        const row = { ...reportRow(), hosted: { id: `h1` } };
+        const res = await postHostReport(fakePrisma({ sandbox: { findUnique: jest.fn().mockResolvedValue(row), updateMany } }), REPORT_KEY, {
+            sandbox: TUNNEL_ID,
+            report: fixing,
+        });
+        expect(res.status).toBe(404);
+        expect(updateMany).not.toHaveBeenCalled();
+    });
+
+    it.each([
+        [`a stage that isn't one`, { sandbox: TUNNEL_ID, report: { ...fixing, stage: `resting` } }],
+        [`a sandbox id that isn't 12 hex`, { sandbox: TUNNEL_ID.toUpperCase(), report: fixing }],
+        [`no report`, { sandbox: TUNNEL_ID }],
+        [`25 checks`, { sandbox: TUNNEL_ID, report: { ...fixing, checks: Array.from({ length: 25 }, () => fixing.checks[0]) } }],
+    ])(`400s %s before touching the database`, async (_case, body) => {
+        const findUnique = jest.fn();
+        const res = await postHostReport(fakePrisma({ sandbox: { findUnique } }), REPORT_KEY, body);
+        expect(res.status).toBe(400);
+        expect(await res.text()).toBe(`error: malformed report`);
+        expect(findUnique).not.toHaveBeenCalled();
+    });
+
+    it(`skips a report of the same stage and outcome inside the interval, answering 204 so ic never retries`, async () => {
+        const updateMany = jest.fn();
+        const stored = { ...fixing, doing: `Waiting for Docker Desktop`, at: new Date().toISOString() };
+        const res = await postHostReport(fakePrisma({ sandbox: { findUnique: jest.fn().mockResolvedValue(reportRow(stored)), updateMany } }), REPORT_KEY, {
+            sandbox: TUNNEL_ID,
+            report: fixing,
+        });
+        expect(res.status).toBe(204);
+        expect(updateMany).not.toHaveBeenCalled();
+    });
+
+    it.each([
+        [`the stage moved`, { ...fixing, stage: `checking`, at: new Date().toISOString() }],
+        [`the outcome moved`, { ...fixing, stage: `fixing`, outcome: `failed`, at: new Date().toISOString() }],
+        [`the stored one is a whole interval old`, { ...fixing, at: new Date(Date.now() - HOST_REPORT_INTERVAL_MS).toISOString() }],
+        [`the stored one no longer parses`, { stage: `fixing`, at: new Date().toISOString() }],
+    ])(`writes inside the interval when %s`, async (_case, stored) => {
+        const updateMany = jest.fn().mockResolvedValue({ count: 1 });
+        const res = await postHostReport(fakePrisma({ sandbox: { findUnique: jest.fn().mockResolvedValue(reportRow(stored)), updateMany } }), REPORT_KEY, {
+            sandbox: TUNNEL_ID,
+            report: fixing,
+        });
+        expect(res.status).toBe(204);
+        expect(updateMany).toHaveBeenCalledTimes(1);
+        expect(updateMany).toHaveBeenCalledWith({ where: { id: `s1`, tokenDigest: TOKEN_DIGEST }, data: { hostReport: { ...fixing, at: expect.any(String) } } });
+    });
+
+    it(`401s a report whose sandbox's token rotated between the read and the write`, async () => {
+        const updateMany = jest.fn().mockResolvedValue({ count: 0 });
+        const res = await postHostReport(fakePrisma({ sandbox: { findUnique: jest.fn().mockResolvedValue(reportRow()), updateMany } }), REPORT_KEY, {
+            sandbox: TUNNEL_ID,
+            report: fixing,
+        });
+        expect(res.status).toBe(401);
+        expect(updateMany).toHaveBeenCalledTimes(1);
     });
 });
 

@@ -100,6 +100,9 @@ const subline = computed<{ text: string; tone: string }>(() => {
     if (availability.value === `busy`) {
         return { text: `The sandbox is busy, live actions resume automatically.`, tone: `text-muted` };
     }
+    if (availability.value === `unreachable`) {
+        return { text: `The sandbox isn't responding. Live actions resume when it does.`, tone: `text-muted` };
+    }
     if (availability.value === `starting` || availability.value === `warming`) {
         return { text: `Getting the workspace ready…`, tone: `text-muted` };
     }

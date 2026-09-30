@@ -107,6 +107,10 @@ export const releaseHosted = async (prisma: PrismaClient, config: Config, sandbo
                 setupReport: Prisma.DbNull,
                 bootReport: Prisma.DbNull,
                 announceRefusal: Prisma.DbNull,
+                // The report key is derived from the token rotated above, and the report described the old machine.
+                fixCode: null,
+                fixCodeExpiresAt: null,
+                hostReport: Prisma.DbNull,
             },
         });
     });

@@ -3,6 +3,7 @@ import { FREE_TIER, hostedTier } from "@intentic/constants";
 import { inviteRecords } from "./fixture/access";
 import { DESK_SANDBOX_NAME } from "./fixture/desk";
 import { deskEdition, demoTier } from "./mode";
+import { demoOutage, outageHosted, outageReport } from "./outage";
 import { DEMO_DAEMON_ORIGIN, json } from "./transport";
 
 // Fetch handler for the platform's half of the gates before the workspace renders:
@@ -32,8 +33,10 @@ export const DEMO_SANDBOX: SandboxSummary = {
     providedAddress: false,
     // Null: no real container or CA-signed cert to offer a loopback shortcut from.
     localHostname: null,
-    // Local sandbox, not a machine the platform hosts.
-    hosted: null,
+    // Local sandbox, not a machine the platform hosts, unless the outage acted out (outage.ts) is on one of ours.
+    hosted: outageHosted(),
+    // What the sandbox's own machine last reported, which only an outage gives it reason to (outage.ts).
+    hostReport: outageReport(),
 };
 
 // The rung the demo account's machine is on; the Billing page reads its shape off the machine, not the account.
@@ -124,6 +127,11 @@ const ANSWERS: PlatformAnswers = {
     sandbox: {
         list: () => ({ sandboxes: [DEMO_SANDBOX] }),
         trash: () => ({ sandboxes: [...DEMO_TRASH] }),
+        // The recovery panel's command carries one; nothing ever claims it here.
+        fixCode: () => ({ code: `DEMOFIX7K2Q`, expiresAt: new Date(Date.now() + 30 * 60_000).toISOString() }),
+        hostedStatus: () => ({ machine: demoOutage === `hosted` ? `failed` : `started` }),
+        wake: () => ({ ok: true }),
+        hostedRestart: () => ({ ok: true }),
     },
     // Plan's on/off answer decides whether Settings shows the Billing tab.
     hostedPlan: { state: () => DEMO_HOSTED_PLAN },

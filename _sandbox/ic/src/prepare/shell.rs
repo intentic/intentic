@@ -127,6 +127,34 @@ pub fn run(script: &str) -> Output {
     }
 }
 
+/// The same, with a deadline: for a probe that must not hang the flow reading it (a WSL that stopped answering makes
+/// `wsl --status` inside the probe wait for good). A run that is cut off comes back not ok, saying so.
+#[cfg(windows)]
+pub fn run_within(script: &str, limit: std::time::Duration) -> Output {
+    let mut command = powershell();
+    command.args(["-EncodedCommand", &encoded(&format!("{PREAMBLE}{script}"))]);
+    match crate::docker::bounded(command, limit) {
+        Ok(ran) if ran.timed_out => Output {
+            ok: false,
+            code: -1,
+            stdout: String::new(),
+            stderr: format!("it did not answer within {} seconds", limit.as_secs()),
+        },
+        Ok(ran) => Output {
+            ok: ran.code == Some(0),
+            code: ran.code.unwrap_or(-1),
+            stdout: strip_clixml(&ran.stdout),
+            stderr: strip_clixml(&ran.stderr),
+        },
+        Err(fail) => Output {
+            ok: false,
+            code: -1,
+            stdout: String::new(),
+            stderr: fail.0,
+        },
+    }
+}
+
 /* `Start-Process -Verb RunAs` is the only way to raise a process from a non-elevated one, and it hands back an exit code and nothing else. */
 #[cfg(windows)]
 pub fn run_elevated(script: &str) -> Output {

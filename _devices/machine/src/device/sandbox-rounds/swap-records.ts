@@ -71,6 +71,18 @@ export const readSwapRecords = async (home: string = icHome()): Promise<SwapReco
     return records.filter((record): record is SwapRecord => record?.phase !== undefined);
 };
 
+// Every sandbox this environment's ic keeps a record of, whatever its phase: what runs here as far as anything can tell
+// while Docker is down, which is when the keeper needs it. A removed sandbox's record outlives it until
+// `ic sandbox tidy` archives it, so the listing is preferred wherever Docker answers (keeper.ts, hostedSlugs).
+export const readChannelSlugs = async (home: string = icHome()): Promise<string[]> => {
+    // allow(silent-catch): no readable home is no record, the same answer as a machine ic never ran on
+    const names = await readdir(home).catch((): string[] => []);
+    return names
+        .map(slugOfRecord)
+        .filter((slug): slug is string => slug !== undefined)
+        .toSorted();
+};
+
 // How long a cutover record counts as a swap still in progress. Past it the record is an interruption the probation
 // watch is there to settle, not a reason to hold every other restart of this agent for ever.
 export const CUTOVER_HOLDS_MS = 30 * 60_000;

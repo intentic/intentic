@@ -1,6 +1,7 @@
 import type { DeviceAgentState, DeviceFolderRow, DevicePortRow, DeviceSandboxResources, ResourcesForm } from "@intentic/ui";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import type { FixEnd } from "./fixReport";
 
 // Typed surface over the Rust commands in src-tauri/src/commands.rs. The native side just runs the shipped scripts
 // and reports their output, so there's no environment report, engine, reconcile plan, or claim result modeled here.
@@ -22,6 +23,14 @@ export interface RecreateArgs {
     hash?: string;
     // Third mode of the recreate script: reverts to the image this sandbox ran before its last update.
     rollback: boolean;
+}
+
+// The recovery panel's "Fix it" via intentic://fix (src-tauri/src/fix.rs): the sandbox on this machine to run
+// `ic sandbox fix` for, and the fix code that mirrors the run on the panel that asked, when it sent one.
+export interface FixArgs {
+    slug: string;
+    // Null, as serde writes an absent one.
+    code?: string | null;
 }
 
 // Desktop-sync enrollment via intentic://sync: same URL and single-use token as the copy-paste one-liner, minus
@@ -71,6 +80,8 @@ export interface DesktopInfo {
     installId: string;
     // Seconds a Docker start waits for its engine before it answers `tookTooLong`.
     engineLimitSeconds: number;
+    // Seconds an `ic sandbox fix` may run before the app stops it.
+    fixLimitSeconds: number;
 }
 
 // What the workspace window's × does: `tray` hides it and leaves the app running; `quit` ends it, same as the tray
@@ -165,6 +176,12 @@ export const takePendingDocker = (): Promise<boolean> => invoke(`take_pending_do
 // only one may have it.
 export const takePendingSetup = (): Promise<SetupArgs | null> => invoke(`take_pending_setup`);
 export const takePendingRecreate = (): Promise<RecreateArgs | null> => invoke(`take_pending_recreate`);
+// Taken, not read: a fix request runs once, in whichever mount of this window finds it first.
+export const takePendingFix = (): Promise<FixArgs | null> => invoke(`take_pending_fix`);
+// `ic sandbox fix <slug> [--code] --source app --json [--accept <id>]`, streamed under the run id `fix`. Rejects only
+// when it never ran (no ic here, one already running); how a run that did ended is the answer (fixReport.ts `FixEnd`).
+export const sandboxFix = (slug: string, code: string | null | undefined, accept: readonly string[]): Promise<FixEnd> =>
+    invoke(`sandbox_fix`, { slug, code: code ?? null, accept });
 // Taken, not read: the pairing token inside is single-use, so a duplicate delivery would spend it unwatched.
 export const takePendingSync = (): Promise<SyncArgs | null> => invoke(`take_pending_sync`);
 /** Runs the enrollment (sync.sh/sync.ps1) with the folder the user picked, absent for a mirror pairing. */
@@ -269,6 +286,7 @@ export const onRun = (handler: (event: RunEvent) => void): Promise<UnlistenFn> =
     listen<RunEvent>(`desktop://run`, (event) => handler(event.payload));
 export const onPendingSetup = (handler: () => void): Promise<UnlistenFn> => listen(`desktop://pending-setup`, () => handler());
 export const onPendingRecreate = (handler: () => void): Promise<UnlistenFn> => listen(`desktop://pending-recreate`, () => handler());
+export const onPendingFix = (handler: () => void): Promise<UnlistenFn> => listen(`desktop://pending-fix`, () => handler());
 export const onPendingSync = (handler: () => void): Promise<UnlistenFn> => listen(`desktop://pending-sync`, () => handler());
 
 // Read once, then followed by the event listener below: the read covers a window opening mid-update (the ordinary

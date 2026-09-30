@@ -81,6 +81,10 @@ export const INSTALL_SCRIPTS = {
     updatePs1: { path: "/update.ps1", file: "recreate.ps1" },
     cleanup: { path: "/cleanup", file: "cleanup.sh" },
     cleanupPs1: { path: "/cleanup.ps1", file: "cleanup.ps1" },
+    // The one command a sandbox that stopped answering hands out: `ic sandbox fix`, which checks every layer of the
+    // machine it runs on, heals what is safe and asks before anything else.
+    fix: { path: "/fix", file: "fix.sh" },
+    fixPs1: { path: "/fix.ps1", file: "fix.ps1" },
 } as const satisfies Record<string, { path: string; file: string }>;
 
 export type InstallScript = keyof typeof INSTALL_SCRIPTS;

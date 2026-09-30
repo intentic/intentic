@@ -32,15 +32,26 @@ flowchart LR
   open, and the front serves it with one `tmux -C` client per session shared by every viewer; one that falls behind
   gets a snapshot instead of a backlog. A terminal is a WebSocket however it arrives: a browser's over TCP, or one the
   editor speaks on a WebTransport stream, which the edge relays as the same HTTP/1.1 upgrade.
+- The sandbox's proof of life is the front's too: `GET /system/vitals` on the daemon's host (`vitals.rs`) is answered
+  before anything waits for Node, whether Node has not said hello yet, is up, or is being restarted. It reports Node's
+  link (`starting`, `up`, `restarting`), its lag, how many times the front restarted it in the last 10 minutes, the
+  container's uptime, and cgroup v2's `some avg10` pressure for cpu, memory and io. The lag is the round trip of a
+  `ping` the front sends over the control socket every 2 s once the previous one was answered, or how long the
+  outstanding one has waited when that is longer, and Node answers it in the link itself. Any origin may read the
+  answer and nothing may cache it, since it carries nothing of the workspace. (2026-09-30: the editor's only liveness
+  signal was the heartbeat on Node's `/events` stream, which Node's event loop sends, so a sandbox starved by a build
+  or by swap read as a dead one.)
 - The change feed: the front keeps a generation per checkout Node reads git in, moved by one inotify instance on
   whatever a `git status` there reads, so Node answers an untouched checkout from memory.
 - Node drives the front over the control socket: length-prefixed JSON frames on a Unix socket that push listen config
   and certificates, and either side asks the other a question under one envelope (an id, an answer or a refusal, five
-  seconds' patience). The front owns every socket and byte, Node every decision about them: which terminal a socket
+  seconds' patience; the front's `ping` waits as long as its connection lasts). A reply the front cannot read refuses
+  its own question and leaves the link up, which is how an older Node answers a question it does not know. The front
+  owns every socket and byte, Node every decision about them: which terminal a socket
   opens onto (the front composes tmux's command), and what becomes of a preview request (an upstream to relay, a page
   to write, or the outbox to hand back), decided once when asked. [crates/front-wire](crates/front-wire) defines the frames, and nothing a browser sees;
-  [crates/browser-wire](crates/browser-wire) defines what one does (the terminal's messages, the WebTransport path,
-  the edge's verdict), and the edge builds it too. Each crate's tests, and the tunnel crate's, write their TypeScript
+  [crates/browser-wire](crates/browser-wire) defines what one does (the terminal's messages, the vitals, the
+  WebTransport path, the edge's verdict), and the edge builds it too. Each crate's tests, and the tunnel crate's, write their TypeScript
   and a JSON manifest into `@intentic/sandbox-contract`, whose `contract.lock.json` pins the manifests.
 
 ## Key files

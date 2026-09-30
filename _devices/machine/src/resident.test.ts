@@ -1,6 +1,6 @@
 import type { PeerLink } from "@intentic/sandbox-contract/peer-dial";
 import type { HostLink } from "./device/config.js";
-import { reconcileLinks } from "./resident.js";
+import { type KeptCheck, reconcileLinks, stillKeeping } from "./resident.js";
 
 const link = (url: string, token = `token-for-${url}`): HostLink => ({
     sandboxUrl: url,
@@ -68,5 +68,38 @@ describe("reconcileLinks", () => {
 
         expect(dialled).toEqual(["https://one.example"]);
         expect(stopped).toEqual([]);
+    });
+});
+
+// With nothing linked, paired or held, the agent stays only while this machine hosts a sandbox the keeper looks after:
+// asked at once the first time, then at most every five minutes, and said when it starts to be the reason.
+describe("stillKeeping", () => {
+    const NOW = 1_800_000_000_000;
+
+    it("asks at once when it never has, and says when the sandboxes here become the reason to stay", async () => {
+        const lines: string[] = [];
+        const asked: number[] = [];
+        const check: KeptCheck = { at: Number.NEGATIVE_INFINITY, kept: [] };
+        const ask = async () => {
+            asked.push(NOW);
+            return await Promise.resolve(["work"]);
+        };
+        expect(await stillKeeping(check, (line) => lines.push(line), { ask, now: () => NOW })).toBe(true);
+        expect(asked).toEqual([NOW]);
+        expect(lines).toEqual([
+            "nothing is linked or paired here any more, but this machine runs 1 sandbox (work), so the agent stays to bring it back after a restart. `intentic-machine sandbox keeper off` lets it go.",
+        ]);
+    });
+
+    it("keeps its answer for five minutes, then asks again and lets the agent go once nothing is hosted", async () => {
+        const lines: string[] = [];
+        let hosted: readonly string[] = [];
+        const check: KeptCheck = { at: NOW, kept: ["work"] };
+        const ask = async () => await Promise.resolve(hosted);
+        expect(await stillKeeping(check, (line) => lines.push(line), { ask, now: () => NOW + 5 * 60_000 - 1 })).toBe(true);
+        expect(await stillKeeping(check, (line) => lines.push(line), { ask, now: () => NOW + 5 * 60_000 })).toBe(false);
+        hosted = ["work"];
+        expect(await stillKeeping(check, (line) => lines.push(line), { ask, now: () => NOW + 5 * 60_000 + 1 })).toBe(false);
+        expect(lines).toEqual([]);
     });
 });

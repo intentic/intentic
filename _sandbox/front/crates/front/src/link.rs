@@ -1,12 +1,13 @@
 //! The front's half of the control socket: accepts Node's connection, reads what it sends, asks it questions and answers
 //! its. One Node at a time; a new connection (a restarted Node) replaces the old, and every question in flight on the
-//! old fails.
+//! old fails. A reply the front cannot read refuses its own question and leaves the link up: that is how an older Node
+//! answers a question it does not know.
 
 use std::collections::HashMap;
 use std::io;
 use std::path::Path;
 use std::sync::Mutex;
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::time::Duration;
 
 use anyhow::{Context, anyhow};
@@ -41,10 +42,19 @@ pub enum Pushed {
     },
 }
 
-type Pending = HashMap<u32, oneshot::Sender<Result<Answer, String>>>;
+/// How a question the front asked ended: Node's answer, its refusal and why, or the reason there was neither.
+#[derive(Debug)]
+enum Reply {
+    Answered(Answer),
+    Refused(String),
+    Lost(&'static str),
+}
+
+type Pending = HashMap<u32, oneshot::Sender<Reply>>;
 
 pub struct Link {
     state: watch::Sender<NodeState>,
+    said_hello: AtomicBool,
     writer: Mutex<Option<(u64, mpsc::UnboundedSender<Vec<u8>>)>>,
     pending: Mutex<Pending>,
     next_id: AtomicU32,
@@ -55,6 +65,7 @@ impl Link {
     pub fn new(pushed: mpsc::UnboundedSender<Pushed>) -> Self {
         Self {
             state: watch::Sender::new(None),
+            said_hello: AtomicBool::new(false),
             writer: Mutex::new(None),
             pending: Mutex::new(HashMap::new()),
             next_id: AtomicU32::new(1),
@@ -62,9 +73,13 @@ impl Link {
         }
     }
 
-    #[cfg(test)]
     pub fn state(&self) -> watch::Receiver<NodeState> {
         self.state.subscribe()
+    }
+
+    /// Whether any Node said hello since the front started.
+    pub fn said_hello(&self) -> bool {
+        self.said_hello.load(Ordering::Relaxed)
     }
 
     /// Waits up to `patience` for a Node that has said hello; false when none turned up.
@@ -77,9 +92,21 @@ impl Link {
 
     /// Asks Node and waits `ASK_PATIENCE` for its answer; fails at once when no Node is connected.
     pub async fn ask(&self, question: Question) -> anyhow::Result<Answer> {
-        let patience = ASK_PATIENCE;
+        match self.asked(question, Some(ASK_PATIENCE)).await? {
+            Ok(answer) => Ok(answer),
+            Err(refusal) => Err(anyhow!("the daemon refused: {refusal}")),
+        }
+    }
+
+    /// Asks Node and waits for its reply, an answer or a refusal and why, for `patience` or, without one, for as long as
+    /// the connection it was asked on lasts. Fails when there is no reply: no Node connected, or none in time.
+    pub async fn asked(
+        &self,
+        question: Question,
+        patience: Option<Duration>,
+    ) -> anyhow::Result<Result<Answer, String>> {
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
-        let (answered, answer) = oneshot::channel();
+        let (answered, reply) = oneshot::channel();
         self.pending
             .lock()
             .expect("pending poisoned")
@@ -88,14 +115,21 @@ impl Link {
             self.pending.lock().expect("pending poisoned").remove(&id);
             return Err(anyhow!("the daemon is not connected"));
         }
-        match tokio::time::timeout(patience, answer).await {
-            Ok(Ok(Ok(answer))) => Ok(answer),
-            Ok(Ok(Err(refusal))) => Err(anyhow!("the daemon refused: {refusal}")),
-            Ok(Err(_)) => Err(anyhow!("the daemon went away before answering")),
-            Err(_) => {
-                self.pending.lock().expect("pending poisoned").remove(&id);
-                Err(anyhow!("the daemon did not answer within {patience:?}"))
-            }
+        let reply = match patience {
+            None => reply.await,
+            Some(patience) => match tokio::time::timeout(patience, reply).await {
+                Ok(reply) => reply,
+                Err(_) => {
+                    self.pending.lock().expect("pending poisoned").remove(&id);
+                    return Err(anyhow!("the daemon did not answer within {patience:?}"));
+                }
+            },
+        };
+        match reply {
+            Ok(Reply::Answered(answer)) => Ok(Ok(answer)),
+            Ok(Reply::Refused(refusal)) => Ok(Err(refusal)),
+            Ok(Reply::Lost(why)) => Err(anyhow!(why)),
+            Err(_) => Err(anyhow!("the daemon went away before answering")),
         }
     }
 
@@ -165,18 +199,25 @@ impl Link {
         }
     }
 
-    fn fail_pending(&self, why: &str) {
+    fn fail_pending(&self, why: &'static str) {
         for (_, answered) in self.pending.lock().expect("pending poisoned").drain() {
-            let _ = answered.send(Err(why.to_owned()));
+            let _ = answered.send(Reply::Lost(why));
         }
     }
 
     async fn read(&self, generation: u64, reader: OwnedReadHalf) -> anyhow::Result<()> {
         let mut reader = BufReader::new(reader);
         while let Some(bytes) = read_frame(&mut reader).await? {
-            let message: FromNode =
-                serde_json::from_slice(&bytes).context("decoding a frame from the daemon")?;
-            self.receive(generation, message);
+            match serde_json::from_slice::<FromNode>(&bytes) {
+                Ok(message) => self.receive(generation, message),
+                Err(error) => {
+                    let Some(id) = unreadable_reply(&bytes) else {
+                        return Err(error).context("decoding a frame from the daemon");
+                    };
+                    tracing::debug!(%error, id, "the daemon's reply is unreadable; its question counts as refused");
+                    self.settle(id, Reply::Refused(format!("an unreadable reply: {error}")));
+                }
+            }
         }
         Ok(())
     }
@@ -185,6 +226,7 @@ impl Link {
         match message {
             FromNode::Hello { build, pid } => {
                 tracing::info!(%build, pid, "the daemon is up");
+                self.said_hello.store(true, Ordering::Relaxed);
                 self.state.send_replace(Some(generation));
                 let _ = self.pushed.send(Pushed::Hello);
             }
@@ -209,16 +251,30 @@ impl Link {
             FromNode::Ask { id, question } => {
                 let _ = self.pushed.send(Pushed::Asked { id, question });
             }
-            FromNode::Answer { id, answer } => self.settle(id, Ok(answer)),
-            FromNode::Refused { id, message } => self.settle(id, Err(message)),
+            FromNode::Answer { id, answer } => self.settle(id, Reply::Answered(answer)),
+            FromNode::Refused { id, message } => self.settle(id, Reply::Refused(message)),
         }
     }
 
-    fn settle(&self, id: u32, result: Result<Answer, String>) {
+    fn settle(&self, id: u32, reply: Reply) {
         if let Some(answered) = self.pending.lock().expect("pending poisoned").remove(&id) {
-            let _ = answered.send(result);
+            let _ = answered.send(reply);
         }
     }
+}
+
+/// The id of a frame that is a reply (an answer or a refusal) whatever else it holds, so a reply that does not decode
+/// settles its own question: an older Node answers a question it does not know with an answer missing its body.
+fn unreadable_reply(bytes: &[u8]) -> Option<u32> {
+    #[derive(serde::Deserialize)]
+    struct Envelope {
+        kind: String,
+        id: Option<u32>,
+    }
+    let envelope: Envelope = serde_json::from_slice(bytes).ok()?;
+    matches!(envelope.kind.as_str(), "answer" | "refused")
+        .then_some(envelope.id)
+        .flatten()
 }
 
 /// One frame's JSON, or none at a clean end of stream.
@@ -312,6 +368,75 @@ mod tests {
             .await
             .unwrap()
             .unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn only_a_reply_with_an_id_settles_a_question_when_it_does_not_decode() {
+        assert_eq!(unreadable_reply(br#"{"kind":"answer","id":5}"#), Some(5));
+        assert_eq!(
+            unreadable_reply(br#"{"kind":"refused","id":6,"message":7}"#),
+            Some(6)
+        );
+        assert_eq!(unreadable_reply(br#"{"kind":"answer"}"#), None);
+        assert_eq!(unreadable_reply(br#"{"kind":"hello","id":5}"#), None);
+        assert_eq!(unreadable_reply(b"not json"), None);
+    }
+
+    // What an older Node does with a question it does not know: its answerer returns nothing, and the frame it writes is
+    // an answer with no body. That question is refused and the link stays up for the next one.
+    #[tokio::test]
+    async fn an_answer_the_front_cannot_read_refuses_its_question_and_keeps_the_link() {
+        let dir = std::env::temp_dir().join(format!("front-link-older-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("front.sock");
+        let (pushed, _received) = mpsc::unbounded_channel();
+        let link: &'static Link = Box::leak(Box::new(Link::new(pushed)));
+        let served = path.clone();
+        tokio::spawn(async move { link.serve(&served).await });
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        let (mut reader, mut writer) = node_side(&path).await;
+        let hello = FromNode::Hello {
+            build: "older".into(),
+            pid: 7,
+        };
+        writer.write_all(&frame(&hello).unwrap()).await.unwrap();
+        assert!(link.ready(Duration::from_secs(2)).await);
+        assert!(link.said_hello());
+
+        let pinged = tokio::spawn(async move { link.asked(Question::Ping, None).await });
+        let question: ToNode =
+            serde_json::from_slice(&read_frame(&mut reader).await.unwrap().unwrap()).unwrap();
+        let ToNode::Ask { id, question } = question else {
+            panic!("expected a question, got {question:?}")
+        };
+        assert_eq!(question, Question::Ping);
+        let bodiless = format!(r#"{{"kind":"answer","id":{id}}}"#);
+        let mut framed = u32::try_from(bodiless.len())
+            .unwrap()
+            .to_be_bytes()
+            .to_vec();
+        framed.extend_from_slice(bodiless.as_bytes());
+        writer.write_all(&framed).await.unwrap();
+        let refusal = pinged.await.unwrap().unwrap().unwrap_err();
+        assert!(
+            refusal.starts_with("an unreadable reply: missing field `answer`"),
+            "{refusal}"
+        );
+
+        let asked = tokio::spawn(async move { link.asked(Question::Ping, None).await });
+        let question: ToNode =
+            serde_json::from_slice(&read_frame(&mut reader).await.unwrap().unwrap()).unwrap();
+        let ToNode::Ask { id, .. } = question else {
+            panic!("expected a question, got {question:?}")
+        };
+        let pong = FromNode::Answer {
+            id,
+            answer: Answer::Pong,
+        };
+        writer.write_all(&frame(&pong).unwrap()).await.unwrap();
+        assert_eq!(asked.await.unwrap().unwrap(), Ok(Answer::Pong));
+        assert_eq!(*link.state().borrow(), Some(1));
         let _ = std::fs::remove_dir_all(&dir);
     }
 

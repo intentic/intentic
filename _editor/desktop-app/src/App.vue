@@ -27,6 +27,7 @@ import { confirm, open } from "@tauri-apps/plugin-dialog";
 import { computed, onMounted, onUnmounted, ref, watch, watchEffect } from "vue";
 import { initAnalytics, track, trackBeforeExit } from "./analytics";
 import DockerCard from "./components/DockerCard.vue";
+import FixProgress from "./components/FixProgress.vue";
 import HomeAgents from "./components/HomeAgents.vue";
 import LocalHome from "./components/LocalHome.vue";
 import Requirements from "./components/Requirements.vue";
@@ -34,6 +35,7 @@ import { desktopAgentPanel } from "./deviceAgent";
 import SetupProgress from "./components/SetupProgress.vue";
 import { dragWindow } from "./dragWindow";
 import { useFitToContent } from "./fitWindow";
+import { endFix, type FixEnd, foldFixLine, startFix, type FixView, verdictOf } from "./fixReport";
 import { deviceShown } from "./home";
 import { advance, type PlanStep, progressView, setupPlan, startProgress, tick, type Progress } from "./setupPlan";
 import { useWhenShown } from "./whenShown";
@@ -53,6 +55,7 @@ import {
     deviceAgentRestart,
     deviceStatus,
     launcherClose,
+    onPendingFix,
     onPendingRecreate,
     onPendingSetup,
     onPendingSync,
@@ -66,6 +69,7 @@ import {
     resumableSetup,
     revealLog,
     runStop,
+    sandboxFix,
     sandboxList,
     sandboxLogs,
     sandboxPower,
@@ -78,6 +82,7 @@ import {
     signOutForSetup,
     syncRun,
     takePendingDocker,
+    takePendingFix,
     takePendingRecreate,
     takePendingSetup,
     takePendingSync,
@@ -88,6 +93,7 @@ import {
     type DeviceStatus,
     type DockerEngine,
     type DockerStart,
+    type FixArgs,
     type HomeFacts,
     type Requirement,
     type RequirementProgress,
@@ -894,6 +900,80 @@ const drainRecreate = async (): Promise<void> => {
     await recreate(requested.slug, requested.hash, requested.rollback, `link`);
 };
 
+/* THE RECOVERY PANEL'S "FIX IT" (intentic://fix, src-tauri/src/fix.rs): `ic sandbox fix` for a sandbox on this machine,
+   drawn from ic's own lines (fixReport.ts). One at a time, under its own run id, and serialized with every other run
+   here like they are with each other: they all drive docker on one machine. ic reports the run to the platform itself,
+   which is how the panel that asked follows it. */
+const FIX_RUN = `fix`;
+// `started` stays false while another run on this device finishes: the fix starts the moment that one ends (the watch
+// below).
+const fix = ref<{ args: FixArgs; view: FixView; started: boolean; failure?: string } | undefined>(undefined);
+const fixQueued = computed(() => fix.value !== undefined && !fix.value.started);
+// Read off the app (fix.rs `LIMIT`) rather than said twice; `info` is read before any link is taken.
+const fixLimitMinutes = computed(() => Math.round((info.value?.fixLimitSeconds ?? 0) / 60));
+// The name this app remembers for the sandbox, else its slug.
+const fixName = computed(() => {
+    const slug = fix.value?.args.slug ?? ``;
+    return sandboxes.value.find((sandbox) => sandbox.slug === slug)?.name ?? slug;
+});
+
+// `accept` names the checks the user just said yes to. That re-run carries no code: the run the link came with
+// claimed it, and ic reports to that panel's sandbox without one from then on.
+const runFix = async (accept: readonly string[] = []): Promise<void> => {
+    const held = fix.value;
+    if (held === undefined || running.value) {
+        return;
+    }
+    const code = accept.length === 0 ? held.args.code : undefined;
+    const startedAt = Date.now();
+    fix.value = { args: held.args, view: startFix(held.args.slug), started: true };
+    track(`desktop_fix_started`, { consent: accept.length > 0, code: (code ?? ``) !== `` });
+    // Asked here and awaited through `start`, which owns the run's bookkeeping; its events cannot arrive before `start`
+    // has cleared the run's lines, since the answer is at least one IPC round trip away.
+    const answered = sandboxFix(held.args.slug, code, accept);
+    const failure = await start(FIX_RUN, () => answered.then(() => undefined));
+    const end: FixEnd | undefined = failure === undefined ? await answered : undefined;
+    const current = fix.value;
+    if (current === undefined) {
+        return;
+    }
+    const view = end === undefined ? current.view : endFix(current.view, end);
+    fix.value = { args: current.args, view, started: true, failure };
+    // The verdict's kind, ic's own outcome word and exit code: never a check's words, a slug or a line of output.
+    track(`desktop_fix_finished`, {
+        verdict: failure === undefined ? verdictOf(view).kind : `didNotStart`,
+        outcome: view.outcome ?? null,
+        exitCode: end?.code ?? null,
+        checks: view.checks.map((check) => `${check.id}:${check.state}`),
+        consent: accept.length > 0,
+        durationMs: Date.now() - startedAt,
+    });
+};
+// The fix view is built from ic's own lines as they arrive (fixReport.ts).
+const foldFix = (event: RunEvent): void => {
+    const held = fix.value;
+    if (event.run === FIX_RUN && event.kind === `line` && held !== undefined) {
+        fix.value = { ...held, view: foldFixLine(held.view, event.stream, event.text) };
+    }
+};
+watch(running, (going) => {
+    if (!going && fixQueued.value) {
+        void runFix();
+    }
+});
+
+// Taken, not read. While one is held or running, a second link only brought this window forward (fix.rs), and the
+// one on screen stays the one on screen.
+const drainFix = async (): Promise<void> => {
+    const requested = await takePendingFix();
+    const held = fix.value;
+    if (requested === null || (held !== undefined && held.failure === undefined && held.view.end === undefined)) {
+        return;
+    }
+    fix.value = { args: requested, view: startFix(requested.slug), started: false };
+    await runFix();
+};
+
 // Enables desktop sync from a system dialog, since a webview can't pick a folder itself; runs the same
 // sync.sh/sync.ps1 the card's one-liner does. The SPA's card polls and flips to "Enabled" once this finishes.
 const syncSetup = ref<{ args: SyncArgs; dir?: string; error?: string } | undefined>(undefined);
@@ -1088,6 +1168,7 @@ onMounted(async () => {
             if (marker === undefined) {
                 runs.value = { ...runs.value, [event.run]: [...eventsOf(event.run), event] };
             }
+            foldFix(event);
             // Folded as each line arrives, since the model needs to know when each phase started.
             if (event.run === `setup` && progress.value !== undefined) {
                 now.value = Date.now();
@@ -1122,6 +1203,7 @@ onMounted(async () => {
         }),
         onPendingSetup(() => void loadPending()),
         onPendingRecreate(() => void drainRecreate()),
+        onPendingFix(() => void drainFix()),
         onPendingSync(() => void drainSync()),
         onUpdate((stage) => (update.value = stage)),
     ]);
@@ -1139,7 +1221,7 @@ onMounted(async () => {
     void handover.then(wakeDockerIfNeeded);
     // Not awaited: a setup parked across a restart must resume whatever a booting Docker is doing to the listing.
     void refresh();
-    await Promise.all([handover, drainRecreate(), drainSync()]);
+    await Promise.all([handover, drainRecreate(), drainSync(), drainFix()]);
     // Only when nothing was handed over: a fresh link outranks a setup resumed from an earlier restart.
     if (pending.value === undefined) {
         await loadResumable();
@@ -1301,6 +1383,19 @@ onUnmounted(() => {
                 </Notice>
                 <!-- Only beside the offer it refused: a failed install turns the offer into the download notice above, which says why. -->
                 <Notice v-if="updateError && update.kind === `ready`" tone="warning" class="items-center">{{ updateError }}</Notice>
+
+                <!-- The recovery panel's "Fix it", first: it is what this window was brought forward for. -->
+                <FixProgress
+                    v-if="fix"
+                    :view="fix.view"
+                    :name="fixName"
+                    :queued="fixQueued"
+                    :failure="fix.failure"
+                    :limit-minutes="fixLimitMinutes"
+                    :busy="running"
+                    @accept="(id) => void runFix([id])"
+                    @dismiss="fix = undefined"
+                />
 
                 <!-- A folder or a document of this computer, which needs none of what follows: no Docker, no sandbox, no account. -->
                 <LocalHome />

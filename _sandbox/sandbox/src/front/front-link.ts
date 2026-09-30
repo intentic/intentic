@@ -26,10 +26,13 @@ export interface FrontLink {
     readonly close: () => void;
 }
 
+// A question of the front's that the daemon decides; a ping the link answers itself.
+export type FrontAsks = Exclude<Question, { readonly question: "ping" }>;
+
 export interface FrontLinkOptions {
     readonly path: string;
     // Answers the front's questions; a throw goes back as a refusal carrying its message.
-    readonly answer: (question: Question) => Promise<Answer>;
+    readonly answer: (question: FrontAsks) => Promise<Answer>;
     readonly onTunnel: (connected: boolean) => void;
     readonly onClose: () => void;
     // How long a question of Node's waits for the front; ASK_PATIENCE_MS unless a test says otherwise.
@@ -121,6 +124,12 @@ export const connectFront = async (options: FrontLinkOptions): Promise<FrontLink
                 return;
             case "ask": {
                 const { id, question } = message;
+                // Answered where it lands, with nothing else between: the round trip is how the front reads this event
+                // loop's lag (the vitals it answers for the sandbox), so it must cost the loop nothing but its turn.
+                if (question.question === "ping") {
+                    tell({ kind: "answer", id, answer: { answer: "pong" } });
+                    return;
+                }
                 options.answer(question).then(
                     (answer) => tell({ kind: "answer", id, answer }),
                     (error: unknown) => tell({ kind: "refused", id, message: errorMessage(error) }),

@@ -116,6 +116,14 @@ pub struct ChannelRecord {
     /// When this record was written, in epoch milliseconds: which of two copies (this machine's home and the one
     /// on the sandbox's own /history, see mirror.rs) is newer.
     pub written: Option<u64>,
+    /// The owner stopped this sandbox on purpose (`ic sandbox stop`). Set by stop, cleared by start, restart and
+    /// every flow that moves the container; `ic sandbox fix` only starts a held sandbox when someone says yes.
+    pub held: bool,
+    /// The sandbox's host-report key (sandbox/fix/report.rs): derived wherever ic reads the container's env, and
+    /// kept here so a later run can still report while Docker is down and the env cannot be read.
+    pub report_key: Option<String>,
+    /// The platform origin that key reports to, as this machine spells it.
+    pub report_platform: Option<String>,
 }
 
 impl ChannelRecord {
@@ -204,7 +212,7 @@ pub fn parse(content: &str) -> ChannelRecord {
     // So are a kept target's image and version, and a swap's keys: a half-written group is no group.
     let mut kept: [(Option<String>, Option<String>); MAX_KEPT] = Default::default();
     let mut swap: [Option<String>; 11] = Default::default();
-    let mut rest: [Option<String>; 4] = Default::default();
+    let mut rest: [Option<String>; 7] = Default::default();
     for line in content.lines() {
         let Some((key, value)) = line.split_once('=') else {
             continue;
@@ -226,6 +234,9 @@ pub fn parse(content: &str) -> ChannelRecord {
             "previous_version" => &mut rest[1],
             "rolled_back_from" => &mut rest[2],
             "written" => &mut rest[3],
+            "held" => &mut rest[4],
+            "report_key" => &mut rest[5],
+            "report_platform" => &mut rest[6],
             "kept_1" => &mut kept[0].0,
             "kept_1_version" => &mut kept[0].1,
             "kept_2" => &mut kept[1].0,
@@ -254,11 +265,15 @@ pub fn parse(content: &str) -> ChannelRecord {
         privileged.as_deref(),
         gpus.as_deref(),
     );
-    let [current_version, previous_version, rolled_back_from, written] = rest;
+    let [current_version, previous_version, rolled_back_from, written, held, report_key, report_platform] =
+        rest;
     record.current_version = current_version;
     record.previous_version = previous_version;
     record.rolled_back_from = rolled_back_from;
     record.written = written.and_then(|value| value.parse().ok());
+    record.held = held.as_deref() == Some("1");
+    record.report_key = report_key.filter(|key| !key.is_empty());
+    record.report_platform = report_platform.filter(|url| !url.is_empty());
     record.kept = kept
         .into_iter()
         .filter_map(|(image, version)| {
@@ -361,6 +376,9 @@ pub fn serialize(record: &ChannelRecord) -> String {
         "written",
         record.written.map(|written| written.to_string()).as_deref(),
     );
+    put("held", record.held.then_some("1"));
+    put("report_key", record.report_key.as_deref());
+    put("report_platform", record.report_platform.as_deref());
     if let Some(desired) = &record.desired {
         let keys = [
             "desired_memory",
@@ -380,6 +398,27 @@ pub fn serialize(record: &ChannelRecord) -> String {
 /// the sandbox's volume and this one are told apart (mirror.rs).
 pub fn write(slug: &str, record: &ChannelRecord) -> Result<()> {
     write_file(&record_path(slug), &stamped(record))
+}
+
+/* A DERIVED FACT, KEPT WITHOUT A STAMP. The report key is the same for as long as the container's token is, so
+caching it changes nothing about the record's history: `write` would stamp it as the newest copy and a stale home record
+could then win over a newer one on the sandbox's volume (mirror.rs). Written only when it changed. */
+pub fn remember_report(slug: &str, key: &str, platform: Option<&str>) {
+    let Ok(record) = read(slug) else { return };
+    let platform = platform
+        .map(str::to_string)
+        .or(record.report_platform.clone());
+    if record.report_key.as_deref() == Some(key) && record.report_platform == platform {
+        return;
+    }
+    let _ = write_file(
+        &record_path(slug),
+        &ChannelRecord {
+            report_key: Some(key.to_string()),
+            report_platform: platform,
+            ..record
+        },
+    );
 }
 
 /// The record with `written` set to now.
@@ -668,6 +707,32 @@ mod tests {
             !settled.contains("swap_") && !settled.contains("probation_"),
             "{settled}"
         );
+    }
+
+    /* THE FIX ENGINE'S TWO KEYS, and the older ic that must not choke on them. */
+    #[test]
+    fn a_hold_and_a_cached_report_key_round_trip_and_an_absent_one_leaves_no_key() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("sandbox-abc.channel");
+        let held = ChannelRecord {
+            held: true,
+            report_key: Some("ab".repeat(32)),
+            report_platform: Some("https://api.intentic.dev".to_string()),
+            ..swap("ghcr.io/intentic/sandbox:stable", None)
+        };
+        write_file(&path, &held).expect("write");
+        let read = read_file(&path).expect("read");
+        assert!(read.held);
+        assert_eq!(read.report_key.as_deref(), Some("ab".repeat(32).as_str()));
+        assert_eq!(
+            read.report_platform.as_deref(),
+            Some("https://api.intentic.dev")
+        );
+        let text = serialize(&ChannelRecord::default());
+        assert!(!text.contains("held"), "{text}");
+        assert!(!text.contains("report_"), "{text}");
+        assert!(!parse("held=0\n").held, "only 1 holds");
+        assert_eq!(parse("report_key=\n").report_key, None);
     }
 
     #[test]

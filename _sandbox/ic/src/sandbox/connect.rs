@@ -449,6 +449,8 @@ fn connect(
         "waiting for the sandbox daemon to come up…",
     );
     reporter.stage("waiting-health");
+    // The sandbox's report key, kept for a later `ic sandbox fix` that finds Docker down and the env unreadable.
+    crate::sandbox::fix::report::remember(&slug, Some(&connect_token), Some(platform_url));
     health::wait_answering(&container, &log, "")?;
 
     /* POSTFLIGHT — a daemon answering INSIDE the container proves only half the chain. */

@@ -27,6 +27,7 @@ use crate::connect::{self, Io, NodeConnector, Pool, UpstreamConnector};
 use crate::link::Link;
 use crate::route::{self, Listener, Target};
 use crate::term::{self, Terminals};
+use crate::vitals::{self, Vitals};
 
 // The one disposition Node serves itself, named on the request it is handed back.
 const OUTBOX: &str = "outbox";
@@ -56,6 +57,7 @@ pub struct Front {
     previews: Mutex<HashMap<String, (Instant, Upstream)>>,
     refreshing: Mutex<HashSet<String>>,
     terminals: Arc<Terminals>,
+    vitals: Arc<Vitals>,
 }
 
 enum Destination {
@@ -80,6 +82,7 @@ impl Front {
         node_socket: std::path::PathBuf,
         config: watch::Receiver<Option<Arc<ListenConfig>>>,
         terminals: Arc<Terminals>,
+        vitals: Arc<Vitals>,
     ) -> Self {
         let node_connector = NodeConnector::new(node_socket);
         let upstream_connector = UpstreamConnector::new();
@@ -93,6 +96,7 @@ impl Front {
             previews: Mutex::new(HashMap::new()),
             refreshing: Mutex::new(HashSet::new()),
             terminals,
+            vitals,
         }
     }
 
@@ -103,6 +107,10 @@ impl Front {
     ) -> Response<Body> {
         strip_front_headers(request.headers_mut());
         let host = host_of(&request);
+        // Answered before anything waits for Node: it is how a caller tells a busy or restarting Node from a dead box.
+        if vitals::serves(request.uri().path()) && self.target(listener, &host) == Target::Node {
+            return self.vitals.respond(request.method(), request.headers());
+        }
         let destination = self
             .destination(listener, &host, request.uri().path())
             .await;
@@ -225,6 +233,14 @@ impl Front {
                 Err(Box::new(unavailable()))
             }
         }
+    }
+
+    fn target(&self, listener: Listener, host: &str) -> Target {
+        let config = self.config.borrow();
+        let sandbox_id = config
+            .as_deref()
+            .and_then(|config| config.sandbox_id.as_deref());
+        route::target(listener, host, sandbox_id)
     }
 
     async fn destination(

@@ -178,6 +178,21 @@ impl Harness {
                             .await
                             .unwrap();
                     }
+                    ToNode::Ask {
+                        id,
+                        question: Question::Ping,
+                    } => {
+                        let answer = FromNode::Answer {
+                            id,
+                            answer: Answer::Pong,
+                        };
+                        answering
+                            .lock()
+                            .await
+                            .write_all(&frame(&answer).unwrap())
+                            .await
+                            .unwrap();
+                    }
                     ToNode::Tunnel { connected } => {
                         tunnel_sender.send_replace(Some(connected));
                     }

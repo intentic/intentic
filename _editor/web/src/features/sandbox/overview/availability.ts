@@ -14,7 +14,9 @@ export const SANDBOX_BUSY_AFTER_MS = 30_000;
 // projection's dot must change their mind at the same moment, or the switcher and the card disagree on screen.
 export const DETACHED_AFTER_MS = 20_000;
 
-export type SandboxAvailability = "starting" | "warming" | "live" | "stale" | "busy" | "detached" | "removed" | "blocked";
+// `busy` and `unreachable` are the same wait told apart by evidence: busy is an outage the diagnosis saw a sign of life in
+// (diagnosis/diagnose.ts `isAlive`), unreachable one it saw none in. Only the second is ever called offline.
+export type SandboxAvailability = "starting" | "warming" | "live" | "stale" | "busy" | "unreachable" | "detached" | "removed" | "blocked";
 
 export interface SandboxAvailabilityVisual {
     readonly label: string;
@@ -34,6 +36,8 @@ export const sandboxAvailabilityVisual = (availability: SandboxAvailability): Sa
             return { label: t(`sandbox.availability.online`), variant: "success", dotClass: "bg-success", inkClass: "text-success" };
         case "busy":
             return { label: t(`sandbox.availability.busyCatchingUp`), variant: "neutral", dotClass: "bg-info", inkClass: "text-info" };
+        case "unreachable":
+            return { label: t(`sandbox.availability.notResponding`), variant: "warning", dotClass: "bg-warning", inkClass: "text-warning" };
         case "warming":
         case "starting":
             return { label: t(`sandbox.words.starting`), variant: "neutral", dotClass: "bg-subtle", inkClass: "text-subtle" };
@@ -61,7 +65,8 @@ const settledAvailability = (state: ConnectionState, removed: boolean): SandboxA
 };
 
 // `hiddenMs` is the part of the outage the page spent hidden or asleep: a page woken after a night has waited none of it,
-// so it does not read as a long wait (useVisibleOutage in gates/useRecovery.ts).
+// so it does not read as a long wait (useVisibleOutage in gates/useRecovery.ts). `alive` is whether the diagnosis of
+// this outage saw the sandbox alive (diagnosis/useDiagnosis.ts `sandboxSeemsAlive`).
 export const sandboxAvailability = (
     state: ConnectionState,
     ready: boolean,
@@ -69,6 +74,7 @@ export const sandboxAvailability = (
     now: number,
     removed = false,
     hiddenMs = 0,
+    alive = false,
 ): SandboxAvailability => {
     const settled = settledAvailability(state, removed);
     if (settled !== undefined) {
@@ -85,7 +91,10 @@ export const sandboxAvailability = (
     if (!established) {
         return `starting`;
     }
-    return outageMs(state, now) - hiddenMs >= SANDBOX_BUSY_AFTER_MS ? `busy` : `stale`;
+    if (outageMs(state, now) - hiddenMs < SANDBOX_BUSY_AFTER_MS) {
+        return `stale`;
+    }
+    return alive ? `busy` : `unreachable`;
 };
 
 // Blocks only when nothing can be painted yet or the wait needs explaining; a still-warm reconnect can render a

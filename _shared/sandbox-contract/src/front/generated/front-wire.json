@@ -50,6 +50,18 @@
               "plan"
             ],
             "type": "object"
+          },
+          {
+            "properties": {
+              "answer": {
+                "const": "pong",
+                "type": "string"
+              }
+            },
+            "required": [
+              "answer"
+            ],
+            "type": "object"
           }
         ]
       },
@@ -697,6 +709,19 @@
             "required": [
               "question",
               "query"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "Whether Node's event loop turns, and how fast: answered `pong` at once, by the link itself. The front sends one\nevery 2 s once the previous one is answered, and reports the round trip as the vitals' lag. An older Node answers\nwith a refusal, or with an answer the front cannot read, and either still counts as answered.",
+            "properties": {
+              "question": {
+                "const": "ping",
+                "type": "string"
+              }
+            },
+            "required": [
+              "question"
             ],
             "type": "object"
           }

@@ -119,8 +119,8 @@ const uninstall = buildCommand<UninstallFlags>({
 });
 
 // Drops the named link (or all), then reconciles the resident agent so it keeps running for what's left and retires only
-// when nothing remains.
-export const deviceUninstall = async (out: Log, sandbox?: string): Promise<void> => {
+// when nothing remains. `forGood` is the top-level `uninstall`, which retires it whatever this machine hosts.
+export const deviceUninstall = async (out: Log, sandbox?: string, { forGood = false }: { readonly forGood?: boolean } = {}): Promise<void> => {
     const only = sandbox === undefined || sandbox === "" ? undefined : sandbox;
     const dropped = await removeLinks(only);
     const left = await readLinks();
@@ -132,7 +132,7 @@ export const deviceUninstall = async (out: Log, sandbox?: string): Promise<void>
         // Credential goes; the audit log stays, since it's the user's own record of what happened on their machine.
         await rm(configPath, { force: true });
     }
-    await ensureResident(out);
+    await ensureResident(out, { forGood });
     if (left.length > 0) {
         out(
             `Disconnected from ${dropped.map((link) => link.sandboxUrl).join(", ")}. Still connected to ${left.length} sandbox${left.length === 1 ? "" : "es"}.`,

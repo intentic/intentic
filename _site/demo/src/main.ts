@@ -2,6 +2,7 @@ import { type RawRouteKey, rawRoutePath } from "@intentic/sandbox-contract";
 import { daemon, sockets } from "./daemon";
 import { openTabSnapshot } from "./fixture/openChats";
 import { demoMode } from "./mode";
+import { demoOutage, withOutage } from "./outage";
 import { DEMO_SANDBOX, DEMO_USER, platform } from "./platform";
 import { installFetch, installWebSocket, installWebTransport, installXhr } from "./transport";
 import { coverage } from "./unserved";
@@ -44,13 +45,17 @@ const openOnFleet = (): void => {
     }
 };
 
-installFetch({ platform, daemon });
-installXhr({ platform, daemon });
+installFetch({ platform, daemon: withOutage(daemon) });
+installXhr({ platform, daemon: withOutage(daemon) });
 installWebSocket((url) => SOCKETS.get(url.pathname));
 installWebTransport();
 seedCredentials();
 seedOpenChats();
 openOnFleet();
+
+if (demoOutage !== undefined) {
+    console.info(`[demo] acting out a sandbox outage: ${demoOutage} (?outage=none ends it)`);
+}
 
 const served = coverage();
 console.info(

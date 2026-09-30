@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::{channel, Sender};
+use std::sync::mpsc::{channel, RecvTimeoutError, Sender};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -629,12 +629,45 @@ use intentic_bounded::{await_drain, DRAIN_GRACE};
 /// for it — so every caller passes the non-interactive flags instead (`-y`, `INSTALL_DOCKER=1`).
 pub fn run(app: &AppHandle, id: &str, script: ScriptRun) -> Result<(), String> {
     let mut command = command_for(app, &script)?;
-    let mut child = command
+    let child = spawn_piped(&mut command)
+        .map_err(|error| format!("could not start {}: {error}", script.file))?;
+    let ended = follow(app, id, script.file, child, None)?;
+    if ended.success {
+        return Ok(());
+    }
+    Err(match ended.code {
+        Some(code) => format!("{} exited with status {code}", script.file),
+        None => format!("{} was terminated", script.file),
+    })
+}
+
+/// How a followed run ended.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Ended {
+    pub code: Option<i32>,
+    pub success: bool,
+    /// It ran past its limit and was stopped, with everything it started.
+    pub timed_out: bool,
+}
+
+fn spawn_piped(command: &mut Command) -> std::io::Result<Child> {
+    command
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .map_err(|error| format!("could not start {}: {error}", script.file))?;
+}
+
+/// Follow a spawned run under `id` to its exit: every line to the window and to the transcript as it arrives, then
+/// the exit. `what` names it in the transcript and in errors. With a `limit`, a run still going when it runs out is
+/// stopped with everything it started, as [`stop`] would, and says so in [`Ended::timed_out`].
+fn follow(
+    app: &AppHandle,
+    id: &str,
+    what: &str,
+    mut child: Child,
+    limit: Option<Duration>,
+) -> Result<Ended, String> {
     remember(id, child.id());
 
     // Opened before the first line and shared by both pumps, so the transcript interleaves the two streams
@@ -709,17 +742,39 @@ pub fn run(app: &AppHandle, id: &str, script: ScriptRun) -> Result<(), String> {
         drained,
     );
 
-    let status = child
-        .wait()
-        .map_err(|error| format!("{} did not finish: {error}", script.file))?;
+    // The limit is watched beside the wait rather than by polling it: the exit drops `exited`, which wakes the
+    // watch with nothing to do; running out first kills the tree, which is what ends the wait.
+    let (exited, watch) = channel::<()>();
+    let timed_out = Arc::new(AtomicBool::new(false));
+    if let Some(limit) = limit {
+        let pid = child.id();
+        let timed_out = Arc::clone(&timed_out);
+        std::thread::spawn(move || {
+            if watch.recv_timeout(limit) == Err(RecvTimeoutError::Timeout) {
+                timed_out.store(true, Ordering::Relaxed);
+                let _ = intentic_bounded::kill_tree(pid, intentic_bounded::Signal::Kill);
+            }
+        });
+    }
+    let status = child.wait();
+    drop(exited);
     forget(id);
+    let status = status.map_err(|error| format!("{what} did not finish: {error}"))?;
+    let timed_out = timed_out.load(Ordering::Relaxed);
     // The child is gone; give its pipes a moment to hand over the tail of their buffers, then stop listening
     // whether or not they closed. See DRAIN_GRACE — on Windows they may never close at all.
     await_drain(&drains, 2, DRAIN_GRACE);
     reporting.store(false, Ordering::Relaxed);
     if let Some(file) = &transcript {
         if let Ok(mut file) = file.lock() {
-            let _ = writeln!(file, "\n[{} exited with {:?}]", script.file, status.code());
+            let _ = match limit.filter(|_| timed_out) {
+                Some(limit) => writeln!(
+                    file,
+                    "\n[{what} was stopped after {}s, its limit]",
+                    limit.as_secs()
+                ),
+                None => writeln!(file, "\n[{what} exited with {:?}]", status.code()),
+            };
         }
     }
 
@@ -731,12 +786,10 @@ pub fn run(app: &AppHandle, id: &str, script: ScriptRun) -> Result<(), String> {
             ok: status.success(),
         },
     );
-    if status.success() {
-        return Ok(());
-    }
-    Err(match status.code() {
-        Some(code) => format!("{} exited with status {code}", script.file),
-        None => format!("{} was terminated", script.file),
+    Ok(Ended {
+        code: status.code(),
+        success: status.success() && !timed_out,
+        timed_out,
     })
 }
 
@@ -835,6 +888,41 @@ pub fn ic_listing(app: &AppHandle, fallback: ScriptRun) -> Result<Vec<serde_json
         )),
     }
 }
+
+/// Run the installed `ic` with `args`, streamed and transcribed under `id` as a script run is, and stopped with
+/// everything it started once it has run for `limit`. BLOCKING. `ic` is looked for where [`ic_listing`] looks, in the
+/// same order; there is no shim to fall back on here, so a machine without one is told so. `Err` only when no `ic`
+/// would start: how one that ran ended is the [`Ended`], a non-zero exit included.
+pub fn run_ic(
+    app: &AppHandle,
+    id: &str,
+    args: &[String],
+    env: &[(String, String)],
+    limit: Duration,
+) -> Result<Ended, String> {
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .ok();
+    for candidate in ic_candidates(Host::current(), home.as_deref()) {
+        let mut command = own_group(quiet(Command::new(&candidate)));
+        command.args(args);
+        command.envs(
+            env.iter()
+                .map(|(name, value)| (name.as_str(), value.as_str())),
+        );
+        match spawn_piped(&mut command) {
+            // Not at this path: the next one.
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(error) => return Err(format!("ic would not start: {error}")),
+            Ok(child) => return follow(app, id, "ic", child, Some(limit)),
+        }
+    }
+    Err(IC_MISSING.to_string())
+}
+
+/// What [`run_ic`] says on a machine with no `ic` anywhere it is installed.
+pub const IC_MISSING: &str =
+    "ic isn't installed on this device. Set the sandbox up here again to install it.";
 
 /// Where `intentic-machine` lives on this machine, in the order worth trying. The agent's own installer puts it
 /// under the home it manages, and that copy is the one this app's setup just installed — so it is preferred over
@@ -1403,7 +1491,7 @@ mod tests {
         }
     }
 
-    /* `connect.ps1`, `connect-host.ps1` and `recreate.ps1` are each handed to `irm | iex` as a standalone string: there is no import. */
+    /* `connect.ps1`, `connect-host.ps1`, `recreate.ps1` and `fix.ps1` are each handed to `irm | iex` as a standalone string: there is no import. */
     #[test]
     fn every_copy_of_the_ic_download_is_the_same_download() {
         let scripts = powershell_scripts();
@@ -1414,8 +1502,8 @@ mod tests {
             }
         }
         assert!(
-            blocks.len() >= 3,
-            "expected connect/connect-host/recreate to carry this block, found {}",
+            blocks.len() >= 4,
+            "expected connect/connect-host/recreate/fix to carry this block, found {}",
             blocks.len()
         );
         let (first_path, first) = &blocks[0];
@@ -1458,8 +1546,8 @@ mod tests {
             blocks.push((path, block));
         }
         assert!(
-            blocks.len() == 3,
-            "expected connect/connect-host/recreate to carry this, found {}",
+            blocks.len() == 4,
+            "expected connect/connect-host/recreate/fix to carry this, found {}",
             blocks.len()
         );
         let (first_path, first) = &blocks[0];

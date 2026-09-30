@@ -20,7 +20,17 @@ describe(`sandboxAvailability`, () => {
 
     it(`names a wait only after elapsed unavailability crosses the busy threshold`, () => {
         const state = drive({ kind: "frame", at: 0 }, failed(1_000));
-        expect(sandboxAvailability(state, true, true, 1_000 + SANDBOX_BUSY_AFTER_MS)).toBe("busy");
+        expect(sandboxAvailability(state, true, true, 1_000 + SANDBOX_BUSY_AFTER_MS - 1, false, 0, true)).toBe("stale");
+        expect(sandboxAvailability(state, true, true, 1_000 + SANDBOX_BUSY_AFTER_MS, false, 0, true)).toBe("busy");
+    });
+
+    // The same wait, told apart by evidence: only a sandbox the diagnosis saw alive is busy; one it saw no sign of life
+    // in is not responding, and only that one reads as offline.
+    it(`calls the wait busy only when the sandbox was seen alive`, () => {
+        const state = drive({ kind: "frame", at: 0 }, failed(1_000));
+        expect(sandboxAvailability(state, true, true, 1_000 + SANDBOX_BUSY_AFTER_MS)).toBe("unreachable");
+        expect(sandboxAvailability(state, true, true, 1_000 + SANDBOX_BUSY_AFTER_MS, false, 0, false)).toBe("unreachable");
+        expect(sandboxAvailability(state, true, true, 1_000 + SANDBOX_BUSY_AFTER_MS, false, 0, true)).toBe("busy");
     });
 
     // A page hidden overnight wakes to an outage that began before it slept: none of that time was spent waiting.
@@ -28,14 +38,14 @@ describe(`sandboxAvailability`, () => {
         const state = drive({ kind: "frame", at: 0 }, failed(1_000));
         const now = 1_000 + 8 * 60 * 60_000;
         expect(sandboxAvailability(state, true, true, now, false, now - 1_000 - 1)).toBe("stale");
-        expect(sandboxAvailability(state, true, true, now, false, now - 1_000 - SANDBOX_BUSY_AFTER_MS)).toBe("busy");
+        expect(sandboxAvailability(state, true, true, now, false, now - 1_000 - SANDBOX_BUSY_AFTER_MS)).toBe("unreachable");
     });
 
     it(`treats a restored snapshot as established even before this session receives a frame`, () => {
         const state = drive({ kind: "connect" }, failed(1_000));
         expect(state.everOnline).toBe(false);
-        expect(sandboxAvailability(state, true, true, 1_000 + SANDBOX_BUSY_AFTER_MS)).toBe("busy");
-        expect(sandboxAvailability(state, true, false, 1_000 + SANDBOX_BUSY_AFTER_MS)).toBe("starting");
+        expect(sandboxAvailability(state, true, true, 1_000 + SANDBOX_BUSY_AFTER_MS, false, 0, true)).toBe("busy");
+        expect(sandboxAvailability(state, true, false, 1_000 + SANDBOX_BUSY_AFTER_MS, false, 0, true)).toBe("starting");
     });
 
     it(`surfaces blocked causes immediately and warming separately`, () => {
@@ -85,6 +95,7 @@ describe(`sandboxRequiresGate`, () => {
     it(`keeps an established workspace mounted through stale, busy, and warming states`, () => {
         expect(sandboxRequiresGate(false, true, "stale")).toBe(false);
         expect(sandboxRequiresGate(false, true, "busy")).toBe(false);
+        expect(sandboxRequiresGate(false, true, "unreachable")).toBe(false);
         expect(sandboxRequiresGate(false, true, "warming")).toBe(false);
     });
 

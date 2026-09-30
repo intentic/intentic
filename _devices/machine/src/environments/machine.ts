@@ -20,6 +20,8 @@ export const WINDOWS_SUPERVISOR = "windows";
 export const supervisedByWindows = (env: NodeJS.ProcessEnv = process.env): boolean => env[SUPERVISOR_ENV] === WINDOWS_SUPERVISOR;
 
 // Absent switches are on; `children` names distros by WSL registration name; `upgradeFailure` paces retries of one target.
+// `sandboxKeeper` is this environment's own (`intentic-machine sandbox keeper`), not the PC's: it acts on the sandboxes
+// this environment's ic keeps records of, which no other environment of the PC can see.
 // `skippedAgent` is a release whose agent kept stopping here and was rolled back from (agent-trial.ts): no upgrade
 // moves this environment onto it again, only a newer one.
 export interface MachineConfig {
@@ -28,6 +30,7 @@ export interface MachineConfig {
     readonly sandboxUpdates?: boolean;
     readonly sandboxBackups?: boolean;
     readonly sandboxTidy?: boolean;
+    readonly sandboxKeeper?: boolean;
     readonly upgradeFailure?: { readonly target: string; readonly count: number; readonly at: number };
     readonly skippedAgent?: { readonly version: string; readonly at: number };
 }

@@ -60,6 +60,7 @@ pub fn reconcile(slug: &str) -> ChannelRecord {
     if !newer(&volume, &home) {
         return home;
     }
+    let volume = adopted(volume, &home);
     let _ = record::write_file(&record::record_path(slug), &volume);
     match fetch(&container, "channel.before").filter(|text| !text.trim().is_empty()) {
         Some(before) => {
@@ -76,6 +77,19 @@ pub fn newer(volume: &ChannelRecord, home: &ChannelRecord) -> bool {
         (Some(volume), Some(home)) => volume > home,
         (Some(_), None) => *home == ChannelRecord::default() || home.current.is_none(),
         _ => false,
+    }
+}
+
+/// The volume's copy as this machine keeps it: a report key cached here (record::remember_report) is a derived fact
+/// the other side may never have derived, so it is carried over rather than lost. Pure.
+pub fn adopted(volume: ChannelRecord, home: &ChannelRecord) -> ChannelRecord {
+    if volume.report_key.is_some() {
+        return volume;
+    }
+    ChannelRecord {
+        report_key: home.report_key.clone(),
+        report_platform: home.report_platform.clone(),
+        ..volume
     }
 }
 
@@ -115,6 +129,24 @@ mod tests {
         assert!(newer(&at(Some(20), Some("a")), &at(Some(10), Some("b"))));
         assert!(!newer(&at(Some(10), Some("a")), &at(Some(20), Some("b"))));
         assert!(!newer(&at(Some(10), Some("a")), &at(Some(10), Some("b"))));
+    }
+
+    #[test]
+    fn adopting_the_volumes_copy_keeps_the_report_key_this_machine_derived() {
+        let home = ChannelRecord {
+            report_key: Some("k".to_string()),
+            report_platform: Some("https://api.intentic.dev".to_string()),
+            ..at(Some(1), Some("a"))
+        };
+        let taken = adopted(at(Some(2), Some("b")), &home);
+        assert_eq!(taken.current.as_deref(), Some("b"));
+        assert_eq!(taken.report_key.as_deref(), Some("k"));
+        // The volume's own key, where it has one, is the one that stands.
+        let own = ChannelRecord {
+            report_key: Some("v".to_string()),
+            ..at(Some(2), Some("b"))
+        };
+        assert_eq!(adopted(own, &home).report_key.as_deref(), Some("v"));
     }
 
     #[test]

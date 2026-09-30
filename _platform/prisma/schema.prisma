@@ -212,6 +212,16 @@ model Sandbox {
     // refusal, cleared by an accepted announce, so a value here is always a live disagreement. Was a log line
     // only, which is what made a mis-addressed sandbox look identical to one that never started.
     announceRefusal    Json?
+    // Short-lived code the editor's recovery panel puts in the command it hands out (`ic sandbox fix`): redeemed at
+    // POST /host-report/claim for this sandbox's tunnel id and report key, so the run can report back without a
+    // credential in shell history. Plain like setupCode, re-claimable until expiry, replaced by every mint. Never
+    // minted for a hosted sandbox.
+    fixCode            String?         @unique
+    fixCodeExpiresAt   DateTime?
+    // What the machine this sandbox runs on last found of it (HostReportSchema), posted by `ic sandbox fix` to
+    // POST /host-report under the report key (HMAC of the connect token). Only the latest is kept; the owner's
+    // summary shows it, a member's never does. No mint lifecycle: it describes the machine, not a fix code.
+    hostReport         Json?
     /* Records container deletion while retaining the sandbox identity for a later re-announce. */
     removedAt          DateTime?
     // Who said so, for the sentence the editor shows: the machine's own label ("radarsu-rog"), or null when

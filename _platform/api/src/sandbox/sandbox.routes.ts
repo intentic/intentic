@@ -1,5 +1,6 @@
 import { type AnnounceRefusal, apiContract, type BootReport, HostedStatusSchema, type SetupReport } from "@intentic/api-contract";
 import { FREE_TIER, hostedTier } from "@intentic/constants";
+import type { Prisma } from "@intentic/prisma";
 import type { MemberRole } from "@intentic/sandbox-contract";
 import { GrantedRoleSchema, localHostname } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
@@ -47,6 +48,7 @@ import { assertHostedSource, HostedSourceCapped, recordHostedProvision } from ".
 import { assertHostedStanding, HostedSuspended, hostedSuspensionOf } from "./hosted/abuse/hosted-standing.js";
 import { dropHostedMachine, hostedArrivalBudget, type HostedBudget, hostedBudgetOf, openHostedStretch, settleHostedStretch } from "./hosted/hosted-usage.js";
 import { hostedRegionFor } from "./hosted/region.js";
+import { hostReportOf, mintFixCode } from "./host-report.js";
 import { mintSandbox } from "./mint-sandbox.js";
 import { listTrash, restoreSandbox, trashSandbox, TrashedSandboxGone } from "./sandbox-trash.js";
 import { definitionSeedFor } from "./profiles/profiles.js";
@@ -272,6 +274,8 @@ const isoOrNull = (at: Date | null): string | null => (at === null ? null : at.t
 // their own.
 // `setupCodeClaimedAt` rides along for the setup wizard: it is the platform's only evidence that the pasted
 // command reached a machine, and the wizard's wait reads very differently before and after it.
+// `hostReport` is what the machine a sandbox runs on last found of it (host-report.ts), the owner's alone like the
+// token, and only for a sandbox on a machine of its own: a hosted one is narrated by hostedStatus.
 const toSummary = (
     sandbox: {
         id: string;
@@ -287,6 +291,8 @@ const toSummary = (
         removedBy: string | null;
         // Absent from a caller that selected columns without it; reads as unknown.
         daemonVersion?: string | null;
+        // Absent likewise; reads as no report.
+        hostReport?: Prisma.JsonValue;
         // Hosted machine relation; optional so a caller that skipped the include reads as not-hosted, never crashes.
         hosted?: { region: string; warm: boolean; previousImage?: string | null } | null;
         token: string;
@@ -296,6 +302,7 @@ const toSummary = (
 ) => {
     const zone = intenticZoneOf(context);
     const providedAddress = sandbox.daemonUrl !== null && zone !== undefined && new URL(sandbox.daemonUrl).hostname.endsWith(`.${zone}`);
+    const hosted = sandbox.hosted ?? null;
     return {
         id: sandbox.id,
         name: sandbox.name,
@@ -312,11 +319,9 @@ const toSummary = (
         removedBy: sandbox.removedBy,
         daemonVersion: sandbox.daemonVersion ?? null,
         // `canRollBack`: the platform kept the image the machine ran before its last image change (hostedRollback).
-        hosted:
-            sandbox.hosted === null || sandbox.hosted === undefined
-                ? null
-                : { region: sandbox.hosted.region, warm: sandbox.hosted.warm, canRollBack: (sandbox.hosted.previousImage ?? null) !== null },
+        hosted: hosted === null ? null : { region: hosted.region, warm: hosted.warm, canRollBack: (hosted.previousImage ?? null) !== null },
         token: connectTokenFor(context.config, sandbox.token, role),
+        hostReport: role === `owner` && hosted === null ? hostReportOf(sandbox.hostReport) : null,
         role,
         providedAddress,
         // Derived from the loopback zone, never `daemonUrl`: they are two different zones now.
@@ -766,6 +771,19 @@ export const sandboxRoutes = {
             }
             throw error;
         }
+    }),
+    // The code the recovery panel's command carries so its run can report back (host-report.ts); a fresh one on every
+    // call, replacing the last. Owner-only, and only for a sandbox on a machine of the owner's own that is still there.
+    fixCode: os.sandbox.fixCode.handler(async ({ context, input }) => {
+        const sandbox = await requireOwnedSandbox(context, input.sandboxId);
+        const hosted = await context.prisma.hostedMachine.findUnique({ where: { sandboxId: sandbox.id }, select: { id: true } });
+        if (hosted !== null) {
+            throw new ORPCError(`NOT_FOUND`, { message: `this sandbox runs on a machine the platform hosts, which reports its own state` });
+        }
+        if (sandbox.removedAt !== null) {
+            throw new ORPCError(`NOT_FOUND`, { message: `this sandbox's container was removed from its machine` });
+        }
+        return mintFixCode(context.prisma, sandbox.id);
     }),
     // Mails a setup link to the session's own email, never an input — never usable to mail anyone else. Not plan-gated
     // or specially rate-limited: it's an escape hatch that costs nothing to ignore.

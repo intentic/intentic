@@ -4,7 +4,7 @@ export type Answer = { "answer": "preview", route: PreviewRoute, } | { "answer":
 /**
  * The member whose ticket opened it, lowercased; absent when the daemon runs without auth.
  */
-member?: string, };
+member?: string, } | { "answer": "pong" };
 
 /**
  * A PEM certificate chain and its PEM private key.
@@ -61,7 +61,7 @@ export type PreviewRoute = { "to": "upstream", upstream: Upstream, } | { "to": "
 /**
  * A question the front asks Node.
  */
-export type Question = { "question": "preview", host: string, probe: boolean, } | { "question": "terminal", query: string, };
+export type Question = { "question": "preview", host: string, probe: boolean, } | { "question": "terminal", query: string, } | { "question": "ping" };
 
 export type Scheme = "http" | "https";
 

@@ -562,6 +562,84 @@ export const BootReportSchema = z.object({
 });
 export type BootReport = z.infer<typeof BootReportSchema>;
 
+/* WHAT THE MACHINE A SANDBOX RUNS ON FOUND, for the moments the browser cannot ask the sandbox itself. `ic sandbox fix`
+ * writes it: run by the machine agent on its own when a sandbox of its machine stops answering (`agent`), by the command
+ * the recovery panel hands out (`command`), or by the desktop app (`app`). The platform keeps only the latest one per
+ * sandbox, and only for a sandbox on someone's own machine: a hosted one has `hostedStatus`. */
+
+// The links of the chain `ic` checks, in the order it checks them. Strings on the wire, so a check a later `ic` adds
+// never fails an older editor's parse; the editor has words of its own for these and prints `label` for any other.
+export const HOST_CHECKS = [
+    "prerequisites",
+    "docker-app",
+    "docker",
+    "wsl",
+    "disk",
+    "container",
+    "daemon",
+    "registration",
+    "network",
+    "tunnel",
+    "agent",
+] as const;
+export type HostCheckId = (typeof HOST_CHECKS)[number];
+
+export const HostCheckSchema = z.object({
+    id: z.string().max(40),
+    // The check's name as `ic` prints it.
+    label: z.string().max(120),
+    state: z.enum(["ok", "warn", "fail", "fixing", "skip"]),
+    // On warn/fail only: what is wrong and what closes it, already in the user's terms and rendered verbatim, like a
+    // setup failure's.
+    problem: z.string().max(2000).optional(),
+    remedy: z.string().max(2000).optional(),
+    // Who can close it. `auto`: `ic` does, now or on its next pass. `consent`: `ic` can once someone says yes, which the
+    // handed-out command asks in its terminal. `you`: only a person can (a firmware switch, a dialog in Docker Desktop,
+    // disk space only they can free).
+    fix: z.enum(["auto", "consent", "you"]).optional(),
+});
+export type HostCheck = z.infer<typeof HostCheckSchema>;
+
+// What `ic` sends; the platform stamps `at` on receipt.
+export const HostReportInputSchema = z.object({
+    source: z.enum(["agent", "command", "app"]),
+    // The machine's own name, as the sandbox's device card calls it (`HOST_LABEL`), and the OS `ic` ran on there.
+    machine: z.string().max(120),
+    os: z.enum(["windows", "linux", "macos", "wsl"]),
+    // checking → fixing → asking (a command waits on a yes in its terminal) → done.
+    stage: z.enum(["checking", "fixing", "asking", "done"]),
+    // While fixing, what it is doing ("Starting Docker Desktop"); while asking, the question it is waiting on.
+    doing: z.string().max(300).optional(),
+    // On `done` only. healthy: nothing on this machine was wrong. fixed: something was and is not now. needs-you: a
+    // `you` check, or a `consent` one nobody agreed to, is left. failed: a fix was tried and did not take.
+    outcome: z.enum(["healthy", "fixed", "needs-you", "failed"]).optional(),
+    checks: z.array(HostCheckSchema).max(24),
+});
+export type HostReportInput = z.infer<typeof HostReportInputSchema>;
+
+export const HostReportSchema = HostReportInputSchema.extend({ at: z.string() });
+export type HostReport = z.infer<typeof HostReportSchema>;
+
+// `POST /host-report`, bearer the sandbox's report key: `sandbox` is its tunnel id, the hex its hostname carries.
+export const HostReportPostSchema = z.object({ sandbox: z.string().regex(/^[0-9a-f]{12}$/), report: HostReportInputSchema });
+export type HostReportPost = z.infer<typeof HostReportPostSchema>;
+
+// `POST /host-report/claim`: a live fix code buys the sandbox it was minted for and that sandbox's report key, which
+// `ic` keeps in its channel record so later runs (the machine agent's among them) can report with no code at all.
+export const HostReportClaimSchema = z.object({ code: z.string().min(1).max(64) });
+export const HostReportClaimedSchema = z.object({ sandbox: z.string(), key: z.string() });
+export type HostReportClaimed = z.infer<typeof HostReportClaimedSchema>;
+
+// The report key is HMAC-SHA256 over this label, keyed with the sandbox's connect token, in lowercase hex: `ic` derives
+// it wherever it can read the container's env, the platform wherever it can decrypt the token, and it grants nothing
+// but the one write above.
+export const HOST_REPORT_KEY_LABEL = "intentic/host-report/v1";
+
+// A short-lived code the recovery panel puts in the command it hands out, so the run can report back to the page that
+// asked for it without a credential in the shell's history. Owner-only, own-machine sandboxes only.
+export const FixCodeSchema = z.object({ code: z.string(), expiresAt: z.string() });
+export type FixCode = z.infer<typeof FixCodeSchema>;
+
 // A check-in the platform turned away, kept so the refusal isn't silent to every screen.
 // Carries both the announced and expected address, since the browser can't derive the expected one itself.
 export const AnnounceRefusalSchema = z.object({ announced: z.string(), expected: z.string() });
@@ -708,6 +786,10 @@ export const SandboxSummarySchema = z.object({
     // wherever the edge declares nothing, and absent means not served: the editor opens WebTransport only where it is
     // named. Strings, not an enum, so a token a later edge adds never fails an older editor's parse.
     edgeTransports: z.array(z.string()).optional(),
+    // What the machine this sandbox runs on last reported of it (`HostReportSchema`), on the owner's row of an
+    // own-machine sandbox only; null until one lands, absent from an older platform. Its `at` says how old it is: the
+    // editor reads one older than the outage it is explaining as silence, never as the machine's word.
+    hostReport: HostReportSchema.nullable().optional(),
 });
 export type SandboxSummary = z.infer<typeof SandboxSummarySchema>;
 

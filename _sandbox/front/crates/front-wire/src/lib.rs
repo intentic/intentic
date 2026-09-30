@@ -200,6 +200,10 @@ pub enum Question {
     },
     /// A terminal socket asking to open, its query string as the browser sent it.
     Terminal { query: String },
+    /// Whether Node's event loop turns, and how fast: answered `pong` at once, by the link itself. The front sends one
+    /// every 2 s once the previous one is answered, and reports the round trip as the vitals' lag. An older Node answers
+    /// with a refusal, or with an answer the front cannot read, and either still counts as answered.
+    Ping,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -217,6 +221,7 @@ pub enum Answer {
         #[ts(optional)]
         member: Option<String>,
     },
+    Pong,
 }
 
 /// A question Node asks the front.
@@ -452,6 +457,27 @@ mod tests {
         assert_eq!(
             serde_json::to_string(&PreviewRoute::Outbox).unwrap(),
             r#"{"to":"outbox"}"#
+        );
+    }
+
+    #[test]
+    fn a_ping_is_a_bare_question_and_its_pong_a_bare_answer() {
+        assert_eq!(
+            serde_json::to_string(&ToNode::Ask {
+                id: 9,
+                question: Question::Ping
+            })
+            .unwrap(),
+            r#"{"kind":"ask","id":9,"question":{"question":"ping"}}"#
+        );
+        let answered: FromNode =
+            serde_json::from_str(r#"{"kind":"answer","id":9,"answer":{"answer":"pong"}}"#).unwrap();
+        assert_eq!(
+            answered,
+            FromNode::Answer {
+                id: 9,
+                answer: Answer::Pong
+            }
         );
     }
 

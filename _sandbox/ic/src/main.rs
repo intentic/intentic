@@ -2,14 +2,23 @@
 machine agent restarted mid-update, an SSH session that dropped, a desktop window closed), and a panic between parking
 the old container and starting the new one leaves the sandbox down. These shadow them for every module below: the same
 bytes, and a closed stream is let go. */
+// A `--json` run keeps stdout for its JSON: every human line goes to stderr instead (ui::send_human_to_stderr).
 macro_rules! println {
     () => {{
         use std::io::Write as _;
-        let _ = writeln!(std::io::stdout());
+        if crate::ui::human_on_stderr() {
+            let _ = writeln!(std::io::stderr());
+        } else {
+            let _ = writeln!(std::io::stdout());
+        }
     }};
     ($($arg:tt)*) => {{
         use std::io::Write as _;
-        let _ = writeln!(std::io::stdout(), $($arg)*);
+        if crate::ui::human_on_stderr() {
+            let _ = writeln!(std::io::stderr(), $($arg)*);
+        } else {
+            let _ = writeln!(std::io::stdout(), $($arg)*);
+        }
     }};
 }
 macro_rules! eprintln {
@@ -338,10 +347,44 @@ enum SandboxCommand {
         #[arg(long, default_value_t = 200)]
         tail: u32,
     },
-    /// Check every link of a sandbox's reachability chain and name what is broken, with its fix (read-only)
+    /// Check every layer between this machine and a sandbox and name what is broken, with its fix (read-only:
+    /// `ic sandbox fix` without the fixing)
     Doctor {
-        /// The sandbox to diagnose (omit when this machine runs exactly one)
+        /// The sandbox to diagnose (omit for every sandbox on this machine)
         slug: Option<String>,
+        /// One line of JSON per sandbox on stdout, `{"slug":…,"report":…}` (the platform's HostReportInput); every
+        /// human line goes to stderr
+        #[arg(long)]
+        json: bool,
+    },
+    /// Check every layer between this machine and a sandbox, fix what is safe to fix, ask before anything
+    /// disruptive, and say what is left for you. Exit 0 healthy or fixed, 1 something is left, 3 a fix needs a yes
+    /// and nobody could be asked, 4 Windows has to restart or sign you out first
+    Fix {
+        /// The sandbox to fix (omit for every sandbox on this machine)
+        slug: Option<String>,
+        /// The code your browser's recovery panel put in the command, so this run reports back to that page (or
+        /// FIX_CODE env); it names the sandbox, too
+        #[arg(long, env = "FIX_CODE", allow_hyphen_values = true)]
+        code: Option<String>,
+        /// Unattended (the machine agent): apply only the fixes that are safe unasked, ask nothing, and report the
+        /// rest
+        #[arg(long, conflicts_with_all = ["yes", "accept"])]
+        auto: bool,
+        /// Go ahead with every fix that needs a yes, without asking
+        #[arg(short = 'y', long = "yes")]
+        yes: bool,
+        /// Go ahead, without asking, with the fixes for these checks only (comma-separated check ids, e.g.
+        /// docker,container)
+        #[arg(long, value_delimiter = ',', value_name = "CHECK,...")]
+        accept: Vec<String>,
+        /// Progress as `intentic-fix: {json}` lines, then one line of JSON per sandbox, `{"slug":…,"report":…}`, on
+        /// stdout; every human line goes to stderr
+        #[arg(long)]
+        json: bool,
+        /// Who runs this, for the report: the machine agent, a pasted command (the default), or the desktop app
+        #[arg(long, value_enum, default_value_t = FixSource::Command)]
+        source: FixSource,
     },
     /// List the sandboxes on this machine
     List {
@@ -387,6 +430,24 @@ enum SandboxCommand {
         #[arg(short = 'y', long = "yes")]
         yes: bool,
     },
+}
+
+/// Who runs `ic sandbox fix`: the report's `source`.
+#[derive(Clone, Copy, PartialEq, Debug, ValueEnum)]
+enum FixSource {
+    Agent,
+    Command,
+    App,
+}
+
+impl FixSource {
+    fn source(self) -> sandbox::fix::model::Source {
+        match self {
+            FixSource::Agent => sandbox::fix::model::Source::Agent,
+            FixSource::Command => sandbox::fix::model::Source::Command,
+            FixSource::App => sandbox::fix::model::Source::App,
+        }
+    }
 }
 
 /// A two-state flag spelled out (`--privileged on`), because a bare `--privileged` could only ever ADD: the
@@ -619,7 +680,28 @@ fn main() {
                 sandbox::power::run(sandbox::power::Power::Restart, slug)
             }
             SandboxCommand::Logs { slug, tail } => sandbox::logs::run(slug, tail),
-            SandboxCommand::Doctor { slug } => sandbox::doctor::run(slug),
+            SandboxCommand::Doctor { slug, json } => sandbox::fix::run(sandbox::fix::Args {
+                slug,
+                code: None,
+                mode: sandbox::fix::Mode::Doctor,
+                json,
+                source: sandbox::fix::model::Source::Command,
+            }),
+            SandboxCommand::Fix {
+                slug,
+                code,
+                auto,
+                yes,
+                accept,
+                json,
+                source,
+            } => sandbox::fix::run(sandbox::fix::Args {
+                slug,
+                code,
+                mode: sandbox::fix::Mode::Fix { auto, yes, accept },
+                json,
+                source: source.source(),
+            }),
             SandboxCommand::List { json: false } => sandbox::list(),
             SandboxCommand::List { json: true } => sandbox::listing::list_json(),
             SandboxCommand::Remove {

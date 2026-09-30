@@ -3,7 +3,8 @@
 import "@intentic/testing/dom";
 import SandboxRecovery from "../../features/sandbox/gates/SandboxRecovery.vue";
 import { RESTART_PATIENCE_MS, type RestartWork } from "../../features/sandbox/live/sandboxRestart";
-import { recoveryCard, restartCard } from "./notificationSources";
+import type { DiagnosisNotice } from "../../features/sandbox/diagnosis/presentation";
+import { diagnosisCard, restartCard } from "./notificationSources";
 
 // The lane's one rule about a sandbox going quiet: whether the silence was asked for decides both what is said and
 // how soon. Everything else in this file is wiring; this is the decision.
@@ -51,21 +52,41 @@ describe(`the card for a sandbox that has gone quiet`, () => {
     });
 });
 
-// Past the silence's patience the lane stops describing a wait and hands over what can still be done without the
-// sandbox: a card wide enough for commands, carrying the panel the connecting gate draws too, and put away for this
-// outage alone when dismissed.
-describe(`the card for a sandbox that did not come back`, () => {
-    it(`names the sandbox, carries the recovery panel, and can be put away`, () => {
+// The outage over a painted workspace, in the diagnosis's words: a calm wait while waiting is the answer, a warning with
+// the recovery panel once the diagnosis found a way back, put away for this outage alone when dismissed.
+describe(`the card for a sandbox that isn't answering`, () => {
+    const notice = (over: Partial<DiagnosisNotice> = {}): DiagnosisNotice => ({
+        title: `acme is busy`,
+        body: `It's still running and will catch up by itself.`,
+        waiting: true,
+        tone: `info`,
+        chain: [],
+        action: undefined,
+        otherActions: [],
+        findings: [],
+        ...over,
+    });
+
+    it(`is a calm wait with a spinner and no panel while nothing needs doing`, () => {
+        const card = diagnosisCard(notice(), false, () => undefined);
+        expect(card).toMatchObject({ kind: `condition`, tone: `info`, icon: `spinner`, spin: true, title: `acme is busy` });
+        expect(card.detail).toBe(`It's still running and will catch up by itself.`);
+        expect(card.body).toBeUndefined();
+    });
+
+    it(`carries the recovery panel once there is a way back, and can be put away`, () => {
         let dismissed = 0;
-        const card = recoveryCard(`acme-shop`, () => (dismissed += 1));
-        expect(card).toMatchObject({ kind: `condition`, tone: `warning`, title: `acme-shop hasn't come back`, wide: true });
-        expect(card.detail).toBe(`It has been out of reach for a few minutes.`);
+        const card = diagnosisCard(notice({ title: `acme isn't connected`, waiting: false, tone: `warning`, action: `fix` }), true, () => (dismissed += 1));
+        expect(card).toMatchObject({ tone: `warning`, title: `acme isn't connected`, wide: true });
+        expect(card.spin).toBeUndefined();
         expect(card.body).toBe(SandboxRecovery);
         card.dismiss?.();
         expect(dismissed).toBe(1);
     });
 
-    it(`still says whose it is when the row has no name`, () => {
-        expect(recoveryCard(undefined, () => undefined).title).toBe(`Your sandbox hasn't come back`);
+    it(`opens the panel for the other options a long wait earns, without turning the wait into a warning`, () => {
+        const card = diagnosisCard(notice({ otherActions: [`fix`] }), false, () => undefined);
+        expect(card).toMatchObject({ tone: `info`, spin: true, wide: true });
+        expect(card.body).toBe(SandboxRecovery);
     });
 });

@@ -1,13 +1,14 @@
-use std::net::ToSocketAddrs;
 use std::time::{Duration, Instant};
 
 use crate::checks::{self, Finding, Outcome};
 use crate::docker;
 use crate::health;
 use crate::sandbox::CONTAINER_PREFIX;
-use crate::util::{bail, kv_lines, Result};
+use crate::util::kv_lines;
 
-/* THE REACHABILITY CHAIN — machine → container → daemon → platform, and edge → browser. */
+/* THE REACHABILITY CHAIN, WAITED ON — machine → container → daemon → platform, and edge → browser. What connect's
+postflight runs with patience after a launch. `ic sandbox doctor` itself is the fix engine run read-only
+(sandbox/fix), which checks the layers under this chain too: Docker Desktop, WSL, the disk, the network. */
 
 /// A link's verdict this round: settled, or worth re-probing while patience remains — carrying the outcome
 /// to report if it runs out.
@@ -61,10 +62,19 @@ pub fn verify_chain(slug: &str, public_url: Option<&str>, patience: Duration) ->
                     skip_both(&mut settled, "unknowable while the container is down");
                 }
                 _ => {
-                    let health_json = docker::exec_capture(
-                        &container,
-                        &["curl", "-sf", "http://localhost:8787/health"],
+                    let health_json = docker::ask(
+                        &[
+                            "exec",
+                            &container,
+                            "curl",
+                            "-sf",
+                            "-m",
+                            "5",
+                            "http://localhost:8787/health",
+                        ],
+                        Duration::from_secs(15),
                     )
+                    .said()
                     .and_then(|body| serde_json::from_str::<serde_json::Value>(&body).ok());
                     if settled[DAEMON].is_none() {
                         settle(
@@ -195,16 +205,40 @@ fn skip_both(settled: &mut [Option<Outcome>; 5], why: &str) {
 // the links
 
 fn probe_container(container: &str) -> Verdict {
-    let status = docker::inspect(container, "{{.State.Status}} {{.RestartCount}}");
+    let status = docker::ask(
+        &[
+            "inspect",
+            "--format",
+            "{{.State.Status}} {{.RestartCount}}",
+            container,
+        ],
+        docker::READ_LIMIT,
+    )
+    .said();
     // An interrupted swap leaves the sandbox set aside under its parked name: that is not a sandbox to set up again.
-    if status.is_none() && docker::container_exists(&format!("{container}{}", super::PARKED_SUFFIX))
+    let parked = format!("{container}{}", super::PARKED_SUFFIX);
+    if status.is_none()
+        && docker::ask(
+            &["inspect", "--format", "{{.Id}}", &parked],
+            docker::READ_LIMIT,
+        )
+        .said()
+        .is_some()
     {
         return Verdict::Settled(Outcome::Fail {
             problem: "an interrupted update left this sandbox set aside, with nothing started in its place.".to_string(),
-            remedy: "put it back: ic sandbox start".to_string(),
+            remedy: format!("put it back: ic sandbox start {}", slug_of(container)),
         });
     }
     classify_container(status.as_deref(), container)
+}
+
+/// The slug a container name carries, for the `ic sandbox …` remedies: ic is the one host authority, and a raw docker
+/// verb would skip the saved shape, the tunnel sidecar and the lock.
+fn slug_of(container: &str) -> &str {
+    container
+        .strip_prefix(CONTAINER_PREFIX)
+        .unwrap_or(container)
 }
 
 fn classify_container(inspect: Option<&str>, container: &str) -> Verdict {
@@ -220,19 +254,20 @@ fn classify_container(inspect: Option<&str>, container: &str) -> Verdict {
         .next()
         .and_then(|count| count.parse().ok())
         .unwrap_or(0);
+    let slug = slug_of(container);
     match status {
         "running" if restarts >= 3 => Verdict::Pending(Outcome::Fail {
             problem: format!("the container is crash-looping ({restarts} restarts)."),
-            remedy: format!("read its log: docker logs --tail 100 {container}"),
+            remedy: format!("read its log: ic sandbox logs {slug} --tail 100"),
         }),
         "running" => Verdict::Settled(Outcome::Pass),
         "restarting" => Verdict::Pending(Outcome::Fail {
             problem: "the container keeps restarting.".to_string(),
-            remedy: format!("read its log: docker logs --tail 100 {container}"),
+            remedy: format!("read its log: ic sandbox logs {slug} --tail 100"),
         }),
         other => Verdict::Settled(Outcome::Fail {
             problem: format!("the container is {other}, not running."),
-            remedy: format!("start it: docker start {container}"),
+            remedy: format!("start it: ic sandbox start {slug}"),
         }),
     }
 }
@@ -241,13 +276,19 @@ fn classify_daemon(health: Option<&serde_json::Value>, container: &str) -> Verdi
     let Some(health) = health else {
         return Verdict::Pending(Outcome::Fail {
             problem: "the daemon inside the container does not answer /health.".to_string(),
-            remedy: format!("read its log: docker logs --tail 100 {container}"),
+            remedy: format!(
+                "read its log: ic sandbox logs {} --tail 100",
+                slug_of(container)
+            ),
         });
     };
     if health::journal_failed(health) {
         return Verdict::Settled(Outcome::Fail {
             problem: "the daemon could not convert this sandbox's stored files to its version, and put them back.".to_string(),
-            remedy: "go back to the version before it: ic sandbox rollback".to_string(),
+            remedy: format!(
+                "go back to the version before it: ic sandbox rollback {}",
+                slug_of(container)
+            ),
         });
     }
     // `boot.ready` where the daemon reports it (every daemon since the boot chain), a top-level `ready` for older ones.
@@ -299,13 +340,16 @@ fn classify_announce(health: Option<&serde_json::Value>, container: &str) -> Ver
         }),
         "pending" => Verdict::Pending(Outcome::Fail {
             problem: "the daemon has not been able to register with the platform yet.".to_string(),
-            remedy: "check the container's outbound network, then re-check with: ic sandbox doctor"
-                .to_string(),
+            remedy: format!(
+                "check the container's outbound network, then re-check with: ic sandbox doctor {}",
+                slug_of(container)
+            ),
         }),
         "rejected" | "unreachable" => {
             let remedy = if retrying == Some(false) {
                 format!(
-                    "the daemon stopped retrying — restart it to retry: docker restart {container}"
+                    "the daemon stopped retrying — restart it to retry: ic sandbox restart {}",
+                    slug_of(container)
                 )
             } else {
                 "it is still retrying; if this persists, check the container's outbound network."
@@ -336,10 +380,8 @@ fn host_of(url: &str) -> Option<String> {
 }
 
 fn probe_dns(host: &str) -> Verdict {
-    let resolved = (host, 443u16)
-        .to_socket_addrs()
-        .map(|mut addrs| addrs.next().is_some())
-        .unwrap_or(false);
+    // Bounded: the system resolver's own timeouts can run to minutes.
+    let resolved = super::fix::host::resolve(host, Duration::from_secs(10)).is_ok();
     if resolved {
         return Verdict::Settled(Outcome::Pass);
     }
@@ -409,64 +451,20 @@ fn classify_public(
     }
 }
 
-// the command
-
-/// `ic sandbox doctor [slug]` — the chain, read-only, right now: for the sandbox that was fine last week and
-/// is a dead tab today. Exit code 1 when any link is broken, so scripts can watch it too.
-pub fn run(slug: Option<String>) -> Result<()> {
-    docker::require_daemon()?;
-    let slug = super::resolve_slug(slug, "ic sandbox doctor")?;
-    let container = format!("{CONTAINER_PREFIX}{slug}");
-    println!("intentic: doctor — checking sandbox {slug}…");
-    let public_url = container_public_url(&container);
-    let findings = verify_chain(&slug, public_url.as_deref(), Duration::ZERO);
-    let record = super::mirror::reconcile(&slug);
-    if let Some(swap) = &record.swap {
-        match (swap.phase, swap.until) {
-            (crate::record::Phase::Probation, Some(until)) => println!(
-                "intentic: {slug} moved onto {} and is on probation for {} more; the version before it is parked and ready.",
-                swap.to.as_deref().unwrap_or("a new version"),
-                super::probation::remaining(until)
-            ),
-            _ => println!("intentic: a swap of {slug} was interrupted; `ic sandbox watch {slug}` finishes or undoes it."),
-        }
-    }
-    match checks::failure_summary(&findings) {
-        // A sandbox that broke with a way back on record is told where the way back is.
-        Some(summary) if record.previous.is_some() => bail!(
-            "{summary}\n       If this began with an update, go back to the version before it: ic sandbox rollback {slug}"
-        ),
-        Some(summary) => bail!("{summary}"),
-        None => {
-            match public_url {
-                Some(url) => {
-                    println!("intentic: every link checks out — the sandbox is reachable at {url}.")
-                }
-                None => println!("intentic: every checkable link checks out."),
-            }
-            Ok(())
-        }
-    }
-}
-
-/// SANDBOX_PUBLIC_URL from the container's own env — inspect works on a stopped container too, so the
-/// doctor can name the URL of a sandbox that is down.
-pub fn container_public_url(container: &str) -> Option<String> {
-    container_env(container, "SANDBOX_PUBLIC_URL")
-}
-
 /// The container's own environment as KEY=value lines — the run that created this container is the only
 /// record of what it was given, and it answers for a stopped one too.
 fn container_env_text(container: &str) -> Option<String> {
-    let env = docker::container_env_nul(container).ok()?;
-    Some(String::from_utf8_lossy(&env).replace('\0', "\n"))
-}
-
-/// One value out of that environment, empty read as absent.
-fn container_env(container: &str, key: &str) -> Option<String> {
-    let text = container_env_text(container)?;
-    let value = kv_lines(&text)(key);
-    value.filter(|value| !value.is_empty())
+    let env = docker::ask(
+        &[
+            "inspect",
+            "--format",
+            "{{range .Config.Env}}{{.}}{{printf \"\\x00\"}}{{end}}",
+            container,
+        ],
+        docker::READ_LIMIT,
+    )
+    .said()?;
+    Some(env.replace('\0', "\n"))
 }
 
 #[cfg(test)]
@@ -499,11 +497,17 @@ mod tests {
             }
             _ => panic!("a restart-heavy container is a crash loop"),
         }
-        match classify_container(Some("exited 0"), "c") {
+        match classify_container(Some("exited 0"), "intentic-sandbox-work") {
             Verdict::Settled(Outcome::Fail { remedy, .. }) => {
-                assert!(remedy.contains("docker start c"))
+                assert_eq!(remedy, "start it: ic sandbox start work")
             }
-            _ => panic!("an exited container must fail with the start command"),
+            _ => panic!("an exited container must fail with ic's own start command"),
+        }
+        match classify_container(Some("running 7"), "intentic-sandbox-work") {
+            Verdict::Pending(Outcome::Fail { remedy, .. }) => {
+                assert_eq!(remedy, "read its log: ic sandbox logs work --tail 100")
+            }
+            _ => panic!("a crash loop points at ic's own log verb"),
         }
     }
 
@@ -517,9 +521,9 @@ mod tests {
         ));
         let failed =
             serde_json::json!({ "boot": { "ready": true }, "state": { "journal": "failed" } });
-        match classify_daemon(Some(&failed), "c") {
+        match classify_daemon(Some(&failed), "intentic-sandbox-work") {
             Verdict::Settled(Outcome::Fail { remedy, .. }) => {
-                assert!(remedy.contains("ic sandbox rollback"))
+                assert!(remedy.contains("ic sandbox rollback work"))
             }
             _ => panic!("a failed conversion is a failure with the way back"),
         }
@@ -554,10 +558,10 @@ mod tests {
         let gave_up = serde_json::json!({ "announce": {
             "state": "unreachable", "detail": "the platform could not be reached", "retrying": false
         }});
-        match classify_announce(Some(&gave_up), "c") {
+        match classify_announce(Some(&gave_up), "intentic-sandbox-work") {
             Verdict::Pending(Outcome::Fail { problem, remedy }) => {
                 assert!(problem.contains("could not be reached"));
-                assert!(remedy.contains("docker restart c"));
+                assert!(remedy.contains("ic sandbox restart work"));
             }
             _ => panic!("a given-up registration must fail with the restart remedy"),
         }

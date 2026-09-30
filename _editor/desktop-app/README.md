@@ -13,7 +13,7 @@ flowchart LR
     local -->|"HTTP on loopback, token"| files
     app -->|"spawns"| scripts["Staged scripts<br/>connect, sync, recreate"]
     app -->|"sync changes, bring-back"| machine(["intentic-machine"])
-    app -->|"list --json"| ic(["ic"])
+    app -->|"list --json, sandbox fix"| ic(["ic"])
     scripts --> ic
     ic --> docker["Docker<br/>sandbox + tunnel"]
     app -->|"sign-in"| browser["Default browser"]
@@ -47,6 +47,17 @@ flowchart LR
   confirmation says so, in place of the kit's "cannot be undone". The app reads nothing off `docker inspect`; the
   short children it waits on (Docker probes, the listing, the agent's status) share `ic`'s time-limited capture
   crate, `_sandbox/ic/bounded`.
+- **Fixing a sandbox the workspace cannot reach.** The workspace's recovery panel sends `intentic://fix?slug=…`, and
+  the launcher runs `ic sandbox fix <slug> [--code <code>] --source app --json` with the installed `ic`, looked for
+  where the manager's listing looks, with no console window, one run at a time, and stopped with everything it started
+  after ten minutes (`src-tauri/src/fix.rs`). A second link while one runs brings that run forward. The card at the
+  top of Home is built from `ic`'s `intentic-fix:` progress lines and its final report (`src/fixReport.ts`): what `ic`
+  is doing now, every check with its state and, for one that warns or fails, the problem and the remedy, then the
+  outcome and what the exit code leaves (3: a yes nobody could give in a terminal; 4: a restart or sign-out). Each
+  check whose fix waits on consent becomes a button that runs the fix again with `--accept <that check>` and no code.
+  An `ic` that ends without a report, one from before `sandbox fix`, is said to be unable to fix yet, with setting
+  the sandbox up again as the way to update it, and nothing retries. `ic` posts every run to the platform itself; the
+  app never talks to the platform about it.
 - **Tray-resident.** The × hides the workspace, and the launcher's ×, Esc and platform close go back to the
   workspace when that is the face in use and it is still open, or else hide the card into the tray
   (`launcher_close`). The tray's "Open Intentic" opens the last face, "Home" opens Home, "Open workspace" appears
@@ -132,17 +143,18 @@ every link and drops what an outside sender may not ask for. The editor builds t
 | `sync?url=…&pair=…[&name=…][&takeover=1][&mirror=1]` | app windows | Enrolls this device in desktop sync; the folder is picked in a system dialog. |
 | `sync?url=…&pair=…&project=<name>[&sandbox=<id>]` | app windows | A hosted sandbox's project: syncs the parked folder with `/work/<name>` and remembers it with that sandbox. |
 | `recreate?slug=…[&hash=…][&rollback=1]` | app windows | Moves the sandbox to the `:stable` base, a pinned overlay, or its previous image. |
+| `fix?slug=…[&code=…]` | app windows | Runs `ic sandbox fix` for that sandbox here and shows it in the launcher; `code` is the recovery panel's fix code, which `ic` claims so the panel follows the run. A slug or code that is not a plain token drops the link. |
 | `update` | app windows | Installs the downloaded update and restarts. |
 | `launcher` | app windows | Brings the launcher face back. |
 | `window?do=…` | app and local windows | The editor's own title bar: `ready`, `minimize`, `maximize`, `close[&confirmed=1]`, `dirty&value=0\|1`, `drag`, `raise`, `fit`, `mode`. |
 | `local?do=…` | local windows only | `open-folder` and `open-file` in the system dialog, `reveal[&path=…]` an entry of the window's own folder, `sandbox`, `ask&path=…`, and the project's `changes`, `bring-back[&paths=<JSON array>]`, `restore&point=…`, `direction&value=to-sandbox\|both`. |
 
-A local window is heard on those two links and nothing else: never a setup, a sync, a recreate or a sign-in, since it
-draws documents nobody vouched for (`Source::Files` in `setup_link.rs`). Every value a local verb carries is held to
-its shape before it reaches a folder or a command line: paths are root-relative with forward slashes, never absolute,
-never `..`, never starting with `-`, and never holding a `:` (a drive, `C:/x` or `C:x`, or an alternate data stream);
-a `paths` that is not a non-empty JSON array of such paths, a restore point that is not a plain token, or a direction
-other than the two drops the link. A project verb is answered only for a folder window whose folder is in
+A local window is heard on those two links and nothing else: never a setup, a sync, a recreate, a fix or a sign-in,
+since it draws documents nobody vouched for (`Source::Files` in `setup_link.rs`). Every value a local verb carries is
+held to its shape before it reaches a folder or a command line: paths are root-relative with forward slashes, never
+absolute, never `..`, never starting with `-`, and never holding a `:` (a drive, `C:/x` or `C:x`, or an alternate data
+stream); a `paths` that is not a non-empty JSON array of such paths, a restore point that is not a plain token, or a
+direction other than the two drops the link. A project verb is answered only for a folder window whose folder is in
 `projects.json`. A `sync` link naming a `project` that is not a project folder's name, or naming one beside `mirror`,
 is dropped whole: read without its project it would sync the folder with the sandbox's whole `/work`.
 

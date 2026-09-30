@@ -93,6 +93,29 @@ fn is_sandbox_id(id: &str) -> bool {
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
 }
 
+/// A sandbox's slug as `ic` names its containers (`intentic-sandbox-<slug>`): the leading label of its hostname, or
+/// twelve hex characters of its connect token. Letters, digits, `-` and `_`, starting with a letter or a digit, so it
+/// can never be read as a flag, a path or a second argument.
+pub fn is_slug(slug: &str) -> bool {
+    (1..=63).contains(&slug.len())
+        && slug
+            .bytes()
+            .next()
+            .is_some_and(|byte| byte.is_ascii_alphanumeric())
+        && slug
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
+}
+
+/// A fix code as the recovery panel mints them: a short plain token, never a flag.
+pub fn is_fix_code(code: &str) -> bool {
+    (1..=64).contains(&code.len())
+        && !code.starts_with('-')
+        && code
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
+}
+
 /// `bring-back`'s `paths`: a JSON array of one or more [`is_relative_entry`] paths. Anything else, an empty array
 /// included, is no answer rather than "all of them": a page that meant everything sends no `paths` at all.
 fn entries_of(json: &str) -> Option<Vec<String>> {
@@ -140,6 +163,19 @@ pub struct RecreateArgs {
     pub slug: String,
     pub hash: Option<String>,
     pub rollback: bool,
+}
+
+/// `intentic://fix?slug=…[&code=…]`: the recovery panel's button for a sandbox on this machine that cannot be
+/// reached. The app runs `ic sandbox fix` for it and shows the run in the launcher (fix.rs). `code` is a fix code the
+/// browser minted, which `ic` claims so the panel that asked mirrors the run live; without one the run still reports
+/// to the platform, and nothing waits for it.
+///
+/// [`Source::App`] only, as `recreate` is, for the same reason: the command starts the moment the link lands.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FixArgs {
+    pub slug: String,
+    pub code: Option<String>,
 }
 
 /// `intentic://sync?url=…&pair=…[&name=…][&takeover=1][&mirror=1]` — enroll THIS device in desktop sync:
@@ -224,6 +260,7 @@ pub enum WindowVerb {
 pub enum Link {
     Setup(Box<SetupArgs>),
     Recreate(RecreateArgs),
+    Fix(FixArgs),
     Sync(SyncArgs),
     /// `intentic://signin[?switch=1]` — the SPA's login screen asking to be signed in the way this app can be:
     /// in the user's real browser. `switch` is the one thing it carries, because it is the one thing the page
@@ -348,6 +385,21 @@ pub fn parse_link(url: &str, source: Source) -> Option<Link> {
             }))
         }
         "recreate" => None,
+        // App-window only, like `recreate`: `ic sandbox fix` starts the moment this lands. Both values reach its
+        // command line, so each is held to its shape, and a value that is there and malformed drops the link rather
+        // than running a fix the page did not ask for (a slug-less `ic sandbox fix` picks the machine's only sandbox).
+        "fix" if source.is_app() => {
+            let code = match get("code") {
+                Some(code) if is_fix_code(&code) => Some(code),
+                Some(_) => return None,
+                None => None,
+            };
+            Some(Link::Fix(FixArgs {
+                slug: get("slug").filter(|slug| is_slug(slug))?,
+                code,
+            }))
+        }
+        "fix" => None,
         "auth" => Some(Link::Auth(AuthArgs {
             handoff: get("handoff")?,
             state: get("state")?,
@@ -495,6 +547,94 @@ mod tests {
                 rollback: true
             }))
         );
+    }
+
+    /// The recovery panel's button, with the fix code that mirrors the run on that panel and without one; from any of
+    /// the app's own windows, as every app link is.
+    #[test]
+    fn parses_a_fix_link_with_and_without_its_code() {
+        assert_eq!(
+            parse_link("intentic://fix?slug=sandbox-3f2a9c1d7e4b&code=Xy_9-k2", APP),
+            Some(Link::Fix(FixArgs {
+                slug: "sandbox-3f2a9c1d7e4b".into(),
+                code: Some("Xy_9-k2".into()),
+            }))
+        );
+        assert_eq!(
+            parse_link("intentic://fix?slug=work", APP),
+            Some(Link::Fix(FixArgs {
+                slug: "work".into(),
+                code: None,
+            }))
+        );
+        // An empty value is no value, as on every link: a fix the panel does not mirror.
+        assert_eq!(
+            parse_link("intentic://fix?slug=work&code=", APP),
+            Some(Link::Fix(FixArgs {
+                slug: "work".into(),
+                code: None,
+            }))
+        );
+        assert_eq!(
+            parse_link(
+                "intentic://fix?slug=work&code=abc",
+                Source::App {
+                    window: crate::windows::LAUNCHER
+                }
+            ),
+            Some(Link::Fix(FixArgs {
+                slug: "work".into(),
+                code: Some("abc".into()),
+            }))
+        );
+    }
+
+    /// A fix runs a command the moment it lands, so only the app's own windows may ask for one: not a page in the
+    /// user's browser, and not a document in a local window.
+    #[test]
+    fn a_fix_link_from_outside_the_app_or_a_local_window_is_refused() {
+        for link in [
+            "intentic://fix?slug=work",
+            "intentic://fix?slug=work&code=abc123",
+        ] {
+            assert_eq!(parse_link(link, Source::External), None, "{link}");
+            assert_eq!(parse_link(link, FILES), None, "{link}");
+        }
+    }
+
+    /// Both values reach `ic`'s command line, so a slug or a code that is not a plain token drops the whole link,
+    /// and a link with no slug is none: a slug-less `ic sandbox fix` would pick the machine's only sandbox itself.
+    #[test]
+    fn a_fix_link_carrying_a_value_it_may_not_is_no_link() {
+        for link in [
+            "intentic://fix",
+            "intentic://fix?code=abc",
+            "intentic://fix?slug=-rf",
+            "intentic://fix?slug=--code",
+            "intentic://fix?slug=_work",
+            "intentic://fix?slug=a%2Fb",
+            "intentic://fix?slug=..",
+            "intentic://fix?slug=a.b",
+            "intentic://fix?slug=a%20b",
+            "intentic://fix?slug=a%3Bb",
+            "intentic://fix?slug=a%0Ab",
+            "intentic://fix?slug=work&code=--accept",
+            "intentic://fix?slug=work&code=-x",
+            "intentic://fix?slug=work&code=a%20b",
+            "intentic://fix?slug=work&code=a%2Fb",
+            "intentic://fix?slug=work&code=a.b",
+            "intentic://fix?slug=work&code=a%2Cb",
+        ] {
+            assert_eq!(parse_link(link, APP), None, "{link}");
+        }
+        let longest = format!("intentic://fix?slug={}", "a".repeat(63));
+        assert!(matches!(parse_link(&longest, APP), Some(Link::Fix(_))));
+        let too_long = format!("intentic://fix?slug={}", "a".repeat(64));
+        assert_eq!(parse_link(&too_long, APP), None);
+        let longest_code = format!("intentic://fix?slug=work&code={}", "c".repeat(64));
+        assert!(matches!(parse_link(&longest_code, APP), Some(Link::Fix(_))));
+        let too_long_code = format!("intentic://fix?slug=work&code={}", "c".repeat(65));
+        assert_eq!(parse_link(&too_long_code, APP), None);
     }
 
     /* THE ONE LINK THAT ENDS THE PROCESS, so it is the one link only this app's own window may send. */
@@ -951,6 +1091,7 @@ mod tests {
             "intentic://setup?code=abc123",
             "intentic://sync?url=https%3A%2F%2Fx&pair=p",
             "intentic://recreate?slug=sandbox-abc",
+            "intentic://fix?slug=sandbox-abc",
             "intentic://update",
             "intentic://launcher",
             "intentic://signin",

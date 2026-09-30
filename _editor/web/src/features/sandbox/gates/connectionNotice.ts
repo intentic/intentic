@@ -65,6 +65,9 @@ export interface ConnectionNoticeInput {
     // A daemon path this browser watched run out its own deadline (perf.ts `stalledPaths`). Observed, not inferred:
     // the one cause here that a silent machine cannot account for, because something did answer long enough to be timed.
     readonly stalledPath?: string | undefined;
+    // What the diagnosis of this outage established (diagnosis/presentation.ts), already in words. Outranks the waits and
+    // the stuck sentences below, which only ever had the clock to go on; a refusal and an expected restart outrank it.
+    readonly diagnosed?: ConnectionNotice | undefined;
 }
 
 // The patient wait, in the three shapes the browser can observe; split out since the caller now has a decision to
@@ -184,7 +187,7 @@ const extensionOf = (path: string): string | undefined => /^\/x\/([^/]+)/.exec(p
 
 // What the browser actually watched stop answering. Outranks both lane sentences below, and carries no action on
 // purpose: neither lane's setup screen repairs a route, and that screen is where a machine gets handed back.
-const stalledBody = (path: string | undefined): string | undefined => {
+export const stalledBody = (path: string | undefined): string | undefined => {
     if (path === undefined) {
         return undefined;
     }
@@ -234,6 +237,7 @@ const networkNotice = (input: ConnectionNoticeInput, kind: "timeout" | "closed" 
     suspendedNotice(input, name) ??
     hoursSpentNotice(input, name) ??
     restartNotice(input) ??
+    input.diagnosed ??
     detachedNotice(input, name) ??
     stuckNotice(input, name) ??
     waitingNotice(kind, name);

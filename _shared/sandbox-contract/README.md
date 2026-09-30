@@ -46,8 +46,10 @@ flowchart LR
 - The wire no oRPC route carries is defined by the Rust crates that speak it (`_sandbox/front/crates`): `tunnel` (the
   `/tunnel/v2` door, its headers and lanes, the stream multiplexer, close codes, liveness, ALPN and the transports an
   edge declares; what the daemon announces as its transfers is `protocol/tunnel-bulk.ts`, held to the edge's reading by
-  the shared `ingress-contract.fixture.json`), `browser-wire` (what a browser sees: the terminal socket and its messages, the WebTransport path, the
-  edge's verdict) and `front-wire` (the front's control socket with Node, its env vars and its patience). Their tests
+  the shared `ingress-contract.fixture.json`), `browser-wire` (what a browser sees: the terminal socket and its messages, the front's vitals,
+  the WebTransport path, the edge's verdict) and `front-wire` (the front's control socket with Node, its env vars and its patience). The
+  vitals are read at the package root: `protocol/vitals.ts` gives `VITALS_PATH` and `parseVitals`, which reads any
+  other body (an older sandbox's 404 from Node) as undefined. Their tests
   write TypeScript and a JSON manifest each into `src/front/generated/`; `src/front/browser-wire.ts` and
   `src/front/front-wire.ts` are the entries to them, and `wire-manifests.test.ts` holds every value TypeScript restates
   to those manifests.

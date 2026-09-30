@@ -1,4 +1,7 @@
 import { buildCommand, buildRouteMap, type CommandContext, type FlagParametersForType } from "@stricli/core";
+import { runLogPath } from "../config.js";
+import { type MachineConfig, readMachineConfig, updateMachineConfig } from "../environments/machine.js";
+import { ensureResident } from "../resident.js";
 import { runIcAttached } from "./tools/sandboxes.js";
 
 // `intentic-machine sandbox <verb> [slug]`: ic's own sandbox verbs, passed through, so a sandbox on this machine can be
@@ -79,6 +82,15 @@ type BackupFlags = {
     readonly json?: boolean;
 };
 
+type FixFlags = {
+    readonly code?: string;
+    readonly auto?: boolean;
+    readonly yes?: boolean;
+    readonly accept?: string;
+    readonly json?: boolean;
+    readonly source?: string;
+};
+
 // A positive whole number, as ic's `--tail` takes it; anything else is refused here rather than by ic's usage text.
 const lineCount = (value: string): string => {
     if (!/^\d+$/.test(value) || Number(value) === 0) {
@@ -86,6 +98,50 @@ const lineCount = (value: string): string => {
     }
     return value;
 };
+
+/* THE KEEPER'S SWITCH (sandbox-rounds/keeper.ts), kept in this environment's machine.json: on is the resting state,
+   stored as the key's absence, and only an explicit off is written down, as the `updates` switches are. It is this
+   environment's own rather than the PC's, since the keeper acts on the sandboxes this environment's ic keeps. */
+
+type KeeperWord = "on" | "off" | "status";
+
+const keeperWord = (value: string): KeeperWord => {
+    if (value === "on" || value === "off" || value === "status") {
+        return value;
+    }
+    throw new Error(`"${value}" is not on, off or status.`);
+};
+
+// The config with the keeper switched as asked, every other key as it was. Pure, so what is written is asserted.
+export const withKeeper = (config: MachineConfig, on: boolean): MachineConfig => {
+    const { sandboxKeeper: _was, ...rest } = config;
+    return on ? rest : { ...rest, sandboxKeeper: false };
+};
+
+export const keeperStatus = (on: boolean): string =>
+    on
+        ? `Keeper: on. When a sandbox on this machine stops answering (and half a minute after this agent starts, and every five minutes), this agent runs \`ic sandbox fix --auto\`: it starts Docker Desktop, starts a sandbox nobody stopped on purpose, restarts one whose registration gave up and tidies a full disk. A fix that needs your yes is only reported; \`intentic-machine sandbox fix <slug>\` asks you for it. What it did is in ${runLogPath}. Turn it off with \`intentic-machine sandbox keeper off\`.`
+        : "Keeper: off. Nothing brings this machine's sandboxes back by itself; `intentic-machine sandbox fix` does when you run it. Turn it back on with `intentic-machine sandbox keeper on`.";
+
+const keeper = buildCommand<Record<never, never>, [KeeperWord | undefined]>({
+    docs: { brief: "Whether this agent brings this machine's sandboxes back by itself (`ic sandbox fix --auto`): on, off, or status" },
+    parameters: {
+        positional: {
+            kind: "tuple",
+            parameters: [{ brief: "on, off or status (status unless given)", parse: keeperWord, optional: true, placeholder: "on|off|status" }],
+        },
+    },
+    async func(this: CommandContext, _flags: Record<never, never>, word: KeeperWord | undefined) {
+        const out = (message: string): void => void this.process.stdout.write(`${message}\n`);
+        if (word === "on" || word === "off") {
+            await updateMachineConfig((config) => withKeeper(config, word === "on"));
+            // The keeper is one reason the agent stays resident on a machine with nothing linked: on starts it for the
+            // sandboxes here, off lets it go when they were all it had (resident.ts, keptSandboxes).
+            await ensureResident(out);
+        }
+        out(keeperStatus((await readMachineConfig()).sandboxKeeper !== false));
+    },
+});
 
 export const sandboxRoutes = buildRouteMap({
     routes: {
@@ -115,6 +171,19 @@ export const sandboxRoutes = buildRouteMap({
             json,
         }),
         backups: verbCommand<JsonFlags>("backups", "The backups this machine holds of a sandbox", { json }),
+        fix: verbCommand<FixFlags>(
+            "fix",
+            "Check every layer a sandbox needs on this machine, fix what is safe and ask before anything else (every sandbox unless one is named)",
+            {
+                code: { kind: "parsed", parse: String, optional: true, brief: "The fix code from the browser's recovery panel, so that page follows this run" },
+                auto: { kind: "boolean", optional: true, brief: "Apply only the fixes that need no yes and report the rest, as the keeper does" },
+                yes: { kind: "boolean", optional: true, brief: "Say yes to every fix that asks" },
+                accept: { kind: "parsed", parse: String, optional: true, brief: "Say yes to these checks' fixes only, by id, comma-separated" },
+                json,
+                source: { kind: "parsed", parse: String, optional: true, brief: "Who the report names as asking: agent, command or app" },
+            },
+        ),
+        keeper,
     },
     docs: { brief: "Look at and repair the sandboxes on this machine without a browser: ic's own verbs, passed through" },
 });

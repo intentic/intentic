@@ -7,6 +7,7 @@ flowchart LR
     browser["Editor in the browser"] -->|"/api/auth · /rpc"| api(["platform api"])
     machine["Machine running<br/>the setup command"] -->|"/setup/claim"| api
     daemon["Sandbox daemon"] -->|"/sandbox/announce<br/>connect token"| api
+    host["ic sandbox fix<br/>on the owner's machine"] -->|"/host-report"| api
     api --> db["Postgres<br/>_platform/prisma"]
     api -->|"power · volumes"| fly["Fly Machines API"]
     api --> stripe["Stripe<br/>hosted plan"]
@@ -16,7 +17,7 @@ flowchart LR
 ## What it is
 
 - [`_platform/api`](../../_platform/api) runs on Bun with Hono. Its oRPC router ([`router.ts`](../../_platform/api/src/router.ts)) serves the editor through the contract in [`_shared/api-contract`](../../_shared/api-contract), and Better Auth handles sign-in with Google as the only provider ([`auth.ts`](../../_platform/api/src/auth.ts)).
-- [`app.ts`](../../_platform/api/src/app.ts) holds the plain HTTP routes the machines call: the setup claim, the daemon's announce, farewell and boot report, the ingress's reachability lookup, and the Stripe webhook.
+- [`app.ts`](../../_platform/api/src/app.ts) holds the plain HTTP routes the machines call: the setup claim, the daemon's announce, farewell and boot report, the host report `ic sandbox fix` posts about the machine a sandbox runs on (`/host-report`, and `/host-report/claim` for the fix code the recovery panel hands out), the ingress's reachability lookup, and the Stripe webhook.
 - [`_platform/prisma`](../../_platform/prisma) owns the Postgres schema and migrations. [`_platform/ingress`](../../_platform/ingress) is the public edge a sandbox tunnels to; see [topology.md](topology.md).
 - The editor itself is a static build of [`_editor/web`](../../_editor/web) served by nginx at `app.intentic.dev`, next to the api. [`_tools/selfhost/platform`](../../_tools/selfhost/platform) runs the same stack (Postgres, api, web, ingress) for an operator's own fleet.
 
@@ -25,7 +26,7 @@ flowchart LR
 [`schema.prisma`](../../_platform/prisma/schema.prisma), in four groups:
 
 - **Accounts**: `User`, Better Auth's `Session`, `Account` and `Verification`, and `ApiToken` for provisioning from a script or an agent.
-- **The registry**: `Sandbox` (the daemon's public URL, its last-seen time, the encrypted connect token, the setup code and the last boot report), `SandboxMember` for invitations, and `SandboxTrash` for a deleted sandbox that can still be restored. The daemon enforces membership; the platform only records it.
+- **The registry**: `Sandbox` (the daemon's public URL, its last-seen time, the encrypted connect token, the setup code, the last boot report, the recovery command's fix code and the last host report), `SandboxMember` for invitations, and `SandboxTrash` for a deleted sandbox that can still be restored. The daemon enforces membership; the platform only records it.
 - **Hosted sandboxes**: `HostedMachine` and the warm pool `HostedPoolMachine`, image builds, migrations, cleanups, awake-minute metering, the Stripe subscription mirror (`HostedPlan`, `HostedPlanItem`) and the abuse ledgers.
 - **Everything else**: the free trial's meter, the x402 wallet's custody handle and payments, APNs push devices, the desktop sign-in handoff, and admin statistics.
 
@@ -35,6 +36,8 @@ flowchart LR
 2. The setup command on the owner's machine redeems it at `/setup/claim` for the connect token, the reachability grant and the ingress address, then starts the container.
 3. The daemon announces its URL and liveness with the connect token, and opens its tunnel to the ingress.
 4. The editor lists the owner's sandboxes and talks to each daemon directly. The platform is never on that path.
+
+When the editor cannot reach a sandbox on the owner's own machine, the machine says why. `ic sandbox fix` checks it (Docker, WSL, disk, container, daemon, tunnel), repairs what it can, and posts what it found to `/host-report` under the sandbox's report key: HMAC-SHA256 over a fixed label keyed with the connect token, which `ic` derives from the container's env. A run started from the editor's recovery panel carries a thirty-minute fix code instead, redeemed at `/host-report/claim` for that key. The platform keeps the latest report on the sandbox's row and shows it on the owner's sandbox list, so a browser on another device can say what the machine is doing. It never calls the machine; the machine only reports ([`host-report.ts`](../../_platform/api/src/sandbox/host-report.ts)).
 
 ## Hosted sandboxes
 

@@ -22,6 +22,12 @@ export interface Dial {
 
 const realDial: Dial = { resolveBase: resolveDaemonBase, socket: (url) => new WebSocket(url) };
 
+// The links this process has reached over this machine's loopback, by sandbox URL: a daemon that answered /health there
+// as this sandbox runs on this machine. Kept for the process's life, since the keeper (sandbox-rounds/keeper.ts) needs it
+// most once that address has stopped answering.
+const loopbackUrls = new Set<string>();
+export const reachedOverLoopback: ReadonlySet<string> = loopbackUrls;
+
 // What a revoked link is dropped with; the resident's next pass then closes nothing more, since the loop already ended.
 const forgetLink = async (sandboxUrl: string): Promise<void> => void (await removeLinks(sandboxUrl));
 
@@ -63,6 +69,9 @@ export const connect = (
             const { base, local } = await dial.resolveBase(config.sandboxUrl);
             if (signal.aborted) {
                 return undefined;
+            }
+            if (local) {
+                loopbackUrls.add(config.sandboxUrl);
             }
             return {
                 socket: dial.socket(hostConnectUrl(base)),

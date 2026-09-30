@@ -13,6 +13,7 @@ import { clickElement, fillElement, listTabs, openPage, pressKey, readPage, sele
 import { act, describeAction, settle } from "./tools/device.js";
 import {
     DEFAULT_LOG_LINES,
+    diagnoseSandbox,
     forgetShape,
     listSandboxes,
     manageSandbox,
@@ -413,6 +414,14 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
                 .describe(`How many trailing lines to answer with. Default ${DEFAULT_LOG_LINES}, maximum ${MAX_LOG_LINES}.`),
         }),
         run: async ({ slug, lines }, scopes) => textResult(await sandboxLogs(slug, lines, scopes)),
+    }),
+    tool({
+        name: "diagnose_sandbox",
+        description:
+            "Check every link of one Intentic sandbox's reachability chain on this device (Docker, its container, its daemon, its registration with the platform, the network, the tunnel) and say what is broken and what fixes it, as JSON from the device's `ic sandbox doctor`. Changes nothing, and answers while Docker is down, when list_sandboxes cannot: how you find out why a sandbox on this device cannot be reached. Requires 'Run commands' or 'Manage sandboxes on this device'.",
+        effect: "read",
+        input: z.object({ slug: required.describe("The sandbox's slug, from list_sandboxes, or the first label of its address.") }),
+        run: async ({ slug }, scopes) => textResult(await diagnoseSandbox(slug, scopes)),
     }),
 ];
 

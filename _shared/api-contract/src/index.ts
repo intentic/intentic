@@ -19,6 +19,7 @@ import {
     CfTokenSchema,
     CfZonesSchema,
     DaemonUrlSchema,
+    FixCodeSchema,
     HostedBuildStateSchema,
     HostedBuildStatusSchema,
     HOSTED_PLAN_MAX_SLOTS,
@@ -119,6 +120,8 @@ export const sandboxContract = {
     // Signed way into a hosted sandbox for its owner; owner-only, hosted-only, 404 elsewhere.
     ownerTicket: oc.route({ method: "POST", path: "/sandbox/owner-ticket" }).input(sandboxIdInput).output(OwnerTicketSchema),
     setupCode: oc.route({ method: "POST", path: "/sandbox/setup-code" }).input(sandboxIdInput.extend(profileInput.shape)).output(SetupCodeSchema),
+    // A code for the recovery command (`FixCodeSchema`); minting one replaces the last. NOT_FOUND for a hosted sandbox.
+    fixCode: oc.route({ method: "POST", path: "/sandbox/fix-code" }).input(sandboxIdInput).output(FixCodeSchema),
     emailSetupLink: oc
         .route({ method: "POST", path: "/sandbox/email-setup-link" })
         .input(sandboxIdInput)

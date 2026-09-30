@@ -31,6 +31,21 @@ flowchart LR
   stale (`systemEvents.ts`). Terminals and the browser view use WebSockets opened with a short-lived ticket
   (`wsTicket.ts`); a terminal's is spoken on a stream of the edge's WebTransport session where the sandbox row says the
   edge serves one (`features/terminal/channel/`).
+- **When the sandbox stops answering.** A failed `/events` stream starts a diagnosis (`features/sandbox/diagnosis/`):
+  bounded probes of the sandbox's address (the front's own `/system/vitals`, which answers whatever state Node is in,
+  plus an opaque reach check), the platform, a hosted machine's power state, this computer's loopback where no
+  permission prompt is raised, and the report the machine it runs on posted (`hostReport`, written by
+  `ic sandbox fix`). `diagnose.ts` names one cause from them. A sandbox with any sign of life is **busy**, never down:
+  the tab does not say Offline, no card shows for 90 s, the watchdog stretches to 30 s, and a restart is offered only
+  after five minutes, among "other options". Everything else gets one sentence and at most one thing to press
+  (`presentation.ts`): the platform's restart or rollback for a machine we run, and for the owner's own machine one
+  command, `/fix`, which runs `ic sandbox fix` there and reports its progress back to the panel through a fix code
+  (or `intentic://fix` in the desktop app). The recovery panel (`gates/SandboxRecovery.vue`) shows when the diagnosis
+  found a way back, never on a timer: inside the connecting gate on a screen with nothing to paint yet, and as a card
+  in the notification lane everywhere else. Both read one answer to which screen that is (`gates/established.ts`).
+  _2026-09-30: replaced a panel that appeared after two minutes of silence with three commands (restart, rollback,
+  doctor) for the reader to choose between. It was shown to sandboxes that were only busy, and the choice was the
+  reader's to get right._
 - **Older sandboxes.** A view drawn from fields an older daemon does not send never rebuilds them from what it did
   send. It shows what was served as served, and `SandboxOutdatedNotice.vue` says the sandbox needs an update, what the
   view lacks until then, and how to update: the sandbox page's Update card, or `ic sandbox update <slug>` for a sandbox
@@ -77,7 +92,7 @@ flowchart LR
   section the rail picked._
 - **The browser tab.** `shell/browser-tab/` shows the fleet's news to a reader who is looking elsewhere. One mark at
   a time, the first that holds: `(2)` for what needs you (the Agents tile's own count), `Offline` when the sandbox is
-  not answering, `✓` for a turn someone started that finished while you were away (gone when you come back), and a dot
+  not answering (never while the diagnosis sees it alive and busy), `✓` for a turn someone started that finished while you were away (gone when you come back), and a dot
   on the icon while a turn runs. The icon carries every mark; the title carries all but the last. Two opt-in sounds
   (Settings → Notifications), one when something new needs you and one when a turn finishes, ring only while no
   window of the app has the focus, and from one tab at a time.

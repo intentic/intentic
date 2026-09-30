@@ -16,6 +16,7 @@ import {
     type RepoChecksList,
     type SandboxHandlerInput,
     type SandboxHandlerOutput,
+    type SandboxVitals,
     type SavingsReport,
     type SystemEvent,
     type TranslatorAccounts,
@@ -901,6 +902,15 @@ export const raw = {
     "GET /health": () => json({ error: `The demo has no local daemon to shortcut to.` }, 404),
     // A WebSocket can't carry a bearer header, so this ticket stands in for one per upgrade.
     "POST /system/ws-ticket": () => json({ ticket: `demo-ticket` }),
+    // intentic-front's own answer in a real sandbox: a daemon that is up, idle and never restarted.
+    "GET /system/vitals": () =>
+        json({
+            node: `up`,
+            lagMs: 1,
+            restarts: 0,
+            uptimeS: Math.floor((Date.now() - STARTED_AT) / 1000),
+            pressure: { cpu: 0.3, memory: 0, io: 0.1 },
+        } satisfies SandboxVitals),
     // Screenshot bytes for an <img>, served here rather than from /public.
     "GET /workspace/raw": ({ url }) => workspaceRaw(url.searchParams.get(`path`) ?? ``),
     // A picture at tile size, answered as the daemon answers it: SVG is refused (415) for the client to draw the file.

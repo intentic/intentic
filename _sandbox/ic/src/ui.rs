@@ -89,6 +89,21 @@ struct State {
 
 static UI: OnceLock<Mutex<State>> = OnceLock::new();
 
+/* STDOUT RESERVED FOR MACHINE OUTPUT. A `--json` run (`ic sandbox fix --json`, which the machine agent parses line by
+line) prints its JSON on stdout and every human line on stderr instead: the crate's `println!` (main.rs) and this
+renderer both ask here. Set before anything prints, and never unset. */
+static HUMAN_ON_STDERR: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Whether human output goes to stderr for this run.
+pub fn human_on_stderr() -> bool {
+    HUMAN_ON_STDERR.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// Send every human line of this run to stderr, drawn plain: nothing repaints a stream a program is reading.
+pub fn send_human_to_stderr() {
+    HUMAN_ON_STDERR.store(true, std::sync::atomic::Ordering::Relaxed);
+}
+
 fn ui() -> MutexGuard<'static, State> {
     let cell = UI.get_or_init(|| Mutex::new(State::detect()));
     // A panic while the lock was held must not take every later message with it — the flows here report
@@ -103,6 +118,7 @@ impl State {
         // CHILD's mode — this binary is the one that sets it on the agents it spawns, never the one that runs
         // inside somebody else's checklist — so it is not a value this reads.
         let mode = match std::env::var("INTENTIC_UI").as_deref() {
+            _ if human_on_stderr() => Mode::Plain,
             Ok("plain") => Mode::Plain,
             Ok("rich") => Mode::Rich,
             _ if std::env::var("INTENTIC_PLAIN").as_deref() == Ok("1") => Mode::Plain,

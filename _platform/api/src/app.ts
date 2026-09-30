@@ -11,6 +11,7 @@ import { adminUpstreamRoutes } from "./admin/admin-upstream.routes.js";
 import { localHostname } from "@intentic/sandbox-contract";
 import { acmeChallengeHolds, CloudflareTokenError, ensureLocalDnsRecord, setAcmeChallenge } from "./sandbox/cloudflare.js";
 import { edgeCertificateFor } from "./sandbox/edge-certificate.js";
+import { hostReportHttpRoutes } from "./sandbox/host-report.js";
 import { ingressEnabled, sandboxHostname } from "./sandbox/reachability.js";
 import type { Config } from "./config.js";
 import { buildOrpcContext, type OrpcContext } from "./context.js";
@@ -211,6 +212,10 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
         await prisma.sandbox.update({ where: { id: sandbox.id }, data: { setupReport: report.data } });
         return c.text(`ok`);
     });
+
+    // What `ic sandbox fix` found on the machine a sandbox runs on: `/host-report/claim` redeems the recovery panel's fix
+    // code for the report key, `/host-report` takes a report under that key (sandbox/host-report.ts).
+    app.route(`/host-report`, hostReportHttpRoutes({ config, prisma }));
 
     // The daemon's phone-home, authenticated by the connect token; 404 for unknown tokens (no oracle).
     app.post(`/sandbox/announce`, async (c) => {

@@ -489,8 +489,11 @@ mod tests {
                 Some(key.to_owned())
             })
             .collect();
+        // The terminal's routes and the vitals route (vitals.rs), in the order the contract lists them.
         let served: Vec<String> = ROUTES
             .iter()
+            .copied()
+            .chain([("GET", browser_wire::VITALS_PATH)])
             .map(|(method, path)| format!("{method} {path}"))
             .collect();
         assert_eq!(marked, served);

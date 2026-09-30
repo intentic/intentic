@@ -2,6 +2,7 @@ pub mod backup;
 pub mod connect;
 pub mod desired;
 pub mod doctor;
+pub mod fix;
 pub mod identity;
 pub mod listing;
 pub mod lock;
@@ -66,7 +67,7 @@ pub fn live_slugs() -> Option<Vec<String>> {
 /// its own: beside the live container it is the previous version on probation and adds nothing, and alone it is a
 /// sandbox an interrupted swap left down, which every verb must still be able to find by its own name (a bare
 /// `ic sandbox update` that took `<slug>.previous` for the slug would boot it on new, empty volumes).
-fn slugs_of(names: &[String]) -> Vec<String> {
+pub(crate) fn slugs_of(names: &[String]) -> Vec<String> {
     let mut slugs: Vec<String> = Vec::new();
     for name in names.iter().filter(|name| !name.starts_with(TUNNEL_PREFIX)) {
         let Some(slug) = name.strip_prefix(CONTAINER_PREFIX) else {

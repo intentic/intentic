@@ -148,6 +148,9 @@ pub struct DockerFacts {
     pub platform_problem: Option<(String, String)>,
     /// Unix: the socket exists but this user cannot talk to it — the docker-group case.
     pub socket_needs_group: bool,
+    /// Asked, and no answer came before the deadline: an engine that is up and stuck, which "start Docker" does
+    /// not describe.
+    pub daemon_silent: bool,
     pub user: String,
 }
 
@@ -167,6 +170,16 @@ pub fn docker_outcome(facts: &DockerFacts) -> Outcome {
         }
         return Outcome::Pass;
     }
+    if facts.daemon_silent {
+        return Outcome::Fail {
+            problem: format!(
+                "Docker's engine did not answer within {} seconds — it is running but stuck.",
+                docker::ENGINE_PROBE.as_secs()
+            ),
+            remedy: "run `ic sandbox fix`, which restarts it with your consent, then re-run."
+                .to_string(),
+        };
+    }
     if facts.socket_needs_group {
         return Outcome::Fail {
             problem: "the docker daemon is running, but this user can't talk to it.".to_string(),
@@ -183,17 +196,17 @@ pub fn docker_outcome(facts: &DockerFacts) -> Outcome {
 }
 
 pub fn check_docker() -> Outcome {
-    let cli = docker::cli_present();
-    let daemon = cli && docker::daemon_reachable();
+    // One bounded round trip answers all three questions: whether it answers, what it runs, and whether it is stuck.
+    let engine = docker::engine(docker::ENGINE_PROBE);
     let facts = DockerFacts {
-        cli_present: cli,
-        daemon_reachable: daemon,
-        platform_problem: if daemon {
-            docker::wrong_container_platform(docker::server_os().as_deref())
-        } else {
-            None
+        cli_present: engine != docker::Engine::NoCli,
+        daemon_reachable: engine.up(),
+        platform_problem: match &engine {
+            docker::Engine::Up(os) => docker::wrong_container_platform(Some(os)),
+            _ => None,
         },
         socket_needs_group: socket_needs_group(),
+        daemon_silent: engine == docker::Engine::Silent,
         user: std::env::var("USER").unwrap_or_else(|_| "$USER".to_string()),
     };
     docker_outcome(&facts)
@@ -254,17 +267,21 @@ pub fn parse_df_avail(df_output: &str) -> Option<u64> {
 pub fn check_disk() -> Outcome {
     // Native Linux stores images under DockerRootDir; Docker Desktop's root lives inside its VM, whose
     // backing file grows on the host disk — so when the reported root is not a local path, measure `/`.
-    let root = docker::try_capture(&["info", "-f", "{{.DockerRootDir}}"])
+    let root = docker::ask(&["info", "-f", "{{.DockerRootDir}}"], docker::READ_LIMIT)
+        .said()
         .map(|dir| dir.trim().to_string())
         .filter(|dir| std::path::Path::new(dir).exists())
         .unwrap_or_else(|| "/".to_string());
-    let output = std::process::Command::new("df")
-        .args(["-Pk", &root])
-        .output()
+    disk_outcome(free_kib(&root), &root)
+}
+
+/// Available KiB under `path`, off `df -Pk`, bounded: a stuck network mount must not stall a diagnosis.
+#[cfg(unix)]
+pub fn free_kib(path: &str) -> Option<u64> {
+    docker::run_bounded("df", &["-Pk", path], std::time::Duration::from_secs(10))
         .ok()
-        .filter(|out| out.status.success())
-        .and_then(|out| String::from_utf8(out.stdout).ok());
-    disk_outcome(output.as_deref().and_then(parse_df_avail), &root)
+        .filter(|ran| ran.code == Some(0))
+        .and_then(|ran| parse_df_avail(&ran.stdout))
 }
 
 /// Windows measures its own free space inside [`check_windows`], which probes the machine once for a dozen
@@ -441,6 +458,7 @@ mod tests {
             daemon_reachable: true,
             platform_problem: None,
             socket_needs_group: false,
+            daemon_silent: false,
             user: "dev".into(),
         };
         assert!(matches!(docker_outcome(&base), Outcome::Pass));
@@ -474,6 +492,18 @@ mod tests {
             }
             _ => panic!("platform mismatch must fail"),
         }
+        // A stuck engine is named as stuck, with the command that restarts it, never as "start Docker".
+        match docker_outcome(&DockerFacts {
+            daemon_reachable: false,
+            daemon_silent: true,
+            ..base_clone(&base)
+        }) {
+            Outcome::Fail { problem, remedy } => {
+                assert!(problem.contains("running but stuck"));
+                assert!(remedy.contains("ic sandbox fix"));
+            }
+            _ => panic!("a silent engine must fail"),
+        }
     }
 
     fn base_clone(facts: &DockerFacts) -> DockerFacts {
@@ -482,6 +512,7 @@ mod tests {
             daemon_reachable: facts.daemon_reachable,
             platform_problem: facts.platform_problem.clone(),
             socket_needs_group: facts.socket_needs_group,
+            daemon_silent: facts.daemon_silent,
             user: facts.user.clone(),
         }
     }

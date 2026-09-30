@@ -6,6 +6,7 @@ The platform's HTTP server (`@intentic/api`): sign-in, the registry of sandboxes
 flowchart LR
     spa["web SPA"] -- "/rpc · /api/auth" --> api(["api"])
     daemon["Sandbox daemon"] -- "claim · announce" --> api
+    host["ic sandbox fix<br/>on the owner's machine"] -- "/host-report" --> api
     ingress["ingress"] -- "/api/reachability/:id" --> api
     stripe["Stripe"] -- "webhook" --> api
     api --> db[("Postgres")]
@@ -87,6 +88,23 @@ flowchart LR
   change went on.
 - A daemon's announce may name its `version` (semver, at most 64 characters). It is stored on the sandbox row
   (`daemonVersion`), and an announce that names none, or something else, clears it.
+- A sandbox on its owner's own machine can be reported on from outside it, for when the browser cannot reach it
+  (`src/sandbox/host-report.ts`). `ic sandbox fix` checks the machine (Docker, WSL, disk, container, daemon, tunnel)
+  and posts what it found to `POST /host-report` as `{ sandbox, report }` (`HostReportPostSchema`: the 12-hex tunnel
+  id and the report), with `Authorization: Bearer <report key>`. The platform stamps `at` and keeps only the latest on
+  the row (`hostReport`), which `sandbox.list` puts on the owner's summary of an own-machine sandbox and on no member's
+  or hosted row. It answers 204 for a report stored, 400 for a malformed body, 401 alike for a wrong key and an unknown
+  sandbox, and 404 for a hosted one. A report with the same `stage` and `outcome` as the stored one, less than two
+  seconds after it, is skipped and still answered 204, so `ic` never retries.
+- The report key is lowercase hex HMAC-SHA256 over `intentic/host-report/v1` (`HOST_REPORT_KEY_LABEL`), keyed with
+  the connect token. `ic` derives it from the container's env and keeps it, so the machine agent's own runs report
+  with no code. The platform derives it from the token it keeps encrypted and compares in constant time, and it
+  grants that one write and nothing else. The recovery panel's command carries a fix code instead
+  (`sandbox.fixCode`: owner-only, NOT_FOUND for a hosted or removed sandbox, thirty minutes, the setup code's
+  generator, each mint replacing the last), which `ic` redeems at `POST /host-report/claim` (`{ code }`) for
+  `{ sandbox, key }`. The code stays redeemable until it expires; unknown, expired, removed and hosted all answer 404.
+  Neither route is rate-limited, as no route of this app is, and a fix code carries the setup code's 65 bits. Releasing
+  a hosted machine rotates the connect token, so it clears both columns with the setup ones.
 - Deleting an account runs one erase path whichever side asks (`src/account-erase.ts`): Better Auth's `beforeDelete`
   for the owner's own deletion, `deleteUserAccount` for an operator's. Before the cascade, in one transaction, it queues
   every Fly app the account owns (live machines, trashed sandboxes, a release's held volume, a provision in flight)

@@ -131,6 +131,101 @@
     },
     "upgrade": "websocket"
   },
+  "vitals": {
+    "body": {
+      "$defs": {
+        "NodeLink": {
+          "description": "Where the front's control link to Node stands.",
+          "oneOf": [
+            {
+              "const": "starting",
+              "description": "Node has not said hello since the container started.",
+              "type": "string"
+            },
+            {
+              "const": "up",
+              "description": "Node's control link is open and it said hello on it.",
+              "type": "string"
+            },
+            {
+              "const": "restarting",
+              "description": "Node was up or was restarted before, and is not up now: its link dropped, or its process exited and the front is\nstarting it again.",
+              "type": "string"
+            }
+          ]
+        },
+        "Pressure": {
+          "description": "The share of the last 10 seconds, as a percentage, in which some of the container's tasks stalled waiting for each\nresource: cgroup v2's `some avg10` from `cpu.pressure`, `memory.pressure` and `io.pressure`.",
+          "properties": {
+            "cpu": {
+              "format": "float",
+              "type": "number"
+            },
+            "io": {
+              "format": "float",
+              "type": "number"
+            },
+            "memory": {
+              "format": "float",
+              "type": "number"
+            }
+          },
+          "required": [
+            "cpu",
+            "memory",
+            "io"
+          ],
+          "type": "object"
+        }
+      },
+      "description": "The sandbox's proof of life, measured by the front and answered by it at [`VITALS_PATH`] whatever state Node is in:\nthe daemon's own heartbeat rides Node's event loop, so a sandbox busy enough to starve it would otherwise look dead.\nIt carries nothing of the workspace.",
+      "properties": {
+        "lagMs": {
+          "description": "How long Node's event loop takes to answer the front, in milliseconds: the round trip of the last ping it\nanswered, or how long the one outstanding has waited when that is longer. The front pings every 2 s, only once\nthe previous ping is answered. Null before the first ping, and while Node is not `up`.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "node": {
+          "$ref": "#/$defs/NodeLink"
+        },
+        "pressure": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Pressure"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The container's pressure stall; null where the cgroup's pressure files cannot be read."
+        },
+        "restarts": {
+          "description": "How many times the front restarted Node in the last 10 minutes.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "uptimeS": {
+          "description": "Seconds since the front, and so the container, started.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "node",
+        "restarts",
+        "uptimeS"
+      ],
+      "title": "SandboxVitals",
+      "type": "object"
+    },
+    "path": "/system/vitals"
+  },
   "webTransport": {
     "alpn": "h3",
     "path": "/system/transport"

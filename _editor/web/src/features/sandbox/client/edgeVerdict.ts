@@ -23,6 +23,12 @@ export const noteEdgeVerdict = (sandboxId: string | undefined, response: Respons
     seen = { sandboxId, verdict: edgeVerdictOf(response.headers.get(EDGE_VERDICT_HEADER)), at: Date.now() };
 };
 
+// A verdict read by a probe rather than a daemon call (diagnosis/probes.ts), so the connection machine classifies its
+// next failure on it too.
+export const noteVerdict = (sandboxId: string | undefined, verdict: EdgeVerdict): void => {
+    seen = { sandboxId, verdict, at: Date.now() };
+};
+
 // The edge's word on this sandbox, if it is recent and about this sandbox; undefined means the edge never spoke, which
 // is the ordinary case for a loopback shortcut, a self-hosted address, and every healthy connection.
 export const lastEdgeVerdict = (sandboxId: string | undefined, now = Date.now()): EdgeVerdict | undefined =>

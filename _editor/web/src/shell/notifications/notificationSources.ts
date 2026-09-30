@@ -3,7 +3,8 @@ import { plural } from "@intentic/base/format";
 import { useNow } from "@intentic/ui/async";
 import PushQuestionBody from "./PushQuestionBody.vue";
 import SandboxRecovery from "../../features/sandbox/gates/SandboxRecovery.vue";
-import { useRecoveryDue } from "../../features/sandbox/gates/useRecovery";
+import { useDiagnosisNotice, useRecoveryDue, useVisibleOutage } from "../../features/sandbox/gates/useRecovery";
+import type { DiagnosisNotice } from "../../features/sandbox/diagnosis/presentation";
 import UploadProgressBody from "../../features/workspace/files/upload/UploadProgressBody.vue";
 import { useAppUpdate, type AppUpdate } from "../../app/appUpdate";
 import { hold, type NotificationInput, type NotificationTone } from "./notifications";
@@ -18,7 +19,7 @@ import { useGoogleIdentity } from "../../features/auth/useGoogleIdentity";
 import { useSandboxSession } from "../../features/sandbox/session/sandboxSession";
 import { usePushFlow } from "../../features/workspace/push/usePushFlow";
 import { useUploadQueue } from "../../features/workspace/files/upload/useUploadQueue";
-import { useWorkspaceTree } from "../../features/workspace/explorer/useWorkspaceTree";
+import { useSandboxEstablished } from "../../features/sandbox/gates/established";
 import { t } from "@intentic/ui/i18n";
 
 // Every standing fact and open question this app floats, declared in one place as pure conditions fed to `hold`;
@@ -118,7 +119,7 @@ const uploadHeadline = (phase: UploadPhase, state: UploadState): UploadHeadline 
 // Every way a sandbox mid-swap looks from here, which is all three of them: the first half minute nobody bothers a
 // reader about, the outage past it, and the edge's own verdict that no tunnel is dialled in — true of a container
 // being replaced, and the one that used to make this card vanish twenty seconds into a restart.
-const QUIET: ReadonlySet<SandboxAvailability> = new Set([`stale`, `busy`, `detached`]);
+const QUIET: ReadonlySet<SandboxAvailability> = new Set([`stale`, `busy`, `unreachable`, `detached`]);
 
 // THE SILENCE THIS BROWSER ASKED FOR, said as soon as it starts rather than after the busy threshold. `stale` is
 // invisible by design — a reconnect shorter than 30s isn't worth a card — but that rule is about silence nobody can
@@ -131,18 +132,20 @@ export const restartCard = (restart: RestartWork | undefined, availability: Sand
         ? { kind: `condition`, tone: `info`, icon: `refresh`, spin: true, title: restart.quiet.title, detail: restart.quiet.detail }
         : undefined;
 
-// THE SILENCE THAT OUTLASTED ITS PATIENCE (gates/recovery.ts says how long that is), over a workspace that stays on
-// screen: what can still be done without the sandbox, in a body of its own. It outranks the busy and restart cards,
-// which by then are promising a wait that has not ended. Dismissed for this outage only; the next one raises it again.
-export const recoveryCard = (name: string | undefined, dismiss: () => void): NotificationInput => ({
-    kind: `condition`,
-    tone: `warning`,
-    title: t(`sandbox.sandboxRecovery.title`, { name: name ?? t(`sandbox.sandboxRecovery.yourSandbox`) }),
-    detail: t(`sandbox.sandboxRecovery.detail`),
-    body: SandboxRecovery,
-    wide: true,
-    dismiss,
-});
+// How long a sandbox the diagnosis saw ALIVE stays quiet in the lane: it is catching up, the switcher's dot already says
+// so, and a card over a workspace that is merely slow was the alarm readers learned to ignore.
+export const BUSY_CARD_AFTER_MS = 90_000;
+
+// THE OUTAGE, over a workspace that stays on screen, in the diagnosis's own words (diagnosis/presentation.ts): a wait
+// with a spinner while something is still expected to happen by itself, a warning with the recovery panel once the
+// diagnosis found a cause with a way back (`due`). Put away for this outage alone; a way back found after that raises it
+// again.
+export const diagnosisCard = (notice: DiagnosisNotice, due: boolean, dismiss: () => void): NotificationInput => {
+    const calm = notice.waiting && !due;
+    const card: NotificationInput = { kind: `condition`, tone: calm ? `info` : `warning`, title: notice.title, detail: notice.body, dismiss };
+    const spinning: NotificationInput = calm ? { ...card, icon: `spinner`, spin: true } : card;
+    return due || notice.otherActions.length > 0 ? { ...spinning, body: SandboxRecovery, wide: true } : spinning;
+};
 
 // Call order is stack order, growing up from the corner: most transient first (upload, seconds) to most permanent
 // last (a new build), so frequent changes never shove a fixed one.
@@ -152,9 +155,11 @@ export const startNotificationSources = (): void => {
     const { active, activeSandboxId, reachable, connection } = useSandbox();
     const { presentedEmail, invalidateSession, getSessionToken } = useSandboxSession();
     const { clearCredential } = useGoogleIdentity();
-    const { hasSnapshot } = useWorkspaceTree();
-    const availability = useSandboxAvailability(hasSnapshot);
-    const gated = computed(() => sandboxRequiresGate(reachable.value, hasSnapshot.value, availability.value));
+    // The gate's own reading (established.ts): a screen the gate took is its to explain, and every other screen is this
+    // lane's.
+    const established = useSandboxEstablished();
+    const availability = useSandboxAvailability(established);
+    const gated = computed(() => sandboxRequiresGate(reachable.value, established.value, availability.value));
     // How long this outage has run, on a clock that only ticks while one is running and a restart is what it might
     // be: the restart card is the only thing here that stops being true with time rather than with state.
     const timing = computed(() => !reachable.value && restartExpected(activeSandboxId.value) !== undefined);
@@ -228,40 +233,49 @@ export const startNotificationSources = (): void => {
         };
     });
 
-    // Floats over the live DOM rather than replacing it; a never-painted workspace gets a gate instead.
-    const recovering = useRecoveryDue();
-    // The outage the recovery card was put away for, by when it began.
-    const dismissedOutage = ref<number | undefined>(undefined);
+    // Floats over the live DOM rather than replacing it; a never-painted workspace gets a gate instead. One visible-outage
+    // clock for the diagnosis, the recovery panel's due-ness and the busy card's patience.
+    const outageClock = useVisibleOutage();
+    const diagnosis = useDiagnosisNotice(outageClock);
+    const recovering = useRecoveryDue(outageClock, diagnosis);
+    // The outage the card was put away for, by when it began and whether it had a way back then.
+    const dismissed = ref<string | undefined>(undefined);
     hold(`sandbox-busy`, () => {
         if (gated.value) {
             return undefined;
         }
-        const outage = connection.value.unavailableSince;
-        if (recovering.value && outage !== dismissedOutage.value) {
-            return recoveryCard(active.value?.name, () => (dismissedOutage.value = outage));
-        }
         // An expired session outranks a restart: it is the one cause here that waiting cannot repair, and it stays on
         // the threshold it has always had rather than borrowing the restart's earlier one.
         const needsSignin = connection.value.failure?.kind === `unauthenticated`;
-        const restart = needsSignin ? undefined : restartCard(restartExpected(activeSandboxId.value), availability.value, outageMs.value);
+        if (needsSignin) {
+            return availability.value === `busy` || availability.value === `unreachable`
+                ? {
+                      kind: `condition`,
+                      tone: `info`,
+                      title: t(`shell.notificationSources.sessionNeedsAttention`),
+                      detail: t(`shell.notificationSources.workspaceStillHere`),
+                      actions: [{ label: t(`shell.notificationSources.signInAgain`), severity: `secondary` as const, run: signInAgain }],
+                  }
+                : undefined;
+        }
+        const restart = restartCard(restartExpected(activeSandboxId.value), availability.value, outageMs.value);
         if (restart !== undefined) {
             return restart;
         }
-        if (availability.value !== `busy`) {
+        const notice = diagnosis.value;
+        if (notice === undefined) {
             return undefined;
         }
-        return {
-            kind: `condition`,
-            tone: `info`,
-            icon: `spinner`,
-            spin: true,
-            title: needsSignin ? t(`shell.notificationSources.sessionNeedsAttention`) : t(`shell.notificationSources.sandboxBusy`),
-            detail: needsSignin ? t(`shell.notificationSources.workspaceStillHere`) : t(`shell.notificationSources.sandboxBusyDetail`),
-            // No button for a stall the app is already healing; only an expired session needs the user to act.
-            actions: needsSignin
-                ? [{ label: t(`shell.notificationSources.signInAgain`), severity: `secondary` as const, run: signInAgain }]
-                : undefined,
-        };
+        const due = recovering.value;
+        const key = `${connection.value.unavailableSince ?? ``}:${due}`;
+        if (dismissed.value === key) {
+            return undefined;
+        }
+        // Alive: quiet for a minute and a half. Not alive: past the half minute every surface gives a reconnect.
+        const shown =
+            due ||
+            (availability.value === `busy` ? outageClock.elapsed.value >= BUSY_CARD_AFTER_MS : availability.value === `unreachable` || availability.value === `detached`);
+        return shown ? diagnosisCard(notice, due, () => (dismissed.value = key)) : undefined;
     });
 
     // Never acts on its own, no auto-reload or restart, except the desktop build's update-on-quit.

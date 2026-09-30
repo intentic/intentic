@@ -1,3 +1,4 @@
+import type { HostReport } from "@intentic/api-contract";
 import { sandboxSubdomain } from "@intentic/sandbox-contract";
 import { verifyReachabilityGrant } from "@intentic/sandbox-contract/ingress-contract";
 import { sandboxIdFromToken, sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
@@ -6,6 +7,7 @@ import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import type { OrpcContext } from "../context.js";
 import { INGRESS_TEST_PUBLIC_KEY, testIngressConfig } from "../testing.js";
 import { RECOVERY_WINDOW_MS } from "../durations.js";
+import { FIX_CODE_TTL_MS } from "./host-report.js";
 import { sandboxRoutes } from "./sandbox.routes.js";
 
 const user = { id: `u1`, email: `owner@example.com`, name: `Owner`, image: null };
@@ -653,5 +655,108 @@ describe(`sandbox.delete on a hosted sandbox`, () => {
             baseDigest: hostedMachineRow.baseDigest,
             environmentHash: hostedMachineRow.environmentHash,
         });
+    });
+});
+
+/* THE RECOVERY COMMAND'S FIX CODE: the owner's, for a sandbox on a machine of their own that is still there. */
+describe(`sandbox.fixCode`, () => {
+    const minting = (row: object = sandboxRow, hosted: { id: string } | null = null) => {
+        const update = jest.fn().mockResolvedValue({});
+        const prisma = fakePrisma({
+            sandbox: { findFirst: jest.fn().mockResolvedValue(row), update },
+            hostedMachine: { findUnique: jest.fn().mockResolvedValue(hosted) },
+        });
+        return { prisma, update };
+    };
+
+    it(`mints a code valid for thirty minutes onto the owner's row`, async () => {
+        const { prisma, update } = minting();
+        const before = Date.now();
+        const minted = await call(sandboxRoutes.fixCode, { sandboxId: `s1` }, { context: context({ prisma }) });
+        const after = Date.now();
+
+        // The setup code's generator: eleven base62 characters, safe as a shell argument.
+        expect(minted.code).toMatch(/^[0-9A-Za-z]{11}$/);
+        expect(Date.parse(minted.expiresAt)).toBeGreaterThanOrEqual(before + FIX_CODE_TTL_MS);
+        expect(Date.parse(minted.expiresAt)).toBeLessThanOrEqual(after + FIX_CODE_TTL_MS);
+        expect(FIX_CODE_TTL_MS).toBe(30 * 60 * 1000);
+        expect(update).toHaveBeenCalledTimes(1);
+        expect(update).toHaveBeenCalledWith({ where: { id: `s1` }, data: { fixCode: minted.code, fixCodeExpiresAt: new Date(minted.expiresAt) } });
+    });
+
+    it(`replaces the code on every mint`, async () => {
+        const { prisma, update } = minting();
+        const first = await call(sandboxRoutes.fixCode, { sandboxId: `s1` }, { context: context({ prisma }) });
+        const second = await call(sandboxRoutes.fixCode, { sandboxId: `s1` }, { context: context({ prisma }) });
+        expect(second.code).not.toBe(first.code);
+        expect(update).toHaveBeenLastCalledWith({ where: { id: `s1` }, data: { fixCode: second.code, fixCodeExpiresAt: new Date(second.expiresAt) } });
+    });
+
+    // A member finds no row through the owner-only gate, the same NOT_FOUND every owner-only route answers.
+    it(`is NOT_FOUND to a member, and writes nothing`, async () => {
+        const findFirst = jest.fn().mockResolvedValue(null);
+        const update = jest.fn();
+        const prisma = fakePrisma({ sandbox: { findFirst, update } });
+        await expectOrpcCode(call(sandboxRoutes.fixCode, { sandboxId: `s1` }, { context: context({ prisma, user: { ...user, id: `u2` } }) }), `NOT_FOUND`);
+        expect(findFirst).toHaveBeenCalledWith({ where: { id: `s1`, ownerId: `u2` } });
+        expect(update).not.toHaveBeenCalled();
+    });
+
+    it(`is NOT_FOUND for a hosted sandbox, and writes nothing`, async () => {
+        const { prisma, update } = minting(sandboxRow, { id: `h1` });
+        await expectOrpcCode(call(sandboxRoutes.fixCode, { sandboxId: `s1` }, { context: context({ prisma }) }), `NOT_FOUND`);
+        expect(update).not.toHaveBeenCalled();
+    });
+
+    it(`is NOT_FOUND for a sandbox whose container was removed, and writes nothing`, async () => {
+        const { prisma, update } = minting({ ...sandboxRow, removedAt: new Date(), removedBy: `rog` });
+        await expectOrpcCode(call(sandboxRoutes.fixCode, { sandboxId: `s1` }, { context: context({ prisma }) }), `NOT_FOUND`);
+        expect(update).not.toHaveBeenCalled();
+    });
+});
+
+/* WHAT THE MACHINE LAST REPORTED STAYS WITH THE OWNER, and only for a sandbox on a machine of its own. */
+describe(`sandbox.list and the host report`, () => {
+    const report: HostReport = {
+        source: `agent`,
+        machine: `rog`,
+        os: `windows`,
+        stage: `done`,
+        outcome: `needs-you`,
+        checks: [{ id: `disk`, label: `Disk space`, state: `fail`, problem: `C: has 200 MB free.`, remedy: `Free 10 GB on C:.`, fix: `you` }],
+        at: `2026-09-30T12:00:00.000Z`,
+    };
+
+    const listed = async (owned: object[], shared: object[] = []) => {
+        const prisma = fakePrisma({
+            sandbox: { findMany: jest.fn().mockResolvedValue(owned) },
+            sandboxMember: { findMany: jest.fn().mockResolvedValue(shared) },
+        });
+        const { sandboxes } = await call(sandboxRoutes.list, undefined, { context: context({ prisma }) });
+        return sandboxes.map(({ id, role, hostReport }) => ({ id, role, hostReport }));
+    };
+
+    it(`shows the report on the owner's row and null on a member's`, async () => {
+        expect(
+            await listed([{ ...sandboxRow, hostReport: report, hosted: null }], [{ role: `writer`, sandbox: { ...sandboxRow, id: `s2`, ownerId: `u2`, hostReport: report, hosted: null } }]),
+        ).toEqual([
+            { id: `s1`, role: `owner`, hostReport: report },
+            { id: `s2`, role: `writer`, hostReport: null },
+        ]);
+    });
+
+    it(`answers null for a row with none, one that no longer parses, and a hosted sandbox`, async () => {
+        const hosted = { region: `iad`, warm: false, previousImage: null };
+        expect(
+            await listed([
+                { ...sandboxRow, id: `s1`, hostReport: null, hosted: null },
+                { ...sandboxRow, id: `s2`, hostReport: { stage: `done` }, hosted: null },
+                { ...sandboxRow, id: `s3`, hostReport: report, hosted },
+            ]),
+        ).toEqual([
+            { id: `s1`, role: `owner`, hostReport: null },
+            { id: `s2`, role: `owner`, hostReport: null },
+            { id: `s3`, role: `owner`, hostReport: null },
+        ]);
     });
 });

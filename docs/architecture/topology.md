@@ -17,6 +17,7 @@ flowchart LR
     front --- daemon
     daemon -->|"announce · boot report"| api
     device -->|"outbound WebSocket"| ingress
+    device -->|"host report (ic sandbox fix)"| api
     fly -->|"outbound tunnel<br/>WSS · QUIC"| ingress
     api -.->|"power only"| fly
 ```
@@ -36,6 +37,7 @@ flowchart LR
 The platform never opens a connection to a sandbox:
 
 - The sandbox dials out: the tunnel to the ingress, and `POST /sandbox/announce` to tell the platform its URL and liveness ([`announce.ts`](../../_sandbox/sandbox/src/system/boot/announce.ts)). No inbound port or router rule is needed.
+- The machine a sandbox runs on reports on it when the sandbox cannot: `ic sandbox fix` (run by the machine agent by itself, by the recovery panel's command, or by the desktop app) posts what it found to `POST /host-report`, which is how a browser elsewhere learns that the machine is starting Docker Desktop or is out of disk. It is a report, never a request for instructions.
 - The browser and the devices dial the sandbox, through the ingress or on loopback.
 - The platform never calls a user's daemon. It flips a hosted machine's power through Fly's API, and nothing more.
 
@@ -43,7 +45,7 @@ The platform never opens a connection to a sandbox:
 
 | Party | Can | Cannot |
 | --- | --- | --- |
-| Platform | know accounts, sandbox addresses and liveness; sign reachability grants; start, stop and destroy hosted machines | relay or read ordinary agent turns; hold the credential that drives a daemon |
+| Platform | know accounts, sandbox addresses and liveness, and what a sandbox's own machine reports about it; sign reachability grants; start, stop and destroy hosted machines | relay or read ordinary agent turns; hold the credential that drives a daemon |
 | Ingress | route traffic for a sandbox holding a valid grant; read the traffic it carries, since TLS ends there | make a sandbox reachable or claim a hostname without a grant signed by the platform |
 | Daemon | authenticate its owner and members itself; run agents with the workspace's credentials | reach a device beyond the scopes that device grants |
 | Device | act on its own machine within the switches its owner set | be widened by the sandbox: scopes are enforced on the device |

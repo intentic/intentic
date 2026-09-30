@@ -343,6 +343,17 @@ export const desktopRecreateLink = (slug: string, hash?: string, rollback = fals
     return `intentic://recreate?${params.toString()}`;
 };
 
+// Runs `ic sandbox fix` for a sandbox on the machine this app runs on, in the app's own window, with nothing to paste:
+// the recovery panel's button for a reader already in the app. `code` is the fix code that lets the run report back to
+// the page (FixCodeSchema), absent where the platform minted none.
+export const desktopFixLink = (slug: string, code?: string): string => {
+    const params = new URLSearchParams({ slug });
+    if (code !== undefined && code !== ``) {
+        params.set(`code`, code);
+    }
+    return `intentic://fix?${params.toString()}`;
+};
+
 /* Page load is complete only when the document reports `readyState === "complete"`. */
 const pageLoaded = (): boolean => document.readyState === `complete`;
 

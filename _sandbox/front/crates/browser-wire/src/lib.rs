@@ -1,7 +1,7 @@
 //! Everything a browser sees of a sandbox's front and of the edge in front of it, outside the daemon's oRPC contract: a
-//! terminal socket's path and messages, the WebTransport session's path, and the verdict the edge refuses with. These
-//! are the only definition; `cargo test -p browser-wire` writes their TypeScript, and the manifest the contract's lock
-//! pins, into the contract.
+//! terminal socket's path and messages, the front's vitals, the WebTransport session's path, and the verdict the edge
+//! refuses with. These are the only definition; `cargo test -p browser-wire` writes their TypeScript, and the manifest
+//! the contract's lock pins, into the contract.
 
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -11,6 +11,10 @@ pub const TERMINAL_PATH: &str = "/system/terminal";
 
 /// The upgrade a terminal socket opens with, whichever carrier its bytes ride.
 pub const TERMINAL_UPGRADE: &str = "websocket";
+
+/// Where the front answers its [`SandboxVitals`], on a sandbox's address: a plain GET any origin may read, never
+/// forwarded to Node.
+pub const VITALS_PATH: &str = "/system/vitals";
 
 /// Where a browser opens its WebTransport session, on the address of the sandbox the session's streams reach; the edge
 /// answers it, never the sandbox.
@@ -46,6 +50,57 @@ impl EdgeVerdict {
             Self::Dropped => "dropped",
         }
     }
+}
+
+/// The sandbox's proof of life, measured by the front and answered by it at [`VITALS_PATH`] whatever state Node is in:
+/// the daemon's own heartbeat rides Node's event loop, so a sandbox busy enough to starve it would otherwise look dead.
+/// It carries nothing of the workspace.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
+#[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "browser-wire.ts")]
+pub struct SandboxVitals {
+    pub node: NodeLink,
+    /// How long Node's event loop takes to answer the front, in milliseconds: the round trip of the last ping it
+    /// answered, or how long the one outstanding has waited when that is longer. The front pings every 2 s, only once
+    /// the previous ping is answered. Null before the first ping, and while Node is not `up`.
+    pub lag_ms: Option<u32>,
+    /// How many times the front restarted Node in the last 10 minutes.
+    pub restarts: u32,
+    /// Seconds since the front, and so the container, started.
+    pub uptime_s: u32,
+    /// The container's pressure stall; null where the cgroup's pressure files cannot be read.
+    pub pressure: Option<Pressure>,
+}
+
+/// Where the front's control link to Node stands.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
+#[serde(rename_all = "kebab-case")]
+#[ts(export, export_to = "browser-wire.ts")]
+pub enum NodeLink {
+    /// Node has not said hello since the container started.
+    Starting,
+    /// Node's control link is open and it said hello on it.
+    Up,
+    /// Node was up or was restarted before, and is not up now: its link dropped, or its process exited and the front is
+    /// starting it again.
+    Restarting,
+}
+
+impl NodeLink {
+    pub const ALL: [Self; 3] = [Self::Starting, Self::Up, Self::Restarting];
+}
+
+/// The share of the last 10 seconds, as a percentage, in which some of the container's tasks stalled waiting for each
+/// resource: cgroup v2's `some avg10` from `cpu.pressure`, `memory.pressure` and `io.pressure`.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, TS)]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
+#[ts(export, export_to = "browser-wire.ts")]
+pub struct Pressure {
+    pub cpu: f32,
+    pub memory: f32,
+    pub io: f32,
 }
 
 /// What the browser sends on a terminal socket, each a JSON text message.
@@ -110,6 +165,10 @@ mod tests {
                 "client": schema::<TerminalClientMessage>(),
                 "server": schema::<TerminalServerMessage>(),
             },
+            "vitals": {
+                "path": VITALS_PATH,
+                "body": schema::<SandboxVitals>(),
+            },
             "webTransport": {
                 "path": WEBTRANSPORT_PATH,
                 "alpn": H3_ALPN,
@@ -133,6 +192,30 @@ mod tests {
                 format!("\"{}\"", verdict.name())
             );
         }
+    }
+
+    #[test]
+    fn vitals_are_the_camel_case_json_the_editor_parses_with_null_for_what_is_unknown() {
+        let vitals = SandboxVitals {
+            node: NodeLink::Restarting,
+            lag_ms: None,
+            restarts: 2,
+            uptime_s: 3600,
+            pressure: Some(Pressure {
+                cpu: 12.34,
+                memory: 0.0,
+                io: 1.5,
+            }),
+        };
+        assert_eq!(
+            serde_json::to_string(&vitals).unwrap(),
+            r#"{"node":"restarting","lagMs":null,"restarts":2,"uptimeS":3600,"pressure":{"cpu":12.34,"memory":0.0,"io":1.5}}"#
+        );
+        let spellings: Vec<String> = NodeLink::ALL
+            .iter()
+            .map(|link| serde_json::to_string(link).unwrap())
+            .collect();
+        assert_eq!(spellings, [r#""starting""#, r#""up""#, r#""restarting""#]);
     }
 
     #[test]

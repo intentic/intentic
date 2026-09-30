@@ -4,7 +4,7 @@ use crate::docker;
 use crate::record;
 use crate::sandbox::recreate::{self, Preflight};
 use crate::sandbox::{
-    desired, lock, parked_of, probation, resolve_slug, CONTAINER_PREFIX, TUNNEL_PREFIX,
+    desired, lock, mirror, parked_of, probation, resolve_slug, CONTAINER_PREFIX, TUNNEL_PREFIX,
 };
 use crate::shape::Ask;
 use crate::util::{bail, Result};
@@ -61,6 +61,20 @@ pub fn run(power: Power, slug: Option<String>) -> Result<()> {
             bail!("sandbox container {container} does not exist on this machine.");
         }
     }
+    // The report key rides on the env this verb can read now, for a later `ic sandbox fix` that cannot.
+    if let Some(env) = docker::ask(
+        &[
+            "inspect",
+            "--format",
+            "{{range .Config.Env}}{{.}}{{printf \"\\x00\"}}{{end}}",
+            &container,
+        ],
+        docker::READ_LIMIT,
+    )
+    .said()
+    {
+        crate::sandbox::fix::report::remember_from_env(&slug, env.as_bytes());
+    }
     let tunnel = format!("{TUNNEL_PREFIX}{slug}");
     // Optional: a sandbox reached over the owner's own proxy has none.
     let sidecar = docker::container_exists(&tunnel).then_some(tunnel.as_str());
@@ -90,6 +104,7 @@ pub fn run(power: Power, slug: Option<String>) -> Result<()> {
     if !refused.is_empty() {
         bail!("{}", refused.join("\n       "));
     }
+    hold(&slug, power == Power::Stop);
     let done = match power {
         Power::Start => "started",
         Power::Stop => "stopped",
@@ -104,6 +119,19 @@ pub fn run(power: Power, slug: Option<String>) -> Result<()> {
         }
     );
     Ok(())
+}
+
+/* STOPPED ON PURPOSE. A stop through ic is the owner's decision, and `ic sandbox fix` (the machine agent's `--auto`
+among its callers) must never undo it unasked; a start or restart through ic is the decision reversed. Read through
+the mirror first, so a stale record on this side is never stamped as the newest. */
+fn hold(slug: &str, held: bool) {
+    let saved = mirror::reconcile(slug);
+    if saved.held == held {
+        return;
+    }
+    if record::write(slug, &record::ChannelRecord { held, ..saved }).is_ok() {
+        mirror::push(slug);
+    }
 }
 
 fn power_one(verb: &str, name: &str) -> Result<()> {

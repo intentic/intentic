@@ -277,6 +277,22 @@ pub fn list_json() -> Result<()> {
         if let Err(err) = desired::adopt_legacy(slug, &row.name) {
             eprintln!("intentic: {}", err.0);
         }
+        // The inspect above carries the env already: keeping the report key costs a file write only when it changed.
+        if let Some(env) = inspected
+            .get(&row.name)
+            .and_then(|value| value["Config"]["Env"].as_array())
+        {
+            let value = |name: &str| {
+                env.iter()
+                    .filter_map(Value::as_str)
+                    .find_map(|pair| pair.strip_prefix(&format!("{name}=")))
+            };
+            crate::sandbox::fix::report::remember(
+                slug,
+                value("CONNECT_TOKEN"),
+                value("PLATFORM_URL"),
+            );
+        }
         if let Ok(record) = record::read(slug) {
             records.insert(slug.to_string(), record);
         }

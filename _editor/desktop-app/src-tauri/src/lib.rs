@@ -1,6 +1,7 @@
 mod agent_status;
 mod auth;
 mod commands;
+mod fix;
 mod local;
 mod project;
 mod scripts;
@@ -131,6 +132,8 @@ pub fn run() {
             commands::take_pending_docker,
             commands::take_pending_setup,
             commands::take_pending_recreate,
+            fix::take_pending_fix,
+            fix::sandbox_fix,
             commands::take_pending_sync,
             commands::sync_run,
             commands::folder_entries,

@@ -2,25 +2,20 @@ import type { SandboxSummary } from "@intentic/api-contract";
 import { type Device, hostRunningSandbox, machinesOf } from "@intentic/sandbox-contract";
 import type { CommandOs } from "@intentic/ui";
 import { bashCommand, psCommand } from "../../../app/environments/scriptCommand";
-import type { ConnectionFailure } from "../live/connection";
+import type { DiagnosisNotice } from "../diagnosis/presentation";
 
 // WHEN A SANDBOX DOESN'T COME BACK, what can still be done about it without it. Everything the recovery panel offers
-// works with the daemon down: a link the desktop app on that machine answers, a command typed there, the platform's own
-// rollback for a machine it runs, or another of the owner's sandboxes that can reach the same machine. Pure, so when it
-// shows and what it prints are checked without mounting anything (recovery.test.ts).
+// works with the daemon down: a link the desktop app on that machine answers, the one command typed there, the
+// platform's own restart and rollback for a machine it runs, or another of the owner's sandboxes that can reach the same
+// machine. WHEN it shows is the diagnosis's call (diagnosis/), never a timer's. Pure, so when it shows and what it prints
+// are checked without mounting anything (recovery.test.ts).
 
-// Patience before the panel: past the connecting gate's own minute, so it follows the "isn't answering" words rather
-// than racing them, and past the half minute a swap takes by a wide margin when this browser asked for one.
-export const RECOVERY_AFTER_MS = 2 * 60_000;
+// A restart this browser asked for is what the silence is, for this long; only past it is the way back offered.
 export const RESTART_RECOVERY_AFTER_MS = 3 * 60_000;
 
-// Silence, in the shapes a sandbox that is down produces. A sign-in, a refusal or a removal is a different screen.
-const QUIET: ReadonlySet<ConnectionFailure[`kind`]> = new Set([`network`, `timeout`, `closed`, `detached`]);
-
 export interface RecoveryInput {
-    readonly failure: ConnectionFailure | undefined;
     readonly reachable: boolean;
-    /** How long the current run of failures has lasted. */
+    /** How long the current run of failures has lasted, visibly. */
     readonly outageMs: number;
     /** A restart this browser asked for is still on record: the silence was expected, for a while. */
     readonly restartExpected: boolean;
@@ -28,52 +23,50 @@ export interface RecoveryInput {
     readonly removed: boolean;
     /** The platform refused to wake it (hours spent, hosted lane switched off): its own notice says what to do. */
     readonly refused: boolean;
-    readonly hosted: boolean;
-    /** Hosted only: the platform kept the image before the last change, so it can go back to it. */
-    readonly canRollBack: boolean;
-    /** Only the owner holds the machine, the commands and the platform's rollback. */
+    /** Only the owner holds the machine, the command and the platform's restart and rollback. */
     readonly owner: boolean;
+    /** What the diagnosis of this outage says (diagnosis/presentation.ts); undefined while there is nothing to diagnose. */
+    readonly notice: DiagnosisNotice | undefined;
 }
 
-/** Whether the recovery panel is due: the owner's sandbox has been silent past the patience its situation earns. */
+/**
+ * Whether the recovery panel is due: the diagnosis established a cause with something to do about it, or the machine
+ * reported findings. Never on a clock alone — a sandbox that is merely busy has no way back to offer, however long it
+ * takes — and never for a reader who could press none of it.
+ */
 export const recoveryDue = (input: RecoveryInput): boolean => {
-    if (input.reachable || !input.owner || input.removed || input.refused) {
+    if (input.reachable || !input.owner || input.removed || input.refused || input.notice === undefined) {
         return false;
     }
-    if (input.failure === undefined || !QUIET.has(input.failure.kind) || (input.hosted && !input.canRollBack)) {
+    if (input.restartExpected && input.outageMs < RESTART_RECOVERY_AFTER_MS) {
         return false;
     }
-    return input.outageMs >= (input.restartExpected ? RESTART_RECOVERY_AFTER_MS : RECOVERY_AFTER_MS);
+    return input.notice.action !== undefined || input.notice.findings.length > 0;
 };
 
 export interface RecoveryCommands {
     /** Back to the version before the last update. */
     readonly rollback: string;
     readonly restart: string;
-    /** Every link of the reachability chain, and what is broken: read-only. */
-    readonly doctor: string;
 }
 
 /**
- * The three commands for the machine that runs the sandbox, in its own shell's spelling. All three go through the
- * update script, which fetches the current `ic` first (the one installed may predate what is needed, and the machine
- * agent's copy is not on the PATH). With no name known, `ic`'s bare verbs, which answer for the one sandbox on a
- * machine running only one.
+ * The two single-purpose commands, for a reader who knows which one they want; everyone else gets the fix command, which
+ * offers both when they are what it finds. Both go through the update script, which fetches the current `ic` first. With
+ * no name known, `ic`'s bare verbs, which answer for the one sandbox on a machine running only one.
  */
 export const recoveryCommands = (slug: string | undefined, os: CommandOs): RecoveryCommands => {
     if (slug === undefined) {
-        return { rollback: `ic sandbox rollback`, restart: `ic sandbox restart`, doctor: `ic sandbox doctor` };
+        return { rollback: `ic sandbox rollback`, restart: `ic sandbox restart` };
     }
     return os === `windows`
         ? {
               rollback: psCommand(`updatePs1`, ``, `-Slug ${slug} -Rollback`),
               restart: psCommand(`updatePs1`, ``, `-Slug ${slug} -Restart`),
-              doctor: psCommand(`updatePs1`, ``, `-Slug ${slug} -Doctor`),
           }
         : {
               rollback: bashCommand(`update`, ``, `${slug} --rollback`),
               restart: bashCommand(`update`, ``, `${slug} --restart`),
-              doctor: bashCommand(`update`, ``, `${slug} --doctor`),
           };
 };
 

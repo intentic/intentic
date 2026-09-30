@@ -19,7 +19,8 @@ flowchart LR
 - **The machine work is shell scripts.** `scripts.rs` runs the same `connect`, `sync` and `recreate`
   scripts users can paste, resolved by basename from the bundle's `scripts/` resource directory, and streams each
   line to the launcher as a `desktop://run` event while writing a transcript. Docker is reached through its CLI,
-  with no Docker library in the crate.
+  with no Docker library in the crate. The one run of `ic` itself rather than a script is `fix.rs`'s
+  `ic sandbox fix`, streamed the same way and stopped after ten minutes.
 - **Talking back to pages.** The workspace learns it is inside the app from `window.__INTENTIC_DESKTOP__`, set by
   an initialization script, and hears about updates and setups through `intentic-desktop-update` and
   `intentic-desktop-setup` DOM events. A local window learns its folder from `window.__INTENTIC_LOCAL__` (local.rs)

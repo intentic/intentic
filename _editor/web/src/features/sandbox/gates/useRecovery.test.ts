@@ -1,5 +1,6 @@
 import "@intentic/testing/dom";
-import { effectScope, nextTick, ref } from "vue";
+import { computed, effectScope, nextTick, ref } from "vue";
+import type { DiagnosisNotice } from "../diagnosis/presentation";
 
 const clock = ref(0);
 const reachable = ref(false);
@@ -10,6 +11,7 @@ const activeWakeRefused = ref(undefined);
 jest.mock("@intentic/ui/async", () => ({ useNow: () => clock }));
 jest.mock("../client/useSandbox", () => ({ useSandbox: () => ({ active, connection, reachable, activeWakeRefused }) }));
 jest.mock("../live/sandboxRestart", () => ({ restartExpected: () => undefined }));
+jest.mock("../diagnosis/useDiagnosis", () => ({ useDiagnosis: () => computed(() => undefined) }));
 const { useRecoveryDue, useVisibleOutage } = await import("./useRecovery");
 
 it(`excludes hidden time and waits for a failed reconnect after wake`, async () => {
@@ -19,7 +21,21 @@ it(`excludes hidden time and waits for a failed reconnect after wake`, async () 
     Object.defineProperty(document, `visibilityState`, { configurable: true, get: () => visible ? `visible` : `hidden` });
     const nowSpy = jest.spyOn(Date, `now`).mockImplementation(() => now);
     const scope = effectScope();
-    const state = scope.run(() => ({ due: useRecoveryDue(), outage: useVisibleOutage() }))!;
+    // A diagnosis with a way back, so the only thing left deciding is whether a failure was seen since the page woke.
+    const wayBack: DiagnosisNotice = {
+        title: `box isn't connected`,
+        body: ``,
+        waiting: false,
+        tone: `warning`,
+        chain: [],
+        action: `fix`,
+        otherActions: [],
+        findings: [],
+    };
+    const state = scope.run(() => {
+        const outage = useVisibleOutage();
+        return { due: useRecoveryDue(outage, computed(() => wayBack)), outage };
+    })!;
     try {
         now = 10_000;
         clock.value = now;

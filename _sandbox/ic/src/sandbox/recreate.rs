@@ -721,6 +721,10 @@ fn recreate(
             .rolled_back_from
             .clone()
             .filter(|given_up| Some(given_up) != target_version.as_ref()),
+        // Started by this very recreate, so no longer stopped on purpose; the report key outlives any image.
+        held: false,
+        report_key: saved.report_key.clone(),
+        report_platform: saved.report_platform.clone(),
         // Reshape reuses the staged image because it does not build one.
         ..(if reshaping {
             saved.clone()

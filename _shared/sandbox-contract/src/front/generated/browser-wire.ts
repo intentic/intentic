@@ -6,6 +6,42 @@
 export type EdgeVerdict = "no-tunnel" | "unknown-sandbox" | "dropped";
 
 /**
+ * Where the front's control link to Node stands.
+ */
+export type NodeLink = "starting" | "up" | "restarting";
+
+/**
+ * The share of the last 10 seconds, as a percentage, in which some of the container's tasks stalled waiting for each
+ * resource: cgroup v2's `some avg10` from `cpu.pressure`, `memory.pressure` and `io.pressure`.
+ */
+export type Pressure = { cpu: number, memory: number, io: number, };
+
+/**
+ * The sandbox's proof of life, measured by the front and answered by it at [`VITALS_PATH`] whatever state Node is in:
+ * the daemon's own heartbeat rides Node's event loop, so a sandbox busy enough to starve it would otherwise look dead.
+ * It carries nothing of the workspace.
+ */
+export type SandboxVitals = { node: NodeLink, 
+/**
+ * How long Node's event loop takes to answer the front, in milliseconds: the round trip of the last ping it
+ * answered, or how long the one outstanding has waited when that is longer. The front pings every 2 s, only once
+ * the previous ping is answered. Null before the first ping, and while Node is not `up`.
+ */
+lagMs: number | null, 
+/**
+ * How many times the front restarted Node in the last 10 minutes.
+ */
+restarts: number, 
+/**
+ * Seconds since the front, and so the container, started.
+ */
+uptimeS: number, 
+/**
+ * The container's pressure stall; null where the cgroup's pressure files cannot be read.
+ */
+pressure: Pressure | null, };
+
+/**
  * What the browser sends on a terminal socket, each a JSON text message.
  */
 export type TerminalClientMessage = { "type": "input", data: string, } | { "type": "resize", cols: number, rows: number, } | { "type": "ping" };

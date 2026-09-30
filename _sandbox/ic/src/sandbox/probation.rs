@@ -345,7 +345,7 @@ impl Report {
         value.to_string()
     }
 
-    fn sentence(&self) -> String {
+    pub(crate) fn sentence(&self) -> String {
         let what = match self.action {
             "none" => "nothing to do".to_string(),
             "watching" => "on probation, watching".to_string(),
