@@ -5,6 +5,7 @@ import { basename, dirname, extname, join } from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { errnoCode } from "@intentic/base/errors";
+import { decodeUtf16Window, UTF16_PROBE, utf16ByBom } from "@intentic/base/utf16-text";
 import { nodeStream, webStream } from "@intentic/base/web-stream";
 
 // Reads and writes of one file, with the daemon's semantics for /work (_sandbox/sandbox/src/workspace/files/
@@ -96,6 +97,16 @@ export const readWindow = async (abs: string, offset = 0, limit = MAX_TEXT_BYTES
         const size = found.size;
         const window = Math.min(Math.max(limit, 0), MAX_TEXT_BYTES);
         const from = Math.min(offset < 0 ? Math.max(size + offset, 0) : offset, size);
+        // UTF-16 behind a BOM (Windows' desktop.ini) is text too. It is lossy all the same: a save writes UTF-8.
+        const head = Buffer.alloc(2);
+        await handle.read(head, 0, 2, 0);
+        const utf16 = utf16ByBom(head);
+        if (utf16 !== undefined) {
+            const probe = Math.min(from, UTF16_PROBE);
+            const buffer = Buffer.alloc(Math.min(window, size - from) + probe);
+            const { bytesRead } = await handle.read(buffer, 0, buffer.length, from - probe);
+            return { ...decodeUtf16Window(buffer.subarray(0, bytesRead), probe, from, size, utf16), size, lossy: true };
+        }
         // One byte before the window tells a read that starts mid-line from one at a line's start; not returned.
         const probe = from > 0 ? 1 : 0;
         const buffer = Buffer.alloc(Math.min(window, size - from) + probe);

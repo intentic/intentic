@@ -3,6 +3,7 @@ import { cp, mkdir, open, readFile, rename, rm, stat, utimes, writeFile } from "
 import { dirname } from "node:path";
 import { openWorkspaceFileRange } from "./workspace-files-download.js";
 import { errnoCode, isMissing } from "@intentic/base/errors";
+import { decodeUtf16Window, UTF16_PROBE, utf16ByBom } from "@intentic/base/utf16-text";
 
 // A workspace file's text whole, for callers that bound their own read size; undefined only when missing or a
 // directory, and any other failure throws, so a read-modify-write never replaces content it could not read.
@@ -27,6 +28,8 @@ export interface WorkspaceFileWindow {
     readonly size: number;
     readonly offset: number;
     readonly bytes: number;
+    // Not UTF-8 (a UTF-16 file behind its BOM): the editor shows it read-only, since a save would write UTF-8.
+    readonly lossy?: true;
 }
 
 // A utf8 continuation byte (0b10xxxxxx): the middle of a character, never a cut point.
@@ -78,6 +81,16 @@ export const readWorkspaceFileWindow = async (absPath: string, offset = 0, limit
         const { size } = await handle.stat();
         const window = Math.min(Math.max(limit, 0), MAX_TEXT_BYTES);
         const from = Math.min(offset < 0 ? Math.max(size + offset, 0) : offset, size);
+        // UTF-16 behind a BOM (Windows' desktop.ini) is text, not the NUL-riddled binary a UTF-8 decode makes of it.
+        const head = Buffer.alloc(2);
+        await handle.read(head, 0, 2, 0);
+        const utf16 = utf16ByBom(head);
+        if (utf16 !== undefined) {
+            const probe = Math.min(from, UTF16_PROBE);
+            const buffer = Buffer.alloc(Math.min(window, size - from) + probe);
+            const { bytesRead } = await handle.read(buffer, 0, buffer.length, from - probe);
+            return { ...decodeUtf16Window(buffer.subarray(0, bytesRead), probe, from, size, utf16), size, lossy: true };
+        }
         // One byte before the window tells asked-mid-line from asked-at-line-start; excluded from the returned content.
         const probe = from > 0 ? 1 : 0;
         const buffer = Buffer.alloc(Math.min(window, size - from) + probe);

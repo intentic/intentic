@@ -149,6 +149,17 @@
                 "default": "./dist/plain-text.js"
             }
         },
+        "./utf16-text": {
+            "types": "./dist/utf16-text.d.ts",
+            "import": {
+                "@intentic/src": "./src/utf16-text.ts",
+                "default": "./dist/utf16-text.js"
+            },
+            "require": {
+                "@intentic/src": "./src/utf16-text.ts",
+                "default": "./dist/utf16-text.js"
+            }
+        },
         "./held": {
             "types": "./dist/held.d.ts",
             "import": {

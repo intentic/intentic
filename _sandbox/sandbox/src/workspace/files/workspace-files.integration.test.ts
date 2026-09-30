@@ -17,6 +17,16 @@ test("readWorkspaceFileWindow serves a small file whole, and says so", async () 
     await rm(dir, { recursive: true, force: true });
 });
 
+// Windows writes desktop.ini as UTF-16 behind a BOM: decoded as UTF-8 every other byte was a NUL, which the editor
+// took for binary. Lossy, since the editor saves UTF-8 and must not offer to write that over it.
+test("readWorkspaceFileWindow reads a UTF-16 file behind its BOM as text, marked lossy", async () => {
+    const text = "\r\n[.ShellClassInfo]\r\nIconIndex=-235\r\n";
+    const bytes = Buffer.concat([Uint8Array.from([0xff, 0xfe]), Buffer.from(text, "utf16le")]);
+    const { dir, path } = await fileWith("desktop.ini", bytes);
+    expect(await readWorkspaceFileWindow(path)).toEqual({ content: text, size: bytes.length, offset: 0, bytes: bytes.length, lossy: true });
+    await rm(dir, { recursive: true, force: true });
+});
+
 test("readWorkspaceFileWindow bounds the read to `limit` and reports the file's TOTAL size", async () => {
     // 100 lines of 10 bytes. A 25-byte window can only hold two whole ones.
     const lines = Array.from({ length: 100 }, (_, i) => `line-${String(i).padStart(3, "0")}`).join("\n");

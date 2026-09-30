@@ -33,6 +33,17 @@ describe(`readWindow`, () => {
         writeFileSync(join(dir, `utf8.txt`), `café\n`);
         expect(await readWindow(join(dir, `utf8.txt`))).toEqual({ content: `café\n`, size: 6, offset: 0, bytes: 6 });
     });
+
+    // Windows writes desktop.ini as UTF-16 behind a BOM; decoded as UTF-8 it was every other byte a NUL, which the
+    // editor took for a binary file. It reads as its text, lossy since a save would write it back as UTF-8.
+    it(`reads a UTF-16 file behind its BOM as text`, async () => {
+        const text = `\r\n[.ShellClassInfo]\r\nIconIndex=-235\r\n`;
+        const bytes = Buffer.concat([Uint8Array.from([0xff, 0xfe]), Buffer.from(text, `utf16le`)]);
+        writeFileSync(join(dir, `desktop.ini`), bytes);
+        expect(await readWindow(join(dir, `desktop.ini`))).toEqual({ content: text, size: bytes.length, offset: 0, bytes: bytes.length, lossy: true });
+        const tail = await readWindow(join(dir, `desktop.ini`), -32);
+        expect(tail?.content).toBe(`IconIndex=-235\r\n`);
+    });
 });
 
 describe(`writeFileWhole`, () => {
