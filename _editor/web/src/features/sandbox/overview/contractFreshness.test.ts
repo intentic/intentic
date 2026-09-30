@@ -1,4 +1,4 @@
-import { SANDBOX_ROUTE_SHAPES } from "@intentic/sandbox-contract";
+import { sandboxRouteFingerprints } from "@intentic/sandbox-contract";
 import { stubGlobal, unstubAllGlobals, mocked } from "@intentic/testing/bun";
 import { contractUncompiled, readContractFreshness, resetContractFreshness, uncompiledRoutes } from "./contractFreshness";
 
@@ -13,28 +13,28 @@ const serve = (body: unknown, ok = true): void => {
     );
 };
 
-const someRoute = Object.keys(SANDBOX_ROUTE_SHAPES)[0]!;
+const someRoute = Object.keys(sandboxRouteFingerprints())[0]!;
 
 beforeEach(() => resetContractFreshness());
 
 afterEach(() => unstubAllGlobals());
 
 it(`reports nothing uncompiled while the compiled contract matches this app's`, async () => {
-    serve({ compiled: { ...SANDBOX_ROUTE_SHAPES } });
+    serve({ compiled: { ...sandboxRouteFingerprints() } });
     await readContractFreshness();
     expect(uncompiledRoutes.value).toEqual([]);
     expect(contractUncompiled.value).toBe(false);
 });
 
 it(`names a route the compiled contract shapes differently`, async () => {
-    serve({ compiled: { ...SANDBOX_ROUTE_SHAPES, [someRoute]: `stale` } });
+    serve({ compiled: { ...sandboxRouteFingerprints(), [someRoute]: `stale` } });
     await readContractFreshness();
     expect(uncompiledRoutes.value).toEqual([someRoute]);
     expect(contractUncompiled.value).toBe(true);
 });
 
 it(`counts a route the compiled contract does not have yet`, async () => {
-    const { [someRoute]: _dropped, ...withoutIt } = SANDBOX_ROUTE_SHAPES;
+    const { [someRoute]: _dropped, ...withoutIt } = sandboxRouteFingerprints();
     serve({ compiled: withoutIt });
     await readContractFreshness();
     expect(uncompiledRoutes.value).toEqual([someRoute]);
@@ -58,7 +58,7 @@ it(`leaves the question open when the fetch itself fails`, async () => {
 });
 
 it(`asks once per page, however many disagreements arrive`, async () => {
-    serve({ compiled: { ...SANDBOX_ROUTE_SHAPES } });
+    serve({ compiled: { ...sandboxRouteFingerprints() } });
     await readContractFreshness();
     await readContractFreshness();
     await readContractFreshness();

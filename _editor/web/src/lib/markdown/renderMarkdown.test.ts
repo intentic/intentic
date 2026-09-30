@@ -573,3 +573,19 @@ describe(`document metadata`, () => {
         expect(prose(stream.render(POST))).toContain(`md-frontmatter`);
     });
 });
+
+// Finished prose parses once per window, not once per mount: a chat reopened, a phone switching tabs, a page of older
+// turns — each used to parse every message again. Only while the tree its links resolved against stands.
+describe(`finished prose across mounts`, () => {
+    it(`parses the same words once for every surface showing them`, () => {
+        const words = `Parsed once across mounts: \`src/app/main.ts\` changed.`;
+        const before = markdownParseCount();
+        void useMarkdown(words, false).value;
+        void useMarkdown(words, false).value;
+        expect(markdownParseCount() - before).toBe(1);
+
+        // Whose workspace the words are about is part of what a parse means: another agent's copy links elsewhere.
+        void useMarkdown(words, false, `agent-2`).value;
+        expect(markdownParseCount() - before).toBe(2);
+    });
+});

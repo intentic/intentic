@@ -8,6 +8,7 @@ import {
     CONTINUATIONS,
     continuationKind,
     currentChecklist,
+    lastTurns,
     liveBubbleOf,
     recordedRows,
     repeatedChecklistIds,
@@ -239,4 +240,63 @@ it(`names the app's own continuations word for word, and nothing a person typed`
     expect(continuationKind(CONTINUATIONS.afterDenial)).toBe(`afterDenial`);
     expect(continuationKind(`continue`)).toBe(undefined);
     expect(continuationKind(`Continue, but skip the tests`)).toBe(undefined);
+});
+
+// A streamed reply regroups the transcript on every frame: the turns it did not touch must come back as the same objects,
+// or every settled row keyed on them redraws per frame.
+describe(`turnsOf across frames`, () => {
+    const asked: ChatMessage = { id: 1, role: `user`, text: `fix it` };
+    const answered: ChatMessage = { id: 2, role: `assistant`, text: `done` };
+    const again: ChatMessage = { id: 3, role: `user`, text: `and the test` };
+
+    it(`hands back a turn whose rows are the very same objects, and rebuilds the one that grew`, () => {
+        const writing: ChatMessage = { id: 4, role: `assistant`, text: `on it` };
+        const first = turnsOf([asked, answered, again, writing]);
+        const grown: ChatMessage = { ...writing, text: `on it, running` };
+        const next = turnsOf([asked, answered, again, grown], first);
+
+        expect(next[0]).toBe(first[0]);
+        expect(next[1]).not.toBe(first[1]);
+        expect(next[1]?.messages).toEqual([again, grown]);
+    });
+});
+
+describe(`checklistViewsOf across frames`, () => {
+    it(`keeps a delta equal to the one drawn last frame`, () => {
+        const before: TodoItem[] = [{ content: `Build`, status: `in_progress` }];
+        const after: TodoItem[] = [{ content: `Build`, status: `completed` }];
+        const rows: ChatMessage[] = [
+            { id: 1, role: `user`, text: `go` },
+            { id: 2, role: `assistant`, text: ``, todos: before },
+            { id: 3, role: `assistant`, text: ``, todos: after },
+            { id: 4, role: `assistant`, text: ``, todos: [...after] },
+        ];
+        const first = checklistViewsOf(turnsOf(rows), new Set());
+        const next = checklistViewsOf(turnsOf(rows.map((row) => ({ ...row }))), new Set(), first);
+
+        expect([...next.keys()]).toEqual([...first.keys()]);
+        expect([...next.entries()].filter(([id, view]) => view !== first.get(id))).toEqual([]);
+    });
+});
+
+// A phone's first paint of a chat is its last few turns, not the mirror's whole tail.
+describe(`lastTurns`, () => {
+    const rows: ChatMessage[] = [
+        { id: 1, role: `user`, text: `one` },
+        { id: 2, role: `assistant`, text: `a` },
+        { id: 3, role: `user`, text: `two` },
+        { id: 4, role: `assistant`, text: `b` },
+        { id: 5, role: `user`, text: `three` },
+        { id: 6, role: `assistant`, text: `c` },
+    ];
+
+    it(`starts at the prompt of the turn that many turns from the end`, () => {
+        expect(lastTurns(rows, 2).map((row) => row.id)).toEqual([3, 4, 5, 6]);
+        expect(lastTurns(rows, 1).map((row) => row.id)).toEqual([5, 6]);
+    });
+
+    it(`is the whole transcript when it holds no more turns than asked`, () => {
+        expect(lastTurns(rows, 3)).toBe(rows);
+        expect(lastTurns(rows, 9)).toBe(rows);
+    });
 });

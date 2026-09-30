@@ -1,4 +1,5 @@
 import type { AgentHarness, AgentProvider, TranscriptRow, TranscriptTool } from "@intentic/sandbox-contract";
+import { useDevice } from "@intentic/ui";
 import { queryClient, UNPERSISTED } from "../../../lib/queryPersistence";
 import { orRefusal, SandboxHttpError } from "../../sandbox/client/sandboxHttpError";
 import { sandboxRpc } from "../../sandbox/client/sandboxRpc";
@@ -33,8 +34,17 @@ const boundSession = (body: { sessionId?: string; provider?: AgentProvider; harn
         ? { id: body.sessionId, provider: body.provider, harness: body.harness, account: body.account }
         : undefined;
 
+// A PHONE OPENS A CHAT ON ITS LAST FEW TURNS. The daemon's default page is the last 20 turns, up to 400 rows and 2 MB,
+// and every row of it was parsed, rendered and laid out before the chat answered a tap: on a Galaxy S10 that was
+// seconds of frozen screen (INP from the field, 0.5–1.6s of it inside the tap). The rest is one "Load earlier" away, and
+// the board's read-ahead warms these same smaller pages over the phone's own connection. Only the opening page is
+// narrowed: a reader who asked for earlier turns gets the daemon's full page per press.
+export const PHONE_TURNS = 4;
+
 const read = async (conversationId: string, at: string | undefined, before?: number): Promise<AgentTranscript> => {
-    const page = await orRefusal(sandboxRpc.agents.transcript({ id: conversationId, before }, { context: { at } }));
+    const opening = before === undefined && useDevice().mobile.value;
+    const ask = opening ? { id: conversationId, before, turns: PHONE_TURNS } : { id: conversationId, before };
+    const page = await orRefusal(sandboxRpc.agents.transcript(ask, { context: { at } }));
     if (page instanceof SandboxHttpError) {
         // Every supported daemon serves the route, so a 404 is the conversation, not the route.
         if (page.status === 404) {

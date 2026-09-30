@@ -113,7 +113,26 @@ const deltaOf = (before: readonly TodoItem[], after: readonly TodoItem[]): Check
 
 // Keyed by message id; a message absent from the map draws its list in full, so an unmapped snapshot degrades to the
 // unabridged rendering rather than to nothing. `repeated` messages are skipped because they are never drawn.
-export const checklistViewsOf = (turns: readonly ChatTurn[], repeated: ReadonlySet<number>): Map<number, ChecklistView> => {
+// A checklist delta is a fresh object on every rebuild, and rows memoise on their view: `drawn` hands back the last
+// map, whose equal views are kept so only a row whose checklist actually moved redraws on a streamed frame.
+const sameView = (a: ChecklistView, b: ChecklistView): boolean => a === b || JSON.stringify(a) === JSON.stringify(b);
+
+// Swaps each view for last frame's where the two are equal, so a row keyed on its view keeps its memo.
+const keepEqualViews = (views: Map<number, ChecklistView>, drawn: ReadonlyMap<number, ChecklistView>): Map<number, ChecklistView> => {
+    for (const [id, view] of views) {
+        const was = drawn.get(id);
+        if (was !== undefined && was !== view && sameView(was, view)) {
+            views.set(id, was);
+        }
+    }
+    return views;
+};
+
+export const checklistViewsOf = (
+    turns: readonly ChatTurn[],
+    repeated: ReadonlySet<number>,
+    drawn?: ReadonlyMap<number, ChecklistView>,
+): Map<number, ChecklistView> => {
     const views = new Map<number, ChecklistView>();
     for (const turn of turns) {
         // Reset per turn, not per conversation: a new prompt re-states the whole list once to orient the reader.
@@ -138,7 +157,7 @@ export const checklistViewsOf = (turns: readonly ChatTurn[], repeated: ReadonlyS
             views.set(latest, FULL);
         }
     }
-    return views;
+    return drawn === undefined ? views : keepEqualViews(views, drawn);
 };
 
 /* A file the user attached to a turn, already uploaded to the workspace before send, as the COMPOSER holds it. */
@@ -260,6 +279,22 @@ export const continuationFor = (messages: readonly ChatMessage[]): string =>
 // nudge, an errand is a prompt the app composed on their behalf (errands.ts).
 export const foldsIntoTurn = (message: ChatMessage): boolean => isAcknowledgment(message) || errandOf(message) !== undefined;
 
+// The rows of the last `count` turns: where a phone's first paint of a chat starts (agentTranscript.ts, PHONE_TURNS), so
+// the local mirror does not draw 300 rows ahead of a record that will draw a few turns.
+export const lastTurns = (messages: readonly ChatMessage[], count: number): readonly ChatMessage[] => {
+    let opened = 0;
+    for (let index = messages.length - 1; index > 0; index -= 1) {
+        const message = messages[index]!;
+        if (message.role === `user` && !foldsIntoTurn(message)) {
+            opened += 1;
+            if (opened === count) {
+                return messages.slice(index);
+            }
+        }
+    }
+    return messages;
+};
+
 // The checklist as it stands now: the last snapshot of the LAST turn only. Scoped that way so a finished turn's list
 // keeps standing while the reader looks at it, but an unrelated later prompt clears it instead of pinning a stale one.
 export const currentChecklist = (messages: readonly ChatMessage[]): readonly TodoItem[] | undefined => {
@@ -278,7 +313,13 @@ export const currentChecklist = (messages: readonly ChatMessage[]): readonly Tod
 // Shared by turns that fold nothing, so the renderer gets the same array each rebuild, not a fresh equal one.
 const NOTHING_FOLDED: readonly ChatMessage[] = [];
 
-export const turnsOf = (messages: readonly ChatMessage[]): ChatTurn[] => {
+const sameRows = (a: readonly ChatMessage[], b: readonly ChatMessage[]): boolean => a.length === b.length && a.every((message, index) => message === b[index]);
+
+// `previous` is the last grouping of the same transcript: a turn whose rows are the very same objects comes back as the
+// very same turn, and a changed turn keeps its old `folded` array when it folds the same messages. A streamed reply
+// rebuilds this grouping on every frame, and a fresh turn object (or a fresh equal `folded`) re-renders the rows of every
+// settled turn keyed on it; comparing row identities is a pointer walk, rendering them is not.
+export const turnsOf = (messages: readonly ChatMessage[], previous: readonly ChatTurn[] = []): ChatTurn[] => {
     const turns: { id: number; messages: ChatMessage[]; folded: readonly ChatMessage[] }[] = [];
     for (const message of messages) {
         const open = turns.at(-1);
@@ -292,7 +333,20 @@ export const turnsOf = (messages: readonly ChatMessage[]): ChatTurn[] => {
             open.folded = open.folded === NOTHING_FOLDED ? [message] : [...open.folded, message];
         }
     }
-    return turns;
+    if (previous.length === 0) {
+        return turns;
+    }
+    const before = new Map(previous.map((turn) => [turn.id, turn]));
+    return turns.map((turn) => {
+        const was = before.get(turn.id);
+        if (was === undefined) {
+            return turn;
+        }
+        if (sameRows(was.messages, turn.messages)) {
+            return was;
+        }
+        return turn.folded !== NOTHING_FOLDED && sameRows(was.folded, turn.folded) ? { ...turn, folded: was.folded } : turn;
+    });
 };
 
 // Bubble a live turn is writing into, found by scanning back to the last USER row, not the last assistant row anywhere,

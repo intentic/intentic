@@ -15,6 +15,7 @@ import { agentSeed } from "../../fleet/useAgents-actions";
 import type { FleetAgent } from "../../fleet/useAgents-fleet";
 import type { ViewEvent } from "./boardView";
 import { paneAsk, paneRange, useCardFocus, useCardRing } from "./cardSelection";
+import { afterPaint } from "../../../../lib/afterPaint";
 
 // Pins which card the board points at and what a press on one asks of the chat: the ring follows the chat unless a
 // link's flash outranks it, a plain click is a look, a modified one composes panes, another box's card opens its
@@ -171,7 +172,7 @@ describe(`a press on a card`, () => {
     };
     const [a1, a2, a3] = [card(`a1`), card(`a2`), card(`a3`)];
 
-    it(`opens a look on a plain click, walking to the agent's page only on a phone`, () => {
+    it(`opens a look on a plain click, walking to the agent's page only on a phone`, async () => {
         const board = boardOf([a1]);
         board.focus.focusAgent(a1, new MouseEvent(`click`));
         expect(board.agents.open.mock.calls).toEqual([[a1, `peek`]]);
@@ -179,6 +180,14 @@ describe(`a press on a card`, () => {
 
         board.mobile.value = true;
         board.focus.focusAgent(a1, new MouseEvent(`click`));
+        // A phone paints the press first (afterPaint.ts): nothing opens and nothing moves in the tap's own task.
+        expect(board.agents.open.mock.calls).toEqual([[a1, `peek`]]);
+        expect(board.push).not.toHaveBeenCalled();
+        await afterPaint();
+        expect(board.agents.open.mock.calls).toEqual([
+            [a1, `peek`],
+            [a1, `peek`],
+        ]);
         expect(board.push.mock.calls).toEqual([[`/agents/a1`]]);
     });
 

@@ -13,8 +13,9 @@ const HYSTERESIS_REM = 1.5;
 const rootFontSize = (): number => Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
 
 export function useNarrow(element: Readonly<Ref<HTMLElement | undefined>>, at: number): ComputedRef<boolean> {
-    // Unmeasured reads as wide: the observer's first callback lands before first paint, so this default is
-    // never seen, and the opposite default would flash a folded layout on every desktop mount.
+    // Unmeasured reads as wide, and the element is measured the moment it arrives rather than on the observer's
+    // first callback: that callback can land a frame after the first paint, and on a phone that frame drew the /agents
+    // header in its wide layout and then folded it, shifting every card below it (0.41 of the page's measured CLS).
     const narrow = ref(false);
     let width = Number.POSITIVE_INFINITY;
     const judge = (): void => {
@@ -40,6 +41,13 @@ export function useNarrow(element: Readonly<Ref<HTMLElement | undefined>>, at: n
                 judge();
             });
             observer.observe(el);
+            // The content box, as the observer reports it; an element not laid out yet (0 wide) waits for the observer.
+            const style = getComputedStyle(el);
+            const measured = el.getBoundingClientRect().width - (Number.parseFloat(style.paddingLeft) || 0) - (Number.parseFloat(style.paddingRight) || 0);
+            if (measured > 0) {
+                width = measured;
+                judge();
+            }
         },
         { immediate: true },
     );

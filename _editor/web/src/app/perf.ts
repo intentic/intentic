@@ -32,6 +32,10 @@ const SLOW_MS: Readonly<Record<string, number>> = {
 // Ring buffer size: enough to cover the seconds around a stall, small enough to stay free.
 const RING = 1_000;
 
+// Console warnings per op: every one of the first few, then one in so many.
+const LOUD_SLOW = 5;
+const SAMPLED_SLOW = 50;
+
 export type PerfFields = Readonly<Record<string, string | number | boolean | undefined>>;
 
 export interface PerfSpan {
@@ -96,7 +100,11 @@ export const recordPerf = (op: string, ms: number, fields: PerfFields = {}): voi
     }
     if (slow) {
         // `seen`/`slowSeen` answer whether this is the first occurrence or an ongoing one, without needing the table.
-        console.warn(`[perf] slow ${op} ${round(ms)}ms`, { ...fields, seen: stat.count, slowSeen: stat.slowCount });
+        // Loud while it is news, sampled once it is a pattern: a phone streaming a reply misses the 16ms frame budget on
+        // most frames, and a warning per frame (each holding its fields for DevTools) was itself work on that frame.
+        if (stat.slowCount <= LOUD_SLOW || stat.slowCount % SAMPLED_SLOW === 0) {
+            console.warn(`[perf] slow ${op} ${round(ms)}ms`, { ...fields, seen: stat.count, slowSeen: stat.slowCount });
+        }
         // Durable, at `warn`: a slow-UI complaint is unactionable from a console line nobody was watching. Only slow
         // spans
         // leave the browser (every span still lands in the ring buffer and table); reporting all of them would itself
@@ -184,4 +192,78 @@ export const installPerfConsole = (): void => {
             ring.length = 0;
         },
     };
+};
+
+// A FRAME THAT HELD THE PAGE, NAMED BY THE SCRIPT THAT HELD IT. The spans above time what the app knows to time; a
+// reader's multi-second stall (the field's worst were typing in the composer: 2.7s and 7.7s inside the key's own
+// handlers) happened in code nobody had wrapped. The browser's Long Animation Frames API attributes a frame to the
+// scripts that ran in it, which is what this reports: the frame's length, how much of it was style and layout, and its
+// heaviest scripts by file, function and what invoked them. Only frames past LONG_FRAME_MS, which a reader feels.
+const LONG_FRAME_MS = 300;
+
+interface ScriptTiming {
+    readonly invoker: string;
+    readonly invokerType: string;
+    readonly sourceURL: string;
+    readonly sourceFunctionName: string;
+    readonly duration: number;
+    readonly forcedStyleAndLayoutDuration: number;
+}
+interface LongFrame {
+    readonly duration: number;
+    readonly blockingDuration: number;
+    readonly renderStart: number;
+    readonly styleAndLayoutStart: number;
+    readonly startTime: number;
+    readonly scripts: readonly ScriptTiming[];
+}
+
+// A long frame as reported: its length and phases in ms, and up to three of its scripts, heaviest first, one per line.
+export interface LongFrameFields {
+    readonly ms: number;
+    readonly blockingMs: number;
+    readonly styleLayoutMs: number;
+    readonly renderMs: number;
+    readonly scripts: string;
+}
+
+export type LongFrameReporter = (fields: LongFrameFields) => void;
+
+// One line per script: `file:function (invoker) 812ms, 97ms forced`, the file's own name only, never a path.
+const scriptLine = (script: ScriptTiming): string => {
+    const file = script.sourceURL.split(`/`).pop()?.split(`?`)[0] ?? ``;
+    const where = [file, script.sourceFunctionName].filter((part) => part !== ``).join(`:`) || script.invokerType;
+    return `${where} (${script.invoker.slice(0, 60)}) ${Math.round(script.duration)}ms, ${Math.round(script.forcedStyleAndLayoutDuration)}ms forced`;
+};
+
+export const longFrameFields = (frame: LongFrame): LongFrameFields => {
+    const end = frame.startTime + frame.duration;
+    return {
+        ms: Math.round(frame.duration),
+        blockingMs: Math.round(frame.blockingDuration),
+        styleLayoutMs: frame.styleAndLayoutStart > 0 ? Math.round(end - frame.styleAndLayoutStart) : 0,
+        renderMs: frame.renderStart > 0 ? Math.round(end - frame.renderStart) : 0,
+        scripts: [...frame.scripts]
+            .sort((a, b) => b.duration - a.duration)
+            .slice(0, 3)
+            .map(scriptLine)
+            .join(`\n`),
+    };
+};
+
+// A long animation frame as the observer hands it over: the API's entry type is newer than this app's DOM typings.
+const isLongFrame = (entry: PerformanceEntry): entry is PerformanceEntry & LongFrame => entry.entryType === `long-animation-frame` && `scripts` in entry;
+
+// Where the browser has the API (Chromium); elsewhere this observes nothing.
+export const observeLongFrames = (report: LongFrameReporter): void => {
+    if (!(`PerformanceObserver` in globalThis) || !PerformanceObserver.supportedEntryTypes.includes(`long-animation-frame`)) {
+        return;
+    }
+    new PerformanceObserver((list) => {
+        for (const entry of list.getEntries()) {
+            if (isLongFrame(entry) && entry.duration >= LONG_FRAME_MS) {
+                report(longFrameFields(entry));
+            }
+        }
+    }).observe({ type: `long-animation-frame`, buffered: true });
 };

@@ -1,3 +1,4 @@
+import { useDevice } from "@intentic/ui";
 // Collects wish lists from the surfaces that know their own data (board, review, rail) into one plan;
 // the loader itself knows none of it. A wish isn't a request: `have` answers from cache, so a satisfied
 // wish costs nothing. Bands are the only priority mechanism — four named positions, not an arbitrary number.
@@ -23,6 +24,33 @@ export type WarmSource = () => readonly WarmTask[];
 // Ceiling on the whole plan, not per source; the tail past it is simply left cold.
 export const PLAN_LIMIT = 400;
 
+// A LEAN READ-AHEAD for a phone, a reader who asked to save data, or a slow link. The full plan reads a transcript and
+// a diff for up to forty cards and a hundred and twenty workspace diffs, each validated on the main thread, over the
+// phone's own connection and again after every reconnect: most of it for screens a phone opens one at a time, if at
+// all. Lean keeps the few nearest wishes, which are what a tap is likeliest to open next.
+export const LEAN_PLAN_LIMIT = 24;
+
+interface NetworkInformationLike {
+    readonly saveData?: boolean;
+    readonly effectiveType?: string;
+}
+
+// The Network Information API is Chromium's alone and newer than this app's DOM typings; elsewhere it is absent.
+declare global {
+    interface Navigator {
+        readonly connection?: NetworkInformationLike;
+    }
+}
+
+export const leanReadAhead = (screen: { readonly mobile: boolean; readonly coarse: boolean }, connection?: NetworkInformationLike): boolean =>
+    screen.mobile || screen.coarse || connection?.saveData === true || [`slow-2g`, `2g`, `3g`].includes(connection?.effectiveType ?? ``);
+
+// The live answer, read on every beat: a phone rotated to a tablet's width is still a phone.
+export const leanNow = (): boolean => {
+    const { mobile, coarse } = useDevice();
+    return leanReadAhead({ mobile: mobile.value, coarse: coarse.value }, navigator.connection);
+};
+
 const sources = new Set<WarmSource>();
 
 /** Registers a wish list. */
@@ -36,7 +64,7 @@ export const clearWarmSources = (): void => sources.clear();
 
 // Assembled fresh every beat rather than cached behind reactivity: what's worth warming depends on live
 // fetch and invalidation state no dependency graph covers, and sources are computed-backed, so re-asking is cheap.
-export const warmPlan = (): readonly WarmTask[] => {
+export const warmPlan = (lean: () => boolean = leanNow): readonly WarmTask[] => {
     const byKey = new Map<string, WarmTask>();
     for (const source of sources) {
         // A source that throws contributes nothing this beat; it must not stop the others.
@@ -54,5 +82,6 @@ export const warmPlan = (): readonly WarmTask[] => {
         }
     }
     const plan = [...byKey.values()].sort((left, right) => BAND_ORDER.indexOf(left.band) - BAND_ORDER.indexOf(right.band));
-    return plan.length > PLAN_LIMIT ? plan.slice(0, PLAN_LIMIT) : plan;
+    const limit = lean() ? LEAN_PLAN_LIMIT : PLAN_LIMIT;
+    return plan.length > limit ? plan.slice(0, limit) : plan;
 };

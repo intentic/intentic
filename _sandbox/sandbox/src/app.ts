@@ -173,7 +173,10 @@ export const createApp = (services: Services): Hono<AppEnv> => {
             allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
             // REQUEST_ID_HEADER must be allow-listed too, or the preflight drops it and the correlation stays empty.
             allowHeaders: ["authorization", "content-type", "x-intentic-connect", "x-intentic-base-hash", REQUEST_ID_HEADER],
-            maxAge: 600,
+            // Chrome's own ceiling. Every call carries `authorization`, so each distinct URL (and a route's inputs are in
+            // its URL) is asked about once before it is sent, and a phone on a cellular link pays that round trip again
+            // for every URL whose answer has expired: ten minutes made most of a working session's reads two trips.
+            maxAge: 7200,
         }),
     );
 

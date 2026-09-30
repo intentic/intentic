@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Avatar, Button, ui, Modal, Notice, ResponsiveOverlay, SegmentedControl, type Tip, useDevice, useLoadingReveal } from "@intentic/ui";
 import { createInlineRename } from "@intentic/ui/inline-rename";
-import { computed, onUnmounted, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import ChatPanel from "../../chat/panel/ChatPanel.vue";
 import { agentStatusMeta, unregistered, writingNow } from "../fleet/agentStatus";
@@ -10,6 +10,7 @@ import { errorMessage } from "@intentic/ui/async";
 import { presenceOthers } from "../../../shell/presence/usePresence";
 import { identityHue } from "../../../lib/identityHue";
 import { mobileChatPath } from "../../../shell/tabRoots";
+import { afterPaint } from "../../../lib/afterPaint";
 import ChatSwitcherSheet from "../../chat/tabs/ChatSwitcherSheet.vue";
 import { boxNameOf, openInSandbox, otherFleet } from "../fleet/fleetScope";
 import { otherBoxes, refreshAcross, subscribe as watchOtherBoxes } from "../../sandbox/live/fleetAcross";
@@ -39,7 +40,7 @@ const t = useT();
 const route = useRoute();
 const router = useRouter();
 const { mobile } = useDevice();
-const { fleet, refresh, open, agentById, archived, loadArchived, rename } = useAgents();
+const { fleet, refresh, open, agentById, archived, loadArchived, rename, markSeen } = useAgents();
 const { conversations, setActive, closeTabs, openConversation, active: activeChat } = useChat();
 
 // The phone's chat switcher hangs off this screen's title: this is the only chat surface a phone has, so the open
@@ -136,6 +137,15 @@ const bindLocalConversation = (id: string, previousId: string | undefined): void
     if (id === `` || (id === previousId && conversation.value !== undefined && (mobile.value || reviewable.value))) {
         return;
     }
+    // The tab is already in front (a phone's board opened it as it walked here, cardSelection.ts, or the Chat tab points
+    // at the chat that was): re-revealing it is a second pass over the tab list and the pane layout, inside the
+    // navigation the reader is waiting on. Arriving still stamps the read marker, which is all that open() adds.
+    if (mobile.value && id !== previousId && activeChat.value.conversationId === id && conversation.value !== undefined) {
+        if (fleetAgent.value !== undefined) {
+            markSeen(id);
+        }
+        return;
+    }
     if (fleetAgent.value !== undefined) {
         open(fleetAgent.value);
         if (!mobile.value && !reviewable.value) {
@@ -173,6 +183,16 @@ watch(
     },
     { immediate: true },
 );
+
+// A PHONE DRAWS THIS PAGE IN TWO FRAMES: the header (whose agent was tapped, what it is doing) in the navigation's own,
+// and the chat, the heaviest thing on the screen, in the next. In one task the header waits on every row of the
+// transcript, and the tap that opened it reads as a tap that didn't land.
+const chatMounted = ref(!mobile.value);
+onMounted(() => {
+    if (!chatMounted.value) {
+        void afterPaint().then(() => (chatMounted.value = true));
+    }
+});
 
 // Mode switch only exists on mobile; desktop always renders the review.
 const view = ref<`chat` | `changes`>(mobile.value ? `chat` : `changes`);
@@ -509,7 +529,10 @@ const confirmHandOver = async (): Promise<void> => {
             <SegmentedControl v-model="view" :options="viewOptions" variant="underline" />
         </div>
         <!-- `:tabs="false"`: this screen's header names the conversation, as does the panel's own mobile header. -->
-        <ChatPanel v-if="mobile && localOnly && (view === 'chat' || !reviewable)" :tabs="false" class="min-h-0 flex-1" />
+        <template v-if="mobile && localOnly && (view === 'chat' || !reviewable)">
+            <ChatPanel v-if="chatMounted" :tabs="false" class="min-h-0 flex-1" />
+            <div v-else class="min-h-0 flex-1" aria-hidden="true" />
+        </template>
         <!-- Still asking about this id: the review's own shape stands in. -->
         <template v-else-if="looking">
             <AgentReviewOutline v-if="outline" :label="t(`agents.agentDetail.openingAgentsReview`)" />

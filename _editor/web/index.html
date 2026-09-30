@@ -135,10 +135,22 @@
                 if (themeMeta) themeMeta.setAttribute("content", dark ? "#141210" : "#f4f1ec");
             } catch (e) {}
         </script>
-<!-- Google Identity Services — browser-side sign-in for the direct-to-sandbox ID token. -->
-        <link rel="preconnect" href="https://accounts.google.com" crossorigin />
-        <link rel="preconnect" href="https://www.gstatic.com" crossorigin />
-        <script src="https://accounts.google.com/gsi/client" async></script>
+<!-- Google Identity Services — browser-side sign-in for the direct-to-sandbox ID token. Fetched here only on the
+             pages that exist to sign in, where the button should be ready as the page is; everywhere else a signed-in
+             app mints from a saved sandbox session and asks for the script only when one has run out
+             (useGoogleIdentity.ts waitForGis). It was a third-party script and two connections on every start of a
+             phone that had no use for them. -->
+        <script>
+            (function () {
+                try {
+                    if (!/^\/(login|desktop-auth|invite|setup|platform-unavailable)(\/|$)/.test(location.pathname)) return;
+                    var gis = document.createElement("script");
+                    gis.src = "https://accounts.google.com/gsi/client";
+                    gis.async = true;
+                    document.head.appendChild(gis);
+                } catch (e) {}
+            })();
+        </script>
 <!-- The .ico is first and unqualified because that is the one every crawler, feed reader and pinned-tab list asks for by convention. -->
         <link rel="icon" href="/favicon.ico" sizes="any" />
         <link rel="icon" type="image/svg+xml" href="/favicon.svg" />

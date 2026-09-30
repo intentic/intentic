@@ -1,5 +1,5 @@
 import { sandboxRef } from "@intentic/extension-api";
-import { type Hello, SANDBOX_ROUTE_NAMES, SANDBOX_ROUTE_SHAPES } from "@intentic/sandbox-contract";
+import { type Hello, SANDBOX_ROUTE_NAMES, sandboxRouteFingerprints } from "@intentic/sandbox-contract";
 import { t } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { z } from "zod";
@@ -71,7 +71,7 @@ export const appBehind = computed(() => unknownDaemonRoutes.value.length > 0);
 // unpublished shape is no evidence, not a match.
 const comparableRoutes = computed<string[]>(() => {
     const theirs = advertisedShapes.value;
-    return theirs === undefined ? [] : Object.keys(SANDBOX_ROUTE_SHAPES).filter((name) => theirs[name] !== undefined);
+    return theirs === undefined ? [] : Object.keys(sandboxRouteFingerprints()).filter((name) => theirs[name] !== undefined);
 });
 
 // The denominator a drift count is only meaningful against: "3 routes disagree" says nothing without how many were
@@ -80,7 +80,8 @@ export const comparedRouteCount = computed(() => comparableRoutes.value.length);
 
 export const driftedRoutes = computed<string[]>(() => {
     const theirs = advertisedShapes.value;
-    return theirs === undefined ? [] : comparableRoutes.value.filter((name) => theirs[name] !== SANDBOX_ROUTE_SHAPES[name]).toSorted();
+    const ours = sandboxRouteFingerprints();
+    return theirs === undefined ? [] : comparableRoutes.value.filter((name) => theirs[name] !== ours[name]).toSorted();
 });
 
 // Above this fraction, the two contracts disagree as wholes rather than in places: a different build entirely, a

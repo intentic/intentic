@@ -166,7 +166,7 @@ const isNavActive = (tab: Tab): boolean => {
             v-for="tab in tabs"
             :key="tab.label"
             :to="tab.to"
-            class="relative flex h-14 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 text-muted transition-colors active:bg-overlay"
+            class="relative flex h-14 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 text-muted transition-colors active:bg-overlay active:text-content"
             :class="{ 'text-link': isNavActive(tab) }"
             :aria-label="tabLabel(tab)"
         >

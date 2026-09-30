@@ -312,8 +312,12 @@ export const SANDBOX_ROUTES: readonly ContractRoute[] = contractRoutes(sandboxCo
 export const SANDBOX_ROUTE_NAMES: readonly string[] = SANDBOX_ROUTES.map((route) => route.name);
 
 // Each route's shape, for the failure names alone can't describe: a route both builds have, but whose payload only one
-// expects. Computed once at load, since it's too expensive to repeat per connection.
-export const SANDBOX_ROUTE_SHAPES: Readonly<Record<string, string>> = routeShapes(sandboxContract);
+// expects. Computed on the first ask and kept, since it's too expensive to repeat per connection — and too expensive to
+// pay at load: turning every route's schemas into JSON Schema was a third of a second of a phone's startup at 4× CPU
+// throttle, for a comparison a browser only makes when it has a disagreement to explain (the version card). The daemon
+// asks on its first hello.
+let fingerprints: Readonly<Record<string, string>> | undefined;
+export const sandboxRouteFingerprints = (): Readonly<Record<string, string>> => (fingerprints ??= routeShapes(sandboxContract));
 
 // The contract route a concrete browser request belongs to, bound to this build's route table.
 export const sandboxRouteName = (method: string, pathWithQuery: string): string | undefined =>

@@ -2,7 +2,7 @@
 <script setup lang="ts">
 import { computed, useAttrs } from "vue";
 import { ICONS, type IconName } from "../../icons/iconSets.js";
-import { useReducedMotion } from "../../composables/useReducedMotion.js";
+import { useReducedMotion, useTouchMotion } from "../../composables/useReducedMotion.js";
 import type { Glyph } from "../../icons/glyph.js";
 
 const { name, spin = false } = defineProps<{ name: IconName; spin?: boolean }>();
@@ -24,7 +24,11 @@ const drawing = computed<Glyph>(() => ICONS[name]);
 const isSpinner = computed(() => name === `spinner`);
 const SPINNER_STROKE = 2.5;
 
-const reducedMotion = useReducedMotion();
+// A touch screen turns the whole glyph as a CSS animation on the compositor; a desktop pointer keeps SMIL, which leaves
+// DevTools' Styles editor alone (useTouchMotion says why each). The reduced-motion query is only asked while SMIL turns.
+const touch = useTouchMotion();
+const turnsOnCompositor = computed(() => spin && touch.value);
+const reducedMotion = useReducedMotion(() => spin && !touch.value);
 </script>
 
 <template>
@@ -38,6 +42,7 @@ const reducedMotion = useReducedMotion();
         :aria-hidden="label() !== undefined || attrs['aria-labelledby'] ? undefined : true"
         :aria-label="label()"
         class="ui-icon"
+        :class="{ 'ui-icon-turning': turnsOnCompositor }"
     >
         <g
             fill="none"
@@ -56,7 +61,7 @@ const reducedMotion = useReducedMotion();
                 <path v-if="drawing.solid" :d="drawing.solid" fill="currentColor" stroke="none" />
                 <!-- SMIL leaves DevTools' CSS animation model alone. Reduced motion keeps the slower spinner. -->
                 <animateTransform
-                    v-if="spin"
+                    v-if="spin && !turnsOnCompositor"
                     attributeName="transform"
                     type="rotate"
                     from="0 12 12"
@@ -75,5 +80,24 @@ svg {
     display: inline-block;
     vertical-align: -0.125em;
     flex: none;
+}
+
+/* THE SPINNER ON A TOUCH SCREEN: the whole glyph turns as one composited layer, rasterised once and rotated off the main
+   thread. Its track is a full circle about the centre, so turning it with the arc changes nothing the eye can see.
+   Reduced motion slows it to the SMIL spinner's 3s rather than stopping it: a still mark beside live work reads as hung. */
+.ui-icon-turning {
+    animation: ui-icon-turn 1.1s linear infinite;
+}
+
+@keyframes ui-icon-turn {
+    to {
+        transform: rotate(1turn);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ui-icon-turning {
+        animation-duration: 3s;
+    }
 }
 </style>

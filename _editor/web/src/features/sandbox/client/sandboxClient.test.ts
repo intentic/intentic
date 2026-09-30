@@ -12,7 +12,7 @@ jest.mock("./useSandbox", () => ({
 const { sandboxError, sandboxJson, sandboxRequest } = await import("./sandboxClient");
 const { SandboxTimeoutError } = await import("./sandboxAuthFetch");
 const { setDaemonRoutes } = await import("../overview/useDaemonRoutes");
-const { SANDBOX_ROUTE_NAMES, SANDBOX_ROUTE_SHAPES } = await import("@intentic/sandbox-contract");
+const { SANDBOX_ROUTE_NAMES, sandboxRouteFingerprints } = await import("@intentic/sandbox-contract");
 
 // A daemon that accepts but never answers; settles only when the caller's signal aborts, like real fetch.
 const fetchMock = jest.fn(
@@ -101,14 +101,14 @@ it("blames the image for a 404 on a route the daemon never advertised", async ()
 });
 
 it("blames the image for a 400 on a route whose shape the daemon disagrees about", async () => {
-    setDaemonRoutes([...SANDBOX_ROUTE_NAMES], { ...SANDBOX_ROUTE_SHAPES, "settings.set": `different` });
+    setDaemonRoutes([...SANDBOX_ROUTE_NAMES], { ...sandboxRouteFingerprints(), "settings.set": `different` });
     const error = await sandboxError(json(400, { message: `Invalid input` }), { method: `POST`, path: `/settings` });
     expect(error.message).toContain(`settings.set`);
 });
 
 it("passes an ordinary 400 through with the daemon's own words", async () => {
     // Route present, shapes agree: the daemon's own message explains the refusal best.
-    setDaemonRoutes([...SANDBOX_ROUTE_NAMES], { ...SANDBOX_ROUTE_SHAPES });
+    setDaemonRoutes([...SANDBOX_ROUTE_NAMES], { ...sandboxRouteFingerprints() });
     const error = await sandboxError(json(400, { message: `iqSearchHoldout must be between 0 and 1` }), { method: `POST`, path: `/settings` });
     expect(error.message).toBe(`iqSearchHoldout must be between 0 and 1`);
 });
@@ -117,7 +117,7 @@ it("passes an ordinary 400 through with the daemon's own words", async () => {
 it("stays silent about drift for a path outside the contract, like /health", async () => {
     setDaemonRoutes(
         SANDBOX_ROUTE_NAMES.filter((name) => !name.startsWith(`vpn.`)),
-        { ...SANDBOX_ROUTE_SHAPES, "settings.get": `different` },
+        { ...sandboxRouteFingerprints(), "settings.get": `different` },
     );
     expect((await sandboxError(json(404, { message: `Not Found` }), { method: `GET`, path: `/health` })).message).toBe(`Not Found`);
     expect((await sandboxError(json(400, { error: `bad path` }), { method: `GET`, path: `/health` })).message).toBe(`bad path`);
@@ -125,7 +125,7 @@ it("stays silent about drift for a path outside the contract, like /health", asy
 
 it("passes a 500 through untouched even on a drifted route", async () => {
     // Drift explains a refused request, not a daemon that crashed handling an accepted one.
-    setDaemonRoutes([...SANDBOX_ROUTE_NAMES], { ...SANDBOX_ROUTE_SHAPES, "settings.set": `different` });
+    setDaemonRoutes([...SANDBOX_ROUTE_NAMES], { ...sandboxRouteFingerprints(), "settings.set": `different` });
     const error = await sandboxError(json(500, { error: `boom` }), { method: `POST`, path: `/settings` });
     expect(error.message).toBe(`boom`);
 });

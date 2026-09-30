@@ -1,4 +1,4 @@
-import { SANDBOX_ROUTE_SHAPES } from "@intentic/sandbox-contract";
+import { sandboxRouteFingerprints } from "@intentic/sandbox-contract";
 import { computed, ref } from "vue";
 
 // Why a dev sandbox drifts from a dev browser without either being "older": this app bundles the contract from its
@@ -42,8 +42,9 @@ export const readContractFreshness = async (): Promise<void> => {
                 return;
             }
             // Both directions: a route only source has is as much an uncompiled edit as one whose shape moved.
-            const names = new Set([...Object.keys(SANDBOX_ROUTE_SHAPES), ...Object.keys(compiled)]);
-            uncompiled.value = [...names].filter((name) => compiled[name] !== SANDBOX_ROUTE_SHAPES[name]).toSorted();
+            const ours = sandboxRouteFingerprints();
+            const names = new Set([...Object.keys(ours), ...Object.keys(compiled)]);
+            uncompiled.value = [...names].filter((name) => compiled[name] !== ours[name]).toSorted();
         } catch {
             // A dev server that cannot answer leaves the question open, which is what `undefined` already says.
         }

@@ -150,10 +150,21 @@
             border-color 150ms cubic-bezier(0.4, 0, 0.2, 1),
             box-shadow 150ms cubic-bezier(0.4, 0, 0.2, 1);
     }
-    .session-card:hover {
+/* HOVER IS A POINTER'S, AND A PRESS IS EVERYONE'S. A touch screen applies :hover on the tap and keeps it until the next tap
+   somewhere else, so a card read as still pointed at after the finger left; the press is :active instead, drawn with no
+   transition so it is on screen in the frame the finger lands, not faded in after the screen it opens (router/index.ts). */
+    @media (hover: hover) {
+        .session-card:hover {
+            color: var(--color-content);
+            --card-border: var(--color-line-strong);
+            --card-fill: var(--color-overlay);
+        }
+    }
+    .session-card:active {
         color: var(--color-content);
         --card-border: var(--color-line-strong);
         --card-fill: var(--color-overlay);
+        transition: none;
     }
 /* THE SELECTION RING IS INSET, and that is what keeps it whole. */
     .session-card.session-card-on {
@@ -165,8 +176,10 @@
         --card-lift: 0 1px 3px -1px color-mix(in srgb, var(--color-primary-500) 28%, transparent);
     }
 /* Hover on a card that already wears the accent deepens the halo instead of recolouring the edge. */
-    .session-card.session-card-on:hover {
-        --card-lift: 0 1px 6px -1px color-mix(in srgb, var(--color-primary-500) 45%, transparent);
+    @media (hover: hover) {
+        .session-card.session-card-on:hover {
+            --card-lift: 0 1px 6px -1px color-mix(in srgb, var(--color-primary-500) 45%, transparent);
+        }
     }
 /* NO RULE HERE REPAINTS A CHIP ON A SELECTED CARD, and that absence is the fix rather than the gap in it. */
 /* THIS CARD IS WAITING ON YOU: a bar down the left edge, as an inset shadow rather than a wider border. */

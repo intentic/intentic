@@ -34,6 +34,33 @@ export const appendMessage = (state: TranscriptState, message: Omit<ChatMessage,
     nextId: state.nextId + 1,
 });
 
+// A RECORD REDRAWN KEEPS THE ROWS IT ALREADY DREW. Opening a chat paints the local mirror and then the daemon's record
+// replaces it, and replay after a reconnect or a Retry does the same: with every row a fresh object, every row's markdown
+// was parsed, sanitised and laid out again for words that had not changed — on a phone, seconds of a frozen chat to
+// redraw what was on screen. A message already standing whose content equals a row of the record is kept, id and all
+// (the list's key and its memo both hold); anything new or changed is allocated above every id standing, as a rebuild
+// from nothing would. Equal means equal once the id is set aside; a row the mirror spelled differently is simply drawn
+// anew, which is what every row was before.
+const contentKey = (message: Omit<ChatMessage, "id">): string => JSON.stringify(message);
+
+export const rebuildKeeping = (standing: readonly ChatMessage[], rows: readonly Omit<ChatMessage, "id">[]): TranscriptState => {
+    const kept = new Map<string, ChatMessage[]>();
+    let nextId = 1;
+    for (const message of standing) {
+        const { id, ...content } = message;
+        nextId = Math.max(nextId, id + 1);
+        const key = contentKey(content);
+        const same = kept.get(key);
+        if (same === undefined) {
+            kept.set(key, [message]);
+        } else {
+            same.push(message);
+        }
+    }
+    const messages = rows.map((row): ChatMessage => kept.get(contentKey(row))?.shift() ?? { ...row, id: nextId++ });
+    return { ...emptyTranscriptState, messages, nextId };
+};
+
 const mapMessage = (state: TranscriptState, id: number, fn: (message: ChatMessage) => ChatMessage): TranscriptState => ({
     ...state,
     messages: state.messages.map((message) => (message.id === id ? fn(message) : message)),

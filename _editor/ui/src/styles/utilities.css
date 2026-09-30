@@ -1,14 +1,23 @@
 /* Custom utilities — scrollbar exceptions and loading placeholders, themed via role tokens. */
 @layer utilities {
     /* Hover utilities use the scheme's overlay surface. */
-    .hover\:bg-overlay:hover,
+    /* The hover half answers a pointer only, as Tailwind's own `hover:` does: on a touch screen :hover lands on the tap
+       and stays after the finger has gone, which reads as a row still being pointed at. The press is `active:`. */
+    @media (hover: hover) {
+        .hover\:bg-overlay:hover {
+            background-color: var(--ui-hover-wash, var(--color-overlay));
+        }
+    }
+
     .focus\:bg-overlay:focus,
     .focus-visible\:bg-overlay:focus-visible {
         background-color: var(--ui-hover-wash, var(--color-overlay));
     }
 
+    /* No fade: a press is drawn in the frame the finger lands on, not 150ms into a transition behind the screen it opens. */
     .active\:bg-overlay:active {
         background-color: var(--ui-press-wash, var(--color-overlay));
+        transition-duration: 0s;
     }
 
     :is(.group\/item, .group\/row, .group\/card, .group\/bar, .group\/tile, .group\/cell, .group\/a, .group\/b, .group\/run):hover
@@ -85,8 +94,16 @@
     }
 
 /* Light re-answers this in the accent, for the reason `--ui-hover-wash` gives: 5% of the ink on paper is 1.06:1 against the card under it. */
-    .ui-row-select:hover:not(:disabled) {
-        background: var(--ui-hover-wash, color-mix(in srgb, var(--color-content) 5%, transparent));
+    @media (hover: hover) {
+        .ui-row-select:hover:not(:disabled) {
+            background: var(--ui-hover-wash, color-mix(in srgb, var(--color-content) 5%, transparent));
+        }
+    }
+
+    /* The press every pointer gets, a finger included: the hover wash, drawn at once. */
+    .ui-row-select:active:not(:disabled) {
+        background: var(--ui-press-wash, var(--ui-hover-wash, color-mix(in srgb, var(--color-content) 5%, transparent)));
+        transition-duration: 0s;
     }
 
     .ui-row-select:focus-visible {

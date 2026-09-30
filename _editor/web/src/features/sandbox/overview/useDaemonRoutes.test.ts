@@ -1,5 +1,5 @@
 import { resetSandboxScope } from "@intentic/extension-api";
-import { SANDBOX_ROUTE_NAMES, SANDBOX_ROUTE_SHAPES } from "@intentic/sandbox-contract";
+import { SANDBOX_ROUTE_NAMES, sandboxRouteFingerprints } from "@intentic/sandbox-contract";
 import {
     appBehind,
     comparedRouteCount,
@@ -22,7 +22,7 @@ const LEVEL = [...SANDBOX_ROUTE_NAMES];
 const withoutVpn = LEVEL.filter((name) => !name.startsWith(`vpn.`));
 
 // This browser's shape fingerprints, and a helper to reshape named routes (an image with a changed field).
-const SHAPES = { ...SANDBOX_ROUTE_SHAPES };
+const SHAPES = { ...sandboxRouteFingerprints() };
 const reshaped = (...names: string[]): Record<string, string> => ({ ...SHAPES, ...Object.fromEntries(names.map((name) => [name, `different`])) });
 
 describe(`useDaemonRoutes`, () => {

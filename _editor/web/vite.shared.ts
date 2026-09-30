@@ -105,6 +105,9 @@ const stableDevStyles = (): Plugin => {
 
 export const shared = {
     plugins: [vue(), tailwindcss(), stableDevStyles()],
+    // ES workers, since the code highlighter's worker (ui/src/markdown/highlightWorker.ts) loads each grammar as its
+    // own chunk on first use, which an IIFE worker cannot split.
+    worker: { format: `es` as const },
     define: { "import.meta.env.BUILD_ID": JSON.stringify(BUILD_ID) },
     resolve: {
         // Source-first workspace aliases shared with bun.setup.ts; see source-aliases.ts.

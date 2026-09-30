@@ -1,3 +1,7 @@
+import { defineAsyncComponent } from "vue";
+import type DagEditorView from "./components/charts/DagEditor.vue";
+import type DagGraphView from "./components/charts/DagGraph.vue";
+import { loadChunk } from "./lib/loadChunk.js";
 export { clipboardOf } from "./lib/clipboard.js";
 // `browserOwnsClick` is the check a navigational row/tile/menu item runs before also doing app work on a click;
 // `appLink` applies the matching anchor attributes for surfaces with no router.
@@ -58,8 +62,17 @@ export { default as ActionSheet } from "./components/overlays/ActionSheet.vue";
 export { type ActionItem } from "./components/overlays/actionItem.js";
 export { default as CopyButton } from "./components/primitives/CopyButton.vue";
 export { type TallyItem, default as StatusTally } from "./components/charts/StatusTally.vue";
-export { default as DagEditor } from "./components/charts/DagEditor.vue";
-export { default as DagGraph } from "./components/charts/DagGraph.vue";
+// THE TWO GRAPH COMPONENTS ARE FETCHED WHEN FIRST DRAWN. Each carries Vue Flow and dagre (~190 KB of JS), and exported
+// eagerly from this barrel they rode into every startup of the app — the extension host republishes the whole kit —
+// though a graph is drawn only on a workflow, pipeline or dependency view. Neither exposes anything through a template
+// ref, so the async wrapper is a drop-in; `loadChunk` gives it the same stale-deploy recovery as a lazy route.
+// `defineAsyncComponent` drops a generic component's signature, which would leave callers' events and slots untyped.
+export const DagEditor =
+    // SAFETY: the wrapper renders the component it loads with the props, events and slots it is given.
+    defineAsyncComponent(() => loadChunk(() => import("./components/charts/DagEditor.vue"))) as typeof DagEditorView;
+export const DagGraph =
+    // SAFETY: the wrapper renders the component it loads with the props, events and slots it is given.
+    defineAsyncComponent(() => loadChunk(() => import("./components/charts/DagGraph.vue"))) as typeof DagGraphView;
 // <Row> plus the expand chevron, ARIA state, open tint and indented rail: the app's one expandable record row.
 export { default as DisclosureRow } from "./components/rows/DisclosureRow.vue";
 // Row's tier constants (padding, gaps, tones), plus `useRowDensity`: a tier is declared once on <RowGroup> and

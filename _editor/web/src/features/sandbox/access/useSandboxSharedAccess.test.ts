@@ -64,3 +64,21 @@ describe("useSandboxSharedAccess", () => {
         expect(sharedAccess.value).toBe(true);
     });
 });
+
+// Neither the sandbox list nor the members read survives a reload, so the board used to open without its Everyone/Mine
+// row and grow it a moment later, shifting every card: the last answer stands in until this one arrives.
+describe("before the answer arrives", () => {
+    it("stands on the last answer for this sandbox, and remembers the new one", async () => {
+        localStorage.setItem(`intentic.sharedAccess.sbx-1`, `1`);
+        const { activeSandboxId } = await import("../overview/activeSandbox");
+        activeSandboxId.value = `sbx-1`;
+        active.value = undefined;
+        const { sharedAccess } = mounted();
+        expect(sharedAccess.value).toBe(true);
+
+        // SAFETY: the same summary the suite's beforeEach seeds; the composable reads only its role.
+        active.value = { id: `sbx-1`, name: `Guest`, image: null, lastSeenAt: null, role: `owner` } as SandboxSummary;
+        await waitFor(() => expect(sharedAccess.value).toBe(false));
+        expect(localStorage.getItem(`intentic.sharedAccess.sbx-1`)).toBe(`0`);
+    });
+});

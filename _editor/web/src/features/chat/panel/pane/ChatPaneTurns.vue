@@ -20,6 +20,7 @@ import { useHeldQueue } from "../../transcript/held/heldQueue";
 import { unsaidError } from "../../transcript/transcript";
 import { useShotViewer } from "../../transcript/shots/useShotViewer";
 import { usePaneTranscript } from "./paneTranscript";
+import { useRowBudget, windowTurns } from "./paneWindow";
 import { viewingIn } from "./paneSurface";
 import { usePaneView } from "../useChat-view";
 import FileRefPeek from "../../../workspace/files/refs/FileRefPeek.vue";
@@ -69,6 +70,11 @@ const {
     }),
     refresh,
 });
+// The rows drawn so far, newest first (paneWindow.ts): a long chat opens on its last rows and mounts the rest at idle.
+const budget = useRowBudget({ messages, conversationId: computed(() => conversation.value.conversationId) });
+const shownTurns = computed(() => windowTurns(turns.value, messages.value.length, budget.value));
+// Every row is drawn: only then is the column's top the conversation's (the paging press, the fork line, the prompt).
+const whole = computed(() => budget.value >= messages.value.length);
 const doomed = computed(() => conversation.value.transcript.doomed.value);
 // The error line only where it adds to the transcript: the daemon's notice already says a turn's failure.
 const error = computed(() => unsaidError(conversation.value.error.value, messages.value));
@@ -87,7 +93,7 @@ const column = ref<HTMLElement>();
         <!-- One preview for every file link in the column, hanging off whichever link the pointer or focus is on. -->
         <FileRefPeek :host="column" />
         <!-- The rest of the conversation, above the window it opened on (a long chat starts mid-history); drawn only where more exists. -->
-        <div v-if="conversation.transcript.historyMore.value" class="flex justify-center py-2">
+        <div v-if="conversation.transcript.historyMore.value && whole" class="flex justify-center py-2">
             <!-- The press is the words, not the row — a full-width button would light up on any pointer crossing the top with no visible edges. -->
             <button
                 type="button"
@@ -99,18 +105,18 @@ const column = ref<HTMLElement>();
             </button>
         </div>
         <!-- Where a forked chat says so, above its inherited turns; held back until the reader reaches that point. -->
-        <ChatForkLine v-if="!conversation.transcript.historyMore.value && !props.subagent" />
+        <ChatForkLine v-if="!conversation.transcript.historyMore.value && whole && !props.subagent" />
         <!-- What the conversation was told before its first word, at the one place in the column where that is
              true: above everything it has said. Drawn only at the real top, since in the middle of a paged
              history it would claim a beginning that isn't on screen. -->
         <ChatSystemPrompt
-            v-if="!conversation.transcript.historyMore.value && messages.length > 0 && !props.subagent"
+            v-if="!conversation.transcript.historyMore.value && whole && messages.length > 0 && !props.subagent"
             :conversation-id="conversation.conversationId"
         />
         <template v-if="messages.length > 0">
             <!-- One section per turn, so each prompt's sticky range ends where its own answer does. -->
             <!-- `index` is for the day marker below, the one row that cares about its column position, not its turn. -->
-            <template v-for="(turn, index) in turns" :key="turn.id">
+            <template v-for="(turn, index) in shownTurns" :key="turn.id">
                 <!-- The day this stretch was sent, drawn only where the date changes (dayMarks), between sections rather than inside one (a boundary, not part of a turn). -->
                 <div v-if="dayMarks.get(turn.id)" class="flex justify-center pb-0.5 text-2xs text-subtle" :class="index === 0 ? '' : 'pt-3'">
                     {{ dayMarks.get(turn.id) }}

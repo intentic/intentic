@@ -36,7 +36,9 @@ flowchart LR
   to that same drawing. Attention badges use the glyph itself as their circular plate. Use `check` for a completed
   action or selection, `check-circle` for a completed status, and `times` for closing or dismissing, not for errors.
 - **Markdown.** `renderMarkdown` turns untrusted markdown into sanitized HTML with Shiki-coloured code blocks. Each
-  surface adds its own pass through the `decorate` hook, such as the editor's file links. `src/markdown/` also holds
+  surface adds its own pass through the `decorate` hook, such as the editor's file links. A page that calls
+  `highlightInWorker()` (the editor does) colours code in a worker (`highlightWorker.ts`), one block at a time, with
+  the page's own thread as the fallback. `src/markdown/` also holds
   the editing half (blocks, edits, undo history) every markdown-writing surface shares. The `./markdown` export
   holds no `.vue` files and no import-time DOM access, so node tests can load it.
 - **Figures.** A fenced block in `dag`, `bars` or `stats` carries JSON, and a `mermaid` block carries Mermaid

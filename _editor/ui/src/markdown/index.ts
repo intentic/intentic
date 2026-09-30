@@ -3,7 +3,7 @@
 // node tests. The <Markdown> component stays on the barrel.
 
 export { blockAtOffset, type MarkdownBlock, type MarkdownBlocks, offsetOfLine, splitMarkdownBlocks } from "./blocks.js";
-export { type CodeBlock, codeBlockHtml, copyCodeFromEvent, escapeHtml } from "./code.js";
+export { type CodeBlock, codeBlockHtml, copyCodeFromEvent, escapeHtml, highlightInWorker } from "./code.js";
 // Writing half of the engine: shared by every surface in the product that authors markdown (see
 // MarkdownDocument.vue), not owned by one view. `edits.ts`/`history.ts` are pure over (text, selection);
 // `sourceDom.ts` defers DOM access to call time, so this subpath stays importable from a node test.

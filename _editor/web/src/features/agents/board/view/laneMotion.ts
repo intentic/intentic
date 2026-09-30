@@ -1,4 +1,4 @@
-import { nextTick, onBeforeUpdate, onUpdated, type Ref } from "vue";
+import { nextTick, onBeforeUpdate, onMounted, onUpdated, type Ref } from "vue";
 import type { FleetLane } from "../../fleet/agentStatus";
 import type { FleetAgent } from "../../fleet/useAgents-fleet";
 
@@ -40,6 +40,12 @@ export const laneHolding = (lanes: Record<FleetLane, readonly FleetAgent[]>, id:
     }
     return undefined;
 };
+
+// Which cards stand in which lane, in order: the only thing a render can change that moves a card between places. The
+// board re-renders about once a second per running turn (a clock, a status line), and measuring every card twice around
+// each of those renders forced two full-board layouts for motion that could not exist.
+export const laneOrder = (lanes: Record<FleetLane, readonly FleetAgent[]>): string =>
+    [lanes.attention, lanes.active, lanes.finished].map((lane) => lane.map((agent) => agent.id).join(`,`)).join(`|`);
 
 const laneOfEl = (el: HTMLElement): FleetLane | undefined => el.closest<HTMLElement>(`section[data-lane]`)?.dataset[`lane`] as FleetLane | undefined;
 
@@ -118,8 +124,16 @@ export const useLaneMotion = (host: MotionHost) => {
         const nextLane = laneHolding(host.lanes.value, id);
         return prevLane !== undefined && nextLane !== undefined && prevLane !== nextLane;
     };
+    // The order last drawn, against which a render is asked whether anything can have moved.
+    let drawn: string | undefined;
+    onMounted(() => {
+        drawn = laneOrder(host.lanes.value);
+    });
     onBeforeUpdate(() => {
         before.clear();
+        if (laneOrder(host.lanes.value) === drawn) {
+            return;
+        }
         for (const [id, el] of cardEls) {
             if (!el.isConnected) {
                 cardEls.delete(id);
@@ -157,6 +171,10 @@ export const useLaneMotion = (host: MotionHost) => {
         }
     };
     onUpdated(() => {
+        drawn = laneOrder(host.lanes.value);
+        if (before.size === 0) {
+            return;
+        }
         const prefersReducedMotion = typeof window !== `undefined` && window.matchMedia?.(`(prefers-reduced-motion: reduce)`).matches;
         if (!prefersReducedMotion) {
             for (const [id, el] of cardEls) {

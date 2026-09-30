@@ -24,6 +24,10 @@ const cachedTree = (scope: ViewScope = workspaceScope()): WorkspaceTreeResponse 
     return undefined;
 };
 
+// The tree a reference would resolve against right now, as an identity: rendered prose linked against one tree is only
+// good while that same tree stands (useMarkdown's parse cache keys on it).
+export const fileRefTree = (): WorkspaceTreeResponse | undefined => cachedTree();
+
 // Container workspace root (e.g. /work); empty until the tree fetches once, so absolute references don't open yet
 // (relative ones still do).
 const containerRoot = (): string => cachedTree()?.root ?? ``;

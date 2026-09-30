@@ -4,6 +4,7 @@ import { sandboxRequiresGate } from "../overview/availability";
 import { useSandboxAvailability } from "../overview/useSandboxAvailability";
 import { useSandbox } from "../client/useSandbox";
 import { useWorkspaceTree } from "../../workspace/explorer/useWorkspaceTree";
+import { registry } from "../../agents/fleet/useAgents-registry";
 import SandboxConnecting from "./SandboxConnecting.vue";
 import SandboxUnauthorized from "./SandboxUnauthorized.vue";
 import SandboxWarming from "./SandboxWarming.vue";
@@ -15,10 +16,13 @@ import SandboxWarming from "./SandboxWarming.vue";
 const { reachable, connection } = useSandbox();
 // A 403 (daemon refused this account) reads off the failure's tag rather than a separate sticky boolean.
 const denied = computed(() => connection.value.failure?.kind === `forbidden`);
-// A hydrated tree marks the sandbox as previously visited: painted stale-while-revalidate, not gated.
+// A hydrated tree marks the sandbox as previously visited: painted stale-while-revalidate, not gated. So does a roster
+// restored from the last visit (useAgents-registry.ts), which is what a phone's board draws: without it the first screen
+// waited on the whole connection before drawing a card, the tree being something that board never shows.
 const { hasSnapshot } = useWorkspaceTree();
-const availability = useSandboxAvailability(hasSnapshot);
-const gated = computed(() => sandboxRequiresGate(reachable.value, hasSnapshot.value, availability.value));
+const established = computed(() => hasSnapshot.value || registry.value.length > 0);
+const availability = useSandboxAvailability(established);
+const gated = computed(() => sandboxRequiresGate(reachable.value, established.value, availability.value));
 </script>
 
 <template>

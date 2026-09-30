@@ -80,8 +80,10 @@ it(`stretches the breath for reduced motion instead of holding still`, async () 
     const query = window.matchMedia(`(prefers-reduced-motion: reduce)`);
     const remove = jest.spyOn(query, `removeEventListener`);
     Object.defineProperty(query, `matches`, { value: true });
-    // stubGlobal, not spyOn: the jsdom install defines every window member as an accessor, which spyOn refuses.
-    stubGlobal(`matchMedia`, () => query);
+    const desktop = window.matchMedia(`(hover: none) and (pointer: coarse)`);
+    // stubGlobal, not spyOn: the jsdom install defines every window member as an accessor, which spyOn refuses. Only the
+    // reduced-motion question answers yes; the screen stays a desktop pointer, where the rosette is SMIL.
+    stubGlobal(`matchMedia`, (asked: string) => (asked.includes(`reduced-motion`) ? query : desktop));
 
     const host = await mount();
 
@@ -89,4 +91,31 @@ it(`stretches the breath for reduced motion instead of holding still`, async () 
     app!.unmount();
     app = undefined;
     expect(remove).toHaveBeenCalledWith(`change`, expect.any(Function));
+});
+
+// ON A TOUCH SCREEN the same flower is drawn from composited boxes: no SMIL at all, which would re-style and re-paint the
+// page on the main thread every frame of the turn, and one box per petal so each fades as its own layer.
+it(`draws the flower from composited boxes on a touch screen`, async () => {
+    const touch = window.matchMedia(`(hover: none) and (pointer: coarse)`);
+    Object.defineProperty(touch, `matches`, { value: true });
+    const real = window.matchMedia.bind(window);
+    stubGlobal(`matchMedia`, (asked: string) => (asked.includes(`pointer: coarse`) ? touch : real(asked)));
+
+    const host = await mount();
+
+    expect(host.querySelector(`animate, animateTransform, animatetransform`)).toBeNull();
+    const petals = [...host.querySelectorAll<SVGElement>(`.rosette-petal`)];
+    expect(petals.map((petal) => petal.style.transform)).toEqual([
+        `rotate(0deg)`,
+        `rotate(45deg)`,
+        `rotate(90deg)`,
+        `rotate(135deg)`,
+        `rotate(180deg)`,
+        `rotate(225deg)`,
+        `rotate(270deg)`,
+        `rotate(315deg)`,
+    ]);
+    // The wave: each petal a 32nd of the breath behind the one before it, as the SMIL `begin` offsets are.
+    expect(petals.map((petal) => petal.style.getPropertyValue(`--rosette-lag`))).toEqual([`0`, `-0.03125`, `-0.0625`, `-0.09375`, `-0.125`, `-0.15625`, `-0.1875`, `-0.21875`]);
+    expect(host.querySelector(`.rosette`)?.getAttribute(`aria-hidden`)).toBe(`true`);
 });

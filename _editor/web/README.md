@@ -14,7 +14,8 @@ flowchart LR
 ```
 
 - **Where it runs.** A static SPA served by the nginx image in `Dockerfile`. `entrypoint.sh` fills `API_URL` and
-  `POSTHOG_KEY` into `assets/js/env.js` at container start, so one build serves any environment. The desktop app,
+  `POSTHOG_KEY` into `assets/js/env.js` at container start, so one build serves any environment, and inlines that
+  script into `index.html` so the first page load does not wait on a second, uncached request for it. The desktop app,
   the iOS shell and the Android shell all open this same app, and `_site/demo` builds it through `vite.shared.ts`.
 - **Two backends, two credentials.** The platform api (`src/lib/useApi.ts`) rides the Better Auth cookie and
   answers sign-in, the sandbox list, invites and the hosted plan. Every workspace call goes directly to the daemon

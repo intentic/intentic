@@ -35,4 +35,14 @@ envsubst '$NGINX_RESOLVER $POSTHOG_API_HOST $POSTHOG_ASSETS_HOST $WEB_BUILD' \
 envsubst '$API_URL $POSTHOG_KEY' < /usr/share/nginx/html/assets/js/env.js > /tmp/env.js
 cat /tmp/env.js > /usr/share/nginx/html/assets/js/env.js
 
+# The same config inlined into index.html, in place of the tag that loads it: that tag is a render-blocking script
+# served no-store, a full round trip to this origin before the page could parse another line, which a phone on a
+# cellular link pays on every start. env.js stays served for anything that still asks for it. Read through ENVIRON, not
+# `awk -v`, which would interpret backslashes in the minified script.
+ENV_JS="$(cat /tmp/env.js)" awk '
+    index($0, "<script src=\"/assets/js/env.js\"></script>") { print "        <script>" ENVIRON["ENV_JS"] "</script>"; next }
+    { print }
+' /usr/share/nginx/html/index.html > /tmp/index.html
+cat /tmp/index.html > /usr/share/nginx/html/index.html
+
 exec nginx -g 'daemon off;'

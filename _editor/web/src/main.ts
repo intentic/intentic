@@ -2,6 +2,7 @@
 // stable style set before the app mounts.
 import { installDevStyles } from "virtual:intentic-dev-styles";
 import { installChunkRecovery, installUi } from "@intentic/ui";
+import { highlightInWorker } from "@intentic/ui/markdown";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { createApp } from "vue";
 import App from "./App.vue";
@@ -11,7 +12,7 @@ import { startAudienceSync } from "./app/audienceSync";
 import { dropOutdatedMirrors } from "./app/buildEpoch";
 import { describeError, installClientDiagnostics, reportClient } from "./app/clientDiagnostics";
 import { installDesktopLinks } from "./app/environments/desktop";
-import { installPerfConsole, installPerfReporter } from "./app/perf";
+import { installPerfConsole, installPerfReporter, observeLongFrames } from "./app/perf";
 import { installRenderTrace } from "./app/renderTrace";
 import { queryClient } from "./lib/queryPersistence";
 import { installSelfHeal, purgeIfMarked, reportStartupError } from "./app/selfHeal";
@@ -36,18 +37,26 @@ dropOutdatedMirrors();
 // Runs in every window; must follow the purge, so a wipe here is never misread as a preference.
 installDocumentAppearance();
 
+// Code blocks in chat and documents are coloured in a worker, off the thread a reader's taps land on (code.ts).
+highlightInWorker();
+
 // Runs in every window too, and does nothing outside the desktop app: there, `target="_blank"` reaches the app only
 // because of this.
 installDesktopLinks();
 
-initAnalytics((path) => routePatternOf(router, path));
+// Loads the SDK itself at the page's first idle moment (analytics.ts), so it never stands in front of the first screen.
+void initAnalytics((path) => routePatternOf(router, path));
 
 // Before mount, so a slow first paint's spans land in the ring buffer too (`__intenticPerf` in the console).
 installPerfConsole();
 // Durable copy of only the SLOW spans; handed in since perf.ts must not import back into the app's graph.
-installPerfReporter((_op, _ms, fields, requestId) =>
-    reportClient(`perf.slow`, `slow ${fields["op"]} ${fields["ms"]}ms`, { level: `warn`, fields, ...(requestId !== undefined ? { requestId } : {}) }),
+// Keyed by the op alone, so the reporter's per-kind cap holds: with the milliseconds in the message every slow frame of
+// a streaming reply was a new kind, and a slow phone sent the queue's whole allowance every few seconds.
+installPerfReporter((op, _ms, fields, requestId) =>
+    reportClient(`perf.slow`, `slow ${op}`, { level: `warn`, fields, ...(requestId !== undefined ? { requestId } : {}) }),
 );
+// A frame that held the page past what a reader feels, with the scripts that held it (perf.ts, observeLongFrames).
+observeLongFrames((fields) => reportClient(`perf.frame`, `long frame`, { level: `warn`, fields: { ...fields } }));
 
 // Push taps and app launches, routed in the open page; before mount, so a launch tap is never dropped unheard.
 installNotificationTaps(router);

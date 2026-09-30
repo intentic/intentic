@@ -1,7 +1,8 @@
-import { computed } from "vue";
+import { computed, watch } from "vue";
 import { SANDBOX_MEMBERS } from "../../../lib/queryKeys";
 import { sandboxJson } from "../client/sandboxClient";
 import { useSandbox } from "../client/useSandbox";
+import { activeSandboxId } from "../overview/activeSandbox";
 import { useSandboxQuery } from "../client/useSandboxQuery";
 
 type MembersRoster = { members: { email: string }[]; owner?: string };
@@ -15,15 +16,45 @@ export function useSandboxSharedAccess() {
         queryFn: async (): Promise<MembersRoster> => (await sandboxJson(`/members`)) as MembersRoster,
         enabled: computed(() => isOwner.value),
     });
-    const sharedAccess = computed(() => {
+    // The answer once there is one: undefined while the sandbox list or the members read is still on its way.
+    const known = computed<boolean | undefined>(() => {
         const role = active.value?.role;
-        if (role !== undefined && role !== `owner`) {
+        if (role === undefined) {
+            return undefined;
+        }
+        if (role !== `owner`) {
             return true;
         }
-        if (!isOwner.value || query.isPending.value) {
-            return false;
-        }
-        return (query.data.value?.members.length ?? 0) > 0;
+        return query.isPending.value ? undefined : (query.data.value?.members.length ?? 0) > 0;
     });
+    // THE LAST ANSWER STANDS IN UNTIL THIS ONE ARRIVES. Neither the sandbox list nor the members read survives a reload,
+    // so a shared sandbox's board opened without its Everyone/Mine row and grew it a moment later, pushing every card
+    // down: a layout shift on every start (0.23 of the /agents page's measured CLS). Remembered per sandbox, so the row
+    // is there in the first frame whenever it was there last time.
+    watch(known, (value) => {
+        const id = activeSandboxId.value;
+        if (value !== undefined && id !== undefined) {
+            remember(id, value);
+        }
+    });
+    const sharedAccess = computed(() => known.value ?? recall(activeSandboxId.value));
     return { sharedAccess };
 }
+
+const rememberedKey = (sandboxId: string): string => `intentic.sharedAccess.${sandboxId}`;
+
+const recall = (sandboxId: string | undefined): boolean => {
+    try {
+        return sandboxId !== undefined && localStorage.getItem(rememberedKey(sandboxId)) === `1`;
+    } catch {
+        return false;
+    }
+};
+
+const remember = (sandboxId: string, shared: boolean): void => {
+    try {
+        localStorage.setItem(rememberedKey(sandboxId), shared ? `1` : `0`);
+    } catch {
+        // Unavailable storage costs the next start its first-frame row, nothing else.
+    }
+};

@@ -5,7 +5,7 @@ import {
     type UsageAccount,
     fenceReaches,
     SANDBOX_ROUTE_NAMES,
-    SANDBOX_ROUTE_SHAPES,
+    sandboxRouteFingerprints,
     systemContract,
 } from "@intentic/sandbox-contract";
 import { AGENT_SESSION_PREFIX, agentSessionName, JOB_SESSION_PREFIX, PANEL_SESSION_PREFIX, WEB_SESSION_PREFIX } from "@intentic/sandbox-contract/session-names";
@@ -90,7 +90,7 @@ async function* systemEvents(
         kind: "hello",
         workspaceId: await workspaceIdentity(services),
         routes: [...SANDBOX_ROUTE_NAMES],
-        shapes: { ...SANDBOX_ROUTE_SHAPES },
+        shapes: { ...sandboxRouteFingerprints() },
         build: buildId(),
         boot: services.boot.progress(),
         ...shownProjectDir(services.config, fence),

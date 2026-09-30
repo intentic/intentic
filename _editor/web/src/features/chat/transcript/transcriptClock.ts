@@ -1,8 +1,9 @@
 import type { TranscriptRequests, TranscriptRow } from "@intentic/sandbox-contract";
+import { useTouchMotion } from "@intentic/ui/reduced-motion";
 import { computed, type ComputedRef, ref, shallowRef } from "vue";
 import { recordPerf } from "../../../app/perf";
 import type { ChatMessage } from "./transcript";
-import { appendMessage, applyPatch, attachRun, emptyTranscriptState, flushPending, revealPending, type TranscriptState } from "./transcriptState";
+import { appendMessage, applyPatch, attachRun, emptyTranscriptState, flushPending, rebuildKeeping, revealPending, type TranscriptState } from "./transcriptState";
 import type { AttachEntry, AttachHead, TurnContext } from "../run/turnStream";
 
 // The transcript as it's being written: state, the clock deciding when an entry shows, and every write to it, unified
@@ -15,6 +16,12 @@ import type { AttachEntry, AttachHead, TurnContext } from "../run/turnStream";
 // Bounds the lag when nothing is painting (a minimized window), so the clock doesn't stay armed forever.
 const CLOCK_FALLBACK_MS = 120;
 
+// A touch screen's clock ticks at most every other frame. Each tick is one write that every derived view of the chat
+// re-reads and one render of its column, and a phone's CPU pays for that in a large share of its frame; at 30 writes a
+// second the typing still reads as typing (each tick reveals a share of what is buffered, not a fixed count), and half
+// the frames are left for the reader's own taps and scrolls.
+const TOUCH_TICK_MS = 32;
+
 export class TranscriptClock {
     // shallowRef, not ref: transitions replace the whole object; nothing ever mutates through `state.value`.
     private readonly state = shallowRef<TranscriptState>(emptyTranscriptState);
@@ -24,6 +31,9 @@ export class TranscriptClock {
     // No frame handle kept; an idle tick just returns. The fallback timer is held so it can't fire twice.
     private clockArmed = false;
     private clockFallback: ReturnType<typeof setTimeout> | undefined;
+    // When the last tick with work ran, for the touch screen's spacing (TOUCH_TICK_MS).
+    private lastTick = 0;
+    private readonly touch = useTouchMotion();
 
     // Whether this transcript is visible; unwatched, a batch settles whole rather than typing. Default true.
     readonly watched = ref(true);
@@ -87,6 +97,12 @@ export class TranscriptClock {
         }
         // Measured by hand, not trackPerf: this runs every paint and can't afford a closure and a promise per tick.
         const from = performance.now();
+        // Too soon after the last on a touch screen: the work waits for the next frame, and nothing is lost meanwhile.
+        if (this.touch.value && from - this.lastTick < TOUCH_TICK_MS) {
+            this.schedule();
+            return;
+        }
+        this.lastTick = from;
         const { state, applied } = this.foldInbox(this.state.value);
         const folded = performance.now();
         // Reveals against the state the fold just produced, so one write carries both jobs (see `watched`).
@@ -184,9 +200,10 @@ export class TranscriptClock {
     }
 
     // Replaces the transcript with rows that carry no ids of their own (a branch's inherited turns, the daemon's
-    // record), allocating fresh ones. Nothing stays attached afterward.
+    // record), keeping the objects of messages already drawn with the same content (rebuildKeeping) and allocating fresh
+    // ids for the rest. Nothing stays attached afterward.
     rebuild(rows: readonly TranscriptRow[]): void {
-        this.state.value = rows.reduce((state, row) => appendMessage(state, row), emptyTranscriptState);
+        this.state.value = rebuildKeeping(this.state.value.messages, rows);
     }
 
     // Puts an older page above what's drawn; every standing message keeps its id and position, safe mid-stream. New ids

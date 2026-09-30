@@ -29,8 +29,12 @@ const buildStamp = (): Plugin => ({
 // itself. Dev only: a production build ships both sides compiled and serves no such route, which reads as no evidence.
 const CONTRACT_DIST = here(`../../_shared/sandbox-contract/dist/index.js`);
 
-// A shape map keyed by route name, which is all either side is read for here.
-type ShapeModule = { readonly SANDBOX_ROUTE_SHAPES: Readonly<Record<string, string>> };
+// A shape map keyed by route name, which is all either side is read for here. A dist compiled before the map became a
+// function (sandboxRouteFingerprints) still carries the constant, and still answers.
+type ShapeModule = {
+    readonly sandboxRouteFingerprints?: () => Readonly<Record<string, string>>;
+    readonly SANDBOX_ROUTE_SHAPES?: Readonly<Record<string, string>>;
+};
 
 // Node caches a file: import for the process's life, so a rebuild would keep answering with the copy loaded before it.
 // The dist's own mtime in the specifier makes a rebuilt file a different module, and an untouched one a cache hit.
@@ -46,7 +50,7 @@ const contractFreshness = (): Plugin => ({
                 response.setHeader(`cache-control`, `no-store`);
                 try {
                     const compiled = await loadCompiledContract();
-                    response.end(JSON.stringify({ compiled: compiled.SANDBOX_ROUTE_SHAPES }));
+                    response.end(JSON.stringify({ compiled: compiled.sandboxRouteFingerprints?.() ?? compiled.SANDBOX_ROUTE_SHAPES }));
                 } catch {
                     // A contract that has never been built, or one whose dist cannot load, leaves the question open
                     // rather than answering "compiled and fine".

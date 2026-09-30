@@ -114,9 +114,22 @@ const restore = (): string | undefined => {
 // or a load event firing before the global is assigned.
 const GIS_SRC = `https://accounts.google.com/gsi/client`;
 
+// The script tag, asked for on first need: index.html only fetches it up front on the pages that exist to sign in.
+const gisScript = (): HTMLScriptElement => {
+    const present = document.querySelector<HTMLScriptElement>(`script[src^="${GIS_SRC}"]`);
+    if (present !== null) {
+        return present;
+    }
+    const script = document.createElement(`script`);
+    script.src = GIS_SRC;
+    script.async = true;
+    document.head.append(script);
+    return script;
+};
+
 const waitForGis = async (): Promise<GoogleAccountsId> => {
     const ready = (): GoogleAccountsId | undefined => window.google?.accounts?.id;
-    const script = document.querySelector<HTMLScriptElement>(`script[src^="${GIS_SRC}"]`);
+    const script = ready() === undefined ? gisScript() : null;
     if (script !== null && ready() === undefined) {
         await new Promise<void>((resolve) => {
             script.addEventListener(`load`, () => resolve(), { once: true });

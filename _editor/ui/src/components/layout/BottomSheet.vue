@@ -1,13 +1,24 @@
 <!-- Mobile action sheet: a PrimeVue Drawer docked to the bottom edge, the touch replacement for Popover/ContextMenu. -->
 <script setup lang="ts">
 import Drawer from "primevue/drawer";
-import { ref } from "vue";
+import { ref, watch } from "vue";
 import { useBackDismiss } from "../../composables/useBackDismiss.js";
 
 const { header } = defineProps<{ header?: string }>();
 const visible = defineModel<boolean>({ required: true });
 
 useBackDismiss(visible);
+
+// THE DRAWER EXISTS FROM ITS FIRST OPENING ON. A phone mounts dozens of closed sheets (three on every board card, ten
+// behind a chat's composer), and each closed PrimeVue Drawer is still a component with its theme, passthrough and
+// portal set up; a sheet nobody opened costs nothing this way. Mounting it already visible still slides it in, since
+// the Drawer's transition is `appear`. Kept once opened, so closing plays its leave transition and reopening is instant.
+const opened = ref(visible.value);
+watch(visible, (now) => {
+    if (now) {
+        opened.value = true;
+    }
+});
 
 // Past this much downward travel the release dismisses; under it the sheet springs back to its docked place.
 const DISMISS_PX = 96;
@@ -57,6 +68,7 @@ const onUp = (): void => {
 
 <template>
     <Drawer
+        v-if="opened"
         v-model:visible="visible"
         position="bottom"
         :show-close-icon="false"

@@ -1,13 +1,15 @@
 import { type EditorContext, isAwaitingDecision, type TranscriptRow } from "@intentic/sandbox-contract";
+import { useDevice } from "@intentic/ui";
 import { basename } from "@intentic/ui/path";
 import { computed, ref } from "vue";
 import { trackPerf } from "../../../app/perf";
 import { uuid } from "../../../lib/uuid";
+import { whenIdle } from "../../../lib/whenIdle";
 import { orRefusal, SandboxHttpError } from "../../sandbox/client/sandboxHttpError";
 import { sandboxRpc } from "../../sandbox/client/sandboxRpc";
 import type { AttachEntry, TurnContext } from "../run/turnStream";
-import { olderTranscriptPage } from "../transcript/agentTranscript";
-import { type ChatAttachment, type ChatMessage, recordedRows, withCancelledCards } from "../transcript/transcript";
+import { olderTranscriptPage, PHONE_TURNS } from "../transcript/agentTranscript";
+import { type ChatAttachment, type ChatMessage, lastTurns, recordedRows, withCancelledCards } from "../transcript/transcript";
 import { readTranscript, saveTranscript } from "../transcript/transcriptCache";
 import { TranscriptClock } from "../transcript/transcriptClock";
 import type { PendingAttachment } from "../drafts/useChatAttachments";
@@ -90,11 +92,26 @@ export class TranscriptView extends TranscriptClock {
 
     // Mirror the settled transcript locally so reopening paints from disk rather than waiting on the sandbox.
     // `authoritative` is the daemon's own replay, which may shrink the mirror; anything else is this window's view.
+    // Written when the page is idle, once for however many boundaries asked meanwhile: the write structured-clones up
+    // to 300 rows on the main thread, and it was landing on the same frames as a turn's end and a chat's open. What is
+    // written is the transcript as it stands then, which is the newest there is.
+    private persistQueued = false;
+    private persistAuthoritative = false;
     persist(authoritative = false): void {
-        // Timed: an unconfirmed write reads the mirror back first, so this is two IndexedDB writes per boundary.
-        void trackPerf(`chat.persist`, { messages: this.messages.value.length, authoritative }, () =>
-            saveTranscript(this.host.conversationId, this.messages.value, authoritative),
-        );
+        this.persistAuthoritative ||= authoritative;
+        if (this.persistQueued) {
+            return;
+        }
+        this.persistQueued = true;
+        whenIdle(() => {
+            const confirmed = this.persistAuthoritative;
+            this.persistQueued = false;
+            this.persistAuthoritative = false;
+            // Timed: an unconfirmed write may read the mirror back first (transcriptCache.ts).
+            void trackPerf(`chat.persist`, { messages: this.messages.value.length, authoritative: confirmed }, () =>
+                saveTranscript(this.host.conversationId, this.messages.value, confirmed),
+            );
+        });
     }
 
     // Paint the locally cached transcript if there is one and nothing has rendered yet; returns whether it painted.
@@ -108,7 +125,8 @@ export class TranscriptView extends TranscriptClock {
         if (cached === undefined || this.messages.value.length > 0 || this.host.turn.streaming.value) {
             return false;
         }
-        this.adopt(cached);
+        // A phone paints the turns its record will open on, not the mirror's whole tail (agentTranscript.ts).
+        this.adopt(useDevice().mobile.value ? lastTurns(cached, PHONE_TURNS) : cached);
         return true;
     }
 

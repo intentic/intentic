@@ -12,6 +12,8 @@ import { useAgents } from "../../agents/fleet/useAgents";
 import { errandOf } from "../run/errands";
 import { chatRouteWait } from "../routing/chatRoute";
 import { changedNothing, type ChatMessage, type ChecklistView, continuationKind, foldsIntoTurn } from "./transcript";
+import { pinPrompt } from "./promptPins";
+import { watchClamp } from "./clampWatch";
 import { type CardAnswer, requestIdOf } from "../session/cardReplies";
 import { useMarkdown } from "../../../lib/markdown/useMarkdown";
 import { openFileRefFromEvent } from "../../workspace/files/refs/openFileRef";
@@ -113,8 +115,11 @@ const armedWatch = computed(() => {
 });
 
 // One renderer per message, held for the component's life; file links resolve in the chat's own checkout.
+// The words through a computed: a tool or thinking patch replaces the row object with the same text, and a computed
+// that returns an equal string wakes nothing, so the live bubble's tail is not re-parsed for a frame that did not write.
+const words = computed(() => props.message.text);
 const body = useMarkdown(
-    () => props.message.text,
+    words,
     () => props.streaming,
     () => conversation.value.scope.value,
 );
@@ -225,6 +230,8 @@ const startEdit = (): void => {
 const bubble = useTemplateRef<HTMLElement>(`bubble`);
 const overflowing = ref(false);
 const expanded = ref(false);
+// Measured with every other prompt's in one pass (clampWatch.ts), skipped while expanded: the box always fits then, and
+// remeasuring would clear the collapse flag.
 watch(
     bubble,
     (element, _previous, onCleanup) => {
@@ -232,16 +239,7 @@ watch(
             overflowing.value = false;
             return;
         }
-        const observer = new ResizeObserver(() => {
-            // Skip measuring while expanded, since the box always fits and remeasuring would clear the collapse flag.
-            if (!expanded.value) {
-                // Both axes, because the clamp changes axis with the row: six wrapped lines in flow, one nowrap line
-                // with an ellipsis while the row is stuck (.chat-prompt-pinned in chat.css).
-                overflowing.value = element.scrollHeight > element.clientHeight + 1 || element.scrollWidth > element.clientWidth + 1;
-            }
-        });
-        observer.observe(element);
-        onCleanup(() => observer.disconnect());
+        onCleanup(watchClamp(element, { skip: () => expanded.value, answer: (value) => (overflowing.value = value) }));
     },
     { immediate: true, flush: `post` },
 );
@@ -284,9 +282,8 @@ const trailer = computed(() => {
     return { label, count: folded.filter((message) => foldedLabel(message) === label).length };
 });
 
-// Pinned state (.chat-prompt-pinned).
-// Whether the prompt is actually stuck (CSS can't ask): compares the row's top to the scroller's edge on scroll and on
-// either box resizing; the IntersectionObserver only toggles that listener.
+// Pinned state (.chat-prompt-pinned): whether the prompt is actually stuck, which CSS can't ask. Measured by the
+// scroller's one watcher over all its prompts (promptPins.ts), not by one per prompt.
 const row = useTemplateRef<HTMLElement>(`row`);
 const pinned = ref(false);
 
@@ -298,91 +295,13 @@ watch(
             return;
         }
         // The row's only valid pin anchor is `.chat-scroller`.
-        const scroller = element.closest(`.chat-scroller`);
+        const scroller = element.closest<HTMLElement>(`.chat-scroller`);
         if (scroller === null) {
             return;
         }
-        // What this row covers while pinned, published to the turn as `--chat-pin` so anything else that sticks inside
-        // it (an open mark bar) parks below the prompt instead of under it. One prompt pins per turn, so one writer.
+        // One prompt pins per turn, so the turn's `--chat-pin` has one writer.
         const host = element.closest<HTMLElement>(`.chat-pin-host`);
-        // `top: -1px` is the pin's own offset: the row's last pixel sits that far above the scroller's edge.
-        const publish = (): void => host?.style.setProperty(`--chat-pin`, `${element.offsetHeight - 1}px`);
-        // Read off the row rather than off `pinned`, which leads the DOM by a render: what the next measurement has to
-        // account for is the geometry on screen, not the intent.
-        const collapsed = (): boolean => element.classList.contains(`chat-prompt-pinned`);
-        // This row's height in px while it wraps, remembered because a collapsed row cannot be asked what it would grow
-        // back to.
-        let loose = 0;
-        // Compares against the midpoint of the row's 1px sticky offset, robust to fractional scroll position or display
-        // scaling.
-        // PINNING SHORTENS THE TRANSCRIPT BY WHAT THE ONE-LINE TITLE FREES, so the pin cannot be measured without
-        // hysteresis worth that much: parked at the foot of the scroller there is no scroll left below to absorb the
-        // loss, the browser clamps scrollTop to the smaller maximum, and this row's own flow position drops by the
-        // freed px — past the edge, which unpins it, which restores the height, which pins it again, at frame rate, for
-        // as long as the reader stays at the foot of a turn whose remaining content is within one collapse of filling
-        // the pane. Below the edge by less than its own collapse freed, this row is still the pinned one.
-        const sync = (): void => {
-            const edge = scroller.getBoundingClientRect().top + scroller.clientTop;
-            if (!collapsed()) {
-                loose = element.offsetHeight;
-            }
-            const freed = collapsed() ? Math.max(0, loose - element.offsetHeight) : 0;
-            pinned.value = element.getBoundingClientRect().top < edge - 0.5 + freed;
-        };
-        let listening = false;
-        const listen = (on: boolean): void => {
-            if (on === listening) {
-                return;
-            }
-            listening = on;
-            if (on) {
-                scroller.addEventListener(`scroll`, sync, { passive: true });
-            } else {
-                scroller.removeEventListener(`scroll`, sync);
-            }
-        };
-        // Gates the scroll listener on visibility so off-screen rows aren't measured.
-        const observer = new IntersectionObserver(
-            (entries) => {
-                listen(entries.at(-1)?.isIntersecting === true);
-                sync();
-            },
-            { root: scroller },
-        );
-        observer.observe(element);
-        // A row crosses the threshold with nothing scrolled, too: content above it changes height (a card folding,
-        // the warm-up pass giving skipped rows their real heights) or the box around it resizes (the floating
-        // window fitting itself around a second pane). Scroll anchoring hides most of that — it moves scrollTop to
-        // hold the reader's place, and Chromium does fire a scroll event when it does — but it is suppressed on any
-        // frame that changes a computed style on the anchor's ancestors, which is what folding a row IS. The row
-        // then lifts with no scroll event behind it, and the prompt keeps a transparent band while the turn scrolls
-        // through it, until the reader happens to scroll: the report this measurement was added for.
-        // Two boxes, for the reason useStickToBottom watches two: the scroller's own box changes when the pane or
-        // window resizes it, the wrapper inside it (ChatPane's `content`, which the transcript's insets live on)
-        // changes when the turn grows, and neither implies the other.
-        const resizer = new ResizeObserver(() => {
-            publish();
-            if (listening) {
-                sync();
-            }
-        });
-        // The row itself, for `--chat-pin`: its height changes when the reader opens a clamped prompt.
-        resizer.observe(element);
-        resizer.observe(scroller);
-        // Guarded, not asserted: a scroller with nothing in it yet is a transcript with no row to pin either.
-        if (scroller.firstElementChild !== null) {
-            resizer.observe(scroller.firstElementChild);
-        }
-        // Syncs and listens immediately, so an already-stuck row (transcript restored at the bottom) starts out pinned.
-        publish();
-        sync();
-        listen(true);
-        onCleanup(() => {
-            observer.disconnect();
-            resizer.disconnect();
-            listen(false);
-            host?.style.removeProperty(`--chat-pin`);
-        });
+        onCleanup(pinPrompt(scroller, { element, host, pinned: (value) => (pinned.value = value) }));
     },
     { immediate: true, flush: `post` },
 );

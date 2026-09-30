@@ -81,13 +81,51 @@ it(`slows the spinner for reduced motion and removes its preference listener on 
     const query = window.matchMedia(`(prefers-reduced-motion: reduce)`);
     const remove = jest.spyOn(query, `removeEventListener`);
     Object.defineProperty(query, `matches`, { value: true });
+    const desktop = window.matchMedia(`(hover: none) and (pointer: coarse)`);
     // Stubbed rather than spied on: the DOM shim carries `matchMedia` as an accessor, and a spy cannot stand in for one.
-    stubGlobal(`matchMedia`, () => query);
+    // Only the reduced-motion question answers yes; the screen stays a desktop pointer, where the spinner is SMIL.
+    stubGlobal(`matchMedia`, (asked: string) => (asked.includes(`reduced-motion`) ? query : desktop));
     const host = await spinner(true);
     expect(host.querySelector(`animateTransform`)?.getAttribute(`dur`)).toBe(`3s`);
     app!.unmount();
     app = undefined;
     expect(remove).toHaveBeenCalledWith(`change`, expect.any(Function));
+});
+
+// A still icon never asks: a thousand icons on a board would otherwise hold a thousand preference listeners.
+it(`asks the reduced-motion question only while it spins`, async () => {
+    const asked: string[] = [];
+    const real = window.matchMedia.bind(window);
+    stubGlobal(`matchMedia`, (query: string) => {
+        asked.push(query);
+        return real(query);
+    });
+    await spinner(false);
+
+    expect(asked.filter((query) => query.includes(`reduced-motion`))).toEqual([]);
+});
+
+// ON A TOUCH SCREEN the spinner turns on the compositor: a CSS animation on the whole glyph, and no SMIL, which would
+// re-style and re-paint the page on the main thread every frame it is on screen.
+it(`turns the whole glyph on the compositor on a touch screen`, async () => {
+    const touch = window.matchMedia(`(hover: none) and (pointer: coarse)`);
+    Object.defineProperty(touch, `matches`, { value: true });
+    const real = window.matchMedia.bind(window);
+    stubGlobal(`matchMedia`, (query: string) => (query.includes(`pointer: coarse`) ? touch : real(query)));
+    const host = await spinner(true);
+
+    expect(host.querySelector(`animateTransform, animatetransform`)).toBeNull();
+    expect(host.querySelector(`svg`)?.classList.contains(`ui-icon-turning`)).toBe(true);
+});
+
+it(`keeps a still icon still on a touch screen`, async () => {
+    const touch = window.matchMedia(`(hover: none) and (pointer: coarse)`);
+    Object.defineProperty(touch, `matches`, { value: true });
+    const real = window.matchMedia.bind(window);
+    stubGlobal(`matchMedia`, (query: string) => (query.includes(`pointer: coarse`) ? touch : real(query)));
+    const host = await spinner(false);
+
+    expect(host.querySelector(`svg`)?.classList.contains(`ui-icon-turning`)).toBe(false);
 });
 
 // Assert the actual accessible SVG, including attribute changes after mount.

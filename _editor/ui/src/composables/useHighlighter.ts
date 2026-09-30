@@ -1,5 +1,4 @@
-import { createHighlighterCore, type GrammarState, hastToHtml, type HighlighterCore, type ThemedToken } from "shiki/core";
-import { createJavaScriptRegexEngine } from "shiki/engine/javascript";
+import type { GrammarState, HighlighterCore, ThemedToken } from "shiki/core";
 import { langLoader } from "@intentic/code-read/langs";
 
 // Shared Shiki highlighter: one lazily-built core for the app, using the JS RegExp engine (no WASM) with
@@ -19,6 +18,10 @@ export type CodeToken = Pick<ThemedToken, "content" | "offset" | "htmlStyle">;
 const WARM_UP = `export class A { async b(c = "d") { return [1, /e/g]; } } // f`;
 
 let core: Promise<HighlighterCore> | undefined;
+// Shiki's core and its regex engine arrive with the first highlight, not with this module: the kit's barrel exports this
+// composable, so a static import put ~120 KB of highlighter into every startup, highlighted code or not.
+let shiki: Promise<typeof import("shiki/core")> | undefined;
+const shikiCore = (): Promise<typeof import("shiki/core")> => (shiki ??= import(`shiki/core`));
 // lang -> the load in flight or settled; keyed rather than a loaded set, since a burst of requests for
 // one language would otherwise each re-import before the first resolves. A rejected load is dropped so
 // a later render retries.
@@ -28,12 +31,17 @@ const grammars = new Map<string, Promise<HighlighterCore>>();
 // preview and editor agree.
 const ensureCore = (): Promise<HighlighterCore> => {
     if (!core) {
-        core = createHighlighterCore({
-            themes: [import(`@shikijs/themes/light-plus`), import(`@shikijs/themes/dark-plus`)],
-            langs: [],
-            // Don't throw on a grammar regex the JS engine can't compile; degrade instead.
-            engine: createJavaScriptRegexEngine({ forgiving: true }),
-        });
+        core = (async () => {
+            const [{ createHighlighterCore }, { createJavaScriptRegexEngine }] = await Promise.all([shikiCore(), import(`shiki/engine/javascript`)]);
+            return createHighlighterCore({
+                themes: [import(`@shikijs/themes/light-plus`), import(`@shikijs/themes/dark-plus`)],
+                langs: [],
+                // Don't throw on a grammar regex the JS engine can't compile; degrade instead.
+                engine: createJavaScriptRegexEngine({ forgiving: true }),
+            });
+        })();
+        // A core that failed to build is forgotten, so the next highlight tries again.
+        void core.catch(() => (core = undefined));
     }
     return core;
 };
@@ -156,7 +164,7 @@ const highlightSliced = async (code: string, lang: string, options: SlicedHighli
     const before = lines.slice(0, first).flatMap((line) => [plainLine(line), newline]);
     const after = lines.slice(first + count).flatMap((line) => [newline, plainLine(line)]);
     codeOf(root).children = [...before, ...(body as HastElement[`children`]), ...after];
-    return hastToHtml(root);
+    return (await shikiCore()).hastToHtml(root);
 };
 
 // Tokenizes a single line with no grammar state carried in from lines above it, all a lifted snippet can offer.

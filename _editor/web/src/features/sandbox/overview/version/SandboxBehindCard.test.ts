@@ -5,7 +5,7 @@
 // jsdom: mounts the component tree and reads rendered text.
 import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
-import { type Device, SANDBOX_ROUTE_NAMES, SANDBOX_ROUTE_SHAPES } from "@intentic/sandbox-contract";
+import { type Device, SANDBOX_ROUTE_NAMES, sandboxRouteFingerprints } from "@intentic/sandbox-contract";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { setDaemonRoutes } from "../useDaemonRoutes";
 import { resetContractFreshness } from "../contractFreshness";
@@ -37,7 +37,7 @@ const { default: SandboxBehindCard } = await import("./SandboxBehindCard.vue");
 
 // Baseline daemon level, plus the two ways it can diverge: a missing route, or one with a different shape.
 const LEVEL = [...SANDBOX_ROUTE_NAMES];
-const SHAPES = { ...SANDBOX_ROUTE_SHAPES };
+const SHAPES = { ...sandboxRouteFingerprints() };
 const withoutVpn = LEVEL.filter((name) => !name.startsWith(`vpn.`));
 const reshaped = (...names: string[]): Record<string, string> => ({ ...SHAPES, ...Object.fromEntries(names.map((name) => [name, `different`])) });
 

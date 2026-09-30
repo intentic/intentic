@@ -1,6 +1,7 @@
 import { ref } from "vue";
 import { clipboardOf } from "../lib/clipboard.js";
 import { loadChunk } from "../lib/loadChunk.js";
+import { createWorkerCall } from "../lib/workerCall.js";
 import type { ShikiLang } from "@intentic/code-read/langs";
 import { JSON_FIGURE_LANGS } from "./figures.js";
 
@@ -82,17 +83,66 @@ const settleBatch = (): void => {
 
 // Dynamic import, not top-level: shiki/core plus both themes shouldn't load for prose with no fenced block.
 // Imports useHighlighter.js directly, not the design-system barrel, since this engine also runs from plain node
-// unit tests.
-let highlighter: Promise<(code: string, lang: string) => Promise<string | undefined>> | undefined;
+// unit tests. Sliced (highlightSliced): a block is coloured 2 KB per task with the grammar state carried across, so a
+// long block never holds the main thread for longer than one slice.
+type Highlight = (code: string, lang: string) => Promise<string | undefined>;
+let highlighter: Promise<Highlight> | undefined;
+
+// OFF THE MAIN THREAD, where the page asks for it (the app does, from main.ts): the highlight runs in a worker
+// (highlightWorker.ts, through the kit's one worker protocol) and answers with the same HTML. Opt-in rather than
+// automatic because this engine also runs where there is no page to protect (node unit tests); a worker that cannot
+// start, or dies, hands its calls to the page's own thread, which is what every highlight did before.
+let workerWanted = false;
+export const highlightInWorker = (): void => {
+    workerWanted = true;
+};
+
+const inWorker = createWorkerCall<{ readonly code: string; readonly lang: string }, string | undefined>(
+    async () => (`Worker` in globalThis ? new Worker(new URL(`./highlightWorker.ts`, import.meta.url), { type: `module` }) : undefined),
+    async ({ code, lang }) => (await loadInPage())(code, lang),
+);
+
 // A failed load is forgotten, so the next fence asks again instead of rendering plain for the life of the tab.
-const loadHighlighter = (): Promise<(code: string, lang: string) => Promise<string | undefined>> =>
-    (highlighter ??= loadChunk(() => import(`../composables/useHighlighter.js`)).then(
-        (module) => module.useHighlighter().highlight,
+const loadHighlighter = (): Promise<Highlight> =>
+    (highlighter ??= workerWanted ? Promise.resolve((code: string, lang: string) => inWorker({ code, lang })) : loadInPage());
+
+const loadInPage = (): Promise<Highlight> =>
+    loadChunk(() => import(`../composables/useHighlighter.js`)).then(
+        (module) => {
+            const { highlightSliced } = module.useHighlighter();
+            return (code: string, lang: string) => highlightSliced(code, lang, { from: `start`, stale: () => false });
+        },
         (error: unknown) => {
             highlighter = undefined;
             throw error;
         },
-    ));
+    );
+
+// ONE BLOCK AT A TIME, EACH IN A TASK OF ITS OWN. Every block a render scheduled used to chain onto the highlighter's
+// load, so all of them ran in the one microtask drain its load resolved in: opening a chat with forty code blocks was a
+// single task of about a second at 4× CPU throttle, which a phone spends with the chat frozen under the reader's finger.
+// Queued, the page gets a turn between blocks — a tap, a scroll, a frame.
+const waiting: (() => Promise<void>)[] = [];
+let draining = false;
+const nextTask = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
+const drain = async (): Promise<void> => {
+    if (draining) {
+        return;
+    }
+    draining = true;
+    try {
+        for (let job = waiting.shift(); job !== undefined; job = waiting.shift()) {
+            await job();
+            await nextTask();
+        }
+    } finally {
+        draining = false;
+    }
+};
+const enqueue = (job: () => Promise<void>): void => {
+    waiting.push(job);
+    void drain();
+};
 
 // The fence's info string reduced to a grammar id: `ts`, but also ```` ```ts title=x ```` and ```` ```TS ````.
 const langId = (fence: string): string | undefined => {
@@ -126,7 +176,8 @@ export const highlightedCode = (code: string, info: string): string | undefined 
     }
     if (!inFlight.has(key)) {
         inFlight.add(key);
-        void loadHighlighter()
+        enqueue(() =>
+            loadHighlighter()
             .then((highlight) => highlight(code, lang))
             .then(
                 (html) => {
@@ -147,7 +198,8 @@ export const highlightedCode = (code: string, info: string): string | undefined 
                     inFlight.delete(key);
                     settleBatch();
                 },
-            );
+            ),
+        );
     }
     return undefined;
 };

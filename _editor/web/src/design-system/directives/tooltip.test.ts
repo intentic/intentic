@@ -96,3 +96,17 @@ it(`keeps an open card through a re-render that says the same thing`, async () =
     expect(box()?.querySelector(`dd`)?.textContent).toBe(`1`);
     done();
 });
+
+// A tap is not a hover: a touch screen fires the mouse events after the finger lifts, and a box built for them measures
+// the page and then stays up over whatever the tap opened. A mouse entering after a finger still gets its label.
+it(`draws nothing for the mouse events a tap fires, and still answers a mouse`, () => {
+    const { anchor, done } = anchored(`Archive`);
+    anchor.dispatchEvent(new PointerEvent(`pointerenter`, { pointerType: `touch` }));
+    hover(anchor);
+    expect(box()).toBeNull();
+
+    anchor.dispatchEvent(new PointerEvent(`pointerenter`, { pointerType: `mouse` }));
+    hover(anchor);
+    expect(box()?.textContent).toBe(`Archive`);
+    done();
+});

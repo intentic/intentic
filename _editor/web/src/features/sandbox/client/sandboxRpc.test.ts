@@ -1,5 +1,5 @@
 import { resetSandboxScope } from "@intentic/extension-api";
-import { REQUEST_ID_HEADER, SANDBOX_ROUTE_NAMES, SANDBOX_ROUTE_SHAPES, SandboxSettingsSchema, type SystemEvent } from "@intentic/sandbox-contract";
+import { REQUEST_ID_HEADER, SANDBOX_ROUTE_NAMES, sandboxRouteFingerprints, SandboxSettingsSchema, type SystemEvent } from "@intentic/sandbox-contract";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { readFailure, setDaemonRoutes } from "../overview/useDaemonRoutes";
 import { SandboxHttpError } from "./sandboxHttpError";
@@ -212,7 +212,7 @@ it(`blames the sandbox's image for a 404 on a route its daemon never advertised`
 });
 
 it(`blames the drift for a 400 on a route whose shape the daemon disagrees about`, async () => {
-    setDaemonRoutes([...SANDBOX_ROUTE_NAMES], { ...SANDBOX_ROUTE_SHAPES, "settings.set": `different` });
+    setDaemonRoutes([...SANDBOX_ROUTE_NAMES], { ...sandboxRouteFingerprints(), "settings.set": `different` });
     stubGlobal(
         `fetch`,
         jest.fn(async () => json(400, { message: `Input validation failed` })),

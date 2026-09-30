@@ -5,6 +5,7 @@ import { computed, watch } from "vue";
 import { invalidateAgentTranscript } from "../../chat/transcript/agentTranscript";
 import { useChat } from "../../chat/run/useChat";
 import { reportClient } from "../../../app/clientDiagnostics";
+import { buildId } from "../../../app/buildEpoch";
 import { reloadOnHotUpdate } from "../../../app/hotReload";
 import { onScreen } from "../../../shell/window/onScreen";
 import { AGENT_REVIEW, rpcKey, rpcKeyAt } from "../../../lib/queryKeys";
@@ -18,8 +19,33 @@ import { observeRoster } from "./sandboxClock";
 // a revision line. Bottom of the fleet store's module graph; nothing here reads a module above it. All of it belongs
 // to the daemon it came from, so it is sandbox-scoped: another daemon's archive must never offer restores here.
 
-// Shallow: writes replace the array wholesale; a deep ref would re-proxy every summary each frame.
-export const registry = sandboxShallowRef<AgentSummary[]>(() => []);
+// THE LAST ROSTER THIS BROWSER HEARD, kept per sandbox for the next start: the board paints it at once and the stream
+// replaces it when it answers, the way a restored query cache paints the rest of the app. Without it a phone's first
+// screen waited on the whole connection (session, sandbox list, the stream's first frame) before drawing a single card.
+// Written when the page is hidden, which is the last moment a phone is sure to give; only a roster the stream actually
+// sent is written, never one restored from here, and never across a build, whose summaries may be shaped differently.
+const ROSTER_PREFIX = `intentic.roster.`;
+// Past this, a roster is not worth a synchronous write on the way out; the next start simply waits for the stream.
+const ROSTER_MAX_CHARS = 1_000_000;
+const { activeSandboxId } = useSandbox();
+
+export const readStoredRoster = (sandboxId: string | undefined, build: string): AgentSummary[] => {
+    if (sandboxId === undefined) {
+        return [];
+    }
+    try {
+        // SAFETY: only saveRoster writes this key, as `{ build, agents }` from the registry; a record from another build is
+        // refused by its build stamp before its agents are trusted, and anything unparsable lands in the catch.
+        const stored = JSON.parse(localStorage.getItem(`${ROSTER_PREFIX}${sandboxId}`) ?? `null`) as { build?: string; agents?: AgentSummary[] } | null;
+        return stored?.build === build && Array.isArray(stored.agents) ? stored.agents : [];
+    } catch {
+        return [];
+    }
+};
+
+// Shallow: writes replace the array wholesale; a deep ref would re-proxy every summary each frame. Opens on the stored
+// roster, if any (readStoredRoster above); the first snapshot the stream sends replaces it whole.
+export const registry = sandboxShallowRef<AgentSummary[]>(() => readStoredRoster(activeSandboxId.value, buildId()));
 
 // Archive half of the fleet; shallow like `registry`, and unbounded in size unlike the live roster.
 export const archived = sandboxShallowRef<FleetAgent[]>(() => []);
@@ -84,8 +110,24 @@ const latchRegistered = (agents: readonly AgentSummary[]): void => {
     }
 };
 
-// Recompute fresh every frame; never cache the fingerprint string: markSeen stamps the held entry in place.
 export const snapshotFingerprint = (value: unknown): string => JSON.stringify(value);
+
+// Each entry's fingerprint, taken once per object: a roster frame carries the whole roster, so comparing every held
+// entry against its incoming one stringified both, for every agent, on every frame. An entry markSeen stamps in place
+// has its fingerprint dropped with the stamp (forgetFingerprint), so the next frame reads the entry as it now is.
+const fingerprints = new WeakMap<AgentSummary, string>();
+const fingerprintOf = (agent: AgentSummary): string => {
+    const known = fingerprints.get(agent);
+    if (known !== undefined) {
+        return known;
+    }
+    const taken = snapshotFingerprint(agent);
+    fingerprints.set(agent, taken);
+    return taken;
+};
+const forgetFingerprint = (agent: AgentSummary): void => {
+    fingerprints.delete(agent);
+};
 
 const registryStable = sandboxValue(() => new Map<string, AgentSummary>());
 
@@ -94,7 +136,7 @@ const stabilizeRegistry = (incoming: readonly AgentSummary[]): AgentSummary[] =>
     const stabilized = incoming.map((agent) => {
         nextIds.add(agent.id);
         const cached = registryStable.value.get(agent.id);
-        if (cached !== undefined && snapshotFingerprint(cached) === snapshotFingerprint(agent)) {
+        if (cached !== undefined && fingerprintOf(cached) === fingerprintOf(agent)) {
             return cached;
         }
         registryStable.value.set(agent.id, agent);
@@ -254,6 +296,7 @@ export const markSeen = (id: string): void => {
         return;
     }
     entry.seenAt = Date.now();
+    forgetFingerprint(entry);
     void sandboxRpc.agents.seen({ id }).catch(() => undefined);
 };
 
@@ -262,6 +305,7 @@ export const markAllSeen = (): void => {
     const now = Date.now();
     for (const agent of registry.value) {
         agent.seenAt = now;
+        forgetFingerprint(agent);
     }
     void sandboxRpc.agents.seenAll().catch(() => undefined);
 };
@@ -414,4 +458,28 @@ export const loadArchived = async (): Promise<void> => {
 // One roster per window: a hot update re-executes this module while the stream keeps writing to the old instance,
 // freezing the board. The revision audit can't fix this since the heartbeat reaches that same stale object; only a
 // reload can.
+// The roster as last heard, written on the way out (see ROSTER_PREFIX).
+const saveRoster = (): void => {
+    const sandboxId = activeSandboxId.value;
+    if (sandboxId === undefined || !rosterHeard.value) {
+        return;
+    }
+    try {
+        const json = JSON.stringify({ build: buildId(), agents: registry.value });
+        if (json.length <= ROSTER_MAX_CHARS) {
+            localStorage.setItem(`${ROSTER_PREFIX}${sandboxId}`, json);
+        }
+    } catch {
+        // A full or refused storage costs the next start its early board, nothing else.
+    }
+};
+if (`document` in globalThis) {
+    document.addEventListener(`visibilitychange`, () => {
+        if (document.visibilityState === `hidden`) {
+            saveRoster();
+        }
+    });
+    globalThis.window?.addEventListener(`pagehide`, saveRoster);
+}
+
 reloadOnHotUpdate(import.meta);

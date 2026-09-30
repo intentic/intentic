@@ -1,6 +1,6 @@
 import { eventIterator, oc } from "@orpc/contract";
 import { z } from "zod";
-import { SANDBOX_ROUTE_NAMES, SANDBOX_ROUTE_SHAPES, SANDBOX_ROUTES, sandboxRouteName } from "../index.js";
+import { SANDBOX_ROUTE_NAMES, SANDBOX_ROUTES, sandboxRouteName, sandboxRouteFingerprints } from "../index.js";
 import { procedure } from "./route-meta.js";
 import { contractRoutes, routeNameForRequest, routeShapes, servedRoute, streamOf } from "./routes.js";
 
@@ -231,7 +231,7 @@ describe(`the real sandbox contract`, () => {
     it(`fingerprints every route, streams included`, () => {
         // Nothing may opt out: a route with no fingerprint is a route the browser can never tell has drifted, and the
         // streaming ones (system.events, agent.attach, the exit dials) carry the frames a stale daemon breaks first.
-        expect(SANDBOX_ROUTE_NAMES.filter((name) => !(name in SANDBOX_ROUTE_SHAPES))).toEqual([]);
+        expect(SANDBOX_ROUTE_NAMES.filter((name) => !(name in sandboxRouteFingerprints()))).toEqual([]);
     });
 
     it(`fingerprints the streaming routes eventIterator used to hide`, () => {
@@ -250,7 +250,7 @@ describe(`the real sandbox contract`, () => {
                 `system.runDeviceAgentFlow`,
                 `vpn.connect`,
             ]
-                .filter((name) => name in SANDBOX_ROUTE_SHAPES)
+                .filter((name) => name in sandboxRouteFingerprints())
                 .toSorted(),
         ).toEqual([
             `agent.attach`,
@@ -269,8 +269,8 @@ describe(`the real sandbox contract`, () => {
     });
 
     it(`fingerprints every route exactly once`, () => {
-        expect(Object.keys(SANDBOX_ROUTE_SHAPES).every((name) => SANDBOX_ROUTE_NAMES.includes(name))).toBe(true);
-        expect(Object.keys(SANDBOX_ROUTE_SHAPES).length).toBe(SANDBOX_ROUTE_NAMES.length);
+        expect(Object.keys(sandboxRouteFingerprints()).every((name) => SANDBOX_ROUTE_NAMES.includes(name))).toBe(true);
+        expect(Object.keys(sandboxRouteFingerprints()).length).toBe(SANDBOX_ROUTE_NAMES.length);
     });
 
     it(`derives a route table with no duplicate names`, () => {
@@ -287,7 +287,7 @@ describe(`the real sandbox contract`, () => {
     // differently has to read as drift rather than as a machine that runs nothing.
     it(`fingerprints the fleet view the device buttons are gated on`, () => {
         expect(sandboxRouteName(`GET`, `/system/devices`)).toBe(`system.devices`);
-        expect(SANDBOX_ROUTE_SHAPES[`system.devices`]).toEqual(expect.any(String));
+        expect(sandboxRouteFingerprints()[`system.devices`]).toEqual(expect.any(String));
     });
 
     it(`resolves a known concrete request back to its contract name`, () => {

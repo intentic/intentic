@@ -72,6 +72,7 @@ jest.mock("../fleet/useAgents", () => {
             refresh: jest.fn(() => (knobs.known ? Promise.resolve() : new Promise<void>(() => {}))),
             loadArchived: jest.fn(async () => {}),
             open: jest.fn(),
+            markSeen: jest.fn(),
             agentById: () => (knobs.known ? agent : undefined),
             rename: jest.fn(async () => {}),
         }),

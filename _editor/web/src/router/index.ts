@@ -23,6 +23,7 @@ import { localFace } from "../app/environments/local";
 import { receiveHandoff } from "../features/chat/drafts/localHandoff";
 import { setPageTitle } from "../shell/browser-tab/tabTitle";
 import { coldStartAtRoot, installedApp, lastRoute, rememberRoute } from "./recentRoute";
+import { afterPaint } from "../lib/afterPaint";
 
 declare module "vue-router" {
     interface RouteMeta {
@@ -102,7 +103,8 @@ const chatEntry = async (): Promise<boolean | RouteLocationRaw> => {
 };
 
 // In-shell routes wrap in asyncView so a click never blocks on a chunk download; only first-paint entry routes (login,
-// setup, invite, the shell) stay bare lazy imports.
+// setup, invite, the shell) stay bare lazy imports. `mobile` ranks a view in a phone's idle prefetch: `first` where its
+// next tap goes (an agent's page from the board, the menu), `skip` for the two surfaces a phone never draws.
 const hubOutline = (title: string, description: string, railRows: number): FunctionalComponent => {
     return () => h(SplitViewOutline, { title, description, railRows });
 };
@@ -195,7 +197,7 @@ const routes: RouteRecordRaw[] = [
                 name: `chat`,
                 meta: { title: () => t(`shared.chat`) },
                 beforeEnter: [chatEntry],
-                component: asyncView(() => import(`../features/chat/panel/ChatSection.vue`)),
+                component: asyncView(() => import(`../features/chat/panel/ChatSection.vue`), undefined, { mobile: `skip` }),
             },
             // The live app preview's full-window home, same arrangement as the chat route. Desktop only: the mobile
             // shell mounts no poppable panels, and a phone opens the preview URL directly.
@@ -204,7 +206,7 @@ const routes: RouteRecordRaw[] = [
                 name: `preview`,
                 meta: { title: () => t(`shared.preview`) },
                 beforeEnter: [desktopOnly],
-                component: asyncView(() => import(`../features/preview/PreviewArea.vue`)),
+                component: asyncView(() => import(`../features/preview/PreviewArea.vue`), undefined, { mobile: `skip` }),
             },
             {
                 path: `agents`,
@@ -225,14 +227,14 @@ const routes: RouteRecordRaw[] = [
                 path: `agents/:id`,
                 name: `agent`,
                 meta: { title: () => t(`shared.agent`) },
-                component: asyncView(() => import(`../features/agents/review/AgentDetail.vue`)),
+                component: asyncView(() => import(`../features/agents/review/AgentDetail.vue`), undefined, { mobile: `first` }),
             },
             {
                 path: `menu`,
                 name: `menu`,
                 meta: { title: () => t(`shared.menu`) },
                 beforeEnter: [mobileOnly],
-                component: asyncView(() => import(`../shell/MobileMenu.vue`)),
+                component: asyncView(() => import(`../shell/MobileMenu.vue`), undefined, { mobile: `first` }),
             },
             {
                 path: `terminal`,
@@ -330,6 +332,16 @@ export const router = createRouter({
     // Makes a hash like `/sandbox/usage#accounts` actually scroll into view; vue-router ignores a fragment on its
     // pushState navigations. `{ el }` finds whichever pane owns the scrollbar; no hash means no opinion.
     scrollBehavior: (to) => (to.hash === `` ? false : { el: to.hash, behavior: `smooth` }),
+});
+
+// A PRESS PAINTS BEFORE THE SCREEN IT OPENS, on a phone. Everything a navigation does (guards, the old screen torn down,
+// the new one mounted) otherwise runs in the task of the tap itself, so the tapped card or tab shows no press at all
+// until the next screen is fully built: on a Galaxy S10 that was 0.5–1.6s of a frozen board per tap (INP, PostHog web
+// vitals). Yielding one frame first costs ~16ms and lets the press, and anything the tap already changed, reach the
+// screen. The app's first navigation has no press to show; a desktop pointer's navigation is cheap enough not to need it.
+router.beforeEach((_to, from) => {
+    const { mobile, coarse } = useDevice();
+    return from === START_LOCATION || !(mobile.value || coarse.value) ? true : afterPaint().then(() => true);
 });
 
 // The installed app's cold start at "/" goes back to the page it was on, if that was recent (recentRoute.ts). Only the

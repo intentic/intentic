@@ -2,6 +2,7 @@ import type { SubagentSession, WorkflowRun } from "@intentic/sandbox-contract";
 import { computed, onScopeDispose, ref, type Ref, watch } from "vue";
 import type { LocationQuery, Router } from "vue-router";
 import { clickIntent, rangeSelect } from "../../../../lib/multiSelect";
+import { afterPaint } from "../../../../lib/afterPaint";
 import { uuid } from "../../../../lib/uuid";
 import { showParkedChat } from "../../../chat/panel/chatPanelLayout";
 import { agentTabOf } from "../../../chat/panel/useChat-reveal";
@@ -202,12 +203,18 @@ export const useCardFocus = (host: FocusHost) => {
             return;
         }
         paneAnchor = agent.id;
-        // The reset the modifiers are defined against (`show` collapses any split), opened as a look (Conversation.peek).
-        agents.open(agent, `peek`);
+        // A phone paints the press first: opening the chat and walking to its page is a whole screen of work, and done in
+        // the tap's own task the card shows nothing until that screen is built (afterPaint.ts). The desktop's pane is
+        // beside the board, where the open is the answer to the click.
         if (mobile.value) {
-            void router.push(agentPath(agent));
+            void afterPaint().then(() => {
+                agents.open(agent, `peek`);
+                void router.push(agentPath(agent));
+            });
             return;
         }
+        // The reset the modifiers are defined against (`show` collapses any split), opened as a look (Conversation.peek).
+        agents.open(agent, `peek`);
         showParkedChat();
     };
     // The chat itself, kept, for an ask answered on its card there (drillTarget): the card is drawn in the transcript

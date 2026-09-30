@@ -9,7 +9,7 @@ import {
     withoutResumeNote,
 } from "@intentic/sandbox-contract";
 import type { ChatMessage } from "../transcript/transcript";
-import { t } from "@intentic/ui/i18n";
+import { activeLocale, t } from "@intentic/ui/i18n";
 
 // An app-composed prompt, sent as an ordinary turn (so the agent, Stop and the queue treat it unchanged) but folded and
 // rendered by its label in the transcript, not as raw text. A row names the errand it is (`TranscriptRow.errand`); a row
@@ -33,7 +33,7 @@ export interface Errand {
     readonly matches?: (prompt: string) => boolean;
 }
 
-export const errands = () =>
+const errandTable = () =>
     ({
         landConflict: {
             icon: `sync`,
@@ -97,6 +97,21 @@ export const errands = () =>
         },
     }) as const satisfies Record<string, Errand>;
 
+// Built once per language, not per question: every user row asks which errand it is (errandOf) on every render, and
+// `turnsOf` asks for every prompt on every frame a reply streams, so rebuilding the table and its fourteen translations
+// per ask made a long conversation's streaming cost grow with its length. A language change rebuilds it on the next ask.
+let built: { readonly locale: string; readonly table: ReturnType<typeof errandTable>; readonly all: readonly Errand[] } | undefined;
+const current = (): NonNullable<typeof built> => {
+    const locale = activeLocale.value;
+    if (built?.locale !== locale) {
+        const table = errandTable();
+        built = { locale, table, all: Object.values(table) };
+    }
+    return built;
+};
+
+export const errands = (): ReturnType<typeof errandTable> => current().table;
+
 // The prompt an errand actually sends: its opening, then the parts describing this instance.
 export const errandPrompt = (errand: Errand & { readonly opening: string }, parts: readonly string[]): string => [errand.opening, ...parts].join(`\n\n`);
 
@@ -107,7 +122,7 @@ export const errandOf = (message: ChatMessage): Errand | undefined => {
     if (message.role !== `user`) {
         return undefined;
     }
-    const all: readonly Errand[] = Object.values(errands());
+    const { all } = current();
     const named = message.errand;
     if (named !== undefined) {
         return all.find((errand) => errand.kinds.includes(named));

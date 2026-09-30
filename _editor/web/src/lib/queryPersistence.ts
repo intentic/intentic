@@ -1,10 +1,11 @@
 import type { PersistedClient } from "@tanstack/query-persist-client-core";
-import { persistQueryClient } from "@tanstack/query-persist-client-core";
+import { persistQueryClientRestore, persistQueryClientSave } from "@tanstack/query-persist-client-core";
 import { defaultShouldDehydrateQuery, QueryCache, QueryClient } from "@tanstack/vue-query";
 import { del, get, set } from "idb-keyval";
 import { buildId } from "../app/buildEpoch";
 import { trackPerf } from "../app/perf";
 import { throttleTrailing } from "./throttleTrailing";
+import { whenIdle } from "./whenIdle";
 
 // Persists the vue-query cache to IndexedDB so a reload paints the last-known workspace instantly, instead of blocking
 // on the daemon tunnel. Hydrated data is distrusted when the stream says so rather than permanently: applyHello
@@ -89,11 +90,15 @@ const flushPersist = throttleTrailing(drainPersist, PERSIST_WINDOW_MS);
 
 // Called after auth resolves and before any route mounts, so hydration never races a fetch. `buster` combines the user
 // id and buildId(), so a different account or a new build starts from a clean cache.
+// The cache events a snapshot answers to, as the persistence library itself counts them: a query or mutation added,
+// removed or updated, never one that only gained or lost an observer.
+const CACHE_CHANGES = new Set([`added`, `removed`, `updated`]);
+
 export const restorePersistedQueries = async (userId: string): Promise<void> => {
     if (uninstall !== undefined) {
         return;
     }
-    const [unsubscribe, restored] = persistQueryClient({
+    const options = {
         queryClient,
         persister: {
             persistClient: (client: PersistedClient) => {
@@ -107,11 +112,50 @@ export const restorePersistedQueries = async (userId: string): Promise<void> => 
         // A Monday-morning open after Friday still paints; anything older restores as empty.
         maxAge: 7 * 24 * 60 * 60 * 1000,
         // The storage rule (`mirrors`, above), composed with the default so non-success queries stay out too.
-        dehydrateOptions: { shouldDehydrateQuery: (query) => mirrors(query.queryKey) && defaultShouldDehydrateQuery(query) },
-    });
-    uninstall = unsubscribe;
+        dehydrateOptions: { shouldDehydrateQuery: (query: Parameters<typeof defaultShouldDehydrateQuery>[0]) => mirrors(query.queryKey) && defaultShouldDehydrateQuery(query) },
+    };
+    // THE SNAPSHOT IS TAKEN ONCE PER WINDOW, AT IDLE. The persistence library dehydrates the whole cache on every cache
+    // event, before the write's throttle ever sees it: a reconnect's hello invalidates every query at once, and each of
+    // the hundreds of events that follow walked every query again, on the main thread of a phone that was trying to draw
+    // them. Here an event only marks the cache changed; one snapshot is taken when the window closes and the page is
+    // idle, which also leaves the cache a restore just filled alone rather than writing it straight back.
+    let stopped = false;
+    let owed = false;
+    const snapshot = (): void => {
+        if (owed || stopped) {
+            return;
+        }
+        owed = true;
+        setTimeout(
+            () =>
+                whenIdle(() => {
+                    owed = false;
+                    if (!stopped) {
+                        void persistQueryClientSave(options).catch(() => undefined);
+                    }
+                }),
+            PERSIST_WINDOW_MS,
+        );
+    };
+    // Filled once the restore lands and the cache is followed; a sign-out before then has nothing to unsubscribe.
+    const following: (() => void)[] = [];
+    uninstall = () => {
+        stopped = true;
+        for (const stop of following.splice(0)) {
+            stop();
+        }
+    };
     // The cache is only an optimization; a failed restore is empty and must never block the awaited navigation.
-    await restored.catch(() => undefined);
+    await persistQueryClientRestore(options).catch(() => undefined);
+    if (stopped) {
+        return;
+    }
+    const onChange = (event: { readonly type: string }): void => {
+        if (CACHE_CHANGES.has(event.type)) {
+            snapshot();
+        }
+    };
+    following.push(queryClient.getQueryCache().subscribe(onChange), queryClient.getMutationCache().subscribe(onChange));
 };
 
 // Logout / account deletion: stop persisting, drop memory and disk so the next login starts clean. A failed delete
@@ -124,4 +168,12 @@ export const clearPersistedQueries = async (): Promise<void> => {
     await persisting;
     queryClient.clear();
     await del(IDB_KEY).catch(() => undefined);
+    // The boards' stored rosters (useAgents-registry.ts) belong to the account signing out as much as the cache does.
+    try {
+        for (const key of Object.keys(localStorage).filter((name) => name.startsWith(`intentic.roster.`))) {
+            localStorage.removeItem(key);
+        }
+    } catch {
+        // No storage, then nothing was stored.
+    }
 };

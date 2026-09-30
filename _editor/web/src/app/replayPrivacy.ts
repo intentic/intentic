@@ -28,6 +28,11 @@ import type { CapturedNetworkRequest, PostHogConfig } from "posthog-js";
 // renderer. The rest draw pixels or another document, which no text mask reaches.
 const BLOCKED = [`.monaco-editor`, `.monaco-diff-editor`, `.xterm`, `canvas`, `img`, `picture`, `image`, `video`, `audio`, `iframe`, `object`, `embed`];
 
+// A conversation's turns, blocked whole on a touch screen: its every text node is masked to asterisks anyway, and
+// serialising and masking a transcript's DOM as it mounts and streams cost a phone about a third more main thread to
+// open a chat (measured at 4× CPU throttle). The replay keeps a box of the same size where the turns were.
+const TOUCH_BLOCKED = [`.chat-turns`];
+
 // Attributes whose value is words a reader sees (or a screen reader speaks): allowed only if we wrote them.
 const WORDS = new Set([
     `alt`,
@@ -103,14 +108,14 @@ export const maskAttribute = (name: string, value: string, element?: Element): s
  * What `posthog.init` gets so that a replay never holds the workspace, see the head of this file. `redactAddress` is
  * `addressRedactor` from eventPrivacy.ts, which the recorder runs the address of the page it records through.
  */
-export const replayPrivacy = (redactAddress: (address: string) => string) =>
+export const replayPrivacy = (redactAddress: (address: string) => string, screen: { readonly touch?: boolean } = {}) =>
     ({
         session_recording: {
             maskAllInputs: true,
             maskTextSelector: `*`,
             maskTextFn: (text: string) => maskText(text),
             maskAttributeFn: maskAttribute,
-            blockSelector: BLOCKED.join(`,`),
+            blockSelector: [...BLOCKED, ...(screen.touch === true ? TOUCH_BLOCKED : [])].join(`,`),
             captureCanvas: { recordCanvas: false },
             recordBody: false,
             recordHeaders: false,

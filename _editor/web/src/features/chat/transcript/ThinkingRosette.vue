@@ -1,6 +1,6 @@
 <!-- The mark beside a live turn's status word: a lotus rosette whose petals light in a wave while the flower breathes. -->
 <script setup lang="ts">
-import { useReducedMotion } from "@intentic/ui/reduced-motion";
+import { useReducedMotion, useTouchMotion } from "@intentic/ui/reduced-motion";
 import { computed } from "vue";
 
 // Drawn on the icon pack's 24×24 box at 1em and reaching r=10 like the spinner's outer edge, so swapping the two moves
@@ -15,8 +15,13 @@ const DIM = 0.2;
 // Rounded before it reaches the attribute: unrounded thirds of a second render as `-0.22499999999999998s`.
 const seconds = (value: number): string => `${Number(value.toFixed(3))}s`;
 
-// Seconds per breath, stretched rather than stopped when the reader asked for less motion.
-const reduced = useReducedMotion();
+// A touch screen draws the same flower from composited layers (the second template below); a desktop pointer keeps
+// SMIL, which leaves DevTools' Styles editor alone. useTouchMotion says why each.
+const touch = useTouchMotion();
+
+// Seconds per breath, stretched rather than stopped when the reader asked for less motion. Only SMIL reads it here: the
+// composited flower takes the same two values from CSS (`--rosette-cycle` below).
+const reduced = useReducedMotion(() => !touch.value);
 const cycle = computed(() => (reduced.value ? 6.5 : 2.4));
 const dur = computed(() => seconds(cycle.value));
 
@@ -26,12 +31,36 @@ const petals = computed(() =>
     Array.from({ length: COUNT }, (_, index) => ({
         rotate: `rotate(${(index * 360) / COUNT})`,
         begin: seconds(-(index * cycle.value) / 32),
+        // The composited petal's own turn and lag, the lag as a fraction of the breath CSS resolves.
+        style: { transform: `rotate(${(index * 360) / COUNT}deg)`, "--rosette-lag": String(-index / 32) },
     })),
 );
 </script>
 
 <template>
+    <!-- ON A TOUCH SCREEN every moving part is its own box: the breath scales the whole flower and each petal fades as its
+         own layer, all of it opacity and transform, which the compositor runs without the page's main thread. -->
+    <span v-if="touch" class="rosette relative inline-block size-[1em] flex-none align-[-0.125em]" aria-hidden="true">
+        <span class="rosette-breath absolute inset-0">
+            <svg
+                v-for="petal in petals"
+                :key="petal.rotate"
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                focusable="false"
+                shape-rendering="geometricPrecision"
+                class="rosette-petal absolute inset-0 size-full"
+                :style="petal.style"
+            >
+                <path :d="PETAL" transform="translate(12 12)" fill="currentColor" />
+            </svg>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" focusable="false" class="rosette-seed absolute inset-0 size-full">
+                <circle cx="12" cy="12" r="2" fill="currentColor" />
+            </svg>
+        </span>
+    </span>
     <svg
+        v-else
         xmlns="http://www.w3.org/2000/svg"
         viewBox="0 0 24 24"
         width="1em"
@@ -77,3 +106,65 @@ const petals = computed(() =>
         </g>
     </svg>
 </template>
+
+<style scoped>
+/* The composited flower's timing: SMIL's values, keyTimes and keySplines, spelled as keyframes. */
+.rosette {
+    --rosette-cycle: 2.4s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .rosette {
+        --rosette-cycle: 6.5s;
+    }
+}
+
+.rosette-breath {
+    animation: rosette-breath var(--rosette-cycle) cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+.rosette-petal {
+    opacity: 0.2;
+    animation: rosette-petal var(--rosette-cycle) infinite;
+    animation-delay: calc(var(--rosette-cycle) * var(--rosette-lag));
+}
+
+.rosette-seed {
+    animation: rosette-seed var(--rosette-cycle) linear infinite;
+}
+
+@keyframes rosette-breath {
+    0%,
+    100% {
+        transform: scale(0.9);
+    }
+    50% {
+        transform: scale(1.04);
+    }
+}
+
+/* Lights fast and fades slow, as the SMIL petal does. */
+@keyframes rosette-petal {
+    0% {
+        opacity: 0.2;
+        animation-timing-function: cubic-bezier(0.3, 0, 0.2, 1);
+    }
+    45% {
+        opacity: 1;
+        animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+    }
+    100% {
+        opacity: 0.2;
+    }
+}
+
+@keyframes rosette-seed {
+    0%,
+    100% {
+        opacity: 0.35;
+    }
+    50% {
+        opacity: 0.9;
+    }
+}
+</style>

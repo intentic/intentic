@@ -115,7 +115,22 @@ const rawRows = (oldText: string | undefined, newText: string): DiffRow[] => {
 export const diffRows = (oldText: string | undefined, newText: string): DiffRow[] => cap(collapse(rawRows(oldText, newText)));
 
 // Exact +additions/-deletions for the card header, counted from the uncollapsed, uncapped rows.
-export const diffStat = (oldText: string | undefined, newText: string): { additions: number; deletions: number } => {
+// Remembered by the two texts: the same edit's counts are asked for by its card's header, its icon and its group's
+// summary, and again on every patch to any tool in the turn while a reply streams, and each ask ran a line diff.
+const STATS_KEPT = 256;
+const stats = new Map<string, Readonly<DiffStat>>();
+
+export interface DiffStat {
+    additions: number;
+    deletions: number;
+}
+
+export const diffStat = (oldText: string | undefined, newText: string): DiffStat => {
+    const key = `${oldText === undefined ? `\u0001` : `\u0002${oldText}`}\u0000${newText}`;
+    const kept = stats.get(key);
+    if (kept !== undefined) {
+        return { ...kept };
+    }
     let additions = 0;
     let deletions = 0;
     for (const row of rawRows(oldText, newText)) {
@@ -123,6 +138,13 @@ export const diffStat = (oldText: string | undefined, newText: string): { additi
             additions++;
         } else if (row.type === "del") {
             deletions++;
+        }
+    }
+    stats.set(key, { additions, deletions });
+    if (stats.size > STATS_KEPT) {
+        const oldest = stats.keys().next().value;
+        if (oldest !== undefined) {
+            stats.delete(oldest);
         }
     }
     return { additions, deletions };

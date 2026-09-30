@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ContextMenu, type TooltipValue, useDevice } from "@intentic/ui";
 import type { MenuItem } from "primevue/menuitem";
-import { computed, ref } from "vue";
+import { computed, nextTick, ref } from "vue";
 import { useQueryClient } from "@tanstack/vue-query";
 import { invalidateWorkspace } from "../../workspace/changes/history/useHistory";
 import { useChat } from "../run/useChat";
@@ -9,6 +9,7 @@ import { usePaneView } from "../panel/useChat-view";
 import { openAgentConversation } from "../panel/useChat-reveal";
 import { useAgents } from "../../agents/fleet/useAgents";
 import { errandOf } from "../run/errands";
+import { forksAt } from "./forksIndex";
 import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
@@ -28,10 +29,10 @@ const queryClient = useQueryClient();
 const { fleet, agentById } = useAgents();
 const { conversations, setActive } = useChat();
 
-// Forks already taken from this point, read off the fleet so closed or another window's tabs still count.
-const forks = computed(() =>
-    fleet.value.filter((agent) => agent.forkedFrom?.conversationId === conversation.value.conversationId && agent.forkedFrom.index === props.cut),
-);
+// Forks already taken from this point, read off the fleet so closed or another window's tabs still count. Looked up in
+// one index per roster (forksIndex) rather than by filtering the whole fleet per turn: every roster frame re-ran that
+// filter for every turn of an open chat, and a fresh empty array re-rendered each of their buttons.
+const forks = computed(() => forksAt(fleet.value, conversation.value.conversationId, props.cut));
 
 const openFork = (id: string): void => {
     if (conversations.value.some((open) => open.conversationId === id)) {
@@ -45,6 +46,9 @@ const openFork = (id: string): void => {
 };
 
 const menu = ref<{ show: (event: Event) => void; hide: () => void } | undefined>();
+// The menu exists from its first opening on: one per turn, each a PrimeVue ContextMenu teleported to the body and its
+// rows computed with it, for a press most turns never get.
+const menuMounted = ref(false);
 const rewinding = ref(false);
 const armed = ref(false);
 let armedTimer: ReturnType<typeof setTimeout> | undefined;
@@ -227,6 +231,12 @@ const label = computed(() =>
 
 const open = (event: Event): void => {
     disarm();
+    if (!menuMounted.value) {
+        menuMounted.value = true;
+        // The menu anchors to the press's own target, which outlives the tick the menu takes to mount.
+        void nextTick(() => menu.value?.show(event));
+        return;
+    }
     menu.value?.show(event);
 };
 </script>
@@ -248,6 +258,6 @@ const open = (event: Event): void => {
         >
             <Icon :name="rewinding ? `spinner` : `fork`" :spin="rewinding" class="text-2xs" />
         </button>
-        <ContextMenu ref="menu" :model="items" :min-width="17" />
+        <ContextMenu v-if="menuMounted" ref="menu" :model="items" :min-width="17" />
     </div>
 </template>

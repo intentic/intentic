@@ -3,8 +3,8 @@
 import "@intentic/testing/dom";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { h } from "vue";
-import { asyncView } from "../components/asyncView";
-import { prefetchViewsAtIdle } from "./prefetch";
+import { asyncView, type ViewLoader } from "../components/asyncView";
+import { prefetchOrder, prefetchViewsAtIdle } from "./prefetch";
 
 it(`pulls every registered view once, at idle, and survives a loader that fails`, async () => {
     jest.useFakeTimers();
@@ -31,4 +31,14 @@ it(`pulls every registered view once, at idle, and survives a loader that fails`
     expect(first).toHaveBeenCalledTimes(1);
     expect(last).toHaveBeenCalledTimes(1);
     jest.useRealTimers();
+});
+
+// A phone walks where its next tap goes first and never fetches a view it cannot draw; a desktop keeps route order.
+it(`orders a phone's walk by what its next tap opens and drops what it cannot draw`, () => {
+    const load = (): Promise<void> => Promise.resolve();
+    const loaders: ViewLoader[] = [{ load }, { load, mobile: `skip` }, { load }, { load, mobile: `first` }, { load, mobile: `first` }];
+    const names = (order: readonly ViewLoader[]): number[] => order.map((loader) => loaders.indexOf(loader));
+
+    expect(names(prefetchOrder(loaders, true))).toEqual([3, 4, 0, 2]);
+    expect(names(prefetchOrder(loaders, false))).toEqual([0, 1, 2, 3, 4]);
 });

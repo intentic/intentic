@@ -1,5 +1,5 @@
 import type { AttachFrame, TranscriptTool } from "@intentic/sandbox-contract";
-import { applyPatch, attachRun, emptyTranscriptState } from "./transcriptState";
+import { applyPatch, attachRun, emptyTranscriptState, rebuildKeeping } from "./transcriptState";
 
 const child: TranscriptTool = { id: `t2`, name: `Read`, category: `read`, status: `in_progress` };
 const delegation: TranscriptTool = { id: `task-1`, name: `Agent`, category: `other`, status: `in_progress`, thinking: `in`, children: [child] };
@@ -47,4 +47,42 @@ test(`a subagent's reasoning lands on the card that spawned it, however deep it 
     expect(deep.messages[0]?.tools?.[0]?.thinking).toBe(`looking for the handler`);
     // A card nobody holds leaves the row as it was.
     expect(applyPatch(deep, { op: `toolThinking`, index: 0, id: `gone`, text: `x` }, false).messages).toEqual(deep.messages);
+});
+
+// A redraw of a record already on screen (the daemon's page replacing the mirror's paint, a replay after a reconnect)
+// keeps the rows it drew, so nothing unchanged is parsed and laid out again; what is new or changed is allocated above
+// every id standing, so a kept row's id is never handed to another.
+describe(`rebuildKeeping`, () => {
+    it(`keeps the objects of rows whose content is unchanged, and draws the rest anew above every standing id`, () => {
+        const asked = { id: 7, role: `user` as const, text: `fix the bug` };
+        const answered = { id: 8, role: `assistant` as const, text: `looking` };
+        const state = rebuildKeeping(
+            [asked, answered],
+            [
+                { role: `user`, text: `fix the bug` },
+                { role: `assistant`, text: `looking at it now` },
+                { role: `user`, text: `thanks` },
+            ],
+        );
+
+        expect(state.messages[0]).toBe(asked);
+        expect(state.messages.slice(1)).toEqual([
+            { role: `assistant`, text: `looking at it now`, id: 9 },
+            { role: `user`, text: `thanks`, id: 10 },
+        ]);
+        expect(state.nextId).toBe(11);
+    });
+
+    it(`matches repeated rows one for one, in order`, () => {
+        const first = { id: 1, role: `user` as const, text: `continue` };
+        const second = { id: 2, role: `user` as const, text: `continue` };
+        const state = rebuildKeeping([first, second], [{ role: `user`, text: `continue` }, { role: `user`, text: `continue` }, { role: `user`, text: `continue` }]);
+
+        expect(state.messages.map((message) => message.id)).toEqual([1, 2, 3]);
+        expect(state.messages[1]).toBe(second);
+    });
+
+    it(`numbers from one when nothing stands`, () => {
+        expect(rebuildKeeping([], [{ role: `user`, text: `hi` }]).messages).toEqual([{ role: `user`, text: `hi`, id: 1 }]);
+    });
 });

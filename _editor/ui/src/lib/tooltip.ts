@@ -60,6 +60,11 @@ interface TooltipState {
     hide: () => void;
     onKeydown: (event: KeyboardEvent) => void;
     onFocus: () => void;
+    // Whether the pointer that last entered the anchor was a finger (onPointerEnter): the mouse events a touch screen
+    // fires after a tap are not a hover, and a box built for one measures the page and then stays up under the finger.
+    touched: boolean;
+    onPointerEnter: (event: PointerEvent) => void;
+    onMouseEnter: () => void;
 }
 
 // Nothing to say is no box: a blank label, a tip with no headline, or no value at all.
@@ -214,9 +219,20 @@ export const vTooltip: Directive<HTMLElement, TooltipValue, Modifier> = {
                     state.show();
                 }
             },
+            touched: false,
+            onPointerEnter: (event) => {
+                state.touched = event.pointerType === `touch`;
+            },
+            // A tap's compatibility `mouseenter` arrives after its touch `pointerenter`; a real mouse's after a mouse one.
+            onMouseEnter: () => {
+                if (!state.touched) {
+                    state.show();
+                }
+            },
         };
         states.set(el, state);
-        el.addEventListener(`mouseenter`, state.show);
+        el.addEventListener(`pointerenter`, state.onPointerEnter);
+        el.addEventListener(`mouseenter`, state.onMouseEnter);
         el.addEventListener(`mouseleave`, state.hide);
         el.addEventListener(`click`, state.hide);
         el.addEventListener(`focus`, state.onFocus);
@@ -245,7 +261,8 @@ export const vTooltip: Directive<HTMLElement, TooltipValue, Modifier> = {
             return;
         }
         state.hide();
-        el.removeEventListener(`mouseenter`, state.show);
+        el.removeEventListener(`pointerenter`, state.onPointerEnter);
+        el.removeEventListener(`mouseenter`, state.onMouseEnter);
         el.removeEventListener(`mouseleave`, state.hide);
         el.removeEventListener(`click`, state.hide);
         el.removeEventListener(`focus`, state.onFocus);

@@ -3,8 +3,10 @@ import type { MatchSnippet, TranscriptRow } from "@intentic/sandbox-contract";
 import { sandboxRef, sandboxValue } from "@intentic/extension-api";
 import { errorMessage } from "@intentic/ui/async";
 import { t } from "@intentic/ui/i18n";
+import { useDevice } from "@intentic/ui";
 import { watch } from "vue";
 import { reloadOnHotUpdate } from "../../../app/hotReload";
+import { whenIdle } from "../../../lib/whenIdle";
 import { agentTranscript, type AgentTranscript, freshAgentTranscript } from "../transcript/agentTranscript";
 import type { Conversation } from "../session/conversation";
 import type { PickUp } from "./pickUp";
@@ -335,18 +337,46 @@ const hydrating = new WeakSet<Conversation>();
 // Cached-transcript tabs, not daemon-confirmed; they still hydrate, so the guard below isn't fooled.
 const painted = new WeakSet<Conversation>();
 
+// THE CHAT IN FRONT FIRST, THE REST AT IDLE, on a phone. Every restored tab painted its mirror and fetched its record at
+// once — an IndexedDB read, a transcript page of up to 2 MB validated on the main thread, rows built for each — though a
+// phone shows one chat at a time: its start paid for every tab the reader had left open. There the tab in front goes
+// first and each other follows in an idle moment of its own, so all of them are still ready by the time anyone switches.
+const { mobile, coarse } = useDevice();
+const inFrontFirst = <T>(each: (conversation: Conversation) => T): void => {
+    const front = conversations.value.find((conversation) => conversation.conversationId === activeId.value);
+    const rest = conversations.value.filter((conversation) => conversation !== front);
+    if (!(mobile.value || coarse.value)) {
+        for (const conversation of [...(front === undefined ? [] : [front]), ...rest]) {
+            each(conversation);
+        }
+        return;
+    }
+    if (front !== undefined) {
+        each(front);
+    }
+    const next = (): void => {
+        const conversation = rest.shift();
+        if (conversation === undefined) {
+            return;
+        }
+        each(conversation);
+        whenIdle(next);
+    };
+    whenIdle(next);
+};
+
 // Paints every restored tab from the local mirror immediately, without waiting on reachability: a reopened
 // chat is readable before any round-trip (see transcriptCache). At load, and each time a sandbox's tabs come back.
 watch(
     scopedSandboxId,
     () => {
-        for (const conversation of conversations.value) {
+        inFrontFirst((conversation) => {
             void conversation.transcript.paintCached().then((didPaint) => {
                 if (didPaint) {
                     painted.add(conversation);
                 }
             });
-        }
+        });
     },
     { immediate: true },
 );
@@ -355,12 +385,12 @@ watch([reachable, conversations], ([isReachable]) => {
     if (!isReachable) {
         return;
     }
-    for (const conversation of conversations.value) {
+    inFrontFirst((conversation) => {
         if ((conversation.transcript.messages.value.length > 0 && !painted.has(conversation)) || conversation.turn.streaming.value || hydrating.has(conversation)) {
-            continue;
+            return;
         }
         hydrateOnce(conversation);
-    }
+    });
 });
 
 // Attaches a tab to a turn this browser didn't start (e.g. a workflow step whose turn begins before the tab

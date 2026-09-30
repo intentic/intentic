@@ -69,6 +69,11 @@ const run = async <T>(mode: IDBTransactionMode, act: (store: IDBObjectStore) => 
 // Every row field is plain data (a picture is a path, not an object URL), so it structured-clones as-is.
 const persistable = (messages: readonly ChatMessage[]): ChatMessage[] => messages.slice(-KEPT_MESSAGES);
 
+// How many rows each mirror entry held when this window last wrote or read it. An unconfirmed write only has to know
+// whether the mirror is longer than what it would write, and reading the entry back to learn that cloned the whole
+// record off disk on every turn's end; once this window has touched an entry, it already knows.
+const mirroredRows = new Map<string, number>();
+
 // `authoritative` (daemon-confirmed) may shrink the mirror. Any other write only reports what a window happens to show,
 // which can be partial, so it may extend the mirror but never truncate it.
 export const saveTranscript = async (conversationId: string, messages: readonly ChatMessage[], authoritative = false): Promise<void> => {
@@ -76,22 +81,27 @@ export const saveTranscript = async (conversationId: string, messages: readonly 
     if (messages.length === 0) {
         return;
     }
+    const kept = persistable(messages);
     if (!authoritative) {
-        const cached = await readTranscript(conversationId);
-        if (cached !== undefined && cached.length > messages.length) {
+        const held = mirroredRows.get(conversationId) ?? (await readTranscript(conversationId))?.length;
+        if (held !== undefined && held > kept.length) {
             return;
         }
     }
-    await run(`readwrite`, (store) => store.put(persistable(messages), conversationId));
+    mirroredRows.set(conversationId, kept.length);
+    await run(`readwrite`, (store) => store.put(kept, conversationId));
 };
 
 export const readTranscript = async (conversationId: string): Promise<ChatMessage[] | undefined> => {
     const cached = await run<ChatMessage[]>(`readonly`, (store) => store.get(conversationId));
-    return Array.isArray(cached) && cached.length > 0 ? cached : undefined;
+    const found = Array.isArray(cached) && cached.length > 0 ? cached : undefined;
+    mirroredRows.set(conversationId, found?.length ?? 0);
+    return found;
 };
 
 // Closing a tab is the clear signal to drop this entry; without it the store would grow for the life of the profile.
 // Reopening later just re-fetches and re-warms it.
 export const dropTranscript = async (conversationId: string): Promise<void> => {
+    mirroredRows.delete(conversationId);
     await run(`readwrite`, (store) => store.delete(conversationId));
 };

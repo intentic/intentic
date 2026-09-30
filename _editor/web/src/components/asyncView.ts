@@ -10,11 +10,21 @@ import { t } from "@intentic/ui/i18n";
 
 type Loader = () => Promise<{ readonly default: Component }>;
 
-// Every registered loader, walked by the idle prefetcher; shared, so a prefetched view mounts synchronously.
-const registered: Array<() => Promise<unknown>> = [];
-export const viewLoaders: readonly (() => Promise<unknown>)[] = registered;
+// Where a view stands in the phone's idle prefetch (router/prefetch.ts): `first` for where a phone's next tap goes (an
+// agent's page from the board, the menu), `skip` for a view a phone never draws, whose chunk would be downloaded and
+// evaluated for nothing. Absent is route order, which is all a desktop ever uses.
+export type MobilePrefetch = `first` | `skip`;
 
-export const asyncView = (load: Loader, outline?: Component): Component => {
+export interface ViewLoader {
+    readonly load: () => Promise<unknown>;
+    readonly mobile?: MobilePrefetch;
+}
+
+// Every registered loader, walked by the idle prefetcher; shared, so a prefetched view mounts synchronously.
+const registered: ViewLoader[] = [];
+export const viewLoaders: readonly ViewLoader[] = registered;
+
+export const asyncView = (load: Loader, outline?: Component, options: { readonly mobile?: MobilePrefetch } = {}): Component => {
     // One fetch shared by the prefetcher and every mount; survives unmounts, so a revisit renders synchronously.
     const resolved = shallowRef<Component | undefined>(undefined);
     let inflight: Promise<unknown> | undefined;
@@ -30,7 +40,8 @@ export const asyncView = (load: Loader, outline?: Component): Component => {
             });
         return inflight;
     };
-    registered.push(() => start());
+    const fetchChunk = (): Promise<unknown> => start();
+    registered.push(options.mobile === undefined ? { load: fetchChunk } : { load: fetchChunk, mobile: options.mobile });
 
     return defineComponent({
         name: `AsyncView`,

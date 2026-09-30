@@ -1,3 +1,4 @@
+import { useDevice } from "@intentic/ui";
 import { nextTick, type Ref, ref, watch } from "vue";
 
 // Forces content-visibility:auto rows (chat.css) to lay out for real after a transcript swap, since scrollHeight is
@@ -34,8 +35,13 @@ export const useTranscriptWarmup = (transcript: {
         view.requestIdleCallback(task);
     };
 
+    // Not on a phone. The pass lays out every row of the chat at once, which a laptop pays in a frame and a phone pays in
+    // a long one, at a chat's opening and again as every turn ends; what it buys is an exact scrollbar, and a phone's
+    // scrollbar is an overlay that shows only while the finger moves. Rows there take their real height as they come
+    // into view, and scroll anchoring holds the reader's place when one above them does.
+    const { mobile, coarse } = useDevice();
     const warm = (): void => {
-        if (queued) {
+        if (queued || mobile.value || coarse.value) {
             return;
         }
         queued = true;

@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { useDevice } from "@intentic/ui";
-import { onMounted, onUnmounted, watch } from "vue";
+import { loadChunk, useDevice } from "@intentic/ui";
+import { defineAsyncComponent, onMounted, onUnmounted, watch } from "vue";
 import { useRoute } from "vue-router";
 import { useChat } from "../features/chat/run/useChat";
 import { floatingWindowPanel } from "./window/floating";
@@ -11,12 +11,17 @@ import { reportIdle, reportSessionId, reportView } from "./presence/usePresence"
 import { useSandboxLiveness } from "../features/sandbox/overview/useSandboxLiveness";
 import { offerTimezone } from "../features/sandbox/overview/offerTimezone";
 import { startRestartWatch } from "../features/sandbox/live/restartWatch";
-import PoppablePanels from "./window/PoppablePanels.vue";
 import { startBrowserTab } from "./browser-tab/browserTab";
 
 // The signed-in session's live daemon connection and the panels it feeds, mounted above every route
 // (App.vue) rather than inside the workspace shell, so /setup, an invite link, and the desktop handoff
 // keep it too. Presence and the background loader ride the same lifetime; floating notices live in App.vue.
+
+// THE POPPABLE PANELS ARRIVE ONLY WHERE THEY ARE DRAWN. The chat, terminal and preview panels, xterm with its WebGL
+// addon among them (~0.9 MB of JS), were imported with this runtime, so a phone downloaded, parsed and evaluated them at
+// every start although its shell never mounts them. A desktop fetches the chunk the moment the runtime renders; a phone
+// only if it opens a floating window.
+const PoppablePanels = defineAsyncComponent(() => loadChunk(() => import(`./window/PoppablePanels.vue`)));
 
 const liveness = useSandboxLiveness();
 const route = useRoute();

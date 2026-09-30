@@ -1,4 +1,4 @@
-import { clearWarmSources, PLAN_LIMIT, registerWarmSource, warmPlan, type WarmBand, type WarmTask } from "./warmPlan";
+import { clearWarmSources, LEAN_PLAN_LIMIT, leanReadAhead, PLAN_LIMIT, registerWarmSource, warmPlan, type WarmBand, type WarmTask } from "./warmPlan";
 
 const wish = (key: string, band: WarmBand): WarmTask => ({ key, band, have: () => false, read: () => Promise.resolve() });
 
@@ -44,5 +44,27 @@ describe(`the wish list`, () => {
         expect(warmPlan()).toHaveLength(1);
         dispose();
         expect(warmPlan()).toHaveLength(0);
+    });
+});
+
+// A phone, a reader saving data or a slow link keeps only the nearest wishes: each read is a transcript or a diff over
+// that connection, validated on that CPU, again after every reconnect.
+describe(`a lean read-ahead`, () => {
+    it(`keeps only the nearest wishes`, () => {
+        registerWarmSource(() => Array.from({ length: 60 }, (_, index) => wish(`k${index}`, index < 5 ? `now` : `rail`)));
+        const lean = warmPlan(() => true);
+        expect(lean).toHaveLength(LEAN_PLAN_LIMIT);
+        expect(lean.slice(0, 5).map((task) => task.key)).toEqual([`k0`, `k1`, `k2`, `k3`, `k4`]);
+        expect(warmPlan(() => false)).toHaveLength(60);
+    });
+
+    it(`is lean on a touch screen, a narrow one, a save-data reader and a slow link, and nowhere else`, () => {
+        const desk = { mobile: false, coarse: false };
+        expect(leanReadAhead({ mobile: true, coarse: false })).toBe(true);
+        expect(leanReadAhead({ mobile: false, coarse: true })).toBe(true);
+        expect(leanReadAhead(desk, { saveData: true })).toBe(true);
+        expect(leanReadAhead(desk, { effectiveType: `3g` })).toBe(true);
+        expect(leanReadAhead(desk, { effectiveType: `4g`, saveData: false })).toBe(false);
+        expect(leanReadAhead(desk)).toBe(false);
     });
 });

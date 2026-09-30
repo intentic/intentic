@@ -22,7 +22,7 @@ const OFF = `disabled:cursor-default disabled:text-subtle disabled:hover:text-su
 
 const iconButton = (...twClasses: string[]) =>
     twMerge(
-        `touch-target flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content`,
+        `touch-target flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content active:bg-overlay active:text-content`,
         `${OFF} disabled:hover:bg-transparent`,
         ...twClasses,
     );
@@ -32,7 +32,7 @@ const iconButton = (...twClasses: string[]) =>
 // centers, not shrink-wraps, in a row).
 const linkButton = (...twClasses: string[]) =>
     twMerge(
-        `-my-1.5 flex min-h-9 w-fit cursor-pointer items-center gap-1.5 text-left text-xs text-link transition-colors hover:underline`,
+        `-my-1.5 flex min-h-9 w-fit cursor-pointer items-center gap-1.5 text-left text-xs text-link transition-colors hover:underline active:underline`,
         `${OFF} disabled:hover:no-underline`,
         ...twClasses,
     );
@@ -41,7 +41,7 @@ const linkButton = (...twClasses: string[]) =>
 // recipe, not an argument, since the two are chosen by meaning, not styling taste.
 const textAction = (...twClasses: string[]) =>
     twMerge(
-        `-my-1.5 flex min-h-9 w-fit cursor-pointer items-center gap-1.5 text-left text-xs text-muted transition-colors hover:text-content`,
+        `-my-1.5 flex min-h-9 w-fit cursor-pointer items-center gap-1.5 text-left text-xs text-muted transition-colors hover:text-content active:text-content`,
         OFF,
         ...twClasses,
     );
@@ -76,7 +76,7 @@ const emptyState = (...twClasses: string[]) =>
 const addTile = (...twClasses: string[]) =>
     twMerge(
         `ui-off inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-md border border-dashed border-line`,
-        `text-xs text-muted transition-colors hover:border-line-strong hover:text-content`,
+        `text-xs text-muted transition-colors hover:border-line-strong hover:text-content active:border-line-strong active:text-content`,
         ...twClasses,
     );
 
@@ -85,7 +85,7 @@ const addTile = (...twClasses: string[]) =>
 const overlayChip = (...twClasses: string[]) =>
     twMerge(
         `touch-target inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-line px-2 py-0.5`,
-        `text-2xs text-muted transition-colors hover:border-line-strong hover:text-content`,
+        `text-2xs text-muted transition-colors hover:border-line-strong hover:text-content active:border-line-strong active:text-content`,
         OFF,
         ...twClasses,
     );
@@ -106,7 +106,7 @@ const sectionLabelSm = (...twClasses: string[]) => twMerge(`text-2xs font-semibo
 const tab = (active: boolean, ...twClasses: string[]) =>
     twMerge(
         `cursor-pointer border-b-2 transition-colors`,
-        active ? `border-b-primary-500 text-content` : `border-b-transparent text-muted hover:text-content`,
+        active ? `border-b-primary-500 text-content` : `border-b-transparent text-muted hover:text-content active:text-content`,
         ...twClasses,
     );
 

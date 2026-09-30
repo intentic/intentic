@@ -6,6 +6,7 @@ import { attachedPaths, type ChatShot, shotsByTurn } from "../../transcript/shot
 import {
     type ChatMessage,
     type ChatTurn,
+    type ChecklistView,
     checklistViewsOf,
     cutsAboveOf,
     dayMarksOf,
@@ -41,7 +42,9 @@ export const usePaneTranscript = (pane: PaneTranscriptHost) => {
     const { messages, streaming, ending, awaitingDecision } = pane;
     // The bubble this turn writes into, if any (liveBubbleOf); recomputed per frame, scanning only the tail.
     const liveBubble = computed(() => liveBubbleOf(messages.value));
-    const turns = computed(() => turnsOf(messages.value));
+    // Settled turns come back as the same objects frame to frame (turnsOf's `previous`), so a streamed reply redraws its own
+    // turn, not every turn above it.
+    const turns = computed<ChatTurn[]>((previous) => turnsOf(messages.value, previous));
     // A turn whose pictures didn't change keeps its array (shotsByTurn), so a settled strip isn't redrawn per paint.
     const attached = computed(() => attachedPaths(messages.value));
     const turnShots = computed<ReadonlyMap<number, readonly ChatShot[]>>((previous) => shotsByTurn(turns.value, attached.value, previous));
@@ -82,7 +85,7 @@ export const usePaneTranscript = (pane: PaneTranscriptHost) => {
             return turn.id === writingTurn.value || deliverables === undefined || deliverables.length === 0 ? undefined : deliverables;
         },
         // How each surviving checklist snapshot draws: the list once per turn, then only what moved.
-        checklistViews: computed(() => checklistViewsOf(turns.value, repeatedChecklists.value)),
+        checklistViews: computed<Map<number, ChecklistView>>((previous) => checklistViewsOf(turns.value, repeatedChecklists.value, previous)),
         // The date named above the first turn sent on a given day, so each prompt's own stamp shrinks to the clock.
         dayMarks: computed(() => dayMarksOf(turns.value)),
         // What a fork below each turn inherits, built as one index since `turns` rebuilds every streaming paint.

@@ -1,5 +1,5 @@
 import type { User } from "@intentic/api-contract";
-import { freshImport, stubGlobal, mocked } from "@intentic/testing/bun";
+import { freshImport, mocked, stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { nextTick, ref } from "vue";
 
 // Plain ref stands in for useAuth's module singleton; the mock closure keeps re-imported analytics modules
@@ -34,7 +34,7 @@ const bootAnalytics = async (posthogKey: string, desktop?: { version: string; in
     });
     const { posthog } = await import(`posthog-js`);
     const analytics = await freshImport<typeof import("./analytics")>("./analytics", import.meta.url);
-    analytics.initAnalytics(routePatternOf);
+    await analytics.initAnalytics(routePatternOf);
     return { posthog, analytics };
 };
 
@@ -162,5 +162,38 @@ describe(`track`, () => {
         const { posthog, analytics } = await bootAnalytics(`phc_test`);
         analytics.track(`message_sent`, { agent: `claude` });
         expect(posthog.capture).toHaveBeenCalledWith(`message_sent`, { agent: `claude` });
+    });
+});
+
+// The SDK arrives at the page's first idle moment, not with the app: a milestone tracked before it has loaded waits,
+// and goes out once it has, in the order it happened.
+describe(`the SDK loading after the first screen`, () => {
+    it(`holds milestones tracked before it has loaded and sends them once it has`, async () => {
+        environment.analytics.posthogKey = `phc_test`;
+        stubGlobal(`window`, { env: environment });
+        const { posthog } = await import(`posthog-js`);
+        const analytics = await freshImport<typeof import("./analytics")>("./analytics", import.meta.url);
+        const loading = analytics.initAnalytics(routePatternOf);
+        analytics.track(`sandbox_connected`, { first: true });
+        expect(posthog.capture).not.toHaveBeenCalled();
+
+        await loading;
+        expect(mocked(posthog.capture).mock.calls).toEqual([[`sandbox_connected`, { first: true }]]);
+    });
+
+    // A phone's replay leaves the conversation out whole: every word of it is asterisks anyway, and recording its DOM
+    // cost a phone a third more main thread to open a chat. A desktop's replay keeps its masked layout.
+    it(`blocks the conversation in a touch screen's replay, and only there`, async () => {
+        const touch = (query: string) => ({ matches: query.includes(`pointer: coarse`) });
+        environment.analytics.posthogKey = `phc_test`;
+        stubGlobal(`window`, { env: environment });
+        stubGlobal(`matchMedia`, touch);
+        const { posthog } = await import(`posthog-js`);
+        await (await freshImport<typeof import("./analytics")>("./analytics", import.meta.url)).initAnalytics(routePatternOf);
+        expect(mocked(posthog.init).mock.calls.at(-1)![1]!.session_recording!.blockSelector).toContain(`.chat-turns`);
+
+        unstubAllGlobals();
+        const { posthog: desk } = await bootAnalytics(`phc_test`);
+        expect(mocked(desk.init).mock.calls.at(-1)![1]!.session_recording!.blockSelector).not.toContain(`.chat-turns`);
     });
 });

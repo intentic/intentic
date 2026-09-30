@@ -87,7 +87,14 @@ const resizers = [] as { readonly targets: Element[]; readonly fire: () => void 
             }
             this.targets.push(target);
         }
-        unobserve(): void {}
+        // One observer now watches every prompt's bubble (clampWatch.ts), so a released bubble is unobserved, not the
+        // observer disconnected.
+        unobserve(target: Element): void {
+            const at = this.targets.indexOf(target);
+            if (at !== -1) {
+                this.targets.splice(at, 1);
+            }
+        }
         disconnect(): void {
             this.targets.length = 0;
         }
