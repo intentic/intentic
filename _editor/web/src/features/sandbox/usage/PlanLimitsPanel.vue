@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { type AccountFix, providerLabel } from "@intentic/sandbox-contract";
-import { RowGroup, RowNote, SearchBar, type Tip, ui } from "@intentic/ui";
+import { Card, SearchBar, type Tip, ui } from "@intentic/ui";
 import { computed, onMounted, ref } from "vue";
 import ProviderLogo from "../../chat/accounts/ProviderLogo.vue";
 import { accountsLoaded, providerAccounts, translatorAccounts } from "../../chat/accounts/providerAccounts";
@@ -39,6 +39,9 @@ import { useT } from "@intentic/ui/i18n";
 //   3. ATTENTION: what's broken (unrefreshable), narrower than "unavailable": a spent pool reopens on its own
 //      and is already counted at level 1.
 //   4. ROSTER: a filterable table to reconcile one account.
+// Laid out as cards: one per provider down the left, and the fleet-wide answers (1 and 3) in one card spanning their
+// full height on the right, so "can I start work" stays beside whichever provider is being read. Narrow, that card
+// stacks above them. The roster runs under both, since a table needs the width.
 // Distribution uses bar height, not colour-only cells: this system's severity ramp (orange/amber/red) is
 // unreadable as colour alone to a red-weak reader.
 
@@ -70,6 +73,10 @@ const capacity = computed(() =>
         share: (100 * summary.value.counts[band]) / Math.max(1, capacityTotal.value),
     })),
 );
+
+// The one grid both the panel and its skeleton stand on: provider cards on the left, the fleet-wide card on the right
+// once the panel is wide enough for both. One string, so the outline cannot promise a column the panel never draws.
+const SPLIT = `grid gap-3 @2xl:grid-cols-[minmax(0,1fr)_16rem] @4xl:grid-cols-[minmax(0,1fr)_18rem]`;
 
 // groups
 
@@ -177,258 +184,275 @@ const roster = computed(() => {
 </script>
 
 <template>
-    <!-- `@container` over the section: columns thin against the panel, not the window's width. -->
-    <RowGroup v-if="rows.length > 0" id="accounts" class="@container" :label="t(`shared.planLimits`)">
-        <!-- 1. CAPACITY: headline is a count, not a percentage, since that question survives having 31 accounts. -->
-        <RowNote variant="block">
-            <div class="flex flex-col gap-2">
-                <!-- Answers "can I start work, and if not, when", not a connection count (the roster already does that). -->
-                <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                    <!-- Counted against the accounts that could have room, never the whole roster: a credential no turn can run on belongs to the legend below. -->
-                    <span class="text-sm text-content">
-                        {{ t(`sandbox.planLimitsPanel.accountsWithRoom`, { count: summary.counts.room, total: capacityTotal }, summary.counts.room) }}
-                    </span>
-                    <span v-if="summary.nextResetAt !== undefined" class="ml-auto shrink-0 text-2xs text-subtle"
-                        >{{ t(`sandbox.planLimitsPanel.nextPoolReopens`, { nextResetAt: formatReset(summary.nextResetAt) }) }}
-                    </span>
-                </div>
+    <!-- `@container` over the section: the columns follow the panel's width, not the window's. -->
+    <section v-if="rows.length > 0" id="accounts" class="@container">
+        <div class="mb-2.5 px-1">
+            <span :class="ui.sectionLabel()">{{ t(`shared.planLimits`) }}</span>
+        </div>
 
-                <!-- Segments are account counts; a surface gap separates them, so even a single account draws a visible sliver. -->
-                <div v-if="capacityTotal > 0" class="flex h-1.5 gap-0.5">
-                    <div
-                        v-for="segment in capacity"
-                        :key="segment.band"
-                        v-tooltip.top="`${segment.count} ${segment.label}`"
-                        class="ui-meter-fill h-full rounded-full"
-                        :class="planLimitBandTone(segment.band)"
-                        :style="{ width: `${segment.share}%`, ...planLimitBandTint(segment.band) }"
-                    />
-                </div>
+        <div class="flex flex-col gap-3">
+            <!-- Summary first in the document, so it is read first and stacks on top when narrow; wide, it takes the
+                 right-hand column and the full height of the provider cards beside it. -->
+            <div :class="SPLIT">
+                <Card class="@2xl:col-start-2 @2xl:row-start-1">
+                    <!-- Sticks while the provider column scrolls past, since it answers the question every card below it raises. -->
+                    <div class="flex flex-col gap-4 @2xl:sticky @2xl:top-4">
+                        <!-- 1. CAPACITY: headline is a count, not a percentage, since that question survives having 31 accounts. -->
+                        <div class="flex flex-col gap-3">
+                            <!-- Answers "can I start work, and if not, when", not a connection count (the roster already does that). -->
+                            <div class="flex flex-col gap-1">
+                                <!-- Counted against the accounts that could have room, never the whole roster: a credential no turn can run on belongs to the legend below. -->
+                                <span class="text-base font-semibold leading-snug text-content">
+                                    {{ t(`sandbox.planLimitsPanel.accountsWithRoom`, { count: summary.counts.room, total: capacityTotal }, summary.counts.room) }}
+                                </span>
+                                <span v-if="summary.nextResetAt !== undefined" class="text-2xs text-subtle"
+                                    >{{ t(`sandbox.planLimitsPanel.nextPoolReopens`, { nextResetAt: formatReset(summary.nextResetAt) }) }}
+                                </span>
+                            </div>
 
-                <!-- Legend is the sentence: swatch, count and word together, nothing carried by colour alone. -->
-                <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-muted">
-                    <span v-for="segment in capacity" :key="segment.band" class="flex items-center gap-1.5">
-                        <span
-                            class="ui-meter-fill size-2 shrink-0 rounded-2xs"
-                            :class="planLimitBandTone(segment.band)"
-                            :style="planLimitBandTint(segment.band)"
-                        />
-                        <span class="tabular-nums text-content">{{ segment.count }}</span>
-                        {{ segment.label }}
-                    </span>
-                    <span v-if="summary.counts.blocked > 0" class="text-danger">
-                        · {{ summary.counts.blocked }} {{ planLimitBandLabel(`blocked`) }}
-                    </span>
-                    <span v-if="summary.counts.none > 0" class="text-subtle"> · {{ summary.counts.none }} {{ planLimitBandLabel(`none`) }} </span>
-                </div>
-            </div>
-        </RowNote>
+                            <!-- Segments are account counts; a surface gap separates them, so even a single account draws a visible sliver. -->
+                            <div v-if="capacityTotal > 0" class="flex h-1.5 gap-0.5">
+                                <div
+                                    v-for="segment in capacity"
+                                    :key="segment.band"
+                                    v-tooltip.top="`${segment.count} ${segment.label}`"
+                                    class="ui-meter-fill h-full rounded-full"
+                                    :class="planLimitBandTone(segment.band)"
+                                    :style="{ width: `${segment.share}%`, ...planLimitBandTint(segment.band) }"
+                                />
+                            </div>
 
-        <!-- 2. PROVIDERS: the unit a reader actually chooses (the translator picks the account). -->
-        <RowNote variant="block">
-            <div class="flex flex-col gap-6">
-                <div v-for="group in groups" :key="group.provider" class="flex gap-2">
-                    <!-- The mark alone, no rule under it: the column it leaves empty is what says the accounts belong to it. -->
-                    <span class="flex size-5 shrink-0 items-center justify-center rounded-md bg-content/10 text-content">
-                        <ProviderLogo :provider="group.provider" class="text-xs" />
-                    </span>
-
-                    <div class="flex min-w-0 flex-1 flex-col gap-2">
-                        <!-- `min-h-5` matches the mark's height, so the name's line holds steady whatever the metadata wraps to. -->
-                        <div class="flex min-h-5 flex-wrap items-baseline gap-x-2 gap-y-1">
-                            <span class="text-sm font-semibold text-content">{{ providerLabel(group.provider) }}</span>
-                            <!-- One account ⇒ its own name, because "1 account" says nothing a reader wanted. -->
-                            <span v-if="groupNote(group) !== undefined" class="min-w-0 truncate text-2xs text-subtle">{{ groupNote(group) }}</span>
-                            <span v-if="single(group)?.measuredAt !== undefined" class="ml-auto shrink-0 text-2xs text-subtle"
-                                >{{ t(`sandbox.planLimitsPanel.read`, { measuredAt: formatAge(single(group)!.measuredAt!) }) }}
-                            </span>
-                            <span v-else-if="!isInline(group) && groupState(group) !== ``" class="ml-auto shrink-0 text-2xs text-muted">{{
-                                groupState(group)
-                            }}</span>
+                            <!-- Legend is the sentence: swatch, count and word together, nothing carried by colour alone. A
+                                 row of words when stacked above the providers, a column with the counts lined up on the
+                                 right once it has a column of its own. -->
+                            <div class="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-2xs text-muted @2xl:flex-col @2xl:items-stretch">
+                                <span v-for="segment in capacity" :key="segment.band" class="flex items-center gap-1.5">
+                                    <span
+                                        class="ui-meter-fill size-2 shrink-0 rounded-2xs"
+                                        :class="planLimitBandTone(segment.band)"
+                                        :style="planLimitBandTint(segment.band)"
+                                    />
+                                    <span class="tabular-nums text-content @2xl:order-last @2xl:ml-auto">{{ segment.count }}</span>
+                                    {{ segment.label }}
+                                </span>
+                                <!-- Off the bar, so an outline where the others have a fill: counted, never capacity. -->
+                                <span v-if="summary.counts.blocked > 0" class="flex items-center gap-1.5 text-danger">
+                                    <span class="size-2 shrink-0 rounded-2xs border border-current" />
+                                    <span class="tabular-nums @2xl:order-last @2xl:ml-auto">{{ summary.counts.blocked }}</span>
+                                    {{ planLimitBandLabel(`blocked`) }}
+                                </span>
+                                <span v-if="summary.counts.none > 0" class="flex items-center gap-1.5 text-subtle">
+                                    <span class="size-2 shrink-0 rounded-2xs border border-current" />
+                                    <span class="tabular-nums @2xl:order-last @2xl:ml-auto">{{ summary.counts.none }}</span>
+                                    {{ planLimitBandLabel(`none`) }}
+                                </span>
+                            </div>
                         </div>
 
-                        <!-- Flush with the provider's name, not indented past it; smaller, lighter and markless, so an account heading can't read as another provider. -->
-                        <div class="flex flex-col gap-3 pb-1">
-                            <!-- Small provider: the meters themselves. Nothing that fits is folded away. -->
-                            <template v-if="isInline(group)">
-                                <div v-for="row in group.rows" :key="row.id" class="flex flex-col gap-1.5">
-                                    <!-- Account labels sit between the provider and its pools. -->
-                                    <div v-if="single(group) === undefined" class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                                        <span class="min-w-0 truncate text-xs font-medium text-content">{{ row.label }}</span>
-                                        <!-- Show the identity only when the account label does not identify it. -->
-                                        <span v-if="row.identity !== undefined" class="min-w-0 truncate text-2xs text-subtle">{{
-                                            row.identity
-                                        }}</span>
-                                        <span
-                                            v-if="row.measuredAt !== undefined"
-                                            class="ml-auto shrink-0 text-2xs"
-                                            :class="row.stale ? `text-muted` : `text-subtle`"
-                                            >{{ t(`sandbox.planLimitsPanel.read`, { measuredAt: formatAge(row.measuredAt) }) }}
-                                        </span>
-                                    </div>
-
-                                    <p v-if="row.pools.length === 0" class="text-2xs text-subtle">
-                                        {{
-                                            row.readable
-                                                ? t(`sandbox.planLimitsPanel.noReadingYet`)
-                                                : t(`sandbox.planLimitsPanel.planPublishesNoLimits`)
-                                        }}
-                                    </p>
-
-                                    <!-- Narrow layouts wrap meters without hiding reset dates. -->
-                                    <!-- A pool inside another (the session inside the week) hangs off it on an elbow, one step in per
-                                         level; the elbow sits inside the label's fixed width, so every bar still starts on one line. -->
-                                    <div
-                                        v-for="{ item: pool, depth, parent, capped } in nestedPools(row)"
-                                        :key="pool.kind"
-                                        class="flex flex-wrap items-center gap-x-3 gap-y-1 @xl:flex-nowrap"
+                        <!-- 3. ATTENTION: beside the count it explains, since both are about the whole fleet rather than one provider. -->
+                        <div v-if="summary.attention.length > 0" class="flex flex-col gap-2 border-t border-line-subtle pt-4">
+                            <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                                <span class="text-2xs font-medium text-danger">{{ t(`sandbox.planLimitsPanel.cantServeTurn`, { attentionTotal }) }}</span>
+                                <span v-if="reconnectTotal > 0" class="text-2xs text-subtle">
+                                    {{ t(`sandbox.planLimitsPanel.reconnectOnAgentTab`, { count: reconnectTotal }, reconnectTotal) }}
+                                </span>
+                                <span v-if="verifyTotal > 0" class="text-2xs text-subtle">
+                                    {{ t(`sandbox.planLimitsPanel.verifyEachLink`, { count: verifyTotal }, verifyTotal) }}
+                                </span>
+                                <span v-if="seatTotal > 0" class="text-2xs text-subtle">
+                                    {{ t(`sandbox.planLimitsPanel.seatFromAdmin`, { count: seatTotal }, seatTotal) }}
+                                </span>
+                            </div>
+                            <div v-for="group in attentionShown" :key="group.fix" class="flex flex-col gap-1">
+                                <span class="text-2xs text-muted">{{ group.reason }}</span>
+                                <span class="text-2xs text-subtle">{{ group.detail }}</span>
+                                <!-- Wraps as a set, not a column: names are short, unordered, and scanned for the one you recognise. -->
+                                <div class="flex flex-wrap items-center gap-x-4 gap-y-1">
+                                    <span
+                                        v-for="row in group.rows"
+                                        :key="row.id"
+                                        v-tooltip.top="attentionTip(row)"
+                                        class="flex min-w-0 items-center gap-1.5 text-2xs"
                                     >
-                                        <span class="flex min-w-0 flex-1 items-center text-2xs text-muted @xl:w-40 @xl:flex-none">
+                                        <ProviderLogo :provider="row.provider" class="shrink-0 text-muted" />
+                                        <!-- A verification is done by the account's owner on the provider's own page: the name is that door. -->
+                                        <a
+                                            v-if="row.state.url !== undefined"
+                                            :href="row.state.url"
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            class="min-w-0 truncate text-link hover:underline"
+                                            >{{ row.label }}</a
+                                        >
+                                        <span v-else class="min-w-0 truncate text-muted">{{ row.label }}</span>
+                                    </span>
+                                    <!-- Never a silent cap, and never a dead end: the rest are one click away, in place. -->
+                                    <button
+                                        v-if="group.hidden > 0"
+                                        type="button"
+                                        class="cursor-pointer text-2xs text-link hover:underline"
+                                        @click="attentionExpanded = true"
+                                    >
+                                        {{ t(`sandbox.planLimitsPanel.more`, { hidden: group.hidden }) }}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </Card>
+
+                <!-- 2. PROVIDERS: the unit a reader actually chooses (the translator picks the account), one card each. -->
+                <div class="flex min-w-0 flex-col gap-3 @2xl:col-start-1 @2xl:row-start-1">
+                    <!-- Each card its own container: a meter lays itself out against the card it sits in, not the section. -->
+                    <Card v-for="group in groups" :key="group.provider" class="@container flex gap-2.5">
+                        <!-- The mark alone, no rule under it: the column it leaves empty is what says the accounts belong to it. -->
+                        <span class="flex size-5 shrink-0 items-center justify-center rounded-md bg-content/10 text-content">
+                            <ProviderLogo :provider="group.provider" class="text-xs" />
+                        </span>
+
+                        <div class="flex min-w-0 flex-1 flex-col gap-3">
+                            <!-- `min-h-5` matches the mark's height, so the name's line holds steady whatever the metadata wraps to. -->
+                            <div class="flex min-h-5 flex-wrap items-baseline gap-x-2 gap-y-1">
+                                <span class="text-sm font-semibold text-content">{{ providerLabel(group.provider) }}</span>
+                                <!-- One account ⇒ its own name, because "1 account" says nothing a reader wanted. -->
+                                <span v-if="groupNote(group) !== undefined" class="min-w-0 truncate text-2xs text-subtle">{{ groupNote(group) }}</span>
+                                <span v-if="single(group)?.measuredAt !== undefined" class="ml-auto shrink-0 text-2xs text-subtle"
+                                    >{{ t(`sandbox.planLimitsPanel.read`, { measuredAt: formatAge(single(group)!.measuredAt!) }) }}
+                                </span>
+                                <span v-else-if="!isInline(group) && groupState(group) !== ``" class="ml-auto shrink-0 text-2xs text-muted">{{
+                                    groupState(group)
+                                }}</span>
+                            </div>
+
+                            <!-- Flush with the provider's name, not indented past it; smaller, lighter and markless, so an account heading can't read as another provider. -->
+                            <div class="flex flex-col gap-3">
+                                <!-- Small provider: the meters themselves. Nothing that fits is folded away. -->
+                                <template v-if="isInline(group)">
+                                    <div v-for="row in group.rows" :key="row.id" class="flex flex-col gap-1.5">
+                                        <!-- Account labels sit between the provider and its pools. -->
+                                        <div v-if="single(group) === undefined" class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                                            <span class="min-w-0 truncate text-xs font-medium text-content">{{ row.label }}</span>
+                                            <!-- Show the identity only when the account label does not identify it. -->
+                                            <span v-if="row.identity !== undefined" class="min-w-0 truncate text-2xs text-subtle">{{
+                                                row.identity
+                                            }}</span>
                                             <span
-                                                v-if="depth > 0"
-                                                class="mr-1.5 size-2 shrink-0 -translate-y-0.5 rounded-bl-2xs border-b border-l border-line-strong"
-                                                :style="{ marginLeft: `${0.25 + (depth - 1) * 0.75}rem` }"
-                                                aria-hidden="true"
-                                            />
-                                            <span class="min-w-0 truncate">{{ pool.label }}</span>
-                                            <span v-if="parent !== undefined" class="sr-only">
+                                                v-if="row.measuredAt !== undefined"
+                                                class="ml-auto shrink-0 text-2xs"
+                                                :class="row.stale ? `text-muted` : `text-subtle`"
+                                                >{{ t(`sandbox.planLimitsPanel.read`, { measuredAt: formatAge(row.measuredAt) }) }}
+                                            </span>
+                                        </div>
+
+                                        <p v-if="row.pools.length === 0" class="text-2xs text-subtle">
+                                            {{
+                                                row.readable
+                                                    ? t(`sandbox.planLimitsPanel.noReadingYet`)
+                                                    : t(`sandbox.planLimitsPanel.planPublishesNoLimits`)
+                                            }}
+                                        </p>
+
+                                        <!-- Narrow layouts wrap meters without hiding reset dates. -->
+                                        <!-- A pool inside another (the session inside the week) hangs off it on an elbow, one step in per
+                                             level; the elbow sits inside the label's fixed width, so every bar still starts on one line. -->
+                                        <div
+                                            v-for="{ item: pool, depth, parent, capped } in nestedPools(row)"
+                                            :key="pool.kind"
+                                            class="flex flex-wrap items-center gap-x-3 gap-y-1 @xl:flex-nowrap"
+                                        >
+                                            <span class="flex min-w-0 flex-1 items-center text-2xs text-muted @xl:w-40 @xl:flex-none">
+                                                <span
+                                                    v-if="depth > 0"
+                                                    class="mr-1.5 size-2 shrink-0 -translate-y-0.5 rounded-bl-2xs border-b border-l border-line-strong"
+                                                    :style="{ marginLeft: `${0.25 + (depth - 1) * 0.75}rem` }"
+                                                    aria-hidden="true"
+                                                />
+                                                <span class="min-w-0 truncate">{{ pool.label }}</span>
+                                                <span v-if="parent !== undefined" class="sr-only">
+                                                    {{
+                                                        capped
+                                                            ? t(`sandbox.planLimitsPanel.cappedBy`, { pool: parent.label })
+                                                            : t(`sandbox.planLimitsPanel.insidePool`, { pool: parent.label })
+                                                    }}
+                                                </span>
+                                            </span>
+                                            <!-- Drains as turns spend it: the fill is what is left. A spent pool tints its empty track, so
+                                                 it can't be mistaken for one with no reading. A nested pool draws thinner, the one holding
+                                                 it being the headline, and fades while that one is spent: its room waits on the holder. -->
+                                            <div
+                                                v-tooltip.top="
+                                                    capped && parent !== undefined
+                                                        ? {
+                                                              title: t(`sandbox.planLimitsPanel.unusable`),
+                                                              rows: [{ label: t(`sandbox.planLimitsPanel.waitsOn`), value: parent.label }],
+                                                          }
+                                                        : undefined
+                                                "
+                                                class="order-last min-w-0 flex-1 basis-full overflow-hidden rounded-full @xl:order-none @xl:basis-0"
+                                                :class="[meterTrack(pool.percent), depth > 0 ? `h-1` : `h-1.5`, capped ? `opacity-40` : ``]"
+                                            >
+                                                <div
+                                                    class="ui-meter-fill h-full rounded-full"
+                                                    :class="usageTone(pool.percent)"
+                                                    :style="{ width: `${meterFill(pool.percent)}%`, ...meterTint(pool.percent) }"
+                                                />
+                                            </div>
+                                            <span
+                                                class="w-16 shrink-0 text-right text-2xs tabular-nums"
+                                                :class="[usageTone(pool.percent), capped ? `opacity-40` : ``]"
+                                                :style="meterTint(pool.percent)"
+                                            >
+                                                {{ formatRemaining(pool.percent, row.stale) }}
+                                            </span>
+                                            <span class="shrink-0 truncate text-right text-2xs text-subtle @xl:w-32">
                                                 {{
-                                                    capped
-                                                        ? t(`sandbox.planLimitsPanel.cappedBy`, { pool: parent.label })
-                                                        : t(`sandbox.planLimitsPanel.insidePool`, { pool: parent.label })
+                                                    pool.resetsAt === undefined
+                                                        ? ``
+                                                        : t(`sandbox.planLimitsPanel.resets`, { resetsAt: formatReset(pool.resetsAt) })
                                                 }}
                                             </span>
-                                        </span>
-                                        <!-- Drains as turns spend it: the fill is what is left. A spent pool tints its empty track, so
-                                             it can't be mistaken for one with no reading. A nested pool draws thinner, the one holding
-                                             it being the headline, and fades while that one is spent: its room waits on the holder. -->
-                                        <div
-                                            v-tooltip.top="
-                                                capped && parent !== undefined
-                                                    ? {
-                                                          title: t(`sandbox.planLimitsPanel.unusable`),
-                                                          rows: [{ label: t(`sandbox.planLimitsPanel.waitsOn`), value: parent.label }],
-                                                      }
-                                                    : undefined
-                                            "
-                                            class="order-last min-w-0 flex-1 basis-full overflow-hidden rounded-full @xl:order-none @xl:basis-0"
-                                            :class="[meterTrack(pool.percent), depth > 0 ? `h-1` : `h-1.5`, capped ? `opacity-40` : ``]"
-                                        >
-                                            <div
-                                                class="ui-meter-fill h-full rounded-full"
-                                                :class="usageTone(pool.percent)"
-                                                :style="{ width: `${meterFill(pool.percent)}%`, ...meterTint(pool.percent) }"
-                                            />
                                         </div>
+                                    </div>
+                                </template>
+
+                                <!-- Large providers use bars, one per account, each as tall as what it has left; a missing reading keeps an empty neutral track. -->
+                                <template v-else>
+                                    <div class="flex h-5 items-end gap-0.5">
                                         <span
-                                            class="w-16 shrink-0 text-right text-2xs tabular-nums"
-                                            :class="[usageTone(pool.percent), capped ? `opacity-40` : ``]"
-                                            :style="meterTint(pool.percent)"
+                                            v-for="row in barsOf(group)"
+                                            :key="row.id"
+                                            v-tooltip.top="barTooltip(row)"
+                                            class="flex h-full w-1.5 items-end rounded-2xs"
+                                            :class="row.percent === undefined ? `bg-content/10` : meterTrack(row.percent)"
                                         >
-                                            {{ formatRemaining(pool.percent, row.stale) }}
-                                        </span>
-                                        <span class="shrink-0 truncate text-right text-2xs text-subtle @xl:w-32">
-                                            {{
-                                                pool.resetsAt === undefined
-                                                    ? ``
-                                                    : t(`sandbox.planLimitsPanel.resets`, { resetsAt: formatReset(pool.resetsAt) })
-                                            }}
+                                            <span
+                                                v-if="row.percent !== undefined"
+                                                class="ui-meter-fill w-full rounded-2xs"
+                                                :class="usageTone(row.percent)"
+                                                :style="{ height: `${meterFill(row.percent, 5)}%`, ...meterTint(row.percent) }"
+                                            />
                                         </span>
                                     </div>
-                                </div>
-                            </template>
-
-                            <!-- Large providers use bars, one per account, each as tall as what it has left; a missing reading keeps an empty neutral track. -->
-                            <template v-else>
-                                <div class="flex h-5 items-end gap-0.5">
-                                    <span
-                                        v-for="row in barsOf(group)"
-                                        :key="row.id"
-                                        v-tooltip.top="barTooltip(row)"
-                                        class="flex h-full w-1.5 items-end rounded-2xs"
-                                        :class="row.percent === undefined ? `bg-content/10` : meterTrack(row.percent)"
-                                    >
-                                        <span
-                                            v-if="row.percent !== undefined"
-                                            class="ui-meter-fill w-full rounded-2xs"
-                                            :class="usageTone(row.percent)"
-                                            :style="{ height: `${meterFill(row.percent, 5)}%`, ...meterTint(row.percent) }"
-                                        />
-                                    </span>
-                                </div>
-                                <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs">
-                                    <button type="button" class="cursor-pointer text-link hover:underline" @click="openRoster(group.provider)">
-                                        {{ t(`sandbox.planLimitsPanel.viewAccounts`) }}
-                                    </button>
-                                    <!-- Never a silent cap: a strip that shows 24 of 31 says so. -->
-                                    <span v-if="group.rows.length > MAX_BARS" class="text-subtle"
-                                        >{{ t(`sandbox.planLimitsPanel.showingMostConstrained`, { max_bars: MAX_BARS, count: group.rows.length }) }}
-                                    </span>
-                                </div>
-                            </template>
+                                    <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs">
+                                        <button type="button" class="cursor-pointer text-link hover:underline" @click="openRoster(group.provider)">
+                                            {{ t(`sandbox.planLimitsPanel.viewAccounts`) }}
+                                        </button>
+                                        <!-- Never a silent cap: a strip that shows 24 of 31 says so. -->
+                                        <span v-if="group.rows.length > MAX_BARS" class="text-subtle"
+                                            >{{ t(`sandbox.planLimitsPanel.showingMostConstrained`, { max_bars: MAX_BARS, count: group.rows.length }) }}
+                                        </span>
+                                    </div>
+                                </template>
+                            </div>
                         </div>
-                    </div>
+                    </Card>
                 </div>
             </div>
-        </RowNote>
 
-        <!-- 3. -->
-        <RowNote v-if="summary.attention.length > 0" variant="block">
-            <div class="flex flex-col gap-2">
-                <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                    <span class="text-2xs font-medium text-danger">{{ t(`sandbox.planLimitsPanel.cantServeTurn`, { attentionTotal }) }}</span>
-                    <span v-if="reconnectTotal > 0" class="text-2xs text-subtle">
-                        {{ t(`sandbox.planLimitsPanel.reconnectOnAgentTab`, { count: reconnectTotal }, reconnectTotal) }}
-                    </span>
-                    <span v-if="verifyTotal > 0" class="text-2xs text-subtle">
-                        {{ t(`sandbox.planLimitsPanel.verifyEachLink`, { count: verifyTotal }, verifyTotal) }}
-                    </span>
-                    <span v-if="seatTotal > 0" class="text-2xs text-subtle">
-                        {{ t(`sandbox.planLimitsPanel.seatFromAdmin`, { count: seatTotal }, seatTotal) }}
-                    </span>
-                </div>
-                <div v-for="group in attentionShown" :key="group.fix" class="flex flex-col gap-1">
-                    <span class="text-2xs text-muted">{{ group.reason }}</span>
-                    <span class="text-2xs text-subtle">{{ group.detail }}</span>
-                    <!-- Wraps as a set, not a column: names are short, unordered, and scanned for the one you recognise. -->
-                    <div class="flex flex-wrap items-center gap-x-4 gap-y-1">
-                        <span
-                            v-for="row in group.rows"
-                            :key="row.id"
-                            v-tooltip.top="attentionTip(row)"
-                            class="flex min-w-0 items-center gap-1.5 text-2xs"
-                        >
-                            <ProviderLogo :provider="row.provider" class="shrink-0 text-muted" />
-                            <!-- A verification is done by the account's owner on the provider's own page: the name is that door. -->
-                            <a
-                                v-if="row.state.url !== undefined"
-                                :href="row.state.url"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                class="min-w-0 truncate text-link hover:underline"
-                                >{{ row.label }}</a
-                            >
-                            <span v-else class="min-w-0 truncate text-muted">{{ row.label }}</span>
-                        </span>
-                        <!-- Never a silent cap, and never a dead end: the rest are one click away, in place. -->
-                        <button
-                            v-if="group.hidden > 0"
-                            type="button"
-                            class="cursor-pointer text-2xs text-link hover:underline"
-                            @click="attentionExpanded = true"
-                        >
-                            {{ t(`sandbox.planLimitsPanel.more`, { hidden: group.hidden }) }}
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </RowNote>
-
-        <!-- 4 · ROSTER. The escape hatch: every account, searchable, with the number behind each meter. -->
-        <RowNote variant="block">
-            <div class="flex flex-col gap-2">
+            <!-- 4 · ROSTER. The escape hatch: every account, searchable, with the number behind each meter. -->
+            <Card class="flex flex-col gap-2">
                 <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
-                    <button type="button" class="flex cursor-pointer items-center gap-1.5 text-2xs text-content" @click="rosterOpen = !rosterOpen">
+                    <button type="button" class="flex cursor-pointer items-center gap-1.5 text-xs text-content" @click="rosterOpen = !rosterOpen">
                         <Icon :name="rosterOpen ? `chevron-down` : `chevron-right`" class="text-muted" />
                         {{ t(`sandbox.planLimitsPanel.allAccounts`) }}
                     </button>
@@ -484,28 +508,37 @@ const roster = computed(() => {
                     </table>
                     <p v-if="roster.length === 0" :class="ui.emptyState(`py-4`)">{{ t(`sandbox.planLimitsPanel.noAccountMatchesFilter`) }}</p>
                 </div>
-            </div>
-        </RowNote>
-    </RowGroup>
+            </Card>
+        </div>
+    </section>
 
-    <!-- An unread state is not an empty one: drawn as the panel itself (headline, band strip, legend), not a "Reading..." sentence in its place. -->
-    <RowGroup v-else-if="!accountsLoaded && outline" class="@container" role="status" aria-busy="true">
-        <template #label><span class="skeleton block h-2.5 w-24" aria-hidden="true" /></template>
+    <!-- An unread state is not an empty one: drawn as the panel itself (summary card beside provider cards), not a "Reading..." sentence in its place. -->
+    <section v-else-if="!accountsLoaded && outline" class="@container" role="status" aria-busy="true">
+        <div class="mb-2.5 px-1"><span class="skeleton block h-2.5 w-24" aria-hidden="true" /></div>
         <span class="sr-only">{{ t(`sandbox.words.readingConnections`) }}</span>
-        <RowNote variant="block" aria-hidden="true">
-            <div class="flex flex-col gap-2">
-                <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                    <span class="skeleton block h-4 w-52" />
-                    <span class="skeleton ml-auto block h-2.5 w-32" />
+        <div :class="SPLIT" aria-hidden="true">
+            <Card class="flex flex-col gap-3 @2xl:col-start-2 @2xl:row-start-1">
+                <div class="flex flex-col gap-1.5">
+                    <span class="skeleton block h-4 w-44" />
+                    <span class="skeleton block h-2.5 w-32" />
                 </div>
-                <!-- Matches the strip's actual 1.5px height; a thicker placeholder would promise more than the real thing. -->
+                <!-- Matches the strip's actual height; a thicker placeholder would promise more than the real thing. -->
                 <span class="skeleton block h-1.5 w-full rounded-full" />
-                <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <div class="flex flex-wrap gap-x-3 gap-y-1.5 @2xl:flex-col">
                     <span v-for="(width, index) in [`w-20`, `w-24`, `w-16`]" :key="index" class="skeleton block h-2.5" :class="width" />
                 </div>
+            </Card>
+            <div class="flex min-w-0 flex-col gap-3 @2xl:col-start-1 @2xl:row-start-1">
+                <Card v-for="card in 2" :key="card" class="flex gap-2.5">
+                    <span class="skeleton block size-5 shrink-0 rounded-md" />
+                    <div class="flex min-w-0 flex-1 flex-col gap-3">
+                        <span class="skeleton block h-3.5 w-28" />
+                        <span class="skeleton block h-1.5 w-full rounded-full" />
+                    </div>
+                </Card>
             </div>
-        </RowNote>
-    </RowGroup>
+        </div>
+    </section>
 
     <!-- Said only once it is true, and silent for the beat before the outline earns its place. -->
     <p v-else-if="accountsLoaded" :class="ui.emptyState()">
