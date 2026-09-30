@@ -122,7 +122,8 @@ const column = ref<HTMLElement>();
                     {{ dayMarks.get(turn.id) }}
                 </div>
                 <!-- `chat-pin-host` carries `--chat-pin`: this turn's prompt writes its pinned height there, and anything sticky inside the turn reads it. -->
-                <section class="chat-pin-host chat-stack group/turn relative flex flex-col">
+                <!-- `chat-turn` scopes the fork marks' hover (chat.css): each lights for the rows above it, not for the whole turn. -->
+                <section class="chat-pin-host chat-stack chat-turn relative flex flex-col">
                     <!-- v-memo keys rendered inputs so streaming updates only the active row. -->
                     <!-- `doomed` is part of the memo key because struck rows render differently. -->
                     <!-- The checklist view is a fresh object per rebuild, so only the few rows that carry a
@@ -143,6 +144,7 @@ const column = ref<HTMLElement>();
                             heldRow === message.id,
                         ]"
                         class="contents"
+                        :class="cutsAbove.get(message.id) !== undefined && !props.subagent && `chat-cut-row`"
                     >
                         <!-- Fork marks sit between message rows because row overflow clips marks above a row. -->
                         <ChatForkCut v-if="cutsAbove.get(message.id) !== undefined && !props.subagent" :cut="cutsAbove.get(message.id)!" />
@@ -160,7 +162,7 @@ const column = ref<HTMLElement>();
                     <!-- The pictures the turn's tools showed the agent, where its answer is read (ChatTurnShots). -->
                     <ChatTurnShots v-if="stripOf(turn)" :shots="stripOf(turn)!" :agent="conversation.scope.value" @view="viewer.view" />
                     <!-- The fork point sits after the answer and inside its hover region. -->
-                    <ChatForkCut v-if="!props.subagent" :cut="forkCuts.get(turn.id) ?? messages.length" />
+                    <ChatForkCut v-if="!props.subagent" class="chat-cut-row" :cut="forkCuts.get(turn.id) ?? messages.length" />
                 </section>
             </template>
         </template>

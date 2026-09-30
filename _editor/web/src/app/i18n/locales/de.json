@@ -1455,8 +1455,19 @@
             "stillFetchingConversationSandbox": "Diese Unterhaltung wird noch aus Ihrer Sandbox geholt…"
         },
         "chatTurnAsides": {
-            "showSteps": "Schritte zeigen",
-            "thinking": "Denkt nach"
+            "failed": "Fehlgeschlagen",
+            "kindCommands": "Befehle",
+            "kindEdits": "Änderungen",
+            "kindOther": "Sonstiges",
+            "kindReads": "Gelesen",
+            "kindSearches": "Suchen",
+            "kindSubagents": "Subagenten",
+            "kindWeb": "Web",
+            "showSteps": "{count} Schritt zeigen | {count} Schritte zeigen",
+            "showThinkingAndSteps": "Überlegungen und {count} Schritt zeigen | Überlegungen und {count} Schritte zeigen",
+            "steps": "{count} Schritt | {count} Schritte",
+            "thinking": "Denkt nach",
+            "thoughtFirst": "Erst durchdacht"
         },
         "chatTurnDeliverables": {
             "open": "{name} öffnen, {kind}",

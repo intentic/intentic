@@ -1,71 +1,72 @@
-import type { IconName } from "@intentic/ui";
 import type { TranscriptTool } from "@intentic/sandbox-contract";
-import { delegates as startsSubagent, present } from "./toolPresentation";
+import { delegates as startsSubagent } from "./toolPresentation";
 
-// Summary of a turn's tool-call run for its collapsed mark (ChatTurnAsides.vue): how many top-level calls it made (a
-// sub-agent's own calls count as the one delegation that spawned them) and which was the most notable.
+// Summary of a turn's tool-call run for its node on the spine (ChatTurnAsides.vue): how many top-level calls it made (a
+// sub-agent's own calls count as the one delegation that spawned them), what kinds they were, and how it went. The
+// node itself shows only the count; the kinds are what its hover card breaks that count into.
+
+// What a call did, by consequence rather than by which tool it was. Declared in the order the card lists them: what
+// changed the world first, what only looked at it last.
+export const RUN_KINDS = [`subagents`, `edits`, `commands`, `web`, `searches`, `reads`, `other`] as const;
+export type RunKind = (typeof RUN_KINDS)[number];
 
 export interface ToolRun {
     readonly count: number;
-    // Icon of the run's most notable call, borrowed from that call's own presentation.
-    readonly icon: IconName;
-    readonly failed: boolean;
+    // Calls per kind, in RUN_KINDS order; kinds the run made no call of are left out.
+    readonly kinds: readonly { readonly kind: RunKind; readonly count: number }[];
+    // Calls that failed, so the card can say how many and the node can turn.
+    readonly failed: number;
     readonly running: boolean;
 }
 
-// What the category alone is worth, once the shapes that outrank it have been ruled out.
-const CATEGORY_SCORES: Partial<Record<TranscriptTool["category"], number>> = { fetch: 40, execute: 30, search: 20, read: 10 };
-
 // `nested` stands in for `children` on a transcript page, which counts a delegation's calls rather than carrying them; a
-// delegation must rank the same either way, or a reopened turn's mark changes on its own. A spawned subagent's call ranks
-// as one too, though its calls live in its own conversation.
+// delegation must read the same either way, or a reopened turn's card changes on its own. A spawned subagent's call
+// counts as one too, though its calls live in its own conversation.
 const delegates = (tool: TranscriptTool): boolean => startsSubagent(tool) || (tool.children?.length ?? 0) > 0 || (tool.nested ?? 0) > 0;
 
 const writes = (tool: TranscriptTool): boolean =>
     tool.category === `edit` || tool.category === `delete` || tool.category === `move` || (tool.content ?? []).some((entry) => entry.type === `diff`);
 
-// Ranks a call by consequence (delegation, workspace edit, image, fetch/browser, command, search, read) rather than by
-// which tool it is; the mark is the highest score.
-const notability = (tool: TranscriptTool): number => {
+// A shell call that carried a diff changed a file, whatever its category says; a browser tool is the web, whatever
+// the backend filed it under.
+const kindOf = (tool: TranscriptTool): RunKind => {
     if (delegates(tool)) {
-        return 70;
+        return `subagents`;
     }
     if (writes(tool)) {
-        return 60;
+        return `edits`;
     }
-    if ((tool.content ?? []).some((entry) => entry.type === `image`)) {
-        return 50;
+    if (tool.category === `fetch` || tool.name.toLowerCase().startsWith(`browser `)) {
+        return `web`;
     }
-    if (tool.name.toLowerCase().startsWith(`browser `)) {
-        return 40;
+    switch (tool.category) {
+        case `execute`:
+            return `commands`;
+        case `search`:
+            return `searches`;
+        case `read`:
+            return `reads`;
+        default:
+            return `other`;
     }
-    return CATEGORY_SCORES[tool.category] ?? 5;
-};
-
-// Picks the first call reaching the top score, so the mark's icon doesn't change as later calls of equal weight arrive
-// mid-turn.
-const mostNotable = (tools: readonly TranscriptTool[]): TranscriptTool | undefined => {
-    let best: TranscriptTool | undefined;
-    let bestScore = -1;
-    for (const tool of tools) {
-        const score = notability(tool);
-        if (score > bestScore) {
-            best = tool;
-            bestScore = score;
-        }
-    }
-    return best;
 };
 
 export const summarizeRun = (tools: readonly TranscriptTool[]): ToolRun | undefined => {
-    const notable = mostNotable(tools);
-    if (notable === undefined) {
+    if (tools.length === 0) {
         return undefined;
+    }
+    const counts = new Map<RunKind, number>();
+    for (const tool of tools) {
+        const kind = kindOf(tool);
+        counts.set(kind, (counts.get(kind) ?? 0) + 1);
     }
     return {
         count: tools.length,
-        icon: present(notable).icon,
-        failed: tools.some((tool) => tool.status === `failed`),
+        kinds: RUN_KINDS.flatMap((kind) => {
+            const count = counts.get(kind);
+            return count === undefined ? [] : [{ kind, count }];
+        }),
+        failed: tools.filter((tool) => tool.status === `failed`).length,
         running: tools.some((tool) => tool.status === `pending` || tool.status === `in_progress`),
     };
 };

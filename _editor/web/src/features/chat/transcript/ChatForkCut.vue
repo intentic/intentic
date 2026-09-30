@@ -14,9 +14,10 @@ import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
 
-// A mark in the column's margin, costing no transcript height, hanging off the answer above it rather than the prompt
-// below. Its width matches the turn's control lane exactly, clear of the run-mark past it (`.chat-run-mark` in
-// chat.css), so the two never overlap. The menu's four rows are two independent choices, which chat and which files.
+// A mark in the column's right gutter, costing no transcript height, hanging off the answer above it rather than the
+// prompt below. That gutter is the reader's side, what they can DO; what the agent did stands on the spine down the
+// left one (ChatTurnAsides), so the two never meet. The menu's four rows are two independent choices, which chat and
+// which files.
 
 const props = defineProps<{
     // Count of bubbles above the line and the index of the first bubble below it; the first message has none.
@@ -250,7 +251,8 @@ const open = (event: Event): void => {
             class="touch-target absolute right-[calc(-1*var(--chat-gutter))] bottom-0 flex h-7 w-[var(--chat-gutter)] cursor-pointer items-center justify-center rounded-md transition-opacity hover:bg-overlay hover:text-content"
             :class="[
                 forks.length > 0 ? `text-link opacity-100` : `text-subtle`,
-                forks.length > 0 ? `` : mobile ? `opacity-40` : `opacity-0 focus-visible:opacity-100 group-hover/turn:opacity-100`,
+                // Lit by a hover over the answer above it, its own hover or focus (`.chat-fork-mark` in chat.css).
+                forks.length > 0 ? `` : mobile ? `opacity-40` : `chat-fork-mark opacity-0`,
             ]"
             v-tooltip.left="tip"
             :aria-label="label"

@@ -1961,8 +1961,19 @@
             "retry": "Spróbuj ponownie"
         },
         "chatTurnAsides": {
-            "showSteps": "Pokaż kroki",
-            "thinking": "Myśli"
+            "failed": "Nieudane",
+            "kindCommands": "Polecenia",
+            "kindEdits": "Zmiany",
+            "kindOther": "Inne",
+            "kindReads": "Odczyty",
+            "kindSearches": "Wyszukiwania",
+            "kindSubagents": "Podagenci",
+            "kindWeb": "Sieć",
+            "showSteps": "Pokaż {count} krok | Pokaż {count} kroki | Pokaż {count} kroków",
+            "showThinkingAndSteps": "Pokaż przemyślenia i {count} krok | Pokaż przemyślenia i {count} kroki | Pokaż przemyślenia i {count} kroków",
+            "steps": "{count} krok | {count} kroki | {count} kroków",
+            "thinking": "Myśli",
+            "thoughtFirst": "Najpierw to przemyślał"
         },
         "chatTurnDeliverables": {
             "open": "Otwórz {name}, {kind}",

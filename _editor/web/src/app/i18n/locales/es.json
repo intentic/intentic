@@ -1463,8 +1463,19 @@
             "stillFetchingConversationSandbox": "Todavía trayendo esta conversación de tu sandbox…"
         },
         "chatTurnAsides": {
-            "showSteps": "Ver pasos",
-            "thinking": "Pensando"
+            "failed": "Fallidos",
+            "kindCommands": "Comandos",
+            "kindEdits": "Cambios",
+            "kindOther": "Otros",
+            "kindReads": "Lecturas",
+            "kindSearches": "Búsquedas",
+            "kindSubagents": "Subagentes",
+            "kindWeb": "Web",
+            "showSteps": "Ver {count} paso | Ver {count} pasos",
+            "showThinkingAndSteps": "Ver el razonamiento y {count} paso | Ver el razonamiento y {count} pasos",
+            "steps": "{count} paso | {count} pasos",
+            "thinking": "Pensando",
+            "thoughtFirst": "Lo pensó antes"
         },
         "chatTurnDeliverables": {
             "open": "Abrir {name}, {kind}",

@@ -1961,8 +1961,19 @@
             "retry": "Try again"
         },
         "chatTurnAsides": {
-            "showSteps": "Show steps",
-            "thinking": "Thinking"
+            "failed": "Failed",
+            "kindCommands": "Commands",
+            "kindEdits": "Edits",
+            "kindOther": "Other",
+            "kindReads": "Reads",
+            "kindSearches": "Searches",
+            "kindSubagents": "Subagents",
+            "kindWeb": "Web",
+            "showSteps": "Show {count} step | Show {count} steps",
+            "showThinkingAndSteps": "Show thinking and {count} step | Show thinking and {count} steps",
+            "steps": "{count} step | {count} steps",
+            "thinking": "Thinking",
+            "thoughtFirst": "Thought it through first"
         },
         "chatTurnDeliverables": {
             "open": "Open {name}, {kind}",

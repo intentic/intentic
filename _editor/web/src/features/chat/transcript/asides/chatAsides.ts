@@ -12,9 +12,6 @@ export interface ChatAsideMark {
     // The pointer's shorter reading, where the label runs past a word or two; the label stands in when absent.
     readonly tip?: TooltipValue;
     readonly count?: number;
-    // Still being written: spins in the glyph's place, so a shut mark still reads as live.
-    readonly busy?: boolean;
-    readonly failed?: boolean;
     // Cheap text, kept in the page while shut (hidden="until-found") so find-in-page reaches it and opens the mark.
     readonly findable?: boolean;
 }

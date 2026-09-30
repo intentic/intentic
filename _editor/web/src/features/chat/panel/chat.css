@@ -166,11 +166,11 @@
 /* No per-block measure: .chat-turns already caps the whole column at a readable width. */
     --prose-measure: none;
 }
-/* Reading width for the transcript. */
+/* Reading width for the transcript. The left gutter is the spine's (below), the right one the reader's controls'. */
 .chat-turns {
     width: 100%;
-    max-width: calc(48rem + 2 * var(--chat-gutter));
-    padding-inline: var(--chat-gutter);
+    max-width: calc(48rem + var(--chat-spine-gutter) + var(--chat-gutter));
+    padding-inline: var(--chat-spine-gutter) var(--chat-gutter);
     margin-inline: auto;
 }
 /* THE ONE GAP THE WHOLE TRANSCRIPT IS SPACED BY, and the only place it is written down. */
@@ -185,11 +185,167 @@
 .chat-turns {
     --chat-gutter: 1rem;
 }
+/* A FORK MARK LIGHTS FOR THE ANSWER IT HANGS OFF, not for its whole turn (ChatForkCut). A turn a nudge carried on
+   ("Continue") holds a cut above every nudge, and a hover anywhere on the section lit all of them at once. The one lit
+   is the first cut after the row under the pointer: a turn's rows are its direct children (a message's wrapper is
+   `display: contents`, which `:hover` still reaches), and `.chat-cut-row` names the ones that hold a cut. */
+.chat-fork-mark:is(:hover, :focus-visible),
+.chat-turn > :hover ~ .chat-cut-row:not(.chat-turn > :hover ~ .chat-cut-row ~ .chat-cut-row) .chat-fork-mark {
+    opacity: 1;
+    transition-delay: 0ms;
+}
+/* On its way to the mark the pointer crosses the gutter, where no row is: the mark waits that long before it fades. */
+.chat-fork-mark {
+    transition-delay: 200ms;
+}
 @container (min-width: 53rem) {
 /* Scoped to the pane on purpose: .chat-turns is borrowed by the subagent view for the same reading measure. */
     .chat-pane .chat-turns {
         --chat-gutter: 2.25rem;
     }
+}
+/* THE SPINE: what the agent did between its words, down the LEFT edge of the column, where the eye starts every line
+   (ChatTurnAsides). One node per run of tool calls, beside the first line of the words that run led to, and a faint
+   thread through a turn that has any. The right edge is the reader's own (fork, edit); the left is the agent's.
+   A node costs its row no height: the lane it replaced cost every run a blank band as tall as a line and a half. */
+.chat-turns {
+/* The left gutter, where the nodes stand: a narrow column's 1rem gutter is short of a node with a thought mark on it,
+   so it gets half a rem more than the right one; with room, the two are the same. */
+    --chat-spine-gutter: calc(var(--chat-gutter) + 0.5rem);
+/* The thread's centre line, from the column's left edge: far enough out that a node clears the 14px an answer's own
+   words are inset by. */
+    --chat-spine-x: -0.375rem;
+/* Where a node centres below its row's top: on the first line of the answer's words (their box's 0.625rem inset,
+   then half a line of --prose-lead 1.625), so the node reads as that paragraph's marker. */
+    --chat-spine-top: calc(0.625rem + var(--text-xs) * 0.8125);
+}
+@container (min-width: 53rem) {
+    .chat-pane .chat-turns {
+        --chat-spine-gutter: var(--chat-gutter);
+        --chat-spine-x: -0.75rem;
+    }
+}
+/* THE THREAD is the turn's own background, one pixel wide, so it paints under every row rather than over the cards a
+   positioned line would cross; the turn reaches out over the gutter to have somewhere to paint it. It fades in below
+   the prompt and out at the turn's end, so it never reads as a rule across the turn's edges. */
+.chat-turn:has(.chat-spine-node) {
+    margin-left: calc(-1 * var(--chat-spine-gutter));
+    padding-left: var(--chat-spine-gutter);
+    background-image: linear-gradient(
+        to bottom,
+        transparent 1.5rem,
+        color-mix(in srgb, var(--color-line) 80%, transparent) 4rem,
+        color-mix(in srgb, var(--color-line) 80%, transparent) calc(100% - 2rem),
+        transparent
+    );
+    background-repeat: no-repeat;
+    background-size: 1px 100%;
+    background-position-x: calc(var(--chat-spine-gutter) + var(--chat-spine-x) - 0.5px);
+}
+/* A ROW PAINT-CLIPS AT ITS OWN EDGE (content-visibility), and a node stands out in the gutter: the row reaches out
+   over it too, negative margin then equal padding, so the text measure does not move a pixel. */
+.chat-message:has(> .chat-spine) {
+    margin-left: calc(-1 * var(--chat-spine-gutter));
+    padding-left: var(--chat-spine-gutter);
+}
+/* SHUT, THE SPINE IS NOTHING IN THE ROW'S FLOW: a zero-height bar, a thought hidden until found, and the row's gap after
+   them taken back. A row that is nothing BUT a run (it stopped before any words) keeps one short line for its node. */
+.chat-spine-shut {
+    gap: 0;
+    margin-bottom: calc(-1 * var(--chat-gap));
+}
+.chat-spine-shut:last-child {
+    --chat-spine-top: 0.625rem;
+    min-height: 1.25rem;
+    margin-bottom: 0;
+}
+.chat-spine-bar {
+    position: relative;
+    height: 0;
+}
+/* OPENED, WHAT A NODE STANDS FOR STARTS WHERE THE WORDS DO (their box's px-3.5): it reads as the prelude to that
+   paragraph, and it clears the node, which would otherwise sit on the thought's rounded corner. */
+.chat-spine > :not(.chat-spine-bar) {
+    margin-left: 0.875rem;
+}
+.chat-spine-node {
+    position: absolute;
+    top: var(--chat-spine-top);
+    left: var(--chat-spine-x);
+    translate: -50% -50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.125rem;
+    min-width: 1.125rem;
+    height: 1.125rem;
+    padding-inline: 0.3rem;
+    border: 1px solid var(--color-line);
+    border-radius: 9999px;
+/* Opaque, so the thread passes BEHIND the node rather than through its figure. */
+    background: var(--color-card);
+    color: var(--color-subtle);
+    font-size: var(--text-3xs);
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+    white-space: nowrap;
+    cursor: pointer;
+    transition:
+        color 120ms ease-out,
+        border-color 120ms ease-out;
+}
+.chat-spine-node:hover {
+    color: var(--color-content);
+    border-color: color-mix(in srgb, var(--color-content) 30%, var(--color-line));
+}
+.chat-spine-node:focus-visible {
+    outline: 2px solid var(--color-link);
+    outline-offset: 1px;
+}
+.chat-spine-node-on,
+.chat-spine-node-on:hover {
+    color: var(--color-link);
+    border-color: color-mix(in srgb, var(--color-link) 50%, var(--color-line));
+}
+.chat-spine-node-failed,
+.chat-spine-node-failed:hover {
+    color: var(--color-danger);
+    border-color: color-mix(in srgb, var(--color-danger) 50%, var(--color-line));
+}
+/* THE ONE THING ON THE SPINE THAT MOVES: the node of the row still being written breathes. Never a spinner — the turn's
+   status at the column's foot already says what is running, and two spinners side by side said it twice. */
+.chat-spine-node-live {
+    border-color: color-mix(in srgb, var(--color-link) 50%, var(--color-line));
+    animation: chat-spine-breathe 1.8s ease-in-out infinite;
+}
+@keyframes chat-spine-breathe {
+    0%,
+    100% {
+        box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-link) 35%, transparent);
+    }
+    60% {
+        box-shadow: 0 0 0 0.25rem color-mix(in srgb, var(--color-link) 0%, transparent);
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .chat-spine-node-live {
+        animation: none;
+    }
+}
+/* AN OPEN NODE FOLLOWS ITS OWN MATERIAL DOWN, as a lane mark does (.chat-mark-open below): it is the way to shut a long
+   run, so it may not be left at the top of a screenful the reader has scrolled past. */
+.chat-spine-open > .chat-spine-bar {
+    position: sticky;
+    top: var(--chat-pin, 0px);
+    z-index: 4;
+}
+.chat-message:has(> .chat-spine-open) {
+    content-visibility: visible;
+}
+/* THE PINNED PROMPT REACHES OVER THE SPINE'S GUTTER, or the nodes and the thread slide up beside it instead of under. */
+.chat-turn:has(.chat-spine-node) .chat-prompt {
+    margin-left: calc(-1 * var(--chat-spine-gutter));
+    padding-left: var(--chat-spine-gutter);
 }
 /* THE SCROLLER RESERVES ITS SCROLLBAR ON BOTH EDGES, so the column re-centres in the width the reader actually sees. */
 .chat-scroller {
@@ -206,12 +362,12 @@
 .chat-panel .chat-panes > .chat-pane:last-child .chat-scroller {
     padding-right: var(--capacity-rail, 0px);
 }
-/* THE LANE PAST THE READING COLUMN, and every mark that stands in it (ChatAsideLane): a turn's thinking, the notes the
-   sandbox prepended, an errand's own words, a hidden run of tool calls. One bar per row carrying all of that row's
-   marks, so two of them can never stack on each other out there. */
+/* THE LANE PAST THE READING COLUMN, and every mark that stands in it (ChatAsideLane): the notes the sandbox prepended to
+   a message, an errand's own words — what went out on the reader's side. What the agent thought and ran stands on the
+   spine instead (above). One bar per row carrying all of that row's marks, so two can never stack on each other. */
 .chat-turns {
-/* The room the marks stand in, past the column's own gutter: a thought and a run of tool calls measure 5.25rem side by
-   side, and a wider one slides back toward the text rather than off the edge (see the lane rule below). */
+/* The room the marks stand in, past the column's own gutter; a wider mark slides back toward the text rather than off
+   the edge (see the lane rule below). */
     --chat-lane: 5.5rem;
 /* How far past the column's text a row keeps painting: that gutter, that lane, and the ring a pressed mark draws
    outside itself. EVERY edge out here is cut to this one distance, which is why it is written down once. */
@@ -234,9 +390,6 @@
     background: transparent;
     border-color: transparent;
     color: var(--color-link);
-}
-.chat-mark-bar .ui-chip.border-danger\/40 {
-    border-color: transparent;
 }
 /* A ROW PAINT-CLIPS AT ITS OWN EDGE (content-visibility), and a mark standing on that edge draws a focus ring outside
    itself: without this the keyboard ring on the last mark is the one pixel the row cuts. */
@@ -285,7 +438,7 @@
         padding-right: var(--chat-lane-reserve);
     }
 }
-/* AN OPEN MARK FOLLOWS ITS OWN MATERIAL DOWN: the chip that opened a run of tool calls is the only way to shut it, so
+/* AN OPEN MARK FOLLOWS ITS OWN MATERIAL DOWN: the chip that opened a long list of notes is the only way to shut it, so
    it may not be left at the top of a screenful the reader has scrolled past. The bar is sticky for exactly the range of
    what it opened — its parent box in ChatAsideLane is the bar plus that material, and nothing else. */
 .chat-mark-open .chat-mark-bar {
