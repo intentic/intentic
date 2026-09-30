@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
-import { deriveText } from "./derived-text.js";
+import { deriveText, readDerivedText, subscribeDerived } from "./derived-text.js";
 import type { ExecFn } from "./fileq.js";
 
 /* The on-demand half: what a reader gets back when they ask for a file to be rendered now. */
@@ -36,10 +36,6 @@ test("a successful derive answers with the shadow the run just wrote", async () 
     expect(await deriveText(root, "bundle.zip", exec)).toMatchObject({ present: true, deriver: "archive+tar v1", content: "- Archive: zip\n" });
 });
 
-// No service runs in these tests, so the pass reports itself stopped; asserted rather than elided, since a reader is
-// shown this and "nothing is rendering" is the honest thing to show them.
-const STOPPED = { enabled: false, queued: 0, deriving: [], sweeping: false, broken: false };
-
 test("a refusal carries fileq's own reason back, rather than a bare failure", async () => {
     const result = await deriveText(root, "huge.pdf", failing(1, '{"kind":"skipped","relPath":"huge.pdf","reason":"too-large (300 MB)"}\n'));
     expect(result).toEqual({
@@ -47,7 +43,6 @@ test("a refusal carries fileq's own reason back, rather than a bare failure", as
         path: "huge.pdf",
         derivable: false,
         state: "undeliverable",
-        queue: STOPPED,
         reason: "too-large (300 MB)",
     });
 });
@@ -72,7 +67,6 @@ test("a sandbox without the binary blames the sandbox, not the file: `broken`, n
         path: "notes.docx",
         derivable: false,
         state: "broken",
-        queue: STOPPED,
         reason: "this sandbox has no fileq binary, so nothing can be rendered as text here",
     });
 });
@@ -133,11 +127,39 @@ test("never more than two children at once, however many files a reader opens", 
     expect(peak).toBe(2);
 });
 
-test("a shadow still matching its source is settled, whatever else the pass has queued", async () => {
+test("a rendering still matching its source is settled", async () => {
     const exec: ExecFn = async () => {
         await writeShadow("bundle.zip", "- Archive: zip");
         return { stdout: '{"kind":"derived","relPath":"bundle.zip"}\n' };
     };
     // The source does not exist, so there is no hash to disagree with the front matter's: not stale, so not waiting.
     expect(await deriveText(root, "bundle.zip", exec)).toMatchObject({ present: true, stale: false, state: "idle" });
+});
+
+// Nothing renders in the background any more, so the one wait a reader can see is a rendering someone asked for: a
+// second reader arriving mid-run is told so rather than offered to start another, and hears the text land.
+test("a reader arriving mid-render is told the file is being read, and hears it land", async () => {
+    // A zip's magic, so the file is one a reader claims before any rendering of it exists.
+    await writeFile(join(root, "slow.zip"), Buffer.from([0x50, 0x4b, 0x03, 0x04, 0, 0, 0, 0]));
+    let release = (): void => {};
+    const gate = new Promise<void>((resolve) => {
+        release = resolve;
+    });
+    const exec: ExecFn = async () => {
+        await gate;
+        await writeShadow("slow.zip", "- Archive: zip");
+        return { stdout: "" };
+    };
+    const heard: string[][] = [];
+    const stop = subscribeDerived((paths) => heard.push(paths));
+    try {
+        const running = deriveText(root, "slow.zip", exec);
+        expect(await readDerivedText(root, "slow.zip")).toMatchObject({ present: false, derivable: true, state: "deriving" });
+        release();
+        expect(await running).toMatchObject({ present: true, state: "idle" });
+        expect(heard).toEqual([["slow.zip"]]);
+        expect(await readDerivedText(root, "slow.zip")).toMatchObject({ present: true, state: "idle" });
+    } finally {
+        stop();
+    }
 });

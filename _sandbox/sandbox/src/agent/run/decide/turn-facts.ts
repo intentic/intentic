@@ -147,11 +147,12 @@ const iqTeachingFor = (deps: Pick<Services, "config" | "logger">, premise: TurnP
           })
         : Promise.resolve(undefined);
 
-// Read at the tree the daemon reaches (an isolated turn's worktree), where the owner's rules are read from too.
-const fieldNotesFor = (deps: Pick<Services, "logger">, context: TurnContext, settings: SandboxSettings): FieldNotes | undefined =>
+// Read at the shared workspace root, never the turn's tree: the brief is daemon-kept config that git does not track, so
+// an isolated turn's worktree has no copy of it, and the settings row reads the same file to say what is sent.
+const fieldNotesFor = (deps: Pick<Services, "logger" | "workspace">, settings: SandboxSettings): FieldNotes | undefined =>
     EXPERIMENTS.fieldNotes.on(settings)
         ? fieldNotes({
-              file: join(context.localCwd, FIELD_NOTES_FILE),
+              file: join(deps.workspace.root, FIELD_NOTES_FILE),
               budget: settings.fieldNotesBudget,
               onUnreadable: (why) => deps.logger.warn({ why }, "field notes: the file is there but cannot be sent"),
           })
@@ -247,7 +248,7 @@ export const gatherTurnFacts = async (services: TurnFactsDeps, input: RoutedTurn
     const iqTeaching = await iqTeachingFor(services, premise);
     // What checks the work, on the turns that owe it to a card that did not drop it (turn-premise.ts).
     const landingChecksNote = premise.send.landingChecks ? LANDING_CHECKS_NOTE : undefined;
-    const brief = fieldNotesFor(services, context, settings);
+    const brief = fieldNotesFor(services, settings);
     const card = premise.persona.persona;
     // Only a card that asked for its own prompt is read, so an ordinary turn pays nothing for it.
     const personaPrompt = card?.systemPromptMode === "custom" ? await readPersonaPrompt(services.workspace.root, card.id) : undefined;

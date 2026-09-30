@@ -372,13 +372,6 @@ export const SandboxSettingsSchema = z.object({
         .describe(
             "What share of conversations to run without the brief, so the two can be compared. Whole conversations rather than individual turns, because the brief sits in the prompt for the whole session and withholding it from one turn would not take it back.",
         ),
-    // Only the eager background pass; the `fileq` CLI itself is always on PATH regardless, gated only by its own skill.
-    sidecars: z
-        .boolean()
-        .default(false)
-        .describe(
-            "Keep an up-to-date markdown rendering of every document, image and audio file in the workspace, made in the background as files land, so the agent reads a pre-derived text instead of paying to parse the file mid-task. Costs background CPU on a document-heavy workspace, so it is a switch rather than a default.",
-        ),
     outputCleaners: z
         .string()
         .default("")
@@ -630,6 +623,7 @@ export const InputSavingsSchema = z.object({
 });
 export type InputSavings = z.infer<typeof InputSavingsSchema>;
 // One arm of a turn-level experiment; mean is per turn, since the two arms never hold the same count.
+// `mean` is over samples capped at both arms' pooled 95th percentile, so one runaway conversation cannot carry an arm.
 export const SavingsArmSchema = z.object({ turns: z.number(), mean: z.number() });
 // One metric's reading of a turn-level experiment (the two arms, plus the arithmetic over them). `metric` says what
 // `mean`/`deltaPct` count:

@@ -62,7 +62,7 @@ export const checkCommand = buildCommand({
     },
     async func(this: CommandContext, flags: CheckFlags, file: string) {
         const absPath = resolve(file);
-        // Loaded here, not at the top: every fileq run (a sweep, a read of a png) imports this module, and only a check
+        // Loaded here, not at the top: every fileq run (a derive, a read of a png) imports this module, and only a check
         // needs the checkers.
         const { CHECKABLE, checkFile } = await import("../lib/check/check.js");
         const outcome = await checkFile(absPath);

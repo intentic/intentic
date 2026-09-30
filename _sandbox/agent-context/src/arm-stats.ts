@@ -34,7 +34,8 @@ export interface MeasuredTurn {
 
 export type SampleUnit = "turns" | "conversations" | "opening turns";
 
-// One arm of an experiment; mean is per turn, since the two arms never hold the same count.
+// One arm of an experiment; mean is per turn, since the two arms never hold the same count, and taken over samples
+// capped at the pooled 95th percentile (CAP_QUANTILE).
 export interface ArmReading {
     readonly turns: number;
     readonly mean: number;
@@ -95,6 +96,18 @@ const armOfValues = (values: readonly number[]): Arm => {
     const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
     const variance = values.length < 2 ? 0 : values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / (values.length - 1);
     return { turns: values.length, mean, variance };
+};
+
+// Every conversation is counted, but none above the pooled 95th percentile: one runaway conversation otherwise moves a
+// mean by half (identical arms read 42 vs 28 on this ledger), and with labels shuffled the uncapped comparison called
+// 8-11% of no-effect splits significant against its nominal 5%, the capped one 4-6%.
+const CAP_QUANTILE = 0.95;
+
+const capped = (on: readonly number[], off: readonly number[]): { readonly on: number[]; readonly off: number[] } => {
+    const pooled = [...on, ...off].toSorted((left, right) => left - right);
+    const cap = pooled[Math.min(pooled.length - 1, Math.floor(CAP_QUANTILE * pooled.length))] ?? 0;
+    const bound = (values: readonly number[]): number[] => values.map((value) => Math.min(value, cap));
+    return { on: bound(on), off: bound(off) };
 };
 
 const RESOLVING_MARGIN_PCT = 10;
@@ -211,7 +224,8 @@ export const measureExperiment = <Row extends MeasuredTurn>(turns: readonly Row[
                 const value = sample.arm === arm ? design.sample(sample.turns, metric) : undefined;
                 return value === undefined ? [] : [value];
             });
-        return readingOfArms(armOfValues(values(true)), armOfValues(values(false)), metric, false);
+        const arms = capped(values(true), values(false));
+        return readingOfArms(armOfValues(arms.on), armOfValues(arms.off), metric, false);
     };
     const [headline, ...rest] = design.metrics;
     return {

@@ -1923,9 +1923,7 @@
             "briefReach": "Les {sent} premières sections sur {total} · {chars} caractères",
             "characters": "caractères",
             "codeSearch": "Recherche de code",
-            "documentShadows": "Ombres de documents",
             "iqCodeSearch": "Recherche de code iq",
-            "keepDocumentsImagesAudio": "Garder documents, images, audio et archives pré-rendus en texte, mis à jour à mesure que les fichiers changent. Ouvrez-en un dans l'espace de travail pour lire ce que lit un agent.",
             "lengthLimit": "Longueur max.",
             "noBriefYet": "Pas encore écrite. L'automatisation mensuelle écrit la première.",
             "notScheduled": "Non planifiée",
@@ -4664,6 +4662,7 @@
             "versionCouldNotBeRead": "La version {side} de {filename} n'a pas pu être lue comme texte : {reason}."
         },
         "derivedTextView": {
+            "beingReadNow": "Lecture en cours…",
             "copyDerivedText": "Copier le texte dérivé",
             "copyText": "Copier le texte",
             "deriveAgain": "Dériver à nouveau",
@@ -4673,12 +4672,10 @@
             "longRenderingOnlyFirst": "Rendu long : seule sa première partie est montrée ici.",
             "lookingFilesText": "Recherche du texte de ce fichier…",
             "mostDocumentsTakeMoment": "La plupart des documents prennent un instant. Un PDF scanné doit être reconnu page par page, et c'est celui-là qui peut durer une minute ou plus.",
-            "readNow": "Le lire maintenant",
             "readingAgain": "Relecture en cours… {waited}",
             "readingFileWritingText": "Lecture de ce fichier et écriture de son texte…",
             "renderText": "Afficher en texte",
             "rereadFile": "Relire le fichier",
-            "settingsAgentDocumentShadows": "Paramètres → Agent → Ombres de documents garde chaque document, image, enregistrement et archive rendu à mesure que les fichiers changent.",
             "stillGoingNothingFailed": "Toujours en cours — rien n'a échoué. Le texte est écrit sur disque à son arrivée : vous pouvez donc quitter ce fichier ou y revenir, il sera là.",
             "tokens": "{tokens} jetons"
         },

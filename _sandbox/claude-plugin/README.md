@@ -20,7 +20,6 @@ The hooks and the bundled commands run on Node.js 20.11 or later, which has to b
 | A Bash command succeeds | The output is cleaned before Claude reads it: progress bars, install chatter, repeated lines, the middle of huge logs. A footer names the command that reads the full text back. | `output_cleaners`, `cleaners` |
 | Claude reads a document | `fileq` turns docx, pdf, xlsx, pptx, epub, ipynb, images, audio and archives into markdown. | `fileq` |
 | Claude makes a document | `fileq check` lists what is wrong with a docx, pptx, xlsx or pdf by slide, page or cell, and `fileq render` draws its pages as PNGs for Claude to look at (with LibreOffice and poppler installed). The fileq skill says to run both before handing the file over. | `fileq` |
-| In the background | Every document in the project keeps a markdown shadow that a read finds ready. A sweep runs when a session opens and at most every ten minutes as prompts arrive, and each document Claude writes is rendered at once. Off by default. | `shadows` |
 
 A failed command reaches Claude unchanged. Outside an Intentic sandbox there is no secret store to mask values from, so the cleaners mask only text that looks like a credential: an assignment to a name like `API_KEY` or `TOKEN` whose value looks generated, bearer tokens, AWS access keys, and passwords in URLs.
 
@@ -39,7 +38,6 @@ Open `/config` and find the rows under intentic. The switches read at session st
 | `field_notes` | on | Send this project's field notes at session start |
 | `iq` | on | Teach `iq` and run its session recall, when `iq` is installed |
 | `fileq` | on | Let the bundled `fileq` run. Off, it refuses, and its skill stays listed because a plugin cannot hide its own skills |
-| `shadows` | off | Keep document shadows fresh in the background |
 | `holdout` | 0.1 | Share of sessions opened without the map, the notes and the iq teaching, so the report can compare |
 
 ## What it saved
@@ -62,8 +60,6 @@ The numbers above are an illustration of the format. The report reads two things
 - The cleaners' ledger, one row per command with the bytes before and after and what each cleaner removed. That saving is exact. With `output_holdout` above 0 it also compares the median cleaned output against commands left uncleaned.
 - Claude Code's own session transcripts, compared across the two arms each session was drawn into. A hash of the session id puts `holdout` of the sessions in the control arm for each mechanism, so the draw needs no state and gives the same answer every time it is read. The map is judged on directory listings of the project root in the first turn, the field notes on failed tool calls, and the iq teaching on search calls. A change is stated only once both arms hold 30 samples and the 95% margin excludes zero.
 
-Document shadows are counted but not measured.
-
 The arithmetic is the one behind the savings page of an Intentic sandbox, from the same packages, so a number here means what it means there.
 
 ## Field notes
@@ -74,9 +70,9 @@ Run `/intentic:field-notes` every few weeks. It counts this project's sessions (
 
 | Path | Holds |
 | --- | --- |
-| `~/.claude/plugins/data/intentic-intentic/` | `sessions.jsonl` (the arms each session drew), `options.json` (the switches of the last session), `output/` (the cleaners' ledger, the full text of trimmed commands, the repeat cache), sweep and ingest logs |
+| `~/.claude/plugins/data/intentic-intentic/` | `sessions.jsonl` (the arms each session drew), `options.json` (the switches of the last session), `output/` (the cleaners' ledger, the full text of trimmed commands, the repeat cache), `iq/` (the logs of iq's transcript ingest) |
 | `.claude/intentic/field-notes.toon` | This project's field notes |
-| `.intentic/local/cache/derived/` | Document shadows. The directory ignores itself in git |
+| `.intentic/local/cache/derived/` | `fileq`'s cache: the markdown of each document it has read, reused while the document is unchanged. The directory ignores itself in git |
 
 The plugin makes no network requests. Uninstalling it deletes the data directory unless you pass `--keep-data`.
 

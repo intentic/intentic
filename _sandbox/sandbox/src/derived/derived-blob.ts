@@ -48,8 +48,8 @@ const readKept = async (path: string): Promise<DerivedSide | undefined> => {
     };
 };
 
-// The file's own shadow, when it was made from exactly these bytes; the background pass usually has it before a
-// reviewer opens the diff, and rendering it again would be the same work twice.
+// The file's own rendering, when it was made from exactly these bytes; whoever opened the file first has usually made
+// it before a reviewer opens the diff, and rendering it again would be the same work twice.
 const freshShadow = async (root: string, relPath: string, sha: string): Promise<DerivedSide | undefined> => {
     const path = sidecarPathFor(root, relPath);
     const window = await readWorkspaceFileWindow(path, 0, MAX_DERIVED_BYTES);

@@ -198,7 +198,7 @@ export const parseTarListing = (stdout: string): ArchiveEntry[] => {
     return entries;
 };
 
-// Long enough for a large archive's index, short enough that a hung tar cannot hold the sweep behind it.
+// Long enough for a large archive's index, short enough that a hung tar cannot hold a read hostage.
 const TAR_TIMEOUT_MS = 60_000;
 const TAR_MAX_BUFFER = 16 * 1024 * 1024;
 

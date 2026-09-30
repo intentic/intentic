@@ -1932,9 +1932,7 @@
             "briefReach": "Primeras {sent} de {total} secciones · {chars} caracteres",
             "characters": "caracteres",
             "codeSearch": "Búsqueda de código",
-            "documentShadows": "Sombras de documentos",
             "iqCodeSearch": "Búsqueda de código iq",
-            "keepDocumentsImagesAudio": "Mantener documentos, imágenes, audio y archivos comprimidos pre-renderizados como texto, actualizados a medida que cambian los archivos. Abre cualquiera de ellos en el espacio de trabajo para leer lo que lee un agente.",
             "lengthLimit": "Límite de longitud",
             "noBriefYet": "Aún no se ha escrito. La automatización mensual escribe el primero.",
             "notScheduled": "Sin programar",
@@ -4714,6 +4712,7 @@
             "versionCouldNotBeRead": "La versión {side} de {filename} no se pudo leer como texto: {reason}."
         },
         "derivedTextView": {
+            "beingReadNow": "Leyéndose ahora…",
             "copyDerivedText": "Copiar el texto derivado",
             "copyText": "Copiar texto",
             "deriveAgain": "Derivar de nuevo",
@@ -4723,12 +4722,10 @@
             "longRenderingOnlyFirst": "Salida larga: aquí solo se muestra su primera parte.",
             "lookingFilesText": "Buscando el texto de este archivo…",
             "mostDocumentsTakeMoment": "La mayoría de los documentos tardan un momento. Un PDF escaneado hay que reconocerlo página a página, y ese es el que puede llegar a un minuto o más.",
-            "readNow": "Leerlo ahora",
             "readingAgain": "Leyéndolo otra vez… {waited}",
             "readingFileWritingText": "Leyendo este archivo y escribiendo su texto…",
             "renderText": "Mostrar como texto",
             "rereadFile": "Releer archivo",
-            "settingsAgentDocumentShadows": "Ajustes → Agente → Sombras de documentos mantiene cada documento, imagen, grabación y archivo comprimido generado a medida que cambian los archivos.",
             "stillGoingNothingFailed": "Sigue en marcha: no ha fallado nada. El texto se escribe en disco cuando llega, así que puedes dejar este archivo o volver a él y seguirá aquí."
         },
         "diffSkeleton": {

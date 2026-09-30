@@ -1153,7 +1153,6 @@ const DEMO_SETTINGS: SandboxHandlerOutput<`settings`, `get`> = {
     fieldNotesHoldout: 0.2,
     leanGuidance: true,
     leanGuidanceHoldout: 0.2,
-    sidecars: true,
 };
 
 // What a conversation was told before its first word. Every source at once, because the chip's whole job is to let a

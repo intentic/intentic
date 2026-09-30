@@ -1,4 +1,4 @@
-// What a reader actually sees of a file's shadow: the text, and the three things that make it trustworthy — which
+// What a reader actually sees of a file's rendered text: the text, and the three things that make it trustworthy — which
 // reader made it, what it had to cut, and whether the file has moved on since. Asserted in the DOM, since "shown
 // with the text" rather than "carried in the response" is the whole point of this surface.
 import "@intentic/testing/dom";
@@ -7,14 +7,12 @@ import { type App, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import type { WorkspaceDerived } from "@intentic/sandbox-contract";
 
-// A stopped background pass, which is what the daemon reports when nothing is rendering.
-const STOPPED = { enabled: false, queued: 0, deriving: [], sweeping: false, broken: false };
 // The daemon seam, stubbed: `read` is what opening the file answers, `derive` what asking for it now answers. `hold`
 // keeps a call unanswered, which is the only way to assert what the pane shows while it waits.
 // The cache module next door is NOT stubbed: what this tab already read, and whether a file version has had a
 // derivation asked for it, are two of the things under test here.
 const answers: { read: WorkspaceDerived; derive?: WorkspaceDerived; hold?: boolean } = {
-    read: { present: false, path: `bundle.zip`, derivable: true, state: `off`, queue: STOPPED },
+    read: { present: false, path: `bundle.zip`, derivable: true, state: `idle` },
 };
 const derived = jest.fn();
 let release: ((value: WorkspaceDerived) => void) | undefined;
@@ -38,7 +36,6 @@ const derivedEpoch = ref(0);
 jest.mock("../changes/live/useWorkspaceLive", () => ({
     changeEpochOf: () => 0,
     derivedEpochOf: () => derivedEpoch.value,
-    sidecarQueue: { value: undefined },
 }));
 
 const { default: DerivedTextView } = await import("./DerivedTextView.vue");
@@ -57,17 +54,15 @@ const shadow = (over: Partial<Extract<WorkspaceDerived, { present: true }>> = {}
     truncated: false,
     stale: false,
     state: `idle`,
-    queue: STOPPED,
     ...over,
 });
 
-// A file with no text yet, at whichever point of the queue the test is about.
+// A file with no text yet.
 const nothing = (over: Partial<Extract<WorkspaceDerived, { present: false }>> = {}): WorkspaceDerived => ({
     present: false,
     path: `bundle.zip`,
     derivable: true,
-    state: `off`,
-    queue: STOPPED,
+    state: `idle`,
     ...over,
 });
 
@@ -116,7 +111,7 @@ describe(`DerivedTextView`, () => {
     });
 
     // Reopening a file whose text exists used to blank the pane and spin until the daemon answered, which reads as the
-    // file being derived all over again. It is not: a shadow is keyed by the source's content hash and reused.
+    // file being derived all over again. It is not: a rendering is keyed by the source's content hash and reused.
     it(`paints the text this tab already read before the daemon answers again`, async () => {
         rememberDerived(`docs/spec.docx`, shadow());
         answers.hold = true;
@@ -180,39 +175,37 @@ describe(`DerivedTextView`, () => {
         expect(element.textContent).not.toContain(`Nothing has read this file yet`);
     });
 
-    // The one case that must not derive itself: a second child process for a file the background pass is already
-    // holding would compete with the one doing the work. The wait says so, and the button is there to jump the queue.
-    it(`leaves a file the background pass already has to the pass`, async () => {
-        answers.read = nothing({
-            path: `bundle.zip`,
-            state: `queued`,
-            queue: { enabled: true, queued: 2, deriving: [], sweeping: false, broken: false },
-        });
+    // Nothing renders in the background, so a rendering older than its file is refreshed by the reader looking at it,
+    // or it stays stale for good.
+    it(`refreshes a rendering older than its file on open, since nothing else will`, async () => {
+        answers.read = shadow({ stale: true, content: `# Old plan` });
+        answers.derive = shadow({ content: `# New plan` });
+        const element = mount({ path: `docs/spec.docx` });
+        await settle();
+        expect(derived).toHaveBeenCalledWith(`docs/spec.docx`);
+        expect(element.textContent).toContain(`New plan`);
+        expect(element.textContent).not.toContain(`changed after its text was made`);
+    });
+
+    // The one case that must not derive itself: another reader's run is already rendering this file, and a second child
+    // process would compete with the one doing the work. Its landing is what re-reads this pane.
+    it(`leaves a file another reader is rendering to that run, and picks its text up when it lands`, async () => {
+        answers.read = nothing({ path: `bundle.zip`, state: `deriving` });
         const element = mount({ path: `bundle.zip` });
         await settle();
         expect(derived).not.toHaveBeenCalled();
-        expect(element.textContent).toContain(`in line to be read`);
-        const labels = [...element.querySelectorAll(`button`)].map((node) => node.textContent?.trim());
-        expect(labels.some((label) => label?.includes(`Read it now`))).toBe(true);
-    });
-
-    // The other half of that rule: a sweep converges the whole tree, so "queued" behind one is a wait of minutes for
-    // a file a person is looking at right now. That one is worth its own child process.
-    it(`does not make a reader wait behind a whole-tree sweep`, async () => {
-        answers.read = nothing({
-            path: `bundle.zip`,
-            state: `queued`,
-            queue: { enabled: true, queued: 400, deriving: [], sweeping: true, broken: false },
-        });
-        answers.derive = shadow({ path: `bundle.zip`, content: `- Archive: zip`, deriver: `archive+tar v1` });
-        const element = mount({ path: `bundle.zip` });
+        expect(element.textContent).toContain(`being read`);
+        // What a `derivedChanged` frame does: the rendering lands where the watcher does not look, so the source
+        // file's own epoch never moves. Without this trigger the pane would sit on the empty state indefinitely.
+        answers.read = shadow({ path: `bundle.zip`, content: `- Archive: zip`, deriver: `archive+tar v1` });
+        derivedEpoch.value = 1;
         await settle();
-        expect(derived).toHaveBeenCalledWith(`bundle.zip`);
         expect(element.textContent).toContain(`Archive: zip`);
+        expect(derived).not.toHaveBeenCalled();
     });
 
-    // A file that renders to nothing answers once. The pane re-reads on every sweep and every shadow that lands, and
-    // each of those would otherwise spawn the same fruitless work again.
+    // A file that renders to nothing answers once. The pane re-reads on every rendering that lands, and each of those
+    // would otherwise spawn the same fruitless work again.
     it(`asks for one version of a file to be read exactly once`, async () => {
         answers.derive = nothing({ path: `tool.bin`, reason: `unsupported` });
         const element = mount({ path: `tool.bin` });
@@ -225,48 +218,8 @@ describe(`DerivedTextView`, () => {
         // And says what happened, rather than claiming nothing has read a file this pane just had read.
         expect(element.textContent).toContain(`no text came out of it`);
         expect(element.textContent).toContain(`unsupported`);
-    });
-
-    it(`picks up text that landed in the background, without the file itself having changed`, async () => {
-        // Queued, so the pane is waiting on the pass rather than reading the file itself: this is about the frame
-        // that tells it the wait is over.
-        answers.read = nothing({
-            path: `bundle.zip`,
-            state: `queued`,
-            queue: { enabled: true, queued: 1, deriving: [], sweeping: false, broken: false },
-        });
-        const element = mount({ path: `bundle.zip` });
-        await settle();
-        expect(element.textContent).toContain(`in line to be read`);
-        // What a `derivedChanged` frame does: the shadow is rewritten where the watcher does not look, so the source
-        // file's own epoch never moves. Before this trigger existed, the pane sat on the empty state indefinitely.
-        answers.read = shadow({ path: `bundle.zip`, content: `- Archive: zip`, deriver: `archive+tar v1` });
-        derivedEpoch.value = 1;
-        await settle();
-        expect(element.textContent).toContain(`Archive: zip`);
-        expect(derived).not.toHaveBeenCalled();
-    });
-
-    it(`says a queued file is waiting, and does not tell the reader to switch on what is already on`, async () => {
-        answers.read = nothing({
-            path: `docs/spec.docx`,
-            state: `queued`,
-            queue: { enabled: true, queued: 3, deriving: [`other.pdf`], sweeping: false, broken: false },
-        });
-        const element = mount({ path: `docs/spec.docx` });
-        await settle();
-        expect(element.textContent).toContain(`in line to be read`);
-        expect(element.textContent).toContain(`2 other files ahead`);
-        // The old copy pointed at Settings whatever the setting said, which is what made it misleading.
+        // There is no switch to point at: a file has text once someone opens it.
         expect(element.textContent).not.toContain(`Settings → Agent`);
-        expect(element.textContent).not.toContain(`Nothing has read this file yet`);
-    });
-
-    it(`points at the setting only where turning it on is the answer`, async () => {
-        answers.read = nothing({ path: `docs/spec.docx`, state: `off` });
-        const element = mount({ path: `docs/spec.docx` });
-        await settle();
-        expect(element.textContent).toContain(`Settings → Agent`);
     });
 
     it(`blames the sandbox, not the file, when the renderer is missing, and offers nothing that would fail`, async () => {
@@ -274,7 +227,6 @@ describe(`DerivedTextView`, () => {
             path: `docs/spec.docx`,
             derivable: false,
             state: `broken`,
-            queue: { enabled: true, queued: 0, deriving: [], sweeping: false, broken: true },
         });
         const element = mount({ path: `docs/spec.docx`, downloadable: true });
         await settle();

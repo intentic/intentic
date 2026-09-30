@@ -20,7 +20,7 @@ import type { HeavyCommands } from "../../system/resources/heavy-commands.js";
 import type { OwnBrowserReach } from "../../webext/webext-peer.js";
 import type { DependencyIssue } from "../../workspace/deps/reconcile-deps.js";
 import type { SteeringQueue } from "../checkpoints/agent-steering.js";
-import type { GuidanceVariant } from "../prompt/guidance.js";
+import type { GuidanceVariant, SearchTool } from "../prompt/guidance.js";
 import type { PromptTrim } from "../prompt/system-prompt.js";
 import type { ChildSupervisor } from "../subagents/children.js";
 import type { SecretAccess } from "../../secrets/secret-access.js";
@@ -76,6 +76,8 @@ export interface TurnSpec {
     readonly contextTrim?: PromptTrim;
     // Which variant of this product's guidance the turn drew, read by the adapter and the disclosure alike; absent is full.
     readonly guidance?: GuidanceVariant;
+    // Which tool that guidance tells the turn to find code with; absent is `rg`, the one every image carries.
+    readonly search?: SearchTool;
     // Mid-turn steering queue; when present the turn streams input and pushed messages inject between tool calls.
     readonly steering?: SteeringQueue;
 }

@@ -1,7 +1,7 @@
 {
     "name": "@intentic/claude-plugin",
     "version": "0.0.0",
-    "description": "The intentic Claude Code plugin: trimmed Bash output, a project map and field notes at session start, iq search and fileq teaching, background document shadows, and a /intentic:stats report of what each saved",
+    "description": "The intentic Claude Code plugin: trimmed Bash output, a project map and field notes at session start, iq search and fileq teaching, and a /intentic:stats report of what each saved",
     "license": "MIT",
     "type": "module",
     "repository": {

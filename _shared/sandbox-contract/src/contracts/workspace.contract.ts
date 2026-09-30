@@ -22,7 +22,6 @@ import {
     WorkspaceChildrenQuerySchema,
     WorkspaceChildrenSchema,
     WorkspaceClassificationSchema,
-    SidecarStatusSchema,
     WorkspaceDerivedQuerySchema,
     WorkspaceDerivedSchema,
     WorkspaceDeletedSchema,
@@ -109,17 +108,6 @@ export const workspaceContract = {
         .meta({ floor: "viewer", guest: true })
         .input(WorkspaceDerivedQuerySchema)
         .output(WorkspaceDerivedSchema),
-    // Where the background pass stands, with no file in hand: what the setting's own row reports about itself.
-    derivedStatus: procedure
-        .route({
-            method: "GET",
-            path: "/workspace/derived-status",
-            summary: "How the background rendering is doing",
-            description:
-                "Whether documents, pictures, recordings and archives are being rendered to text in the background, how many are waiting, which are being read right now, and how many shadows the last whole-tree pass counted. Ask this to tell a file nothing can read from a file whose turn has not come.",
-        })
-        .meta({ guest: true })
-        .output(SidecarStatusSchema),
     // Mints the ticket GET /workspace/media (a plain Hono byte-range route, no oRPC shape) requires to stream.
     mediaTicket: procedure
         .route({

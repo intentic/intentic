@@ -178,13 +178,12 @@ export const createWorkspaceRoutes = (services: Services) => {
             refuseFenced(await fenceFor(context), input.path);
             return services.derived.read(services.workspace.root, await derivedRel(input.path));
         }),
-        // The same convergence the background pass runs, for the one file someone is looking at.
+        // Renders the one file someone is looking at; unchanged content answers from fileq's cache.
         derive: i.derive.handler(async ({ input, context }) => {
             refuseFenced(await fenceFor(context), input.path);
             return services.derived.derive(services.workspace.root, await derivedRel(input.path));
         }),
         // In-memory state of a running service, not a disk read: no path to contain, nothing to scope.
-        derivedStatus: i.derivedStatus.handler(() => services.derived.status()),
         // Mints the ticket presented to GET /workspace/media, guarded like a read so it can only name a file already
         // readable. Binds the resolved file, not its shared-tree namesake.
         mediaTicket: i.mediaTicket.handler(async ({ input, context }) => {

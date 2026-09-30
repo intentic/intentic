@@ -13,7 +13,7 @@
         },
         {
             "name": "intentic",
-            "description": "Cheaper, sharper Claude Code sessions: Bash output trimmed before Claude reads it, a project map and this project's field notes at session start, iq code search and fileq document reading taught, document shadows kept fresh, and /intentic:stats to show what each one saved. Every mechanism is a switch in /config.",
+            "description": "Cheaper, sharper Claude Code sessions: Bash output trimmed before Claude reads it, a project map and this project's field notes at session start, iq code search and fileq document reading taught, and /intentic:stats to show what each one saved. Every mechanism is a switch in /config.",
             "source": {
                 "source": "npm",
                 "package": "@intentic/claude-plugin"

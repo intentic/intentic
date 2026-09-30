@@ -7,16 +7,14 @@ import ToggleSwitch from "primevue/toggleswitch";
 import { computed } from "vue";
 import { useSavings } from "../../usage/useSavings";
 import { useSandboxSettings } from "../../overview/useSandboxSettings";
-import { useSidecarStatus } from "../../../workspace/files/useSidecarStatus";
 import { useFieldNotes } from "./useFieldNotes";
 import { commitCount, asPercent } from "../models/numberInputs";
 import MeasurementPanel from "../models/MeasurementPanel.vue";
 import { type ResultTable, tableOf } from "../models/experimentReadings";
 import { useT } from "@intentic/ui/i18n";
 
-// Four composing settings, ordered by when each acts: iq search (on demand), the project map (before there's
-// a question), the field notes (before the conversation, and for all of it), and document shadows (a background pass
-// rendering non-text files so the others can reach them).
+// Three composing settings, ordered by when each acts: iq search (on demand), the project map (before there's a
+// question), and the field notes (before the conversation, and for all of it).
 
 const t = useT();
 
@@ -52,26 +50,6 @@ const notesSchedule = computed<string>(() => {
     return next === undefined
         ? t(`sandbox.agentCodeSearch.rewrittenMonthly`)
         : t(`sandbox.agentCodeSearch.rewrittenMonthlyNext`, { when: formatDayMonth(next) });
-});
-
-// The background pass reports itself, since nothing else can: it makes no request and owns no page.
-const { status: shadowStatus } = useSidecarStatus();
-const shadowBusy = computed(() => shadowStatus.value !== undefined && (shadowStatus.value.sweeping || shadowStatus.value.deriving.length > 0));
-const shadowSummary = computed<string>(() => {
-    const status = shadowStatus.value;
-    if (status === undefined) {
-        return ``;
-    }
-    if (status.broken) {
-        return `The renderer is missing from this sandbox, so nothing is being rendered until it restarts.`;
-    }
-    const rendered = status.shadows === undefined ? `` : `${status.shadows} rendered`;
-    if (status.sweeping) {
-        return `Checking every file…`;
-    }
-    const waiting = status.deriving.length + status.queued;
-    const queued = waiting === 0 ? `nothing waiting` : `${waiting} waiting`;
-    return rendered === `` ? `Up to date, ${queued}.` : `${rendered}, ${queued}.`;
 });
 </script>
 
@@ -216,31 +194,6 @@ const shadowSummary = computed<string>(() => {
                         @commit="(fieldNotesHoldout: number) => patch({ fieldNotesHoldout })"
                     />
                 </div>
-            </template>
-        </Row>
-
-        <!-- Background pass that pre-renders binary files (docx, pdf, images, audio) as markdown as they land, so a later read is a file open, not a parse. -->
-        <Row
-            spine
-            icon="file"
-            :title="t(`sandbox.agentCodeSearch.documentShadows`)"
-            :description="t(`sandbox.agentCodeSearch.keepDocumentsImagesAudio`)"
-        >
-            <template #control>
-                <ToggleSwitch
-                    :model-value="settings?.sidecars ?? false"
-                    :disabled="settings === undefined"
-                    @update:model-value="(value: boolean) => patch({ sidecars: value })"
-                />
-            </template>
-            <!-- Work with no request behind it and no page of its own; without this line the only way to know whether it
-                 is keeping up is to open a file and find out. -->
-            <template v-if="settings?.sidecars === true && shadowStatus !== undefined" #below>
-                <p class="flex items-center gap-2 text-xs text-muted">
-                    <Icon v-if="shadowBusy" name="spinner" spin class="text-[0.7rem]" />
-                    <Icon v-else-if="shadowStatus.broken" name="exclamation-triangle" class="text-[0.7rem] text-warning" />
-                    <span :class="shadowStatus.broken ? `text-warning` : undefined">{{ shadowSummary }}</span>
-                </p>
             </template>
         </Row>
     </RowGroup>

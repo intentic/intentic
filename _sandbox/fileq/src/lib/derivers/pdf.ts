@@ -17,7 +17,7 @@ import { stripRunningFurniture } from "./pdf-furniture.js";
 // Below this many chars per page, the text layer is furniture, not content: a scan with a vestigial layer.
 const SCAN_THRESHOLD_CHARS_PER_PAGE = 24;
 
-// OCR costs seconds per page and runs unasked in the sweep, so a long scan gets its first pages and a note.
+// OCR costs seconds per page, so a long scan gets its first pages and a note.
 const MAX_OCR_PAGES = 20;
 const OCR_DPI = "200";
 

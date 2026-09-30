@@ -3,7 +3,7 @@ import { Button, CopyButton, formatTokens, Markdown, timeAgo } from "@intentic/u
 import { errorMessage, useLatest } from "@intentic/ui/async";
 import { computed, onUnmounted, ref, watch } from "vue";
 import { formatElapsed } from "../../agents/fleet/agentStatus";
-import { changeEpochOf, derivedEpochOf, sidecarQueue } from "../changes/live/useWorkspaceLive";
+import { changeEpochOf, derivedEpochOf } from "../changes/live/useWorkspaceLive";
 import { firstDeriveAttempt, rememberedDerivedText } from "../files/derivedCache";
 import { deriveText, readDerivedText, type WorkspaceDerived } from "../files/derivedText";
 import ConversionNotes from "./ConversionNotes.vue";
@@ -89,16 +89,13 @@ const derive = (target: string): void => {
     );
 };
 
-// Whether this file is about to be read by someone else, closely enough that asking for it again would only put two
-// child processes on the same work. A named batch is seconds away, so it is; a whole-tree sweep converges hundreds of
-// files and can run for minutes, and the file in front of a reader should not wait behind all of them.
-const handledSoon = (result: Extract<WorkspaceDerived, { present: false }>): boolean =>
-    result.state === `deriving` || (result.state === `queued` && !result.queue.sweeping);
-
 // A reader looking at this pane has already asked for this file's text; a button asking them to confirm it is a step,
-// not a choice, and one ordinary document costs a few hundred milliseconds to read — a load, not a job.
+// not a choice, and one ordinary document costs a few hundred milliseconds to read — a load, not a job. Nothing renders
+// in the background, so a stale rendering is refreshed here too, or it stays stale. Another reader's run in flight
+// (`deriving`) is left alone: its landing re-reads this pane.
 const deriveIfNothingElseWill = (target: string, result: WorkspaceDerived): void => {
-    if (result.present || !result.derivable || result.state === `broken` || result.state === `undeliverable` || handledSoon(result)) {
+    const current = result.present ? !result.stale : !result.derivable || result.state === `broken` || result.state === `undeliverable`;
+    if (current || result.state === `deriving`) {
         return;
     }
     // Once per version of the file: one that renders to nothing has answered, and this pane re-reads often.
@@ -141,23 +138,11 @@ watch(
     { immediate: true },
 );
 
-// The live count beats the one this response was built with: frames keep arriving while a reader looks at a wait.
-const queue = computed(() => sidecarQueue.value ?? shadow.value?.queue);
-// Whether this file is waiting on the background pass rather than on someone pressing a button.
-const waiting = computed(() => shadow.value?.state === `queued` || shadow.value?.state === `deriving`);
-const waitLabel = computed(() => {
-    if (shadow.value?.state === `deriving`) {
-        return `Being read now…`;
-    }
-    const ahead = queue.value?.queued ?? 0;
-    if (queue.value?.sweeping === true) {
-        return `Waiting: every file is being checked`;
-    }
-    return ahead > 1 ? `Waiting, with ${ahead - 1} other ${ahead === 2 ? `file` : `files`} ahead` : `Waiting its turn`;
-});
+// Whether someone else's rendering of this file is under way, rather than this pane's own.
+const waiting = computed(() => shadow.value?.state === `deriving`);
 
 // A format nothing reads cannot be rendered by asking harder, and a sandbox with no renderer would fail the same way
-// for every file; everything else is worth offering, including a file whose turn simply has not come.
+// for every file; everything else is worth offering.
 const canDerive = computed(() => shadow.value !== undefined && shadow.value.state !== `undeliverable` && shadow.value.state !== `broken`);
 
 const emptyIcon = computed(() => {
@@ -174,16 +159,14 @@ const absent = computed(() => (shadow.value?.present === false ? shadow.value : 
 const emptyMessage = computed(() => {
     switch (shadow.value?.state) {
         case `deriving`:
-        case `queued`:
-            return `This file is in line to be read. Its text will appear here on its own.`;
+            return `This file is being read. Its text will appear here on its own.`;
         case `broken`:
             return `This sandbox has no renderer installed, so nothing can be turned into text here.`;
         case `undeliverable`:
             return `Nothing here can turn this file into text.`;
         default:
-            // `reason` is set exactly when a derivation was just attempted and produced nothing, which is now the
-            // common way to arrive here: opening the file already tried. Saying "nothing has read this" over a file
-            // this pane just had read would be the same lie the queued state used to tell.
+            // `reason` is set exactly when a derivation was just attempted and produced nothing, which is the common
+            // way to arrive here: opening the file already tried, so "nothing has read this" would be untrue.
             return absent.value?.reason === undefined
                 ? `Nothing has read this file yet. Rendering it gives you its text — and gives an agent the same.`
                 : `This file was read, but no text came out of it.`;
@@ -238,7 +221,7 @@ const emptyMessage = computed(() => {
                 <Icon :name="waiting ? `spinner` : `exclamation-triangle`" :spin="waiting" class="shrink-0 text-[0.7rem]" />
                 <span>
                     {{ t(`workspace.derivedTextView.fileChangedAfterText`) }}
-                    <template v-if="waiting">{{ waitLabel }}</template>
+                    <template v-if="waiting">{{ t(`workspace.derivedTextView.beingReadNow`) }}</template>
                 </span>
             </div>
             <!-- Every cap and degradation the derivation hit, shown rather than stored. -->
@@ -279,28 +262,21 @@ const emptyMessage = computed(() => {
             <p class="text-sm text-danger">{{ error }}</p>
         </div>
 
-        <!-- No text yet, which is five different situations. Saying "nothing has read this" over a file already in the
-             queue is the failure this pane used to have: the reader is told to act when waiting was the right answer. -->
+        <!-- No text yet, which is four different situations: being read, never read, read to nothing, or unreadable here. -->
         <div v-else class="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
             <Icon :name="emptyIcon" :spin="waiting" class="text-4xl text-subtle" />
             <p class="max-w-sm text-sm text-muted">{{ emptyMessage }}</p>
-            <p v-if="waiting" class="max-w-sm text-2xs text-subtle">{{ waitLabel }}</p>
             <p v-if="shadow?.reason !== undefined" class="max-w-sm text-2xs text-subtle">{{ shadow.reason }}</p>
             <div class="mt-1 flex items-center gap-2">
-                <!-- Offered even while queued: this is the way to jump the queue for the file in front of you. -->
-                <Button v-if="canDerive" severity="secondary" :disabled="deriving" @click="derive(path)">
+                <Button v-if="canDerive" severity="secondary" :disabled="deriving || waiting" @click="derive(path)">
                     <Icon name="align-left" class="text-xs" />
-                    {{ waiting ? t(`workspace.derivedTextView.readNow`) : t(`workspace.derivedTextView.renderText`) }}
+                    {{ t(`workspace.derivedTextView.renderText`) }}
                 </Button>
                 <Button v-if="downloadable" severity="secondary" @click="emit(`download`)">
                     <Icon name="download" class="text-xs" />
                     {{ t(`ui.action.download`) }}
                 </Button>
             </div>
-            <!-- Only where it is actually actionable: pointing at a switch that is already on is how this misled before. -->
-            <p v-if="shadow?.state === `off`" class="max-w-sm text-2xs text-subtle">
-                {{ t(`workspace.derivedTextView.settingsAgentDocumentShadows`) }}
-            </p>
         </div>
     </div>
 </template>

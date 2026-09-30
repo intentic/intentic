@@ -2,7 +2,7 @@ import { z } from "zod";
 import { AgentSummarySchema } from "../schemas/agents.js";
 import { AccountUsageSchema, ProviderRefusalSchema } from "../schemas/providers/plan-limits.js";
 import { MemberRoleSchema } from "../schemas/shared.js";
-import { SidecarStatusSchema, WorkspaceTreeDeltaSchema } from "../schemas/workspace/workspace-tree.js";
+import { WorkspaceTreeDeltaSchema } from "../schemas/workspace/workspace-tree.js";
 
 // Frames about the sandbox rather than a turn: liveness, boot progress, what moved (repos, refs, running processes,
 // presence, the fleet), and account headroom. One stream carries them all.
@@ -73,10 +73,10 @@ export type ReposChanged = z.infer<typeof ReposChangedSchema>;
 export const WorkspaceChangedSchema = z.object({ kind: z.literal("workspaceChanged"), paths: z.array(z.string()) });
 export type WorkspaceChanged = z.infer<typeof WorkspaceChangedSchema>;
 
-// Files whose markdown shadow was just rewritten, plus where the background pass stands. Shadows live under the state
-// directory the watcher ignores on purpose — a sidecar write must never re-trigger the derivation that wrote it — so
-// `workspaceChanged` structurally cannot carry this, and without it a reader watching a file sees its text land never.
-export const DerivedChangedSchema = z.object({ kind: z.literal("derivedChanged"), paths: z.array(z.string()), queue: SidecarStatusSchema });
+// Files whose rendered text just landed. Renderings live under the state directory the watcher ignores on purpose — a
+// cache write must never read as a workspace change — so `workspaceChanged` structurally cannot carry this, and without
+// it a second reader watching the same file never sees its text land.
+export const DerivedChangedSchema = z.object({ kind: z.literal("derivedChanged"), paths: z.array(z.string()) });
 export type DerivedChanged = z.infer<typeof DerivedChangedSchema>;
 
 // Repos whose refs moved (commit, checkout, branch, rebase); a repo's git dir lives outside /work and the watcher

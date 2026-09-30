@@ -1,8 +1,8 @@
-// CLI end-to-end against a temp workspace: derive, freshness, budgeted read, sweep with orphan pruning, the ignore
-// floor, and forged markers dying in the sidecar's bytes.
+// CLI end-to-end against a temp workspace: derive, freshness, the content cache, budgeted read, the ignore floor, and
+// forged markers dying in the sidecar's bytes.
 // Driven in-process through the same `run(app, …)` seam cli.ts calls (@intentic/agent-cli/testing); no build
 // artifact, no child process.
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { captureCli, type CliOutcome } from "@intentic/agent-cli/testing";
@@ -125,19 +125,16 @@ describe("read", () => {
         expect(out).toContain("Paragraph 199 with a good number");
     });
 
-    it("--plain on a file outside the workspace saves nothing, since git hands textconv one temp file per blob", async () => {
+    it("--plain on a file outside the workspace keeps its rendering by content, so git's next textconv of that blob is cached", async () => {
         const outside = mkdtempSync(join(tmpdir(), "fileq-outside-"));
-        const home = mkdtempSync(join(tmpdir(), "fileq-home-"));
-        process.env["FILEQ_HOME"] = home;
         try {
-            writeFileSync(join(outside, "memo.docx"), docxBytes("Memo", ["Kept in memory only."]));
+            writeFileSync(join(outside, "memo.docx"), docxBytes("Memo", ["A blob git handed over."]));
             const { out } = await fileq("read", "--plain", join(outside, "memo.docx"));
-            expect(out).toContain("Kept in memory only.");
-            expect(existsSync(join(home, "out"))).toBe(false);
+            expect(out).toContain("A blob git handed over.");
+            expect(out).not.toContain("saved:");
+            expect(JSON.parse((await fileq("read", "--json", join(outside, "memo.docx"))).out)).toMatchObject({ source: "fresh" });
         } finally {
-            delete process.env["FILEQ_HOME"];
             rmSync(outside, { recursive: true, force: true });
-            rmSync(home, { recursive: true, force: true });
         }
     });
 
@@ -164,26 +161,52 @@ describe("read", () => {
     });
 });
 
-describe("sweep", () => {
-    it("converges the tree, skips machine dirs, prunes orphans", async () => {
-        mkdirSync(join(root, "docs"), { recursive: true });
-        writeFileSync(join(root, "docs/photo.png"), pngBytes());
-        // An orphan: a shadow whose source never existed in this workspace.
-        mkdirSync(join(root, DERIVED_DIR, "gone"), { recursive: true });
-        writeFileSync(join(root, DERIVED_DIR, "gone/old.pdf.md"), "---\nsource: gone/old.pdf\n---\n");
-        const { out, exitCode } = await fileq("sweep");
-        expect(exitCode).toBe(0);
-        expect(out).toContain("derived docs/photo.png");
-        expect(out).toContain("pruned gone/old.pdf");
-        expect(out).not.toContain("node_modules");
-        expect(existsSync(sidecarOf("docs/photo.png"))).toBe(true);
-        expect(existsSync(join(root, DERIVED_DIR, "gone/old.pdf.md"))).toBe(false);
+describe("content cache", () => {
+    const readJson = async (path: string): Promise<{ source: string; path?: string }> => JSON.parse((await fileq("read", "--json", path)).out);
+
+    it("a copy of a workspace file at another path is fresh on its first read, with a sidecar of its own", async () => {
+        writeFileSync(join(root, "original.docx"), docxBytes("Original", ["Rendered once."]));
+        expect(await readJson(join(root, "original.docx"))).toMatchObject({ source: "derived" });
+        mkdirSync(join(root, "copies"), { recursive: true });
+        copyFileSync(join(root, "original.docx"), join(root, "copies/original.docx"));
+        expect(await readJson(join(root, "copies/original.docx"))).toMatchObject({ source: "fresh", path: sidecarOf("copies/original.docx") });
+        expect(readFileSync(sidecarOf("copies/original.docx"), "utf8")).toContain("source: copies/original.docx");
     });
 
-    it("--json answers counts a program can read", async () => {
-        const { out } = await fileq("sweep", "--json");
-        const summary = JSON.parse(out) as { derived: number; fresh: number };
-        expect(summary.fresh).toBeGreaterThan(0);
+    it("a file outside the workspace is derived once, then answered from the cache until its bytes change", async () => {
+        const outside = mkdtempSync(join(tmpdir(), "fileq-outside-"));
+        try {
+            writeFileSync(join(outside, "memo.docx"), docxBytes("Memo", ["First draft."]));
+            const first = await readJson(join(outside, "memo.docx"));
+            expect(first).toMatchObject({ source: "derived" });
+            expect(first.path?.startsWith(join(root, DERIVED_DIR, ".by-hash/"))).toBe(true);
+            expect(await readJson(join(outside, "memo.docx"))).toMatchObject({ source: "fresh", path: first.path });
+            writeFileSync(join(outside, "memo.docx"), docxBytes("Memo", ["Second draft."]));
+            const edited = await fileq("read", join(outside, "memo.docx"));
+            expect(edited.out).toContain("derived");
+            expect(edited.out).toContain("Second draft.");
+        } finally {
+            rmSync(outside, { recursive: true, force: true });
+        }
+    });
+
+    it("with no workspace and an unwritable cache, the rendering is still printed, and says nothing was saved", async () => {
+        const outside = mkdtempSync(join(tmpdir(), "fileq-outside-"));
+        delete process.env["WORKSPACE_ROOT"];
+        process.env["FILEQ_HOME"] = join(outside, "blocker");
+        try {
+            writeFileSync(join(outside, "blocker"), "a file where the cache directory would go");
+            writeFileSync(join(outside, "memo.docx"), docxBytes("Memo", ["Still readable."]));
+            const { out, exitCode } = await fileq("read", join(outside, "memo.docx"));
+            expect(exitCode).toBe(0);
+            expect(out).toContain("Still readable.");
+            expect(out).toContain("note: nothing saved: the rendering cache could not be written");
+            expect(out).not.toMatch(/^saved: /m);
+        } finally {
+            process.env["WORKSPACE_ROOT"] = root;
+            delete process.env["FILEQ_HOME"];
+            rmSync(outside, { recursive: true, force: true });
+        }
     });
 });
 

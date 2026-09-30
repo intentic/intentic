@@ -9,7 +9,7 @@ ports live in [`_sandbox/output-cleaners`](../../_sandbox/output-cleaners).
 ## Status, 2026-09-29
 
 Built as one plugin rather than two. [`_sandbox/claude-plugin`](../../_sandbox/claude-plugin) is the `intentic`
-plugin: the `trim` port below, plus the project map, field notes, the iq teaching, fileq, document shadows and a
+plugin: the `trim` port below, plus the project map, field notes, the iq teaching, fileq and a
 `/intentic:stats` report, each behind a `/config` switch. Its README says what it does and how it measures.
 
 - The cleaners moved out of `_sandbox/sandbox/bin/` into their own package,

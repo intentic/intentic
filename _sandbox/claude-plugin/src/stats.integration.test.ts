@@ -85,9 +85,9 @@ test("a mechanism that is off, or measured by nobody, says which", () => {
 test("the report's switches are the ones the last session opened with, and a flag overrides one", () => {
     const data = tempDir();
     expect(parseStatsArgs(["--data", data, "--project", "/p"]).options).toEqual(readOptions({}));
-    saveOptions(data, readOptions({ CLAUDE_PLUGIN_OPTION_SHADOWS: "true", CLAUDE_PLUGIN_OPTION_CLEANERS: "-cap,-wide", CLAUDE_PLUGIN_OPTION_HOLDOUT: "0.2" }));
+    saveOptions(data, readOptions({ CLAUDE_PLUGIN_OPTION_FIELD_NOTES: "false", CLAUDE_PLUGIN_OPTION_CLEANERS: "-cap,-wide", CLAUDE_PLUGIN_OPTION_HOLDOUT: "0.2" }));
     const args = parseStatsArgs(["--data", data, "--project", "/p", "--option", "holdout=0.3"]);
     expect(args).toMatchObject({ data, project: "/p" });
-    expect(args.options).toMatchObject({ shadows: true, cleaners: "-cap,-wide", holdout: 0.3, iq: true });
+    expect(args.options).toMatchObject({ field_notes: false, cleaners: "-cap,-wide", holdout: 0.3, iq: true });
     expect(parseStatsArgs(["--data", data, "--project", "/p", "all"]).project).toBeUndefined();
 });

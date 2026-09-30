@@ -104,6 +104,15 @@ test("a delta whose margin spans zero is not a delta: only its resolution is rep
     expect(search?.metrics[0].saved).toBeUndefined();
 });
 
+// One runaway conversation used to carry its arm: identical arms read 42 vs 28 on the ledger, and a shuffled-label check
+// called one no-effect split in ten significant. Capped at the pooled 95th percentile, it counts as high, not unbounded.
+test("one runaway conversation counts as high, not as a difference between the arms", async () => {
+    const arms = [...searchArms(40, 40, 2, 2), turn({ conversationId: "runaway", iqSearchArm: true, searchCalls: 900, openingSearches: 450 })];
+    const { search } = await readTurnExperiments(storeOf(arms), {});
+    expect(search?.metrics[0].on.mean).toBe(2);
+    expect(search?.metrics[0].deltaPct).toBeUndefined();
+});
+
 test("failed and cancelled turns are dropped from the population", async () => {
     const healthy = searchArms(MIN_ARM_TURNS, MIN_ARM_TURNS, 4, 4);
     const failures = Array.from({ length: MIN_ARM_TURNS }, () =>

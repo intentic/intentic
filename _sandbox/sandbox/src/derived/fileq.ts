@@ -1,9 +1,9 @@
 import { execFile } from "node:child_process";
 import { errorMessage } from "@intentic/base/errors";
 
-// The one place the daemon spawns the fileq binary, shared by the background service that converges shadows, the
-// route that derives a single file on demand and the diff route that derives a past version's bytes, so every caller
-// bounds a child the same way and reads its refusals the same way.
+// The one place the daemon spawns the fileq binary, shared by the route that derives a single file on demand and the
+// diff route that derives a past version's bytes, so every caller bounds a child the same way and reads its refusals
+// the same way.
 
 export type ExecFn = (command: string, args: string[], options: { timeout: number; maxBuffer: number }) => Promise<{ stdout: string }>;
 
@@ -49,8 +49,7 @@ export const runFailure = (error: unknown): string | undefined => {
 
 // Interactive derivations run right now, across every caller. Opening a file or a diff asks for one without anyone
 // pressing a button, so a reader walking a folder of documents would otherwise have a child process per file, all at
-// once, on the box their agent is working on. One at a time past this, which is what the background pass already
-// holds itself to for the same reason.
+// once, on the box their agent is working on. One at a time past this.
 const MAX_CONCURRENT = 2;
 const waiting: (() => void)[] = [];
 let running = 0;

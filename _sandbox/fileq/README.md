@@ -1,12 +1,12 @@
 # fileq
 
-A CLI that shows an agent the contents of binary workspace files (Office documents, PDFs, images, audio, archives) as budgeted markdown, cached as sidecars, and checks and draws the documents an agent makes.
+A CLI that shows an agent the contents of binary workspace files (Office documents, PDFs, images, audio, archives) as budgeted markdown, cached by content, and checks and draws the documents an agent makes.
 
 ```mermaid
 flowchart LR
     agent["Agent<br/>fileq read"] --> fileq(["fileq"])
     maker["Agent<br/>fileq check · render"] --> fileq
-    daemon["Daemon<br/>derive · sweep"] --> fileq
+    daemon["Daemon<br/>derive"] --> fileq
     git["git diff · show<br/>textconv"] --> fileq
     fileq --> derivers["Derivers<br/>docx · pdf · xlsx · image …"]
     fileq --> sidecars["Sidecars<br/>.intentic/local/cache/derived"]
@@ -14,13 +14,18 @@ flowchart LR
 ```
 
 - An agent cannot `cat` a docx or the text layer of a PDF. `fileq <file>` prints a capsule line (title, format,
-  token cost, derived or fresh), then the markdown clipped to `--budget` tokens, and names the sidecar that holds the
-  whole text.
-- Each derivable file gets one sidecar at `.intentic/local/cache/derived/<path>.md`. It is fresh while the source's
-  sha256 and the deriver's version stamp both match, so reading a file twice derives it once. Text is neutralized at
-  write time, because a sidecar is later read as a plain file.
-- The daemon keeps sidecars converged in the background with `fileq derive` and `fileq sweep`
-  (`_sandbox/sandbox/src/derived/`), and imports `./formats` and `./sidecar` so both sides agree on what is derivable.
+  token cost, derived or fresh), then the markdown clipped to `--budget` tokens, and names the file that holds the whole
+  text.
+- Renderings are cached by content: keyed by the source's sha256 and the deriver's version stamp, never its path, so
+  a repeat read of unchanged content is instant, whether it is the same file, a copy or a move of it, or a file
+  outside the workspace. The entries live under `.intentic/local/cache/derived/.by-hash/`, or with no workspace under
+  `by-hash/` in `$FILEQ_HOME`, else `$XDG_CACHE_HOME/fileq`, else `~/.cache/fileq`. A cache that cannot be written costs the speed-up,
+  never the read.
+- A workspace file also gets a sidecar at `.intentic/local/cache/derived/<path>.md`, fresh while its sha256 and the
+  stamp both match. Text is neutralized at write time, because a sidecar or a cache entry is later read as a plain
+  file.
+- The daemon renders one file when asked with `fileq derive --json <path>` (`_sandbox/sandbox/src/derived/`), and
+  imports `./formats` and `./sidecar` so both sides agree on what is derivable.
 - In the sandbox image, `git diff` and `git show` on a document print its text through `fileq read --plain`, wired by
   `fileq git-attributes`.
 - `fileq check <file>` lints a docx, pptx, xlsx or pdf an agent produced and names each problem where a reader meets
@@ -54,7 +59,8 @@ there `fileq render` names the missing tool and prints `environment propose offi
 ## Key files
 
 - [src/app.ts](src/app.ts) — the command routes and the `--help` text an agent reads.
-- [src/lib/derive.ts](src/lib/derive.ts) — `ensureSidecar`: the pipeline `read`, `derive` and `sweep` all run.
+- [src/lib/derive.ts](src/lib/derive.ts) — `ensureSidecar` and `renderByContent`: the pipeline `read` and `derive` both run.
+- [src/lib/content-cache.ts](src/lib/content-cache.ts) — renderings keyed by content hash and deriver stamp.
 - [src/lib/formats.ts](src/lib/formats.ts) — `detectFormat`: magic bytes first, extension as fallback.
 - [src/lib/sidecar.ts](src/lib/sidecar.ts) — sidecar paths, front matter and the freshness rule.
 - [src/lib/check/check.ts](src/lib/check/check.ts) — `fileq check`: which formats have a checker; each format's rules sit beside it.

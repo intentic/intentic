@@ -1,4 +1,7 @@
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { FIELD_NOTES_FILE } from "@intentic/constants";
 import { repoRoot } from "@intentic/constants/node";
 import { type CredentialGate, type Persona, type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
@@ -273,4 +276,29 @@ test.each(["claude", "codex", "grok"] as const)("%s is read the note on its open
     const facts = admitted(await gatherTurnFacts(services, turn({ agent, conversationId: `c-${agent}` }), context));
 
     expect(facts.landingChecksNote?.text).toContain("Nothing checks your work when you finish");
+});
+
+// The brief is daemon-kept config that git does not track, so an isolated turn's worktree never has a copy: read from the
+// turn's own tree it reached no conversation at all, while the settings row, reading the shared root, said it was sent.
+test("the field notes are read from the shared workspace root, not the turn's own tree", async () => {
+    const root = await mkdtemp(join(tmpdir(), "notes-root-"));
+    const worktree = await mkdtemp(join(tmpdir(), "notes-worktree-"));
+    try {
+        await mkdir(join(root, FIELD_NOTES_FILE, ".."), { recursive: true });
+        await writeFile(
+            join(root, FIELD_NOTES_FILE),
+            ["priority[1]{rank,id,title,cost}:", "  1,ground,Which tree you are in,edits land outside the branch", "ground:", "  check: git branch", ""].join("\n"),
+        );
+        const services = servicesWith({
+            workspace: unstubbed<Services["workspace"]>("workspace", { root }),
+            sandboxSettings: settingsOf(SandboxSettingsSchema.parse({ fieldNotes: true })),
+            agents: unstubbed<Services["agents"]>("agents", { entry: () => undefined }),
+        });
+
+        const facts = admitted(await gatherTurnFacts(services, turn({ conversationId: "c-notes" }), { ...context, localCwd: worktree, effectiveCwd: worktree }));
+
+        expect(facts.fieldNotes?.text).toContain("check: git branch");
+    } finally {
+        await Promise.all([root, worktree].map((dir) => rm(dir, { recursive: true, force: true })));
+    }
 });

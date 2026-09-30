@@ -214,7 +214,6 @@ export const UNSERVED = {
     "usage.limitReset": UNFILLED_VIEW,
     "workspace.appsList": UNFILLED_VIEW,
     "workspace.derived": UNFILLED_VIEW,
-    "workspace.derivedStatus": UNFILLED_VIEW,
     "workspace.health": UNFILLED_VIEW,
     "workspace.modules": UNFILLED_VIEW,
     "workspace.packageGraph": UNFILLED_VIEW,

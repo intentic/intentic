@@ -30,3 +30,12 @@ test("spells out the shape field-notes.ts slices by rank", () => {
     expect(text).toContain("a `meta` block, a `priority` table whose columns begin `rank,id` and whose every id is also a top-level key");
     expect(text).toContain("Ranks are integers and ids are kebab-case words.");
 });
+
+// The reader stops at the first section that does not fit, so a writer that is not told so ships a brief whose rank 1
+// alone fills the budget and whose other ranks never reach a turn.
+test("tells the writer the budget is shared and a long section silences the ranks below it", () => {
+    const text = fieldNotesPrompt(PROJECT);
+    expect(text).toContain("SIZE IS PART OF THE RANKING. The plugin sends the priority table on every turn");
+    expect(text).toContain("so one long section silences every rank below it");
+    expect(text).toContain("recount every percentage from them rather than carrying the old one forward");
+});

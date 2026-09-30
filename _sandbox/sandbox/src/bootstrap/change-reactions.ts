@@ -1,6 +1,5 @@
 import { join } from "node:path";
 import { startVanishedRepoSweep } from "../conversations/registry/vanished-repos.js";
-import { startSidecarService } from "../derived/sidecar-service.js";
 import { invalidateContributions } from "../capabilities/contributions.js";
 import { stopPendingExtensionProcesses } from "../extensions/extension-processes.js";
 import { onListenerStatusMoved } from "../extensions/listener/listener-status.js";
@@ -39,10 +38,6 @@ export const startChangeReactions = ({ logger, services, shutdown, traits }: Boo
             void stopPendingExtensionProcesses(services);
         }
     });
-    // The `sidecars` setting is read fresh each pass, so the switch works without a restart.
-    shutdown.push(
-        startSidecarService({ enabled: async () => (await services.sandboxSettings.get()).sidecars, logger }, subscribeWorkspaceChanges).stop,
-    );
     startRepoWatch(services.workspace.root, logger);
     startRefWatch(services.workspace.root, subscribeRepoChanges, logger);
     // A ref can move without a workspace byte changing, so only the ref feed can invalidate health.

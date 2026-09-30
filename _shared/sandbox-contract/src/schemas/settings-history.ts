@@ -85,6 +85,7 @@ export const SETTINGS_HISTORY = [
         "quickModel",
         "resumeAfterLimit",
         "resumeAfterOutage",
+        "sidecars",
         "terseHoldout",
         "terseOutput",
         "testFaultDetection",

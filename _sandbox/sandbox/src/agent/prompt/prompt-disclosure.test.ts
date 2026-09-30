@@ -97,7 +97,7 @@ test("the guidance shown is the form the turn was sent", () => {
             terminal: tmuxRunEnabled(),
             hostDevices: undefined,
             ownBrowsers: undefined,
-        }),
+        }, "rg"),
     );
     const codex = promptDisclosure({
         capabilities: CODEX,
@@ -111,7 +111,7 @@ test("the guidance shown is the form the turn was sent", () => {
         },
         at: AT,
     });
-    expect(textOf(codex, "guidance")).toBe(guidanceBlock("lean", undefined));
+    expect(textOf(codex, "guidance")).toBe(guidanceBlock("lean", undefined, "rg"));
 });
 
 test("a runtime that keeps its own prompt says so, and its guidance is the append's own head", () => {

@@ -16,7 +16,6 @@ const dist = join(root, "dist");
 const ENTRIES = {
     "session-start": "src/session-start.ts",
     "post-bash": "src/post-bash.ts",
-    "post-edit": "src/post-edit.ts",
     "prompt-submit": "src/prompt-submit.ts",
     stats: "src/stats.ts",
     "notes-evidence": "src/notes-evidence.ts",

@@ -1,5 +1,5 @@
 {
-    "description": "intentic: session context (map, field notes, iq teaching), Bash output cleaning, document shadows. Each script reads its own /config switch and answers nothing when it is off. Without node on PATH the tool hooks stand down silently and each session opens with one line saying why nothing ran.",
+    "description": "intentic: session context (map, field notes, iq teaching), Bash output cleaning. Each script reads its own /config switch and answers nothing when it is off. Without node on PATH the tool hooks stand down silently and each session opens with one line saying why nothing ran.",
     "hooks": {
         "SessionStart": [
             {
@@ -31,16 +31,6 @@
                         "type": "command",
                         "command": "command -v node >/dev/null 2>&1 && node \"${CLAUDE_PLUGIN_ROOT}/dist/post-bash.mjs\"; exit 0",
                         "timeout": 15
-                    }
-                ]
-            },
-            {
-                "matcher": "Write|Edit|MultiEdit|NotebookEdit",
-                "hooks": [
-                    {
-                        "type": "command",
-                        "command": "command -v node >/dev/null 2>&1 && node \"${CLAUDE_PLUGIN_ROOT}/dist/post-edit.mjs\"; exit 0",
-                        "timeout": 10
                     }
                 ]
             }

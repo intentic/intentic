@@ -1924,9 +1924,7 @@
             "briefReach": "Die ersten {sent} von {total} Abschnitten · {chars} Zeichen",
             "characters": "Zeichen",
             "codeSearch": "Codesuche",
-            "documentShadows": "Dokumentschatten",
             "iqCodeSearch": "iq-Codesuche",
-            "keepDocumentsImagesAudio": "Dokumente, Bilder, Audio und Archive als Text vorgerendert halten, aktualisiert, während Dateien sich ändern. Öffnen Sie eines davon im Workspace, um zu lesen, was ein Agent liest.",
             "lengthLimit": "Längenlimit",
             "noBriefYet": "Noch nicht geschrieben. Die monatliche Automatisierung schreibt die erste.",
             "notScheduled": "Nicht geplant",
@@ -4686,6 +4684,7 @@
             "versionCouldNotBeRead": "Die {side}Version von {filename} konnte nicht als Text gelesen werden: {reason}."
         },
         "derivedTextView": {
+            "beingReadNow": "Wird gerade gelesen…",
             "copyDerivedText": "Abgeleiteten Text kopieren",
             "copyText": "Text kopieren",
             "deriveAgain": "Erneut ableiten",
@@ -4695,12 +4694,10 @@
             "longRenderingOnlyFirst": "Lange Ausgabe: hier wird nur ihr erster Teil gezeigt.",
             "lookingFilesText": "Der Text dieser Datei wird gesucht…",
             "mostDocumentsTakeMoment": "Die meisten Dokumente brauchen einen Moment. Ein gescanntes PDF muss Seite für Seite erkannt werden — das ist das, was eine Minute oder länger dauern kann.",
-            "readNow": "Jetzt lesen",
             "readingAgain": "Wird erneut gelesen… {waited}",
             "readingFileWritingText": "Diese Datei wird gelesen und ihr Text geschrieben…",
             "renderText": "Als Text darstellen",
             "rereadFile": "Datei neu lesen",
-            "settingsAgentDocumentShadows": "Einstellungen → Agent → Dokumentschatten hält jedes Dokument, Bild, jede Aufnahme und jedes Archiv gerendert, während Dateien sich ändern.",
             "stillGoingNothingFailed": "Läuft noch — nichts ist fehlgeschlagen. Der Text wird beim Eintreffen auf die Platte geschrieben, Sie können diese Datei also verlassen oder zurückkommen, und er ist da.",
             "tokens": "{tokens} Tokens"
         },

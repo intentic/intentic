@@ -180,9 +180,9 @@ export const applySystemEvent = (event: SystemEvent, sandboxId: string): void =>
             return;
         }
         case `derivedChanged`:
-            // Only the derived-text surfaces care, and they hold a ref rather than a query: a shadow is read by path on
-            // demand, never cached per file, so there is no key to invalidate here.
-            markDerivedChanged(event.paths, event.queue);
+            // Only the derived-text surfaces care, and they hold a ref rather than a query: a rendering is read by path
+            // on demand, never cached per file, so there is no key to invalidate here.
+            markDerivedChanged(event.paths);
             return;
         case `workspaceChanged`:
             applyWorkspaceChanged(event);

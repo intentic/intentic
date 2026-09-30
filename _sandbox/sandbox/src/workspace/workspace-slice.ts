@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
 import type { ResidentEngine } from "@intentic/iq-engine";
-import type { DerivedSide, SidecarStatus, WorkspaceChildren, WorkspaceDerived, WorkspaceTree } from "@intentic/sandbox-contract";
+import type { DerivedSide, WorkspaceChildren, WorkspaceDerived, WorkspaceTree } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import type { BlobSource } from "../derived/derived-blob.js";
 import type { Config } from "../env.config.js";
@@ -53,15 +53,13 @@ export interface WorkspaceSlice {
         // Unpacks an archive beside itself, answering with the absolute path of what landed.
         readonly extract: (absArchive: string) => Promise<string>;
     };
-    // A binary file's markdown shadow, read and derived on demand; wired here so no route reaches into fileq's own
+    // A binary file's rendered markdown, read and derived on demand; wired here so no route reaches into fileq's own
     // subsystem, which reads workspace files itself.
     readonly derived: {
         readonly read: (root: string, relPath: string) => Promise<WorkspaceDerived>;
         readonly derive: (root: string, relPath: string) => Promise<WorkspaceDerived>;
         // Bytes that are no workspace file (a past version at a rev-spec), rendered and kept by content hash.
         readonly deriveBytes: (root: string, bytes: Uint8Array, source: BlobSource) => Promise<DerivedSide>;
-        // How the background pass is doing; the one derived answer no file on disk carries.
-        readonly status: () => SidecarStatus;
     };
     readonly workspaceTree: (root: string) => Promise<WorkspaceTree>;
     // What the watcher saw change under the workspace root, root-relative; empty is an unnamed change. The tree walk holds

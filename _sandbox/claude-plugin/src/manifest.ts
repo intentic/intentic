@@ -26,7 +26,7 @@ export const manifest = (version: string): PluginManifest => ({
     displayName: "Intentic",
     version,
     description:
-        "Cheaper, sharper Claude Code sessions: Bash output trimmed before Claude reads it, a project map and this project's field notes at session start, iq code search and fileq document reading taught, document shadows kept fresh, and /intentic:stats to show what each one saved. Every mechanism is a switch in /config.",
+        "Cheaper, sharper Claude Code sessions: Bash output trimmed before Claude reads it, a project map and this project's field notes at session start, iq code search and fileq document reading taught, and /intentic:stats to show what each one saved. Every mechanism is a switch in /config.",
     author: { name: "intentic" },
     homepage: "https://github.com/intentic/intentic/tree/main/_sandbox/claude-plugin",
     repository: "https://github.com/intentic/intentic",

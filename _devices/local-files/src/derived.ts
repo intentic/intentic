@@ -6,14 +6,14 @@ import { estimateTokens } from "@intentic/base/format";
 import { neutralizeOutsideText } from "@intentic/base/outside-text";
 import { refuse } from "@intentic/contract-serve";
 import type { Format } from "@intentic/fileq/formats";
-import type { DerivedState, SidecarStatus, WorkspaceDerived } from "@intentic/sandbox-contract";
+import type { DerivedState, WorkspaceDerived } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { resolveExisting } from "./paths.js";
 import { Turns } from "./turns.js";
 
 // A document's text for the quick look, a picture's or a recording's description, rendered by fileq's own readers in
-// memory. A sandbox keeps a shadow of each file beside it in the workspace; a folder on the user's disk is theirs, so
-// nothing is ever written into it: each rendering is kept in the app's cache instead, under the file's real path, size,
+// memory. A sandbox's fileq keeps each rendering under the workspace's state directory; a folder on the user's disk is
+// theirs, so nothing is ever written into it: each rendering is kept in the app's cache instead, under the file's real path, size,
 // time and the reader's version, so a file that changes or a reader that improves renders afresh. Reading the text
 // never renders it; only asking to does, one file at a time and bounded like the daemon's.
 
@@ -29,9 +29,6 @@ const MAX_CONTENT_CHARS = 512 * 1024;
 const RENDERS_AT_ONCE = 2;
 const RENDERS_WAITING = 8;
 const BUSY = `Too many documents are being read right now. Ask again in a moment.`;
-
-// No pass renders a folder in the background here: a document has text once someone asks for it, and only then.
-export const QUEUE: SidecarStatus = { enabled: false, queued: 0, deriving: [], sweeping: false, broken: false };
 
 // One rendering as the cache keeps it.
 const CachedSchema = z.object({
@@ -85,7 +82,7 @@ const sourceOf = async (root: string, path: string): Promise<Source | undefined>
 };
 
 const absent = (path: string, derivable: boolean, state: DerivedState, reason?: string): WorkspaceDerived => {
-    const answer: WorkspaceDerived = { present: false, path, derivable, state, queue: QUEUE };
+    const answer: WorkspaceDerived = { present: false, path, derivable, state };
     if (reason !== undefined) {
         answer.reason = reason;
     }
@@ -99,7 +96,6 @@ const present = (path: string, cached: Cached): WorkspaceDerived => {
         path,
         content,
         state: `idle`,
-        queue: QUEUE,
         deriver: cached.deriver,
         derivedAt: cached.derivedAt,
         notes: cached.notes,
@@ -149,7 +145,7 @@ export class DerivedTexts {
         if (cached !== undefined) {
             return present(path, cached);
         }
-        return absent(path, true, this.#inFlight.has(key) ? `deriving` : `off`);
+        return absent(path, true, this.#inFlight.has(key) ? `deriving` : `idle`);
     }
 
     // Renders `path` now unless what is kept is current, and answers with the text or why there is none.
@@ -163,7 +159,7 @@ export class DerivedTexts {
         }
         const { maxBytes } = await (fileq ??= loadFileq());
         if (source.size > maxBytes) {
-            return absent(path, true, `off`, `It is larger than ${Math.round(maxBytes / 1024 / 1024)} MB, the most that is read as text.`);
+            return absent(path, true, `idle`, `It is larger than ${Math.round(maxBytes / 1024 / 1024)} MB, the most that is read as text.`);
         }
         const key = await this.#keyOf(source, source.format);
         const cached = await this.#cached(key);
@@ -171,7 +167,7 @@ export class DerivedTexts {
             return present(path, cached);
         }
         const outcome = await this.#bounded(this.#rendering(key, source, source.format));
-        return outcome.kind === `derived` ? present(path, outcome.cached) : absent(path, true, `off`, outcome.reason);
+        return outcome.kind === `derived` ? present(path, outcome.cached) : absent(path, true, `idle`, outcome.reason);
     }
 
     // The cache's name for this version of this file as this reader renders it.

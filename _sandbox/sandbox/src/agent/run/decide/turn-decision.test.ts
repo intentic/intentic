@@ -440,6 +440,20 @@ test.each([true, false])("a conversation drawing the %s arm is composed with tha
     expect(decision.experiments).toEqual({ turnIndex: 0, guidanceArm: arm, guidanceCohort: GUIDANCE_REVISION });
 });
 
+// The system prompt names the tool the conversation was taught, so its guidance and the iq teaching never disagree; the
+// holdout keeps `rg`, or the guidance would teach the control what the experiment withholds from it.
+test.each([true, false])("a conversation drawing the %s iq arm is told to find code with the tool it was taught", (arm) => {
+    const decision = decided({ ...FACTS, settings: SEARCH_MEASURED }, turn({ conversationId: conversationIn("iq-search", arm) }));
+
+    expect(decision.context.base.spec.search).toBe(arm ? "iq" : "rg");
+});
+
+test("a sandbox with iq off is told rg", () => {
+    const decision = decided({ ...FACTS, settings: SandboxSettingsSchema.parse({ iqSearch: false }) }, turn({ conversationId: "c-1" }));
+
+    expect(decision.context.base.spec.search).toBe("rg");
+});
+
 test("the switch with no holdout sends the short form and measures nothing", () => {
     const decision = decided({ ...FACTS, settings: SandboxSettingsSchema.parse({ leanGuidance: true }) }, turn({ conversationId: "c-1" }));
 

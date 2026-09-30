@@ -6,12 +6,11 @@ import { parseSidecarFront, sha256OfFile, sidecarBody, sidecarPathFor } from "@i
 import type { WorkspaceDerived } from "@intentic/sandbox-contract";
 import { readWorkspaceFileWindow } from "../workspace/files/workspace-files.js";
 import { defaultExec, DERIVE_TIMEOUT_MS, FILEQ_MAX_BUFFER, isMissingBinary, runFailure, stdoutOf, withFileqSlot, type ExecFn } from "./fileq.js";
-import { sidecarStateOf, sidecarStatus } from "./sidecar-service.js";
 
-// Reading a file's shadow for a person rather than an agent: the same markdown `fileq read` serves, plus the front
-// matter's provenance, so a reader can see what was derived, by which reader, and what it had to cut.
-// The shared tree only: a conversation's checkout is never shadowed (fileq refuses worktree paths), so there is no
-// scope here to get wrong.
+// Reading a file's rendered text for a person rather than an agent: the same markdown `fileq read` serves from its cache,
+// plus the front matter's provenance, so a reader can see what was derived, by which reader, and what it had to cut.
+// Nothing renders in the background: a file has text once someone asks, and fileq keeps it until the file changes.
+// The shared tree only: fileq refuses worktree paths, so there is no scope here to get wrong.
 
 // What one response carries. Well past any real document's shadow and far under the daemon's own read ceiling, so a
 // pathological one is cut rather than sent.
@@ -25,21 +24,31 @@ const isDerivable = async (absPath: string): Promise<boolean> => {
     return source?.isFile() === true && (await detectFormat(absPath).catch(() => undefined)) !== undefined;
 };
 
-/** A file's shadow as it stands, with no derivation triggered; absent is the ordinary answer, not a failure. */
-export const readDerivedText = async (root: string, relPath: string, reason?: string): Promise<WorkspaceDerived> => {
+// Derivations asked for right now, by path: two callers wanting the same file wait on the same child rather than
+// spawning a second, and a reader arriving mid-run is told it is being read rather than offered to start another.
+const inFlight = new Map<string, Promise<WorkspaceDerived>>();
+
+// Who hears a rendering land: the /events stream, so a second reader of the same file refreshes. Renderings are written
+// where the watcher does not look, so nothing else would tell it.
+const landedListeners = new Set<(paths: string[]) => void>();
+
+/** Subscribes to renderings landing; returns the unsubscribe. */
+export const subscribeDerived = (listener: (paths: string[]) => void): (() => void) => {
+    landedListeners.add(listener);
+    return () => landedListeners.delete(listener);
+};
+
+// `reading` is passed rather than looked up by the derivation's own final read, which is still in flight when it asks.
+const readText = async (root: string, relPath: string, reading: boolean, reason?: string): Promise<WorkspaceDerived> => {
     const source = join(root, relPath);
     const window = await readWorkspaceFileWindow(sidecarPathFor(root, relPath), 0, MAX_DERIVED_BYTES);
-    // Where the background pass stands is read alongside the shadow, never inferred from its absence: a file nothing
-    // has rendered yet and a file waiting its turn are the same bytes on disk and different answers to a reader.
-    const queue = sidecarStatus();
     if (window === undefined) {
         const derivable = await isDerivable(source);
         return {
             present: false,
             path: relPath,
             derivable,
-            state: sidecarStateOf(relPath, derivable),
-            queue,
+            state: !derivable ? "undeliverable" : reading ? "deriving" : "idle",
             ...(reason === undefined ? {} : { reason }),
         };
     }
@@ -54,10 +63,8 @@ export const readDerivedText = async (root: string, relPath: string, reason?: st
         present: true,
         path: relPath,
         content: body,
-        // A shadow that exists can still be waiting: the file moved on under it and its re-derivation is in the queue.
-        // A fresh one is settled whatever the queue is doing, so it says `idle` rather than reporting someone else's wait.
-        state: stale ? sidecarStateOf(relPath, true) : "idle",
-        queue,
+        // A stale rendering can be mid-refresh; a fresh one is settled, whoever else is being read.
+        state: stale && reading ? "deriving" : "idle",
         // A shadow whose front matter was hand-edited has no stamp left to name; it is still the text that was derived.
         deriver: front.deriver ?? "unknown",
         ...(front.derivedAt === undefined ? {} : { derivedAt: front.derivedAt }),
@@ -68,6 +75,9 @@ export const readDerivedText = async (root: string, relPath: string, reason?: st
         stale,
     };
 };
+
+/** A file's rendered text as it stands, with no derivation triggered; absent is the ordinary answer, not a failure. */
+export const readDerivedText = (root: string, relPath: string): Promise<WorkspaceDerived> => readText(root, relPath, inFlight.has(relPath));
 
 // `fileq derive --json` prints one outcome object per line; with one file asked for, the last line is its verdict.
 const skipReason = (stdout: string): string | undefined => {
@@ -87,10 +97,6 @@ const skipReason = (stdout: string): string | undefined => {
     }
 };
 
-// Derivations asked for right now, by path: two callers wanting the same file wait on the same child rather than
-// spawning a second. The box-wide cap on children is fileq.ts's slot.
-const inFlight = new Map<string, Promise<WorkspaceDerived>>();
-
 const deriveOnce = async (root: string, relPath: string, exec: ExecFn): Promise<WorkspaceDerived> => {
     try {
         await withFileqSlot(() => exec("fileq", ["derive", "--json", relPath], { timeout: DERIVE_TIMEOUT_MS, maxBuffer: FILEQ_MAX_BUFFER }));
@@ -102,14 +108,13 @@ const deriveOnce = async (root: string, relPath: string, exec: ExecFn): Promise<
                 path: relPath,
                 derivable: false,
                 state: "broken",
-                queue: sidecarStatus(),
                 reason: "this sandbox has no fileq binary, so nothing can be rendered as text here",
             };
         }
         // Exit 1 is fileq's "nothing derivable here", and the line it printed says which of its reasons applied.
-        return await readDerivedText(root, relPath, runFailure(error) ?? skipReason(stdoutOf(error)));
+        return await readText(root, relPath, false, runFailure(error) ?? skipReason(stdoutOf(error)));
     }
-    return await readDerivedText(root, relPath);
+    return await readText(root, relPath, false);
 };
 
 /**
@@ -121,7 +126,13 @@ export const deriveText = (root: string, relPath: string, exec: ExecFn = default
     if (already !== undefined) {
         return already;
     }
-    const started = deriveOnce(root, relPath, exec).finally(() => inFlight.delete(relPath));
+    const started = deriveOnce(root, relPath, exec).finally(() => {
+        // Out of flight before anyone hears of it, so the read a listener makes finds the settled text.
+        inFlight.delete(relPath);
+        for (const listener of landedListeners) {
+            listener([relPath]);
+        }
+    });
     inFlight.set(relPath, started);
     return started;
 };

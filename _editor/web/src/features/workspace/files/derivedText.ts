@@ -3,17 +3,18 @@ import { sandboxRpc } from "../../sandbox/client/sandboxRpc";
 import type { OpenFile } from "../viewers/openFile";
 import { rememberDerived } from "./derivedCache";
 
-// A file's derived text: the markdown shadow the sandbox keeps of a document, picture, recording or archive, and the
-// same rendering an agent reads instead of the bytes.
-// Two calls, deliberately split: reading never derives, so opening a file costs nothing, and deriving is something a
-// reader asks for. Both answers are kept (derivedCache.ts), so reopening a file paints before the daemon answers.
+// A file's derived text: the markdown rendering fileq keeps of a document, picture, recording or archive, and the same
+// text an agent reads instead of the bytes.
+// Two calls, deliberately split: reading never derives, so a file already rendered paints at once, and deriving runs
+// only when there is nothing current to show. Both answers are kept (derivedCache.ts), so reopening a file paints before
+// the daemon answers.
 
 export type { WorkspaceDerived };
 
-/** The shadow as it stands. `present: false` is the ordinary answer while background derivation is switched off. */
+/** The rendering as it stands. `present: false` is the ordinary answer for a file nobody has opened yet. */
 export const readDerivedText = async (path: string): Promise<WorkspaceDerived> => rememberDerived(path, await sandboxRpc.workspace.derived({ path }));
 
-/** Renders this one file now, however the `sidecars` setting stands, and answers with what came out. */
+/** Renders this one file now and answers with what came out; unchanged content comes back from fileq's cache. */
 export const deriveText = async (path: string): Promise<WorkspaceDerived> => rememberDerived(path, await sandboxRpc.workspace.derive({ path }));
 
 // JSON on disk: text by every rule this viewer has, and unreadable by any person. The one text-shaped format whose

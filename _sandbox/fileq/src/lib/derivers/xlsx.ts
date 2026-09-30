@@ -4,7 +4,7 @@ import type { DerivedDoc, Deriver } from "./deriver.js";
 /* Spreadsheets: one markdown table per sheet, capped, with the cap announced. */
 
 // exceljs is 0.8s to load, and it is loaded inside derive() rather than here because every fileq run — every agent
-// read of a png, every sweep, `fileq --version` — pays for a module this file imports at its top. The type import
+// read of a png, every `fileq derive`, `fileq --version` — pays for a module this file imports at its top. The type import
 // above is erased at compile time and costs nothing.
 
 const MAX_ROWS_PER_SHEET = 200;

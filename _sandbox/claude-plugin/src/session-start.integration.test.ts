@@ -103,8 +103,8 @@ test("a resumed session is not told again or counted again; a compacted one is t
 test("the switches a session opened with are kept for the report, whatever it was told", () => {
     const root = project();
     const data = tempDir();
-    sessionStart({ session_id: "s-7", source: "resume", cwd: root }, { ...baseEnv(data, root), CLAUDE_PLUGIN_OPTION_SHADOWS: "false", CLAUDE_PLUGIN_OPTION_HOLDOUT: "0.25" });
-    expect(loadOptions(data)).toMatchObject({ shadows: false, holdout: 0.25, project_map: true });
+    sessionStart({ session_id: "s-7", source: "resume", cwd: root }, { ...baseEnv(data, root), CLAUDE_PLUGIN_OPTION_OUTPUT_CLEANERS: "false", CLAUDE_PLUGIN_OPTION_HOLDOUT: "0.25" });
+    expect(loadOptions(data)).toMatchObject({ output_cleaners: false, holdout: 0.25, project_map: true });
 });
 
 test("every Bash command of the session learns where the project is and whether fileq is on", () => {

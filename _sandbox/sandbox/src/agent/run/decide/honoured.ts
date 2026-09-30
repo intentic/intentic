@@ -20,6 +20,7 @@ import { gatedCliEnv, gatedCredentialsNote, gatedSkills } from "../../../secrets
 import { SKILL_CATALOG_NOTE_TITLE } from "../../../store/loaded-skills.js";
 import { resolveWithin } from "../../../workspace/files/workspace-files-paths.js";
 import { type InstallReach, setupNoticeFor, setupNoticeTitle } from "../../../workspace/layout/workspace-setup.js";
+import type { SearchTool } from "../../prompt/guidance.js";
 import { IQ_SEARCH_INSTRUCTION_TITLE } from "../../prompt/iq-search-instruction.js";
 import { turnPromptPlacement } from "../../prompt/system-prompt.js";
 import { worktreeNote, worktreeReminder } from "../../prompt/turn-preamble.js";
@@ -32,6 +33,10 @@ import { TURN_CONTEXT_NOTE_TITLE } from "../turn/turn-context.js";
 import type { TurnContext } from "../../providers/adapter.js";
 import type { AdmittedTurnFacts } from "./turn-facts.js";
 import type { TurnPremise } from "./turn-premise.js";
+
+// The tool this product's guidance names for finding code: iq wherever the conversation has the iq teaching, so the two
+// never disagree; its holdout, and a sandbox with iq off, keep `rg`.
+const searchToolOf = (premise: TurnPremise): SearchTool => (premise.iqSearchEnabled ? "iq" : "rg");
 
 // The one point every provider arm passes through: controls a runtime cannot honour are dropped, and every
 // runtime-agnostic fact (worktree, dependency readiness, persona shelves, credential gates, standing instructions) is
@@ -169,6 +174,7 @@ export const honoured = (
         // What the window will not pay for: this product's guidance, and on the smallest windows the base prompt too.
         ...opt("trim", promptTrim(context.contextTrim)),
         guidance: premise.guidance,
+        search: searchToolOf(premise),
     });
     const access = turnAccess(facts, base, persona, withheldMounts);
     return {
@@ -186,6 +192,7 @@ export const honoured = (
             ...opt("systemPrompt", placement.systemPrompt),
             ...opt("systemAppend", placement.systemAppend),
             guidance: premise.guidance,
+            search: searchToolOf(premise),
             sessionStore: facts.sessionStore,
             ...opt("cwd", startPath),
             // A fact about that cwd: only an isolated turn works in a copy of its own. Read by the command gate.

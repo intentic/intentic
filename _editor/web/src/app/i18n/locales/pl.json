@@ -2565,10 +2565,8 @@
             "briefUnreadable": "Notatka jest na miejscu, ale nie da się jej wysłać: {why}",
             "characters": "znaków",
             "codeSearch": "Wyszukiwanie kodu",
-            "documentShadows": "Cienie dokumentów",
             "fieldNotes": "Notatki z terenu",
             "iqCodeSearch": "Wyszukiwanie kodu iq",
-            "keepDocumentsImagesAudio": "Trzymaj dokumenty, obrazy, audio i archiwa wstępnie wyrenderowane jako tekst, aktualizowane w miarę zmian plików. Otwórz dowolne z nich w przestrzeni roboczej, żeby przeczytać to, co czyta agent.",
             "lengthLimit": "Limit długości",
             "noBriefYet": "Jeszcze niespisana. Pierwszą napisze comiesięczna automatyzacja.",
             "notScheduled": "Nie zaplanowano",
@@ -5888,6 +5886,7 @@
             "versionCouldNotBeRead": "Wersji {side} pliku {filename} nie udało się odczytać jako tekstu: {reason}."
         },
         "derivedTextView": {
+            "beingReadNow": "Trwa odczyt…",
             "copyDerivedText": "Kopiuj tekst pochodny",
             "copyText": "Kopiuj tekst",
             "deriveAgain": "Wyprowadź ponownie",
@@ -5897,12 +5896,10 @@
             "longRenderingOnlyFirst": "Długie wyjście: pokazujemy tutaj tylko jego początek.",
             "lookingFilesText": "Szukanie tekstu tego pliku…",
             "mostDocumentsTakeMoment": "Większość dokumentów zajmuje chwilę. Zeskanowany PDF trzeba rozpoznać strona po stronie — to ten przypadek, który może potrwać minutę albo dłużej.",
-            "readNow": "Przeczytaj teraz",
             "readingAgain": "Czytamy ponownie… {waited}",
             "readingFileWritingText": "Czytanie tego pliku i zapisywanie jego tekstu…",
             "renderText": "Pokaż jako tekst",
             "rereadFile": "Wczytaj plik ponownie",
-            "settingsAgentDocumentShadows": "Ustawienia → Agent → Cienie dokumentów trzymają każdy dokument, obraz, nagranie i archiwum wyrenderowane w miarę zmian plików.",
             "stillGoingNothingFailed": "Wciąż trwa — nic nie zawiodło. Tekst trafia na dysk, gdy będzie gotowy, więc możesz opuścić ten plik albo do niego wrócić i będzie tutaj.",
             "tokens": "{tokens} tokenów"
         },

@@ -5,20 +5,19 @@ import { deriveCommand } from "./commands/derive.command.js";
 import { gitAttributesCommand } from "./commands/git-attributes.command.js";
 import { readCommand } from "./commands/read.command.js";
 import { renderCommand } from "./commands/render.command.js";
-import { sweepCommand } from "./commands/sweep.command.js";
 
 // The agent-facing contract, kept small — this is what `fileq --help` prints.
 const HELP = `fileq — binary workspace files as clean, budgeted markdown.
 
 Reads the formats an agent cannot: docx, xlsx, pptx, pdf (text layer), images
-(dimensions + EXIF), audio/video (duration + tags), html. Each workspace file
-gets a markdown SIDECAR under .intentic/local/cache/derived/<path>.md, kept
-fresh by content hash — reading a file twice derives once.
+(dimensions + EXIF), audio/video (duration + tags), html. Renderings are cached
+by content hash, so reading unchanged bytes again (the same file, a copy, a
+download outside the workspace) is instant; each workspace file also gets a
+markdown SIDECAR under .intentic/local/cache/derived/<path>.md.
 
   fileq <file>            print it as markdown (default: read), budgeted
   fileq read <file> --budget 8000
   fileq derive <file…>    converge named files' sidecars (stale→derive, gone→remove)
-  fileq sweep             converge the whole workspace, prune orphaned sidecars
   fileq read --plain <f>  the markdown alone, for a program; git's textconv driver
   fileq git-attributes    the gitattributes that route documents through it
 
@@ -47,7 +46,6 @@ export const app = buildApplication(
             check: checkCommand,
             render: renderCommand,
             derive: deriveCommand,
-            sweep: sweepCommand,
             gitAttributes: gitAttributesCommand,
         },
         defaultCommand: "read",

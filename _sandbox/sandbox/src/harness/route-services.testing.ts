@@ -9,7 +9,6 @@ import { type Services, wireReactions } from "../composition.js";
 import { conversationsSliceFake } from "../conversations/conversations-slice.testing.js";
 import { deriveBytes } from "../derived/derived-blob.js";
 import { deriveText, readDerivedText } from "../derived/derived-text.js";
-import { sidecarStatus } from "../derived/sidecar-service.js";
 import { extensionsSliceFake } from "../extensions/extensions-slice.testing.js";
 import { type GitFakeOverrides, gitSliceFake } from "../git/git-slice.testing.js";
 import { hostsSliceFake } from "../hosts/hosts-slice.testing.js";
@@ -159,7 +158,7 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         // The processes slice's: a real slot table with a no-dial probe.
         portForwards: createPortForwards(portSlotsFromToken("tok"), async () => "http"),
         // The workspace slice's: the real readers, since a shadow is read off disk and a fake would only test the fake.
-        derived: { read: readDerivedText, derive: deriveText, deriveBytes, status: sidecarStatus },
+        derived: { read: readDerivedText, derive: deriveText, deriveBytes },
         history: fakeHistory(),
         async *intentic() {},
         // The engine's own announcements, as composition binds them, and the reactions it subscribes.

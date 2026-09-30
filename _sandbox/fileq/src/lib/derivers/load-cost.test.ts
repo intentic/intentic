@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 // What a fileq run costs before it does anything. `derive.ts` imports all eleven derivers so `read` and `derive`
 // cannot disagree about a file, which means one deriver's top-level `import` is paid by every run of the CLI: an
-// agent reading a png, a sweep with nothing stale in it, `fileq --version`.
+// agent reading a png, a read answered from the cache, `fileq --version`.
 // Measured when this guard was written, on the sandbox image: loading these three took ~1.3s of a ~1.4s no-op run,
 // and moving them inside `derive()` took `fileq --version` from ~560ms to ~120ms. A file of that format pays the
 // same load it always did, once, in the process that actually parses it.

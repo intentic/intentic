@@ -83,13 +83,6 @@ export const OPTIONS = {
             "Let Claude read documents, PDFs, spreadsheets, slides, notebooks, images, audio and archives as markdown with the bundled `fileq` CLI. Off makes the command refuse; its one-line skill description stays listed, since a plugin cannot hide its own skills.",
         default: true,
     },
-    shadows: {
-        type: "boolean",
-        title: "Document shadows",
-        description:
-            "Keep a markdown rendering of every document in the project up to date in the background (a sweep at session start and every ten minutes, and each binary file Claude writes), so a read finds one ready. Costs background CPU on a document-heavy project.",
-        default: false,
-    },
     holdout: {
         type: "number",
         title: "Measured share",

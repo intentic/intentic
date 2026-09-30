@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
     MECHANISMS,
@@ -11,12 +11,11 @@ import {
     type TurnMetricReading,
 } from "@intentic/agent-context/arm-stats";
 import { readClaudeSession } from "@intentic/agent-context/claude-transcript";
-import { DERIVED_DIR } from "@intentic/fileq/sidecar";
 import { createTurnMetrics } from "@intentic/agent-context/turn-metrics";
 import { parseStatsFile, summarizeStats, type SavingsSummary, type StatRow } from "@intentic/output-cleaners/stats";
 import { loadOptions, OPTIONS, optionEnvName, type OptionKey, readOptions, type Options } from "./features.js";
 import { outputDir } from "./post-bash.js";
-import { isMissing, projectSlug } from "./runtime.js";
+import { isMissing } from "./runtime.js";
 import { readSessions, type SessionRow } from "./sessions.js";
 
 // /intentic:stats: what each mechanism saved, read off the plugin's own ledgers and the sessions' transcripts. The
@@ -46,7 +45,7 @@ const tokens = (count: number): string => {
 
 const counted = (count: number, noun: string): string => `${count} ${noun}${count === 1 ? "" : "s"}`;
 
-// A ledger or log nothing has written yet reads as undefined; one that is there and unreadable fails the report aloud.
+// A ledger nothing has written yet reads as undefined; one that is there and unreadable fails the report aloud.
 const readText = (path: string): string | undefined => {
     try {
         return readFileSync(path, "utf8");
@@ -164,57 +163,6 @@ const mechanismLine = (title: string, reads: string, on: boolean, experiment: Tu
     return `${title}, ${reads}: ${readingLine(experiment.metrics[0], experiment.sampleUnit ?? "conversations")}`;
 };
 
-// ---- shadows ------------------------------------------------------------------------------------------------------
-
-const countShadows = (dir: string): number => {
-    let count = 0;
-    const walk = (current: string): void => {
-        let entries;
-        try {
-            entries = readdirSync(current, { withFileTypes: true });
-        } catch (error) {
-            if (isMissing(error)) {
-                return;
-            }
-            throw error;
-        }
-        for (const entry of entries) {
-            if (entry.isDirectory()) {
-                walk(join(current, entry.name));
-            } else if (entry.name.endsWith(".md")) {
-                count += 1;
-            }
-        }
-    };
-    walk(dir);
-    return count;
-};
-
-// The last sweep's own summary (`fileq sweep --json`), said in words; nothing when it has not run or did not finish.
-const lastSweep = (data: string, project: string): string => {
-    const text = readText(join(data, "shadows", `${projectSlug(project)}.sweep.log`));
-    try {
-        const summary = JSON.parse(text ?? "") as { derived?: unknown; fresh?: unknown; pruned?: unknown };
-        return typeof summary.derived === "number" && typeof summary.fresh === "number"
-            ? ` (last sweep: ${summary.derived} derived, ${summary.fresh} already fresh${typeof summary.pruned === "number" && summary.pruned > 0 ? `, ${summary.pruned} pruned` : ""})`
-            : "";
-    } catch {
-        // allow(silent-catch): a log that is not one finished JSON summary is a sweep still running or one that died, and neither has a result to quote.
-        return "";
-    }
-};
-
-const shadowLine = (args: StatsArgs): string => {
-    if (!args.options.shadows) {
-        return "Document shadows: switched off.";
-    }
-    if (args.project === undefined) {
-        return "Document shadows: reported per project.";
-    }
-    const count = countShadows(join(args.project, DERIVED_DIR));
-    return `Document shadows: ${count} documents have a markdown shadow${lastSweep(args.data, args.project)}. Nothing measures what they save yet.`;
-};
-
 // ---- the report ---------------------------------------------------------------------------------------------------
 
 const inScope = (args: StatsArgs, project: string | undefined): boolean => args.project === undefined || project === args.project;
@@ -239,8 +187,6 @@ export const statsReport = (args: StatsArgs): string => {
         ...DESIGNS.map(({ title, option, design, reads }) =>
             mechanismLine(title, reads, args.options[option] === true, measureExperiment(turns, design), args.options.holdout),
         ),
-        ``,
-        shadowLine(args),
         ``,
     ].join("\n");
 };

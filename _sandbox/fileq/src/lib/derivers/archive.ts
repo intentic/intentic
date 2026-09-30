@@ -9,7 +9,7 @@ import type { DerivedDoc, Deriver } from "./deriver.js";
 
 // Members listed before the table is more index than shadow; the count above it still states the whole truth.
 const MAX_ENTRIES = 500;
-// A gzip member worth inflating into memory during a background sweep; above it the trailer's facts are the shadow.
+// A gzip member worth inflating into memory for one read; above it the trailer's facts are the shadow.
 const MAX_UNPACKED_BYTES = 128 * 1024 * 1024;
 // Text of a single compressed file carried into the shadow; the rest stays one `zcat` away.
 const MAX_MEMBER_TEXT_BYTES = 256 * 1024;

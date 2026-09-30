@@ -87,9 +87,9 @@ test("a runtime outside the Claude Code loop is told what outside content is", (
 
 test("the drawn variant is the one a runtime outside the loop carries", () => {
     const lean = turnPromptPlacement({ capabilities: CODEX, mode: "intentic", systemPrompt: "", stableSystemPrompt: false, guidance: "lean" });
-    expect(lean.systemAppend).toBe(guidanceBlock("lean", undefined));
+    expect(lean.systemAppend).toBe(guidanceBlock("lean", undefined, "rg"));
     const full = turnPromptPlacement({ capabilities: CODEX, mode: "intentic", systemPrompt: "", stableSystemPrompt: false });
-    expect(full.systemAppend).toBe(guidanceBlock("full", undefined));
+    expect(full.systemAppend).toBe(guidanceBlock("full", undefined, "rg"));
 });
 
 test("a custom prompt is added where it cannot replace", () => {
@@ -261,7 +261,7 @@ test("the lean variant replaces the full one in the loop's own composition", asy
         hostDevices: undefined,
         ownBrowsers: undefined,
     };
-    expect(lean).toBe(`${INTENTIC}\n\n${guidanceBlock("lean", mounted)}\n\nextra`);
+    expect(lean).toBe(`${INTENTIC}\n\n${guidanceBlock("lean", mounted, "rg")}\n\nextra`);
     expect(lean).not.toContain("ORIENTING");
 });
 

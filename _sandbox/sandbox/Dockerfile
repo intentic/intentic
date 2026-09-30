@@ -397,10 +397,10 @@ RUN chmod +x /opt/sandbox/node_modules/@intentic/iq/dist/cli.js \
 RUN chmod +x /opt/sandbox/node_modules/@intentic/webq/dist/cli.js \
     && ln -s /opt/sandbox/node_modules/@intentic/webq/dist/cli.js /usr/local/bin/webq
 # The fileq CLI on PATH — the agent's binary-file reader (docx/xlsx/pptx/pdf/images/audio → clean budgeted
-# markdown, with content-hash-fresh sidecars under .intentic/local/cache/derived/). Symlinked out of the
-# daemon's tree exactly like lsp, iq and webq above: @intentic/fileq is a dependency of @intentic/sandbox, and
-# the daemon's sidecar service (src/derived/) spawns this very binary for the background pass the `sidecars`
-# setting gates. The skill that teaches agents it exists rides settings/skills.ts, not a plugin dir.
+# markdown, cached by content under .intentic/local/cache/derived/ so a repeat read of unchanged bytes is instant).
+# Symlinked out of the daemon's tree exactly like lsp, iq and webq above: @intentic/fileq is a dependency of
+# @intentic/sandbox, and the daemon (src/derived/) spawns this very binary to render a file a person opens. The
+# skill that teaches agents it exists rides settings/skills.ts, not a plugin dir.
 RUN chmod +x /opt/sandbox/node_modules/@intentic/fileq/dist/cli.js \
     && ln -s /opt/sandbox/node_modules/@intentic/fileq/dist/cli.js /usr/local/bin/fileq
 # An agent's own `git diff`, `git show` and `git log -p` on a document print fileq's text instead of "Binary files

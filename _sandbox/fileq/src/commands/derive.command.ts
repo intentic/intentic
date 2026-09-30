@@ -37,7 +37,7 @@ export const deriveCommand = buildCommand({
             return;
         }
         if (files.length === 0) {
-            this.process.stdout.write("fileq: derive takes file paths (or run `fileq sweep` for the whole workspace)\n");
+            this.process.stdout.write("fileq: derive takes file paths\n");
             process.exitCode = 2;
             return;
         }

@@ -20,6 +20,8 @@ export interface FieldNotesPlace {
     readonly quietSpan: string;
 }
 
+const capitalized = (text: string): string => `${text.charAt(0).toUpperCase()}${text.slice(1)}`;
+
 const COUNTS_NOT_IMPRESSIONS =
     `Work from counts, not impressions: how MANY sessions hit a thing is what decides its rank, and one bad afternoon is ` +
     `not a standing problem.`;
@@ -33,7 +35,15 @@ export const fieldNotesPrompt = (at: FieldNotesPlace): string =>
     `asks for things. If a fact could be found by reading the repository, it belongs in the map and not in your file.\n\n` +
     `${at.evidence} ${COUNTS_NOT_IMPRESSIONS}\n\n` +
     `Rank by what it costs a turn NOT to know: how often sessions hit it, how much it costs when they do, and whether ` +
-    `they could have found it out cheaply themselves. Rank 1 is the costliest gap.\n\n` +
+    `they could have found it out cheaply themselves. Rank 1 is the costliest gap. Rank on recent sessions only, and ` +
+    `recount every percentage from them rather than carrying the old one forward: a trap sessions stopped hitting, because ` +
+    `the code or the environment has since fixed it, drops down or out however costly it once was.\n\n` +
+    `SIZE IS PART OF THE RANKING. ${capitalized(at.reader)} sends the priority table on every turn, then whole sections in rank order ` +
+    `until the owner's budget runs out (4,000 characters by default, the table included), and stops at the first section ` +
+    `that does not fit, so one long section silences every rank below it. Keep the table's cells to a few words, keep ` +
+    `each section under about 700 characters, and split anything longer into two ranks. Leave out what every turn is ` +
+    `already told elsewhere (the system prompt's working rules, the skills it lists, the search teaching): repeating it ` +
+    `spends the budget twice.\n\n` +
     `VERIFY EVERY FACT AGAINST ${at.place.toUpperCase()} BEFORE YOU WRITE IT DOWN. A transcript from six weeks ago is a ` +
     `hypothesis: run the command, list the directory, check the port. A brief that is confidently wrong is worse than no ` +
     `brief, because every turn reads it and none of them will doubt it.\n\n` +

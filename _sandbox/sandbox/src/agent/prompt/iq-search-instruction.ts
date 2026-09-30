@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { SEARCH_GUIDANCE } from "./guidance.js";
 
 export const IQ_SEARCH_INSTRUCTION_HEADER = "## iq workspace search";
 // The chat-row title, beside the header it belongs to (turn-preamble.ts explains the pairing).
@@ -10,7 +11,8 @@ export const IQ_SEARCH_INSTRUCTION_TITLE = "Using iq for workspace search";
 export interface IqSearchTeaching {
     readonly note: string;
     // Content address rather than package version: this experiment measures the words the model received, and
-    // a copy edit to the skill is a new treatment even when the surrounding package version did not move.
+    // a copy edit to the skill, or to the system prompt's search line the iq arm is given, is a new treatment even
+    // when the surrounding package version did not move.
     readonly cohort: string;
 }
 
@@ -21,7 +23,10 @@ const loadIqSearchInstruction = async (pluginDir: string): Promise<IqSearchTeach
     const body = nudgeSource.trim();
     return {
         note: `${IQ_SEARCH_INSTRUCTION_HEADER}\n\n${body}`,
-        cohort: createHash("sha256").update(body).digest("hex").slice(0, 12),
+        cohort: createHash("sha256")
+            .update(`${body}\0${SEARCH_GUIDANCE.iq.full}\0${SEARCH_GUIDANCE.iq.lean}`)
+            .digest("hex")
+            .slice(0, 12),
     };
 };
 

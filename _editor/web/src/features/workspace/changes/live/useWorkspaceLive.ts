@@ -1,4 +1,4 @@
-import type { SidecarStatus, WorkspaceTree, WorkspaceTreeDelta } from "@intentic/sandbox-contract";
+import type { WorkspaceTree, WorkspaceTreeDelta } from "@intentic/sandbox-contract";
 import { parentDir } from "@intentic/ui/path";
 import { sandboxRef, sandboxValue } from "@intentic/extension-api";
 import { queryClient } from "../../../../lib/queryPersistence";
@@ -120,26 +120,16 @@ export const markWorkspaceChanged = (paths: readonly string[]): void => {
 export const changeEpochOf = (path: string): number => epochs.value.get(path) ?? 0;
 export const isRecentlyChanged = (path: string): boolean => recentlyChanged.value.has(path);
 
-/* A FILE'S TEXT LANDING, which no workspace change can stand in for: shadows are written under the state directory
-   the watcher ignores, so `derivedChanged` is the only signal that a shadow was rewritten. Separate epochs from the
-   ones above, since the two move independently — a file changing makes its text stale, its text landing does not
-   change the file. */
+/* A FILE'S TEXT LANDING, which no workspace change can stand in for: renderings are written under the state directory
+   the watcher ignores, so `derivedChanged` is the only signal that one landed. Separate epochs from the ones above,
+   since the two move independently — a file changing makes its text stale, its text landing does not change the file. */
 const derivedEpochs = sandboxRef(() => new Map<string, number>());
-// A sweep rewrites what it found and does not report which; this bumps for every path at once without enumerating one.
-const sweepEpoch = sandboxRef(() => 0);
-// Last reported state of the background pass, for anything explaining a wait rather than just waiting.
-export const sidecarQueue = sandboxRef<SidecarStatus | undefined>(() => undefined);
 
-export const markDerivedChanged = (paths: readonly string[], queue: SidecarStatus): void => {
-    sidecarQueue.value = queue;
-    if (paths.length === 0) {
-        sweepEpoch.value += 1;
-        return;
-    }
+export const markDerivedChanged = (paths: readonly string[]): void => {
     for (const path of paths) {
         derivedEpochs.value.set(path, ++epoch);
     }
 };
 
-/** Bumps when this file's derived text was rewritten, or when a sweep rewrote an unnamed set that may include it. */
-export const derivedEpochOf = (path: string): number => (derivedEpochs.value.get(path) ?? 0) + sweepEpoch.value;
+/** Bumps when this file's derived text was rewritten. */
+export const derivedEpochOf = (path: string): number => derivedEpochs.value.get(path) ?? 0;

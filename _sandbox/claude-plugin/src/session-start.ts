@@ -1,4 +1,4 @@
-import { appendFileSync, existsSync } from "node:fs";
+import { appendFileSync } from "node:fs";
 import { join } from "node:path";
 import { fieldNotes } from "@intentic/agent-context/field-notes";
 import { workspaceMapNote } from "@intentic/agent-context/workspace-map";
@@ -6,11 +6,10 @@ import { readOptions, saveOptions, type Options } from "./features.js";
 import { dataDir, type Env, fieldNotesFile, type HookInput, projectDir, runHook } from "./hook-io.js";
 import { claimIfDue, onPath, pluginFile, projectSlug, startDetached } from "./runtime.js";
 import { armsOf, type Mechanism, measuredArms, recordSession, sends, type SessionRow } from "./sessions.js";
-import { sweepIfDue } from "./shadows.js";
 
 // SessionStart: what a session is told as it opens (the project map, this project's field notes, the iq teaching), which
-// arm it drew for each, and the background work a session starts (document shadows, iq's transcript ingest). The same
-// notes the sandbox composes into its turns, from the same code, delivered as this hook's additional context.
+// arm it drew for each, and the background work a session starts (iq's transcript ingest). The same notes the sandbox
+// composes into its turns, from the same code, delivered as this hook's additional context.
 
 // The field-notes budget the sandbox defaults to, in characters: the ranked brief is cut to whole sections under it.
 const NOTES_BUDGET = 4_000;
@@ -83,7 +82,7 @@ const compose = (options: Options, input: HookInput, project: string, arms: Sess
     return { context, row: { arms: measuredArms(arms, offered), sent, ...(notesRevision === undefined ? {} : { notesRevision }) }, notices };
 };
 
-// Values for every Bash command this session runs: where the project is (the bundled fileq keys its shadows by it) and
+// Values for every Bash command this session runs: where the project is (the bundled fileq keys its cache by it) and
 // whether fileq is switched on. Bash commands get no plugin variables of their own.
 const exportEnv = (options: Options, project: string, env: Env): void => {
     const file = env["CLAUDE_ENV_FILE"];
@@ -110,9 +109,6 @@ export const sessionStart = (input: HookInput, env: Env = process.env): object |
     const source = input.source ?? "startup";
     record("the switches", () => saveOptions(data, options));
     exportEnv(options, project, env);
-    if (options.shadows && existsSync(project)) {
-        sweepIfDue(data, project, env);
-    }
     if (!TOLD_ON.has(source)) {
         return undefined;
     }

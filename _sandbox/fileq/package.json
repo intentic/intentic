@@ -1,7 +1,7 @@
 {
     "name": "@intentic/fileq",
     "version": "0.0.0",
-    "description": "fileq, agent-native file reading: any binary workspace file (docx, xlsx, pptx, pdf, images, audio, archives) as clean budgeted markdown, kept fresh as sidecars the moment files land",
+    "description": "fileq, agent-native file reading: any binary workspace file (docx, xlsx, pptx, pdf, images, audio, archives) as clean budgeted markdown, cached by content so a repeat read is instant",
     "license": "MIT",
     "type": "module",
     "repository": {

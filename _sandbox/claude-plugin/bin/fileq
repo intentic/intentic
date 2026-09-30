@@ -1,7 +1,7 @@
 #!/bin/sh
 # fileq, bundled with the intentic plugin. A fileq installed on PATH ahead of this one wins (Claude Code puts a plugin's
-# bin/ after the user's own PATH); this one answers otherwise. Its shadows are keyed to the project the SessionStart hook
-# exported, so a `cd` inside the session does not scatter them.
+# bin/ after the user's own PATH); this one answers otherwise. Its cache is keyed to the project the SessionStart hook
+# exported, so a `cd` inside the session does not scatter it.
 if [ "${INTENTIC_FILEQ:-1}" = "0" ]; then
     echo "fileq is switched off in the intentic plugin (/config). Tell the user rather than converting the file another way." >&2
     exit 2

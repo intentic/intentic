@@ -24,7 +24,6 @@ import { filePersonasStore, personasDocument, type PersonasStore } from "./perso
 import { areasDocument, type AreasStore, fileAreasStore } from "./areas/areas-store.js";
 import { deriveBytes } from "./derived/derived-blob.js";
 import { deriveText, readDerivedText } from "./derived/derived-text.js";
-import { sidecarStatus } from "./derived/sidecar-service.js";
 import { createBrowserRouters } from "./browser/tools/browser-prepare.js";
 import type { BrowserRouterFactory } from "./browser/tools/browser-router.js";
 
@@ -374,7 +373,7 @@ const createBridgedMembers = (
         // WorkspaceSlice: derived/ and scaffold/ import workspace/ back. Read here, once, at composition: the last moment
         // /work still looks the way the user handed it over.
         workspaceArrivedEmpty: workspaceArrivedEmpty(workspace.root),
-        derived: { read: readDerivedText, derive: deriveText, deriveBytes, status: sidecarStatus },
+        derived: { read: readDerivedText, derive: deriveText, deriveBytes },
         // ProcessesSlice: ports/ reaches processes/ back through system/. Slot names are salted with the connect token so
         // a port's hostname can't be guessed from the sandbox id.
         portForwards: createPortForwards(portSlotsFromToken(config.connectToken)),

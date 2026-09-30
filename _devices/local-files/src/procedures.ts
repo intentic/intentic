@@ -1,7 +1,7 @@
 import { type FixtureRouter, Frames, refuse, servedProcedures } from "@intentic/contract-serve";
 import { type Hello, type SystemEvent, TRANSLATOR_PROVIDERS, TranslatorAccountsSchema } from "@intentic/sandbox-contract";
 import { toRelPath } from "@intentic/workspace-ignore";
-import { type DerivedTexts, QUEUE } from "./derived.js";
+import type { DerivedTexts } from "./derived.js";
 import type { Grant } from "./grants.js";
 import { readWindow } from "./files.js";
 import { resolveExisting, within } from "./paths.js";
@@ -98,7 +98,7 @@ const eventsFor = (grant: Grant, context: ProcedureContext, advertised: Advertis
         // A document's text landing, as a daemon says it (`derivedChanged`): the text view that read `deriving` reloads.
         const unheard = context.derived.onLanded((abs) => {
             if (abs !== grant.root && within(grant.root, abs)) {
-                sink.emit({ kind: `derivedChanged`, paths: [toRelPath(grant.root, abs)], queue: QUEUE });
+                sink.emit({ kind: `derivedChanged`, paths: [toRelPath(grant.root, abs)] });
             }
         });
         return () => {

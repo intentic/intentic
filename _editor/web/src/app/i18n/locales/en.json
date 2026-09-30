@@ -2729,10 +2729,8 @@
             "briefUnreadable": "The brief is there but cannot be sent: {why}",
             "characters": "characters",
             "codeSearch": "Code search",
-            "documentShadows": "Document shadows",
             "fieldNotes": "Field notes",
             "iqCodeSearch": "iq code search",
-            "keepDocumentsImagesAudio": "Keep documents, images, audio and archives pre-rendered as text, updated as files change. Open any of them in Workspace to read what an agent reads.",
             "lengthLimit": "Length limit",
             "noBriefYet": "Not written yet. The monthly automation writes the first one.",
             "notScheduled": "Not scheduled",
@@ -6052,6 +6050,7 @@
             "versionCouldNotBeRead": "The {side} version of {filename} could not be read as text: {reason}."
         },
         "derivedTextView": {
+            "beingReadNow": "Being read now…",
             "copyDerivedText": "Copy derived text",
             "copyText": "Copy text",
             "deriveAgain": "Derive again",
@@ -6061,12 +6060,10 @@
             "longRenderingOnlyFirst": "Long rendering: only its first part is shown here.",
             "lookingFilesText": "Looking for this file's text…",
             "mostDocumentsTakeMoment": "Most documents take a moment. A scanned PDF has to be recognised a page at a time, which is the one that can run to a minute or more.",
-            "readNow": "Read it now",
             "readingAgain": "Reading it again… {waited}",
             "readingFileWritingText": "Reading this file and writing its text…",
             "renderText": "Render as text",
             "rereadFile": "Re-read file",
-            "settingsAgentDocumentShadows": "Settings → Agent → Document shadows keeps every document, picture, recording and archive rendered as files change.",
             "stillGoingNothingFailed": "Still going — nothing has failed. The text is written to disk when it lands, so you can leave this file or come back to it and it will be here.",
             "tokens": "{tokens} tokens"
         },

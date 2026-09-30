@@ -14,6 +14,18 @@ export const GUIDANCE_HEADER = `## ${GUIDANCE_TITLE}`;
 // `full` is every paragraph as written; `lean` is the short core the guidance experiment measures against it.
 export type GuidanceVariant = "full" | "lean";
 
+// Which tool the turn is told to find code with: `iq` when the conversation has the iq teaching (decide/experiments.ts),
+// `rg` for its holdout and wherever iq is off. One line, never both teachings unreconciled: the system prompt outranks
+// the teaching's own note, so a prompt that said `rg` alone won the argument on every search that followed.
+export type SearchTool = "iq" | "rg";
+
+// What every runtime's turn knows about itself, whichever loop serves it.
+interface TurnFacts {
+    readonly search: SearchTool;
+}
+
+type EveryText = string | ((facts: TurnFacts) => string);
+
 // What only the Claude Code loop's own composition knows: which servers it mounted and whether anyone is watching.
 export interface LoopFacts {
     readonly unattended: boolean;
@@ -30,7 +42,7 @@ type LoopText = string | ((facts: LoopFacts) => string);
 // `false` drops the entry from that variant; the lean core leaves it to the base prompt, a tool description or a skill.
 type GuidanceEntry =
     // True of the sandbox whatever runtime serves the turn, so it names no mechanism only the Claude Code loop wires.
-    | { readonly id: string; readonly reach: "every"; readonly full: string; readonly lean: string | false }
+    | { readonly id: string; readonly reach: "every"; readonly full: EveryText; readonly lean: EveryText | false }
     // Said only to a runtime outside the Claude Code loop, in place of a loop entry naming what that runtime has no way to load.
     | { readonly id: string; readonly reach: "outside"; readonly full: string; readonly lean: string | false }
     // Names a tool, skill or hook only the Claude Code loop mounts; `when` holds it to the turns that mounted it.
@@ -41,6 +53,27 @@ type GuidanceEntry =
           readonly full: LoopText;
           readonly lean: LoopText | false;
       };
+
+// What the `search` entry says for each tool, as data: the iq teaching's cohort hashes the iq half
+// (iq-search-instruction.ts), since it is part of what that experiment's arm is told.
+export const SEARCH_GUIDANCE: Record<SearchTool, Record<GuidanceVariant, string>> = {
+    iq: {
+        full:
+            "Find code with `iq \"<question>\"`: it ranks the workspace by what you mean and names the line to open, so use " +
+            "it whenever you are looking for where something lives or how it works. Use `rg` (ripgrep) once you hold the " +
+            "exact string, and to list or count every occurrence of it; never `grep -r`, which walks node_modules. Reach " +
+            "for `grep` only to filter text you already have in hand (a log, a command's output).",
+        lean: "Find code with `iq \"<question>\"`; use `rg` for an exact string you already hold, never `grep -r`, which walks node_modules.",
+    },
+    rg: {
+        full:
+            "Search code with `rg` (ripgrep), which is installed: it is ~30× faster than `grep -r` on this tree and " +
+            "returns about a third of the bytes for the same hits, because it skips node_modules, dist and binaries " +
+            "without being told to. Reach for `grep` only to filter text you already have in hand (a log, a command's " +
+            "output), never to walk the repository.",
+        lean: "Search code with `rg`, never `grep -r`, which walks node_modules.",
+    },
+};
 
 const LANDING = "The owner lands uncommitted work; commit only when asked.";
 
@@ -327,14 +360,11 @@ const ENTRIES: readonly GuidanceEntry[] = [
     { id: "landing", reach: "every", full: LANDING, lean: LANDING },
     {
         id: "search",
-        // `rg` is an unconditional line in the sandbox image; iq has its own gated teaching and is never named here.
+        // Measured on the ledger: an iq call led straight to the file the turn opened next about 60% of the time, an rg
+        // call about 23%, so iq is named for finding and rg kept for the exact string a turn already holds.
         reach: "every",
-        full:
-            "Search code with `rg` (ripgrep), which is installed: it is ~30× faster than `grep -r` on this tree and " +
-            "returns about a third of the bytes for the same hits, because it skips node_modules, dist and binaries " +
-            "without being told to. Reach for `grep` only to filter text you already have in hand (a log, a command's " +
-            "output), never to walk the repository.",
-        lean: "Search code with `rg`, never `grep -r`, which walks node_modules.",
+        full: ({ search }) => SEARCH_GUIDANCE[search].full,
+        lean: ({ search }) => SEARCH_GUIDANCE[search].lean,
     },
     {
         id: "fleet",
@@ -490,8 +520,12 @@ const ENTRIES: readonly GuidanceEntry[] = [
     },
 ];
 
-const textOf = (entry: GuidanceEntry, variant: GuidanceVariant, loop: LoopFacts | undefined): string | undefined => {
-    if (entry.reach === "every" || (entry.reach === "outside" && loop === undefined)) {
+const textOf = (entry: GuidanceEntry, variant: GuidanceVariant, loop: LoopFacts | undefined, turn: TurnFacts): string | undefined => {
+    if (entry.reach === "every") {
+        const text = entry[variant];
+        return text === false ? undefined : typeof text === "string" ? text : text(turn);
+    }
+    if (entry.reach === "outside" && loop === undefined) {
         const text = entry[variant];
         return text === false ? undefined : text;
     }
@@ -507,8 +541,8 @@ const textOf = (entry: GuidanceEntry, variant: GuidanceVariant, loop: LoopFacts 
 
 // The guidance block under its heading. `loop` undefined is a runtime outside the Claude Code loop, which is told only
 // what holds for every runtime.
-export const guidanceBlock = (variant: GuidanceVariant, loop: LoopFacts | undefined): string =>
-    [GUIDANCE_HEADER, ...ENTRIES.flatMap((entry) => textOf(entry, variant, loop) ?? [])].join("\n\n");
+export const guidanceBlock = (variant: GuidanceVariant, loop: LoopFacts | undefined, search: SearchTool): string =>
+    [GUIDANCE_HEADER, ...ENTRIES.flatMap((entry) => textOf(entry, variant, loop, { search }) ?? [])].join("\n\n");
 
 // Every mechanism on, so any wording change in either variant changes the hash. Unattended, since no entry is held to
 // attended turns alone any more, and the "unwatched" entry is held to unattended ones.
@@ -528,6 +562,6 @@ const EVERY_FACT: LoopFacts = {
 
 // The experiment's cohort: which wording the arms were compared on, content-addressed over both variants.
 export const GUIDANCE_REVISION = createHash("sha256")
-    .update(`${guidanceBlock("full", EVERY_FACT)}\0${guidanceBlock("lean", EVERY_FACT)}`)
+    .update((["iq", "rg"] as const).flatMap((search) => [guidanceBlock("full", EVERY_FACT, search), guidanceBlock("lean", EVERY_FACT, search)]).join("\0"))
     .digest("hex")
     .slice(0, 12);

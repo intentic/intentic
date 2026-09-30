@@ -25,7 +25,7 @@ import { foreground, PANE_FORMAT, paneStates, SHELL } from "../terminal/pane-sta
 import { subscribeRepoChanges } from "../workspace/watch/repo-watch.js";
 import { subscribeRefChanges } from "../git/remote/ref-watch.js";
 import { subscribeTreeChanges, subscribeUnwatchedWrites, subscribeWorkspaceChanges } from "../workspace/watch/workspace-watch.js";
-import { subscribeDerived } from "../derived/sidecar-service.js";
+import { subscribeDerived } from "../derived/derived-text.js";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
 import { subscribeRuntimeChanges } from "./runtime-watch.js";
 import { registerPresence, subscribePresence, updatePresence } from "./presence.js";
@@ -162,10 +162,10 @@ async function* systemEvents(
             enqueue({ kind: "workspaceChanged", paths: [] });
             onWake();
         }),
-        // Shadows land under the state directory the watcher ignores on purpose, so no workspaceChanged batch can ever
-        // carry them; without this frame a reader watching a file waits for text that already arrived.
+        // Renderings land under the state directory the watcher ignores on purpose, so no workspaceChanged batch can
+        // ever carry them; without this frame a second reader of the same file waits for text that already arrived.
         subscribeDerived((paths) => {
-            enqueue({ kind: "derivedChanged", paths, queue: services.derived.status() });
+            enqueue({ kind: "derivedChanged", paths });
             onWake();
         }),
         // Repo-set snapshots: a clone, scaffold, or delete under /work re-frames the discovered list.

@@ -52,12 +52,12 @@ description: Read binary files (docx, xlsx, pptx, pdf, odt, epub, ipynb, images,
 
 # fileq: binary files as markdown
 
-The \`fileq\` CLI (on PATH) turns the workspace files you cannot open as text into markdown, and keeps a
-sidecar copy fresh so reading twice derives once.
+The \`fileq\` CLI (on PATH) turns the workspace files you cannot open as text into markdown. Renderings are
+cached by content, so a repeat read of unchanged content is instant.
 
 ## Read a file
 \`fileq <file>\` (or \`fileq read <file> --budget 8000\`)
-- Prints a capsule (format, token cost), the content up to the budget, and \`saved:\` — the sidecar path
+- Prints a capsule (format, token cost), the content up to the budget, and \`saved:\` — the markdown file
   carrying the whole thing. Over budget, the cut is announced with that exact path to Read.
 - Formats: docx and odt (headings, lists, tables), xlsx (capped tables), pptx (slides + speaker notes),
   pdf (text layer; ${OCR_FORMAT[host]}, and the note says the words are
@@ -69,10 +69,11 @@ sidecar copy fresh so reading twice derives once.
   compressed file (\`server.log.gz\`) is the exception and derives to its text, since there the archive is
   the document. 7z and rar answer that nothing here opens them.
 
-## Check the sidecar first
-A file may already have a shadow at \`${DERIVED_DIR}/<path>.md\` — front matter says which
-source hash it was derived from. \`fileq read\` checks freshness for you, so prefer it over trusting a
-shadow's age by eye.
+## Reading again is free
+A rendering is keyed by the file's sha256 and the reader's version, not its path: \`fileq read\` on an
+unchanged file, a copy or a move of it, or the same bytes downloaded elsewhere answers from the cache
+without parsing it again. Run it again rather than opening a sidecar under \`${DERIVED_DIR}\` by hand; it
+checks the hash for you.
 
 ## What it refuses, and why
 ${OCR_REFUSAL[host]}

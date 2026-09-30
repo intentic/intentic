@@ -10,7 +10,6 @@ jest.mock("../../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc
 const { derivedIsOnlyView, mayHaveDerivedText, readDerivedText } = await import("./derivedText");
 const { rememberedDerivedText } = await import("./derivedCache");
 
-const STOPPED = { enabled: false, queued: 0, deriving: [], sweeping: false, broken: false };
 const shadow = (path: string, content: string): WorkspaceDerived => ({
     present: true,
     path,
@@ -21,10 +20,9 @@ const shadow = (path: string, content: string): WorkspaceDerived => ({
     truncated: false,
     stale: false,
     state: `idle`,
-    queue: STOPPED,
 });
 
-describe("what a tab remembers of the shadows it has read", () => {
+describe("what a tab remembers of the renderings it has read", () => {
     beforeEach(() => {
         resetSandboxScope();
         derived.mockReset();

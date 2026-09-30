@@ -32,19 +32,15 @@ beforeEach(() => {
 });
 afterEach(() => rmSync(base, { recursive: true, force: true }));
 
-// The background pass a sandbox runs has no counterpart on the user's computer.
-const QUEUE = { enabled: false, queued: 0, deriving: [], sweeping: false, broken: false };
-
 describe(`a document's text`, () => {
     it(`is absent until asked for, then kept where the app keeps its cache and read back from there`, async () => {
-        expect(await derived.read(root, `plan.docx`)).toEqual({ present: false, path: `plan.docx`, derivable: true, state: `off`, queue: QUEUE });
+        expect(await derived.read(root, `plan.docx`)).toEqual({ present: false, path: `plan.docx`, derivable: true, state: `idle` });
         const rendered = await derived.derive(root, `plan.docx`);
         expect(rendered).toEqual({
             present: true,
             path: `plan.docx`,
             content: expect.stringContaining(`# Quarterly plan\n\nShip the viewer.`),
             state: `idle`,
-            queue: QUEUE,
             deriver: expect.stringMatching(/^docx v\d+$/),
             derivedAt: expect.any(String),
             notes: expect.any(Array),
@@ -73,18 +69,17 @@ describe(`a document's text`, () => {
         await derived.derive(root, `plan.docx`);
         writeFileSync(join(root, `plan.docx`), docxOf(`Revised plan`, [`Ship it later.`]));
         utimesSync(join(root, `plan.docx`), new Date(2_000_000_000_000), new Date(2_000_000_000_000));
-        expect(await derived.read(root, `plan.docx`)).toMatchObject({ present: false, derivable: true, state: `off` });
+        expect(await derived.read(root, `plan.docx`)).toMatchObject({ present: false, derivable: true, state: `idle` });
         expect(await derived.derive(root, `plan.docx`)).toMatchObject({ present: true, content: expect.stringContaining(`# Revised plan`) });
     });
 
     it(`says when nothing reads the file, or nothing is there`, async () => {
-        expect(await derived.read(root, `notes.txt`)).toEqual({ present: false, path: `notes.txt`, derivable: false, state: `undeliverable`, queue: QUEUE });
+        expect(await derived.read(root, `notes.txt`)).toEqual({ present: false, path: `notes.txt`, derivable: false, state: `undeliverable` });
         expect(await derived.derive(root, `notes.txt`)).toEqual({
             present: false,
             path: `notes.txt`,
             derivable: false,
             state: `undeliverable`,
-            queue: QUEUE,
             reason: `Nothing here reads this kind of file.`,
         });
         expect(await derived.derive(root, `gone.docx`)).toMatchObject({ present: false, derivable: false, reason: `There is no file there to read.` });
@@ -118,7 +113,7 @@ describe(`over the window's routes`, () => {
         const frames = framesOf(stream);
         expect((await frames.next()).value).toMatchObject({ kind: `hello` });
         await ask(`/workspace/derive`, { method: `POST`, token, body: JSON.stringify({ path: `plan.docx` }), headers: { "content-type": `application/json` } });
-        expect((await frames.next()).value).toEqual({ kind: `derivedChanged`, paths: [`plan.docx`], queue: QUEUE });
+        expect((await frames.next()).value).toEqual({ kind: `derivedChanged`, paths: [`plan.docx`] });
         stop.abort();
     });
 });
