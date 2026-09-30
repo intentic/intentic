@@ -22,10 +22,12 @@ describe(`onTabRoot`, () => {
         expect(onTabRoot({ path: `/agentsmith` }, ROOTS)).toBe(false);
     });
 
-    it(`follows Review to the approvals extension when that pack is on`, () => {
-        const roots: readonly TabRoot[] = [{ path: `/agents` }, { path: `/menu` }, { path: `/ext/approvals` }];
-        expect(onTabRoot({ path: `/ext/approvals/queue` }, roots)).toBe(true);
+    it(`follows Review to Needs you when the approvals pack is on, where its decisions wait`, () => {
+        const roots: readonly TabRoot[] = [{ path: `/agents` }, { path: `/menu` }, { path: `/needs` }];
+        expect(onTabRoot({ path: `/needs` }, roots)).toBe(true);
         expect(onTabRoot({ path: `/workspace`, panel: `changes` }, roots)).toBe(false);
+        // The queue itself is reached from the Menu now, so it draws the shell's back arrow like any Menu screen.
+        expect(onTabRoot({ path: `/ext/approvals` }, roots)).toBe(false);
     });
 });
 

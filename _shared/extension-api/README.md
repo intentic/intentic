@@ -44,6 +44,10 @@ flowchart LR
   the input bound. Its input is plain values, since a tab survives a reload and travels between windows, and its body
   never touches `api.route`, which belongs to the section beside it. With `links: true` it may `claim` links the chat
   renders, which then open beside the chat instead of in a new browser tab.
+- A view that badges (`badge: true` on its manifest entry) may also itemise what a person owes it: `asks` returns one
+  `ViewAsk` per decision, which the host draws in its Needs you inbox beside what agents are waiting on, with up to
+  three presses answered in place and an `open` path back to the view for editing, scheduling and history. Read it off
+  module state that stays current while the view is closed (`sandboxPoll`), as the badge is.
 - `./protocol` exports only the version and the engines matcher, for the daemon, which cannot load the Vue-dependent
   barrel.
 

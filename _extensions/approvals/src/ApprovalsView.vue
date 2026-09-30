@@ -45,7 +45,6 @@ import { useHeldWakes, waitingOf } from "./useHeldWakes";
 import { useHookRequests, waitingHooksOf } from "./useHookRequests";
 import { usePlatformCatalog } from "./usePlatformCatalog";
 import { usePostEdit } from "./usePostEdit";
-import { useWaitingAgents } from "./useWaitingAgents";
 import { t } from "./i18n.js";
 
 // The approval inbox: the agent proposes a post or an action, and only the owner's click makes it real. Approving isn't
@@ -74,18 +73,6 @@ const hooksNotice = computed<NoticeModel | undefined>(() => {
     // The record of approvals could not be read, so no settings hook runs anywhere until one is approved again.
     return ledgerUnreadable.value ? { tone: `danger`, title: t(`approvalsView.hookLedgerUnreadable`) } : undefined;
 });
-// What agents ask while they work (a permission, a question, a plan) is answered in their own chat, never here; the page
-// says where, rather than "Nothing waiting" over cards that are waiting somewhere else.
-const waitingAgents = useWaitingAgents();
-const agentsNotice = computed<NoticeModel | undefined>(() =>
-    waitingAgents.value === 0
-        ? undefined
-        : {
-              tone: `info`,
-              title: t(`approvalsView.agentsWaitInChats`, { count: waitingAgents.value }, waitingAgents.value),
-              action: { label: t(`approvalsView.seeWhatNeedsYou`), run: () => host().navigate(`/needs`) },
-          },
-);
 // Below maintainer, the queue is read-only (the daemon floors the mutation too); a viewer can still watch.
 const canShip = computed(() => roleAtLeast(host().sandbox.role(), `maintainer`));
 const { notice: actionError, run } = useAsyncAction();
@@ -229,9 +216,9 @@ const holding = computed(() => approvals.value.filter((item) => item.status === 
 
 const isEmpty = computed(() => approvals.value.length === 0 && invalid.value.length === 0 && held.value.length === 0 && hookSets.value.length === 0);
 
-// The tile's count is module state a background poll owns, so it survives with nothing mounted to correct it: a
-// reader who opens the queue and finds it empty would otherwise keep the badge that sent them here. Opening the
-// page is the one moment both readings are on screen at once, so it is where they are made to agree.
+// What this queue asks of a person in Needs you is module state a background poll owns, so it survives with nothing
+// mounted to correct it: a reader who opens the queue and finds it empty would otherwise keep the asks that sent them
+// here. Opening the page is the one moment both readings are on screen at once, so it is where they are made to agree.
 onMounted(() => approvalsAttention.refresh());
 
 // A countdown hold runs itself when the timer passes; the row just says so and keeps cancel in reach. "starting…"
@@ -252,7 +239,7 @@ const dropWake = (wake: AutomationApproval): Promise<void> =>
         await rejectWake.mutateAsync(wake.id);
     }, `Could not drop the held automation.`);
 
-// A yes pins this exact set from the next turn on; dismissing keeps it off without asking again. Each re-reads the badge,
+// A yes pins this exact set from the next turn on; dismissing keeps it off without asking again. Each re-reads the asks,
 // which nothing on /work announces for these.
 const letHooksRun = (request: HookRequest): Promise<void> =>
     run(async () => {
@@ -395,7 +382,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
     <SplitView :title="t(`approvalsView.approvals`)" scroll="page" :scroll-key="railScope">
         <!-- Whole-page banners: the countdown speaks for every slice, and an unparsed file has no slice to belong to. -->
         <template #strips>
-            <NoticeStack :of="[actionError, listNotice, heldNotice, hooksNotice, goingAheadNotice, agentsNotice]" />
+            <NoticeStack :of="[actionError, listNotice, heldNotice, hooksNotice, goingAheadNotice]" />
             <Notice v-if="invalid.length > 0" tone="warning">
                 {{ invalid.length }} {{ t(`approvalsView.file`) }}{{ invalid.length === 1 ? "" : "s" }} {{ t(`approvalsView.couldntReadWontRun`) }}
                 <span class="font-mono">{{ invalid.join(", ") }}</span>
@@ -418,11 +405,12 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                     </RowGroup>
                 </template>
 
-                <!-- Nothing at all. The rail hides its own tile here, so a reader arriving deliberately is owed an explanation. -->
-                <!-- With agents waiting in their chats, the notice above says where; "Nothing waiting" would contradict it. -->
-                <p v-else-if="isEmpty" :class="ui.emptyState(`py-8`)">
-                    {{ waitingAgents > 0 ? t(`approvalsView.nothingHereToApprove`) : t(`approvalsView.nothingWaitingPostsAgent`) }}
-                </p>
+                <!-- Nothing at all. A reader arriving deliberately is owed an explanation, and the way to everything else that
+                     waits on them: what agents ask while they work is answered from Needs you, never here. -->
+                <div v-else-if="isEmpty" :class="ui.emptyState(`flex flex-col items-center gap-3 py-8`)">
+                    <p>{{ t(`approvalsView.nothingWaitingPostsAgent`) }}</p>
+                    <button type="button" :class="ui.linkButton()" @click="host().navigate(`/needs`)">{{ t(`approvalsView.seeWhatNeedsYou`) }}</button>
+                </div>
 
                 <div v-else class="flex flex-col gap-6">
                     <!-- Broken first: the only state where the queue already tried and stopped. -->

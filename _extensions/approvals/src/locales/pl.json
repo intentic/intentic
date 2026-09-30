@@ -54,8 +54,6 @@
         "needsReview": "Wymaga Twojego przeglądu",
         "nothingUndone": "Nic nie jest cofane",
         "nothingWaitingPostsAgent": "Nic nie czeka. Wpisy, które Twój agent chce opublikować, wszystko inne, czego nie powinien robić bez pytania, i automatyzacje ustawione na „najpierw zapytaj” — wszystko ląduje tutaj do zatwierdzenia.",
-        "nothingHereToApprove": "Nie ma tu nic do zatwierdzenia.",
-        "agentsWaitInChats": "{count} agent czeka na Twoją odpowiedź w swoim czacie: zgodę, pytanie albo plan. Odpowiada się tam, nie tutaj. | {count} agenci czekają na Twoją odpowiedź w swoich czatach: zgodę, pytanie albo plan. Odpowiada się tam, nie tutaj. | {count} agentów czeka na Twoją odpowiedź w swoich czatach: zgodę, pytanie albo plan. Odpowiada się tam, nie tutaj.",
         "seeWhatNeedsYou": "Zobacz, co na Ciebie czeka",
         "open": "Otwórz",
         "postStaysUpOn": "Wpis zostaje na {rejecting}: usuwany jest tylko ten jego ślad.",
@@ -76,9 +74,19 @@
         "whatDoneStaysDone": "Co zrobione, zostaje zrobione: usuwany jest tylko ten ślad.",
         "wontGoAhead": "Nie ruszy"
     },
+    "asks": {
+        "post": "Post",
+        "action": "Działanie",
+        "files": "Pliki",
+        "holdNote": "Zatwierdzenie zaczyna minutowe wstrzymanie, które możesz odwołać w Zatwierdzeniach.",
+        "failedNoReason": "Uruchomienie nie podało powodu.",
+        "hooksTitle": "Pozwól działać {count} hookowi Claude Code | Pozwól działać {count} hookom Claude Code | Pozwól działać {count} hookom Claude Code",
+        "hooksNote": "Dopóki się nie zgodzisz, tury działają z wyłączonymi hookami.",
+        "unreadableTitle": "Nie da się odczytać {count} pliku zatwierdzeń | Nie da się odczytać {count} plików zatwierdzeń | Nie da się odczytać {count} plików zatwierdzeń",
+        "ledgerTitle": "Nie da się odczytać zapisu zatwierdzonych hooków"
+    },
     "extension": {
-        "approvals": "Zatwierdzenia",
-        "waitingOn": "{count} czeka"
+        "approvals": "Zatwierdzenia"
     },
     "hookSetBody": {
         "filesPinned": "Zatwierdzenie obejmuje też te pliki, bajt po bajcie:",

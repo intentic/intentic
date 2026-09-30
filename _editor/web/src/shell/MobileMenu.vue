@@ -21,6 +21,7 @@ import { useVocabulary } from "../core-views/vocabulary";
 import { badgeChip, badgeClass, badgeToneClass, RUNNING_MARK_CLASS } from "../core-views/viewBadge";
 import { usePanels } from "../features/extensions/usePanels";
 import { useRole } from "../features/sandbox/secrets/useRole";
+import { useInbox } from "../features/needs/inbox/useInbox";
 import { useSandboxAttention } from "../features/sandbox/overview/sandboxAttention";
 import { identityHue } from "../lib/identityHue";
 import { presenceActivity, presenceOthers } from "./presence/usePresence";
@@ -76,6 +77,8 @@ const { panels } = usePanels();
 const { capabilities } = useCapabilities();
 // The Sandbox row below stays badge-free; the tab's own badge already flags this, so a chip would repeat it.
 const { needs: sandboxAttention, notes: sandboxNotes } = useSandboxAttention();
+// The one row to everything waiting on a person, with what it counts said on the row, since a phone has no hover.
+const { badge: inboxBadge } = useInbox();
 
 onMounted(() => {
     if (sandbox.sandboxes.value.length === 0) {
@@ -139,7 +142,15 @@ const logout = async (): Promise<void> => {
          the Menu reads as one list of places in labelled cards rather than a flat run of lines in three type sizes. -->
     <div class="mx-auto flex w-full max-w-lg flex-col gap-6 p-4">
         <!-- First on the page: the tab's badge is what brought the reader here, one row per pending item. -->
-        <RowGroup v-if="sandboxAttention.length > 0" :label="t(`shared.needs`)">
+        <RowGroup v-if="inboxBadge !== undefined || sandboxAttention.length > 0" :label="t(`shared.needs`)">
+            <MenuRow
+                v-if="inboxBadge !== undefined"
+                to="/needs"
+                icon="exclamation-circle"
+                :tone="inboxBadge.tone === `danger` ? `danger` : `warning`"
+                :title="t(`needs.inbox.title`)"
+                :description="inboxBadge.tooltip"
+            />
             <MenuRow v-for="item in sandboxAttention" :key="item.message" :to="item.to" :icon="item.icon" :tone="item.tone" :title="item.message" />
         </RowGroup>
 

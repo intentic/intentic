@@ -42,7 +42,24 @@ Before raising a card the daemon checks what the turn can already reach ([`turn-
 - A push names the conversation and what it needs, and is sent to the people who are away, not to nobody because someone else has a tab open.
 - A conversation that came from a channel (Slack, Telegram, Discord…) hears it there too ([`need-channel.ts`](../../_sandbox/sandbox/src/needs/need-channel.ts)), with where to answer it and, for a secret, a warning not to paste it into the channel. A visitor's chat never does: nothing a need asks for is a stranger's to give.
 - A pending plan names the conversation's open needs under itself, so the person answers them in the same sitting as the plan rather than one interruption at a time.
-- Every yes still standing (what a grant widened, which credentials were released, whether its installs run unasked) is listed under Needs you, by conversation, each with Take back ([`standing-grants.ts`](../../_sandbox/sandbox/src/needs/standing-grants.ts)); it applies from the conversation's next turn, and for installs from its next install. A yes is kept until a person takes it back or the conversation is gone: a restart forgets none of them.
+- Every yes still standing (what a grant widened, which credentials were released, whether its installs run unasked) is listed on Needs you's Allowed tab, by conversation, each with Take back ([`standing-grants.ts`](../../_sandbox/sandbox/src/needs/standing-grants.ts)); it applies from the conversation's next turn, and for installs from its next install. A yes is kept until a person takes it back or the conversation is gone: a restart forgets none of them.
+
+## Needs you
+
+One inbox answers "what is waiting on me", whichever part of the app holds it ([`useInbox.ts`](../../_editor/web/src/features/needs/inbox/useInbox.ts)):
+
+| Source | Answered |
+| --- | --- |
+| an open need | in place, with the need's own card controls |
+| a turn parked on a person in its chat (a plan, a question, a permission, a setup, a release, a hand-off) | a permission's Allow once and Skip in place; the rest in the chat |
+| a held automation wake with no countdown | Start it or Drop it in place |
+| an extension written in the workspace waiting for its yes | on the Extensions tab, where its powers are read in full |
+| anything an extension view says a person owes it (`ViewRegistration.asks`: the Approvals queue's proposals, failures and hook sets) | up to three presses in place, the rest in that view |
+
+- It is a list of short rows beside the one opened, not a feed of open cards: rows are grouped into what an agent is standing still on (a parked turn, or a need whose conversation stopped on it) and what is only waiting, oldest first, a broken one first in its group. Answering one opens the next.
+- The desktop rail's Needs you tile, the phone's Menu row and, with the Approvals pack on, the phone's Review tab carry its one count ([`inboxItems.ts`](../../_editor/web/src/features/needs/inbox/inboxItems.ts) `inboxBadge`): warning while an agent is stopped on one, danger while one already broke.
+- What was answered and what is still allowed are tabs of the same page, not sections under the list.
+- 2026-09-30: the page was a feed of every need's card, each with its form open, and the Approvals page held the other half of the question under its own count; each sent the reader to the other. Standing conditions of the sandbox (no backup, no AI account) stay on the sandbox chip: they are health, not asks.
 
 ## After the answer
 

@@ -72,9 +72,19 @@
         "whatDoneStaysDone": "Ce qui a été fait reste fait : seule cette trace en est supprimée.",
         "wontGoAhead": "Ne part pas"
     },
+    "asks": {
+        "post": "Publication",
+        "action": "Action",
+        "files": "Fichiers",
+        "holdNote": "Approuver lance une attente d'une minute que tu peux annuler depuis Approbations.",
+        "failedNoReason": "L'exécution n'a pas dit pourquoi.",
+        "hooksTitle": "Laisser {count} hook Claude Code s'exécuter | Laisser {count} hooks Claude Code s'exécuter",
+        "hooksNote": "Tant que tu n'as pas dit oui, les tours s'exécutent avec tous les hooks désactivés.",
+        "unreadableTitle": "{count} fichier d'approbation illisible | {count} fichiers d'approbation illisibles",
+        "ledgerTitle": "Le registre des hooks approuvés est illisible"
+    },
     "extension": {
-        "approvals": "Approbations",
-        "waitingOn": "{count} en attente"
+        "approvals": "Approbations"
     },
     "hookSetBody": {
         "filesPinned": "L'approbation couvre aussi ces fichiers, octet pour octet :",

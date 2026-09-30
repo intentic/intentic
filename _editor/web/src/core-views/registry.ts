@@ -1,4 +1,4 @@
-import type { Activation, CapabilityFacts, Disposable, RepoFacts, ViewBadge, ViewRegistration } from "@intentic/extension-api";
+import type { Activation, CapabilityFacts, Disposable, RepoFacts, ViewAsk, ViewBadge, ViewRegistration } from "@intentic/extension-api";
 import { computed, shallowRef } from "vue";
 import { type Audience, useAudience } from "../app/useAudience";
 import { useRole } from "../features/sandbox/secrets/useRole";
@@ -96,7 +96,7 @@ const judge = (): RailGroup => ({
     // Needs you leads the band: what agents are waiting on a person for, on the rail only while anything is.
     items: [signal(`needs`), signal(`approvals`), signal(`acceptance`), signal(`pipelines`), signal(`deployments`), signal(`maintenance`)],
 });
-// Authored once, then left alone. Automations never badges: a held wake is counted by Approvals instead.
+// Authored once, then left alone. Automations never badges: a held wake is counted in Needs you instead.
 const setup = (): RailGroup => ({ id: `setup`, label: t(`views.words.setUp`), items: [signal(`workflows`), signal(`automations`)] });
 // Consulted deliberately, not summoned; Documentation badges rarely and meaningfully, the others don't at all.
 const know = (): RailGroup => ({
@@ -191,9 +191,10 @@ export const onRailOnlyByVisit = (
 
 // What the mobile tab bar already promotes, so the mobile menu doesn't list it again. View ids, the same
 // key RAIL_GROUPS and detectActivations use, not package ids. The home tile is not among them: on a phone the file
-// tree and the Project page live on the Menu, and Chat takes the tile.
+// tree and the Project page live on the Menu, and Chat takes the tile. Approvals is not either: with that pack on the
+// Review tab opens Needs you, where its decisions wait (shell/mobileTabs.ts), and the queue itself is a Menu row.
 export const APPROVALS_VIEW_ID = `approvals`;
-export const tabBarIds = (): readonly string[] => [APPROVALS_VIEW_ID, `chat`, `agents`];
+export const tabBarIds = (): readonly string[] => [`chat`, `agents`];
 
 const railOrder = (): readonly string[] => activeGroups().flatMap((group) => group.items.map((item) => item.id));
 
@@ -247,6 +248,27 @@ export const detectActivations = (repos: readonly RepoFacts[], capabilities: rea
     // Ordered here, not per-surface, so the rail and menu can't disagree; unlisted ids share the last rank.
     return resolved.toSorted((left, right) => railRank(left.extension.id) - railRank(right.extension.id));
 };
+
+// What each registered view says a person owes it (ViewRegistration.asks), for the Needs you inbox. Contained like
+// detect(): a throwing asks() costs that view its rows, not the inbox. Every registration, detected or not: an ask is
+// owed whatever the rail is showing, and a view whose extension is switched off is not registered at all.
+export interface ViewAsks {
+    readonly view: ViewRegistration;
+    readonly asks: readonly ViewAsk[];
+}
+export const viewAsks = (): readonly ViewAsks[] =>
+    views.value.flatMap(({ owner, registration }) => {
+        if (registration.asks === undefined) {
+            return [];
+        }
+        try {
+            const asks = registration.asks();
+            return asks.length === 0 ? [] : [{ view: registration, asks }];
+        } catch (error) {
+            console.error(`extension ${owner}/${registration.id}: asks() failed`, error);
+            return [];
+        }
+    });
 
 // An element's badge, contained like detect(): a throwing badge costs its own tile, not the whole rail.
 // Normalizes to undefined when there's nothing to draw, so callers only test for presence. `badgeSpeaks`

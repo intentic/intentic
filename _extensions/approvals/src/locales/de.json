@@ -72,9 +72,19 @@
         "whatDoneStaysDone": "Was getan wurde, bleibt getan: nur dieser Eintrag darüber wird gelöscht.",
         "wontGoAhead": "Geht nicht los"
     },
+    "asks": {
+        "post": "Beitrag",
+        "action": "Aktion",
+        "files": "Dateien",
+        "holdNote": "Die Zustimmung startet eine einminütige Pause, die du in Freigaben zurückrufen kannst.",
+        "failedNoReason": "Der Lauf hat keinen Grund genannt.",
+        "hooksTitle": "{count} Claude-Code-Hook ausführen lassen | {count} Claude-Code-Hooks ausführen lassen",
+        "hooksNote": "Bis du zustimmst, laufen Züge mit allen Hooks aus.",
+        "unreadableTitle": "{count} Freigabedatei kann nicht gelesen werden | {count} Freigabedateien können nicht gelesen werden",
+        "ledgerTitle": "Die Liste der freigegebenen Hooks kann nicht gelesen werden"
+    },
     "extension": {
-        "approvals": "Genehmigungen",
-        "waitingOn": "{count} warten"
+        "approvals": "Genehmigungen"
     },
     "hookSetBody": {
         "filesPinned": "Die Genehmigung gilt auch für diese Dateien, Byte für Byte:",

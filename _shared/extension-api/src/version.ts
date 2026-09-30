@@ -137,4 +137,11 @@
 // the block and the registration are where this surface will grow. Its manifest digest also records a capability card's
 // `hosts` (the hosts its credential is meant for, which the sandbox limits the `{{secret:…}}` reference to), added
 // under 2.21.0 without a version: an older host drops the list and leaves the reference unlimited, as before it.
-export const extensionApiVersion = "2.22.0";
+// 2.23.0 lets a view say, item by item, what a person owes it: `ViewRegistration.asks`, drawn in the host's Needs you
+// inbox beside what agents are waiting on, with up to three presses answered in place and an `open` path to the view
+// for the rest. Until now a view could only badge its own tile, so the Approvals queue and Needs you each held half of
+// "what is waiting on me" and sent the reader to the other; the inbox now answers it whole. Gated on the manifest's
+// `badge: true`, since the asks are the badge's count spelled out. Additive: a view that declares none is unchanged,
+// and an older host ignores the field. The recorded surface grows a grain for it, ViewRegistration's own fields
+// (`viewRegistration`).
+export const extensionApiVersion = "2.23.0";

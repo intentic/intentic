@@ -46,6 +46,50 @@ export interface ViewBadge {
     readonly running?: string | undefined;
 }
 
+// One press an ask offers where the host draws it, so a plain yes or no needs no trip into the view.
+export interface ViewAskAction {
+    // The verb on the button ("Approve", "Let them run"); short, since it sits beside another.
+    readonly label: string;
+    // An icon name from the host's icon set; an unknown one draws nothing.
+    readonly icon?: string | undefined;
+    // primary: the ask's yes, at most one. secondary: anything else. danger: a no that throws something away.
+    // Absent means secondary.
+    readonly tone?: "primary" | "secondary" | "danger" | undefined;
+    // Does it. A throw is shown to the person under the ask, so reject with a sentence they can act on.
+    readonly run: () => Promise<void>;
+}
+
+// Something a person owes this view a decision on, drawn in the host's Needs you inbox beside what agents are waiting
+// on, so one place answers "what is waiting on me" whichever extension holds it. The view stays where the thing is
+// handled in depth (edited, scheduled, looked back on); the ask is only the decision.
+export interface ViewAsk {
+    // Stable for as long as the ask stands; the inbox keeps its selection by it.
+    readonly id: string;
+    // What kind of thing it is, in a word or two ("Post", "Hooks"): the row's lead.
+    readonly kind: string;
+    // What is asked, in one line ("Post to #general", "Let 3 hooks run").
+    readonly title: string;
+    // Where it comes from or goes, said after the kind ("Discord · as acme").
+    readonly context?: string | undefined;
+    // What to read before deciding (a post's words, an action's plan); the inbox clamps it.
+    readonly body?: string | undefined;
+    // How `body` is written: `markdown` is drawn as a document, anything else as the plain text it is. Absent is text.
+    readonly bodyFormat?: "text" | "markdown" | undefined;
+    // One line beside the presses saying what they do ("Goes ahead after a one-minute hold you can call back").
+    readonly note?: string | undefined;
+    // An icon name from the host's icon set, or a brand slug the host draws as that platform's mark (`logo` wins).
+    readonly icon?: string | undefined;
+    readonly logo?: string | undefined;
+    // When it was asked, epoch ms: the inbox leads with what has waited longest.
+    readonly createdAt?: number | undefined;
+    // danger: it already tried and broke (a failed post), and waits on a person to retry or drop it.
+    readonly tone?: "danger" | undefined;
+    // The app path it is handled at in depth ("/ext/approvals?scope=discord"): the inbox's "Open in …".
+    readonly open: string;
+    // Up to three presses the inbox offers in place, the yes first; none leaves the answer to `open`.
+    readonly actions?: readonly ViewAskAction[] | undefined;
+}
+
 // One cached read, shared by `ViewRegistration.warm` and `api.sandbox.fetch`. `staleTime`/`gcTime` are
 // optional; both default to the host's.
 export interface HostQuery<T = unknown> {
@@ -72,6 +116,10 @@ export interface ViewRegistration {
     // Read inside the host's computed, so a ref read here re-renders the tile; called on every render, so
     // keep it cheap, pure and non-writing. Requires `badge: true` on the manifest entry.
     readonly badge?: ((activation: Activation) => ViewBadge | undefined) | undefined;
+    // What a person owes this view, itemised for the host's Needs you inbox (see ViewAsk). Read inside the host's
+    // computed like `badge`, so cheap, pure and non-writing, off module state that stays current while the view is
+    // closed (`sandboxPoll`). Requires `badge: true` on the manifest entry: the asks are the badge's count, spelled out.
+    readonly asks?: (() => readonly ViewAsk[]) | undefined;
     // Declare the query (not a fetcher) the loader should read ahead of need; use the same key your view's
     // `useQuery` reads. A wish, never a guarantee; called every loader beat, so keep it cheap and pure.
     readonly warm?: (() => readonly HostQuery[]) | undefined;

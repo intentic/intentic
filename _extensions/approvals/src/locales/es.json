@@ -72,9 +72,19 @@
         "whatDoneStaysDone": "Lo hecho sigue hecho: solo se elimina este registro de ello.",
         "wontGoAhead": "No se ejecuta"
     },
+    "asks": {
+        "post": "Publicación",
+        "action": "Acción",
+        "files": "Archivos",
+        "holdNote": "Aprobar inicia una espera de un minuto que puedes anular desde Aprobaciones.",
+        "failedNoReason": "La ejecución no dijo por qué.",
+        "hooksTitle": "Dejar que se ejecute {count} hook de Claude Code | Dejar que se ejecuten {count} hooks de Claude Code",
+        "hooksNote": "Hasta que digas que sí, los turnos se ejecutan con todos los hooks desactivados.",
+        "unreadableTitle": "No se puede leer {count} archivo de aprobación | No se pueden leer {count} archivos de aprobación",
+        "ledgerTitle": "No se puede leer el registro de hooks aprobados"
+    },
     "extension": {
-        "approvals": "Aprobaciones",
-        "waitingOn": "{count} en espera"
+        "approvals": "Aprobaciones"
     },
     "hookSetBody": {
         "filesPinned": "La aprobación también cubre estos archivos, byte a byte:",

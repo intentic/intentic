@@ -14,7 +14,7 @@ export const hookRequestsQuery = (): HostQuery<HookRequests> => {
     };
 };
 
-// A dismissed set is kept off on purpose and owes nobody anything, so it neither badges nor counts as waiting.
+// A dismissed set is kept off on purpose and owes nobody anything, so it is neither asked about nor counted as waiting.
 export const waitingHooksOf = (list: HookRequests | undefined): readonly HookRequest[] => (list?.requests ?? []).filter((request) => request.dismissed !== true);
 
 export function useHookRequests() {

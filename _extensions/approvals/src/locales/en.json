@@ -54,8 +54,6 @@
         "needsReview": "Needs your review",
         "nothingUndone": "Nothing is undone",
         "nothingWaitingPostsAgent": "Nothing waiting. Posts your agent wants to publish, anything else it should not do unasked, and automations set to ask first all land here for you to approve.",
-        "nothingHereToApprove": "Nothing here to approve.",
-        "agentsWaitInChats": "{count} agent is waiting on your answer in its chat: a permission, a question or a plan. Those are answered there, not here. | {count} agents are waiting on your answer in their chats: a permission, a question or a plan. Those are answered there, not here.",
         "seeWhatNeedsYou": "See what needs you",
         "open": "Open",
         "postStaysUpOn": "The post stays up on {rejecting}: only this record of it is deleted.",
@@ -76,9 +74,19 @@
         "whatDoneStaysDone": "What was done stays done: only this record of it is deleted.",
         "wontGoAhead": "Won't go ahead"
     },
+    "asks": {
+        "post": "Post",
+        "action": "Action",
+        "files": "Files",
+        "holdNote": "Approving starts a one-minute hold you can call back from Approvals.",
+        "failedNoReason": "The run did not say why.",
+        "hooksTitle": "Let {count} Claude Code hook run | Let {count} Claude Code hooks run",
+        "hooksNote": "Until you say yes, turns run with every hook off.",
+        "unreadableTitle": "{count} approval file can't be read | {count} approval files can't be read",
+        "ledgerTitle": "The record of approved hooks can't be read"
+    },
     "extension": {
-        "approvals": "Approvals",
-        "waitingOn": "{count} waiting"
+        "approvals": "Approvals"
     },
     "hookSetBody": {
         "filesPinned": "The approval also covers these files, byte for byte:",

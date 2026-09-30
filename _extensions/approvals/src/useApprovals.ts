@@ -12,14 +12,6 @@ export const approvalsQuery = () => ({
     queryFn: (): Promise<ApprovalsList> => host().sandbox.rpc.approvals.list(),
 });
 
-// What the badge and mobile chip need without mounting the view: proposed, failed and unreadable are the states nothing
-// moves on; scheduled and done would leave a badge that never returns to zero.
-export const owedOf = (list: ApprovalsList | undefined): { owed: number; broken: number } => {
-    const approvals = list?.approvals ?? [];
-    const broken = approvals.filter((item) => item.status === `failed`).length + (list?.invalid.length ?? 0);
-    return { owed: approvals.filter((item) => item.status === `proposed`).length + broken, broken };
-};
-
 export function useApprovals() {
     const api = host();
     const queryClient = useQueryClient();
@@ -41,14 +33,10 @@ export function useApprovals() {
 
     const approvals = computed<ApprovalSummary[]>(() => data.value?.approvals ?? []);
     const invalid = computed<string[]>(() => data.value?.invalid ?? []);
-    const broken = computed<number>(() => owedOf(data.value).broken);
-    const owed = computed<number>(() => owedOf(data.value).owed);
 
     return {
         approvals,
         invalid,
-        owed,
-        broken,
         error: computed(() => error.value?.message),
         isLoading,
         save,

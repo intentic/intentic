@@ -22,6 +22,7 @@ import {
     railPolicy,
     onRailOnlyByVisit,
     tabBarIds,
+    viewAsks,
 } from "./registry";
 import { badgeChip } from "./viewBadge";
 
@@ -555,5 +556,28 @@ describe(`a guest's rail`, () => {
         for (const section of [`/workspace`, `/preview`, `/browsers`, `/sandbox`, `/ext/intentic.approvals`]) {
             expect(sectionReachable(section), section).toBe(true);
         }
+    });
+});
+
+// What a view says a person owes it, gathered for the Needs you inbox: every registration that has any, and one whose
+// asks() throws costs only its own rows.
+describe(`viewAsks`, () => {
+    const register = (id: string, asks: ViewRegistration[`asks`]): Disposable =>
+        registerView(`test`, { id, label: id, surface: `rail`, detect: () => [], view: async () => await Promise.resolve({}), asks });
+
+    it(`lists each view's asks under that view, and leaves out a view with none and one that throws`, () => {
+        const owed = register(`owed`, () => [{ id: `p1`, kind: `Post`, title: `Post to #general`, open: `/ext/owed` }]);
+        const quiet = register(`quiet`, () => []);
+        const broken = register(`broken`, () => {
+            throw new Error(`no state yet`);
+        });
+        const error = jest.spyOn(console, `error`).mockImplementation(() => {});
+        const gathered = viewAsks().filter(({ view }) => [`owed`, `quiet`, `broken`].includes(view.id));
+        expect(gathered.map(({ view, asks }) => [view.id, asks.map((ask) => ask.id)])).toEqual([[`owed`, [`p1`]]]);
+        expect(error).toHaveBeenCalledWith(`extension test/broken: asks() failed`, expect.any(Error));
+        error.mockRestore();
+        owed.dispose();
+        quiet.dispose();
+        broken.dispose();
     });
 });

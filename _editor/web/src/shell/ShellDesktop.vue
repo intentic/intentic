@@ -66,7 +66,7 @@ import PresenceAvatars from "./presence/PresenceAvatars.vue";
 import QuickOpen from "./commands/QuickOpen.vue";
 import SandboxGate from "../features/sandbox/gates/SandboxGate.vue";
 import SandboxSwitcher from "../features/sandbox/gates/SandboxSwitcher.vue";
-import { useNeeds } from "../features/needs/useNeeds";
+import { useInbox } from "../features/needs/inbox/useInbox";
 import { useT } from "@intentic/ui/i18n";
 
 // A rail element; the identity half (id, route, label, icon) is RailTile, shared with the rail's memory.
@@ -267,18 +267,18 @@ const browserTile = computed<SectionTile | undefined>(() => {
               : {}),
     };
 });
-// What agents wait on people for (docs/architecture/needs.md): on the rail only while something is, badged in the
-// warning tone, since every one of them is a person's to answer.
-const { open: openNeeds } = useNeeds();
+// Everything waiting on a person (docs/architecture/needs.md, the Needs you inbox): what agents asked for, turns parked
+// on an answer, held wakes, extensions and every view's asks, in one count. On the rail only while something is.
+const { badge: inboxBadge } = useInbox();
 const needsTile = computed<SectionTile | undefined>(() =>
-    openNeeds.value.length === 0
+    inboxBadge.value === undefined
         ? undefined
         : {
               id: `needs`,
               to: `/needs`,
               label: t(`needs.inbox.title`),
               icon: `exclamation-circle`,
-              badge: { count: openNeeds.value.length, tone: `warning` as const, tooltip: t(`needs.inbox.waiting`, { count: openNeeds.value.length }) },
+              badge: inboxBadge.value,
           },
 );
 // Same SectionTile shape as the nav tiles, so badges render through one path instead of per hand-rolled link.

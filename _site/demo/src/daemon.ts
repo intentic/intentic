@@ -92,6 +92,7 @@ import {
 } from "./fixture/workspace";
 import { demoMode, deskEdition } from "./mode";
 import { type FixtureRouter, Frames, type RawContext, type RawRoutes, refuse, serve } from "@intentic/contract-serve";
+import { demoApprovals, removeDemoApproval, upsertDemoApproval } from "./fixture/approvals";
 import { terminalSession } from "./terminal";
 import { featuredRun, type Run, visitorRun } from "./turn";
 import { type DemoSession, json } from "./transport";
@@ -824,7 +825,9 @@ export const procedures = {
         setSettings: () => ({ ok: true }),
     },
     approvals: {
-        list: () => ({ approvals: [], invalid: [] }),
+        list: () => ({ approvals: [...demoApprovals()], invalid: [] }),
+        upsert: (item) => okAfter(() => upsertDemoApproval(item)),
+        remove: ({ id }) => okAfter(() => removeDemoApproval(id)),
         // The demo's Claude settings declare no hooks, so no turn ever held one for approval.
         hookRequests: () => ({ requests: [] }),
     },

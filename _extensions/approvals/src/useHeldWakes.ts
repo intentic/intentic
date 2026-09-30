@@ -15,8 +15,8 @@ export const heldWakesQuery = (): HostQuery<AutomationApproval[]> => {
     };
 };
 
-// Only holds with no `autoRunAt` want a person; a countdown hold releases itself, so counting it would badge something
-// already about to happen on its own.
+// Only holds with no `autoRunAt` want a person; a countdown hold releases itself, so counting it would ask about
+// something already about to happen on its own.
 export const waitingOf = (held: readonly AutomationApproval[]): readonly AutomationApproval[] => held.filter((wake) => wake.autoRunAt === undefined);
 
 export function useHeldWakes() {

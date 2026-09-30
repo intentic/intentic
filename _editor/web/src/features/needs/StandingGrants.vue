@@ -2,7 +2,7 @@
      with one press. A turn already running keeps what it mounted; the conversation's next turn runs without it. -->
 <script setup lang="ts">
 import type { GrantRevoke, StandingGrants } from "@intentic/sandbox-contract";
-import { Notice } from "@intentic/ui";
+import { Notice, ui } from "@intentic/ui";
 import { useAsyncAction } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
@@ -12,7 +12,8 @@ import { useStandingGrants } from "./useStandingGrants";
 
 const t = useT();
 
-const props = defineProps<{ titleOf: (conversationId: string) => string }>();
+// `empty` is what to say when nothing stands, for a page that is only this list; without it an empty list draws nothing.
+const props = defineProps<{ titleOf: (conversationId: string) => string; empty?: string }>();
 
 const { conversations, revoke } = useStandingGrants();
 
@@ -61,6 +62,7 @@ const chatOf = (conversationId: string) => ({ path: `/`, query: { conversation: 
 </script>
 
 <template>
+    <p v-if="rows.length === 0 && empty" :class="ui.emptyState(`py-16`)">{{ empty }}</p>
     <section v-if="rows.length > 0" class="mb-6 flex flex-col gap-2">
         <h2 class="text-sm font-semibold text-content">{{ t(`needs.grants.title`) }}</h2>
         <p class="text-2xs text-muted">{{ t(`needs.grants.hint`) }}</p>

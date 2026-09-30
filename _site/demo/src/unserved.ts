@@ -243,8 +243,6 @@ export const UNSERVED = {
     "agents.stopWatching": UNSIMULATED_WRITE,
     "approvals.approveHooks": UNSIMULATED_WRITE,
     "approvals.dismissHooks": UNSIMULATED_WRITE,
-    "approvals.remove": UNSIMULATED_WRITE,
-    "approvals.upsert": UNSIMULATED_WRITE,
     "automations.rotateToken": UNSIMULATED_WRITE,
     "automations.setEnabled": UNSIMULATED_WRITE,
     "capabilities.add": UNSIMULATED_WRITE,
