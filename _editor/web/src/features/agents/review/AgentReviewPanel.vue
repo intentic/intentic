@@ -742,15 +742,6 @@ const seamWidth = computed<number>({
                         <span class="font-medium text-content">{{ bodyFiles.length }}</span> {{ t(`agents.agentReviewPanel.file`)
                         }}{{ bodyFiles.length === 1 ? "" : "s" }}
                     </span>
-                    <!-- Where the committed work went: a pill in this header rather than a row of its own, shown only while `history` is what the list is showing. The rest opens beside the list on hover. -->
-                    <AgentHistoryChip
-                        v-if="filter === 'history' && history.commits.value.length > 0"
-                        :commits="history.commits.value"
-                        :unaccounted="history.unaccounted.value"
-                        :remote-name="remoteName"
-                        :graphs="graphs"
-                        @open-graph="openGitHistory"
-                    />
                     <Icon v-if="changes.fetching.value" name="spinner" class="shrink-0 text-2xs text-muted" spin />
                     <span class="flex-1"></span>
                     <!-- Totals for the whole review; the code/tests split is now carried by the filter options above instead. -->
@@ -950,14 +941,16 @@ const seamWidth = computed<number>({
                                 <Icon :name="reasonCopy()[selected.blocked].icon" class="text-2xs" />{{ t(`agents.agentReviewPanel.blocked`) }}
                                 {{ reasonCopy()[selected.blocked].mark }}
                             </span>
-                            <!-- What this diff is on an already-committed file: the agent's own change, measured the same as every other row, not the commit's own patch. -->
-                            <span
+                            <!-- What this diff is on an already-committed file: the agent's own change, measured the same as every other row, not the commit's own patch. The review's one statement of where committed work went; the rest opens under it on hover. -->
+                            <AgentHistoryChip
                                 v-else-if="selected.carriedBy !== undefined"
-                                class="inline-flex shrink-0 items-center gap-1 ui-status-pill bg-success/15 font-mono text-2xs font-medium text-success"
-                                v-tooltip.bottom="{ title: t(`agents.agentReviewPanel.yourCommit`), note: t(`agents.agentReviewPanel.agentsDiff`) }"
-                            >
-                                <Icon name="check" class="text-2xs" />{{ selected.carriedBy.short }}
-                            </span>
+                                :current="selected.carriedBy"
+                                :commits="history.commits.value"
+                                :unaccounted="history.unaccounted.value"
+                                :remote-name="remoteName"
+                                :graphs="graphs"
+                                @open-graph="openGitHistory"
+                            />
                             <span
                                 v-else-if="mixedLanding && !selected.change.landed"
                                 class="shrink-0 ui-status-pill bg-warning/15 text-2xs font-medium text-warning"

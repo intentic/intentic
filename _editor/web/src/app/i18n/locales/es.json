@@ -98,7 +98,6 @@
             "addsDependenciesHint": "Al integrar el trabajo, pasan a tu proyecto y el sandbox las instala en tu árbol.",
             "agentHasntChangedAny": "Este agente no ha cambiado ningún archivo. Su conversación está en {remoteName}: ábrela allí para pedirle algo, y lo que escriba aparecerá aquí.",
             "agentHasntChangedAny2": "Este agente no ha cambiado ningún archivo. Pídele algo en el chat: su trabajo aparece aquí, archivo a archivo, para revisarlo antes de que se integre.",
-            "agentsDiff": "El diff es del agente",
             "all": "Los {count}",
             "anythingWritesNextShows": "{absorbedNote} Lo que escriba a continuación aparecerá aquí.",
             "awaitingLand": "Pendiente de integrar",

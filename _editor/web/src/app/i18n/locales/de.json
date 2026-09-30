@@ -97,7 +97,6 @@
             "addsDependenciesHint": "Landet die Arbeit, kommen sie in Ihr Projekt, und die Sandbox installiert sie in Ihrem Baum.",
             "agentHasntChangedAny": "Dieser Agent hat keine Dateien geändert. Seine Unterhaltung ist in {remoteName}: öffnen Sie sie dort, um etwas zu erbitten, und was immer er schreibt, taucht hier auf.",
             "agentHasntChangedAny2": "Dieser Agent hat keine Dateien geändert. Bitten Sie ihn im Chat um etwas: seine Arbeit taucht hier auf, Datei für Datei, zur Durchsicht, bevor sie landet.",
-            "agentsDiff": "Diff stammt vom Agenten",
             "all": "Alle {count}",
             "anythingWritesNextShows": "{absorbedNote} Was er als Nächstes schreibt, taucht hier auf.",
             "awaitingLand": "Wartet aufs Landen",

@@ -104,7 +104,6 @@
             "addsDependenciesHint": "Landing the work adds them to your project, and the sandbox installs them in your tree.",
             "agentHasntChangedAny": "This agent hasn't changed any files. Its conversation is in {remoteName}: open it there to ask for something, and whatever it writes shows up here.",
             "agentHasntChangedAny2": "This agent hasn't changed any files. Ask it for something in the chat: its work shows up here, file by file, to review before it lands.",
-            "agentsDiff": "Diff is the agent's",
             "all": "All {count}",
             "anythingWritesNextShows": "{absorbedNote} Anything it writes next shows up here.",
             "awaitingLand": "Awaiting land",

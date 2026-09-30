@@ -104,7 +104,6 @@
             "addsDependenciesHint": "Przeniesienie pracy doda je do Twojego projektu, a sandbox zainstaluje je w Twoim drzewie.",
             "agentHasntChangedAny": "Ten agent nie zmienił żadnych plików. Jego rozmowa jest w {remoteName}: otwórz ją tam, żeby o coś poprosić, a wszystko, co napisze, pokaże się tutaj.",
             "agentHasntChangedAny2": "Ten agent nie zmienił żadnych plików. Poproś go o coś na czacie: jego praca pojawi się tutaj, plik po pliku, do przejrzenia, zanim zostanie scalona.",
-            "agentsDiff": "Diff pochodzi od agenta",
             "all": "Wszystkie ({count})",
             "anythingWritesNextShows": "{absorbedNote} Wszystko, co napisze dalej, pojawi się tutaj.",
             "awaitingLand": "Czeka na scalenie",

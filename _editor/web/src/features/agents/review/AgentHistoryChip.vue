@@ -4,17 +4,20 @@ import { useT } from "@intentic/ui/i18n";
 import { computed, onBeforeUnmount, ref } from "vue";
 import type { AgentHistoryEntry } from "../fleet/useAgentHistory";
 
-// Where the agent's committed work went, as the same small commit pill the diff toolbar shows, sitting in the file
-// list's header rather than taking a row of its own. The explanation, the full commit list and the way into the graph
-// wait in a card that opens to the right of the list on hover, focus or tap. The card is teleported to escape the panel's clipping, and is
+// The commit that carries the open file, as a small pill in the diff toolbar: the one place the review names where
+// committed work went. The explanation, every commit this conversation's work is in (this file's marked) and the way
+// into the graph wait in a card that opens under the pill on hover, focus or tap. The card is teleported to escape the panel's clipping, and is
 // interactive (unlike a tooltip) so a commit in it can be clicked.
 
 const {
+    current,
     commits,
     unaccounted,
     remoteName = undefined,
     graphs,
 } = defineProps<{
+    // The commit carrying the file on screen.
+    current: { readonly sha: string; readonly short: string };
     commits: readonly AgentHistoryEntry[];
     unaccounted: number;
     remoteName?: string | undefined;
@@ -24,7 +27,6 @@ const {
 const emit = defineEmits<{ openGraph: [repo: string] }>();
 const t = useT();
 
-const lead = computed(() => commits[0]);
 const whose = computed(() => (remoteName === undefined ? `your` : `${remoteName}'s`));
 // The pill carries only the SHA, so the card says what it is.
 const heading = computed(() => `${t(`agents.agentReviewPanel.in`)} ${whose.value} ${t(`agents.agentReviewPanel.history`)}`);
@@ -33,10 +35,10 @@ const WIDTH = 384;
 const GAP = 8;
 const trigger = ref<HTMLElement | null>(null);
 const card = ref<HTMLElement | null>(null);
-const placement = ref<{ left: number; top: number; maxHeight: number }>();
+const placement = ref<{ left: number; top: number; width: number; maxHeight: number }>();
 
-// Right of the list the pill heads (the diff lies that way, and the list's rows stay readable), then left of it for
-// a panel at the window's right edge, then under the pill when neither side has room (a phone).
+// Under the pill, its right edge on the pill's: the toolbar sits at the diff's top right, so the card hangs into the
+// diff rather than over the file list, clamped to the window when the pill is further left.
 const place = (): void => {
     const el = trigger.value;
     if (el === null) {
@@ -44,20 +46,18 @@ const place = (): void => {
     }
     const win = el.ownerDocument.defaultView ?? globalThis;
     const rect = el.getBoundingClientRect();
-    const column = el.closest(`aside`)?.getBoundingClientRect() ?? rect;
-    const top = Math.max(GAP, rect.top - 4);
-    if (win.innerWidth - column.right - GAP * 2 >= WIDTH) {
-        placement.value = { left: column.right + GAP, top, maxHeight: win.innerHeight - top - GAP };
-    } else if (column.left - GAP * 2 >= WIDTH) {
-        placement.value = { left: column.left - GAP - WIDTH, top, maxHeight: win.innerHeight - top - GAP };
-    } else {
-        const below = rect.bottom + GAP;
-        placement.value = { left: Math.max(GAP, Math.min(rect.left, win.innerWidth - WIDTH - GAP)), top: below, maxHeight: win.innerHeight - below - GAP };
-    }
+    const width = Math.min(WIDTH, win.innerWidth - GAP * 2);
+    const top = rect.bottom + GAP / 2;
+    placement.value = {
+        left: Math.max(GAP, Math.min(rect.right - width, win.innerWidth - width - GAP)),
+        top,
+        width,
+        maxHeight: win.innerHeight - top - GAP,
+    };
 };
 
 // Short delays either way: opening on a pointer merely crossing the pill would flash the card, and closing the instant
-// the pointer leaves gives it time to reach the card beside the list.
+// the pointer leaves gives it time to reach the card.
 const OPEN_DELAY = 150;
 const CLOSE_DELAY = 200;
 let timer: ReturnType<typeof setTimeout> | undefined;
@@ -99,8 +99,7 @@ onBeforeUnmount(close);
             @keydown.esc="close"
             @click="toggle"
         >
-            <Icon name="check" class="text-2xs" />{{ lead?.short
-            }}<span v-if="commits.length > 1" class="font-sans font-normal opacity-80">+{{ commits.length - 1 }}</span>
+            <Icon name="check" class="text-2xs" />{{ current.short }}
         </button>
 
         <Teleport to="body">
@@ -108,7 +107,7 @@ onBeforeUnmount(close);
                 v-if="placement"
                 ref="card"
                 class="fixed z-50 flex flex-col gap-2 overflow-y-auto rounded-lg border border-line-strong bg-card p-3 shadow-lg"
-                :style="{ left: `${placement.left}px`, top: `${placement.top}px`, width: `${WIDTH}px`, maxHeight: `${placement.maxHeight}px` }"
+                :style="{ left: `${placement.left}px`, top: `${placement.top}px`, width: `${placement.width}px`, maxHeight: `${placement.maxHeight}px` }"
                 @mouseenter="settle(true, 0)"
                 @mouseleave="settle(false, CLOSE_DELAY)"
                 @focusout="onFocusOut"
@@ -123,11 +122,14 @@ onBeforeUnmount(close);
                         <button
                             type="button"
                             class="group flex w-full items-start gap-2 rounded-md px-1.5 py-1 text-left transition-colors"
-                            :class="graphs.get(commit.repo) === undefined ? 'cursor-default' : 'hover:bg-overlay'"
+                            :class="[
+                                graphs.get(commit.repo) === undefined ? 'cursor-default' : 'hover:bg-overlay',
+                                commit.sha === current.sha && commits.length > 1 ? 'bg-success/10' : '',
+                            ]"
                             :disabled="graphs.get(commit.repo) === undefined"
                             @click="emit('openGraph', commit.repo)"
                         >
-                            <span class="mt-px shrink-0 font-mono text-2xs text-subtle">{{ commit.short }}</span>
+                            <span class="mt-px shrink-0 font-mono text-2xs" :class="commit.sha === current.sha ? 'text-success' : 'text-subtle'">{{ commit.short }}</span>
                             <span class="flex min-w-0 flex-1 flex-col gap-0.5">
                                 <span class="break-words text-xs text-content">{{ commit.subject }}</span>
                                 <span class="text-2xs text-subtle">{{

@@ -198,8 +198,8 @@ it(`shows work the user has committed, under the commit that carries it`, async 
         },
     );
 
-    // The commit is named, replacing "somewhere in your history" with a place to actually look: its SHA on the
-    // header pill, its subject and size in the card the pill opens.
+    // The commit is named, replacing "somewhere in your history" with a place to actually look: its SHA on the diff
+    // toolbar's pill, its subject and size in the card the pill opens.
     expect(el.textContent).toContain(`a3f9c21`);
     el.querySelector<HTMLButtonElement>(`button[aria-expanded]`)?.click();
     await nextTick();
