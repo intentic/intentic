@@ -278,7 +278,10 @@ it(`says how much of the work no commit here accounts for`, async () => {
             unaccounted: 2,
         },
     );
-    expect(el.textContent).toContain(`2 more files are in your history without a commit here accounting for them`);
+    // The note lives in the card the history line opens, drawn over the page rather than inside the panel.
+    el.querySelector<HTMLButtonElement>(`button[aria-expanded]`)?.click();
+    await nextTick();
+    expect(document.body.textContent).toContain(`2 more files are in your history without a commit here accounting for them`);
 });
 
 it(`marks each blocked row with its own cause, and leaves the rest of the review alone`, async () => {

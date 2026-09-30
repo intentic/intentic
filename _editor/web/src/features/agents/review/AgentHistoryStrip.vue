@@ -4,10 +4,10 @@ import { useT } from "@intentic/ui/i18n";
 import { computed, onBeforeUnmount, ref } from "vue";
 import type { AgentHistoryEntry } from "../fleet/useAgentHistory";
 
-// Where the agent's committed work went, as one line over the review list. The line names the newest commit and
-// nothing else; the explanation, the full commit list and the way into the graph wait in a card that opens on hover,
-// focus or tap. The card sits inside the strip's own box rather than being teleported, so the pointer can travel into
-// it and click a commit, which a tooltip would not allow.
+// Where the agent's committed work went, as one line of plain text over the review list: no box of its own, since the
+// review around it is busy enough. The explanation, the full commit list and the way into the graph wait in a card
+// that opens beside the line on hover, focus or tap. The card is teleported to escape the panel's clipping, and is
+// interactive (unlike a tooltip) so a commit in it can be clicked.
 
 const {
     commits,
@@ -27,69 +27,101 @@ const t = useT();
 const lead = computed(() => commits[0]);
 const whose = computed(() => (remoteName === undefined ? `your` : `${remoteName}'s`));
 
-// Short delays either way: opening on a pointer merely crossing the strip would flash the card, and closing the
-// instant the pointer leaves would make the gap between strip and card impassable.
+const WIDTH = 384;
+const GAP = 8;
+const trigger = ref<HTMLElement | null>(null);
+const card = ref<HTMLElement | null>(null);
+const placement = ref<{ left: number; top: number; maxHeight: number }>();
+
+// Right of the line first, since the review list and diff lie that way; left when a panel sits at the window's right
+// edge; under the line when neither side has room (a phone).
+const place = (): void => {
+    const el = trigger.value;
+    if (el === null) {
+        return;
+    }
+    const win = el.ownerDocument.defaultView ?? globalThis;
+    const rect = el.getBoundingClientRect();
+    const top = Math.max(GAP, rect.top - 4);
+    if (win.innerWidth - rect.right - GAP * 2 >= WIDTH) {
+        placement.value = { left: rect.right + GAP, top, maxHeight: win.innerHeight - top - GAP };
+    } else if (rect.left - GAP * 2 >= WIDTH) {
+        placement.value = { left: rect.left - GAP - WIDTH, top, maxHeight: win.innerHeight - top - GAP };
+    } else {
+        const below = rect.bottom + GAP;
+        placement.value = { left: Math.max(GAP, Math.min(rect.left, win.innerWidth - WIDTH - GAP)), top: below, maxHeight: win.innerHeight - below - GAP };
+    }
+};
+
+// Short delays either way: opening on a pointer merely crossing the line would flash the card, and closing the instant
+// the pointer leaves would make the gap between line and card impassable.
 const OPEN_DELAY = 150;
 const CLOSE_DELAY = 200;
-const open = ref(false);
 let timer: ReturnType<typeof setTimeout> | undefined;
-const settle = (next: boolean, delay: number): void => {
+const show = (): void => {
     clearTimeout(timer);
-    timer = setTimeout(() => {
-        open.value = next;
-    }, delay);
-};
-const toggle = (): void => {
-    clearTimeout(timer);
-    open.value = !open.value;
+    place();
 };
 const close = (): void => {
     clearTimeout(timer);
-    open.value = false;
+    placement.value = undefined;
 };
-// Keyboard reach: tabbing into the strip opens it, tabbing out past the card closes it.
+const settle = (next: boolean, delay: number): void => {
+    clearTimeout(timer);
+    timer = setTimeout(next ? show : close, delay);
+};
+const toggle = (): void => (placement.value === undefined ? show() : close());
+// Keyboard reach: tabbing onto the line opens the card, tabbing out of both the line and the card closes it.
 const onFocusOut = (event: FocusEvent): void => {
     const into = event.relatedTarget as Node | null;
-    if (into === null || !(event.currentTarget as HTMLElement).contains(into)) {
+    if (into === null || !(trigger.value?.contains(into) || card.value?.contains(into))) {
         close();
     }
 };
-onBeforeUnmount(() => clearTimeout(timer));
+onBeforeUnmount(close);
 </script>
 
 <template>
-    <div
-        class="relative mx-2 mt-2 shrink-0"
-        @mouseenter="settle(true, OPEN_DELAY)"
-        @mouseleave="settle(false, CLOSE_DELAY)"
-        @focusin="open = true"
-        @focusout="onFocusOut"
-        @keydown.esc="close"
-    >
+    <div class="mx-2 mt-1.5 flex shrink-0">
         <button
+            ref="trigger"
             type="button"
-            class="flex h-7 w-full items-center gap-2 rounded-md border border-success/40 bg-success/10 px-2 text-left text-2xs transition-colors hover:bg-success/15"
-            :aria-expanded="open"
+            class="group inline-flex min-w-0 max-w-full items-center gap-1.5 rounded px-1 py-0.5 text-left text-2xs text-muted transition-colors hover:text-content"
+            :aria-expanded="placement !== undefined"
+            @mouseenter="settle(true, OPEN_DELAY)"
+            @mouseleave="settle(false, CLOSE_DELAY)"
+            @focusin="show"
+            @focusout="onFocusOut"
+            @keydown.esc="close"
             @click="toggle"
         >
-            <span class="inline-flex shrink-0 items-center gap-1 font-medium text-success">
-                <Icon name="check" class="text-2xs" />{{ t(`agents.agentReviewPanel.in`) }} {{ whose }} {{ t(`agents.agentReviewPanel.history`) }}
+            <Icon name="check" class="shrink-0 text-2xs text-success" />
+            <span class="shrink-0 underline decoration-dotted decoration-from-font underline-offset-2">
+                {{ t(`agents.agentReviewPanel.in`) }} {{ whose }} {{ t(`agents.agentReviewPanel.history`) }}
             </span>
             <template v-if="lead">
-                <span class="shrink-0 rounded bg-overlay px-1 py-px font-mono text-muted">{{ lead.short }}</span>
-                <span class="min-w-0 flex-1 truncate text-content">{{ lead.subject }}</span>
+                <span class="shrink-0 text-subtle">·</span>
+                <span class="shrink-0 font-mono text-subtle">{{ lead.short }}</span>
+                <span class="min-w-0 truncate">{{ lead.subject }}</span>
             </template>
             <span v-if="commits.length > 1" class="shrink-0 text-subtle">{{
                 t(`agents.agentReviewPanel.moreCommits`, { count: commits.length - 1 }, commits.length - 1)
             }}</span>
-            <Icon name="chevron-down" class="shrink-0 text-3xs text-subtle transition-transform" :class="open ? 'rotate-180' : ''" />
         </button>
 
-        <!-- pt-1 rather than a margin: the padding is part of the hover box, so the pointer crosses into the card without leaving. -->
-        <div v-show="open" class="absolute inset-x-0 top-full z-30 pt-1">
-            <div class="flex max-h-80 flex-col gap-2 overflow-y-auto rounded-lg border border-line-strong bg-card p-3 shadow-lg">
+        <Teleport to="body">
+            <div
+                v-if="placement"
+                ref="card"
+                class="fixed z-50 flex flex-col gap-2 overflow-y-auto rounded-lg border border-line-strong bg-card p-3 shadow-lg"
+                :style="{ left: `${placement.left}px`, top: `${placement.top}px`, width: `${WIDTH}px`, maxHeight: `${placement.maxHeight}px` }"
+                @mouseenter="settle(true, 0)"
+                @mouseleave="settle(false, CLOSE_DELAY)"
+                @focusout="onFocusOut"
+                @keydown.esc="close"
+            >
                 <p class="text-2xs leading-relaxed text-muted">{{ t(`agents.agentReviewPanel.committedWorkNotDifference`) }}</p>
-                <ul class="flex flex-col gap-0.5">
+                <ul class="-mx-1.5 flex flex-col gap-0.5">
                     <li v-for="commit in commits" :key="commit.sha">
                         <button
                             type="button"
@@ -98,7 +130,7 @@ onBeforeUnmount(() => clearTimeout(timer));
                             :disabled="graphs.get(commit.repo) === undefined"
                             @click="emit('openGraph', commit.repo)"
                         >
-                            <span class="mt-px shrink-0 rounded bg-overlay px-1 py-px font-mono text-2xs text-muted">{{ commit.short }}</span>
+                            <span class="mt-px shrink-0 font-mono text-2xs text-subtle">{{ commit.short }}</span>
                             <span class="flex min-w-0 flex-1 flex-col gap-0.5">
                                 <span class="break-words text-xs text-content">{{ commit.subject }}</span>
                                 <span class="text-2xs text-subtle">{{
@@ -109,12 +141,11 @@ onBeforeUnmount(() => clearTimeout(timer));
                                     )
                                 }}</span>
                             </span>
-                            <span
+                            <Icon
                                 v-if="graphs.get(commit.repo) !== undefined"
-                                class="mt-px inline-flex shrink-0 items-center gap-1 text-2xs text-subtle opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
-                            >
-                                <Icon name="sitemap" class="text-2xs" />{{ t(`agents.agentReviewPanel.gitHistory`) }}
-                            </span>
+                                name="sitemap"
+                                class="mt-0.5 shrink-0 text-2xs text-subtle opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
+                            />
                         </button>
                     </li>
                 </ul>
@@ -123,6 +154,6 @@ onBeforeUnmount(() => clearTimeout(timer));
                     {{ t(`agents.agentReviewPanel.unaccounted`, { count: unaccounted }, unaccounted) }}
                 </p>
             </div>
-        </div>
+        </Teleport>
     </div>
 </template>
