@@ -27,7 +27,7 @@ flowchart LR
 ## Wallpapers
 
 A wallpaper is a picture behind the agents board and the full-width card pages named in `WALLPAPERED_EXTENSIONS`
-(`/ext/workflows`, `/ext/automations`, `/ext/projects`), picked on its own row in Appearance and worn under any of
+(`/ext/workflows`, `/ext/automations`, `/ext/projects`, `/ext/pipelines`), picked on its own row in Appearance and worn under any of
 the four looks. `useWallpaper.ts` stores it under `ui-wallpaper` (`none` or `mist`, `none` by default) and writes it as
 `data-wallpaper` on `<html>`; `wallpapers.css` draws it as the backgrounds of `.agents-board`, and of the shell's
 main scroller (`.wallpaper-surface`, set by `useWallpaperedRoute`) on those pages, so the picture stays put while the

@@ -38,7 +38,7 @@ export function useWallpaper() {
  * The extension views a wallpaper also shows behind (`/ext/<id>`): full-width pages of cards with no navigation of
  * their own down the left, where a picture has room to be seen. A view with a sidebar or a dense list stays plain.
  */
-export const WALLPAPERED_EXTENSIONS: ReadonlySet<string> = new Set([`workflows`, `automations`, `projects`]);
+export const WALLPAPERED_EXTENSIONS: ReadonlySet<string> = new Set([`workflows`, `automations`, `projects`, `pipelines`]);
 
 /** Whether the shell's main column should wear the wallpaper for the route on screen. The board draws its own. */
 export function useWallpaperedRoute(): ComputedRef<boolean> {
