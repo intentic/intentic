@@ -2,10 +2,11 @@
 import { providerLabel } from "@intentic/sandbox-contract";
 import { Button, type Tip, useDevice } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
+import { formatWhen } from "@intentic/ui/format";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { sandboxNow } from "../../fleet/sandboxClock";
-import { activityIcon, formatElapsed, limitClosed, limitCountdown, limitScheduled, turnInFlight, watching, watchLine } from "../../fleet/agentStatus";
+import { activityIcon, formatElapsed, limitClosed, limitCorner, turnInFlight, watching, watchLine } from "../../fleet/agentStatus";
 import { cacheCooling, cacheWarm, warmMark } from "../../fleet/prompt-cache/promptCache";
 import type { FleetAgent } from "../../fleet/useAgents-fleet";
 import { relativeTime } from "../../../chat/models/catalog";
@@ -32,33 +33,46 @@ const { mobile } = useDevice();
 // On the sandbox's clock: every instant this corner counts to or from is one the sandbox stamped (sandboxClock.ts).
 const tick = useNow(() => turnInFlight(props.agent) || watching(props.agent) || limitClosed(props.agent) || cacheWarm(props.agent));
 const now = computed(() => sandboxNow(tick.value));
+// Shares the card's "when" corner with the running elapsed and the watch countdown; the chip already says what
+// happened, this says what comes of it: when the allowance is back, or, for a booked resend or move, when or where it
+// goes by itself, which is why a card resting in Active is there (agentStatus.limitCorner). Undefined once nothing is
+// booked and the window is open, or the provider gave no instant; the corner then falls back to the ordinary date.
+const limit = computed(() => limitCorner(props.agent, now.value));
 // Recomputed against the ticking `now`, like the elapsed beside it, so the countdown moves without its own timer.
 // Suppressed while a turn is in flight: the running corner already answers "doing what, for how long", and reclaims it
-// the moment the turn ends.
-const watch = computed(() => (props.working ? undefined : watchLine(props.agent, now.value)));
-// Shares the card's "when" corner with the running elapsed and the watch countdown; the chip already says what
-// happened, this says when.
-// Undefined once the window is open or the provider gave no instant; the corner then falls back to the ordinary date.
-const limitBackAt = computed(() => limitCountdown(props.agent, now.value));
-// A booked resend leaves Attention for Active (limitScheduled), and the corner says why a card that is not running is
-// there: it goes again by itself at that hour, where one still in Attention only comes back within reach.
-const limitBooked = computed(() => limitScheduled(props.agent));
+// the moment the turn ends. And yields to a spent allowance, so the corner holds ONE clock: a watch firing into a shut
+// window runs nothing (turn-admission holds its words back), so the reset is the next moment the card can move, and
+// the watch's countdown comes back with its Stop press once the limit has had its say.
+const watch = computed(() => (props.working || limit.value !== undefined ? undefined : watchLine(props.agent, now.value)));
 // Its hover from the facts the card holds (whose limit, when it reopens) rather than the provider's refusal sentence;
-// a booked resend says it goes by itself then, so nothing needs pressing.
-const limitTip = computed((): Tip => ({
-    title: limitBooked.value ? t(`agents.agentCard.resendBooked`) : t(`agents.agentStatus.usageLimit`),
-    tone: limitBooked.value ? `info` : `warn`,
-    rows: [
-        { label: t(`agents.words.provider`), value: providerLabel(props.agent.provider) },
-        { label: limitBooked.value ? t(`agents.agentCard.resendsAt`) : t(`agents.agentCard.reopens`), value: limitBackAt.value ?? `` },
-    ],
-    note: limitBooked.value ? t(`agents.agentCard.noPressNeeded`) : undefined,
-}));
+// the corner says the wait, the hover the instant. A booked resend or move says it goes by itself, so nothing needs
+// pressing (and the card offers no press: AgentCard's `resendable`).
+const limitTip = computed((): Tip | undefined => {
+    const corner = limit.value;
+    if (corner === undefined) {
+        return undefined;
+    }
+    const provider = { label: t(`agents.words.provider`), value: providerLabel(props.agent.provider) };
+    if (corner.kind === `back`) {
+        return {
+            title: t(`agents.agentStatus.usageLimit`),
+            tone: `warn`,
+            rows: [provider, { label: t(`agents.agentCard.reopens`), value: formatWhen(corner.clock.at, now.value) }],
+        };
+    }
+    const at = corner.kind === `resend` && corner.clock !== undefined ? [{ label: t(`agents.agentCard.resendsAt`), value: formatWhen(corner.clock.at, now.value) }] : [];
+    return {
+        title: corner.kind === `moving` ? t(`agents.agentStatus.movingTo`, { account: corner.account }) : t(`agents.agentCard.resendBooked`),
+        tone: `info`,
+        rows: [provider, ...at],
+        note: t(`agents.agentCard.noPressNeeded`),
+    };
+});
 // Shares that same corner, and yields it: a reset clock and a watch are each a firmer promise about the card than a
 // cache that only makes answering cheaper, so this speaks when the corner is otherwise free.
-const cooling = computed(() => (watch.value !== undefined || limitBackAt.value !== undefined ? undefined : cacheCooling(props.agent, now.value)));
+const cooling = computed(() => (watch.value !== undefined || limit.value !== undefined ? undefined : cacheCooling(props.agent, now.value)));
 // A hold outranks the cooling clock in that corner: it is the answer to the question the cooling chip asks.
-const warm = computed(() => (watch.value !== undefined || limitBackAt.value !== undefined || props.working ? undefined : warmMark(props.agent)));
+const warm = computed(() => (watch.value !== undefined || limit.value !== undefined || props.working ? undefined : warmMark(props.agent)));
 // Either cache mark's hover, closed by what pressing it does, since the press is this corner's own.
 const warmTip = computed((): Tip | undefined =>
     warm.value === undefined ? undefined : { ...warm.value.hint, note: t(`agents.promptCache.clickToChange`) },
@@ -73,10 +87,10 @@ const coolingTip = computed((): Tip | undefined =>
     <span v-if="agent.archivedAt !== undefined" class="shrink-0"
         >{{ t(`agents.agentCard.archived`, { archivedAt: relativeTime(agent.archivedAt) }) }}
     </span>
-    <!-- Takes the date's slot: "back at X" tells the reader something to plan around, unlike "last active". -->
-    <span v-else-if="limitBackAt !== undefined" class="inline-flex shrink-0 items-center gap-1" v-tooltip.top="limitTip">
+    <!-- Takes the date's slot: "back in 27m" tells the reader something to plan around, unlike "last active". -->
+    <span v-else-if="limit !== undefined" class="inline-flex shrink-0 items-center gap-1" v-tooltip.top="limitTip">
         <Icon name="clock" class="shrink-0 text-2xs" />
-        <span class="tabular-nums">{{ limitBooked ? t(`agents.agentCard.resends`, { limitBackAt }) : t(`agents.agentCard.back`, { limitBackAt }) }}</span>
+        <span class="tabular-nums">{{ limit.text }}</span>
     </span>
     <!-- A hold on the cache, running or stopped early: the corner says until when, or since when it went cold. -->
     <button

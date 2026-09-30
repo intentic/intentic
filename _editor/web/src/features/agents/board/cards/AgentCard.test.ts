@@ -546,3 +546,69 @@ it(`says a broken land in plain words, keeping git's own sentence for the hover`
     expect(el.textContent).not.toContain(`Command failed`);
     expect(el.querySelector(`.ui-status-pill`)?.textContent?.trim()).toBe(`Couldn't land`);
 });
+
+// A TURN A SPENT ALLOWANCE STRANDED. The card's one press sends it again, offered only while that is the reader's to make,
+// and the corner says what comes of the wait. Reset 40 minutes out, floored to the second the roster carries it in, so the
+// corner's rounded-up minutes read 40 whenever the mount lands in that second.
+const stranded = (over: Partial<FleetAgent> = {}): FleetAgent => ({
+    ...ready(`error`),
+    failureCode: `rate_limit`,
+    limitHeld: true,
+    limitResetsAt: Math.floor((Date.now() + 40 * 60 * 1000) / 1000),
+    ...over,
+});
+const sendAgainButton = (el: HTMLElement): HTMLButtonElement | undefined => textButton(el, `Send again`);
+
+// It takes the drill-in's seat in the summary row: that drill-in is "Open chat", where a click on the card goes anyway.
+it(`offers Send again on a stranded turn nothing is booked for, in the drill-in's seat`, () => {
+    const card = mount(stranded());
+    expect(sendAgainButton(card)).toEqual(expect.any(Object));
+    expect(textButton(card, `Open chat`)).toBeUndefined();
+    expect(card.textContent).toContain(`back in 40m`);
+});
+
+// witty-maple-9dtg: booked to go again at the reset, the card still offered to send it now, beside a corner saying it
+// would go by itself and a hover saying no press was needed.
+it(`offers no Send again once a resend is booked, and says when it goes`, () => {
+    const card = mount(stranded({ limitScheduled: true }));
+    expect(sendAgainButton(card)).toBeUndefined();
+    expect(card.textContent).toContain(`resends in 40m`);
+});
+
+// A booked move goes on the resume pass's next beat, so the refused account's reset is not when anything happens.
+it(`names where a booked move is taking the turn, not the refused account's reset`, () => {
+    const card = mount(stranded({ limitScheduled: true, limitMoving: `Work` }));
+    expect(sendAgainButton(card)).toBeUndefined();
+    expect(card.textContent).toContain(`moving to Work`);
+    expect(card.textContent).not.toContain(`resends in`);
+});
+
+// Every press waits for a restore in the archive, and another sandbox's turn is not this daemon's to resend: the seat
+// goes back to the drill-in, which for another box's card opens its page, where the crossing lives.
+it(`withholds Send again in the archive and on another sandbox's card`, () => {
+    for (const agent of [stranded({ archivedAt: 5 }), stranded({ sandboxId: `box-2` })]) {
+        const card = mount(agent);
+        expect(sendAgainButton(card)).toBeUndefined();
+        expect(textButton(card, `Open chat`)).toEqual(expect.any(Object));
+        app?.unmount();
+        app = undefined;
+    }
+});
+
+// ONE CLOCK PER CORNER. A watch firing into a shut window runs nothing, so the reset is the next moment the card moves.
+it(`keeps the limit's clock over a watch's, the watch's coming back once the limit has had its say`, () => {
+    const card = mount(watching(stranded({ limitScheduled: true })));
+    expect(card.textContent).toContain(`resends in 40m`);
+    expect(card.textContent).not.toContain(`pnpm verify gate`);
+});
+
+// "Completed" was the drill-in's stand-in from when the summary row carried the drill-in on every lane: once that moved
+// to the header, the word said itself only where the drill-in was missing, a label no card in a lane named Finished needs.
+it(`says no "Completed" on a finished card, with a drill-in or without one`, () => {
+    const { branch: _branch, ...unbranched } = ready(`landed`);
+    for (const agent of [ready(`landed`), unbranched]) {
+        expect(mount(agent).textContent).not.toContain(`Completed`);
+        app?.unmount();
+        app = undefined;
+    }
+});

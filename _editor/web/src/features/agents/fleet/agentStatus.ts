@@ -1,6 +1,6 @@
 import type { IconName, Tip } from "@intentic/ui";
 import { briefDuration } from "@intentic/base/format";
-import { formatWeekdayTime } from "@intentic/ui/format";
+import { formatClock, formatWhen } from "@intentic/ui/format";
 import {
     type AgentAttention,
     type AgentOrigin,
@@ -971,18 +971,66 @@ export const loopMeta = (loop: NonNullable<AgentSummary["loop"]>): { readonly te
     return { ...ended[loop.state], spin: false };
 };
 
-// Threshold between showing an hour-count ("4h 11m", readable at a glance) and a day+hour ("74h 12m" would be
-// arithmetic); same threshold as the chat strip's own switch (chat/pickUp.ts). Undefined for a card with no
-// published reset instant (Grok, Cursor).
+// Threshold between a wait ("in 27m", readable at a glance) and the instant itself ("Thu 14:05", where "in 244m" would
+// be arithmetic); same threshold as the chat strip's own switch (chat/pickUp.ts).
 export const CLOCK_FROM_MS = 90 * 60 * 1_000;
 
-export const limitCountdown = (agent: AgentStanding, now: number): string | undefined => {
+// When a spent allowance reopens, in the few characters a card's corner has: whole minutes while that is a wait a
+// person can hold (rounded up, as the chat's own press counts them), the clock later today, the day past that. Minutes,
+// never seconds: the instant is the provider's guess and routinely early, so a corner ticking "26m 26s" claimed a
+// precision nobody had. `wait` says which it is, since a wait reads "in 27m" and an instant stands bare ("back 14:05");
+// `at` is the instant (ms), for a hover that names it whatever the corner says. Undefined once the window is open, and
+// for a provider that published no instant (Grok, Cursor).
+export interface LimitClock {
+    readonly at: number;
+    readonly text: string;
+    readonly wait: boolean;
+}
+export const limitCountdown = (agent: AgentStanding, now: number): LimitClock | undefined => {
     const reopensAt = agent.limitResetsAt;
     if (!limitClosed(agent, now) || reopensAt === undefined) {
         return undefined;
     }
     const at = reopensAt * 1_000;
-    return at - now >= CLOCK_FROM_MS ? formatWeekdayTime(at) : formatElapsed(now, at);
+    if (at - now < CLOCK_FROM_MS) {
+        return { at, text: `${Math.max(1, Math.ceil((at - now) / 60_000))}m`, wait: true };
+    }
+    return { at, text: new Date(at).toDateString() === new Date(now).toDateString() ? formatClock(at) : formatWhen(at, now), wait: false };
+};
+
+// "back in 27m", "back Thu 14:05": when the allowance returns, the one thing a card nothing is booked for can plan around.
+export const limitBack = (clock: LimitClock): string =>
+    clock.wait ? t(`agents.agentCard.backIn`, { limitBackAt: clock.text }) : t(`agents.agentCard.back`, { limitBackAt: clock.text });
+
+// A spent allowance's words for a card's "when" corner, and what they hang on. A booked move names where it is going,
+// since it goes on the resume pass's next beat, seconds away, whatever the refused account's reset says. A booked resend
+// says when it goes, and that it goes in a moment once that instant has passed (the resume pass lets it go on its next
+// beat), which is also what tells a card resting in Active why it is there. One nothing is booked for says when the
+// allowance is back, and nothing once it is: the corner is the ordinary date's again, beside the card's own press.
+export type LimitCorner =
+    | { readonly kind: `moving`; readonly text: string; readonly account: string }
+    | { readonly kind: `resend`; readonly text: string; readonly clock?: LimitClock }
+    | { readonly kind: `back`; readonly text: string; readonly clock: LimitClock };
+export const limitCorner = (agent: AgentStanding, now: number): LimitCorner | undefined => {
+    if (!limited(agent)) {
+        return undefined;
+    }
+    const moving = limitMoveBooked(agent) ? agent.limitMoving : undefined;
+    if (moving !== undefined) {
+        return { kind: `moving`, account: moving, text: t(`agents.agentCard.movingTo`, { account: moving }) };
+    }
+    const clock = limitCountdown(agent, now);
+    if (limitScheduled(agent)) {
+        if (clock === undefined) {
+            return { kind: `resend`, text: t(`agents.agentCard.resendsShortly`) };
+        }
+        return {
+            kind: `resend`,
+            clock,
+            text: clock.wait ? t(`agents.agentCard.resendsIn`, { limitBackAt: clock.text }) : t(`agents.agentCard.resends`, { limitBackAt: clock.text }),
+        };
+    }
+    return clock === undefined ? undefined : { kind: `back`, clock, text: limitBack(clock) };
 };
 
 // The watch a card's clock counts to: the first deadline to arrive is the next moment the card definitely moves. One

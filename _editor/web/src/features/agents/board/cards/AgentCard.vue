@@ -46,6 +46,7 @@ import {
     landFailure,
     laneOf,
     limited,
+    limitScheduled,
     loopMeta,
     memoryHeld,
     reviewAction,
@@ -203,6 +204,19 @@ const restoreHint = computed((): TooltipValue => (takesFamily.value ? { title: t
 const enterKey = formatChord(`enter`, isApplePlatform());
 // Drill-in label, undefined for a draft (nothing to review); desktop only, since a mobile tap navigates there.
 const review = computed(() => (mobile.value ? undefined : reviewAction(props.agent)));
+// A turn a spent allowance stranded, sent again from the card: offered only where that is still the reader's press to
+// make. Not once a resend or a move is booked, which goes by itself (limitScheduled: the card has left Attention for
+// that reason, and its corner already says when it goes; the chat keeps its own press for going sooner). Not in the
+// archive, where every press waits for a restore (a resend would un-archive it as a side effect, as a resolve would),
+// and not on another sandbox's card: the resend addresses this sandbox's daemon, which holds no such turn.
+const resendable = computed(
+    () =>
+        limited(props.agent) && props.agent.limitHeld === true && !limitScheduled(props.agent) && props.agent.archivedAt === undefined && localOnly.value,
+);
+// The drill-in is the Attention card's way on, spelled out in the summary row (a header icon on every other lane),
+// unless Send again holds that seat. Nothing is lost there: a stranded card's drill-in is "Open chat" (drillTarget),
+// exactly where a click on the card already goes, so it earns no header seat taken out of the title's width.
+const rowDrill = computed(() => review.value !== undefined && lane.value === `attention` && !resendable.value);
 
 // Asks laneDrop the same question the drag already answers, so a second reading can't disagree with it on the same
 // card.
@@ -337,9 +351,6 @@ const tileHint = computed((): TooltipValue => {
         ],
     };
 });
-// Only a card with a daemon registry entry may claim "Completed": client-only standings have no such account of a turn.
-// A history-reopened chat sits in this lane too but says nothing here, since its own chip already states what it is.
-const completed = computed(() => lane.value === `finished` && !unregistered(props.agent.status));
 const working = computed(() => turnWorking(props.agent));
 // Whether the card can show a date at all: an untouched draft can't, and neither can a running turn, whose own elapsed
 // readout takes the same slot.
@@ -351,8 +362,11 @@ const reactable = computed(() => !unregistered(props.agent.status));
 const reactionsStrip = useTemplateRef<{ open: (from: HTMLElement) => void }>(`reactionsStrip`);
 // Whether the closing line has anything to show: gated on everything it draws, so a card with nothing here opens no
 // empty strip.
-// One wrapping line (stats left, standing/time right) rather than two rows, so a lane fits more cards.
-const summary = computed(() => stats.value || review.value !== undefined || completed.value || dated.value || working.value || reactable.value);
+// One wrapping line (stats left, press and time right) rather than two rows, so a lane fits more cards.
+// No "Completed" here: the word was the drill-in's stand-in from when this row carried the drill-in on every lane, so
+// once that moved to the header it said itself only where the drill-in was missing (any phone, a card with no branch),
+// a coin toss of a label on forty receipts in a lane already named Finished, whose corner glyph says how each settled.
+const summary = computed(() => stats.value || rowDrill.value || resendable.value || dated.value || working.value || reactable.value);
 const loopLine = computed(() => (props.agent.loop === undefined ? undefined : loopMeta(props.agent.loop)));
 // What its last turn showed of its own work (proofSeal.ts). Held while value-equal, so a roster frame that moved
 // something else on this card (its activity, its clock) redraws none of the seal.
@@ -874,31 +888,29 @@ const grab = (event: PointerEvent): void => {
                     :dense="true"
                 />
 
-                <!-- Standing and clock pinned right by margin, not a spacer, so wrapping doesn't strand them on an empty line. -->
+                <!-- Press and clock pinned right by margin, not a spacer, so wrapping doesn't strand them on an empty line. -->
                 <span class="ml-auto inline-flex min-w-0 items-center gap-2 text-subtle">
-                    <!-- Waiting agents show their instruction when the card has room. -->
-                    <!-- Stranded turns expose the held instruction as the action. -->
+                    <!-- A stranded turn's own press, in the drill-in's seat (see `resendable`). It acts in place, so it is a text action leading with what it does, not a link trailing the arrow that marks the drill-in as a way somewhere else. -->
                     <button
-                        v-if="limited(agent) && agent.limitHeld === true"
+                        v-if="resendable"
                         type="button"
-                        :class="ui.linkButton('inline-flex shrink-0 gap-1 font-medium')"
+                        :class="ui.textAction('inline-flex shrink-0 gap-1 font-medium')"
                         :disabled="resending || busy"
                         v-tooltip.top="{ title: t(`agents.agentCard.sameTurn`), note: t(`agents.agentCard.notNewMessage`) }"
                         @click.stop="sendAgain"
                     >
-                        {{ resending ? t(`ui.status.sending`) : t(`agents.words.sendAgain`) }}<Icon name="arrow-right" class="text-2xs" />
+                        <Icon :name="resending ? `spinner` : `refresh`" :spin="resending" class="text-2xs" />{{
+                            resending ? t(`ui.status.sending`) : t(`agents.words.sendAgain`)
+                        }}
                     </button>
                     <button
-                        v-else-if="review !== undefined && lane === 'attention'"
+                        v-else-if="rowDrill"
                         type="button"
                         class="inline-flex shrink-0 items-center gap-1 rounded font-medium text-link hover:underline"
                         @click.stop="reviewCard"
                     >
                         {{ review }}<Icon name="arrow-right" class="text-2xs" />
                     </button>
-                    <span v-else-if="review === undefined && completed" class="inline-flex shrink-0 items-center gap-1">
-                        <Icon name="check" class="text-2xs" />{{ t(`agents.agentCard.completed`) }}
-                    </span>
                     <!-- The one part of the card that moves with the clock, so a tick redraws it and not the card around it. -->
                     <AgentCardClock
                         :agent="agent"

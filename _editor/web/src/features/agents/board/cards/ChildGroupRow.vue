@@ -3,7 +3,7 @@ import { providerLabel } from "@intentic/sandbox-contract";
 import { useNow } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
-import { agentStatusMeta, attentionReason, limitClosed, limitCountdown } from "../../fleet/agentStatus";
+import { agentStatusMeta, attentionReason, limitBack, limitClosed, limitCountdown } from "../../fleet/agentStatus";
 import type { TrayGroup } from "../view/childFold";
 
 // CHILDREN STOPPED ON ONE THING, as one row of their parent's tray (childFold.trayOf): how many, what stopped them, and
@@ -55,7 +55,8 @@ const back = computed(() => {
         (best, member) => (best === undefined || (member.limitResetsAt ?? Infinity) < (best.limitResetsAt ?? Infinity) ? member : best),
         undefined,
     );
-    return soonest === undefined ? undefined : limitCountdown(soonest, now.value);
+    const clock = soonest === undefined ? undefined : limitCountdown(soonest, now.value);
+    return clock === undefined ? undefined : limitBack(clock);
 });
 </script>
 
@@ -74,7 +75,7 @@ const back = computed(() => {
         <Icon :name="group.open ? `chevron-down` : `chevron-right`" class="shrink-0 text-xs" />
         <span class="min-w-0 flex-1 truncate">{{ label }}</span>
         <span v-if="back !== undefined" class="inline-flex shrink-0 items-center gap-1 tabular-nums">
-            <Icon name="clock" class="shrink-0 text-2xs" />{{ t(`agents.agentCard.back`, { limitBackAt: back }) }}
+            <Icon name="clock" class="shrink-0 text-2xs" />{{ back }}
         </span>
     </button>
 </template>

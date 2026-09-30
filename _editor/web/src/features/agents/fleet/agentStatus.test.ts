@@ -16,6 +16,8 @@ import {
     landFailure,
     laneOf,
     standingFrom,
+    limitBack,
+    limitCorner,
     limitCountdown,
     limitGroups,
     memoryHeld,
@@ -479,12 +481,47 @@ describe("a spent allowance", () => {
     });
 
     // The clock corner: minutes while that's a number a person can hold, the day and hour once it isn't, since a weekly
-    // pool measured in hours is arithmetic, not information.
-    it("counts down while that is a number, and names the day once it is not", () => {
-        const soon = { failureCode: `rate_limit`, limitResetsAt: (NOW + 40 * 60 * 1000) / 1000 };
-        expect(limitCountdown({ status: `error`, attention: none, ...soon }, NOW)).toBe(`40m 0s`);
+    // pool measured in hours is arithmetic, not information. Whole minutes rounded up, never seconds: the instant is
+    // the provider's guess, and "26m 26s" ticking on a card claimed a precision nobody had.
+    it("counts down in whole minutes while that is a wait, and names the instant once it is not", () => {
+        const at = NOW + 39 * 60 * 1000 + 20_000;
+        expect(limitCountdown({ status: `error`, attention: none, failureCode: `rate_limit`, limitResetsAt: at / 1000 }, NOW)).toEqual({
+            at,
+            text: `40m`,
+            wait: true,
+        });
+        // Seconds from the reset still read as a minute, never "0m".
+        expect(limitCountdown({ status: `error`, attention: none, failureCode: `rate_limit`, limitResetsAt: (NOW + 5_000) / 1000 }, NOW)?.text).toBe(`1m`);
         // Four hours out: a clock time, not a count. The exact string is the locale's; this pins the shape.
-        expect(limitCountdown({ status: `error`, attention: none, ...SHUT }, NOW)).toMatch(/\d{2}:\d{2}/u);
+        const far = limitCountdown({ status: `error`, attention: none, ...SHUT }, NOW);
+        expect(far?.wait).toBe(false);
+        expect(far?.text).toMatch(/\d{2}:\d{2}/u);
+    });
+
+    // A wait takes "in", an instant stands bare: "back 26m 26s" read as a sentence missing its word.
+    it("says a wait with its preposition and an instant without one", () => {
+        expect(limitBack({ at: NOW, text: `40m`, wait: true })).toBe(`back in 40m`);
+        expect(limitBack({ at: NOW, text: `Thu 14:05`, wait: false })).toBe(`back Thu 14:05`);
+    });
+
+    // The card's corner for each shape of the wait. Booked, it says what goes by itself and when, which is why a card
+    // that isn't running rests in Active; a booked move goes on the resume pass's next beat whatever the refused
+    // account's reset says, so it names where, not when.
+    it("names what goes by itself, and when, in the card's corner", () => {
+        const soon = { status: `error`, attention: none, failureCode: `rate_limit`, limitResetsAt: (NOW + 40 * 60 * 1000) / 1000 } as const;
+        expect(limitCorner(soon, NOW)?.text).toBe(`back in 40m`);
+        expect(limitCorner({ ...soon, limitScheduled: true }, NOW)?.text).toBe(`resends in 40m`);
+        expect(limitCorner({ status: `error`, attention: none, ...SHUT, limitScheduled: true }, NOW)?.text).toMatch(/^resends \S.*\d{2}:\d{2}$/u);
+        // Past its instant a booked resend goes on the pass's next beat: said so, not dropped for a date that makes a
+        // card resting in Active look stuck.
+        expect(limitCorner({ status: `error`, attention: none, ...OPEN, limitScheduled: true }, NOW)?.text).toBe(`resends in a moment`);
+        expect(limitCorner({ ...soon, limitScheduled: true, limitMoving: `Work` }, NOW)).toEqual({ kind: `moving`, account: `Work`, text: `moving to Work` });
+    });
+
+    // Nothing booked and the window open: the corner is the ordinary date's again. And a real failure never gets one.
+    it("leaves the corner to the date once nothing is waited on", () => {
+        expect(limitCorner({ status: `error`, attention: none, ...OPEN }, NOW)).toBeUndefined();
+        expect(limitCorner({ status: `error`, attention: none }, NOW)).toBeUndefined();
     });
 
     // Once the window is open there's no instant left to count to, and a provider that published none (Grok, Cursor)
