@@ -65,7 +65,7 @@ import { stateRegroupStep } from "../store/evolution/steps/state-regroup.js";
 import { issueInstallsDocument, webchatInstallsDocument } from "../store/installs.js";
 import { newestRunDocument } from "../store/newest-run.js";
 import { bootFailureDocument } from "../system/boot/boot-failure.js";
-import { stagedUpdateDocument, updateOutcomeDocument } from "../system/boot/staged-update.js";
+import { stagedUpdateDocument, updateOutcomeDocument, updatePreparingDocument } from "../system/boot/staged-update.js";
 import { skippedUpdateDocument } from "../system/boot/update-skip.js";
 import { heavyCommandsDocument } from "../system/resources/heavy-commands.js";
 import { workspaceIdentityDocument } from "../system/workspace-identity.js";
@@ -152,6 +152,7 @@ export const stateDocuments = (): readonly DocumentSpec[] => [
     bootFailureDocument,
     stagedUpdateDocument,
     updateOutcomeDocument,
+    updatePreparingDocument,
     skippedUpdateDocument,
     heavyCommandsDocument,
     workspaceIdentityDocument,

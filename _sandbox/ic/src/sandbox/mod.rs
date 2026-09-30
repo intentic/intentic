@@ -12,6 +12,7 @@ pub mod outcome;
 pub mod owner;
 pub mod power;
 pub mod preflight;
+pub mod preparing;
 pub mod probation;
 pub mod project_dir;
 pub mod recreate;

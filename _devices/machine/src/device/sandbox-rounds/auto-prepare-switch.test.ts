@@ -13,6 +13,7 @@ jest.mock("../tools/sandboxes.js", () => ({
         return Promise.resolve([]);
     },
     icInFlight: new Set<string>(),
+    icBackgroundPrepareArgs: (slug: string): string[] => ["sandbox", "prepare", slug, "--auto"],
     holdIcFlow: () => {
         reached.push("hold");
         return () => {};

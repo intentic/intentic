@@ -4,10 +4,12 @@
 // machine last did about this sandbox's version, a withdrawn release and a skipped one, each with the action that
 // applies to it.
 import "@intentic/testing/dom";
-import type { Environment, Info, StagedUpdate, UpdateOutcome } from "@intentic/sandbox-contract";
+import type { Environment, Info, PreparingUpdate, StagedUpdate, UpdateOutcome } from "@intentic/sandbox-contract";
 import { useOsPreference } from "@intentic/ui";
+import PrimeVue from "primevue/config";
 import { type App, computed, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
+import type { DownloadWanted } from "./useBackgroundDownload";
 
 const LATEST = `1.54.0`;
 const info = ref<Info>({ version: `1.53.0`, latest: LATEST, updateAvailable: true, channel: `stable` });
@@ -16,6 +18,7 @@ const stagedPlan = ref<StagedUpdate[`plan`]>(undefined);
 const breakingNotes = ref<string[]>([]);
 const updateNotes = ref<string[]>([]);
 const moreUpdateNotes = ref(0);
+const preparing = ref<PreparingUpdate | undefined>(undefined);
 const skipServed = ref(true);
 const skipVersion = jest.fn(async (_version: string | null): Promise<void> => undefined);
 jest.mock(`./useSandboxVersion`, () => ({
@@ -30,12 +33,24 @@ jest.mock(`./useSandboxVersion`, () => ({
         updateStaged: computed(() => stagedPlan.value !== undefined),
         stagedBehind: ref(undefined),
         stagedPlan,
+        preparing,
         serverManaged: ref(false),
         slug: ref(`demo`),
         skipServed,
         skipVersion,
         localImage,
     }),
+}));
+// The card's ask to the machine, stood in for: what it asks for is read back through `asked`, and whether its request is
+// still out is set through `starting`. The ask itself (which machine, which agent, how often) is its own suite's.
+const starting = ref(false);
+let wantedByCard: () => DownloadWanted | undefined = () => undefined;
+const asked = (): DownloadWanted | undefined => wantedByCard();
+jest.mock(`./useBackgroundDownload`, () => ({
+    useBackgroundDownload: (wanted: () => DownloadWanted | undefined) => {
+        wantedByCard = wanted;
+        return { starting };
+    },
 }));
 jest.mock(`../../../agents/fleet/useAgents`, () => ({ useAgents: () => ({ fleet: ref([]) }) }));
 type ActiveRow = { id: string; role: string; hosted?: { region: string; warm: boolean; canRollBack?: boolean } };
@@ -50,11 +65,13 @@ jest.mock(`../../../capabilities/connect/hosts/HostRecreate.vue`, () => ({
             action: { type: String, default: `` },
             label: { type: String, default: undefined },
             gilded: { type: Boolean, default: false },
+            ready: { type: Boolean, default: false },
             open: { type: Boolean, default: false },
         },
         emits: [`update:open`],
         render(): ReturnType<typeof h> {
-            return h(`div`, { "data-recreate": this.action, "data-label": this.label, "data-gilded": String(this.gilded), "data-open": String(this.open) }, [
+            const marks = { "data-label": this.label, "data-gilded": String(this.gilded), "data-ready": String(this.ready), "data-open": String(this.open) };
+            return h(`div`, { "data-recreate": this.action, ...marks }, [
                 h(`button`, { type: `button`, onClick: () => this.$emit(`update:open`, !this.open) }, `${this.action} command`),
                 this.$slots[`beside`]?.(),
             ]);
@@ -91,6 +108,7 @@ const mount = (): HTMLElement => {
     app = createApp({ render: () => h(SandboxUpdateCard) });
     app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
+    app.use(PrimeVue);
     app.mount(el);
     return el;
 };
@@ -112,6 +130,8 @@ afterEach(() => {
     breakingNotes.value = [];
     updateNotes.value = [];
     moreUpdateNotes.value = 0;
+    preparing.value = undefined;
+    starting.value = false;
     skipServed.value = true;
     skipVersion.mockClear();
     active.value = { id: `sb1`, role: `owner` };
@@ -121,26 +141,68 @@ afterEach(() => {
     document.body.innerHTML = ``;
 });
 
-it(`offers the published update on a sandbox that follows the registry, in gold, with downloading first folded beside it`, async () => {
+it(`offers the published update on a sandbox that follows the registry, in gold, with nothing beside it to download first`, () => {
     const el = mount();
     expect(recreates(el)).toEqual([`Update`]);
     expect(el.querySelector(`[data-recreate="Update"]`)?.getAttribute(`data-gilded`)).toBe(`true`);
+    expect(el.querySelector(`[data-recreate="Update"]`)?.getAttribute(`data-ready`)).toBe(`false`);
     expect(el.querySelector(`[data-executor="checkout"]`)).toBeNull();
-    await press(el, `Download first`);
-    expect(recreates(el)).toEqual([`Update`, `Download`]);
-    // The secondary step keeps its own plain button: gold is for the one that moves the version.
-    expect(el.querySelector(`[data-recreate="Download"]`)?.getAttribute(`data-gilded`)).toBe(`false`);
+    // The download is the machine's to do by itself; there is no button for it.
+    expect(el.textContent).not.toContain(`Download first`);
 });
 
-it(`keeps one folded step open at a time, so two blocks of shell are never on the card at once`, async () => {
+it(`draws a download the machine is running in place of the buttons, and turns to the restart by itself once it is in`, async () => {
+    preparing.value = { channel: `stable`, startedAt: Date.now() - 60_000, at: Date.now(), phase: `download`, percent: 41.6 };
     const el = mount();
-    await press(el, `Download first`);
-    await press(el, `Update command`);
+    expect(recreates(el)).toEqual([]);
+    const status = el.querySelector(`[role="status"]`)!;
+    expect([...status.querySelectorAll(`span, p`)].map((part) => part.textContent?.trim())).toEqual([
+        `Downloading 1.54.0 in the background`,
+        `42%`,
+        `Your sandbox keeps working. Once it's in, updating takes about 30 seconds.`,
+    ]);
+    expect(el.querySelector(`header`)?.textContent).toContain(`Downloading update`);
+    // In: the marker gone and the build staged, so the gold button is the half-minute restart.
+    preparing.value = undefined;
+    stagedPlan.value = { ok: true, steps: [] };
+    await nextTick();
     expect(recreates(el)).toEqual([`Update`]);
-    expect(el.querySelector(`[data-recreate="Update"]`)?.getAttribute(`data-open`)).toBe(`true`);
-    await press(el, `Download first`);
-    expect(recreates(el)).toEqual([`Update`, `Download`]);
-    expect(el.querySelector(`[data-recreate="Update"]`)?.getAttribute(`data-open`)).toBe(`false`);
+    expect(el.querySelector(`[data-recreate="Update"]`)?.getAttribute(`data-ready`)).toBe(`true`);
+    expect(el.querySelector(`header`)?.textContent).toContain(`Update ready to apply`);
+    expect(el.querySelector(`[role="status"]`)).toBeNull();
+});
+
+it(`names the step a download is on, with a bar that has no end where there is nothing to measure`, () => {
+    preparing.value = { channel: `stable`, startedAt: Date.now() - 60_000, at: Date.now(), phase: `build` };
+    const el = mount();
+    const status = el.querySelector(`[role="status"]`)!;
+    expect(status.textContent).toContain(`Building your environment on 1.54.0`);
+    expect(status.textContent).not.toContain(`%`);
+    expect(status.querySelector(`.p-progressbar-indeterminate`)).not.toBeNull();
+});
+
+it(`draws its own request for the download as one starting, until the machine says how far it got`, () => {
+    starting.value = true;
+    const el = mount();
+    expect(recreates(el)).toEqual([]);
+    expect(el.querySelector(`[role="status"]`)?.textContent).toContain(`Starting to download 1.54.0 in the background`);
+});
+
+it(`asks the machine for the download only while an update on offer is neither downloaded nor downloading`, async () => {
+    mount();
+    expect(asked()).toEqual({ slug: `demo`, version: LATEST });
+    preparing.value = { channel: `stable`, startedAt: Date.now(), at: Date.now(), phase: `download` };
+    expect(asked()).toBeUndefined();
+    preparing.value = undefined;
+    stagedPlan.value = { ok: true, steps: [] };
+    expect(asked()).toBeUndefined();
+    stagedPlan.value = undefined;
+    // The platform restarts a hosted sandbox onto its image; there is no machine of the owner's to download on.
+    active.value = { id: `sb1`, role: `owner`, hosted: { region: `ams`, warm: true } };
+    expect(asked()).toBeUndefined();
+    active.value = { id: `sb1`, role: `owner` };
+    info.value = { ...info.value, updateAvailable: false };
+    expect(asked()).toBeUndefined();
 });
 
 it(`leads with the version it takes you to and how much is in it, then what is new, the rest a link away`, () => {

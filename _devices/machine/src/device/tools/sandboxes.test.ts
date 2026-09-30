@@ -9,6 +9,7 @@ import {
     icConnectEnv,
     icRemoveArgs,
     icRunnerArgs,
+    icBackgroundPrepareArgs,
     icSwapArgs,
     lineSplitter,
     olderResizePlan,
@@ -322,6 +323,19 @@ test("advertises rollback-to only when ic's rollback takes --to, spelled whole",
     // An ic from before `--to`, and flags that merely begin with the same letters.
     expect(featuresFrom(undefined, "Usage: ic sandbox rollback [OPTIONS] [SLUG]\n      --skip-preflight")).toEqual([]);
     expect(featuresFrom(undefined, "      --token <TOKEN>\n      --to-image <IMAGE>")).toEqual([]);
+});
+
+// `background-prepare` is what the update card checks before it sends `prepare-background` when it opens: an agent
+// advertises it only when its ic can prepare unattended, the only way this agent runs that op.
+test("advertises background-prepare only when ic's prepare takes --auto, spelled whole", () => {
+    const prepare = "Usage: ic sandbox prepare [OPTIONS] [SLUG]\n      --channel <CHANNEL>\n      --auto";
+    expect(featuresFrom(undefined, undefined, prepare)).toEqual(["background-prepare"]);
+    expect(featuresFrom(undefined, undefined, "Usage: ic sandbox prepare [OPTIONS] [SLUG]\n      --channel <CHANNEL>")).toEqual([]);
+    expect(featuresFrom(undefined, undefined, "      --automatic")).toEqual([]);
+});
+
+test("a background download runs ic's unattended prepare, the same argv as the machine's own timer", () => {
+    expect(icBackgroundPrepareArgs("work")).toEqual(["sandbox", "prepare", "work", "--auto"]);
 });
 
 // A log is a stream of chunks whose boundaries fall anywhere: a line split across two chunks is one line, and a blank

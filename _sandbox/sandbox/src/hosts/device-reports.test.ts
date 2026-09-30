@@ -585,6 +585,19 @@ test("a shape reaches an agent that announces it only whole and with when it tak
     ]);
 });
 
+// The update card sends this by itself when it opens: an older agent would refuse it by name, so it never leaves here
+// for one, and the refusal says the agent's own timer still covers it.
+test("a background download reaches only an agent that says it can run one unattended", async () => {
+    const old = runnerServices({ features: ["set-shape"] });
+    await expect(drain(manageDeviceSandbox(old.services, "rog", { op: "prepare-background", slug: "work" }))).rejects.toThrow(
+        /too old to download an update in the background\. Nothing was changed; its own timer still downloads updates every few hours\./,
+    );
+    expect(old.sent).toEqual([]);
+    const current = runnerServices({ features: ["set-shape", "background-prepare"] });
+    await drain(manageDeviceSandbox(current.services, "rog", { op: "prepare-background", slug: "work" }));
+    expect(current.sent).toEqual([{ op: "prepare-background", slug: "work" }]);
+});
+
 // Pairing injection applies only to `runner-up`; every other op passes through untouched.
 test("no other op grows a pairing", async () => {
     const { services, sent, minted } = runnerServices();

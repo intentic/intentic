@@ -64,9 +64,11 @@ flowchart LR
   in `~/.intentic/machine/machine-id`, sent in the connect-time facts, the sync report and the sync enrollment. The
   Windows side hands its own to the agent it starts in each distro, so every OS install of one PC answers with one id;
   a sandbox joins enrollments, sync enrollments and device rows on it, never on a hostname.
-- The features a device advertises (`set-shape`, `reshape-later`, `rollback-to`) are read off the `ic` under it, from
-  that `ic`'s own help (`ic sandbox shape --set` for the first two, `ic sandbox rollback --to` for the third), rather
-  than listed beside the code. The device RPC inputs are strict, so an op or field this agent does not know is refused
+- The features a device advertises (`set-shape`, `reshape-later`, `rollback-to`, `background-prepare`) are read off
+  the `ic` under it, from that `ic`'s own help (`ic sandbox shape --set` for the first two, `ic sandbox rollback --to`
+  for the third, `ic sandbox prepare --auto` for the fourth), rather than listed beside the code. `background-prepare`
+  is the `prepare-background` op the update card sends when it opens: the same unattended download as the timer's,
+  run now. The device RPC inputs are strict, so an op or field this agent does not know is refused
   rather than dropped, and a `to` on anything but a rollback is refused. The one exception is the grant a sandbox
   pushes ([`device/grant.ts`](src/device/grant.ts)): a switch this agent does not know is left off and logged once per
   link, since refusing the grant dropped the link and the sandbox redialled it forever. A known switch with a value it
@@ -89,7 +91,8 @@ flowchart LR
   taken port answers `busy`, and the sandbox leaves the paste to the person.
 - On Windows the Windows side is the root of the PC (`src/environments/`): it holds one `wsl.exe` session per
   distro with an agent, and `upgrade` brings every environment to the same release. The root also updates itself
-  on a timer and pre-downloads sandbox updates with `ic sandbox prepare --auto`.
+  on a timer and pre-downloads sandbox updates with `ic sandbox prepare --auto`, which the update card can also ask
+  for at once (`prepare-background`) and follows while it runs (ic's `update-preparing.json`).
 - The install shims only put a first binary down and run `setup`; `install.ts` decides the rest. `status --json`
   is what the desktop app's tray reads.
 

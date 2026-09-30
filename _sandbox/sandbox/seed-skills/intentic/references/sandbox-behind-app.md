@@ -42,9 +42,11 @@ Sandbox ▸ Overview shows **Installed version** and, when one is out, **→ <ve
 card:
 
 - **Hosted**: **Restart and update**, "the platform boots your sandbox onto the new image, files kept".
-- **On their own machine**: **Update now** (or **Download first**, which restarts nothing), which runs on a connected
-  device or in the desktop app, and otherwise opens the command to run on that machine. `ic sandbox update <slug>` on
-  the machine itself does the same.
+- **On their own machine**: the machine downloads the update in the background by itself (and starts at once when
+  the card is opened on a connected machine), and the card shows how far it has got. Once it is in, **Update now** is
+  a half-minute restart; before that it downloads, builds and restarts in one go. It runs on a connected device or in
+  the desktop app, and otherwise opens the command to run on that machine. `ic sandbox update <slug>` on the machine
+  itself does the same.
 
 The sandbox restarts for about half a minute; files in `/work` and conversations are kept. Running turns stop
 (the card warns when an agent is mid-turn) and must be resumed unless **Resume turns after a restart** is on, or the

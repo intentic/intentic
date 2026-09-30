@@ -2,7 +2,7 @@ import type { Log } from "@intentic/local-agent";
 import type { DeviceSandbox } from "@intentic/sandbox-contract";
 import { readMachineConfig } from "../../environments/machine.js";
 import { type IcRun, lastLine, newRoundState, type RoundState, type Rounds, runRound, startRounds, ticksToSkip } from "./ic-rounds.js";
-import { fleet, icInFlight, runIc } from "../tools/sandboxes.js";
+import { fleet, icBackgroundPrepareArgs, icInFlight, runIc } from "../tools/sandboxes.js";
 
 // Keeps the next sandbox update downloaded by running `ic sandbox prepare <slug> --auto` on a timer, letting `ic`
 // decide everything (disk checks, pinned/dev images, no-ops). Lives on the machine, not the sandbox, since the
@@ -22,8 +22,8 @@ export { ticksToSkip };
 export const prepareTargets = (boxes: readonly DeviceSandbox[]): string[] =>
     boxes.filter((box) => box.running && !box.slug.startsWith("runner-")).map((box) => box.slug);
 
-// `--auto` tells ic nobody is watching; dropping it would run the attended flow's judgement calls unattended.
-export const autoPrepareArgs = (slug: string): string[] => ["sandbox", "prepare", slug, "--auto"];
+// `--auto` tells ic nobody is watching; the same argv the update card's `prepare-background` runs (tools/sandboxes.ts).
+export const autoPrepareArgs = icBackgroundPrepareArgs;
 
 export type AutoPrepareState = RoundState;
 

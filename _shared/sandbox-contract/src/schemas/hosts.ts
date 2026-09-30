@@ -72,12 +72,16 @@ export type DeviceFacts = z.infer<typeof DeviceFactsSchema>;
 //   previous one; advertised only when the agent's `ic sandbox rollback` takes `--to`.
 // - `loopback-catch`: the `catchLoopback` procedure, a sign-in's loopback redirect caught on this machine
 //   (loopback-catch.ts); an agent without it rejects the call as an unknown procedure.
-export const DeviceFeatureSchema = z.enum(["reshape-later", "set-shape", "rollback-to", "loopback-catch"]);
+// - `background-prepare`: the `prepare-background` op, the next update downloaded under the unattended rules of the
+//   agent's own timer (`ic sandbox prepare --auto`), which the update card sends when it opens; advertised only when
+//   the agent's `ic sandbox prepare` takes `--auto`.
+export const DeviceFeatureSchema = z.enum(["reshape-later", "set-shape", "rollback-to", "loopback-catch", "background-prepare"]);
 export type DeviceFeature = z.infer<typeof DeviceFeatureSchema>;
 export const DEVICE_FEATURE_RESHAPE_LATER: DeviceFeature = "reshape-later";
 export const DEVICE_FEATURE_SET_SHAPE: DeviceFeature = "set-shape";
 export const DEVICE_FEATURE_ROLLBACK_TO: DeviceFeature = "rollback-to";
 export const DEVICE_FEATURE_LOOPBACK_CATCH: DeviceFeature = "loopback-catch";
+export const DEVICE_FEATURE_BACKGROUND_PREPARE: DeviceFeature = "background-prepare";
 // The features an agent advertised that this build knows; an unknown one is a newer agent's and means nothing here.
 export const deviceFeatures = (facts: Pick<DeviceFacts, "features"> | undefined): DeviceFeature[] =>
     (facts?.features ?? []).flatMap((feature) => {

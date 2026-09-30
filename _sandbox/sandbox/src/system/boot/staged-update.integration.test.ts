@@ -2,7 +2,7 @@ import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { UpdateOutcome } from "@intentic/sandbox-contract";
-import { stagedUpdate, updateOutcome } from "./staged-update.js";
+import { PREPARING_FRESH_MS, preparingUpdate, stagedUpdate, updateOutcome } from "./staged-update.js";
 
 // The staged-update marker: every failure to read it (missing, malformed, unversioned) falls back to "nothing is known
 // to be waiting".
@@ -65,4 +65,32 @@ test("no outcome, or one this build cannot read, is nothing said", async () => {
     // A result a newer host has a word for and this build does not.
     expect(await updateOutcome(await withOutcome(JSON.stringify({ result: "deferred", at: 1 })))).toBeUndefined();
     expect(await updateOutcome(await withOutcome(JSON.stringify({ result: "kept" })))).toBeUndefined();
+});
+
+// The host's word on a download still running, which `ic sandbox prepare` rewrites every few seconds and removes when
+// it ends. A killed ic cannot remove it, so only a fresh one is a download in progress.
+const withPreparing = (contents?: string): Promise<string> => withMarker(contents, "update-preparing.json");
+const NOW = 1_790_000_000_000;
+
+test("a download the host is running is read back whole while its heartbeat is fresh", async () => {
+    const pulling = { channel: "stable", startedAt: NOW - 90_000, at: NOW - 3_000, phase: "download", percent: 42 };
+    expect(await preparingUpdate(await withPreparing(JSON.stringify(pulling)), NOW)).toEqual(pulling);
+    const building = { channel: "stable", startedAt: NOW - 200_000, at: NOW - PREPARING_FRESH_MS, phase: "build" };
+    expect(await preparingUpdate(await withPreparing(JSON.stringify(building)), NOW)).toEqual(building);
+});
+
+test("a download whose heartbeat stopped is no download at all, so a killed ic never leaves a bar frozen on the card", async () => {
+    const stalled = { channel: "stable", startedAt: NOW - 600_000, at: NOW - PREPARING_FRESH_MS - 1, phase: "download", percent: 40 };
+    expect(await preparingUpdate(await withPreparing(JSON.stringify(stalled)), NOW)).toBeUndefined();
+});
+
+test("no download marker, or one this build cannot read, is nothing downloading", async () => {
+    expect(await preparingUpdate(await withPreparing(), NOW)).toBeUndefined();
+    expect(await preparingUpdate(await withPreparing(JSON.stringify({ channel: "stable", at: NOW })), NOW)).toBeUndefined();
+    expect(await preparingUpdate(await withPreparing(JSON.stringify({ channel: "stable", startedAt: NOW, at: NOW, phase: "download", percent: 140 })), NOW)).toBeUndefined();
+});
+
+test("a step a newer ic names is still a download in progress", async () => {
+    const newer = { channel: "stable", startedAt: NOW - 1_000, at: NOW, phase: "verify" };
+    expect(await preparingUpdate(await withPreparing(JSON.stringify(newer)), NOW)).toEqual(newer);
 });

@@ -1,4 +1,4 @@
-import { computed } from "vue";
+import { computed, type Ref } from "vue";
 import { rpcPrefix } from "../../../../lib/queryKeys";
 import { queryClient } from "../../../../lib/queryPersistence";
 import { rpcQuery } from "../../client/rpcQuery";
@@ -11,10 +11,13 @@ import { supportsRoute } from "../useDaemonRoutes";
 // query feeds both the hub card and the chip's attention list. The update itself runs on the host (HostRecreate), never
 // the sandbox; no per-version dismiss, since the fact just badges the chip and clears itself.
 
-export function useSandboxVersion() {
+// `poll` is the update card's own re-read while a download it draws is under way (updateDownload.ts); every other reader
+// leaves it out, so only an open card ever polls.
+export function useSandboxVersion(poll?: Ref<number | false>) {
     const { serverManaged, state: envState, localImage } = useEnvironment();
 
-    const { query } = useSandboxQuery(rpcQuery(`system.info`));
+    const read = rpcQuery(`system.info`);
+    const { query } = useSandboxQuery(poll === undefined ? read : { ...read, refetchInterval: poll });
     const info = computed(() => query.data.value);
     const installed = computed(() => info.value?.version);
     const latest = computed(() => info.value?.latest);
@@ -38,6 +41,9 @@ export function useSandboxVersion() {
     // What the staged build's first boot converts in this sandbox's stored files, pre-flighted when it was downloaded;
     // only for the build actually on offer, since an overtaken one's plan describes an update nobody is being offered.
     const stagedPlan = computed(() => (updateStaged.value ? staged.value?.plan : undefined));
+    // A download of the next update running on the machine right now, with its step and how far it got; the daemon
+    // passes it on only while the machine keeps saying so.
+    const preparing = computed(() => info.value?.preparing);
 
     // Whether a runtime can serve a turn right now. `unknown` or absent means unverified and is never shown as a
     // problem; only an explicit `unavailable` is, with the daemon's own sentence.
@@ -68,6 +74,7 @@ export function useSandboxVersion() {
         updateStaged,
         stagedBehind,
         stagedPlan,
+        preparing,
         runtimeIssue,
         serverManaged,
         slug,

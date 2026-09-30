@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Button, Code, commandLang, CopyButton, type IconName, Notice, type NoticeModel, RowGroup, RowNote, StatusBadge, ui, useOsPreference } from "@intentic/ui";
 import { useAsyncAction, useNow } from "@intentic/ui/async";
-import { computed, ref } from "vue";
+import { computed, ref, watchEffect } from "vue";
 import DevRebuild from "../../environment/rebuild/DevRebuild.vue";
 import HostRecreate from "../../../capabilities/connect/hosts/HostRecreate.vue";
 import { turnInFlight } from "../../../agents/fleet/agentStatus";
@@ -9,8 +9,11 @@ import { useAgents } from "../../../agents/fleet/useAgents";
 import { useSandbox } from "../../client/useSandbox";
 import { expectRestart, type RestartQuiet } from "../../live/sandboxRestart";
 import HostedRollbackDialog from "./HostedRollbackDialog.vue";
+import UpdateDownloadProgress from "./UpdateDownloadProgress.vue";
 import UpdateRollbackPanel from "./UpdateRollbackPanel.vue";
 import UpdateWhatsNew from "./UpdateWhatsNew.vue";
+import { useBackgroundDownload } from "./useBackgroundDownload";
+import { type DownloadState, downloadPercent, downloadPollMs, downloadStep, downloading } from "./updateDownload";
 import { updateCardPlan } from "./updateOutcome";
 import { useSandboxVersion } from "./useSandboxVersion";
 import { UPDATE_ACTION_ANCHOR } from "./updateAnchor";
@@ -21,19 +24,23 @@ import { useT } from "@intentic/ui/i18n";
 // Update prompt on the sandbox hub. Updates run on the host, not the sandbox (no host Docker socket; see
 // HostRecreate); a server-managed sandbox updates on its next deploy instead. Also shown with no update when there is
 // something to say about the version that runs (what the machine last did about it, a release withdrawn after it
-// shipped, a release skipped) or a way back to offer, and splits download from apply so it can offer a bounded restart
-// once staged. Which of its actions apply is decided in one place (updateOutcome.ts).
+// shipped, a release skipped) or a way back to offer. The download is the machine's to do by itself, which the card
+// only starts sooner and follows (updateDownload.ts), so once it is in, what the card offers is a half-minute restart.
+// Which of its actions apply is decided in one place (updateOutcome.ts).
 //
 // AN UPDATE ON OFFER IS GOOD NEWS, AND IS DRAWN AS SOME. It used to be a wall: two full terminal walkthroughs (one of
 // them for the secondary "download first"), the same cost sentence twice, three paragraphs of reassurance, the release
 // notes as one run of large text, and the developer notes in a red box under a heading that called the whole update a
 // danger. Now the offer is its own card, in reading order: what you get (the version, and how much is in it), the one
-// gold button that takes it, what it costs and keeps as three short facts, then what is new. Everything a reader might
-// need but most never do (the command for a machine this page cannot reach, downloading first, what developers must
-// change, the way back) is one line that opens.
+// gold button that takes it (or, while the update downloads in the background, how far it has got), what it costs and
+// keeps as three short facts, then what is new. Everything a reader might need but most never do (the command for a
+// machine this page cannot reach, what developers must change, the way back) is one line that opens.
 
 const t = useT();
 
+// The card's own re-read of `system.info`, set below from the download it follows: often while one runs, never when
+// nothing on the card can change by itself.
+const poll = ref<number | false>(false);
 const {
     installed,
     latest,
@@ -44,13 +51,14 @@ const {
     updateStaged,
     stagedBehind,
     stagedPlan,
+    preparing,
     info,
     serverManaged,
     slug,
     skipServed,
     skipVersion,
     localImage,
-} = useSandboxVersion();
+} = useSandboxVersion(poll);
 const { cmdOs } = useOsPreference();
 
 // A hosted sandbox has no host to run a command on: its restart replaces the machine's image via the platform,
@@ -221,18 +229,23 @@ const facts = computed((): Fact[] => {
     ];
 });
 
-// ONE FOLDED STEP OPEN AT A TIME, under the button: the command a machine this page cannot reach needs (HostRecreate's
-// own fold), or downloading first. Two blocks of shell open at once is the page this card used to be.
-const folded = ref<`command` | `download` | undefined>(undefined);
-const commandOpen = computed({
-    get: () => folded.value === `command`,
-    set: (open: boolean) => {
-        folded.value = open ? `command` : undefined;
-    },
+// THE DOWNLOAD IS NOT A BUTTON. The machine that runs this sandbox downloads its next update by itself, and the card
+// asks it to start now rather than within the next few hours (useBackgroundDownload). While it runs, its progress stands
+// where the buttons do; once it is in, the gold button is a half-minute restart. Only a sandbox on its owner's own
+// machine downloads that way: the platform restarts a hosted one onto its image, and a deploy moves a managed one.
+const downloadsHere = computed(() => offering.value && hosted.value === undefined && !serverManaged.value && slug.value !== undefined);
+const { starting } = useBackgroundDownload(() =>
+    downloadsHere.value && !updateStaged.value && preparing.value === undefined && slug.value !== undefined && latest.value !== undefined
+        ? { slug: slug.value, version: latest.value }
+        : undefined,
+);
+const download = computed(
+    (): DownloadState => ({ offered: downloadsHere.value, staged: updateStaged.value, preparing: preparing.value, starting: starting.value }),
+);
+const isDownloading = computed(() => downloading(download.value));
+watchEffect(() => {
+    poll.value = downloadPollMs(download.value);
 });
-const toggleDownload = (): void => {
-    folded.value = folded.value === `download` ? undefined : `download`;
-};
 
 // The quiet group's heading, for everything that is not an offer.
 const quietHeading = computed(() => {
@@ -294,7 +307,13 @@ const finePrint = computed(
                             :class="updateStaged ? `text-success` : `text-link`"
                         >
                             <Icon v-if="updateStaged" name="check-circle" aria-hidden="true" />
-                            {{ updateStaged ? t(`sandbox.sandboxUpdateCard.updateReady`) : t(`sandbox.sandboxUpdateCard.updateAvailable`) }}
+                            {{
+                                updateStaged
+                                    ? t(`sandbox.sandboxUpdateCard.updateReady`)
+                                    : isDownloading
+                                      ? t(`sandbox.sandboxUpdateCard.updateDownloading`)
+                                      : t(`sandbox.sandboxUpdateCard.updateAvailable`)
+                            }}
                         </p>
                         <h2 class="text-xl font-semibold leading-tight tracking-tight text-content">{{ t(`sandbox.sandboxUpdateCard.offerTitle`, { version: latest }) }}</h2>
                         <p class="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-muted">
@@ -308,8 +327,8 @@ const finePrint = computed(
                     </div>
                 </header>
 
-                <!-- THE STEP: the button, then what it costs and keeps. The switcher's update row points at this block by
-                     id and focuses the first button in it, which is the gold one. -->
+                <!-- THE STEP: the button (or the download it waits on), then what it costs and keeps. The switcher's update
+                     row points at this block by id and focuses the first button in it, which is the gold one. -->
                 <div :id="UPDATE_ACTION_ANCHOR" class="flex flex-col gap-3.5">
                     <p v-if="serverManaged" class="text-xs text-muted">
                         {{ t(`sandbox.sandboxUpdateCard.sandboxUpdatesOnNext`) }} <span class="font-mono text-content">intentic deploy apply</span>
@@ -324,27 +343,11 @@ const finePrint = computed(
                         </div>
                         <Notice v-if="restartNotice" :of="restartNotice" />
                     </template>
-                    <!-- Downloaded already: what is left is the restart, so there is nothing to download first. -->
-                    <HostRecreate v-else-if="slug && updateStaged" :slug="slug" action="Update" ready gilded bare keeps-said :label="retryLabel" />
-                    <template v-else-if="slug">
-                        <HostRecreate v-model:open="commandOpen" :slug="slug" action="Update" gilded bare keeps-said :label="retryLabel">
-                            <template #beside>
-                                <!-- The way to keep the restart for later: say what it does on hover, and open the step on press. -->
-                                <button
-                                    v-tooltip.top="{ title: t(`capabilities.hostRecreate.inBackground`), note: t(`capabilities.hostRecreate.nothingRestarts`) }"
-                                    type="button"
-                                    :class="ui.textAction()"
-                                    :aria-expanded="folded === `download`"
-                                    @click="toggleDownload"
-                                >
-                                    <Icon name="download" aria-hidden="true" />{{ t(`sandbox.sandboxUpdateCard.downloadFirst`) }}
-                                </button>
-                            </template>
-                        </HostRecreate>
-                        <div v-if="folded === `download`" class="rounded-lg border border-line-subtle bg-canvas/50 p-3.5">
-                            <HostRecreate :slug="slug" action="Download" />
-                        </div>
-                    </template>
+                    <!-- Downloading in the background: nothing to press until it is in, so its progress stands in the
+                         buttons' place, and the card turns to the restart by itself once it is. -->
+                    <UpdateDownloadProgress v-else-if="isDownloading" :step="downloadStep(preparing)" :percent="downloadPercent(preparing)" :version="latest" />
+                    <!-- Downloaded already, the gold button is the restart; otherwise it downloads, builds and restarts. -->
+                    <HostRecreate v-else-if="slug" :slug="slug" action="Update" :ready="updateStaged" gilded bare keeps-said :label="retryLabel" />
 
                     <ul class="flex flex-wrap gap-x-5 gap-y-1.5">
                         <li v-for="fact in facts" :key="fact.icon" v-tooltip.top="fact.tip" class="flex items-center gap-1.5 text-2xs text-muted">
@@ -354,18 +357,18 @@ const finePrint = computed(
                         </li>
                     </ul>
 
-                    <!-- Only the restart costs a turn, so the way out is downloading first. -->
-                    <p v-if="midTurn > 0" class="flex gap-1.5 text-2xs text-warning">
+                    <!-- Only the restart costs a turn, and only a press starts one: said beside the button, never under a
+                         download that interrupts nothing. -->
+                    <p v-if="midTurn > 0 && !isDownloading" class="flex gap-1.5 text-2xs text-warning">
                         <Icon name="exclamation-triangle" class="mt-px shrink-0" aria-hidden="true" />
                         <span>
                             {{ t(`sandbox.sandboxUpdateCard.midTurnRestart`, { count: midTurn }, midTurn) }}
-                            <template v-if="!updateStaged">{{ t(`sandbox.sandboxUpdateCard.downloadCostsNothing`, { count: midTurn }, midTurn) }}</template>
-                            <template v-else>{{ t(`sandbox.sandboxUpdateCard.waitFleetToSettle`) }}</template>
+                            {{ t(`sandbox.sandboxUpdateCard.waitFleetToSettle`) }}
                         </span>
                     </p>
                     <!-- A staged update a newer release overtook; still worth saying, since applying now hands over the older image. -->
                     <p v-if="stagedBehind" class="text-2xs text-muted">
-                        {{ t(`sandbox.sandboxUpdateCard.alreadyDownloadedHereReleased`, { stagedBehind, latest, stagedBehind2: stagedBehind }) }}
+                        {{ t(`sandbox.sandboxUpdateCard.alreadyDownloadedHereReleased`, { stagedBehind, latest }) }}
                     </p>
                 </div>
             </div>

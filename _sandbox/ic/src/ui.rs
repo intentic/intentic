@@ -750,7 +750,7 @@ fn start_spinner() {
 // estimates
 
 /* A FRACTION, NOT A TALLY OF FINISHED LAYERS. */
-fn pull_percent(layers: &BTreeMap<String, f32>, floor: u32) -> u32 {
+pub(crate) fn pull_percent(layers: &BTreeMap<String, f32>, floor: u32) -> u32 {
     if layers.is_empty() {
         return floor;
     }
@@ -883,7 +883,7 @@ fn is_pull_noise(line: &str) -> bool {
 /// time; the rest are announcements either side of them. Spawned without a terminal docker cannot draw its
 /// bars and prints one line per layer per state change instead, which is better for us than the bars: no
 /// cursor tricks to undo, and a layer's last word is its state.
-fn parse_layer(line: &str) -> Option<(String, f32)> {
+pub(crate) fn parse_layer(line: &str) -> Option<(String, f32)> {
     let (id, rest) = line.trim_end().split_once(": ")?;
     if id.len() < 6 || !id.chars().all(|c| c.is_ascii_hexdigit()) {
         return None;

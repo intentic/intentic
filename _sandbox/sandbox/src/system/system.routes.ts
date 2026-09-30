@@ -40,7 +40,7 @@ import { isNoTmuxServer } from "../terminal/tmux-server.js";
 import { projectDirOf } from "./project-dir.js";
 import { latestVersion } from "./boot/version-check.js";
 import { breakingNotes, MAX_UPDATE_NOTES, updateNotes, withdrawnRelease } from "./boot/release-notes.js";
-import { stagedUpdate, updateOutcome } from "./boot/staged-update.js";
+import { preparingUpdate, stagedUpdate, updateOutcome } from "./boot/staged-update.js";
 import { fileUpdateSkip, updateOffered } from "./boot/update-skip.js";
 import { opt } from "../opt.js";
 import { runtimeHealth } from "../agent/providers/adapter-health.js";
@@ -269,8 +269,9 @@ export const createSystemRoutes = (services: Services) => {
             const runtimes = runtimeHealth();
             // The host machine's own build status and its last word on the version, unknowable to the daemon; read
             // fresh from /history, never cached, like the owner's skip beside them.
-            const [staged, lastUpdate, skippedVersion] = await Promise.all([
+            const [staged, preparing, lastUpdate, skippedVersion] = await Promise.all([
                 stagedUpdate(services.config.historyRoot),
+                preparingUpdate(services.config.historyRoot, Date.now()),
                 updateOutcome(services.config.historyRoot),
                 fileUpdateSkip(services.config.historyRoot).skipped(),
             ]);
@@ -288,6 +289,7 @@ export const createSystemRoutes = (services: Services) => {
                 ...(notes.length > shown.length ? { moreUpdateNotes: notes.length - shown.length } : {}),
                 ...(breaking.length > 0 ? { breakingNotes: breaking } : {}),
                 ...(staged !== undefined ? { staged } : {}),
+                ...opt("preparing", preparing),
                 ...opt("lastUpdate", lastUpdate),
                 ...opt("withdrawn", withdrawn),
                 ...opt("skippedVersion", skippedVersion),

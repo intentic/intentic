@@ -532,6 +532,24 @@ export const icFlow = async (
     }
 };
 
+// `prepare` under the unattended rules, the one argv the background tick (sandbox-rounds/auto-prepare.ts) and the
+// `prepare-background` op both run: nobody pressed anything, so ic skips a pinned sandbox and the version it went back
+// from, and treats low disk as "not now". Dropping `--auto` would run the attended flow's judgement calls unattended.
+export const icBackgroundPrepareArgs = (slug: string): string[] => ["sandbox", "prepare", slug, "--auto"];
+
+// The update card's own nudge when it opens: the download the background tick would run within the next few hours, run
+// now. It answers with ic's last line (downloaded, already current, or skipped and why), since unlike an attended
+// prepare every one of those is a fine ending; only ic failing outright is an error.
+export const prepareInBackground = async (slug: string, scopes: DeviceScopes, onLine: (line: string) => void): Promise<string> => {
+    assertScope(scopes, "sandboxes");
+    await find(slug);
+    const { code, output } = await icFlow(slug, icBackgroundPrepareArgs(slug), onLine, { moves: false });
+    if (code !== 0) {
+        throw new Error(`The background download for "${slug}" failed on this device.\n\n${output}`);
+    }
+    return output.split(/\r?\n/).findLast((line) => line.trim() !== ``) ?? `Nothing to download for "${slug}" right now.`;
+};
+
 export const swapResult = (swap: SandboxSwap, slug: string, output: string, to?: string): string => {
     if (swap === "update" && output.includes("no newer sandbox image is available yet")) {
         return `Sandbox "${slug}" is already up to date. Nothing was restarted.`;

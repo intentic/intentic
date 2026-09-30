@@ -103,6 +103,10 @@ export const DeviceSandboxOpSchema = z.enum([
     "stop",
     "restart",
     "prepare",
+    // `prepare` under the unattended rules (`ic sandbox prepare --auto`): nobody pressed anything, so low disk is "not
+    // now" and a pinned sandbox or the version it went back from is left alone. What the update card sends by itself
+    // when it opens; sent only to an agent advertising `background-prepare`.
+    "prepare-background",
     "update",
     "rebuild",
     "rollback",

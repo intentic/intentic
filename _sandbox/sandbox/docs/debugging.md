@@ -56,7 +56,8 @@ pretty-prints to stdout instead of writing `daemon.log`.
 - A `conversations.db.corrupt-<ms>` beside the registry is one a boot found damaged and set aside, never deleted; the
   live file is what could be copied out of it, or a new one. `trash/conversations/` holds the directories no registry
   row owned, moved there by the boot's sweep and removed 14 days later.
-- `update-staged.json`, `update-outcome.json` (what the host last did about the version) and `boot-failure.json` are
+- `update-staged.json`, `update-preparing.json` (a download running now, rewritten every few seconds and read only
+  while fresh), `update-outcome.json` (what the host last did about the version) and `boot-failure.json` are
   written by `ic` and a failed boot for each other; `update-skipped.json` is the release the owner chose not to be
   offered.
 - A conversation's transcript is a zstd log, one frame per settled turn behind a skippable frame naming its length,

@@ -12,6 +12,7 @@ import {
     createSandbox,
     forgetShape,
     manageSandbox,
+    prepareInBackground,
     reconnectSandbox,
     removeSandbox,
     reshapeSandbox,
@@ -84,6 +85,11 @@ const FLOWS: Record<DeviceSandboxOp, FlowFor> = {
         async (onLine) =>
             await manageSandbox("restart", slug, scopes, onLine),
     prepare: swapFlowFor("prepare"),
+    // The same download under the background tick's rules, sent by the update card when it opens.
+    "prepare-background":
+        ({ slug }, scopes) =>
+        (onLine) =>
+            prepareInBackground(slug, scopes, onLine),
     update: swapFlowFor("update"),
     rebuild: swapFlowFor("rebuild"),
     rollback: swapFlowFor("rollback"),

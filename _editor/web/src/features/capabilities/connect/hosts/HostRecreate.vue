@@ -16,7 +16,7 @@ import {
 import { noticeFrom } from "@intentic/ui/async";
 import Checkbox from "primevue/checkbox";
 import { computed, onBeforeUnmount, ref, type VNode, watch } from "vue";
-import { type DeviceSandboxPayload, manageDeviceSandbox, swapServingSandbox, useHostRunning } from "../../../sandbox/devices/useDevices";
+import { type DeviceSandboxPayload, swapServingSandbox, useHostRunning } from "../../../sandbox/devices/useDevices";
 import { useSandbox } from "../../../sandbox/client/useSandbox";
 import { expectRestart, type RestartQuiet } from "../../../sandbox/live/sandboxRestart";
 import { useHubWork } from "../../../../shell/hub/hubWork";
@@ -33,8 +33,9 @@ import { useT } from "@intentic/ui/i18n";
 
 // Recreating needs the host machine (the daemon has no host Docker socket for its own container), so this renders
 // across four surfaces: a button on a connected device or the desktop app, else a copyable per-OS command. Mode
-// rides the argument shape (a hash rebuilds that pinned overlay, no hash pulls :stable), not a flag. `Download` runs
-// the same flow but stops before the container is touched.
+// rides the argument shape (a hash rebuilds that pinned overlay, no hash pulls :stable), not a flag. Downloading an
+// update ahead of its restart is not a button here: the machine does it by itself (the update card's
+// useBackgroundDownload, and the machine agent's timer).
 //
 // Every caller hands it the slug of the sandbox serving this page (read off its own /environment), so every swap run
 // from here is relayed by the very daemon it replaces: the stream dies at the cutover. That is the swap happening, not
@@ -43,10 +44,7 @@ import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
 
-type Action = `Download` | `Update` | `Rebuild` | `Roll back`;
-
-// Action members for template comparisons: the i18n gate reads bound-attribute expressions, not enum switches.
-const DOWNLOAD: Action = `Download`;
+type Action = `Update` | `Rebuild` | `Roll back`;
 
 const props = defineProps<{
     slug: string;
@@ -89,26 +87,23 @@ const desktop = computed(() => desktopVersion() !== undefined);
 
 // The machine, when it is one this sandbox can ask directly.
 const hostId = useHostRunning(() => props.slug);
-const OP: Record<Action, DeviceSandboxOp> = { Download: `prepare`, Update: `update`, Rebuild: `rebuild`, "Roll back": `rollback` };
+const OP: Record<Action, DeviceSandboxOp> = { Update: `update`, Rebuild: `rebuild`, "Roll back": `rollback` };
 
 // The action as a reader sees it. `Action` is the enum this component switches on and the script it runs, so its
 // members are not the words on screen: every label takes this instead.
-const VERBS: Record<Action, string> = { Download: `download`, Update: `update`, Rebuild: `rebuild`, "Roll back": `rollBack` };
+const VERBS: Record<Action, string> = { Update: `update`, Rebuild: `rebuild`, "Roll back": `rollBack` };
 const verb = computed(() => t(`capabilities.hostRecreate.${VERBS[props.action]}Verb` as `capabilities.hostRecreate.updateVerb`));
 
 // The loud tier in the house gold (primeng.css); gold stands for moving up a version, so it goes on nothing else.
 const GILDED = `ui-button-loud ui-button-gilded`;
-// The glyph says where the press goes: up a version, down into the machine, or the older swap's bolt.
-const icon = computed<IconName>(() => (props.action === DOWNLOAD ? `download` : props.gilded ? `arrow-circle-up` : `bolt`));
+// The glyph says where the press goes: up a version, or the older swap's bolt.
+const icon = computed<IconName>(() => (props.gilded ? `arrow-circle-up` : `bolt`));
 // The button's row, shared with the caller's `beside` step; the gilded one sits a little further from its neighbour.
 const row = computed(() => (props.gilded ? `flex flex-wrap items-center gap-x-4 gap-y-2` : `flex flex-wrap items-center gap-2`));
 
 // What this action costs, read by all four renderings: the sandbox stays up through the download and rebuild, and
 // only the final restart interrupts anything.
 const cost = computed(() => {
-    if (props.action === `Download`) {
-        return t(`capabilities.hostRecreate.costDownload`);
-    }
     // A rebuild downloads nothing — it builds the approved recipe on the image already there.
     if (props.action === `Rebuild`) {
         return t(`capabilities.hostRecreate.costRebuild`);
@@ -126,7 +121,6 @@ const cost = computed(() => {
 // What the hub row this is rendered on says while the machine works: the same button sits on Environment and on
 // Overview's update tile, and each reports where it was pressed.
 const workingWords = (): Record<Action, string> => ({
-    Download: t(`capabilities.hostRecreate.workingDownload`),
     Update: t(`capabilities.hostRecreate.workingUpdate`),
     Rebuild: t(`capabilities.hostRecreate.workingRebuild`),
     "Roll back": t(`capabilities.hostRecreate.workingRollBack`),
@@ -147,7 +141,7 @@ const idle = useRebuildWhenIdle();
 // Checked by default: the owner is restarting under agents they set working, and the box is right beside the names.
 const resumeAfter = ref(true);
 // Offered while someone is mid-turn, the owner's own setting does not already resume them, and the sandbox can.
-const offerResume = computed(() => activeAgents.value.length > 0 && !autoResume.value && idle.supported.value && props.action !== DOWNLOAD);
+const offerResume = computed(() => activeAgents.value.length > 0 && !autoResume.value && idle.supported.value);
 const resumes = computed(() => autoResume.value || (offerResume.value && resumeAfter.value));
 const interruption = computed(() => {
     const count = activeAgents.value.length;
@@ -189,15 +183,10 @@ const failure = ref<NoticeModel | undefined>(undefined);
 const done = ref<string | undefined>(undefined);
 
 // Recreating always drops this page's connection, confirmed in-app (not the browser's confirm()) before it starts.
-// `Download` skips confirmation since it never touches the container and costs nothing to abandon.
 const confirming = ref(false);
 
 const runOnMachine = (): void => {
     if (hostId.value === undefined || running.value) {
-        return;
-    }
-    if (props.action === `Download`) {
-        void execute();
         return;
     }
     confirming.value = true;
@@ -221,9 +210,8 @@ const confirmBody = computed(() => {
     return t(`capabilities.hostRecreate.confirmBuildThenRestart`, { work });
 });
 
-// What the sandbox going quiet means while this runs, for every surface that isn't this tile. `Download` is absent
-// on purpose: it never touches the container, so a silence during one is not this button's doing.
-const QUIET = computed((): Partial<Record<Action, RestartQuiet>> => ({
+// What the sandbox going quiet means while this runs, for every surface that isn't this tile.
+const QUIET = computed((): Record<Action, RestartQuiet> => ({
     Update: {
         title: t(`capabilities.hostRecreate.restartingOntoUpdate`),
         detail: t(`capabilities.hostRecreate.updateAppliedReplacesSandboxs`),
@@ -364,9 +352,9 @@ const heard = (line: string): void => {
 };
 
 // The version this press is made on, read before the swap can move it; a rebuild is told by its hash instead.
-const noteStartingVersion = (swapping: boolean): void => {
+const noteStartingVersion = (): void => {
     fromVersion = undefined;
-    if (!swapping || props.hash !== undefined) {
+    if (props.hash !== undefined) {
         return;
     }
     void runningVersion()
@@ -377,8 +365,7 @@ const noteStartingVersion = (swapping: boolean): void => {
         .catch(() => undefined);
 };
 
-// The stream died with no answer. A download never touches the container, so that is lost contact like any other; a
-// swap's may be the cutover, which the watch armed at the press waits out.
+// The stream died with no answer, which may be the cutover: the watch armed at the press waits it out.
 const streamDied = (): void => {
     if (!watching.value) {
         void armWatch();
@@ -390,12 +377,12 @@ const streamDied = (): void => {
 };
 
 // What the lines under a waiting button say: the restart this is, and that the page picks it up by itself.
-const comingBack = computed(() => t(`capabilities.hostRecreate.comingBack`, { what: QUIET.value[props.action]?.title ?? verb.value }));
+const comingBack = computed(() => t(`capabilities.hostRecreate.comingBack`, { what: QUIET.value[props.action].title }));
 
-// The press's restart as the sandbox's own return holds it, for when it outlives the press; nothing to hand where the
-// action restarts nothing or no sandbox is active.
-const handOffTo = (sandbox: string | undefined, quiet: RestartQuiet | undefined): (() => void) | undefined => {
-    if (sandbox === undefined || quiet === undefined) {
+// The press's restart as the sandbox's own return holds it, for when it outlives the press; nothing to hand where no
+// sandbox is active.
+const handOffTo = (sandbox: string | undefined, quiet: RestartQuiet): (() => void) | undefined => {
+    if (sandbox === undefined) {
         return undefined;
     }
     const what = workingWords()[props.action];
@@ -414,14 +401,12 @@ const execute = async (): Promise<void> => {
     failure.value = undefined;
     done.value = undefined;
     lines.value = [];
-    const swapping = props.action !== DOWNLOAD;
-    noteStartingVersion(swapping);
+    noteStartingVersion();
     // Armed for the whole op, not just its restart: the machine gives no sign of which minute the swap falls in, and
     // an expectation costs nothing while the sandbox is still answering.
     const quiet = QUIET.value[props.action];
     const sandbox = activeSandboxId.value;
-    const expecting = quiet !== undefined && sandbox !== undefined;
-    const working = expecting ? expectRestart({ sandbox, id: `recreate`, what: workingWords()[props.action], quiet }) : undefined;
+    const working = sandbox === undefined ? undefined : expectRestart({ sandbox, id: `recreate`, what: workingWords()[props.action], quiet });
     handOff = handOffTo(sandbox, quiet);
     // Now, not later: a rebuild the sandbox was holding for idle agents is withdrawn first, or it would run again.
     if (idleWait.value !== undefined && idleWait.value.phase !== `rebuilding`) {
@@ -432,18 +417,15 @@ const execute = async (): Promise<void> => {
     if (offerResume.value && resumeAfter.value) {
         payload.resumeTurns = true;
     }
-    const watched = swapping ? armWatch() : undefined;
+    const watched = armWatch();
     const endWork = hubWork.begin(workingWords()[props.action]);
     try {
-        const stream = swapping
-            ? swapServingSandbox(id, props.slug, OP[props.action], payload)
-            : manageDeviceSandbox(id, props.slug, OP[props.action], payload);
-        const said = await (watched === undefined ? stream : Promise.race([stream, watched]));
+        const said = await Promise.race([swapServingSandbox(id, props.slug, OP[props.action], payload), watched]);
         if (said !== undefined) {
             // The device answered in words: nothing was swapped out from under this page, or it says why not.
             done.value = said;
             stopWatching();
-        } else if (!swapping || watching.value) {
+        } else if (watching.value) {
             streamDied();
         }
     } catch (error) {
@@ -483,7 +465,7 @@ watch(
         }
         const sandbox = activeSandboxId.value;
         const quiet = QUIET.value.Rebuild;
-        if (watching.value || running.value || sandbox === undefined || quiet === undefined) {
+        if (watching.value || running.value || sandbox === undefined) {
             return;
         }
         void armWatch();
@@ -497,22 +479,12 @@ watch(
 const command = computed(() => {
     const key = props.hash === undefined ? `update` : `rebuild`;
     const rollback = props.action === `Roll back`;
-    const download = props.action === `Download`;
     if (cmdOs.value === `windows`) {
-        const args = rollback
-            ? `-Slug ${props.slug} -Rollback`
-            : download
-              ? `-Slug ${props.slug} -Prepare`
-              : props.hash === undefined
-                ? `-Slug ${props.slug}`
-                : `-Slug ${props.slug} -Hash ${props.hash}`;
+        const args = rollback ? `-Slug ${props.slug} -Rollback` : props.hash === undefined ? `-Slug ${props.slug}` : `-Slug ${props.slug} -Hash ${props.hash}`;
         return psCommand(props.hash === undefined ? `updatePs1` : `rebuildPs1`, ``, args);
     }
     if (rollback) {
         return bashCommand(key, ``, `${props.slug} --rollback`);
-    }
-    if (download) {
-        return bashCommand(key, ``, `${props.slug} --prepare`);
     }
     return bashCommand(key, ``, props.hash === undefined ? props.slug : `${props.slug} ${props.hash}`);
 });
@@ -527,7 +499,7 @@ const command = computed(() => {
                     :label="running ? t(`capabilities.hostRecreate.running`, { action: verb }) : (label ?? t(`capabilities.hostRecreate.now`, { action: verb }))"
                     :size="gilded ? undefined : `small`"
                     :class="gilded ? GILDED : undefined"
-                    :severity="!gilded && (text || action === DOWNLOAD) ? `secondary` : undefined"
+                    :severity="!gilded && text ? `secondary` : undefined"
                     :text="text"
                     :loading="running || awaiting || idleWait?.phase === `rebuilding`"
                     @click="runOnMachine"
@@ -601,7 +573,7 @@ const command = computed(() => {
         </template>
 
         <!-- Desktop deep link covers all three swaps including rollback. -->
-        <template v-else-if="desktop && action !== DOWNLOAD">
+        <template v-else-if="desktop">
             <div :class="row">
                 <Button
                     :label="label ?? t(`capabilities.hostRecreate.now`, { action: verb })"

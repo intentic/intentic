@@ -33,7 +33,9 @@ flowchart LR
   read-only mounts of the container's data (`/work`, `/history`, and `/agent-auth` where the container has it: the run
   contract's `DATA_MOUNTS`, held to it by a golden test) (`preflight.rs`) and refuses if one would fail;
   `--skip-preflight` overrides. `prepare` records the staged image's plan in the marker it leaves the sandbox, the
-  planner's line verbatim, so the update card says what an update converts before anyone accepts it. It also refuses a
+  planner's line verbatim, so the update card says what an update converts before anyone accepts it. While it runs it
+  also keeps `update-preparing.json` there (`preparing.rs`): its step and how far the pull has got, rewritten every
+  few seconds and removed when it ends, so the card draws the download in progress instead of a button for it. It also refuses a
   run line that would put the sandbox on other storage than it has (`storage.rs`: a renamed or dropped volume would
   otherwise boot a healthy-looking sandbox on empty volumes).
 - **Nothing old is let go until the new version has proved itself.** A swap parks the old container, and a new version

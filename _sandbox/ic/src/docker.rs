@@ -378,9 +378,13 @@ impl Said {
 }
 
 /// How a streamed command's output reaches the terminal: byte for byte, or as the lines `keep` lets through to `show`.
+/// `Watched` is byte for byte too, with each line also handed to `watch` (a prepare's progress, sandbox/preparing.rs).
 #[derive(Clone, Copy)]
 pub enum Shown {
     Raw,
+    Watched {
+        watch: fn(&str),
+    },
     Lines {
         keep: fn(&str) -> bool,
         show: fn(&str),
@@ -450,13 +454,22 @@ fn pump(
 ) -> std::thread::JoinHandle<()> {
     let (log, said) = (log.clone(), said.clone());
     std::thread::spawn(move || match shown {
-        Shown::Raw => tee(from, &log, &mut terminal, &said),
+        Shown::Raw => tee(from, &log, &mut terminal, &said, None),
+        Shown::Watched { watch } => tee(from, &log, &mut terminal, &said, Some(watch)),
         Shown::Lines { keep, show } => sift(from, &log, keep, show, &said),
     })
 }
 
-fn tee(mut from: impl Read, log: &Log, terminal: &mut impl Write, said: &Said) {
+fn tee(
+    mut from: impl Read,
+    log: &Log,
+    terminal: &mut impl Write,
+    said: &Said,
+    watch: Option<fn(&str)>,
+) {
     let mut buf = [0u8; 8192];
+    // Only a watched stream is cut into lines, and only for the watcher: the terminal still gets docker's bytes.
+    let mut pending = Vec::new();
     while let Ok(read) = from.read(&mut buf) {
         if read == 0 {
             break;
@@ -465,7 +478,36 @@ fn tee(mut from: impl Read, log: &Log, terminal: &mut impl Write, said: &Said) {
         let _ = terminal.flush();
         log.write(&buf[..read]);
         said.push(&String::from_utf8_lossy(&buf[..read]));
+        if let Some(watch) = watch {
+            pending.extend_from_slice(&buf[..read]);
+            for line in drain_lines(&mut pending) {
+                watch(&line);
+            }
+        }
     }
+    if let Some(watch) = watch {
+        let tail = String::from_utf8_lossy(&pending).into_owned();
+        if !tail.trim().is_empty() {
+            watch(&tail);
+        }
+    }
+}
+
+/// The whole lines at the front of `pending`, taken out of it; a line split across two reads waits for its end.
+/// Docker rewrites its status lines with a carriage return, so that ends a line too.
+fn drain_lines(pending: &mut Vec<u8>) -> Vec<String> {
+    let mut lines = Vec::new();
+    while let Some(at) = pending
+        .iter()
+        .position(|byte| *byte == b'\n' || *byte == b'\r')
+    {
+        let line = String::from_utf8_lossy(&pending[..at]).into_owned();
+        pending.drain(..=at);
+        if !line.trim().is_empty() {
+            lines.push(line);
+        }
+    }
+    lines
 }
 
 /// Line-buffered because the decision is per LINE and the kernel's read sizes are not: a chunk boundary
@@ -846,13 +888,20 @@ fn is_layer_chatter(line: &str) -> bool {
 /// One attempt. A pipe gets docker's own output byte for byte — it is what an install log has always held,
 /// and the desktop app counts those same layer lines for its bar. A terminal gets the count instead.
 fn pull_once(image: &str, log: &Log) -> Result<Streamed> {
+    // Every layer line also reaches a prepare's progress marker, if one is running (sandbox/preparing.rs): the
+    // background prepare has no terminal, and it is the download the update card most needs to see.
     let shown = if crate::ui::is_rich() {
         Shown::Lines {
-            keep: |line| !crate::ui::pull_line(line),
+            keep: |line| {
+                crate::sandbox::preparing::observe(line);
+                !crate::ui::pull_line(line)
+            },
             show: crate::ui::note,
         }
     } else {
-        Shown::Raw
+        Shown::Watched {
+            watch: crate::sandbox::preparing::observe,
+        }
     };
     stream(&["pull", image], None, shown, log)
 }

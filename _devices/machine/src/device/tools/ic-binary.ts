@@ -7,6 +7,7 @@ import {
     DEVICE_FEATURE_RESHAPE_LATER,
     DEVICE_FEATURE_ROLLBACK_TO,
     DEVICE_FEATURE_SET_SHAPE,
+    DEVICE_FEATURE_BACKGROUND_PREPARE,
     type DeviceFeature,
     isNewer,
 } from "@intentic/sandbox-contract";
@@ -150,11 +151,13 @@ const helpLists = (help: string | undefined, flag: string): boolean => help !== 
 // the old `reshape` op's `later` through the same verb (sandboxes.ts, olderResizePlan). `reshape-later` is redundant
 // with `set-shape`'s `when` for every current page, and is still advertised only for pages and daemons from before
 // `set-shape` (v1.312.0 and older), which check it before sending a later-reshape: REMOVE IN v1.314.0, with the old
-// `reshape` op. `rollback-to` is a rollback's `to`, carried as `ic sandbox rollback <slug> --to <version>`. Pure over
-// the help, so the derivation is asserted without an ic.
-export const featuresFrom = (shapeHelp: string | undefined, rollbackHelp?: string): DeviceFeature[] => [
+// `reshape` op. `rollback-to` is a rollback's `to`, carried as `ic sandbox rollback <slug> --to <version>`.
+// `background-prepare` is the `prepare-background` op, which this agent runs only as `ic sandbox prepare --auto`. Pure
+// over the help, so the derivation is asserted without an ic.
+export const featuresFrom = (shapeHelp: string | undefined, rollbackHelp?: string, prepareHelp?: string): DeviceFeature[] => [
     ...(helpLists(shapeHelp, "--set") ? [DEVICE_FEATURE_RESHAPE_LATER, DEVICE_FEATURE_SET_SHAPE] : []),
     ...(helpLists(rollbackHelp, "--to") ? [DEVICE_FEATURE_ROLLBACK_TO] : []),
+    ...(helpLists(prepareHelp, "--auto") ? [DEVICE_FEATURE_BACKGROUND_PREPARE] : []),
 ];
 
 // Asked once per process when it answers: the agent keeps its ic current before asking (ensureCurrentIc), so the answer
@@ -163,8 +166,12 @@ let features: Promise<DeviceFeature[]> | undefined;
 export const deviceFeatures = async (): Promise<DeviceFeature[]> => {
     features ??= (async () => {
         await ensureCurrentIc();
-        const [shapeHelp, rollbackHelp] = await Promise.all([helpOf(["sandbox", "shape"]), helpOf(["sandbox", "rollback"])]);
-        return featuresFrom(shapeHelp, rollbackHelp);
+        const [shapeHelp, rollbackHelp, prepareHelp] = await Promise.all([
+            helpOf(["sandbox", "shape"]),
+            helpOf(["sandbox", "rollback"]),
+            helpOf(["sandbox", "prepare"]),
+        ]);
+        return featuresFrom(shapeHelp, rollbackHelp, prepareHelp);
     })();
     const answered = await features;
     if (answered.length === 0) {

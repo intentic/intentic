@@ -9,8 +9,8 @@ use crate::record::{self, ChannelRecord, Phase, Pin, Swap};
 use crate::sandbox::lock::{self, Wait};
 use crate::sandbox::outcome::{self, Kind, Outcome};
 use crate::sandbox::{
-    desired, identity, mirror, now_ms, probation, resolve_slug, staged, storage, versions,
-    CONTAINER_PREFIX, PARKED_SUFFIX,
+    desired, identity, mirror, now_ms, preparing, probation, resolve_slug, staged, storage,
+    versions, CONTAINER_PREFIX, PARKED_SUFFIX,
 };
 use crate::shape::{Ask, Shape, GPUS_TOKEN, PRIVILEGED_TOKEN};
 use crate::util::{bail, sha256_hex, Fail, Result};
@@ -248,6 +248,8 @@ fn recreate(
     );
 
     let log = Log::create_named("recreate", &format!("recreate-{verb}"))?;
+    /* A PREPARE IS DRAWN WHILE IT RUNS, not only once it is over (preparing.rs): held for the rest of this function, so every way out of it, a failed pull's `?` included, takes the marker down with it. */
+    let announcing = (reach == Reach::Staged).then(|| preparing::start(&container, &channel, &log));
     let workdir = tempfile::tempdir()?;
     let overlay_path = workdir.path().join("overlay.Dockerfile");
 
@@ -456,6 +458,9 @@ fn recreate(
                     "intentic: rebuilding your environment overlay on the {} base…",
                     if fresh { "new" } else { "rollback" }
                 );
+                if let Some(announcing) = &announcing {
+                    announcing.enter(preparing::Phase::Build);
+                }
                 build_overlay(&target_image, &overlay_path, fresh, &base_image, &log)?;
             }
         }
@@ -490,6 +495,9 @@ fn recreate(
 
     /* `prepare` stops here, which is the whole of what makes it safe to run at any moment: the container has not been read from since the overlay copy. */
     if reach == Reach::Staged {
+        if let Some(announcing) = &announcing {
+            announcing.enter(preparing::Phase::Check);
+        }
         // What the staged build's first boot would convert, for the update card to show before anyone accepts it.
         let plan = crate::sandbox::preflight::staged_plan(
             &container,

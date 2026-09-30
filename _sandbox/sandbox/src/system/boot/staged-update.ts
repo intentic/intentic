@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { type StagedUpdate, StagedUpdateSchema, type UpdateOutcome, UpdateOutcomeSchema } from "@intentic/sandbox-contract";
+import { type PreparingUpdate, PreparingUpdateSchema, type StagedUpdate, StagedUpdateSchema, type UpdateOutcome, UpdateOutcomeSchema } from "@intentic/sandbox-contract";
 import type { z } from "zod";
 import { defineDocument } from "../../store/evolution/documents.js";
 
@@ -14,6 +14,11 @@ import { defineDocument } from "../../store/evolution/documents.js";
 // frozen like every other stored file, and a change to it that an older marker would not satisfy fails the typecheck.
 // Not the boot step's to look for: ic writes and removes it.
 export const stagedUpdateDocument = defineDocument({ root: "history", path: "update-staged.json", boot: false, schema: StagedUpdateSchema });
+
+// A download of the next update running on the host right now, with its step and how far the pull has got: `ic
+// sandbox prepare` rewrites it every few seconds while it works (_sandbox/ic/src/sandbox/preparing.rs) and removes it
+// when it ends. Declared for the same reasons as the staged marker, and like it never written here.
+export const updatePreparingDocument = defineDocument({ root: "history", path: "update-preparing.json", boot: false, schema: PreparingUpdateSchema });
 
 // What the host last did about this sandbox's version: an update that took, one it gave up on, and until when the
 // version before stays ready. Written by ic (_sandbox/ic/src/sandbox/outcome.rs) on the volume both containers share,
@@ -37,3 +42,15 @@ export const stagedUpdate = (historyRoot: string): Promise<StagedUpdate | undefi
 
 // The host's last word on this sandbox's version, or undefined when it has said nothing this build can read.
 export const updateOutcome = (historyRoot: string): Promise<UpdateOutcome | undefined> => hostMarker(historyRoot, updateOutcomeDocument.path, UpdateOutcomeSchema);
+
+// How long the host's last word on a running download stands. ic rewrites the marker every 4 s (preparing.rs
+// HEARTBEAT); one that is killed cannot take it down, and a bar frozen at 40% forever is worse than no bar. Well past
+// a missed beat or two on a busy machine, well short of the minutes a stuck bar would sit on a card.
+export const PREPARING_FRESH_MS = 60_000;
+
+// The download the host says is running, or undefined when none is: no marker, one this build cannot read, or one whose
+// heartbeat stopped longer ago than PREPARING_FRESH_MS.
+export const preparingUpdate = async (historyRoot: string, now: number): Promise<PreparingUpdate | undefined> => {
+    const said = await hostMarker(historyRoot, updatePreparingDocument.path, PreparingUpdateSchema);
+    return said !== undefined && now - said.at <= PREPARING_FRESH_MS ? said : undefined;
+};

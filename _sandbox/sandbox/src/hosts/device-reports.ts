@@ -11,6 +11,7 @@ import {
     DeviceSandboxSchema,
     DEVICE_FEATURE_RESHAPE_LATER,
     DEVICE_FEATURE_SET_SHAPE,
+    DEVICE_FEATURE_BACKGROUND_PREPARE,
     deviceSupports,
     environmentOf,
     HOST_NATIVE_ENVIRONMENT,
@@ -390,6 +391,12 @@ export async function* manageDeviceSandbox(services: Services, id: string, input
     if ((input.op === "set-shape" || input.op === "forget-shape") && !deviceSupports(facts, DEVICE_FEATURE_SET_SHAPE)) {
         throw new ORPCError("CONFLICT", {
             message: `The agent on "${id}" is too old to set a sandbox's shape through ic. Nothing was changed. Update that device's agent, then try again.`,
+        });
+    }
+    // An agent from before `prepare-background` refuses the op by name anyway; said here in words, like `set-shape`.
+    if (input.op === "prepare-background" && !deviceSupports(facts, DEVICE_FEATURE_BACKGROUND_PREPARE)) {
+        throw new ORPCError("CONFLICT", {
+            message: `The agent on "${id}" is too old to download an update in the background. Nothing was changed; its own timer still downloads updates every few hours.`,
         });
     }
     if (input.op === "set-shape" && (input.shape === undefined || input.when === undefined)) {

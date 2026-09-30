@@ -39,6 +39,26 @@ export const StagedUpdateSchema = z.object({
         .describe("What the downloaded build's first boot would convert in this sandbox's stored files. Absent when no plan could be had, which says nothing either way."),
 });
 export type StagedUpdate = z.infer<typeof StagedUpdateSchema>;
+// A download of the next update running on the machine right now, with how far it has got. `ic sandbox prepare` writes
+// it onto /history while it works (update-preparing.json), refreshing `at` every few seconds, and removes it when it
+// ends, whichever way. Advisory like the staged marker: the daemon passes it on only while `at` is fresh, so a download
+// whose ic was killed is never drawn as one still running.
+// It names no version: only the finished image can say which it is, and asking it costs a container; the card already
+// knows the release it is downloading as `latest`.
+export const PreparingUpdateSchema = z.object({
+    channel: z.string().describe("Which channel it is being taken from."),
+    startedAt: z.number().describe("When the download began, in milliseconds."),
+    at: z.number().describe("When the machine last said it is still working on it, in milliseconds."),
+    // A string rather than an enum, as UpdateOutcome's `verb` is: a newer ic's step must not make an older daemon drop
+    // the whole marker. `download`, `build` and `check` are the ones this build names.
+    phase: z
+        .string()
+        .describe(
+            "What it is doing: download (pulling the new image), build (building this sandbox's environment on it), or check (checking this sandbox's stored files against it).",
+        ),
+    percent: z.number().min(0).max(100).optional().describe("How far through the download it is, from 0 to 100. Absent for a step with no measure of its own."),
+});
+export type PreparingUpdate = z.infer<typeof PreparingUpdateSchema>;
 export const InfoSchema = z.object({
     name: z.string().optional().describe("What this sandbox is called."),
     image: z.string().optional().describe("The image it is running."),
@@ -82,6 +102,11 @@ export const InfoSchema = z.object({
     // Update already downloaded and built, waiting for the restart that applies it; absent when nothing is staged.
     staged: StagedUpdateSchema.optional().describe(
         "An update already downloaded and built on the machine running this container, waiting only for the restart that applies it. That restart is seconds, where an unprepared update is minutes, which is a different decision entirely. Absent when nothing is waiting.",
+    ),
+    // A download running on the host right now (update-preparing.json, written by ic while it prepares); absent when
+    // none is, and when the host stopped refreshing it (PREPARING_FRESH_MS in the daemon).
+    preparing: PreparingUpdateSchema.optional().describe(
+        "A download of the next update running on the machine right now, and how far it has got. Absent when nothing is downloading, or when the machine stopped saying it is.",
     ),
     // What the host last did about this sandbox's version (update-outcome.json on /history, written by ic); absent
     // when no host has said, which is every hosted sandbox and every host older than the file.
