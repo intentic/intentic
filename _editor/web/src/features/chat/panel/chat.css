@@ -266,7 +266,9 @@
     display: inline-flex;
     align-items: center;
     gap: 0.1875rem;
-    color: var(--color-subtle);
+/* In the background until asked for: the faintest ink the scale has, and fainter still, so a figure is found when
+   looked for and never competes with the words. Hover, an open run and a failure bring it forward. */
+    color: color-mix(in srgb, var(--color-subtle) 65%, transparent);
     font-size: var(--text-2xs);
     font-variant-numeric: tabular-nums;
     line-height: 1;
@@ -286,14 +288,15 @@
 .chat-spine-node-on:hover {
     color: var(--color-link);
 }
-.chat-spine-node-failed,
+.chat-spine-node-failed {
+    color: color-mix(in srgb, var(--color-danger) 60%, transparent);
+}
 .chat-spine-node-failed:hover {
     color: var(--color-danger);
 }
 /* THE ONE THING ON THE SPINE THAT MOVES: the figure of the row still being written breathes. Never a spinner — the
    turn's status at the column's foot already says what is running, and two spinners side by side said it twice. */
 .chat-spine-node-live {
-    color: var(--color-link);
     animation: chat-spine-breathe 1.8s ease-in-out infinite;
 }
 @keyframes chat-spine-breathe {
