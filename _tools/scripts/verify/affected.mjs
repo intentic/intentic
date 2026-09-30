@@ -96,6 +96,8 @@ const LOOSE = {
     "perf-browser": /^\.github\/workflows\/ci\.yml/,
     // The tier's own spec and harness live in @intentic/e2e, which nothing of the face depends on.
     "local-face": /^(_tools\/e2e\/local-face\/|\.github\/workflows\/ci\.yml)/,
+    // The sign-in gate's spec, fakes and stack live in @intentic/e2e, which neither the api nor the web depends on.
+    signin: /^(_tools\/e2e\/signin\/|\.github\/workflows\/ci\.yml)/,
     "ci-base-changed": /^_tools\/ci-base\//,
     // ci-desktop's FROM is ci-base's mutable `latest`; a ci-base change forces a rebuild here too.
     "ci-desktop-changed": /^_tools\/ci-(desktop|base)\//,
@@ -122,6 +124,8 @@ const ROOTS = {
     // What the local face is built from and served by: the editor, the UI kit, the sidecar and the contract all reach
     // it through the desktop app's graph.
     "local-face": ["@intentic/desktop-app", "@intentic/local-files"],
+    // A person signing in crosses exactly these two: the web build's pages and router, and the api's auth and handoff.
+    signin: ["@intentic/api", "@intentic/web"],
 };
 for (const [trigger, names] of Object.entries(ROOTS)) {
     for (const name of names) {

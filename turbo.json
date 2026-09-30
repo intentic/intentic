@@ -237,6 +237,17 @@
             "cache": false,
             "passThroughEnv": ["PLAYWRIGHT_BROWSERS_PATH", "LOCAL_FACE_REUSE_BUILD"]
         },
+        // The sign-in gate (_tools/e2e/signin): a person signs in on the web and through the desktop app, against the web
+        // build, the api harness and a Postgres testcontainer. It serves `dist`, so the web's own build is a dependency
+        // here rather than a step of its setup: turbo restores or rebuilds it for this commit, and a `dist` a CI workspace
+        // kept from an older checkout is never what it tests. The api has no build of its own, but bun resolves its
+        // workspace dependencies to their `dist`, which `@intentic/api#build`'s `^build` is what builds. It gates the
+        // platform deploy (`e2e-signin` in ci.yml).
+        "e2e:signin": {
+            "dependsOn": ["^build", "@intentic/web#build", "@intentic/api#build"],
+            "cache": false,
+            "passThroughEnv": ["PLAYWRIGHT_BROWSERS_PATH", "SIGNIN_E2E_REUSE_BUILD", "SIGNIN_E2E_DATABASE_URL"]
+        },
         "bench:retrieval": {
             "dependsOn": ["^build", "build"],
             "cache": false,

@@ -138,6 +138,7 @@ jobs:
       perf-instr: ${{ steps.filter.outputs.perf-instr }}
       perf-browser: ${{ steps.filter.outputs.perf-browser }}
       local-face: ${{ steps.filter.outputs.local-face }}
+      signin: ${{ steps.filter.outputs.signin }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -1341,6 +1342,62 @@ jobs:
       - uses: ./.github/actions/pnpm-setup
       - run: pnpm turbo run e2e:hermetic --filter=@intentic/api
 
+  # THE SIGN-IN GATE, and the second suite `images-platform` waits on. A person with no session signs in, on the web and
+  # through the desktop app (its window, the browser page it opens, the `intentic://auth` link back, the landing that
+  # redeems it), against the web build that ships, the api harness (_platform/api/src/e2e/browser-api.ts) and a
+  # Postgres testcontainer with the migration history replayed. Google is stood in for at its two edges: the GIS
+  # script in the browser, and its JWKS inside the api's process. _tools/e2e/signin says what else is real.
+  #
+  # Written after 1.318.0, when a router guard for "Ask an agent about this" took the `handoff` off the desktop
+  # sign-in's landing and every desktop sign-in stopped on "This sign-in link is incomplete". verify-platform's unit
+  # tests passed, e2e-billing has no browser, and the post-deploy smoke only looks at /login's Google button, so the
+  # deploy went out. Every piece of the sign-in can pass on its own while the chain between them is broken; this is
+  # the one place the chain runs.
+  #
+  # Gating for the reason `e2e-billing` is: hermetic (Docker and Chromium, no vendor, no secret), so it cannot fail
+  # for a reason that is not ours. Its Postgres is reached through testcontainers' host/port mapping, and the api and
+  # the web listen inside this job's own container, which is what lets it run here when `e2e:browser` cannot.
+  #
+  # On `platform` as well as its own `signin` trigger, so it has run whenever `images-platform` would: a skip there
+  # would read as a failure to the gate.
+  e2e-signin:
+    needs: [changes, preflight]
+    if: ${{ !cancelled() && (needs.changes.outputs.platform == 'true' || needs.changes.outputs.signin == 'true') && needs.preflight.result == 'success' }}
+    runs-on: [self-hosted, intentic]
+    timeout-minutes: 25
+    container:
+      image: ghcr.io/intentic/ci-base:latest
+      volumes:
+        - /ci-cache:/ci-cache
+        # Postgres comes up through the host's daemon; testcontainers resolves the address it answers on.
+        - /var/run/docker.sock:/var/run/docker.sock
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    env:
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+      PNPM_STORE: /ci-cache/pnpm-store
+      TURBO_CACHE_DIR: /ci-cache/turbo
+      # Not $HOME, which a job container maps to a throwaway /github/home.
+      PLAYWRIGHT_BROWSERS_PATH: /ci-cache/ms-playwright
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          clean: false
+      - uses: ./.github/actions/pnpm-setup
+      - run: pnpm --filter @intentic/e2e exec playwright install --with-deps chromium
+      # Builds the web first (turbo.json `e2e:signin` depends on `@intentic/web#build`), so the tier serves this commit.
+      - run: pnpm e2e:signin
+      - uses: ./.github/actions/upload-artifact-retry
+        if: failure()
+        with:
+          name: signin-results
+          path: |
+            _tools/e2e/.cache/signin-results/
+            _tools/e2e/.cache/signin/api.log
+          retention-days: 7
+
   # Hermetic infra e2e on pull requests — a NON-BLOCKING sidecar. Boots a Docker-in-Docker host via
   # testcontainers and drives the real CLI (resolve -> targeted apply -> adopt -> readiness diagnostics), no
   # external services and no secrets. Needing nothing at all is what earns it a run per pull request.
@@ -1586,13 +1643,18 @@ jobs:
   # them is broken, and this job rolls the Komodo stack — the last point at which a plan that takes payments and
   # grants nothing is still ours to stop. It skips on the same `platform == 'true'` this job does, so it never
   # withholds a deploy that should have happened.
+  #
+  # `e2e-signin` gates here for the same reason at the front door: this job is also what ships the web, and 1.318.0
+  # went out with every piece of the desktop sign-in passing its own tests and no one able to finish it. It runs on
+  # `platform` too, so it has always run when this job does.
   images-platform:
-    needs: [changes, verify-platform, e2e-billing, front-check]
+    needs: [changes, verify-platform, e2e-billing, e2e-signin, front-check]
     if: |
       !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main'
       && needs.changes.outputs.platform == 'true'
       && needs.verify-platform.result == 'success'
       && needs.e2e-billing.result == 'success'
+      && needs.e2e-signin.result == 'success'
       && needs.front-check.result != 'failure'
     runs-on: [self-hosted, intentic]
     container:

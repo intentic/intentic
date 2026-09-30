@@ -3740,6 +3740,9 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.6
+      testcontainers:
+        specifier: 'catalog:'
+        version: 12.1.0(supports-color@10.2.2)
       typescript:
         specifier: 'catalog:'
         version: 6.0.3

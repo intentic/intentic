@@ -116,6 +116,10 @@ pub fn complete(app: &AppHandle, args: &crate::setup_link::AuthArgs) {
 
 /// The page the webview redeems the handoff at. The profile rides along verbatim (setup_link.rs has already
 /// reduced it to a known name), and the page consumes it off its query string before its router looks.
+///
+/// The sign-in gate (_tools/e2e/signin/desktop.ts, `e2e-signin` in ci.yml) plays this file's half of the sign-in
+/// in TypeScript, `start`'s page and this path included, since it runs the web app without Tauri: a change to
+/// either shape changes it there too, or the gate goes on proving a sign-in this app no longer does.
 fn complete_path(handoff: &str, verifier: &str, profile: Option<&str>) -> String {
     let mut path = format!("/desktop-auth/complete?handoff={handoff}&verifier={verifier}");
     if let Some(profile) = profile {

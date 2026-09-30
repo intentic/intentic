@@ -79,6 +79,41 @@ const inspect = async (browser) => {
     }
 };
 
+// THE DESKTOP SIGN-IN'S LANDING, read off the deployed artifact. The app points its window at
+// /desktop-auth/complete?handoff=…&verifier=… (desktop-app auth.rs `complete_path`), and the page must hand both to the
+// api's redeem call. In 1.318.0 a router guard took `handoff` off this address first, so every desktop sign-in stopped
+// on "This sign-in link is incomplete" while this smoke, which only looked at /login, passed. A made-up handoff is
+// refused by the api (the page ends on its failure frame either way), so what tells the two apart is whether the redeem
+// call went out. The sign-in gate (_tools/e2e/signin, `e2e-signin` in ci.yml) runs the whole chain before a deploy;
+// this is the same question asked of what actually shipped.
+const REDEEM_PATH = "/rpc/desktop/redeem";
+const LANDING_STOPPED = /Back to sign in/i;
+const LANDING_INCOMPLETE = /sign-in link is incomplete/i;
+
+const inspectLanding = async (browser) => {
+    // English, so the page's own words are the ones matched above.
+    const page = await browser.newPage({ locale: "en-US" });
+    let redeemed = false;
+    page.on("request", (request) => {
+        if (request.method() === "POST" && new URL(request.url()).pathname === REDEEM_PATH) {
+            redeemed = true;
+        }
+    });
+    try {
+        await page.goto(`${origin}/desktop-auth/complete?handoff=smoke-${Date.now()}&verifier=${"0".repeat(64)}`, {
+            waitUntil: "domcontentloaded",
+            timeout: BUTTON_DEADLINE_MS,
+        });
+        await page.getByRole("button", { name: LANDING_STOPPED }).waitFor({ timeout: BUTTON_DEADLINE_MS });
+        const said = (await page.locator("main").innerText()).replace(/\s+/g, " ").trim();
+        return { redeemed, incomplete: LANDING_INCOMPLETE.test(said), said, loadError: undefined };
+    } catch (error) {
+        return { redeemed, incomplete: false, said: "", loadError: error instanceof Error ? error.message : String(error) };
+    } finally {
+        await page.close();
+    }
+};
+
 // Full chromium, not the headless shell: the smoke must use the browser a visitor gets.
 const browser = await chromium.launch({ channel: "chromium" });
 
@@ -154,8 +189,27 @@ try {
         ]);
     }
 
+    // Asked only of an app that was served: a dead origin has already failed above, for its own reason.
+    if (result.loadError === undefined && result.status === 200) {
+        const landing = await inspectLanding(browser);
+        if (landing.loadError !== undefined) {
+            fail(`the desktop sign-in's landing never settled: ${landing.loadError}`);
+        } else if (landing.incomplete || !landing.redeemed) {
+            fail("The desktop sign-in's landing loses its handoff before redeeming it: no desktop sign-in can finish.", [
+                "",
+                `The page said: ${landing.said}`,
+                "",
+                `/desktop-auth/complete?handoff=…&verifier=… must reach POST ${REDEEM_PATH} with both. Something between`,
+                "the address and DesktopAuthComplete.vue took one away: look first at the router's global guards",
+                "(_editor/web/src/router/index.ts), which run before the page reads its query.",
+            ]);
+        }
+    }
+
     if (process.exitCode !== 1) {
-        console.log(`sign-in smoke OK: Google's button is live on ${loginUrl}, secure previews are admitted, and the fallback control is there.`);
+        console.log(
+            `sign-in smoke OK: Google's button is live on ${loginUrl}, secure previews are admitted, the fallback control is there, and the desktop sign-in's landing reaches its redeem call.`,
+        );
     }
 } finally {
     await browser.close();

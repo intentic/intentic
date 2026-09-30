@@ -42,7 +42,8 @@
             "entry": ["src/**/*.test.ts", "bun.setup.ts"]
         },
         "_platform/api": {
-            "entry": ["src/**/*.test.ts"]
+            // browser-api.ts: the api as the sign-in tier boots it (_tools/e2e/signin), run by path with bun.
+            "entry": ["src/**/*.test.ts", "src/e2e/browser-api.ts"]
         },
         "_sandbox/sandbox": {
             "entry": [
@@ -175,7 +176,16 @@
             "entry": ["src/**/*.ts"]
         },
         "_tools/e2e": {
-            "entry": ["playwright.config.ts", "specs/**/*.ts", "global-setup.ts", "global-teardown.ts", "promo/*.{mjs,js}", "shots/*.mts"]
+            "entry": [
+                "playwright.config.ts",
+                "specs/**/*.ts",
+                "global-setup.ts",
+                "global-teardown.ts",
+                "promo/*.{mjs,js}",
+                "shots/*.mts",
+                "signin/*.spec.ts",
+                "signin/global-setup.ts"
+            ]
         }
     }
 }
