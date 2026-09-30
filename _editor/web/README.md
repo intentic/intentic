@@ -24,7 +24,8 @@ flowchart LR
   certified loopback name when it runs on this machine (`features/sandbox/secrets/endpoint.ts`).
 - **Personas.** `/sandbox/personas` shows square selectors with the selected persona's editor below. Settings and
   the popped-out chat share `components/PersonaTile.vue` for the face, label and selected appearance; each view owns
-  its selection and actions. Settings saves a queued edit against its original persona when the selection changes.
+  its selection and actions. Settings wraps the shared tile in `PersonaSelector.vue` for renaming and removal directly
+  on the selector. It saves a queued edit against its original persona when the selection changes.
 - **Live state.** Server state lives in vue-query, mirrored per user to IndexedDB so a reload paints the last-known
   workspace. One `/events` stream per active sandbox (`useSandboxLiveness.ts`) invalidates what each frame makes
   stale (`systemEvents.ts`). Terminals and the browser view use WebSockets opened with a short-lived ticket

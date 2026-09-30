@@ -1,25 +1,10 @@
 <script setup lang="ts">
-import { type Persona, personaBounds } from "@intentic/sandbox-contract";
-import {
-    Avatar,
-    BrandMark,
-    Button,
-    ui,
-    ConfirmDialog,
-    InlineRename,
-    Notice,
-    type NoticeModel,
-    PersonaFace,
-    Row,
-    RowGroup,
-    RowNote,
-    SkeletonRows,
-    StatusBadge,
-} from "@intentic/ui";
+import { type Persona } from "@intentic/sandbox-contract";
+import { Avatar, Button, ui, ConfirmDialog, Notice, type NoticeModel, PersonaFace, Row, RowGroup, RowNote, SkeletonRows } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, nextTick, onBeforeUnmount, ref, useId, watch } from "vue";
-import PersonaTile from "../../../components/PersonaTile.vue";
+import PersonaSelector from "./PersonaSelector.vue";
 import PersonaForm, { type PersonaDraft } from "./PersonaForm.vue";
 import { useBrowserAccounts } from "../../extensions/useBrowserAccounts";
 import { useCapabilities } from "../../capabilities/connect/useCapabilities";
@@ -57,17 +42,13 @@ const listNotice = computed<NoticeModel | undefined>(() =>
 );
 // Logged-in browser profiles, each carrying its site's brand; one capability per account, so a twice-connected site
 // appears twice.
-const { accounts, accountOf } = useBrowserAccounts();
+const { accounts } = useBrowserAccounts();
 
 // The other four things a persona grants by id (see grantablesFrom, extensionGrantablesFrom), shared with the Workspace
 // tree's quick panel.
 const { capabilities } = useCapabilities();
 const { extensions } = useExtensions();
 const grantables = computed<PersonaGrantable[]>(() => [...grantablesFrom(capabilities.value), ...extensionGrantablesFrom(extensions.value)]);
-
-// Marks for the accounts a persona names; an id with no matching capability still gets one, so the row doesn't understate
-// what the persona reaches.
-const marks = (persona: Persona) => persona.capabilities.map((id) => ({ id, account: accountOf(id), signedIn: isConnected(id) }));
 
 // Whether a persona can act at all right now: one signed-in account among several is enough, so this only marks a persona
 // that can reach nothing.
@@ -285,8 +266,10 @@ const confirmRemove = async (): Promise<void> => {
         return;
     }
     const id = removing.value.id;
-    clearTimeout(pending);
-    pending = undefined;
+    if (draft.value?.original === id) {
+        clearTimeout(pending);
+        pending = undefined;
+    }
     await remove.mutateAsync(id);
     if (draft.value?.original === id) {
         draft.value = undefined;
@@ -353,76 +336,23 @@ const confirmRemove = async (): Promise<void> => {
                 </template>
 
                 <div role="group" :aria-label="t(`sandbox.sandboxPersonas.personas`)" class="flex flex-wrap gap-1">
-                    <PersonaTile
+                    <PersonaSelector
                         v-for="persona in personas"
                         :key="persona.id"
                         :persona="persona"
-                        :label="persona.label ?? persona.id"
                         :selected="isOpen(persona)"
-                        :aria-pressed="isOpen(persona)"
-                        :aria-controls="detailsId"
-                        v-tooltip.bottom="persona.brief"
-                        class="aspect-square w-28"
-                        @click="toggleOpen(persona)"
+                        :controls="detailsId"
+                        :signed-in="ready(persona)"
+                        :saving="isOpen(persona) && save.isPending.value"
+                        :write="renameOf(persona)"
+                        @select="toggleOpen(persona)"
+                        @remove="removing = persona"
                     />
                 </div>
 
                 <div :id="detailsId" class="mt-4">
-                    <div v-if="selected && draft" :key="selected.id" class="overflow-hidden rounded-xl border border-line-subtle bg-card">
-                        <Row lead="face">
-                            <template #lead="{ mark }"><PersonaFace :persona="selected" :size="mark" /></template>
-                            <template #title>
-                                <div class="flex min-w-0 flex-col">
-                                    <InlineRename
-                                        :value="selected.label ?? selected.id"
-                                        :write="renameOf(selected)"
-                                        :label="t(`sandbox.sandboxPersonas.personaName`)"
-                                        :action="t(`sandbox.sandboxPersonas.renamePersona`)"
-                                        failure="Couldn't rename this persona."
-                                        class="font-medium"
-                                    />
-                                    <span v-if="selected.brief !== undefined" class="truncate px-1 text-2xs text-muted">{{ selected.brief }}</span>
-                                </div>
-                            </template>
-
-                            <template #meta>
-                                <!-- Marks say "spans platforms" faster than words could. -->
-                                <span v-if="selected.capabilities.length > 0" class="flex items-center gap-1">
-                                    <BrandMark
-                                        v-for="mark in marks(selected)"
-                                        :key="mark.id"
-                                        :size="16"
-                                        :name="mark.account?.site ?? mark.id"
-                                        :logo="mark.account?.logo"
-                                        :icon="mark.account?.icon ?? `globe`"
-                                        :idle="!mark.signedIn"
-                                    />
-                                </span>
-                                <!-- A bounded persona says so here; which shelf is off is the form's business, this is just whether any are. -->
-                                <StatusBadge v-if="selected.powers !== undefined" variant="neutral" size="xs">{{
-                                    personaBounds(selected)
-                                }}</StatusBadge>
-                                <StatusBadge v-if="selected.capabilities.length > 0 && !ready(selected)" variant="neutral" size="xs" dot>
-                                    {{ t(`sandbox.sandboxPersonas.notSignedIn`) }}
-                                </StatusBadge>
-                            </template>
-
-                            <template #control>
-                                <!-- Shown only while the write is in flight, since a lingering tick is one more thing to read on every row. -->
-                                <Icon v-if="save.isPending.value" name="spinner" spin class="text-2xs text-subtle" />
-                                <button
-                                    type="button"
-                                    :class="ui.iconButton('hover:text-danger')"
-                                    :aria-label="t(`sandbox.sandboxPersonas.removePersona`)"
-                                    @click.stop="removing = selected"
-                                >
-                                    <Icon name="trash" class="text-xs" />
-                                </button>
-                            </template>
-                        </Row>
-                        <div class="border-t border-line-subtle p-4">
-                            <PersonaForm :draft="draft" :accounts="accounts" :connected="connected" :grantables="grantables" :error="saveError" />
-                        </div>
+                    <div v-if="selected && draft" :key="selected.id" class="rounded-xl border border-line-subtle bg-card p-4">
+                        <PersonaForm :draft="draft" :accounts="accounts" :connected="connected" :grantables="grantables" :error="saveError" />
                     </div>
                 </div>
 
