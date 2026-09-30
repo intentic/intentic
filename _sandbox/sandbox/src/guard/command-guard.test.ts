@@ -12,7 +12,7 @@ import { JS_TOOL_NAME } from "../execution/js-tool.js";
 import { commandGateHooks, type CommandGuardOptions } from "./command-guard.js";
 import { createTurnTaint, NO_TAINT } from "./turn-taint.js";
 import type { ClassifiedInstall } from "../environment/runtime-installs.js";
-import type { ProjectInstallGate } from "../agent/providers/project-installs.js";
+import { PROJECT_INSTALL_RULE, type ProjectInstallGate } from "../agent/providers/project-installs.js";
 import { parkedCards } from "../conversations/actor/parked-cards.js";
 import { memoryFleet } from "../testing.js";
 
@@ -788,6 +788,7 @@ describe("the gate over installs", () => {
         mode: "automatic",
         canInstall: true,
         grants: undefined,
+        rule: PROJECT_INSTALL_RULE,
         ...over,
     });
     const contextOf = (out: SyncHookJSONOutput): string | undefined => (out.hookSpecificOutput as { additionalContext?: string } | undefined)?.additionalContext;

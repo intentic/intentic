@@ -24,8 +24,7 @@ import { excerptProgram } from "../safety/safety-log.js";
 import type { TurnTaint } from "./turn-taint.js";
 import type { ParkedCards } from "../conversations/actor/parked-cards.js";
 import type { ClassifiedInstall } from "../environment/runtime-installs.js";
-import { agentCommand, classifyImageInstalls, projectInstallsOf } from "../agent/providers/agent-installs.js";
-import { consultProjectInstall, type ProjectInstallGate } from "../agent/providers/project-installs.js";
+import type { ProjectInstallGate } from "../agent/providers/project-installs.js";
 
 // Second layer under the admission floor (guard/actions.ts sessionStart): what an already-running session's commands
 // may do. Four tiers run in `consult`: triage, an un-waivable hard rule, a judge, then a person; only the last
@@ -263,16 +262,17 @@ export const createCommandGuard = (options: CommandGuardOptions): CommandGuard =
         if (subject.language !== "bash" || installs === undefined) {
             return undefined;
         }
-        const command = agentCommand(program);
-        const images = classifyImageInstalls(command);
+        const { rule } = installs;
+        const command = rule.agentCommand(program);
+        const images = rule.classifyImageInstalls(command);
         if (images.length > 0) {
             options.onImageInstall?.(images, command);
         }
-        const projects = projectInstallsOf(program, where?.cwd ?? options.cwd ?? installs.root);
+        const projects = rule.projectInstallsOf(program, where?.cwd ?? options.cwd ?? installs.root);
         if (projects.length === 0) {
             return undefined;
         }
-        const verdict = yield* consultProjectInstall(command, projects, installs, { cards: options.cards, signal: options.signal, canPark: options.canPark !== false });
+        const verdict = yield* rule.consult(command, projects, installs, { cards: options.cards, signal: options.signal, canPark: options.canPark !== false });
         if (!verdict.allow) {
             return verdict;
         }
@@ -393,10 +393,10 @@ export const createCommandGuard = (options: CommandGuardOptions): CommandGuard =
             if (installed?.allow === false) {
                 return installed;
             }
-            const judged = yield* safetyTiers(program, subject);
+            const safety = yield* safetyTiers(program, subject);
             // The install's note rides an allowed command; a command the safety tiers refused is refused whatever it
             // installs.
-            return judged.allow && installed?.allow === true && installed.context !== undefined ? installed : judged;
+            return safety.allow && installed?.allow === true && installed.context !== undefined ? installed : safety;
         },
     };
 };

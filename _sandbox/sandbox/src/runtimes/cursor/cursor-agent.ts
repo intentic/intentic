@@ -1,4 +1,4 @@
-import { vendorShellEnv } from "../decorators/vendor-shell-env.js";
+import { vendorShellEnv } from "../../agent/run/vendor-shell-env.js";
 import type { AgentOptions, ModelSelection, SendOptions } from "@cursor/sdk";
 import { type AgentEvent, CURSOR } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
