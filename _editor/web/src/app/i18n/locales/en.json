@@ -2777,6 +2777,8 @@
             "ofConversationsKeepFullGuidance": "of conversations keep the long form, as a control.",
             "notCopyKeptBy": ", not a copy kept by this app. Choose Claude and it keeps updating with the sandbox; fork it and you own it from here.",
             "onAddedToPrompt": "On {adds} it is added to their prompt instead.",
+            "promptReachAdds": "Added to",
+            "promptReachReplaces": "Replaces",
             "ownPromptAgentRuns": "Your own prompt: the agent runs on this text alone.",
             "readingSandbox": "Reading it from your sandbox…",
             "replace": "Replace",

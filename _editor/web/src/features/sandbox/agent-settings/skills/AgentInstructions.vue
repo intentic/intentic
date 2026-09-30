@@ -1,6 +1,19 @@
 <script setup lang="ts">
 import { type BuiltinPromptText, SYSTEM_PROMPT_MAX, type SystemPromptMode } from "@intentic/sandbox-contract";
-import { Button, ConfirmDialog, CopyButton, MarkdownDocument, Modal, Notice, type NoticeModel, Row, RowGroup, RowNote, SegmentedControl } from "@intentic/ui";
+import {
+    Button,
+    ConfirmDialog,
+    CopyButton,
+    MarkdownDocument,
+    Modal,
+    Notice,
+    type NoticeModel,
+    Row,
+    RowGroup,
+    RowNote,
+    SegmentedControl,
+    type Tip,
+} from "@intentic/ui";
 import { noticeFrom, useAsyncAction } from "@intentic/ui/async";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref } from "vue";
@@ -91,10 +104,15 @@ const guidanceHoldoutPercent = computed<number>(() => asPercent(settings.value?.
 const guidanceReadings = computed<PanelReading[]>(() => readingsOf(savings.value?.guidance));
 
 const reach = promptReach();
-const reachLine =
-    reach.adds.length > 0
-        ? `Replaces the prompt on ${spokenList(reach.replaces)} · added to theirs on ${spokenList(reach.adds)}.`
-        : `Replaces the prompt on ${spokenList(reach.replaces)}.`;
+const viewPromptTip = computed((): Tip => ({
+    title: t(`sandbox.agentInstructions.viewPrompt`),
+    rows: [
+        { label: t(`sandbox.agentInstructions.promptReachReplaces`), value: spokenList(reach.replaces) },
+        ...(reach.adds.length > 0
+            ? [{ label: t(`sandbox.agentInstructions.promptReachAdds`), value: spokenList(reach.adds) }]
+            : []),
+    ],
+}));
 </script>
 
 <template>
@@ -110,22 +128,13 @@ const reachLine =
             </template>
             <template #below>
                 <template v-if="promptMode !== `custom`">
-                    <div class="flex flex-wrap items-center gap-2">
-                        <Button
-                            :label="t(`sandbox.agentInstructions.viewPrompt`)"
-                            size="small"
-                            severity="secondary"
-                            @click="viewBuiltin(promptMode)"
-                        />
-                        <Button
-                            :label="t(`sandbox.agentInstructions.editCopy`)"
-                            size="small"
-                            severity="secondary"
-                            :loading="builtinBusy"
-                            @click="forkBuiltin(promptMode)"
-                        />
-                    </div>
-                    <p class="mt-2 text-2xs text-subtle">{{ reachLine }}</p>
+                    <Button
+                        :label="t(`sandbox.agentInstructions.viewPrompt`)"
+                        size="small"
+                        severity="secondary"
+                        v-tooltip.bottom="viewPromptTip"
+                        @click="viewBuiltin(promptMode)"
+                    />
                 </template>
 
                 <!-- What the choice costs and where to start from belong to the row that makes it; the document itself
@@ -254,7 +263,6 @@ const reachLine =
             </div>
             <div class="mt-3 flex items-center justify-end gap-2">
                 <CopyButton :text="builtinPrompts[viewingBase]?.text ?? ``" :label="t(`ui.action.copy`)" />
-                <Button :label="t(`sandbox.agentInstructions.editCopy`)" size="small" @click="forkBuiltin(viewingBase)" />
             </div>
         </template>
     </Modal>
