@@ -42,6 +42,11 @@ export const hostIdFrom = (label: string): string => {
 // OS slugs the devices extension has cards for; other platforms connect no device instead of failing apply.
 const KNOWN_PLATFORMS = new Set(["linux", "windows"]);
 
+// The card setup made for the machine that ran the installer, named as `seedSetupHost` names it. Absent when setup
+// connected no device. Read from the container's own env, which every recreate replays.
+export const setupHostCard = (config: { readonly hostPairToken: string; readonly hostPlatform: string; readonly hostLabel: string }): string | undefined =>
+    config.hostPairToken === "" || !KNOWN_PLATFORMS.has(config.hostPlatform) ? undefined : hostIdFrom(config.hostLabel);
+
 const SeededSchema = z.object({ ids: z.array(z.string()) });
 
 export const hostSetupSeededDocument = defineDocument({ root: "history", path: "host-setup-seeded.json", schema: SeededSchema });

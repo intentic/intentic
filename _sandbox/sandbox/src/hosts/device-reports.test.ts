@@ -113,9 +113,9 @@ test("reads a sync-only machine's platform off its report", () => {
     expect(merged.map((row) => row.platform)).toEqual(["windows", "macos"]);
 });
 
-// ROWS JOIN ON THE MACHINE, never on a name. A sync enrollment and a host connection are one row when both name the same
-// computer and the same OS install on it; the enrollment name, the card id and the hostname can each differ, and a
-// hostname is shared by a PC and every WSL distro on it.
+// ROWS JOIN ON THE MACHINE, never on a name (setup's own card, further down, is the one exception). A sync enrollment and
+// a host connection are one row when both name the same computer and the same OS install on it; the enrollment name,
+// the card id and the hostname can each differ, and a hostname is shared by a PC and every WSL distro on it.
 const ROG = "m-rog-0123456789";
 const OMEN = "m-omen-012345678";
 const stamped = (machine: string, machineId: string, environment = HOST_NATIVE_ENVIRONMENT): SyncEnrollmentRow => ({ ...enrolled(machine), machineId, environment });
@@ -189,6 +189,67 @@ test("keeps rows apart while either door has not said which machine it is, howev
     );
     expect(merged).toHaveLength(2);
     expect(merged.map((row) => row.hostId)).toEqual([undefined, "radarsu-rog"]);
+});
+
+// SETUP'S CARD IS THE ONE EXCEPTION. The installer syncs the PC it runs on and connects it as a device under a card
+// named after it. A device half that never said which machine it is (its connect step failed, or its agent predates
+// machine ids and the PC lost the link) used to leave that PC as two devices for good: one syncing, one offline.
+const setupOrphan = (card = "radarsu-rog", environment = HOST_NATIVE_ENVIRONMENT): HostSummary =>
+    host(hostConnectionKey(card, environment), { card, online: false, platform: "windows", environments: [{ key: environment, online: false }] });
+const syncingRog = { machine: "radarsu-rog", report: report("radarsu-rog", { os: "win32", machineId: ROG }) };
+
+test("folds setup's never-identified card into the PC it synced, as one row whose device door is offline", () => {
+    const merged = mergeDevices([stamped("radarsu-rog", ROG)], [syncingRog], [{ host: setupOrphan(), result: { gap: "offline" } }], "radarsu-rog");
+    expect(merged).toHaveLength(1);
+    expect(merged[0]).toMatchObject({ label: "radarsu-rog", sync: stamped("radarsu-rog", ROG), hostId: "radarsu-rog", card: "radarsu-rog", online: false });
+    // The sync report still describes the machine, so the row says its device door is shut rather than calling it offline.
+    expect(merged[0]?.gap).toBeUndefined();
+});
+
+test("places setup's card by the name setup gave it, the way hostIdFrom spells a Windows computer name", () => {
+    const merged = mergeDevices([stamped("RADARSU-ROG.lan", ROG)], [], [{ host: setupOrphan(), result: { gap: "offline" } }], "radarsu-rog");
+    expect(merged).toHaveLength(1);
+});
+
+test("keeps any other card that never said which machine it is apart, however its name agrees", () => {
+    const merged = mergeDevices([stamped("radarsu-rog", ROG)], [syncingRog], [{ host: setupOrphan(), result: { gap: "offline" } }]);
+    expect(merged.map((row) => row.hostId)).toEqual([undefined, "radarsu-rog"]);
+});
+
+test("keeps setup's card apart from a WSL distro that shares the PC's name", () => {
+    const merged = mergeDevices([stamped("radarsu-rog", ROG, "wsl:archlinux")], [], [{ host: setupOrphan(), result: { gap: "offline" } }], "radarsu-rog");
+    expect(merged.map((row) => row.hostId)).toEqual([undefined, "radarsu-rog"]);
+});
+
+test("keeps setup's card apart when two synced machines carry its name", () => {
+    const merged = mergeDevices(
+        [stamped("radarsu-rog", ROG), stamped("radarsu-rog", OMEN)],
+        [],
+        [{ host: setupOrphan(), result: { gap: "offline" } }],
+        "radarsu-rog",
+    );
+    expect(merged.map((row) => row.hostId)).toEqual([undefined, undefined, "radarsu-rog"]);
+});
+
+test("once setup's card says which machine it is, that machine decides and the name no longer does", () => {
+    const elsewhere = host("radarsu-rog", { card: "radarsu-rog", platform: "windows", ...saidBy(OMEN) });
+    const merged = mergeDevices([stamped("radarsu-rog", ROG)], [syncingRog], [{ host: elsewhere, result: { gap: "scope-off" } }], "radarsu-rog");
+    expect(merged.map((row) => row.hostId)).toEqual([undefined, "radarsu-rog"]);
+});
+
+test("a connection that said which machine it is claims the synced row before setup's card is placed by name", () => {
+    const identified = host("rog", { card: "rog", platform: "windows", ...saidBy(ROG) });
+    const merged = mergeDevices(
+        [stamped("radarsu-rog", ROG)],
+        [syncingRog],
+        // Listed first, so a claim made in list order would hand the orphan the row.
+        [
+            { host: setupOrphan(), result: { gap: "offline" } },
+            { host: identified, result: { gap: "scope-off" } },
+        ],
+        "radarsu-rog",
+    );
+    expect(merged.map((row) => row.hostId)).toEqual(["rog", "radarsu-rog"]);
 });
 
 test("keeps two devices apart when they report one hostname", () => {

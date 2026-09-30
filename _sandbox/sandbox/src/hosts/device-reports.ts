@@ -26,6 +26,7 @@ import type { SyncEnrollmentRow } from "./desktop-sync.js";
 import { emitDefinitionToml, settingsDefinition } from "../portability/definition.js";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
 import { type HostClient, hostConnections, hostSummaries } from "./host-peer.js";
+import { hostIdFrom, setupHostCard } from "./host-seed.js";
 
 // Every machine reachable from this sandbox, via two doors: the desktop-sync agent's volunteered report (free, no
 // capability needed) and a `host` capability's pull (adds containers, never a mounted docker socket). The pull asks the
@@ -261,14 +262,20 @@ const sameEnvironment = (
     right: { readonly machineId: string | undefined; readonly environment: string | undefined },
 ): boolean => left.machineId !== undefined && left.machineId === right.machineId && left.environment !== undefined && left.environment === right.environment;
 
+// The environment a connection was enrolled as; the native one when nothing names another.
+const connectionEnvironment = (host: HostSummary): string => host.environments[0]?.key ?? HOST_NATIVE_ENVIRONMENT;
+
 // Pure reconciliation of enrollments, volunteered reports and host pulls into rows, testable without IO. A sync
-// enrollment and a host connection fold into one row only when both name the same machine and environment.
+// enrollment and a host connection fold into one row when both name the same machine and environment. The one other
+// fold is setup's own card (`setupCard` below).
 export const mergeDevices = (
     // Full enrollments, not names: a row must say which half of sync a machine holds and address it to revoke.
     enrolled: readonly SyncEnrollmentRow[],
     volunteered: readonly { machine: string; report: DeviceReport }[],
     // Full host summary, not just id/liveness: connect-time facts are the only description a report-less row has.
     hosts: readonly { host: HostSummary; result: PullResult }[],
+    // The card setup made for the machine that ran it (host-seed.ts's setupHostCard), when it made one.
+    setupCard?: string,
 ): Device[] => {
     // Driven by the enrollment list, not the report list, so a machine that never posted still gets a row.
     const rows: Device[] = enrolled.map((enrollment) => {
@@ -289,21 +296,60 @@ export const mergeDevices = (
         machineId: row.sync?.machineId ?? row.report?.machineId,
         environment: row.sync?.environment ?? environmentOf(undefined, row.report),
     });
-    // No rule may steal an occupied row.
-    const claim = (host: HostSummary, report: DeviceReport | undefined): Device | undefined => {
+    // Which sync row each host connection folds into, settled before any row is built. No rule may steal an occupied
+    // row, and every connection that said which machine it is claims before setup's card is placed by its name.
+    const claims = new Map<number, Device>();
+    const free = (row: Device): boolean => ![...claims.values()].includes(row);
+    const claim = (host: HostSummary): Device | undefined => {
         // The environment the enrollment names (the connection's own), which no report can contradict.
-        const identity = { machineId: machineOfHost(host), environment: host.environments[0]?.key ?? HOST_NATIVE_ENVIRONMENT };
-        return rows.find((row) => row.hostId === undefined && sameEnvironment(syncIdentity(row), identity));
+        const identity = { machineId: machineOfHost(host), environment: connectionEnvironment(host) };
+        return rows.find((row) => free(row) && sameEnvironment(syncIdentity(row), identity));
     };
+    // SETUP'S CARD, PLACED BY THE NAME SETUP GAVE IT. The installer syncs the machine it runs on and connects it as a
+    // device, the card named after that machine (hostIdFrom). When the device half never says which machine it is (the
+    // connect step failed, or its agent predates machine ids and the PC later lost the link), the PC read as two devices:
+    // one syncing, one offline for good. Only this card, only its native connection while it has said nothing, and only
+    // into the one native sync row enrolled under that name: a WSL distro shares the PC's hostname, so the environment
+    // must agree, and two rows of that name fold neither.
+    const claimSetupMachine = (host: HostSummary): Device | undefined => {
+        if (
+            setupCard === undefined ||
+            (host.card ?? host.id) !== setupCard ||
+            machineOfHost(host) !== undefined ||
+            connectionEnvironment(host) !== HOST_NATIVE_ENVIRONMENT
+        ) {
+            return undefined;
+        }
+        const named = rows.filter(
+            (row) =>
+                free(row) &&
+                row.sync !== undefined &&
+                syncIdentity(row).environment === HOST_NATIVE_ENVIRONMENT &&
+                hostIdFrom(row.sync.machine) === setupCard,
+        );
+        return named.length === 1 ? named[0] : undefined;
+    };
+    for (const [index, { host }] of hosts.entries()) {
+        const row = claim(host);
+        if (row !== undefined) {
+            claims.set(index, row);
+        }
+    }
+    for (const [index, { host }] of hosts.entries()) {
+        const row = claims.has(index) ? undefined : claimSetupMachine(host);
+        if (row !== undefined) {
+            claims.set(index, row);
+        }
+    }
 
     // Row keys must be unique, a shared key is a rendering fault; the capability id always works as a fallback.
     const taken = new Set(rows.map((row) => row.key));
     const distinct = (preferred: string, id: string): string =>
         [preferred, id, `${preferred}:${id}`].find((candidate) => !taken.has(candidate)) ?? `${preferred}:${id}:${rows.length}`;
 
-    for (const { host, result } of hosts) {
+    for (const [index, { host, result }] of hosts.entries()) {
         const { report, known, gap } = pulledHost(host, result);
-        const existing = claim(host, report);
+        const existing = claims.get(index);
         if (existing !== undefined) {
             // Pulled report wins; a shut door removes nothing, only sets online:false. gap only when nothing else
             // shows.
@@ -344,7 +390,7 @@ export const devices = async (services: Services): Promise<Device[]> =>
             })),
         );
         const fleet = await services.syncFleet();
-        return mergeDevices(fleet.machines, fleet.reports, answered);
+        return mergeDevices(fleet.machines, fleet.reports, answered, setupHostCard(services.config));
     });
 
 // The host-capability devices as the readings ALREADY IN HAND describe them: `devices` without the asking, for callers
