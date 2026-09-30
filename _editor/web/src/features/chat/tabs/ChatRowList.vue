@@ -96,7 +96,7 @@ onBeforeUnmount(actions.registerDrawn(() => drawnIds.value));
                 @keep="actions.keep(c.conversationId)"
                 @middle-close="actions.middleClose(c.conversationId)"
             />
-            <ChildRows v-if="agent !== undefined && props.trays" :agent="agent" rail />
+            <ChildRows v-if="agent !== undefined && props.trays" :agent="agent" :focused="selected(c.conversationId)" rail />
         </div>
     </div>
 </template>

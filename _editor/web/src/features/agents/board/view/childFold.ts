@@ -374,6 +374,23 @@ export const trayOf = (
     return { asks, lead: dealt.lead, groups, folded: dealt.settled.length, open, tail };
 };
 
+// How many agents a card started, and how many of them are still at work: what the card itself wears (ChildCount), so
+// a shut tray still says there is a family under it and whether it is busy. Counted over the same two lists the tray
+// deals, unfiltered, so the count never disagrees with the rows the tray draws once it opens.
+export interface TrayCount {
+    readonly total: number;
+    readonly running: number;
+}
+
+export const trayCount = (children: readonly FleetAgent[], subagents: readonly SubagentSession[] = NO_SUBAGENTS): TrayCount | undefined => {
+    const total = children.length + subagents.length;
+    if (total === 0) {
+        return undefined;
+    }
+    const running = children.filter((child) => laneOf(child) === `active`).length + subagents.filter(subagentLive).length;
+    return { total, running };
+};
+
 // The conversations a tray draws, top to bottom, for anything that walks the board in drawing order (a Shift+click
 // range): an in-process subagent has no chat of its own to open in a pane.
 export const trayRows = (tray: Tray | undefined): readonly FleetAgent[] =>

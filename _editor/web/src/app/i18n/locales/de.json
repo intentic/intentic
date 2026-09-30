@@ -315,6 +315,8 @@
             "parent": "Auftraggeber",
             "parentNotified": "Auftraggeber informiert",
             "startedBy": "Von „{title}“ gestartete Agenten",
+            "startedCount": "Gestartete Agenten: {count}",
+            "workingCount": "{running} von {total} arbeiten noch",
             "watching": "Beobachtet",
             "needYou": "{count} braucht Sie | {count} brauchen Sie",
             "callsMore": "{count} weitere",

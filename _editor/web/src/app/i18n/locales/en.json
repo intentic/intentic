@@ -422,6 +422,8 @@
             "parent": "Parent",
             "parentNotified": "Parent notified",
             "startedBy": "Agents {title} started",
+            "startedCount": "Agents started: {count}",
+            "workingCount": "{running} of {total} still working",
             "watching": "Watching",
             "needYou": "{count} needs you | {count} need you",
             "callsMore": "{count} more",

@@ -68,6 +68,7 @@ import IdentityTile from "../../../capabilities/connect/IdentityTile.vue";
 import MatchLine from "../../../../components/MatchLine.vue";
 import SessionChip from "../session/SessionChip.vue";
 import SessionMetrics from "../../metrics/SessionMetrics.vue";
+import ChildCount from "./ChildCount.vue";
 import { boxImageOf, boxNameOf } from "../../fleet/fleetScope";
 import { accountBadge } from "../session/accountChip";
 import { previewOf } from "../../../chat/panel/useChat-strip";
@@ -861,6 +862,8 @@ const grab = (event: PointerEvent): void => {
                 <span v-if="agent.costUsd !== undefined">{{ formatCost(agent.costUsd) }}</span>
                 <!-- Opt-in geek metrics, beside what it cost: what its processes hold now. Draws only when the board provides a reading naming this conversation, so never for another box's card. -->
                 <SessionMetrics v-if="localOnly" :conversation-id="agent.id" />
+                <!-- The agents it started, counted, live-of-total while any work: the list itself opens under the card only while it is the one being looked at (ChildRows). -->
+                <ChildCount :agent="agent" />
                 <!-- Marks people left, at the end of the counted stats rather than in a row of their own, and drawn only when there are some: a strip that came and went with the pointer would resize every card it is on and flicker the lane around it. The press that adds one is in the header, with the card's other actions. -->
                 <AgentReactions
                     v-if="reactable"

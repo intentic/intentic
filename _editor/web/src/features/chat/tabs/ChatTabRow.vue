@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useT } from "@intentic/ui/i18n";
 import CardSeal from "../../agents/board/cards/CardSeal.vue";
+import ChildCount from "../../agents/board/cards/ChildCount.vue";
 import { boxNameOf } from "../../agents/fleet/fleetScope";
 import { editsRefusal, turnInFlight } from "../../agents/fleet/agentStatus";
 import { settingsChip, useSettingsRefusal } from "../../agents/review/settingsRefusal";
@@ -180,6 +181,8 @@ const act = (event: Event, verb: "close" | "keep"): void => {
             <span v-if="isArchived(props.conversation)" class="flex shrink-0 items-center" :aria-label="t(`shared.archived`)">
                 <Icon name="box" class="text-2xs text-subtle" />
             </span>
+            <!-- The agents it started, counted, as its board card counts them: the list opens under this card only while it is on screen (ChildRows). -->
+            <ChildCount v-if="props.agent !== undefined" :agent="props.agent" />
             <!-- Spend, diff and turn count are deliberately absent here; they live on the board and Usage tab. -->
             <span v-if="props.view.model !== undefined" class="max-w-24 truncate">{{ props.view.model }}</span>
             <span v-else-if="twinFact !== undefined" class="max-w-24 truncate">{{ twinFact }}</span>

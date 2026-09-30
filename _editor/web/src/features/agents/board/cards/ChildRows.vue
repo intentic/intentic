@@ -16,6 +16,14 @@ import { CHILD_ROWS } from "./childRows";
 // by one provider are one fact about that provider, not fifteen; and the settled ones behind one quiet toggle, since an
 // orchestrator's thirty finished helpers are its history, not its news. Draws nothing on a board that provides no trays
 // (CHILD_ROWS), or for a card with nothing riding under it.
+//
+// OPEN ONLY UNDER THE CARD BEING LOOKED AT. Drawn under every card, the trays turned each lane into a list of lists, and
+// every helper an unwatched card's runtime started or finished pushed a row in or out and shook every card below it.
+// So a tray opens, with a short fold rather than a jump, only under the card the reader is on (`focused`), under a card
+// whose child is on screen (the ring must be on something drawn), and under every card while a filter is on (a result
+// set must not hide its own matches). Every other card counts its family on itself instead (ChildCount), which moves no
+// card's height. The one exception is a child asking what only the reader can give: that is news, not history, and a
+// chat list's card, unlike the board's, carries no word of it, so its row stays in sight under any card.
 
 const props = defineProps<{
     agent: FleetAgent;
@@ -23,6 +31,8 @@ const props = defineProps<{
     live?: boolean;
     // Hung from a chat list's card (RailCard) rather than the board's: its identity tile is smaller and sits further left.
     rail?: boolean;
+    // The card this hangs from is the one the reader is on (its ring), which opens the tray.
+    focused: boolean;
 }>();
 
 const t = useT();
@@ -35,6 +45,13 @@ const subagents = computed(() => board?.subagentsOf(props.agent) ?? []);
 const tray = computed(() => (board === undefined ? undefined : trayOf(children.value, board.stateOf(props.agent), subagents.value)));
 const title = computed(() => agentDisplayTitle(props.agent));
 const label = computed(() => t(`agents.childRows.startedBy`, { title: title.value }));
+// Whether one of the rows is on screen: its chat in a pane, or its transcript in this card's column.
+const childOnScreen = computed(
+    () =>
+        board !== undefined &&
+        (children.value.some((child) => board.selected(child.id)) || subagents.value.some((session) => board.selected(session.id))),
+);
+const shown = computed(() => props.focused || childOnScreen.value || (board?.stateOf(props.agent).filtering ?? false));
 
 // A conversation's row answers the card's own presses for itself; an in-process subagent's shows its transcript in this
 // card's chat, and joins no motion, being no card that could fly to a lane of its own.
@@ -68,30 +85,15 @@ const inset = computed(() => (props.rail ? `ml-6` : props.live ? `ml-7.5` : `ml-
 <template>
     <div
         v-if="board !== undefined && tray !== undefined"
-        role="group"
+        :role="shown || tray.asks.length > 0 ? `group` : undefined"
         :aria-label="label"
-        class="child-tray flex flex-col border-l border-line pt-1 pl-1"
+        class="child-tray flex flex-col border-l border-line pl-1"
         :class="inset"
     >
-        <ChildRow
-            v-for="child in [...tray.asks, ...tray.lead]"
-            :key="child.id"
-            :ref="(el) => setRow(child, el)"
-            :child="child"
-            :selected="selected(child)"
-            :provider="agent.provider"
-            :needle="board.needle.value"
-            :match-case="board.matchCase.value"
-            :menus="board.menu !== undefined"
-            @open="(event) => open(child, event)"
-            @review="review(child)"
-            @menu="(event) => menu(child, event)"
-        />
-        <template v-for="group in tray.groups" :key="group.key">
-            <!-- One child alone is its own row: a fold of one would be a press to read a single line. -->
-            <ChildGroupRow v-if="group.members.length > 1" :group="group" :parent="title" @toggle="board?.toggle(agent, group.key)" />
+        <!-- A child asking the reader keeps its row under any card: the one row that is news whichever card is looked at. -->
+        <div v-if="tray.asks.length > 0" class="flex flex-col pt-1">
             <ChildRow
-                v-for="child in group.shown"
+                v-for="child in tray.asks"
                 :key="child.id"
                 :ref="(el) => setRow(child, el)"
                 :child="child"
@@ -104,31 +106,80 @@ const inset = computed(() => (props.rail ? `ml-6` : props.live ? `ml-7.5` : `ml-
                 @review="review(child)"
                 @menu="(event) => menu(child, event)"
             />
-        </template>
-        <!-- The fold, in the rows' own glyph column: a chevron where a row has its standing, so the count reads as one more row. -->
-        <button
-            v-if="tray.folded > 0"
-            type="button"
-            class="ui-row-select flex min-h-7 w-full min-w-0 items-center gap-2 rounded-md px-2 text-left text-2xs text-subtle max-md:min-h-10"
-            :aria-expanded="tray.open"
-            @click="board.toggle(agent, FINISHED_FOLD)"
+        </div>
+        <!-- The rest folds open and shut on its grid row's height (0fr to 1fr), so the cards below slide rather than jump; only the fade is kept for a reader who asked for less motion. -->
+        <Transition
+            enter-active-class="transition-[grid-template-rows,opacity] duration-200 ease-out *:overflow-hidden motion-reduce:transition-opacity"
+            leave-active-class="transition-[grid-template-rows,opacity] duration-150 ease-in *:overflow-hidden motion-reduce:transition-opacity"
+            enter-from-class="grid-rows-[0fr] opacity-0"
+            enter-to-class="grid-rows-[1fr]"
+            leave-from-class="grid-rows-[1fr]"
+            leave-to-class="grid-rows-[0fr] opacity-0"
         >
-            <Icon :name="tray.open ? `chevron-down` : `chevron-right`" class="shrink-0 text-xs" />
-            <span class="min-w-0 flex-1 truncate">{{ t(`agents.childRows.finished`, { count: tray.folded }, tray.folded) }}</span>
-        </button>
-        <ChildRow
-            v-for="child in tray.tail"
-            :key="child.id"
-            :ref="(el) => setRow(child, el)"
-            :child="child"
-            :selected="selected(child)"
-            :provider="agent.provider"
-            :needle="board.needle.value"
-            :match-case="board.matchCase.value"
-            :menus="board.menu !== undefined"
-            @open="(event) => open(child, event)"
-            @review="review(child)"
-            @menu="(event) => menu(child, event)"
-        />
+            <div v-if="shown" class="grid">
+                <!-- Two boxes, so the padding is inside what the fold clips: a box's own padding is never squeezed, and would jump in and out. -->
+                <div class="min-h-0">
+                    <div class="flex flex-col" :class="tray.asks.length === 0 ? `pt-1` : ``">
+                        <ChildRow
+                            v-for="child in tray.lead"
+                            :key="child.id"
+                            :ref="(el) => setRow(child, el)"
+                            :child="child"
+                            :selected="selected(child)"
+                            :provider="agent.provider"
+                            :needle="board.needle.value"
+                            :match-case="board.matchCase.value"
+                            :menus="board.menu !== undefined"
+                            @open="(event) => open(child, event)"
+                            @review="review(child)"
+                            @menu="(event) => menu(child, event)"
+                        />
+                        <template v-for="group in tray.groups" :key="group.key">
+                            <!-- One child alone is its own row: a fold of one would be a press to read a single line. -->
+                            <ChildGroupRow v-if="group.members.length > 1" :group="group" :parent="title" @toggle="board?.toggle(agent, group.key)" />
+                            <ChildRow
+                                v-for="child in group.shown"
+                                :key="child.id"
+                                :ref="(el) => setRow(child, el)"
+                                :child="child"
+                                :selected="selected(child)"
+                                :provider="agent.provider"
+                                :needle="board.needle.value"
+                                :match-case="board.matchCase.value"
+                                :menus="board.menu !== undefined"
+                                @open="(event) => open(child, event)"
+                                @review="review(child)"
+                                @menu="(event) => menu(child, event)"
+                            />
+                        </template>
+                        <!-- The fold, in the rows' own glyph column: a chevron where a row has its standing, so the count reads as one more row. -->
+                        <button
+                            v-if="tray.folded > 0"
+                            type="button"
+                            class="ui-row-select flex min-h-7 w-full min-w-0 items-center gap-2 rounded-md px-2 text-left text-2xs text-subtle max-md:min-h-10"
+                            :aria-expanded="tray.open"
+                            @click="board.toggle(agent, FINISHED_FOLD)"
+                        >
+                            <Icon :name="tray.open ? `chevron-down` : `chevron-right`" class="shrink-0 text-xs" />
+                            <span class="min-w-0 flex-1 truncate">{{ t(`agents.childRows.finished`, { count: tray.folded }, tray.folded) }}</span>
+                        </button>
+                        <ChildRow
+                            v-for="child in tray.tail"
+                            :key="child.id"
+                            :ref="(el) => setRow(child, el)"
+                            :child="child"
+                            :selected="selected(child)"
+                            :provider="agent.provider"
+                            :needle="board.needle.value"
+                            :match-case="board.matchCase.value"
+                            :menus="board.menu !== undefined"
+                            @open="(event) => open(child, event)"
+                            @review="review(child)"
+                            @menu="(event) => menu(child, event)"
+                        />
+                    </div>
+                </div>
+            </div>
+        </Transition>
     </div>
 </template>

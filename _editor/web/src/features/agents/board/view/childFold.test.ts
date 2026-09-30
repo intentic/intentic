@@ -1,7 +1,7 @@
 import type { SubagentSession } from "@intentic/sandbox-contract";
 import { NO_ATTENTION } from "../../fleet/agentStatus";
 import { type FleetAgent, laneGroups } from "../../fleet/useAgents-fleet";
-import { ARCHIVE_RULES, cardKey, FINISHED_FOLD, foldChildren, standsAlone, steadyFold, stopOf, type TrayState, trayOf, trayRows } from "./childFold";
+import { ARCHIVE_RULES, cardKey, FINISHED_FOLD, foldChildren, standsAlone, steadyFold, stopOf, trayCount, type TrayState, trayOf, trayRows } from "./childFold";
 
 // Pins which children ride under their parent's card and which keep a card of their own: every child rides while its
 // parent is on the board, save one owing a press a row cannot carry; a child calling the reader moves its family's card
@@ -326,5 +326,36 @@ describe(`what a tray draws`, () => {
             expect(ids(trayOf(brood, filtered, [early, late])?.lead)).toEqual([`w1`, `late`]);
             expect(trayOf([], { ...filtered, matchesSubagent: () => false }, [early, late])).toBeUndefined();
         });
+    });
+});
+
+// What a card wears while its tray is shut: every agent it started, and how many of them are still at work.
+describe(`what a card counts of its family`, () => {
+    const subagent = (id: string, status: SubagentSession["status"]): SubagentSession => ({
+        id,
+        kind: `subagent`,
+        conversationId: `p`,
+        agentType: `Explore`,
+        status,
+        startedAt: 1,
+        activityAt: 1,
+    });
+
+    it(`counts nothing for a card that started nothing`, () => {
+        expect(trayCount([], [])).toBeUndefined();
+    });
+
+    it(`counts spawned and in-process children together, only the working ones as running`, () => {
+        const children = [
+            working(`w`, { startedBy: `agent:p` }),
+            child(`done`, `p`),
+            child(`asked`, `p`, { status: `awaiting`, attention: permission }),
+            limited(`spent`, `p`),
+        ];
+        expect(trayCount(children, [subagent(`s1`, `running`), subagent(`s2`, `completed`)])).toEqual({ total: 6, running: 2 });
+    });
+
+    it(`counts a family with none at work as running none`, () => {
+        expect(trayCount([child(`done`, `p`)], [subagent(`s`, `completed`)])).toEqual({ total: 2, running: 0 });
     });
 });

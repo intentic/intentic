@@ -363,6 +363,8 @@
             "parent": "Rodzic",
             "parentNotified": "Rodzic powiadomiony",
             "startedBy": "Agenty uruchomione przez „{title}”",
+            "startedCount": "Uruchomione agenty: {count}",
+            "workingCount": "Nadal pracują: {running} z {total}",
             "watching": "Wypatruje",
             "needYou": "{count} potrzebuje Cię | {count} potrzebują Cię | {count} potrzebuje Cię",
             "callsMore": "jeszcze {count}",

@@ -145,3 +145,25 @@ it(`shows an in-process subagent in its parent's column, and the parent's card s
     await settle();
     expect(subagentOnScreen.value).toBeUndefined();
 });
+
+// Only the chat on screen hangs its tray open; another open chat counts its family on its card instead, so a list of
+// busy orchestrators does not shake with every helper each of them starts.
+it(`shuts the tray under a chat the reader moved away from, and counts its family on its card`, async () => {
+    setAgents([lead, port, agent(`other`, { title: `other work`, startedAt: 3 })], 100);
+    roster([mapUi]);
+    const el = await mountList();
+    open(`lead`);
+    await settle();
+    expect(rows(el)).toHaveLength(2);
+
+    open(`other`);
+    await settle();
+    expect(useChat().activeId.value).toBe(`other`);
+    expect(tray(el)).toBeNull();
+    // Gone from the page once the fold has closed, not only hidden: a shut tray keeps no rows mounted.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(el.textContent).not.toContain(`port the parser`);
+    expect(el.textContent).not.toContain(`map the UI`);
+    const card = el.querySelector(`[data-chat-tab="lead"]`);
+    expect(card?.querySelector(`[role="img"][aria-label="${t(`agents.childRows.workingCount`, { running: 2, total: 2 })}"]`)?.textContent?.trim()).toBe(`2/2`);
+});

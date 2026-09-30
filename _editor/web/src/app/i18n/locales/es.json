@@ -318,6 +318,8 @@
             "parent": "Padre",
             "parentNotified": "Padre avisado",
             "startedBy": "Agentes que inició «{title}»",
+            "startedCount": "Agentes iniciados: {count}",
+            "workingCount": "{running} de {total} siguen trabajando",
             "watching": "Vigilando",
             "needYou": "{count} te necesita | {count} te necesitan",
             "callsMore": "{count} más",

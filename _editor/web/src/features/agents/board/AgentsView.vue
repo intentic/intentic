@@ -529,6 +529,7 @@ const starters = computed(() => boardStarters(workspaceRepos.value.length, works
                                 />
                                 <ChildRows
                                     :agent="agent"
+                                    :focused="ringed(agent.id)"
                                     :live="!narrow && lane.key !== `finished`"
                                     :class="draggedId === agent.id && dragging ? `opacity-40` : ``"
                                 />

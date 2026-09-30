@@ -1,7 +1,9 @@
 // The children an agent started, through the real board: they hang under its card as rows instead of standing as
 // cards, working ones in sight and settled ones behind a count, and a child asking what only the reader can give moves
 // its parent's card to Attention, wearing the ask there and on its own row. The subagents its runtime ran in-process
-// ride in the same tray, from the roster. The fold's rules are view/childFold.test.ts; this pins the board's wiring.
+// ride in the same tray, from the roster. The tray opens only under the card the reader is on, or one whose child is on
+// screen; every other card counts its family on itself and keeps only an asking child's row in sight. The fold's rules
+// are view/childFold.test.ts; this pins the board's wiring.
 import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
 import { type AgentSummary, providerLabel, type SubagentSession } from "@intentic/sandbox-contract";
@@ -85,10 +87,42 @@ const tray = (board: HTMLElement): HTMLElement | null =>
 const rows = (board: HTMLElement): string[] =>
     [...(tray(board)?.querySelectorAll(`button:not([aria-expanded])`) ?? [])].map((row) => row.textContent?.replace(/\s+/g, ` `).trim() ?? ``);
 const fold = (board: HTMLElement): HTMLButtonElement | null => tray(board)?.querySelector<HTMLButtonElement>(`button[aria-expanded]`) ?? null;
+// The reader's press on a card, which rings it and so opens its tray.
+const focus = async (board: HTMLElement, title: string): Promise<void> => {
+    board.querySelector<HTMLElement>(`[aria-label="Focus agent: ${title}"]`)?.click();
+    await settle();
+};
+// The count a card wears for its family (ChildCount), by the words its hover and label say.
+const count = (board: HTMLElement, label: string): string | undefined =>
+    board.querySelector(`[role="img"][aria-label="${label}"]`)?.textContent?.trim();
+
+it(`keeps the tray shut under a card the reader is not on, counting its family on the card and keeping an ask in sight`, async () => {
+    setAgents(family, 100);
+    const board = await mountBoard();
+
+    expect(cards(board)).toEqual([`Focus agent: ship the release`]);
+    expect(rows(board)).toEqual([expect.stringMatching(/^rotate the keys/)]);
+    expect(fold(board)).toBeNull();
+    expect(count(board, t(`agents.childRows.workingCount`, { running: 1, total: 4 }))).toBe(`1/4`);
+
+    await focus(board, `ship the release`);
+    expect(rows(board)).toEqual([expect.stringMatching(/^rotate the keys/), expect.stringMatching(/^port the parser/)]);
+    expect(count(board, t(`agents.childRows.workingCount`, { running: 1, total: 4 }))).toBe(`1/4`);
+});
+
+it(`counts a family with nothing left at work as its total alone, and leaves no group to announce under a shut tray`, async () => {
+    setAgents([lead, helper(`notes`, { title: `write the notes`, updatedAt: 900 })], 100);
+    roster([inProcess(`call-scan`, { description: `scan the logs`, status: `completed`, endedAt: 950, activityAt: 950 })]);
+    const board = await mountBoard();
+
+    expect(count(board, t(`agents.childRows.startedCount`, { count: 2 }))).toBe(`2`);
+    expect(tray(board)).toBeNull();
+});
 
 it(`hangs the children under their parent's card, the asking and working ones in sight and settled ones behind a count`, async () => {
     setAgents(family, 100);
     const board = await mountBoard();
+    await focus(board, `ship the release`);
 
     expect(cards(board)).toEqual([`Focus agent: ship the release`]);
     expect(rows(board)).toEqual([expect.stringMatching(/^rotate the keys/), expect.stringMatching(/^port the parser/)]);
@@ -111,6 +145,7 @@ it(`keeps Attention empty for children stopped under a parent still at work, one
     const spent = (id: string): AgentSummary => helper(id, { title: `batch ${id}`, status: `error`, failureCode: `rate_limit`, provider: `codex` });
     setAgents([lead, ...[`b1`, `b2`, `b3`].map(spent), helper(`port`, { title: `port the parser`, status: `running`, startedAt: 2 })], 100);
     const board = await mountBoard();
+    await focus(board, `ship the release`);
 
     expect(board.querySelector(`[data-lane="attention"] [role="button"]`)).toBeNull();
     const groups = [...(tray(board)?.querySelectorAll(`button[aria-expanded]`) ?? [])].map((row) => row.textContent?.replace(/\s+/g, ` `).trim());
@@ -121,6 +156,7 @@ it(`keeps Attention empty for children stopped under a parent still at work, one
 it(`unfolds the settled children on the count, and points the chat at a child from its row`, async () => {
     setAgents(family, 100);
     const board = await mountBoard();
+    await focus(board, `ship the release`);
 
     fold(board)?.click();
     await settle();
@@ -161,6 +197,7 @@ it(`carries the subagents its runtime ran in-process in the same tray, and a spa
         { id: `port`, kind: `spawned`, conversationId: `lead`, agentType: `Codex`, status: `running`, startedAt: 2, activityAt: 2 },
     ]);
     const board = await mountBoard();
+    await focus(board, `ship the release`);
 
     expect(cards(board)).toEqual([`Focus agent: ship the release`]);
     expect(rows(board)).toEqual([
@@ -186,6 +223,7 @@ it(`shows an in-process subagent's transcript in its parent's chat from its row`
     setAgents([lead], 100);
     roster([inProcess(`call-map`, { description: `map the UI`, model: `claude-opus-x`, effort: `low` })]);
     const board = await mountBoard();
+    await focus(board, `ship the release`);
 
     // What it runs on: the model it was served, right of the title on a wide row and under it on a narrow one (the row's
     // container query shows one, which this DOM does not apply, so both are read), and the tier as the ladder's rungs,
@@ -202,22 +240,24 @@ it(`shows an in-process subagent's transcript in its parent's chat from its row`
 
 // The view is held per window and only the chat panel prunes it, so a board whose chat is popped out keeps a stale copy
 // once the reader moves on: the ring follows what the chat shows, not that copy, and never lands on row and card both.
+// The tray stays open while its row wears the ring, though the card no longer does, and shuts once the reader moves on.
 it(`rings the subagent's row alone, and lets it go when the chat moves to another card`, async () => {
     setAgents([lead, agent(`other`, { title: `other work`, startedAt: 3 })], 100);
     roster([inProcess(`call-map`, { description: `map the UI` })]);
     const board = await mountBoard();
     const card = (title: string): HTMLElement => board.querySelector<HTMLElement>(`[aria-label="Focus agent: ${title}"]`)!;
-    const row = (): HTMLButtonElement => tray(board)!.querySelector<HTMLButtonElement>(`button`)!;
+    const row = (): HTMLButtonElement | null => tray(board)?.querySelector<HTMLButtonElement>(`button`) ?? null;
+    await focus(board, `ship the release`);
 
-    row().click();
+    row()?.click();
     await settle();
-    expect(row().classList.contains(`ui-row-select-on`)).toBe(true);
+    expect(row()?.classList.contains(`ui-row-select-on`)).toBe(true);
     expect(card(`ship the release`).closest(`.session-card-on`)).toBeNull();
 
     card(`other work`).click();
     await settle();
     expect(useChat().activeId.value).toBe(`other`);
-    expect(row().classList.contains(`ui-row-select-on`)).toBe(false);
+    expect(tray(board)).toBeNull();
     expect(card(`other work`).closest(`.session-card-on`)).not.toBeNull();
 });
 

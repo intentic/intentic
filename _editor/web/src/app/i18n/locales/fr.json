@@ -314,6 +314,8 @@
             "parent": "Parent",
             "parentNotified": "Parent prévenu",
             "startedBy": "Agents lancés par « {title} »",
+            "startedCount": "Agents lancés : {count}",
+            "workingCount": "{running} sur {total} travaillent encore",
             "watching": "Guette",
             "needYou": "{count} a besoin de vous | {count} ont besoin de vous",
             "callsMore": "{count} de plus",
