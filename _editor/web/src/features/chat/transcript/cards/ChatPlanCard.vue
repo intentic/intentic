@@ -7,16 +7,20 @@ import { useMarkdown } from "../../../../lib/markdown/useMarkdown";
 import { NEED_ICONS } from "../../../needs/needStatus";
 import { useNeeds } from "../../../needs/useNeeds";
 import { usePaneView } from "../../panel/useChat-view";
-import type { CardAnswer } from "../../session/cardReplies";
 import type { ChatMessage } from "../transcript";
 import ChatCard from "./ChatCard.vue";
-import ChatDecisionButton from "./ChatDecisionButton.vue";
 import ChatDocumentBody from "./ChatDocumentBody.vue";
 import { documentDrawn, documentTitled, planStatus } from "./cardStatus";
 
+// The plan and nothing to press: its two answers are the bar's pinned over the composer (ChatWaitingBar), the one place
+// they stand. There they are on screen at any scroll position (a long plan's own foot is below the fold on a phone), and
+// they carry the notes in the box, which a press down here could not. The shared card props (`settling`, `reply`) are
+// not declared, and not let fall onto the card either.
+defineOptions({ inheritAttrs: false });
+
 const t = useT();
 
-const props = defineProps<{ message: ChatMessage; settling: boolean; reply: (answer: CardAnswer) => Promise<void> }>();
+const props = defineProps<{ message: ChatMessage }>();
 const card = computed(() => props.message.plan!);
 
 const { conversation } = usePaneView();
@@ -59,14 +63,5 @@ const needs = openFor(() => conversation.value.conversationId);
             <span v-for="need in needs" :key="need.id" class="flex items-center gap-1.5 text-content/85"><Icon :name="NEED_ICONS[need.subject.kind]" class="text-warning" />{{ need.title }}</span>
             <span class="text-subtle">{{ t(`needs.plan.answerThere`) }}</span>
         </div>
-        <template v-if="card.status === 'pending'" #actions>
-            <!-- Single approval, not a posture menu: approving a plan approves the work inside the isolation boundary. -->
-            <ChatDecisionButton tone="primary" icon="check" :disabled="settling" @click="reply({ kind: 'plan', approve: true })">{{
-                t(`ui.action.approve`)
-            }}</ChatDecisionButton>
-            <ChatDecisionButton tone="secondary" icon="pencil" :disabled="settling" @click="reply({ kind: 'plan', approve: false })">{{
-                t(`chat.chatMessageView.noKeepPlanning`)
-            }}</ChatDecisionButton>
-        </template>
     </ChatCard>
 </template>

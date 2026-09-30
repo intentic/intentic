@@ -75,7 +75,7 @@ const composerTurn = ({ streaming, ending, awaitingDecision, pendingPlanMessage 
 // notes": the plan reply carries no words beside a yes (its feedback is a rejection's), so the approval goes first and
 // the notes follow as an ordinary message, which the running turn takes mid-turn or right after. The box empties at the
 // press and gets its words back if the approval did not land. And its "keep planning": the box's notes when it holds
-// any (what Send does here), else a bare no, which is what the card's own button sends.
+// any (what Send does here), else a bare no. These two are the plan's only answers; its card in the transcript has none.
 const planAnswers = (
     host: SendHost,
     planMessage: Readonly<Ref<ChatMessage | undefined>>,

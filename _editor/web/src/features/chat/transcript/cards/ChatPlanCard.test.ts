@@ -38,6 +38,7 @@ let app: App | undefined;
 const render = (message: ChatMessage): HTMLElement => {
     const element = document.createElement(`div`);
     document.body.append(element);
+    // Mounted as ChatMessageView mounts every card, with the shared answer props this one leaves to the bar.
     app = createApp({ render: () => h(ChatPlanCard, { message, settling: false, reply: async () => {} }) });
     app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
@@ -78,4 +79,13 @@ it(`says nothing when nothing is waiting, or once the plan is answered`, () => {
     app?.unmount();
     open.value = [needOf(`need-1`, `The STRIPE_SECRET_KEY secret`, { kind: `secret`, name: `STRIPE_SECRET_KEY` })];
     expect(needsLine(render(planRow(true)))).toEqual([]);
+});
+
+// Its answers are the bar's over the composer (ChatWaitingBar), where they carry the box's notes: the card has none, and
+// the shared props it is handed do not land on it as attributes.
+it(`a pending plan draws no answers of its own`, () => {
+    const element = render(planRow(false));
+    expect(element.querySelectorAll(`button`)).toHaveLength(0);
+    expect(element.querySelector(`[reply], [settling]`)).toBeNull();
+    expect(element.querySelector(`[data-card-live]`)).not.toBeNull();
 });

@@ -101,7 +101,7 @@ const memoryLine = computed(() => {
                 <span v-else-if="decision.requestId === undefined" class="text-muted"> · {{ t(`chat.chatWaitingBar.fetching`) }}</span>
             </span>
             <span class="flex shrink-0 flex-wrap items-center gap-1">
-                <!-- The plan's answers here too, so Approve is not only at the end of a long plan, below the fold on a phone. -->
+                <!-- The plan's answers stand here alone, not on its card too: pinned, and beside the box whose notes they carry. -->
                 <template v-if="decision.kind === `plan` && decision.requestId !== undefined">
                     <Button size="small" :disabled="!props.canDrive || replying" @click="emit(`approve`)">
                         {{ staged ? t(`chat.chatWaitingBar.approveWithNotes`) : t(`ui.action.approve`) }}

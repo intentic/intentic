@@ -245,13 +245,12 @@ const SHOTS: Shot[] = [
         name: "chat-plan",
         path: "/workspace",
         openFirst: "/agents/cnv_checkout_stripe",
-        waitFor: "text=No, keep planning",
+        waitFor: "text=Plan waiting for your approval",
         settleMs: 3200,
         clip: "chat",
         dpr: DENSE_DPR,
-        // Stops below the plan's Approve row. The composer is pinned to the foot of the pane, so trimming to the
-        // last inked pixel always reaches it and hands back 350px of empty column between the two.
-        stopAt: 640,
+        // No `stopAt`: the plan's Approve is in the bar pinned over the composer, not on the card, so the frame runs
+        // down to it rather than stopping under the plan.
     },
     // The workspace
     { name: "workspace-editor", path: "/workspace/api/src/db/schema.ts", waitFor: "text=deletedAt", settleMs: 1800, clip: "area" },
@@ -397,14 +396,13 @@ const DESK_SHOTS: Shot[] = [
         name: "desk-hero-plan",
         path: "/workspace",
         openFirst: `/agents/${DESK_FEATURED}`,
-        waitFor: "text=No, keep planning",
+        waitFor: "text=Plan waiting for your approval",
         settleMs: 3200,
         clip: "chat",
         dpr: DENSE_DPR,
-        stopAt: 640,
         mode: "desk",
     },
-    // The chat in its own window, on the plan the assistant wrote for the newsletter, Approve under it. The plan card
+    // The chat in its own window, on the plan the assistant wrote for the newsletter, Approve in the bar below. The plan card
     // lands three seconds into the run and the popped-out window starts its own copy of it, so it waits longer than
     // the code demo's twin.
     {
