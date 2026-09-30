@@ -22,9 +22,16 @@ test("a conversation's grants and its releases come back as one row, newest chan
 
     expect(await standingGrants(deps)).toEqual({
         conversations: [
-            { conversationId: "conv-new", capabilities: ["github"], folders: [], shelves: ["browser"], by: "bob@acme.dev", updatedAt: 300, releases: [] },
-            { conversationId: "conv-released", capabilities: [], folders: [], shelves: [], releases: [{ subject: "reddit-work", approvedBy: "bob@acme.dev", at: 200 }] },
-            { conversationId: "conv-old", capabilities: [], folders: ["refs/vendor"], shelves: [], by: "ada@acme.dev", updatedAt: 100, releases: [] },
+            { conversationId: "conv-new", capabilities: ["github"], folders: [], shelves: ["browser"], installs: false, by: "bob@acme.dev", updatedAt: 300, releases: [] },
+            {
+                conversationId: "conv-released",
+                capabilities: [],
+                folders: [],
+                shelves: [],
+                installs: false,
+                releases: [{ subject: "reddit-work", approvedBy: "bob@acme.dev", at: 200 }],
+            },
+            { conversationId: "conv-old", capabilities: [], folders: ["refs/vendor"], shelves: [], installs: false, by: "ada@acme.dev", updatedAt: 100, releases: [] },
         ],
     });
 });
@@ -42,7 +49,34 @@ test("taking one back leaves the rest, and a conversation with nothing left drop
     expect(await revokeGrant(deps, { conversationId: "conv-2", kind: "release", what: "reddit-work" })).toBe(false);
 
     expect((await standingGrants(deps)).conversations).toEqual([
-        { conversationId: "conv-1", capabilities: [], folders: ["docs"], shelves: [], by: "ada@acme.dev", updatedAt: 100, releases: [] },
+        { conversationId: "conv-1", capabilities: [], folders: ["docs"], shelves: [], installs: false, by: "ada@acme.dev", updatedAt: 100, releases: [] },
     ]);
     expect(deps.credentialGrants.has("conv-2", "reddit-work")).toBeUndefined();
+});
+
+// An install card's "Allow installs for this conversation" is a yes like any other: listed, and taken back alone.
+test("a conversation's unasked installs are listed with its other yeses and taken back on their own", async () => {
+    const { deps, tick } = harness();
+    await deps.conversationGrants.add("conv-1", { subject: "folder", what: "docs" }, "ada@acme.dev");
+    tick(200);
+    await deps.conversationGrants.allowInstalls("conv-1", undefined);
+    expect(await deps.conversationGrants.installsAllowed("conv-1")).toBe(true);
+    expect((await standingGrants(deps)).conversations).toEqual([
+        { conversationId: "conv-1", capabilities: [], folders: ["docs"], shelves: [], installs: true, by: "ada@acme.dev", updatedAt: 200, releases: [] },
+    ]);
+
+    expect(await revokeGrant(deps, { conversationId: "conv-1", kind: "install", what: "" })).toBe(true);
+    expect(await revokeGrant(deps, { conversationId: "conv-1", kind: "install", what: "" })).toBe(false);
+    expect(await deps.conversationGrants.installsAllowed("conv-1")).toBe(false);
+    // The folder stands; only the installs yes went.
+    expect((await standingGrants(deps)).conversations).toEqual([
+        { conversationId: "conv-1", capabilities: [], folders: ["docs"], shelves: [], installs: false, by: "ada@acme.dev", updatedAt: 200, releases: [] },
+    ]);
+});
+
+test("a conversation whose only yes was its installs drops out once that is taken back", async () => {
+    const { deps } = harness();
+    await deps.conversationGrants.allowInstalls("conv-1", "ada@acme.dev");
+    expect(await revokeGrant(deps, { conversationId: "conv-1", kind: "install", what: "" })).toBe(true);
+    expect((await standingGrants(deps)).conversations).toEqual([]);
 });

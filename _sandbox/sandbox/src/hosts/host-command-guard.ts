@@ -253,6 +253,7 @@ export const judgeHostCommand = async (
     const hard = matches.find(
         (match) => guard(commandRun, { commandClass: match.commandClass, locus: DEVICE, live: match.live }).effect !== "allow",
     )?.commandClass;
+    // Told to the judge, never a refusal: whether anybody is watching the live turn right now.
     const unattended = conversationId === undefined || conversationUnattended(conversationId);
     const outsideSource = conversationId === undefined ? undefined : conversationTaintSource(conversationId);
     const { verdict, judging } = await hostVerdict(services, {
@@ -297,13 +298,7 @@ export const judgeHostCommand = async (
                 `Ask in chat before running it on "${input.machine}".`,
         );
     }
-    if (unattended) {
-        record("refused");
-        return refusal(
-            `Held for the owner: ${verdict.sentence} This turn is running unattended, so there is nobody to approve it. ` +
-                `Do not retry: carry on with what you can do without it, and say plainly what you left undone.`,
-        );
-    }
+    // Asked whoever started the turn: a card nobody has answered yet waits for the owner, it is not a refusal.
     record("asked");
     const asking = askOwner(services, run, { conversationId, machine: input.machine, command: input.command, sentence: verdict.sentence, at });
     const ownKey = askKey(conversationId, input.machine, input.command);

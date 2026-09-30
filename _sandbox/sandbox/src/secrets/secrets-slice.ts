@@ -2,11 +2,10 @@ import { join } from "node:path";
 import type { SecretHostGuard } from "@intentic/sandbox-contract";
 import type { SecretVault } from "../capabilities/credentials/secret-vault.js";
 import type { CardDeps } from "../conversations/actor/card-offers.js";
-import { conversationUnattended } from "../guard/turn-taint.js";
 import type { WorkspacePaths } from "../workspace/workspace.js";
 import { createCredentialGate, type CredentialGate } from "./credential-gate.js";
 import { type CredentialGatesStore, fileCredentialGates } from "./credential-gates.js";
-import { createCredentialGrants, type CredentialGrants } from "./credential-grants.js";
+import { type CredentialGrants, credentialReleasesDocument, fileCredentialGrants } from "./credential-grants.js";
 import { createHostGuardGate, type HostGuardGate } from "./host-guard-gate.js";
 import { effectiveHostGuards, fileSecretHostGuards, type SecretHostGuardsStore, secretHostGuardsDocument } from "./host-guards.js";
 import { type NamedSecret, secretRegistryOf } from "./secret-registry.js";
@@ -45,12 +44,16 @@ export interface SecretsDeps {
     readonly connectorHosts: () => Promise<ReadonlyMap<string, readonly string[]>>;
     // Who may loosen a guard on a card the agent raised.
     readonly ownerEmail: () => Promise<string | undefined>;
+    // Where a release that could not be kept is said; the release itself still holds for this process.
+    readonly warn: (message: string, error: unknown) => void;
 }
 
 // Builds the secrets slice.
-export const createSecretsSlice = ({ workspace, authRoot, secretVault, cards, connectorHosts, ownerEmail }: SecretsDeps): SecretsSlice => {
+export const createSecretsSlice = ({ workspace, authRoot, secretVault, cards, connectorHosts, ownerEmail, warn }: SecretsDeps): SecretsSlice => {
     const credentialGates = fileCredentialGates(join(authRoot, "credential-gates.json"));
-    const credentialGrants = createCredentialGrants();
+    const credentialGrants = fileCredentialGrants(join(authRoot, credentialReleasesDocument.path), (error) =>
+        warn("credential releases: the stored releases could not be read or written", error),
+    );
     const sandboxSecrets = fileSandboxSecrets(join(authRoot, sandboxSecretsDocument.path));
     const secretHostGuards = fileSecretHostGuards(join(authRoot, secretHostGuardsDocument.path));
     // Read fresh each call, like the registry: a guard the owner tightens mid-turn holds from the very next use.
@@ -61,7 +64,7 @@ export const createSecretsSlice = ({ workspace, authRoot, secretVault, cards, co
     return {
         secretHostGuards,
         hostGuards,
-        hostGuardGate: createHostGuardGate({ guards: hostGuards, ownerEmail, unattended: conversationUnattended, ...cards }),
+        hostGuardGate: createHostGuardGate({ guards: hostGuards, ownerEmail, ...cards }),
         sandboxSecrets,
         secretRegistry: secretRegistryOf(secretVault, () => workspace.repos["desired-state"], sandboxSecrets),
         secretUses: fileSecretUses(join(workspace.root, secretUsesDocument.path)),

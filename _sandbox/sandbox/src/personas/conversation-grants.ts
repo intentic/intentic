@@ -5,7 +5,9 @@ import { openDocument } from "../store/open-document.js";
 // What a person allowed one conversation beyond its persona and its area, answered on a grant need's card
 // (docs/architecture/needs.md). Beside the other credential policy under the auth root, off the agent-editable config:
 // a grant an agent could write for itself would be no grant. Read as each turn of that conversation is planned
-// (personas.ts widenPersona), so a grant reaches the next turn and never widens the one running.
+// (personas.ts widenPersona), so a grant reaches the next turn and never widens the one running. The one exception is
+// `installs`, answered on an install card mid-turn and read live by the command gate (agent/providers/project-installs.ts):
+// the yes is for the install that asked, and for every later one.
 
 export const conversationGrantsDocument = defineDocument({ root: "auth", path: "conversation-grants.json", schema: ConversationGrantSchema, granularity: "record" });
 
@@ -17,6 +19,11 @@ export interface ConversationGrants {
     readonly add: (conversationId: string, item: GrantItem, by: string | undefined) => Promise<void>;
     // Whether there was one to take back.
     readonly revoke: (conversationId: string, item: GrantItem) => Promise<boolean>;
+    // "Allow installs for this conversation": its own dependency installs run without asking from here on.
+    readonly allowInstalls: (conversationId: string, by: string | undefined) => Promise<void>;
+    readonly installsAllowed: (conversationId: string) => Promise<boolean>;
+    // Whether there was one to take back.
+    readonly revokeInstalls: (conversationId: string) => Promise<boolean>;
     // A conversation that is gone takes its grants with it.
     readonly forget: (conversationId: string) => Promise<void>;
 }
@@ -24,7 +31,19 @@ export interface ConversationGrants {
 const field = (subject: GrantItem["subject"]): "capabilities" | "folders" | "shelves" =>
     subject === "capability" ? "capabilities" : subject === "folder" ? "folders" : "shelves";
 
-const EMPTY = (now: number): ConversationGrant => ({ capabilities: [], folders: [], shelves: [], updatedAt: now });
+const EMPTY = (now: number): ConversationGrant => ({ capabilities: [], folders: [], shelves: [], installs: false, updatedAt: now });
+
+// A record with nothing left in it goes, so the Grants page never lists a conversation with no yes standing.
+const nothingLeft = (grant: ConversationGrant): boolean =>
+    grant.capabilities.length === 0 && grant.folders.length === 0 && grant.shelves.length === 0 && !grant.installs;
+
+const without = (current: GrantsByConversation, conversationId: string, next: ConversationGrant): GrantsByConversation => {
+    if (!nothingLeft(next)) {
+        return { ...current, [conversationId]: next };
+    }
+    const { [conversationId]: _dropped, ...rest } = current;
+    return rest;
+};
 
 type GrantsByConversation = Record<string, ConversationGrant>;
 
@@ -90,13 +109,26 @@ const grantsOver = (file: GrantsFile, now: () => number): ConversationGrants => 
                     return current;
                 }
                 revoked = true;
-                const next = { ...grant, [field(item.subject)]: list.filter((entry) => entry !== item.what), updatedAt: now() };
-                const empty = next.capabilities.length === 0 && next.folders.length === 0 && next.shelves.length === 0;
-                if (empty) {
-                    const { [conversationId]: _dropped, ...rest } = current;
-                    return rest;
+                return without(current, conversationId, { ...grant, [field(item.subject)]: list.filter((entry) => entry !== item.what), updatedAt: now() });
+            });
+            return revoked;
+        },
+        allowInstalls: async (conversationId, by) => {
+            await file.update((current) => {
+                const grant = current[conversationId] ?? EMPTY(now());
+                return grant.installs ? current : { ...current, [conversationId]: { ...grant, installs: true, updatedAt: now(), ...(by === undefined ? {} : { by }) } };
+            });
+        },
+        installsAllowed: async (conversationId) => (await file.read())[conversationId]?.installs === true,
+        revokeInstalls: async (conversationId) => {
+            let revoked = false;
+            await file.update((current) => {
+                const grant = current[conversationId];
+                if (grant?.installs !== true) {
+                    return current;
                 }
-                return { ...current, [conversationId]: next };
+                revoked = true;
+                return without(current, conversationId, { ...grant, installs: false, updatedAt: now() });
             });
             return revoked;
         },

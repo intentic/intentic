@@ -416,7 +416,13 @@ const baseRequestOf = (
             // Rides the same path as `effort`: through turn-plan's own gates, not straight to an adapter.
             ...opt("fast", input.fast),
         },
-        policy: { ...opt("permissionMode", input.permissionMode), ...opt("allowedTools", input.allowedTools) },
+        policy: {
+            ...opt("permissionMode", input.permissionMode),
+            ...opt("allowedTools", input.allowedTools),
+            // Nobody at a composer when it started: told to the judge and the prompt, never a reason to refuse a card.
+            // Lost when the request was split into groups on 2026-09-23 and wired back on 2026-09-30.
+            ...opt("unattended", input.unattended === true ? true : undefined),
+        },
         tools: Object.keys(turn.cliEnv).length > 0 ? { cliEnv: turn.cliEnv } : {},
         hooks: { cards: services.cards, ...(input.conversationId === undefined ? {} : actorAsks(services.conversations, input.conversationId)) },
         signal: turn.signal ?? new AbortController().signal,

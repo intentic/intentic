@@ -187,9 +187,8 @@ export interface PromptRequest {
 const holdsBrowserAccounts = (accounts: Record<string, string> | undefined): boolean => Object.keys(accounts ?? {}).length > 0;
 
 // Whether the terminal hand-off server is mounted, kept as one predicate so the mount and its prompt sentence never
-// drift; off when unattended or without the tmux wrapper.
-export const terminalMounted = (request: Pick<PromptRequest, "policy">, tmuxEnabled: boolean): boolean =>
-    tmuxEnabled && request.policy.unattended !== true;
+// drift; off only without the tmux wrapper. An unattended turn keeps it: the hand-off waits for the owner like a card.
+export const terminalMounted = (tmuxEnabled: boolean): boolean => tmuxEnabled;
 
 // One request, one prompt input: the mapping every caller shares, so a field read differently by two of them can't
 // make the prompt shown disagree with the prompt sent.

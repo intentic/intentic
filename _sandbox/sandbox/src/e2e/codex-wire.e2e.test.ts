@@ -173,18 +173,17 @@ describe.skipIf(!tier.runs)(tier.title, () => {
             expect(JSON.stringify(request), "the appended text must reach the model").toContain(APPENDED);
         });
 
-        // Codex registers this tool when the table is absent, so writing it (even false) is what withholds it;
-        // asserting requests.length first catches the boolean-to-table regression before the tool check gets confusing.
-        test("the question tool is registered for an attended turn and withheld from an unattended one", async () => {
+        // The table is written every turn, so a config Codex refuses shows up here; asserting requests.length first
+        // catches the boolean-to-table regression before the tool check gets confusing. An unattended turn keeps the
+        // tool: its question waits for the owner like any other card.
+        test("the question tool is registered for every turn, attended or not", async () => {
             const attended = await runTurn(MODEL, [{ text: "ok" }]);
             expect(attended.requests.length, "a config Codex refuses never reaches the model at all").toBeGreaterThan(0);
             expect(hasTool(attended.requests[0]!, "request_user_input")).toBe(true);
 
             const unattended = await runTurn(MODEL, [{ text: "ok" }], { policy: { unattended: true } });
             expect(unattended.requests.length).toBeGreaterThan(0);
-            expect(hasTool(unattended.requests[0]!, "request_user_input"), "an unattended turn must not be offered a way to park on a card").toBe(
-                false,
-            );
+            expect(hasTool(unattended.requests[0]!, "request_user_input"), "an unattended turn's question waits for the owner").toBe(true);
         });
 
         // An omitted model field lets the SDK's own default leak through unnoticed.

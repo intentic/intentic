@@ -5,13 +5,13 @@ import type {
     AgentEvent,
     CommandJudgeMode,
     PermissionMode,
-    ProjectInstallMode,
     SystemPromptMode,
     TurnNote,
 } from "@intentic/sandbox-contract";
 import type { TurnPlacement } from "../../conversations/worktrees/isolation.js";
 import type { AccountsServerFactory } from "../../browser/tools/accounts-tools.js";
 import type { ClassifiedInstall } from "../../environment/runtime-installs.js";
+import type { ProjectInstallGate } from "./project-installs.js";
 import type { JsExecutionPlan } from "../../execution/js-runtime.js";
 import type { CommandGuardOptions } from "../../guard/command-guard.js";
 import type { HostDeviceReach } from "../../hosts/self-host.js";
@@ -101,12 +101,11 @@ export interface TurnPolicy {
     readonly rulebook?: AgentCapabilities["rulebook"];
     // Whether this turn was woken by outside content (a listener message, a webchat visitor), naming the source.
     readonly outsideWake?: string;
-    // No one is watching this turn; plan/ask tools are withheld and the permission gate refuses rather than waits.
+    // No one was at a composer when this turn started (an automation, a loop, a spawned child). Information only: the
+    // judge and the prompt are told, and every card still waits for the owner's answer.
     readonly unattended?: boolean;
     // Whether the persona may install a missing dependency itself, read by the install-steering and deps hooks.
     readonly dependencyInstallAllowed?: boolean;
-    // The owner's answer for an agent's own project install (settings `projectInstalls`); absent reads as automatic.
-    readonly projectInstalls?: ProjectInstallMode;
     // What the settings-hook gate found (guard/hook-approvals.ts): `held` runs the turn with every hook off; otherwise
     // `digest` names the approved set, absent when there is none, and a mid-turn edit may not move it.
     readonly settingsHooks?: { readonly held: boolean; readonly digest?: string };
@@ -206,6 +205,10 @@ export interface TurnHooks {
     readonly editReviewers?: readonly EditReviewer[];
     // Every classified image-scoped install this turn attempts, for the install ledger; nothing reaches the model.
     readonly onImageInstall?: (installs: readonly ClassifiedInstall[], command: string) => void;
+    // The turn's project-install rule, built once above the provider split (run/turn/turn-safety.ts) and handed to the
+    // command gate every runtime consults, so Claude Code, Codex and Cursor meet one answer. Absent: no install rule,
+    // which only a hand-built request has.
+    readonly projectInstalls?: ProjectInstallGate;
     // The judge and its writes, as functions so no runtime reaches for them; absent skips the judge.
     readonly judge?: CommandGuardOptions["judge"];
     readonly logSafety?: CommandGuardOptions["log"];

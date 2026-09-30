@@ -66,6 +66,13 @@ export const SandboxNoticeSchema = z.discriminatedUnion("code", [
     // A turn sent thin for a small window ("16k"): what was left out, and whether the base instructions were swapped too.
     z.object({ code: z.literal("contextTrim"), params: z.object({ window: z.string(), omitted: z.string().optional(), base: z.boolean() }) }),
     z.object({ code: z.literal("resumed"), params: z.object({ reason: ResumeNoticeReasonSchema }) }),
+    // An agent's own dependency install starting: into its conversation's own copy (`ownCopy`) or the main tree; the
+    // workspace root (`root`) and up to three project folders named (`projects`, each with its slash, already joined),
+    // and how many `more` were not named.
+    z.object({
+        code: z.literal("installing"),
+        params: z.object({ ownCopy: z.boolean(), root: z.boolean().optional(), projects: z.string().optional(), more: count.optional() }),
+    }),
 ]);
 export type SandboxNotice = z.infer<typeof SandboxNoticeSchema>;
 

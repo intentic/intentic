@@ -164,10 +164,12 @@ export const createCursorHookService = (socketDir: string, logger: Logger): Curs
         if (!turn.gate.enforcing) {
             return { permission: "allow" };
         }
-        // Named for Cursor's own tool, so the card, transcript and runtime all agree on what ran.
-        const outcome = await consultWith(turn.gate, command, vendorSubject("Shell"), turn.push);
+        // Named for Cursor's own tool, so the card, transcript and runtime all agree on what ran. The shell's own cwd
+        // places an install the way Claude Code's hook input does.
+        const outcome = await consultWith(turn.gate, command, vendorSubject("Shell"), turn.push, { cwd: asString(payload.cwd) });
         if (outcome.allow) {
-            return { permission: "allow" };
+            // What the gate had to say about an allowed command (where an install writes) goes to the agent alone.
+            return outcome.context === undefined ? { permission: "allow" } : { permission: "allow", agent_message: outcome.context };
         }
         // Same sentence for both fields: the gate already phrases the refusal; splitting would mean writing it twice.
         return { permission: "deny", agent_message: outcome.reason, user_message: outcome.reason };

@@ -270,10 +270,11 @@ test("custom reaches the SDK as the bare text, with no guidance at all", async (
     expect(prompt).toBe(CUSTOM);
 });
 
-test("an unattended turn loses the interactive guidance but keeps the checklist", async () => {
+test("an unattended turn keeps the interactive guidance and the checklist, and hears that its cards wait", async () => {
     const text = (await systemPromptOf({ ...BASE, mode: "intentic", custom: undefined, unattended: true })) as string;
-    expect(text).not.toContain("AskUserQuestion");
+    expect(text).toContain("AskUserQuestion");
     expect(text).toContain("TaskCreate");
+    expect(text).toContain("waits on its card until the owner answers");
 });
 
 // Both built-in bases as text: the intentic string whole, and the append that rides the preset.

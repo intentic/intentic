@@ -26,7 +26,8 @@ flowchart LR
   uncommitted changes. Nothing checks the turn when it ends or its work after it lands: the dependency reconciler
   (`workspace/deps/reconcile-deps.ts`) installs when a land moved a manifest or brought a new project, and CI checks
   what the owner pushes. An agent may install inside its turn: an isolated one into its own copy, a main-tree one in
-  the install lane (`agent/providers/project-installs.ts`).
+  the install lane. The command gate every runtime consults decides it (`guard/command-guard.ts`,
+  `agent/providers/project-installs.ts`), from what `agent/run/turn/turn-safety.ts` set on the turn.
   When main's CI fails, `ci/main-fixer.ts` gives the failing streak one fix agent and sends it every later failure.
 - Archive is sticky: only a person's message un-archives a conversation. A turn the daemon starts itself (a retry,
   a nudge, an automation's thread) is refused on an archived one (`conversations/actor/conversation-decide.ts`), and a

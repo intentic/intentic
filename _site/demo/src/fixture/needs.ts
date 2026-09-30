@@ -102,8 +102,9 @@ export const provideDemoSecret = (id: string): Need =>
         answeredBy: `demo@intentic.dev`,
     }));
 
-// One yes still standing, for the inbox's "What you have allowed": a folder the checkout agent was let into beyond its
-// persona's fence, by the same demo person who answers everything here. Taking it back moves this store.
+// The yeses still standing, for the inbox's "What you have allowed": a folder the checkout agent was let into beyond its
+// persona's fence, and its installs let run without asking, by the same demo person who answers everything here.
+// Taking one back moves this store.
 let grants: StandingGrants[`conversations`] | undefined;
 
 export const demoGrants = (now: number = Date.now()): StandingGrants => {
@@ -113,6 +114,7 @@ export const demoGrants = (now: number = Date.now()): StandingGrants => {
             capabilities: [],
             folders: [`refs/stripe-samples`],
             shelves: [],
+            installs: true,
             by: `demo@intentic.dev`,
             updatedAt: now - minutes(42),
             releases: [],
@@ -121,15 +123,24 @@ export const demoGrants = (now: number = Date.now()): StandingGrants => {
     return { conversations: grants };
 };
 
+type DemoGrantRow = StandingGrants[`conversations`][number];
+
+const withoutGrant = (conversation: DemoGrantRow, grant: GrantRevoke): DemoGrantRow => {
+    if (grant.kind === `install`) {
+        return { ...conversation, installs: false };
+    }
+    if (grant.kind === `release`) {
+        return { ...conversation, releases: conversation.releases.filter((release) => release.subject !== grant.what) };
+    }
+    const field = grant.kind === `capability` ? `capabilities` : grant.kind === `folder` ? `folders` : `shelves`;
+    return { ...conversation, [field]: conversation[field].filter((what: string) => what !== grant.what) };
+};
+
 export const revokeDemoGrant = (grant: GrantRevoke): void => {
-    const field = grant.kind === `capability` ? `capabilities` : grant.kind === `folder` ? `folders` : grant.kind === `shelf` ? `shelves` : undefined;
     grants = demoGrants()
-        .conversations.map((conversation) =>
-            conversation.conversationId !== grant.conversationId
-                ? conversation
-                : field === undefined
-                  ? { ...conversation, releases: conversation.releases.filter((release) => release.subject !== grant.what) }
-                  : { ...conversation, [field]: conversation[field].filter((what: string) => what !== grant.what) },
-        )
-        .filter((conversation) => conversation.capabilities.length + conversation.folders.length + conversation.shelves.length + conversation.releases.length > 0);
+        .conversations.map((conversation) => (conversation.conversationId === grant.conversationId ? withoutGrant(conversation, grant) : conversation))
+        .filter(
+            (conversation) =>
+                conversation.installs || conversation.capabilities.length + conversation.folders.length + conversation.shelves.length + conversation.releases.length > 0,
+        );
 };

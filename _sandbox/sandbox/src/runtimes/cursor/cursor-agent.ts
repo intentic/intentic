@@ -1,3 +1,4 @@
+import { vendorShellEnv } from "../decorators/vendor-shell-env.js";
 import type { AgentOptions, ModelSelection, SendOptions } from "@cursor/sdk";
 import { type AgentEvent, CURSOR } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
@@ -314,9 +315,12 @@ export const createCursorAgent = (deps: CursorAgentDeps) => {
         yield { kind: "session", sessionId: agent.agentId };
         yield { kind: "init", model: modelId };
 
+        // The session's shell gets the turn's credentials and the heavy table's environment, so its programs queue
+        // and its installs take the install lane as a Claude Code turn's do.
+        const shellEnv = { ...request.tools.cliEnv, ...(await vendorShellEnv(request.tools, { ...process.env, ...request.tools.cliEnv })) };
         const retire = deps.hooks.register({
             conversationId: agent.agentId,
-            ...(request.tools.cliEnv !== undefined ? { cliEnv: request.tools.cliEnv } : {}),
+            ...(Object.keys(shellEnv).length > 0 ? { cliEnv: shellEnv } : {}),
             ...(request.spec.systemAppend !== undefined ? { systemAppend: request.spec.systemAppend } : {}),
             gate,
             push,

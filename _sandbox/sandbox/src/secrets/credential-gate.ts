@@ -29,7 +29,6 @@ export interface CredentialCheck {
     // The agent's own line of rationale, where a door collects one (`secrets request --why`).
     readonly why?: string;
     readonly conversationId: string | undefined;
-    readonly unattended: boolean;
     readonly signal: AbortSignal;
 }
 
@@ -78,22 +77,23 @@ export const createCredentialGate = (deps: CredentialGateDeps): CredentialGate =
         }
         const approvers = nameApprovers(gate.approvers);
 
-        // A release this conversation already holds; only a conversation-scoped gate ever records one.
+        // A release this conversation already holds; only a conversation-scoped gate ever records one. Read once the
+        // stored releases are in, so a yes from before a restart is honoured rather than asked again.
+        await deps.grants.ready;
         const held = input.conversationId === undefined ? undefined : deps.grants.has(input.conversationId, gate.subject);
 
         const card = cardRun(deps, input.conversationId);
         const verdict = guard(credentialUse, {
             gated: true,
             granted: held !== undefined,
-            unattended: input.unattended,
             canPark: card !== undefined,
         });
         if (verdict.effect === "allow") {
             return held === undefined ? { allow: true } : { allow: true, approvedBy: held.approvedBy };
         }
         if (verdict.effect === "deny" || card === undefined) {
-            // Reuses the verdict's own reason so the model knows which wall it hit: unattended turn, or no live
-            // conversation. `card === undefined` here only narrows the type; the guard already denied on it.
+            // Reuses the verdict's own reason: no live conversation to ask in. `card === undefined` here only narrows
+            // the type; the guard already denied on it.
             return {
                 allow: false,
                 reason:

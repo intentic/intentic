@@ -195,7 +195,9 @@ test("a native Codex turn is told the tree's dependencies are missing, exactly a
     const prompt = await promptOf(services, { prompt: "do the thing", agent: "codex" } as AgentTurn, contextIn(root));
 
     expect(prompt).toContain(SETUP_NOTICE_HEADER);
-    expect(prompt).toMatch(/ask the owner/i);
+    // A main-tree turn whose persona may install is told what its own install would do, not sent to the owner.
+    expect(prompt).toContain("needs `pnpm install`. Run it there if the task needs it: this turn works in the main tree, so the install serves every conversation.");
+    expect(prompt).not.toMatch(/ask the owner/i);
     expect(prompt).not.toContain(": run `pnpm install`");
     // The user's own words still end the message: the notice is a preamble, not a replacement.
     expect(prompt.endsWith("do the thing")).toBe(true);

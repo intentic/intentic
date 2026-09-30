@@ -92,6 +92,27 @@ test("a gate that fails refuses the command rather than letting it outrun its ru
     expect(await askGate(dir, { command: "rm -rf build", conversation_id: "agent-1" })).toEqual({ permission: "deny", agent_message: reason, user_message: reason });
 });
 
+// What the gate says about an allowed command (where an install writes) goes to the agent, and the shell's own cwd goes
+// to the gate, the same two things Claude Code's hook carries.
+test("an allowed command's note reaches the agent, and the shell's cwd reaches the gate", async () => {
+    const { service: hooks, dir } = await started();
+    const asked: (string | undefined)[] = [];
+    const gate: CommandGuard = {
+        enforcing: true,
+        // eslint-disable-next-line require-yield
+        async *consult(_program, _subject, where) {
+            asked.push(where?.cwd);
+            return { allow: true, context: "This install writes to this conversation's own copy of the tree." };
+        },
+    };
+    hooks.register({ conversationId: "agent-1", gate, push: () => {} });
+    expect(await askGate(dir, { command: "pnpm add zod", conversation_id: "agent-1", cwd: "/work/video" })).toEqual({
+        permission: "allow",
+        agent_message: "This install writes to this conversation's own copy of the tree.",
+    });
+    expect(asked).toEqual(["/work/video"]);
+});
+
 test("an allowed command comes back as a bare allow", async () => {
     const { service: hooks, dir } = await started();
     hooks.register({ conversationId: "agent-1", gate: allowing(), push: () => {} });

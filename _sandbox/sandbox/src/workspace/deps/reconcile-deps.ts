@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { statSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { promisify } from "node:util";
 import { sleep } from "@intentic/base/async";
@@ -102,8 +102,20 @@ export interface DependencyCoordinatorDeps {
 
 const isInside = (project: string, dir: string): boolean => project === "" || dir === project || dir.startsWith(`${project}/`);
 
-const belongsToLand = (dir: string, origin: Extract<DependencyOrigin, { kind: "land" }>): boolean =>
-    origin.repos.some(({ repo }) => (dir === "" ? repo === "root" : dir === repo || dir.startsWith(`${repo}/`)));
+// The repository a project sits in: the nearest folder up from it with a `.git` of its own (a nested repo), else the
+// workspace's root repo. A folder of the root repo (`video/`) is the root's, not an outsider's.
+const repoOf = (root: string, dir: string): string => {
+    for (let current = dir; current !== ""; current = current.includes("/") ? current.slice(0, current.lastIndexOf("/")) : "") {
+        if (existsSync(join(root, current, ".git"))) {
+            return current;
+        }
+    }
+    return "root";
+};
+
+// A nested repo claims what lies under its folder; the root repo claims what no nested repo does.
+const belongsToLand = (root: string, dir: string, origin: Extract<DependencyOrigin, { kind: "land" }>): boolean =>
+    origin.repos.some(({ repo }) => (repo === "root" ? repoOf(root, dir) === "root" : dir === repo || dir.startsWith(`${repo}/`)));
 
 // The directories of every manifest the land carried, workspace-relative ("." for the workspace root), read from each
 // repo's checkout between where the turn started and what landed. A repo git cannot answer for carries none, so
@@ -361,7 +373,7 @@ export const createDependencyCoordinator = (deps: DependencyCoordinatorDeps): De
                 return undefined;
             }
             for (const project of stale) {
-                remember(project.dir, belongsToLand(project.dir, origin) ? origin : { kind: "external" });
+                remember(project.dir, belongsToLand(deps.workspace.root, project.dir, origin) ? origin : { kind: "external" });
             }
             if (fresh.length > 0) {
                 // Durable like an agent's own request, so a restart before the pass still installs them; the land stays
@@ -375,7 +387,7 @@ export const createDependencyCoordinator = (deps: DependencyCoordinatorDeps): De
                 }
             }
             schedule({ kind: "external" });
-            const caused = stale.filter((project) => belongsToLand(project.dir, origin));
+            const caused = stale.filter((project) => belongsToLand(deps.workspace.root, project.dir, origin));
             const declared = await Promise.all(
                 fresh.map(async (project) =>
                     (await unresolvedDependencies(join(deps.workspace.root, project.dir)).catch(() => [])).reduce((total, entry) => total + entry.names.length, 0),

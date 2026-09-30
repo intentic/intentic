@@ -49,6 +49,7 @@ import { runnerIdentityDocument } from "../runners/runner-identity.js";
 import { claudeSeatsDocument } from "../runtimes/claude/claude-seats.js";
 import { safetyLogDocument } from "../safety/safety-log.js";
 import { autostartDocument } from "../scaffold/autostart.js";
+import { credentialReleasesDocument } from "../secrets/credential-grants.js";
 import { secretHostGuardsDocument } from "../secrets/host-guards.js";
 import { sandboxSecretsDocument } from "../secrets/sandbox-secrets.js";
 import { secretUsesDocument } from "../secrets/secret-uses.js";
@@ -136,6 +137,7 @@ export const stateDocuments = (): readonly DocumentSpec[] => [
     claudeSeatsDocument,
     safetyLogDocument,
     autostartDocument,
+    credentialReleasesDocument,
     secretHostGuardsDocument,
     sandboxSecretsDocument,
     secretUsesDocument,

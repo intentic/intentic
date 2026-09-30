@@ -352,10 +352,10 @@ const codeTool = (
     },
 });
 
-// unattended is the one condition that changes ask's answer: a card on an unwatched turn would deadlock, not just go
-// unused. The supervision set isn't card-shaped and rides unattended turns too; a child settles on its own clock.
+// `ask` is mounted on every turn: an unattended turn's question waits for the owner like any other card. The
+// supervision set isn't card-shaped and rides every turn too; a child settles on its own clock.
 export const cursorCustomTools = (request: AgentRequest, guard: CursorGuard, push: (event: AgentEvent) => void): Record<string, SDKCustomTool> => ({
-    ...(request.policy.unattended === true ? {} : { ask: askTool(request, push) }),
+    ask: askTool(request, push),
     // Absent, not refused, when the persona's card withheld the backend: jsExecutionPlanOf answers undefined there.
     ...(request.tools.jsExecution === undefined ? {} : { code: codeTool(request, request.tools.jsExecution, guard, push) }),
     ...(request.hooks.children !== undefined

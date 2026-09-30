@@ -117,24 +117,22 @@ export interface CredentialUseInput {
     readonly gated: boolean;
     // Whether this conversation already holds a release for it, looked up by the caller and passed in as a fact.
     readonly granted: boolean;
-    readonly unattended: boolean;
     // Whether a card can be raised at all: there is a live conversation to draw it in.
     readonly canPark: boolean;
 }
 
-// Consulted at every exit a credential can leave through. A hold asks a named approver, not whoever is looking; the
-// only DENY is nobody available to ask, never a policy refusal.
+// Consulted at every exit a credential can leave through. A hold asks a named approver, not whoever is looking, and
+// waits for them however long that takes, whoever started the turn; the only DENY is no conversation to ask in, never
+// a policy refusal. 2026-09-30: an unattended turn used to be denied here; rejected, a question nobody has answered
+// yet waits (docs/architecture/conventions.md, A person's answers).
 export const credentialUse = defineGuardedAction<CredentialUseInput>({
     action: "credential.use",
-    decide: ({ gated, granted, unattended, canPark }) => {
+    decide: ({ gated, granted, canPark }) => {
         if (!gated) {
             return ALLOW("no gate covers this credential");
         }
         if (granted) {
             return ALLOW("this conversation already holds a release for it");
-        }
-        if (unattended) {
-            return DENY("this turn is running unattended, and a gated credential needs a named person's click");
         }
         if (!canPark) {
             return DENY("there is no live conversation to raise the release card in");
@@ -150,7 +148,6 @@ export interface SecretSendInput {
     // What the use's own text says of where it goes, read by secrets/secret-destinations.ts: every host it names is on
     // every list, one is not, or the text cannot say.
     readonly destination: "inside" | "outside" | "unreadable";
-    readonly unattended: boolean;
     // Whether a card can be raised at all: there is a live conversation to draw it in.
     readonly canPark: boolean;
 }
@@ -158,10 +155,10 @@ export interface SecretSendInput {
 // Consulted where a secret's reference becomes its value. No judge in the input on purpose: the guard is the owner's
 // per-secret rule, not an opinion, so a judge that allowed the command, was switched off, or could not be reached changes
 // nothing here either way. On, nothing here allows because a judge was missing; off, nothing here asks because one was.
-// The only DENY is nobody to ask.
+// The only DENY is no conversation to ask in: an unattended turn's card waits for the owner like any other.
 export const secretSend = defineGuardedAction<SecretSendInput>({
     action: "secret.send",
-    decide: ({ guarded, destination, unattended, canPark }) => {
+    decide: ({ guarded, destination, canPark }) => {
         if (!guarded) {
             return ALLOW("no secret this spends has its host guard on");
         }
@@ -172,9 +169,6 @@ export const secretSend = defineGuardedAction<SecretSendInput>({
             destination === "outside"
                 ? "this sends a host-guarded secret to a host off its list"
                 : "where this sends a host-guarded secret cannot be read from it";
-        if (unattended) {
-            return DENY(`${why}, and this turn is running unattended, so nobody can approve it`);
-        }
         if (!canPark) {
             return DENY(`${why}, and there is no live conversation to ask in`);
         }

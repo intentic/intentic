@@ -42,7 +42,7 @@ Before raising a card the daemon checks what the turn can already reach ([`turn-
 - A push names the conversation and what it needs, and is sent to the people who are away, not to nobody because someone else has a tab open.
 - A conversation that came from a channel (Slack, Telegram, Discord…) hears it there too ([`need-channel.ts`](../../_sandbox/sandbox/src/needs/need-channel.ts)), with where to answer it and, for a secret, a warning not to paste it into the channel. A visitor's chat never does: nothing a need asks for is a stranger's to give.
 - A pending plan names the conversation's open needs under itself, so the person answers them in the same sitting as the plan rather than one interruption at a time.
-- Every yes still standing (what a grant widened, which credentials were released) is listed under Needs you, by conversation, each with Take back ([`standing-grants.ts`](../../_sandbox/sandbox/src/needs/standing-grants.ts)); it applies from the conversation's next turn.
+- Every yes still standing (what a grant widened, which credentials were released, whether its installs run unasked) is listed under Needs you, by conversation, each with Take back ([`standing-grants.ts`](../../_sandbox/sandbox/src/needs/standing-grants.ts)); it applies from the conversation's next turn, and for installs from its next install. A yes is kept until a person takes it back or the conversation is gone: a restart forgets none of them.
 
 ## After the answer
 
@@ -57,5 +57,5 @@ Before raising a card the daemon checks what the turn can already reach ([`turn-
 | --- | --- |
 | `.intentic/records/needs.json` | every open need and the recent closed ones, with who answered and how the agent was told |
 | `sandbox-secrets.json` (auth root) | secrets a person pasted into a card or added on the Secrets view without DevOps, and ones `secrets generate` made |
-| `conversation-grants.json` (auth root) | what a person allowed one conversation beyond its persona |
-| daemon memory ([`credential-grants.ts`](../../_sandbox/sandbox/src/secrets/credential-grants.ts)) | credentials a named approver released to a conversation, until a restart or a take-back |
+| `conversation-grants.json` (auth root) | what a person allowed one conversation beyond its persona, and "allow installs for this conversation" from an install card |
+| `credential-releases.json` (auth root, [`credential-grants.ts`](../../_sandbox/sandbox/src/secrets/credential-grants.ts)) | credentials a named approver released to a conversation, until a take-back; mirrored in memory, loaded at boot |

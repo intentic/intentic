@@ -30,7 +30,6 @@ const fake = (guards: readonly SecretHostGuard[], over: Partial<HostGuardGateDep
         cards,
         guards: async () => guards,
         ownerEmail: async () => OWNER.email,
-        unattended: () => false,
         liveRun: (conversationId) => ({ conversationId: conversationId ?? "sole-conv", push: (event) => frames.push(event) }),
         observe: () => {},
         awaiting: () => {},
@@ -45,7 +44,6 @@ const asked = (target: SecretTarget, over: Partial<HostGuardCheck> = {}): HostGu
     names: ["GITHUB_TOKEN"],
     target,
     conversationId: "conv-1",
-    unattended: false,
     signal: new AbortController().signal,
     ...over,
 });
@@ -228,13 +226,14 @@ describe("the decision table", () => {
 });
 
 describe("nobody to ask", () => {
-    it("refuses an unattended turn without a card, and says how to use it without one", async () => {
-        const { deps, frames } = fake([GITHUB]);
-        expect(await createHostGuardGate(deps).check(asked(command(OFF_LIST), { unattended: true }))).toEqual({
+    // Whoever started the turn, a card is raised and waits; only a use with no live conversation is refused.
+    it("refuses without a card when there is no live conversation, and says how to use it without one", async () => {
+        const { deps, frames } = fake([GITHUB], { liveRun: () => undefined });
+        expect(await createHostGuardGate(deps).check(asked(command(OFF_LIST)))).toEqual({
             allow: false,
             reason:
                 `${LISTS}, and this command would send it to evil.example. ` +
-                "This turn is running unattended, so nobody can approve it: it was not used. Do not retry: carry on without it, and say what you left undone. " +
+                "There is no live conversation to ask in: it was not used. Do not retry: carry on without it, and say what you left undone. " +
                 "To use it without a card, write one curl, wget or git command whose every URL is on its list (`secrets hosts` shows it).",
         });
         expect(frames).toEqual([]);
@@ -325,9 +324,9 @@ describe("loosening a guard", () => {
         expect(frames[0]).toMatchObject({ title: "Turn off GITHUB_TOKEN's host guard, so the agent may send it anywhere?" });
     });
 
-    it("refuses without a card in an unattended conversation", async () => {
-        const { deps, frames } = fake([], { unattended: () => true });
-        expect(await createHostGuardGate(deps).widen(request())).toEqual({ refusal: expect.stringContaining("there is nobody here to ask") });
+    it("refuses a loosening without a card when there is no live conversation to ask in", async () => {
+        const { deps, frames } = fake([], { liveRun: () => undefined });
+        expect(await createHostGuardGate(deps).widen(request())).toEqual({ refusal: expect.stringContaining("there is no live conversation to ask in") });
         expect(frames).toEqual([]);
     });
 });

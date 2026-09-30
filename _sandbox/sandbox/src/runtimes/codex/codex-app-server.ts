@@ -157,6 +157,8 @@ export type CodexEvent =
           readonly type: "command_approval.requested";
           readonly command: string;
           readonly reason?: string;
+          // Where Codex will run it, when the request says; the gate places an install by it.
+          readonly cwd?: string;
           readonly respond: (allow: boolean) => void;
       }
     | { readonly type: "turn.completed"; readonly usage?: CodexUsage }
@@ -707,17 +709,24 @@ const ownRequest =
 // Questions on an item/tool/requestUserInput request; undefined for another turn's, answered empty.
 // Command on an item/commandExecution/requestApproval, or undefined for a request not this turn's or one with no
 // command text. Tolerant of anything else in the payload, since a shape surprise here must not throw the turn.
-const commandApprovalFrom = (raw: unknown, ours: (params: JsonObject) => boolean): { readonly command: string; readonly reason?: string } | undefined => {
+const textField = (params: JsonObject, key: string): string | undefined => {
+    const value = params[key];
+    return typeof value === "string" && value.trim() !== "" ? value : undefined;
+};
+
+const commandApprovalFrom = (
+    raw: unknown,
+    ours: (params: JsonObject) => boolean,
+): { readonly command: string; readonly reason?: string; readonly cwd?: string } | undefined => {
     const params = maybeObject(raw);
     if (params === undefined || !ours(params)) {
         return undefined;
     }
-    const command = params["command"];
-    if (typeof command !== "string" || command.trim() === "") {
+    const command = textField(params, "command");
+    if (command === undefined) {
         return undefined;
     }
-    const reason = params["reason"];
-    return { command, ...(typeof reason === "string" && reason.trim() !== "" ? { reason } : {}) };
+    return { command, ...opt("reason", textField(params, "reason")), ...opt("cwd", textField(params, "cwd")) };
 };
 
 // Answers one command approval request: a card when there's a command to judge, else the standing yes. The reply rides
@@ -734,7 +743,8 @@ async function* commandApprovalFrames(
     yield {
         type: "command_approval.requested",
         command: approval.command,
-        ...(approval.reason !== undefined ? { reason: approval.reason } : {}),
+        ...opt("reason", approval.reason),
+        ...opt("cwd", approval.cwd),
         respond: (allow) => notification.respond({ decision: allow ? "accept" : "decline" }),
     };
 }

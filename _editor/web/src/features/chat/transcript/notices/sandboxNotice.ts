@@ -91,6 +91,24 @@ const dependencies = (deps: number | undefined, queued: boolean | undefined): st
     return queued === true ? t(`chat.sandboxNotice.depsQueued`, { count: deps }, deps) : t(`chat.sandboxNotice.depsInstalling`, { count: deps }, deps);
 };
 
+// Where an agent's own install works: the workspace root first, then the named folders, then how many more.
+const installWhere = ({ root, projects, more }: Coded<`installing`>[`params`]): string | undefined => {
+    const named = [...(root === true ? [t(`chat.sandboxNotice.installRoot`)] : []), ...(projects === undefined ? [] : [projects])].join(`, `);
+    if (named === ``) {
+        return undefined;
+    }
+    return more === undefined || more === 0 ? named : t(`chat.sandboxNotice.installMore`, { named, more });
+};
+
+// An agent's own install starting: into its own copy, or the main tree, in the projects it names.
+const installingLine = (notice: Coded<`installing`>): string => {
+    const where = installWhere(notice.params);
+    if (notice.params.ownCopy) {
+        return where === undefined ? t(`chat.sandboxNotice.installingOwn`) : t(`chat.sandboxNotice.installingOwnIn`, { where });
+    }
+    return where === undefined ? t(`chat.sandboxNotice.installingMain`) : t(`chat.sandboxNotice.installingMainIn`, { where });
+};
+
 // Sentences that each stand whole, one after another, as the sandbox's own text joins them.
 const sentences = (...parts: readonly (string | undefined)[]): string => parts.filter((part) => part !== undefined).join(` `);
 
@@ -191,6 +209,8 @@ const codedLine = (notice: SandboxNotice, audience: Audience): string => {
             return t(`chat.sandboxNotice.keptWarm`, notice.params, notice.params.refreshes);
         case `keptCold`:
             return t(`chat.sandboxNotice.keptCold`, notice.params, notice.params.refreshes);
+        case `installing`:
+            return installingLine(notice);
         case `contextTrim`: {
             const { window, omitted, base } = notice.params;
             return sentences(

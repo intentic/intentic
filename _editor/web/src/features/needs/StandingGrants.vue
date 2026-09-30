@@ -24,13 +24,16 @@ interface Item {
 
 type StandingConversation = StandingGrants["conversations"][number];
 
-// Each yes in words, in the order a person scans for the risky ones: accounts, folders, whole shelves, released secrets.
+// Each yes in words, in the order a person scans for the risky ones: accounts, folders, whole shelves, unasked installs,
+// released secrets.
 const itemsOf = (conversation: StandingConversation): readonly Item[] => {
     const at = (kind: GrantRevoke["kind"], what: string): GrantRevoke => ({ conversationId: conversation.conversationId, kind, what });
     return [
         ...conversation.capabilities.map((what) => ({ grant: at(`capability`, what), label: t(`needs.grants.capability`, { what }) })),
         ...conversation.folders.map((what) => ({ grant: at(`folder`, what), label: t(`needs.grants.folder`, { what }) })),
         ...conversation.shelves.map((what) => ({ grant: at(`shelf`, what), label: t(`needs.grants.shelf`, { what }) })),
+        // An install card's "Allow installs for this conversation": the one yes that names no single thing.
+        ...(conversation.installs ? [{ grant: at(`install`, ``), label: t(`needs.grants.installs`) }] : []),
         ...conversation.releases.map((release) => ({
             grant: at(`release`, release.subject),
             label: t(`needs.grants.release`, { what: release.subject }),

@@ -2,6 +2,7 @@ import { capabilitiesOf } from "@intentic/sandbox-contract";
 import { guidanceBlock } from "./guidance.js";
 import { promptDisclosure, withBaseText } from "./prompt-disclosure.js";
 import { turnPromptPlacement } from "./system-prompt.js";
+import { tmuxRunEnabled } from "../tools/agent-terminals.js";
 
 // What the chat shows must be what the turn was sent. Everything here composes a placement the ordinary way and then
 // reads it back, so a note that changes its header, or an arm that stops carrying one, fails here rather than drawing
@@ -73,8 +74,10 @@ test("the harness arm's own guidance is shown, though it never rode the append",
     const claude = disclosureOf(CLAUDE, "intentic");
     expect(claude.base).toEqual({ kind: "intentic" });
     expect(textOf(claude, "guidance")).toContain("You run inside Intentic");
-    // Unattended: the interactive paragraph is composed out, and must be absent here for the same turn.
-    expect(textOf(claude, "guidance")).not.toContain("AskUserQuestion");
+    // Unattended: its cards wait for the owner, so the turn keeps the ask paragraph and is told nobody is watching; the
+    // disclosure shows both, as the turn was sent them.
+    expect(textOf(claude, "guidance")).toContain("AskUserQuestion");
+    expect(textOf(claude, "guidance")).toContain("Nobody is watching this turn right now");
 });
 
 // The variant rides the request, so the disclosure recomposes the form the turn drew rather than the default.
@@ -90,7 +93,8 @@ test("the guidance shown is the form the turn was sent", () => {
             browserOutputDir: undefined,
             browserAccounts: false,
             diagnostics: false,
-            terminal: false,
+            // The hand-off is mounted wherever tmux-run is, attended or not: read off the machine, as the turn was.
+            terminal: tmuxRunEnabled(),
             hostDevices: undefined,
             ownBrowsers: undefined,
         }),

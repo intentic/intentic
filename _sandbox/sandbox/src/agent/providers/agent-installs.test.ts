@@ -2,35 +2,15 @@ import type { HookInput } from "@anthropic-ai/claude-agent-sdk";
 import type { ClassifiedInstall } from "../../environment/runtime-installs.js";
 import { syncHookOutput } from "../../testing.js";
 import { classifyImageInstalls, installSteeringHooks, projectInstallsOf } from "./agent-installs.js";
-import { createInstallGrants, type ProjectInstallGateOptions } from "./project-installs.js";
 
-// The SDK always names the shell's cwd; an empty one is what reaches the hook's own fallback.
-const fire = async (hooks: ReturnType<typeof installSteeringHooks>, command: string, cwd = "") => {
+const fire = async (hooks: ReturnType<typeof installSteeringHooks>, command: string, cwd = "/work") => {
     const [matcher] = hooks.PreToolUse!;
     const input = { hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command }, tool_use_id: "t1", cwd } as unknown as HookInput;
     return matcher!.hooks[0]!(input, "t1", { signal: new AbortController().signal });
 };
 
-// A main-tree turn's gate: nothing to prepare, so these tests read the verdict alone. Placement and asking are covered
-// in project-installs.integration.test.ts.
-const gate = (over: Partial<ProjectInstallGateOptions> = {}): ProjectInstallGateOptions => ({
-    placement: { kind: "shared" },
-    mode: "automatic",
-    canInstall: true,
-    conversationId: "c1",
-    grants: createInstallGrants(),
-    cards: undefined,
-    push: undefined,
-    signal: new AbortController().signal,
-    unattended: false,
-    ...over,
-});
-
 const context = (result: Awaited<ReturnType<typeof fire>>): string | undefined =>
     (syncHookOutput(result).hookSpecificOutput as { additionalContext?: string } | undefined)?.additionalContext;
-
-const decision = (result: Awaited<ReturnType<typeof fire>>): { permissionDecision?: string; permissionDecisionReason?: string } | undefined =>
-    syncHookOutput(result).hookSpecificOutput as { permissionDecision?: string; permissionDecisionReason?: string } | undefined;
 
 // Classification is the ledger's input; precision here is the ledger's meaning.
 
@@ -104,30 +84,9 @@ test("a command already wrapped by tmux-run still classifies", () => {
     expect(classifyImageInstalls(wrapped)).toEqual([{ kind: "apt", tool: "ffmpeg" }]);
 });
 
-// The hook: silent recording, loud only when it changes the model's next move.
+// The hook: loud only when it changes the model's next move.
 
-test("an image-scoped install is recorded silently, not lectured", async () => {
-    const recorded: { installs: readonly ClassifiedInstall[]; command: string }[] = [];
-    const hooks = installSteeringHooks({ onImageInstall: (installs, command) => recorded.push({ installs, command }) });
-    const result = await fire(hooks, "apt-get install -y imagemagick");
-    expect(context(result)).toBeUndefined();
-    expect(recorded).toEqual([{ installs: [{ kind: "apt", tool: "imagemagick" }], command: "apt-get install -y imagemagick" }]);
-});
-
-test("every install is recorded, not just the first", async () => {
-    const recorded: string[] = [];
-    const hooks = installSteeringHooks({ onImageInstall: (installs) => recorded.push(...installs.map((install) => install.tool)) });
-    await fire(hooks, "apt-get install -y jq");
-    await fire(hooks, "pip install pillow");
-    expect(recorded).toEqual(["jq", "pillow"]);
-});
-
-test("the recorded command is the agent's own, unwrapped from tmux", async () => {
-    const recorded: string[] = [];
-    const hooks = installSteeringHooks({ onImageInstall: (_installs, command) => recorded.push(command) });
-    await fire(hooks, "/usr/local/bin/tmux-run agent-abc 'apt-get install -y ffmpeg' install-ffmpeg");
-    expect(recorded).toEqual(["apt-get install -y ffmpeg"]);
-});
+// Recording the image install for the ledger is the command gate's, for every runtime (command-guard.test.ts).
 
 test("a browser install is told the browser already exists", async () => {
     const told = context(await fire(installSteeringHooks(), "npx playwright install chromium"));
@@ -144,6 +103,7 @@ test("the browser notice is told once per turn", async () => {
     expect(await fire(hooks, "npx playwright install firefox")).toEqual({});
 });
 
+// Every spelling of a project install is found, so the command gate's install rule reaches it (command-guard.test.ts).
 test.each([
     "pnpm install",
     "npm install --save-dev vitest",
@@ -156,44 +116,25 @@ test.each([
     "poetry install",
     "python3 -m venv .venv && .venv/bin/pip install pillow",
     "source .venv/bin/activate && pip install requests",
-])("a project dependency mutation is recognised, so the owner's answer reaches it: %s", async (command) => {
-    const result = decision(await fire(installSteeringHooks({ projectInstalls: gate({ mode: "never" }) }), command));
-    expect(result?.permissionDecision).toBe("deny");
-    expect(result?.permissionDecisionReason).toContain("turned agent installs off");
+])("a project dependency mutation is found: %s", (command) => {
+    expect(projectInstallsOf(command, "/work/app")).toHaveLength(1);
 });
 
-test("a project install runs by default, and the turn is told once where it writes", async () => {
-    const hooks = installSteeringHooks({ projectInstalls: gate() });
-    const first = await fire(hooks, "pnpm add zod");
-    expect(decision(first)?.permissionDecision).toBeUndefined();
-    expect(context(first)).toContain("install lane");
-    expect(await fire(hooks, "pnpm add vue")).toEqual({});
+test.each([
+    // The image's, not a project's.
+    "npm install typescript --global",
+    "npm install -g typescript",
+    // Read, not run.
+    "rg 'pnpm install' docs",
+    "echo 'npm ci is the documented command'",
+    "pnpm run install-hooks",
+])("what is not a project install is not found as one: %s", (command) => {
+    expect(projectInstallsOf(command, "/work/app")).toEqual([]);
 });
 
-test("a caller that cannot say where the turn writes refuses a project install rather than guessing", async () => {
-    const result = decision(await fire(installSteeringHooks(), "pnpm install"));
-    expect(result?.permissionDecision).toBe("deny");
-    expect(result?.permissionDecisionReason).toContain("does not know where its turn writes");
-});
-
-test("a persona without write and shell authority is refused and sent to the owner", async () => {
-    const result = decision(await fire(installSteeringHooks({ projectInstalls: gate({ canInstall: false }) }), "pnpm install"));
-    expect(result?.permissionDecision).toBe("deny");
-    expect(result?.permissionDecisionReason).toContain("ask the owner");
-    expect(result?.permissionDecisionReason).not.toContain("mcp__deps__install");
-});
-
-test("a global flag after the package name remains image-scoped, not a project mutation", async () => {
-    const recorded: (readonly ClassifiedInstall[])[] = [];
-    const hooks = installSteeringHooks({ projectInstalls: gate({ mode: "never" }), onImageInstall: (installs) => recorded.push(installs) });
-    const result = await fire(hooks, "npm install typescript --global");
-    expect(decision(result)?.permissionDecision).toBeUndefined();
-    expect(recorded).toEqual([[{ kind: "npm", tool: "typescript" }]]);
-});
-
-test("a project install carried in the current tmux wrapper is still recognised", async () => {
+test("a project install carried in the current tmux wrapper is still found", () => {
     const wrapped = "/usr/local/bin/tmux-run -c 'pnpm install' agent-abc 'nice bash -c pnpm-install' install";
-    expect(decision(await fire(installSteeringHooks({ projectInstalls: gate({ mode: "never" }) }), wrapped))?.permissionDecision).toBe("deny");
+    expect(projectInstallsOf(wrapped, "/work/app")).toEqual([{ dir: "/work/app", ecosystem: "node" }]);
 });
 
 test("an install after a test on the same line is still found: the first manager verb does not end the search", () => {

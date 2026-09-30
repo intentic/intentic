@@ -76,7 +76,6 @@ export const turnSecretAccess = (deps: HarnessServersDeps, input: AgentTurn, sig
             names,
             target,
             conversationId: input.conversationId,
-            unattended: input.unattended === true,
             signal,
         });
         if (!sent.allow) {
@@ -96,7 +95,6 @@ export const turnSecretAccess = (deps: HarnessServersDeps, input: AgentTurn, sig
                 lane,
                 detail,
                 conversationId: input.conversationId,
-                unattended: input.unattended === true,
                 signal,
             });
             if (!verdict.allow) {
@@ -225,7 +223,6 @@ export const harnessAccounts = (
                     lane,
                     detail,
                     conversationId: input.conversationId,
-                    unattended: input.unattended === true,
                     signal: context.base.signal,
                 });
                 return verdict.allow ? { ok: true } : { refusal: verdict.reason };

@@ -373,9 +373,6 @@ export const createSecretsRoutes = (services: SecretsRoutesDeps, providerAccount
                 // Body field first, else the header every agent CLI sends; the gate re-derives the live conversation
                 // anyway.
                 conversationId: input.conversationId ?? context.headers.get("x-intentic-conversation") ?? undefined,
-                // Arrives only from a turn's shell; an unattended shell stays unattended, so the gate refuses, not
-                // parks.
-                unattended: false,
                 signal: signal ?? new AbortController().signal,
             });
             if (!verdict.allow) {

@@ -57,6 +57,10 @@ const FOLDED: readonly TranscriptRow[] = [
     ...turn([{ kind: `prompt_cache`, readTokens: 0, writtenTokens: 310_000, kept: { forMs: 7 * 60_000, refreshes: 3 } }]),
     ...turn([{ kind: `context_trim`, window: 16_384, omitted: [`Field notes`, `Skills`], base: true }]),
     ...turn([{ kind: `context_trim`, window: 32_768, omitted: [], base: false }]),
+    ...turn([{ kind: `install`, reach: `own-copy`, projects: [`video`] }]),
+    ...turn([{ kind: `install`, reach: `own-copy`, projects: [] }]),
+    ...turn([{ kind: `install`, reach: `main-tree`, projects: [``] }]),
+    ...turn([{ kind: `install`, reach: `main-tree`, projects: [`a`, ``, `b`, `c`, `d`] }]),
 ];
 
 // What the daemon writes outside the fold, each as it writes it.
@@ -135,6 +139,9 @@ describe(`a sandbox notice, as the chat says it`, () => {
             `Twoja przestrzeń robocza poszła naprzód, gdy ten agent czekał; jego gałąź przeniesiono na Twoje ostatnie 3 commity. Nie udało się przenieść gałęzi na Twoją przestrzeń roboczą w web, api: tura działa na starszej bazie, więc jej scalenie może wymagać rozwiązania konfliktów.`,
         );
         expect(line(coded(`retrying`))).toBe(`Anthropic is down. Ponawia sam: próba 2 z 6.`);
+        expect(line(FOLDED.find((row) => row.noticeCode?.code === `installing` && row.noticeCode.params?.[`more`] !== undefined))).toBe(
+            `Trwa instalacja pakietów w katalogu głównym przestrzeni roboczej, a/, b/ i jeszcze 2 w głównym drzewie, po jednej instalacji naraz.`,
+        );
         expect(line(coded(`renewalWithdrawn`))).toBe(
             `Token refused. Dane logowania były odnawiane, ale tura zatrzymała się, zanim mogła ruszyć dalej: sama się nie wznowi, więc naciśnij Kontynuuj, żeby ją podjąć.`,
         );

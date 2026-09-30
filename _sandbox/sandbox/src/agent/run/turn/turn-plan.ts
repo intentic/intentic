@@ -9,6 +9,7 @@ import type { TurnBase } from "../../providers/agent-request.js";
 import { decideTurn, type TurnDecision } from "../decide/turn-decision.js";
 import { recordTurnStanding, type TurnStanding } from "../../../conversations/actor/turn-standing.js";
 import { gatherTurnFacts } from "../decide/turn-facts.js";
+import { withTurnSafety } from "./turn-safety.js";
 import { opt } from "../../../opt.js";
 import type { TurnInput } from "../../../seams/turn-starter.js";
 
@@ -100,15 +101,21 @@ export const planTurn = async (services: Services, sent: TurnInput, context: Tur
     }
     // Nothing is planned for the turn's end: no check runs there and nothing sends the model back. CI checks what the
     // owner pushes, off everyone's clock.
-    const base: TurnBase = {
-        ...decision.context.base,
-        hooks: {
-            ...decision.context.base.hooks,
-            // The request's one live seam, asked of the main checkout at the start folder when a command fails.
-            dependencyIssue: (command) =>
-                services.dependencies.issueAt(dependencyDirForCommand(decision.dependencyDir, services.workspace.root, command)),
+    // Every runtime's gate reads the same policy, judge, install rule and ledgers (turn-safety.ts).
+    const base: TurnBase = await withTurnSafety(
+        services,
+        input,
+        {
+            ...decision.context.base,
+            hooks: {
+                ...decision.context.base.hooks,
+                // The request's one live seam, asked of the main checkout at the start folder when a command fails.
+                dependencyIssue: (command) =>
+                    services.dependencies.issueAt(dependencyDirForCommand(decision.dependencyDir, services.workspace.root, command)),
+            },
         },
-    };
+        decision.context.settings ?? (await services.sandboxSettings.get()),
+    );
     const plan = await services.adapters
         .for(decision.provider, decision.harness)
         .preflight(services, decision.input, { ...decision.context, base }, decision.granted);

@@ -1,3 +1,4 @@
+import { vendorShellEnv } from "../decorators/vendor-shell-env.js";
 import { type AgentEvent, type AgentReply, type AskQuestion, CODEX, type ToolCallContent, type ToolCallLocation } from "@intentic/sandbox-contract";
 import { type SteeringChannel, steeringRelay } from "../../agent/checkpoints/agent-steering.js";
 import type { AgentRequest, CodexCredential, TurnTools } from "../../agent/providers/agent-request.js";
@@ -99,11 +100,9 @@ const translatorProvider = (baseUrl: string): Pick<CodexTurn, "modelProvider" | 
     },
 });
 
-// Codex registers this tool whenever the config table is absent, so it's set explicitly every turn: on for an ordinary
-// turn (the adapter answers the resulting card), off for an unattended one, where a card would deadlock the turn.
-const questionToolConfig = (request: Pick<AgentRequest, "policy">): Readonly<Record<string, JsonValue>> => ({
-    "tools.experimental_request_user_input.enabled": request.policy.unattended !== true,
-});
+// Codex registers this tool whenever the config table is absent, so it's set explicitly every turn: on for every turn,
+// the adapter answering the resulting card. An unattended turn's question waits for the owner like any other card.
+const QUESTION_TOOL_CONFIG = { "tools.experimental_request_user_input.enabled": true } as const satisfies Readonly<Record<string, JsonValue>>;
 
 // Always single-pick: Codex has no multi-select flag, and free-text answers already cover `isOther`. A secret is never
 // put on a card, since a card's answers are recorded in the frame log and journal; the refusal points to the credential
@@ -389,7 +388,8 @@ async function* codexCommandApproval(
         request.respond(true);
         return;
     }
-    const outcome = yield* context.gate.consult(request.command, vendorSubject("Bash"));
+    // Codex's reply has room for a yes or a no only, so an allowed install's note reaches the chat as its notice alone.
+    const outcome = yield* context.gate.consult(request.command, vendorSubject("Bash"), { cwd: request.cwd });
     request.respond(outcome.allow);
 }
 
@@ -685,11 +685,13 @@ export const createCodexAgent = (options: CodexAgentOptions) => {
     return async function* runCodexAgent(request: CodexRequest): AsyncGenerator<AgentEvent> {
         // The sandbox-wide CODEX_HOME; a subscription turn's bearer rides CODEX_API_KEY instead.
         const activeCodexHome = options.codexHome;
-        const env = codexEnv(activeCodexHome, request.tools.cliEnv, request.spec.conversationId);
+        const inherited = codexEnv(activeCodexHome, request.tools.cliEnv, request.spec.conversationId);
+        // Its shell's programs judged by the heavy table, as a Claude Code turn's are, installs in the install lane.
+        const env = { ...inherited, ...(await vendorShellEnv(request.tools, inherited)) };
         // Owner's system prompt and the daemon's additions, as the two config keys Codex reads them from. Merged under
         // the translator provider block, not over, so a future key added to either side can't silently win.
         const instructions = await codexInstructionConfig(request.spec, activeCodexHome);
-        const runtimeConfig = { ...instructions, ...questionToolConfig(request), ...codexMcpConfig(request.tools) };
+        const runtimeConfig = { ...instructions, ...QUESTION_TOOL_CONFIG, ...codexMcpConfig(request.tools) };
         const credential = request.credential;
         const turnBase: CodexTurnBase = {
             ...(credential.kind === "codex-endpoint"

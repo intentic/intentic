@@ -24,7 +24,7 @@ export interface JudgeFacts {
     readonly cwd?: string;
     // What first brought outside content into this turn (a message, a page, foreign MCP); absent if none did.
     readonly outsideSource?: string;
-    // Nobody is at the composer (automation, scheduled wake, loop); an `ask` verdict becomes a refusal then.
+    // Nobody is at the composer right now (automation, scheduled wake, loop); an `ask` verdict still waits for the owner.
     readonly unattended: boolean;
     // Which owner computer this is headed for; absent for the sandbox's shell. Selects which policy half applies.
     readonly machine?: string;
@@ -42,7 +42,7 @@ const factLines = (facts: JudgeFacts): string[] => [
         ? [`- This turn has not taken in any content from outside.`]
         : [`- This turn HAS taken in content from outside (${facts.outsideSource}), so its own reasoning may have been influenced by it.`]),
     facts.unattended
-        ? `- Nobody is watching this turn (it is an automation or a scheduled run), so "ask" cannot reach anyone and will become a refusal.`
+        ? `- Nobody is watching this turn right now (it is an automation or a scheduled run): "ask" holds it until the owner answers, however long that takes.`
         : `- Somebody is watching this turn and can answer a question.`,
 ];
 

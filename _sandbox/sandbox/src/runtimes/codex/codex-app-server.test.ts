@@ -130,7 +130,7 @@ test("a subagent's thread reads under the spawn call that started it, and its co
             params: { threadId: "thr-child", turnId: "turn-c1", item: { id: "cmd-c1", type: "commandExecution", command: "rg purge", status: "inProgress", aggregatedOutput: "" } },
         },
         { method: "item/completed", params: { threadId: "thr-new", turnId: "turn-1", item: spawn("completed", ["thr-child"], { "thr-child": { status: "pendingInit", message: null } }) } },
-        { request: "item/commandExecution/requestApproval", params: { threadId: "thr-child", turnId: "turn-c1", command: "rm -rf dist" } },
+        { request: "item/commandExecution/requestApproval", params: { threadId: "thr-child", turnId: "turn-c1", command: "rm -rf dist", cwd: "/work/app" } },
         { method: "item/completed", params: { threadId: "thr-child", turnId: "turn-c1", item: { id: "msg-c1", type: "agentMessage", text: "Ported." } } },
         {
             method: "thread/tokenUsage/updated",
@@ -145,7 +145,8 @@ test("a subagent's thread reads under the spawn call that started it, and its co
             return [`${event.type} ${event.item.type} ${event.item.id} under ${event.parent ?? "the turn"}`];
         }
         if (event.type === "command_approval.requested") {
-            return [`asked about ${event.command}`];
+            // Where Codex will run it rides along, so the gate places an install by it.
+            return [`asked about ${event.command} in ${event.cwd ?? "the turn's cwd"}`];
         }
         if (event.type === "subagent.usage") {
             return [`${event.parent} spent ${event.input}+${event.output}`];
@@ -156,7 +157,7 @@ test("a subagent's thread reads under the spawn call that started it, and its co
         "item.started collab_agent_tool_call spawn-1 under the turn",
         "item.completed collab_agent_tool_call spawn-1 under the turn",
         "item.started command_execution cmd-c1 under spawn-1",
-        "asked about rm -rf dist",
+        "asked about rm -rf dist in /work/app",
         "item.completed agent_message msg-c1 under spawn-1",
         "spawn-1 spent 500+50",
         "spawn-1 ended completed",

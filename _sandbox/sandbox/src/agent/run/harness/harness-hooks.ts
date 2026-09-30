@@ -1,9 +1,8 @@
 import { isAbsolute, join } from "node:path";
-import type { AgentTurn, ModelPin, Rule, SandboxSettings } from "@intentic/sandbox-contract";
+import type { Rule } from "@intentic/sandbox-contract";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import { fromWorktree, inWorktree, type IsolationAnchor, nsenterPrefix } from "../../../conversations/worktrees/isolation.js";
 import type { Services } from "../../../composition.js";
-import type { CommandGuardOptions } from "../../../guard/command-guard.js";
 import { editBytesReviewer } from "../../../rules/edit-bytes.js";
 import { fileEditedReviewer, spawnEditCommand } from "../../../rules/file-edited.js";
 import { repoCwd } from "../../../rules/rule-cwd.js";
@@ -14,28 +13,20 @@ import { checkoutDirtyPaths } from "../../tools/agent-shell-edits.js";
 import type { TurnHooks } from "../../providers/agent-request.js";
 import { opt } from "../../../opt.js";
 
-// What the daemon answers while a turn runs: the checks at every edit, the safety judge and its log, and the ledgers a
-// turn feeds. Nothing runs when the turn ends: the model decides when it is done, and CI checks what the owner pushes.
+// What the daemon answers while a Claude Code turn runs: the checks at every edit and the ledgers they stamp. The safety
+// judge, its log and the install rule are every runtime's (run/turn/turn-safety.ts). Nothing runs when the turn ends: the model decides when it is done, and CI checks what the owner pushes.
 // Every write here is best-effort, since the turn must settle regardless.
 
-// What the harness's hooks reach for: the per-edit reviewers' deps, the ledgers they stamp, and the judge.
+// What the harness's hooks reach for: the per-edit reviewers' deps and the ledgers they stamp.
 export type HarnessHooksDeps = Pick<
     Services,
-    "workspace" | "logger" | "ruleFirings" | "judgeCommand" | "runtimeInstalls" | "safetyLog" | "safetyPolicy"
+    "workspace" | "logger" | "ruleFirings"
 >;
 
 // A rule's command inside the turn's own namespace via nsenter, since the daemon-side worktree has empty dependency
 // directories; `repo` is carried this far because inside the namespace `--wdns`, not the cwd, decides where it runs.
 export const ruleCommandIn = (command: string, anchor: IsolationAnchor | undefined, repo?: string): string =>
     anchor === undefined ? command : `${nsenterPrefix(anchor.pid, repoCwd(anchor.cwd, repo))}bash -c ${shellQuote(command)}`;
-
-// A closure over the judge, the policy text and the owner's model pin rather than any of them directly, because the seam
-// it fills lives in guard/.
-const judgeFor =
-    (deps: Pick<Services, "judgeCommand">, policy: string, pins: readonly ModelPin[] | undefined): CommandGuardOptions["judge"] =>
-    (program, facts, signal) =>
-        // An unpinned role reads as an empty list, which the walk answers with its Auto ladder.
-        deps.judgeCommand({ policy, program, facts, pins: pins ?? [] }, signal);
 
 // Stamps a rule's firing on the settings list; best-effort, so a failed stamp costs the rule its date, not the turn.
 const stampFiring = (deps: Pick<Services, "logger" | "ruleFirings">, rule: Rule): void => {
@@ -73,19 +64,6 @@ const editReviewersOf = (deps: HarnessHooksDeps, context: TurnContext, rules: re
     return { editReviewers: [bytes, commands].filter((each) => each !== undefined) };
 };
 
-// The judge and its writes: snapshots taken here, for one document and one model per turn.
-const safetyHooksOf = (deps: HarnessHooksDeps, settings: SandboxSettings, safetyPolicy: string): Omit<TurnHooks, "cards"> => ({
-    judge: judgeFor(deps, safetyPolicy, settings.modelRoles[`safety-judge`]),
-    // The safety log is the owner's record of what the judge decided; a line it could not keep is said out loud.
-    logSafety: (entry) => {
-        void deps.safetyLog.record(entry).catch((error: unknown) => deps.logger.warn({ err: error }, "safety log: a judged command was not recorded"));
-    },
-    safetyAnswered: (at, answer, outcome) => {
-        void deps.safetyLog.answered(at, answer, outcome).catch((error: unknown) => deps.logger.warn({ err: error }, "safety log: the owner's answer was not recorded"));
-    },
-    rememberSafety: (line) => deps.safetyPolicy.append(line),
-});
-
 // The turn's dirty files for shell-edit attribution, by both names (checkoutDirtyPaths reuses the repo list).
 const dirtyFilesOf = (context: TurnContext): (() => Promise<readonly { readonly onDisk: string; readonly path: string }[]>) => {
     const dirty = checkoutDirtyPaths(context.localCwd);
@@ -97,26 +75,12 @@ const dirtyFilesOf = (context: TurnContext): (() => Promise<readonly { readonly 
 };
 
 // Every hook a harness turn is planned with, on top of the ones the route and the planner already bound.
-export const harnessHooks = (
-    deps: HarnessHooksDeps,
-    input: AgentTurn,
-    context: TurnContext,
-    fileEdited: readonly Rule[],
-    safety: { readonly settings: SandboxSettings; readonly policy: string },
-): TurnHooks => ({
+export const harnessHooks = (deps: HarnessHooksDeps, context: TurnContext, fileEdited: readonly Rule[]): TurnHooks => ({
     ...context.base.hooks,
-    // Every image-scoped install attempt, appended best-effort to the runtime-install ledger; a second distinct session
-    // installing the same tool is what earns an auto-drafted overlay step.
-    onImageInstall: (installs, command) => {
-        void deps.runtimeInstalls
-            .record(installs, command, input.conversationId, Date.now())
-            .catch((error: unknown) => deps.logger.warn({ err: error }, "runtime-install ledger append failed"));
-    },
     // Which files the tree says are dirty, both names, for a shell command's edit diagnostics. Read on every turn: the
     // main checkout's standing dirty set is everyone's landed work and a baseline, not a finding, there.
     dirtyFiles: dirtyFilesOf(context),
     ...editReviewersOf(deps, context, fileEdited),
-    ...safetyHooksOf(deps, safety.settings, safety.policy),
     // The rebase the cards take back while the user is answering them; isolated turns only.
     ...opt("resync", context.resync),
 });

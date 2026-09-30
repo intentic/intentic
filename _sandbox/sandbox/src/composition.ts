@@ -498,6 +498,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         // The same host the extension enumerators read, so a connector's hosts come from exactly the installed set.
         connectorHosts: () => connectorHostDefaults({ workspace, files: workspaceSlice.files, capabilities, config }),
         ownerEmail: authSlice.ownerEmail,
+        warn: (message, error) => logger.warn({ err: error }, message),
     });
     const conversationGrants = fileConversationGrants(join(authRoot, conversationGrantsDocument.path));
     const extensionsSlice = createExtensionsSlice({

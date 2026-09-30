@@ -93,6 +93,36 @@ const dependencyLine = (deps: { missing: number; started: string[]; deferred: bo
         : ` Installing ${what}; the project's checks run when that finishes, and the outcome lands in Activity.`;
 };
 
+// Said as an agent's own install starts: where it writes and what outlasts it. Names up to three projects, the workspace
+// root first; an install the gate could not place in a project says only where it writes. Coded like every sandbox
+// notice (sandbox-notice.ts `installing`), so the chat can say it in the reader's language.
+const INSTALL_NAMED = 3;
+const installRow = (event: { readonly reach: "own-copy" | "main-tree"; readonly projects: readonly string[] }): TranscriptRow => {
+    const root = event.projects.includes(``);
+    const dirs = event.projects.filter((dir) => dir !== ``).map((dir) => `${dir}/`);
+    const shownDirs = dirs.slice(0, INSTALL_NAMED - (root ? 1 : 0));
+    const more = dirs.length - shownDirs.length;
+    const named = [...(root ? [`the workspace root`] : []), ...shownDirs].join(`, `);
+    const list = more > 0 ? `${named} and ${more} more` : named;
+    const where = list === `` ? `` : ` in ${list}`;
+    const ownCopy = event.reach === `own-copy`;
+    return {
+        role: "notice",
+        text: ownCopy
+            ? `Installing packages${where} into this conversation's own copy. The manifest and lockfile land with the work, and the review lists what it adds.`
+            : `Installing packages${where} in the main tree, one install at a time.`,
+        noticeCode: noticeCode({
+            code: "installing",
+            params: {
+                ownCopy,
+                root: root || undefined,
+                projects: shownDirs.length === 0 ? undefined : shownDirs.join(`, `),
+                more: more > 0 ? more : undefined,
+            },
+        }),
+    };
+};
+
 // One line reporting the daemon's rebase of this agent's branch onto the current workspace; `blocked` names repos it
 // couldn't rebase, where the turn ran from an older base.
 const syncLine = (sync: { commits: number; blocked: readonly string[] }): string => {
@@ -427,6 +457,8 @@ export class TranscriptFold {
                 return this.pushRow(landedRow(event));
             case "compact":
                 return this.pushRow(compactedRow());
+            case "install":
+                return this.pushRow(installRow(event));
             case "error":
                 // Keeps a refusal (no prose from the provider) from reading as a session that ended mid-question.
                 // A refusal that ran nothing takes its message back out ahead of the notice standing in for it.

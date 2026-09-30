@@ -1532,7 +1532,13 @@
             "contextTrim": "Sent thin for this model's {window} window.",
             "contextTrimOmitted": "Sent thin for this model's {window} window — left out: {omitted}.",
             "contextTrimBase": "The agent's own base instructions were swapped for a short paragraph, too.",
-            "contextTrimKept": "Your workspace rules, this turn's persona and where its files live still rode."
+            "contextTrimKept": "Your workspace rules, this turn's persona and where its files live still rode.",
+            "installingOwn": "Installing packages into this conversation's own copy. The manifest and lockfile land with the work, and the review lists what it adds.",
+            "installingOwnIn": "Installing packages in {where} into this conversation's own copy. The manifest and lockfile land with the work, and the review lists what it adds.",
+            "installingMain": "Installing packages in the main tree, one install at a time.",
+            "installingMainIn": "Installing packages in {where} in the main tree, one install at a time.",
+            "installRoot": "the workspace root",
+            "installMore": "{named} and {more} more"
         },
         "chatJobRow": {
             "ended": "Ended after {elapsed}",
@@ -2595,7 +2601,8 @@
         },
         "grants": {
             "title": "What you have allowed",
-            "hint": "Reach given to conversations beyond their persona or area, and credentials released to them. Taking one back applies from the conversation's next turn.",
+            "hint": "Reach given to conversations beyond their persona or area, credentials released to them, and installs they may run without asking. Taking one back applies from the conversation's next turn, and for installs from its next install.",
+            "installs": "Installs packages without asking",
             "capability": "{what}, although its persona leaves it out",
             "folder": "Files in {what}",
             "shelf": "The {what} tools",

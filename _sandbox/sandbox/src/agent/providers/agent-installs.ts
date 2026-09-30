@@ -1,12 +1,11 @@
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
 import { resolve } from "node:path";
 import type { ClassifiedInstall } from "../../environment/runtime-installs.js";
-import { decideProjectInstall, type ProjectInstallGateOptions } from "./project-installs.js";
 
-// Anything installed outside /work dies with the container. Every image-scoped install is classified here and recorded
-// silently to the runtime-install ledger; the drift sweep drafts the overlay step. A browser install is told the
-// browser is already baked. A project dependency install is located (which directory it works on) and handed to
-// project-installs.ts, which decides by where it writes and the owner's setting, not by its being an install.
+// Anything installed outside /work dies with the container. Every image-scoped install is classified here; the command
+// gate records it silently to the runtime-install ledger, and the drift sweep drafts the overlay step. A project
+// dependency install is located here (which directory it works on) and decided in project-installs.ts, by where it
+// writes and the owner's setting, not by its being an install. A browser install is told the browser is already baked.
 
 // A pip install inside a venv is project scope, not image scope.
 const VENV_SCOPED = /(\bsource\s+\S*\/activate\b|\bpython3?\s+-m\s+venv\b|\/venv\/bin\/pip\b|\.venv\/bin\/pip\b)/;
@@ -569,28 +568,11 @@ export const toolResultText = (response: unknown): string => {
     return parts.join("\n");
 };
 
-export interface InstallSteering {
-    // Everything a project install's verdict reads (project-installs.ts); absent, as for a caller that cannot say where
-    // the turn stands, refuses every one rather than guessing.
-    readonly projectInstalls?: ProjectInstallGateOptions;
-    // Where the shell stands when the hook's own input names no cwd.
-    readonly cwd?: string;
-    readonly onImageInstall?: (installs: readonly ClassifiedInstall[], command: string) => void;
-}
-
-const UNPLACED =
-    "A project install cannot run here: this agent does not know where its turn writes. Add the dependency to the " +
-    "manifest if the task needs it (it installs once the work lands), and say what you could not run.";
-
-const refusal = (reason: string) => ({
-    hookSpecificOutput: { hookEventName: "PreToolUse" as const, permissionDecision: "deny" as const, permissionDecisionReason: reason },
-});
-
-export const installSteeringHooks = (steering: InstallSteering = {}): Partial<Record<HookEvent, HookCallbackMatcher[]>> => {
-    const { onImageInstall } = steering;
+// What only Claude Code's hooks can say about an install: that the browser is already baked, and, once a command
+// has run, which tool it could not find. Whether an install runs at all, and the ledger it feeds, are the command
+// gate's, for every runtime alike (guard/command-guard.ts).
+export const installSteeringHooks = (): Partial<Record<HookEvent, HookCallbackMatcher[]>> => {
     let browserTold = false;
-    // The first allowed install says where it writes and what lasts of it; later ones need not repeat it.
-    let placementTold = false;
     let missingTold = false;
     // Its own latch: being told about a missing tool teaches nothing about quoting.
     let substitutionTold = false;
@@ -647,26 +629,10 @@ export const installSteeringHooks = (steering: InstallSteering = {}): Partial<Re
                         if (typeof command !== "string") {
                             return {};
                         }
-                        const cwd = input.cwd === "" ? (steering.cwd ?? "/") : input.cwd;
-                        const projectInstalls = projectInstallsOf(command, cwd);
-                        if (projectInstalls.length > 0) {
-                            if (steering.projectInstalls === undefined) {
-                                return refusal(UNPLACED);
-                            }
-                            const verdict = await decideProjectInstall(agentCommand(command), projectInstalls, steering.projectInstalls);
-                            if (!verdict.allow) {
-                                return refusal(verdict.reason);
-                            }
-                            const told = [...(placementTold ? [] : [verdict.note]), ...verdict.unprepared];
-                            placementTold = true;
-                            return told.length === 0 ? {} : { hookSpecificOutput: { hookEventName: "PreToolUse", additionalContext: told.join(" ") } };
-                        }
                         const installs = classifyImageInstalls(command);
                         if (installs.length === 0) {
                             return {};
                         }
-                        // Silent: the ledger and drift sweep carry the durability question, not the model.
-                        onImageInstall?.(installs, agentCommand(command));
                         const browser =
                             installs.some((install) => install.kind === "playwright") || /\bchromium\b|\bgoogle-chrome\b/.test(agentCommand(command));
                         if (!browser || browserTold) {

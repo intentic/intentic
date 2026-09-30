@@ -183,6 +183,17 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("account_usage"), account: z.string().optional(), windows: z.array(UsageWindowSchema) }),
     ContextUsageSchema.extend({ kind: z.literal("context_usage") }),
     z.object({ kind: z.literal("compact"), trigger: z.string(), preTokens: z.number().optional(), postTokens: z.number().optional() }),
+    // An agent's own project-dependency install was let through the command gate: where it writes, and which projects
+    // it works on, so the chat says so before its output arrives. Said by every runtime the gate stands in front of.
+    z.object({
+        kind: z.literal("install"),
+        reach: z
+            .enum(["own-copy", "main-tree"])
+            .describe("Where it writes: this conversation's own copy of the tree, or the main tree every conversation reads."),
+        projects: z
+            .array(z.string())
+            .describe("The projects it works on, workspace-relative, the workspace root as an empty string; empty when none could be named."),
+    }),
     // The four interactive cards; each parks the turn until `POST /agent/reply` resolves its `requestId`.
     PlanRequestSchema,
     QuestionRequestSchema,

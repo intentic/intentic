@@ -9,13 +9,16 @@ import { inWorktree, type IsolationPlan, type TurnPlacement } from "../../conver
 import { opt } from "../../opt.js";
 import type { ProjectInstall } from "./agent-installs.js";
 
-// An agent's own project install is judged by where it writes, not by being an install. An isolated turn's
-// `node_modules` is an overlay whose upper layer is the conversation's own (kept until it is archived), and a project
-// that exists only on its branch installs into its own worktree: nobody else reads either, so the install just runs.
-// Only a main-tree turn writes the tree every conversation reads, and that one takes the heavy table's install lane,
-// the lane the daemon's own installs take (heavy-rules.cjs `dependency-install`), so two never run at once. What lasts
-// is settled at the land: the manifest and lockfile travel with the work, the review lists what it adds, and the
-// reconciler installs it in the main tree. The owner's `projectInstalls` setting only says whether a person is asked.
+// An agent's own project install is judged by where it writes, not by being an install, and judged in one place for
+// every runtime: the command gate (guard/command-guard.ts) asks this before anything else, whether the command came
+// through Claude Code's hook, Codex's approval request or Cursor's shell hook. An isolated turn's `node_modules` is an
+// overlay whose upper layer is the conversation's own (kept until it is archived), and a project that exists only on
+// its branch installs into its own worktree: nobody else reads either, so the install just runs. Only a main-tree turn
+// writes the tree every conversation reads, and that one takes the heavy table's install lane, the lane the daemon's
+// own installs take (heavy-rules.cjs `dependency-install`), so two never run at once. What lasts is settled at the
+// land: the manifest and lockfile travel with the work, the review lists what it adds, and the reconciler installs it
+// in the main tree. The owner's `projectInstalls` setting only says whether a person is asked, and a person's "allow
+// for this conversation" is kept (personas/conversation-grants.ts), never held in memory only.
 
 const execFileAsync = promisify(execFile);
 
@@ -30,34 +33,42 @@ export type InstallPlacement =
 export const installPlacementOf = (isolation: TurnPlacement | undefined): InstallPlacement =>
     isolation === undefined ? { kind: "shared" } : { kind: isolation.anchor === undefined ? "mirrored" : "private", plan: isolation.plan };
 
-// "Allow for this conversation", held for the daemon's life: a restart asks again, which costs one card.
+// "Allow installs for this conversation", bound to one conversation: read at every install, so a yes given on this
+// turn's card holds for its next install, and a yes taken back on the Grants page asks again from the next one.
 export interface InstallGrants {
-    readonly has: (conversationId: string) => boolean;
-    readonly add: (conversationId: string) => void;
+    readonly has: () => Promise<boolean>;
+    readonly add: () => Promise<void>;
 }
 
-export const createInstallGrants = (): InstallGrants => {
-    const granted = new Set<string>();
-    return { has: (id) => granted.has(id), add: (id) => void granted.add(id) };
-};
+// A conversation's grant as the kept store holds it; `by` is whoever answered, when the turn knows.
+export const installGrantsOf = (
+    store: { readonly installsAllowed: (id: string) => Promise<boolean>; readonly allowInstalls: (id: string, by: string | undefined) => Promise<void> },
+    conversationId: string,
+    by?: string,
+): InstallGrants => ({
+    has: () => store.installsAllowed(conversationId),
+    add: () => store.allowInstalls(conversationId, by),
+});
 
-// The daemon's one set; a test builds its own.
-export const INSTALL_GRANTS: InstallGrants = createInstallGrants();
-
-export interface ProjectInstallGateOptions {
+// What a turn's gate knows about its installs; every runtime's gate is built with the same one (turn-safety.ts).
+export interface ProjectInstallGate {
     readonly placement: InstallPlacement;
+    // The workspace root as the agent names it, which the note's project names are relative to.
+    readonly root: string;
     // Absent reads as automatic, the shipped default.
     readonly mode: ProjectInstallMode | undefined;
     // The persona's own authority (files write and a shell); without it nothing is asked, only refused.
     readonly canInstall: boolean;
-    readonly conversationId: string | undefined;
-    readonly grants: InstallGrants;
-    // Asking: the same parked card the command gate raises, and the same reasons it cannot be raised.
+    // Absent for a turn with no conversation to hold a grant; its card then offers no "for this conversation".
+    readonly grants: InstallGrants | undefined;
+}
+
+// How the gate asks: the card it parks on, the turn's signal a parked card settles with, and whether this runtime can
+// pause at all.
+export interface InstallAsking {
     readonly cards: Pick<ParkedCards, "create"> | undefined;
-    readonly push: ((event: AgentEvent) => void) | undefined;
     readonly signal: AbortSignal;
-    readonly unattended: boolean;
-    readonly steered?: (() => boolean) | undefined;
+    readonly canPark: boolean;
 }
 
 export type ProjectInstallVerdict =
@@ -208,10 +219,6 @@ const prepare = async (placement: InstallPlacement, installs: readonly ProjectIn
     return unprepared;
 };
 
-const UNATTENDED =
-    "The owner asks to approve project installs, and this turn is running unattended: nobody is here to approve it. " +
-    "Do not retry. Add the dependency to the manifest if the task needs it (it installs once the work lands), carry on " +
-    "with what does not need it, and say plainly what you could not run.";
 const CANNOT_PARK =
     "The owner asks to approve project installs, and this agent cannot pause to ask. Do not retry. Add the dependency " +
     "to the manifest if the task needs it (it installs once the work lands), and say plainly what you could not run.";
@@ -224,13 +231,11 @@ const whereItLands = (placement: InstallPlacement): string =>
         ? "It runs in the main tree, which every conversation reads."
         : "It installs into this conversation's own copy of the tree; nobody else's work sees it.";
 
-// The card: the same permission ask the command gate raises, so the chat renders and answers it the same way.
-const askOwner = async (command: string, options: ProjectInstallGateOptions): Promise<AskAnswer> => {
-    if (options.unattended && options.steered?.() !== true) {
-        return { allow: false, reason: UNATTENDED };
-    }
-    const { cards, push } = options;
-    if (cards === undefined || push === undefined) {
+// The card: the same permission ask the command gate raises, so the chat renders and answers it the same way. It waits
+// however long the answer takes, whoever is or is not watching: an install nobody has answered yet is not a refusal.
+async function* askOwner(command: string, gate: ProjectInstallGate, asking: InstallAsking): AsyncGenerator<AgentEvent, AskAnswer> {
+    const { cards } = asking;
+    if (cards === undefined || !asking.canPark) {
         return { allow: false, reason: CANNOT_PARK };
     }
     const { id, wait } = cards.create("permission", {
@@ -239,19 +244,19 @@ const askOwner = async (command: string, options: ProjectInstallGateOptions): Pr
         decision: "deny",
         feedback: "The turn ended before the owner answered.",
     });
-    push({
+    yield {
         kind: "permission",
         requestId: id,
         toolName: "Bash",
         title: "Install project dependencies",
         displayName: "Run install",
-        explain: whereItLands(options.placement),
+        explain: whereItLands(gate.placement),
         program: { text: command.slice(0, SHOWN), language: "bash", truncated: command.length > SHOWN, spans: [] },
         // Only a conversation can hold the grant it offers.
-        ...opt("alwaysLabel", options.conversationId === undefined ? undefined : "Allow installs for this conversation"),
-    });
-    const { reply, resolved } = await wait(options.signal);
-    push(resolved);
+        ...opt("alwaysLabel", gate.grants === undefined ? undefined : "Allow installs for this conversation"),
+    };
+    const { reply, resolved } = await wait(asking.signal);
+    yield resolved;
     if (reply.decision === "deny") {
         return {
             allow: false,
@@ -261,20 +266,37 @@ const askOwner = async (command: string, options: ProjectInstallGateOptions): Pr
                     "needs it, and wait for them to say how to proceed.",
         };
     }
-    if (reply.decision === "always" && options.conversationId !== undefined) {
-        options.grants.add(options.conversationId);
+    if (reply.decision === "always") {
+        await gate.grants?.add();
     }
     return { allow: true };
+}
+
+// The projects an install works on, as the note names them: workspace-relative, the root as an empty string.
+const projectsOf = async (placement: InstallPlacement, root: string, installs: readonly ProjectInstall[]): Promise<string[]> => {
+    const named = new Set<string>();
+    for (const install of installs) {
+        const onDisk = placement.kind === "shared" ? install.dir : inWorktree(install.dir, placement.plan);
+        const ceiling = placement.kind === "shared" ? root : placement.plan.worktree;
+        if (onDisk !== ceiling && !onDisk.startsWith(`${ceiling}/`)) {
+            continue;
+        }
+        const project = await installRootOf(onDisk, ceiling);
+        named.add(relative(ceiling, project).split(sep).join("/"));
+    }
+    return [...named];
 };
 
-// One install command's verdict. The persona's authority first, the owner's setting second, and only then where it
-// lands, which decides what is prepared, never whether it runs.
-export const decideProjectInstall = async (
+// One install command's consult, driven by the command gate. The persona's authority first, the owner's setting
+// second, and only then where it lands, which decides what is prepared, never whether it runs. Allowed, it tells the
+// chat as it starts.
+export async function* consultProjectInstall(
     command: string,
     installs: readonly ProjectInstall[],
-    options: ProjectInstallGateOptions,
-): Promise<ProjectInstallVerdict> => {
-    if (!options.canInstall) {
+    gate: ProjectInstallGate,
+    asking: InstallAsking,
+): AsyncGenerator<AgentEvent, ProjectInstallVerdict> {
+    if (!gate.canInstall) {
         return {
             allow: false,
             reason:
@@ -282,7 +304,7 @@ export const decideProjectInstall = async (
                 "needs installed and ask the owner.",
         };
     }
-    const mode = options.mode ?? "automatic";
+    const mode = gate.mode ?? "automatic";
     if (mode === "never") {
         return {
             allow: false,
@@ -292,13 +314,13 @@ export const decideProjectInstall = async (
                 "could not run until then.",
         };
     }
-    const granted = options.conversationId !== undefined && options.grants.has(options.conversationId);
-    if (mode === "ask" && !granted) {
-        const answer = await askOwner(command, options);
+    if (mode === "ask" && (await gate.grants?.has()) !== true) {
+        const answer = yield* askOwner(command, gate, asking);
         if (!answer.allow) {
             return answer;
         }
     }
-    const unprepared = await prepare(options.placement, installs);
-    return { allow: true, note: options.placement.kind === "shared" ? SHARED_NOTE : PRIVATE_NOTE, unprepared };
-};
+    const unprepared = await prepare(gate.placement, installs);
+    yield { kind: "install", reach: gate.placement.kind === "shared" ? "main-tree" : "own-copy", projects: await projectsOf(gate.placement, gate.root, installs) };
+    return { allow: true, note: gate.placement.kind === "shared" ? SHARED_NOTE : PRIVATE_NOTE, unprepared };
+}

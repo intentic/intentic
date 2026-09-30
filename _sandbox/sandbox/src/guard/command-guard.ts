@@ -23,21 +23,25 @@ import { guard } from "./guard.js";
 import { excerptProgram } from "../safety/safety-log.js";
 import type { TurnTaint } from "./turn-taint.js";
 import type { ParkedCards } from "../conversations/actor/parked-cards.js";
+import type { ClassifiedInstall } from "../environment/runtime-installs.js";
+import { agentCommand, classifyImageInstalls, projectInstallsOf } from "../agent/providers/agent-installs.js";
+import { consultProjectInstall, type ProjectInstallGate } from "../agent/providers/project-installs.js";
 
 // Second layer under the admission floor (guard/actions.ts sessionStart): what an already-running session's commands
 // may do. Four tiers run in `consult`: triage, an un-waivable hard rule, a judge, then a person; only the last
-// interrupts anyone, and an unattended turn gets a refusal instead of a card.
+// interrupts anyone. A card waits for its answer whoever started the turn: an unattended turn's is answered when the
+// owner gets to it, never turned into a refusal (docs/architecture/conventions.md, A person's answers).
 
 export interface CommandGuardOptions {
     // The owner's policy text, snapshotted once per turn; edits take effect on the next turn, not mid-turn.
     readonly policy: string;
     // Mode (off/watch/on), snapshotted per turn like the policy; the hard rule applies at every setting.
     readonly judging: CommandJudgeMode;
-    // Nobody at a composer (automation, loop, chore); an ask refuses instead of parking, and the judge is told.
+    // Nobody at a composer when the turn started (automation, loop, chore). Told to the judge, which may weigh that an
+    // ask waits for the owner; never a refusal.
     readonly unattended: boolean;
     // Whether a person has since steered this turn, read per command rather than snapshotted like the two above: an
-    // unattended turn somebody is visibly typing into can be asked after all, and refusing them refuses the person who
-    // just typed. Absent reads as nobody, so a caller that doesn't know keeps the old answer.
+    // unattended turn somebody is visibly typing into has somebody watching after all. Absent reads as nobody.
     readonly steered?: (() => boolean) | undefined;
     // Whether this transport can pause for an answer; false if the runtime's own watchdog aborts a paused turn.
     readonly canPark?: boolean;
@@ -63,6 +67,13 @@ export interface CommandGuardOptions {
     readonly machine?: string | undefined;
     // Appends a line the owner accepted (the Always button) to their policy; absent offers no Always button.
     readonly remember?: ((line: string) => Promise<void>) | undefined;
+    // The turn's project-install rule (agent/providers/project-installs.ts): a shell command that installs a project's
+    // dependencies is decided here, ahead of the safety tiers, so Claude Code's hook, Codex's approval request and
+    // Cursor's shell hook all meet the same answer. Absent for a gate with no turn behind it (a device, a watch).
+    readonly installs?: ProjectInstallGate | undefined;
+    // Every image-scoped install (apt, a global npm, pip outside a venv), recorded for the runtime-install ledger as it
+    // is asked about; the drift sweep drafts the durable step from there.
+    readonly onImageInstall?: ((installs: readonly ClassifiedInstall[], command: string) => void) | undefined;
 }
 
 // How much of the command the card shows: long enough to identify a heredoc, short enough to stay a card.
@@ -134,8 +145,14 @@ const programAsk = (program: string, subject: GuardSubject, matches: readonly Co
     };
 };
 
-// Allow, run it. Refuse, do not, and hand `reason` back to the model as the refusal.
-export type GuardOutcome = { readonly allow: true } | { readonly allow: false; readonly reason: string };
+// Allow, run it, with `context` for the model where the runtime can carry it (Claude Code's additionalContext,
+// Cursor's agent message). Refuse, do not, and hand `reason` back to the model as the refusal.
+export type GuardOutcome = { readonly allow: true; readonly context?: string } | { readonly allow: false; readonly reason: string };
+
+// Where one command runs, when the runtime says so per command rather than once per turn.
+export interface CommandWhere {
+    readonly cwd?: string | undefined;
+}
 
 const ALLOWED: GuardOutcome = { allow: true };
 
@@ -144,7 +161,7 @@ export interface CommandGuard {
     readonly enforcing: boolean;
     // A generator, not a Promise+push callback: a vendor runtime already inside its own for-await loop can `yield*` the
     // card in place. A promise+push shape would deadlock exactly that caller.
-    readonly consult: (program: string, subject: GuardSubject) => AsyncGenerator<AgentEvent, GuardOutcome>;
+    readonly consult: (program: string, subject: GuardSubject, where?: CommandWhere) => AsyncGenerator<AgentEvent, GuardOutcome>;
 }
 
 // Drives a consult from a caller that emits by callback rather than by yielding: every frame goes to `push` in order,
@@ -154,8 +171,9 @@ export const consultWith = async (
     program: string,
     subject: GuardSubject,
     push: (event: AgentEvent) => void,
+    where?: CommandWhere,
 ): Promise<GuardOutcome> => {
-    const consulting = gate.consult(program, subject);
+    const consulting = gate.consult(program, subject, where);
     let step = await consulting.next();
     while (step.done !== true) {
         push(step.value);
@@ -173,21 +191,13 @@ const hardRuled = (matches: readonly CommandMatch[]): CommandClass | undefined =
     matches.find((match) => guard(commandRun, { commandClass: match.commandClass, locus: SANDBOX, live: match.live }).effect !== "allow")
         ?.commandClass;
 
-// Whether an ask can reach anybody. `unattended` says how the turn STARTED; a steer says who is here now, and the
-// second outranks the first — a card raised at somebody who is mid-conversation with this turn gets answered.
-const nobodyToAsk = (options: CommandGuardOptions): boolean => options.unattended && options.steered?.() !== true;
+// Whether anybody is watching right now, for the judge. `unattended` says how the turn STARTED; a steer says who is
+// here now, and the second outranks the first.
+const nobodyWatching = (options: CommandGuardOptions): boolean => options.unattended && options.steered?.() !== true;
 
-// Why a command can't be asked about (or undefined if a card can be raised): both branches are properties of the turn,
-// not the policy. Each refusal tells the model not to retry.
+// Why a command can't be asked about (or undefined if a card can be raised): a property of the runtime, not of the
+// policy or of who is watching. The refusal tells the model not to retry.
 const cannotAsk = (reason: string, options: CommandGuardOptions): GuardOutcome | undefined => {
-    if (nobodyToAsk(options)) {
-        return {
-            allow: false,
-            reason:
-                `${reason} This turn is running unattended: there is nobody to approve it. ` +
-                `Do not retry: carry on with what you can do without this command, and say plainly what you left undone.`,
-        };
-    }
     if (options.canPark === false) {
         return {
             allow: false,
@@ -243,112 +253,150 @@ export const createCommandGuard = (options: CommandGuardOptions): CommandGuard =
         return asking;
     };
 
-    return {
-        enforcing: true,
-        async *consult(program, subject) {
-            // Matched, not merely classified, so the fired fragments are in hand if this ends on a card.
-            const matches = matchCommand(program, context);
-            // Tier 1: nothing matched, nothing to judge; the overwhelming majority of commands stop here for free.
-            if (matches.length === 0) {
-                return ALLOWED;
-            }
-            const classes = matches.map((match) => match.commandClass);
-            const at = Date.now();
-            const outsideSource = options.taint.source();
-            // Tier 1.5, the hard rule: un-waivable, applied first, and the only verdict allowed to title the card.
-            const hard = hardRuled(matches);
-            const facts: JudgeFacts = {
-                consequences: classes.map((commandClass) => COMMAND_CLASS_LABELS[commandClass]),
-                // The same reading `cannotAsk` uses, so the judge is never told nobody can answer while a card would
-                // in fact reach the person steering this turn.
-                unattended: nobodyToAsk(options),
-                language: subject.language,
-                ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
-                ...(outsideSource === undefined ? {} : { outsideSource }),
-                ...(options.machine === undefined ? {} : { machine: options.machine }),
-            };
-            // Tier 2: an unreachable judge leaves the hard rule standing and allows the rest; `off` never asks at all.
-            const verdict: SafetyVerdict =
-                options.judging === "off"
-                    ? { decision: "allow", sentence: JUDGE_OFF }
-                    : await askJudge(program, facts).catch((error: unknown): SafetyVerdict => ({
-                          decision: "allow",
-                          sentence: error instanceof RoleModelUnsetError ? JUDGE_UNSET : JUDGE_UNAVAILABLE,
-                      }));
-            // What's enforced, not what was said: only `on` obeys the verdict; `off` and `watch` never do.
-            const enforced = options.judging === "on" ? verdict.decision : "allow";
-            // The hard rule can only make a verdict stricter, never looser: allow becomes ask, refuse stays refuse.
-            const decision = hard !== undefined && enforced === "allow" ? "ask" : enforced;
-            // Row keeps the judge's own word, not the enforced one, so ask-but-allowed stays distinct from
-            // allow-but-asked.
-            const entry = { program: excerptProgram(program), classes, decision: verdict.decision, sentence: verdict.sentence };
-            if (decision === "allow") {
-                // At `off` there's no verdict to log; a row saying "allowed, nobody looked" would just repeat the
-                // setting.
-                if (options.judging !== "off") {
-                    record({ ...entry, outcome: "allowed" }, at);
-                }
-                return ALLOWED;
-            }
-            if (decision === "refuse") {
-                record({ ...entry, outcome: "refused" }, at);
-                return { allow: false, reason: `${verdict.sentence} Refused by your owner's safety policy. Do not retry.` };
-            }
-            // Checked after the judge, not before, so the log still records what would have happened.
-            if (granted.has(program)) {
-                record({ ...entry, outcome: "allowed", answer: "allowed" }, at);
-                return ALLOWED;
-            }
-            const unaskable = cannotAsk(verdict.sentence, options);
-            if (unaskable !== undefined) {
-                record({ ...entry, outcome: "refused" }, at);
-                return unaskable;
-            }
-            const { id, wait } = options.cards.create("permission", {
-                kind: "permission",
-                requestId: "",
-                decision: "deny",
-                feedback: "The turn ended before you answered.",
-            });
-            record({ ...entry, outcome: "asked" }, at);
-            // Title is the judge's own sentence; the hard rule instead titles its named consequence.
-            yield {
-                kind: "permission",
-                requestId: id,
-                toolName: subject.toolName,
-                title: hard === undefined ? verdict.sentence : `This ${subject.noun} would ${COMMAND_CLASS_LABELS[hard]}`,
-                displayName: subject.displayName,
-                program: programAsk(program, subject, matches, hard),
-                ...(hard === undefined ? {} : { explain: verdict.sentence }),
-                // Label is the exact line to add, so nobody accepts a rule unread; shown only when there is one to
-                // remember, and never under the hard rule, which no line can waive: pressing it would only write a
-                // line that changes nothing, and the next such command would ask again.
-                ...(hard === undefined && verdict.policyLine !== undefined && options.remember !== undefined
-                    ? { alwaysLabel: `Always: ${verdict.policyLine}` }
-                    : {}),
-            };
-            const { reply, resolved } = await wait(options.signal);
-            // Every parked card owes the stream its resolution frame, for a replayed transcript and an honest wait
-            // time.
-            yield resolved;
-            if (reply.decision === "deny") {
-                options.answered?.(at, "declined", "refused");
-                // Feedback present means a redirection; a bare denial means the user is stopping this, so say that
-                // plainly.
-                return {
-                    allow: false,
-                    reason:
-                        reply.feedback?.trim() ||
-                        `The user declined this. Do not run it, and do not look for another way to achieve the same thing: wait for them to say how to proceed.`,
-                };
-            }
-            options.answered?.(at, "allowed", "allowed");
-            granted.add(program);
-            if (reply.decision === "always" && hard === undefined && verdict.policyLine !== undefined) {
-                // Not awaited and failures are swallowed: the command already ran, so a write failure shouldn't matter.
-                void options.remember?.(verdict.policyLine).catch(() => undefined);
+    // The first allowed install of the turn says where it writes and what outlasts it; later ones need not repeat it.
+    let placementTold = false;
+
+    // Tier 0, a shell command's installs: an image install is recorded, a project install decided by where it writes
+    // and the owner's setting. Undefined lets the command on to the safety tiers with nothing to say; a refusal stops it.
+    async function* installTier(program: string, subject: GuardSubject, where: CommandWhere | undefined): AsyncGenerator<AgentEvent, GuardOutcome | undefined> {
+        const installs = options.installs;
+        if (subject.language !== "bash" || installs === undefined) {
+            return undefined;
+        }
+        const command = agentCommand(program);
+        const images = classifyImageInstalls(command);
+        if (images.length > 0) {
+            options.onImageInstall?.(images, command);
+        }
+        const projects = projectInstallsOf(program, where?.cwd ?? options.cwd ?? installs.root);
+        if (projects.length === 0) {
+            return undefined;
+        }
+        const verdict = yield* consultProjectInstall(command, projects, installs, { cards: options.cards, signal: options.signal, canPark: options.canPark !== false });
+        if (!verdict.allow) {
+            return verdict;
+        }
+        const told = [...(placementTold ? [] : [verdict.note]), ...verdict.unprepared];
+        placementTold = true;
+        return told.length === 0 ? ALLOWED : { allow: true, context: told.join(" ") };
+    }
+
+    async function* safetyTiers(program: string, subject: GuardSubject): AsyncGenerator<AgentEvent, GuardOutcome> {
+        // Matched, not merely classified, so the fired fragments are in hand if this ends on a card.
+        const matches = matchCommand(program, context);
+        // Tier 1: nothing matched, nothing to judge; the overwhelming majority of commands stop here for free.
+        if (matches.length === 0) {
+            return ALLOWED;
+        }
+        const classes = matches.map((match) => match.commandClass);
+        const at = Date.now();
+        const outsideSource = options.taint.source();
+        // Tier 1.5, the hard rule: un-waivable, applied first, and the only verdict allowed to title the card.
+        const hard = hardRuled(matches);
+        const facts: JudgeFacts = {
+            consequences: classes.map((commandClass) => COMMAND_CLASS_LABELS[commandClass]),
+            // Nobody watching right now, a steer included, so the judge knows an ask waits for the owner.
+            unattended: nobodyWatching(options),
+            language: subject.language,
+            ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
+            ...(outsideSource === undefined ? {} : { outsideSource }),
+            ...(options.machine === undefined ? {} : { machine: options.machine }),
+        };
+        // Tier 2: an unreachable judge leaves the hard rule standing and allows the rest; `off` never asks at all.
+        const verdict: SafetyVerdict =
+            options.judging === "off"
+                ? { decision: "allow", sentence: JUDGE_OFF }
+                : await askJudge(program, facts).catch((error: unknown): SafetyVerdict => ({
+                      decision: "allow",
+                      sentence: error instanceof RoleModelUnsetError ? JUDGE_UNSET : JUDGE_UNAVAILABLE,
+                  }));
+        // What's enforced, not what was said: only `on` obeys the verdict; `off` and `watch` never do.
+        const enforced = options.judging === "on" ? verdict.decision : "allow";
+        // The hard rule can only make a verdict stricter, never looser: allow becomes ask, refuse stays refuse.
+        const decision = hard !== undefined && enforced === "allow" ? "ask" : enforced;
+        // Row keeps the judge's own word, not the enforced one, so ask-but-allowed stays distinct from
+        // allow-but-asked.
+        const entry = { program: excerptProgram(program), classes, decision: verdict.decision, sentence: verdict.sentence };
+        if (decision === "allow") {
+            // At `off` there's no verdict to log; a row saying "allowed, nobody looked" would just repeat the
+            // setting.
+            if (options.judging !== "off") {
+                record({ ...entry, outcome: "allowed" }, at);
             }
             return ALLOWED;
+        }
+        if (decision === "refuse") {
+            record({ ...entry, outcome: "refused" }, at);
+            return { allow: false, reason: `${verdict.sentence} Refused by your owner's safety policy. Do not retry.` };
+        }
+        // Checked after the judge, not before, so the log still records what would have happened.
+        if (granted.has(program)) {
+            record({ ...entry, outcome: "allowed", answer: "allowed" }, at);
+            return ALLOWED;
+        }
+        const unaskable = cannotAsk(verdict.sentence, options);
+        if (unaskable !== undefined) {
+            record({ ...entry, outcome: "refused" }, at);
+            return unaskable;
+        }
+        const { id, wait } = options.cards.create("permission", {
+            kind: "permission",
+            requestId: "",
+            decision: "deny",
+            feedback: "The turn ended before you answered.",
+        });
+        record({ ...entry, outcome: "asked" }, at);
+        // Title is the judge's own sentence; the hard rule instead titles its named consequence.
+        yield {
+            kind: "permission",
+            requestId: id,
+            toolName: subject.toolName,
+            title: hard === undefined ? verdict.sentence : `This ${subject.noun} would ${COMMAND_CLASS_LABELS[hard]}`,
+            displayName: subject.displayName,
+            program: programAsk(program, subject, matches, hard),
+            ...(hard === undefined ? {} : { explain: verdict.sentence }),
+            // Label is the exact line to add, so nobody accepts a rule unread; shown only when there is one to
+            // remember, and never under the hard rule, which no line can waive: pressing it would only write a
+            // line that changes nothing, and the next such command would ask again.
+            ...(hard === undefined && verdict.policyLine !== undefined && options.remember !== undefined
+                ? { alwaysLabel: `Always: ${verdict.policyLine}` }
+                : {}),
+        };
+        const { reply, resolved } = await wait(options.signal);
+        // Every parked card owes the stream its resolution frame, for a replayed transcript and an honest wait
+        // time.
+        yield resolved;
+        if (reply.decision === "deny") {
+            options.answered?.(at, "declined", "refused");
+            // Feedback present means a redirection; a bare denial means the user is stopping this, so say that
+            // plainly.
+            return {
+                allow: false,
+                reason:
+                    reply.feedback?.trim() ||
+                    `The user declined this. Do not run it, and do not look for another way to achieve the same thing: wait for them to say how to proceed.`,
+            };
+        }
+        options.answered?.(at, "allowed", "allowed");
+        granted.add(program);
+        if (reply.decision === "always" && hard === undefined && verdict.policyLine !== undefined) {
+            // Not awaited and failures are swallowed: the command already ran, so a write failure shouldn't matter.
+            void options.remember?.(verdict.policyLine).catch(() => undefined);
+        }
+        return ALLOWED;
+    }
+
+    return {
+        enforcing: true,
+        async *consult(program, subject, where) {
+            const installed = yield* installTier(program, subject, where);
+            if (installed?.allow === false) {
+                return installed;
+            }
+            const judged = yield* safetyTiers(program, subject);
+            // The install's note rides an allowed command; a command the safety tiers refused is refused whatever it
+            // installs.
+            return judged.allow && installed?.allow === true && installed.context !== undefined ? installed : judged;
         },
     };
 };
@@ -372,7 +420,7 @@ export const commandGateHooks = (
     const gate = createCommandGuard(options);
     const gateFor =
         (source: (typeof EXECUTION_SOURCES)[number]) =>
-        async (input: { hook_event_name: string; tool_input?: unknown }): Promise<Record<string, unknown>> => {
+        async (input: { hook_event_name: string; tool_input?: unknown; cwd?: string }): Promise<Record<string, unknown>> => {
             if (input.hook_event_name !== "PreToolUse") {
                 return {};
             }
@@ -380,8 +428,12 @@ export const commandGateHooks = (
             if (typeof program !== "string") {
                 return {};
             }
-            const outcome = await consultWith(gate, program, source.subject, options.push);
-            return outcome.allow ? {} : refuse(outcome.reason);
+            // The shell's own cwd, which a `cd` in an earlier call moved; the turn's is the fallback.
+            const outcome = await consultWith(gate, program, source.subject, options.push, { cwd: input.cwd === "" ? undefined : input.cwd });
+            if (!outcome.allow) {
+                return refuse(outcome.reason);
+            }
+            return outcome.context === undefined ? {} : { hookSpecificOutput: { hookEventName: "PreToolUse", additionalContext: outcome.context } };
         };
     return {
         PreToolUse: EXECUTION_SOURCES.map((source) => ({ matcher: source.subject.toolName, hooks: [gateFor(source)] })),

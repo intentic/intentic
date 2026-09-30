@@ -1,6 +1,8 @@
 import type { AgentRequest, TurnHooks } from "../../agent/providers/agent-request.js";
 import { parkedCards } from "../../conversations/actor/parked-cards.js";
-import { vendorSubject } from "../../guard/command-guard.js";
+import type { AgentEvent } from "@intentic/sandbox-contract";
+import { consultWith, vendorSubject } from "../../guard/command-guard.js";
+import { opt } from "../../opt.js";
 import { conversationTainted } from "../../guard/turn-taint.js";
 import { memoryFleet } from "../../testing.js";
 import { vendorTurnGate } from "./vendor-gate.js";
@@ -13,13 +15,37 @@ const SUBJECT = vendorSubject("bash");
 const cards = parkedCards(memoryFleet().conversations);
 
 const request = (
-    over: { readonly policy?: AgentRequest["policy"]; readonly judge?: TurnHooks["judge"] } = {},
+    over: { readonly policy?: AgentRequest["policy"]; readonly judge?: TurnHooks["judge"]; readonly projectInstalls?: TurnHooks["projectInstalls"] } = {},
     conversationId?: string,
 ): Pick<AgentRequest, "spec" | "policy" | "hooks" | "signal"> => ({
     spec: { prompt: "p", cwd: "/w", ...(conversationId === undefined ? {} : { conversationId }) },
     policy: over.policy ?? {},
-    hooks: { cards, ...(over.judge === undefined ? {} : { judge: over.judge }) },
+    hooks: { cards, ...opt("judge", over.judge), ...opt("projectInstalls", over.projectInstalls) },
     signal: new AbortController().signal,
+});
+
+// The install rule a Claude Code turn's hook applies, carried to a vendor loop's gate by the same request field.
+const installRule = (mode: "automatic" | "never"): NonNullable<TurnHooks["projectInstalls"]> => ({
+    placement: { kind: "shared" },
+    root: "/nonexistent-workspace",
+    mode,
+    canInstall: true,
+    grants: undefined,
+});
+
+test("a vendor turn's gate meets an install with the same rule as Claude Code's hook", async () => {
+    const refused = vendorTurnGate(request({ projectInstalls: installRule("never") }));
+    const events: AgentEvent[] = [];
+    expect(await consultWith(refused.gate, "pnpm add zod", SUBJECT, (event) => events.push(event))).toMatchObject({
+        allow: false,
+        reason: expect.stringContaining("turned agent installs off"),
+    });
+    const allowed = vendorTurnGate(request({ projectInstalls: installRule("automatic") }));
+    const outcome = await consultWith(allowed.gate, "pnpm add zod", SUBJECT, (event) => events.push(event), { cwd: "/nonexistent-workspace/video" });
+    expect(outcome).toMatchObject({ allow: true, context: expect.stringContaining("install lane") });
+    expect(events).toEqual([{ kind: "install", reach: "main-tree", projects: ["video"] }]);
+    refused.release();
+    allowed.release();
 });
 
 test("an outside wake in the policy is published under the spec's conversation until the gate is released", () => {
@@ -54,16 +80,22 @@ test("the hooks' judge is the one asked, and a refuse-only runtime refuses what 
     expect((step.value as { allow: boolean }).allow).toBe(false);
 });
 
-test("an unattended policy refuses an ask instead of parking a card nobody will answer", async () => {
+// Nobody watching is information for the judge, never a refusal: the card waits for the owner on a vendor turn too.
+test("an unattended policy parks the ask on a card, and the judge is told nobody is watching", async () => {
+    const seen: boolean[] = [];
     const { gate, release } = vendorTurnGate(
         request({
             policy: { unattended: true, rulebook: "approval" },
-            judge: async () => ({ decision: "ask", sentence: "Discards whatever commits origin has." }),
+            judge: async (_program, facts) => {
+                seen.push(facts.unattended);
+                return { decision: "ask", sentence: "Discards whatever commits origin has." };
+            },
         }),
     );
     const step = await gate.consult("git push --force origin main", SUBJECT).next();
     release();
 
-    expect(step.done).toBe(true);
-    expect((step.value as { reason: string }).reason).toContain("This turn is running unattended: there is nobody to approve it.");
+    expect(step.done).toBe(false);
+    expect(step.value).toMatchObject({ kind: "permission", title: "Discards whatever commits origin has." });
+    expect(seen).toEqual([true]);
 });

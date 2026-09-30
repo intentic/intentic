@@ -913,11 +913,12 @@ test("a dismissed question tells Codex so rather than leaving it holding the req
     expect(answered).toEqual([{ q1: ["The user dismissed the questions without answering and stopped the turn."] }]);
 });
 
-test("an unattended turn is given no way to ask: a card nobody will answer is a deadlock", async () => {
+// A question an unattended turn asks waits for the owner like any other card, so the tool is on for every turn.
+test("an unattended turn can still ask: its question waits for the owner", async () => {
     const { runner, calls } = fakeCodexRunner([]);
     await collect(createTestAgent(runner), { ...request, policy: { ...request.policy, unattended: true } });
-    // Turned off by name, not by omission: Codex registers the tool when the table is absent.
-    expect(calls[0]!.config).toEqual({ "tools.experimental_request_user_input.enabled": false });
+    // Turned on by name, not by omission: Codex registers the tool when the table is absent, and names it here.
+    expect(calls[0]!.config).toEqual({ "tools.experimental_request_user_input.enabled": true });
 });
 
 test("a question for a secret is refused without a card, because a card's answers are recorded", async () => {
@@ -1070,16 +1071,18 @@ test("declining the card refuses the command", async () => {
     expect(decisions).toEqual([false]);
 });
 
-test("an unattended turn refuses rather than raising a card", async () => {
+test("an unattended turn raises the card and waits for it, rather than refusing", async () => {
     const decisions: boolean[] = [];
     const agent = createTestAgent(approvalTurn("rm -rf build", (allow) => decisions.push(allow)));
+    const events: AgentEvent[] = [];
 
-    const events = await collect(agent, {
-        ...request,
-        policy: { ...request.policy, unattended: true },
-        hooks: { ...request.hooks, judge: judging("ask") },
-    });
+    for await (const event of agent({ ...request, policy: { ...request.policy, unattended: true }, hooks: { ...request.hooks, judge: judging("ask") } })) {
+        events.push(event);
+        if (event.kind === "permission") {
+            setTimeout(() => cards.resolve({ kind: "permission", requestId: event.requestId, decision: "once" }), 0);
+        }
+    }
 
-    expect(decisions).toEqual([false]);
-    expect(events.some((event) => event.kind === "permission")).toBe(false);
+    expect(events.some((event) => event.kind === "permission")).toBe(true);
+    expect(decisions).toEqual([true]);
 });

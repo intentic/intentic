@@ -18,8 +18,6 @@ export interface HostGuardGateDeps extends CardDeps {
     readonly guards: () => Promise<readonly SecretHostGuard[]>;
     // Who may answer a request to loosen a guard; undefined where no owner is recorded, which lets any signed-in person.
     readonly ownerEmail: () => Promise<string | undefined>;
-    // Whether nobody is at the conversation's composer; a request to loosen is refused there rather than left parked.
-    readonly unattended: (conversationId: string) => boolean;
     readonly deadlineMs?: number;
 }
 
@@ -28,7 +26,6 @@ export interface HostGuardCheck {
     readonly names: readonly string[];
     readonly target: SecretTarget;
     readonly conversationId: string | undefined;
-    readonly unattended: boolean;
     readonly signal: AbortSignal;
 }
 
@@ -141,10 +138,12 @@ const standing = (request: WidenRequest): string =>
 
 const widen = async (deps: HostGuardGateDeps, request: WidenRequest): Promise<WidenVerdict> => {
     const card = cardRun(deps, request.conversationId);
-    if (card === undefined || deps.unattended(card.conversationId)) {
+    // Asked in the conversation whoever started its turn: a card nobody has answered yet waits, and only a call with no
+    // live conversation to ask in is refused.
+    if (card === undefined) {
         return {
             refusal:
-                `Only the owner can loosen ${request.subject}'s host guard, and there is nobody here to ask. ` +
+                `Only the owner can loosen ${request.subject}'s host guard, and there is no live conversation to ask in. ` +
                 "Do not retry: say which host the task needed, so the owner can add it on the Secrets view.",
         };
     }
@@ -199,7 +198,6 @@ export const createHostGuardGate = (deps: HostGuardGateDeps): HostGuardGate => (
         const verdict = guard(secretSend, {
             guarded: reading.destination !== "none",
             destination: reading.destination === "none" ? "inside" : reading.destination,
-            unattended: input.unattended,
             canPark: card !== undefined,
         });
         if (verdict.effect === "allow" || reading.destination === "none" || reading.destination === "inside") {
@@ -207,10 +205,9 @@ export const createHostGuardGate = (deps: HostGuardGateDeps): HostGuardGate => (
         }
         const sentence = sentenceOf(reading, input.target);
         if (verdict.effect === "deny" || card === undefined) {
-            const nobody = input.unattended ? "This turn is running unattended, so nobody can approve it" : "There is no live conversation to ask in";
             return refusal(
                 sentence,
-                `${nobody}: it was not used. Do not retry: carry on without it, and say what you left undone. ${TO_SEND_FREELY}`,
+                `There is no live conversation to ask in: it was not used. Do not retry: carry on without it, and say what you left undone. ${TO_SEND_FREELY}`,
             );
         }
         const program = programAskOf(input.target, reading.guarded);

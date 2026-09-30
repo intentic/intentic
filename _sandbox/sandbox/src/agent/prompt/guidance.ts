@@ -221,8 +221,7 @@ const ENTRIES: readonly GuidanceEntry[] = [
     {
         id: "interactive",
         reach: "loop",
-        // An unattended turn has nobody to click a card.
-        when: ({ unattended }) => !unattended,
+        // Every turn: a card an unattended turn raises waits for the owner rather than being refused ("unwatched" below).
         full: [
             "When a decision is genuinely the user's to make (an ambiguous requirement, a fork between real alternatives, a missing preference you cannot infer from the code), ask with the AskUserQuestion tool. It renders as a clickable card in the chat; options written as plain text do not, so the user cannot answer them by clicking. Do not use it for questions you can answer yourself by reading the workspace.",
             "When a request is large, risky, or underspecified, call EnterPlanMode first, investigate read-only, then ExitPlanMode to get your plan approved before changing anything.",
@@ -230,6 +229,20 @@ const ENTRIES: readonly GuidanceEntry[] = [
         lean:
             "Ask the user with the AskUserQuestion tool, never with options written as prose: only the tool renders a card " +
             "they can click. Call EnterPlanMode before large, risky or underspecified work.",
+    },
+    {
+        id: "unwatched",
+        reach: "loop",
+        // An automation, a loop or a scheduled wake: nobody is at the composer when it starts.
+        when: ({ unattended }) => unattended,
+        full:
+            "Nobody is watching this turn right now: it is an automation, a loop or a scheduled run. A question, a plan " +
+            "approval or a held command waits on its card until the owner answers, which can take hours, and the turn " +
+            "waits with it. Decide what you can yourself, finish everything that does not depend on the answer before you " +
+            "ask, and ask only what is genuinely the owner's to decide.",
+        lean:
+            "Nobody is watching this turn right now: a card you raise waits until the owner answers, which can take hours. " +
+            "Finish what does not depend on it first, and ask only what is genuinely theirs to decide.",
     },
     {
         id: "checklist",
@@ -361,7 +374,7 @@ const ENTRIES: readonly GuidanceEntry[] = [
             "A secret can also have its host guard on (`secrets gates` shows it beside any approver, `secrets hosts` " +
             "lists the hosts). Such a secret goes by itself only in a single plain curl, wget or git command whose every " +
             "URL is on its list; a pipe, a variable, a script, another program or another host puts a card in front of " +
-            "a person first, whatever the safety judge says, and an unattended turn is refused, so aim a guarded secret " +
+            "a person first, whatever the safety judge says, and waits for their answer, so aim a guarded secret " +
             "straight at its own hosts.",
         lean:
             "Stored secrets appear as `{{secret:name}}`. Use that token in commands, where it is substituted at execution, " +
@@ -497,9 +510,10 @@ const textOf = (entry: GuidanceEntry, variant: GuidanceVariant, loop: LoopFacts 
 export const guidanceBlock = (variant: GuidanceVariant, loop: LoopFacts | undefined): string =>
     [GUIDANCE_HEADER, ...ENTRIES.flatMap((entry) => textOf(entry, variant, loop) ?? [])].join("\n\n");
 
-// Every mechanism on, so any wording change in either variant changes the hash.
+// Every mechanism on, so any wording change in either variant changes the hash. Unattended, since no entry is held to
+// attended turns alone any more, and the "unwatched" entry is held to unattended ones.
 const EVERY_FACT: LoopFacts = {
-    unattended: false,
+    unattended: true,
     browserOutputDir: "/",
     browserAccounts: true,
     diagnostics: true,

@@ -7,14 +7,18 @@ import type { AgentEvent } from "@intentic/sandbox-contract";
 import { parkedCards } from "../../conversations/actor/parked-cards.js";
 import type { IsolationPlan } from "../../conversations/worktrees/isolation.js";
 import { opt } from "../../opt.js";
+import { memoryConversationGrants } from "../../personas/conversation-grants.js";
 import { memoryFleet } from "../../testing.js";
+import type { ProjectInstall } from "./agent-installs.js";
 import {
-    createInstallGrants,
-    decideProjectInstall,
+    consultProjectInstall,
     detachMirrors,
+    type InstallAsking,
+    installGrantsOf,
     installRootOf,
     type InstallPlacement,
-    type ProjectInstallGateOptions,
+    type ProjectInstallGate,
+    type ProjectInstallVerdict,
 } from "./project-installs.js";
 
 const git = async (cwd: string, ...args: string[]): Promise<string> => (await promisify(execFile)("git", ["-C", cwd, ...args])).stdout;
@@ -38,22 +42,42 @@ const planOf = (tree: string, over: Partial<IsolationPlan> = {}): IsolationPlan 
 
 const cards = parkedCards(memoryFleet().conversations);
 
-const options = (placement: InstallPlacement, over: Partial<ProjectInstallGateOptions> = {}): ProjectInstallGateOptions & { events: AgentEvent[] } => {
+// The conversation's kept grants, in memory: the same store the daemon keeps under the auth root.
+const grantsStore = memoryConversationGrants();
+
+const gateOf = (placement: InstallPlacement, over: Partial<ProjectInstallGate> = {}): ProjectInstallGate => ({
+    placement,
+    root: "/work",
+    mode: "automatic",
+    canInstall: true,
+    grants: installGrantsOf(grantsStore, `c-${Math.random().toString(36).slice(2)}`),
+    ...over,
+});
+
+const ASKING: InstallAsking = { cards, signal: new AbortController().signal, canPark: true };
+
+// Drives one consult the way the command gate does: every frame it says, in order, and its verdict once it has one.
+const run = (
+    command: string,
+    installs: readonly ProjectInstall[],
+    gate: ProjectInstallGate,
+    asking: InstallAsking = ASKING,
+): { readonly events: AgentEvent[]; readonly verdict: Promise<ProjectInstallVerdict> } => {
     const events: AgentEvent[] = [];
-    return {
-        placement,
-        mode: "automatic",
-        canInstall: true,
-        conversationId: `c-${Math.random().toString(36).slice(2)}`,
-        grants: createInstallGrants(),
-        cards,
-        push: (event) => events.push(event),
-        signal: new AbortController().signal,
-        unattended: false,
-        events,
-        ...over,
-    };
+    const verdict = (async () => {
+        const consulting = consultProjectInstall(command, installs, gate, asking);
+        let step = await consulting.next();
+        while (step.done !== true) {
+            events.push(step.value);
+            step = await consulting.next();
+        }
+        return step.value;
+    })();
+    return { events, verdict };
 };
+
+const verdictOf = (command: string, installs: readonly ProjectInstall[], gate: ProjectInstallGate): Promise<ProjectInstallVerdict> =>
+    run(command, installs, gate).verdict;
 
 const settled = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -79,8 +103,10 @@ test("a project the branch created keeps its fresh node_modules out of the land,
     await writeFile(join(tree, "README.md"), "root\n");
     await mkdir(join(tree, "video"), { recursive: true });
     await writeFile(join(tree, "video", "package.json"), "{}");
-    const verdict = await decideProjectInstall("npm install remotion", [{ dir: "/work/video", ecosystem: "node" }], options({ kind: "private", plan: planOf(tree) }));
-    expect(verdict).toMatchObject({ allow: true, unprepared: [] });
+    const consulted = run("npm install remotion", [{ dir: "/work/video", ecosystem: "node" }], gateOf({ kind: "private", plan: planOf(tree) }));
+    expect(await consulted.verdict).toMatchObject({ allow: true, unprepared: [] });
+    // The chat is told as it starts: where it writes, and which project it works on.
+    expect(consulted.events).toEqual([{ kind: "install", reach: "own-copy", projects: ["video"] }]);
     expect(await ignored(tree, "video/node_modules/")).toBe(true);
     expect(await ignored(tree, "video/packages/scenes/node_modules/")).toBe(true);
     // Anchored to the project: another project's install directory is not swept up with it.
@@ -92,11 +118,7 @@ test("a project the branch created keeps its fresh node_modules out of the land,
 
 test("a directory the same line creates is excluded before it exists", async () => {
     const tree = await worktree();
-    await decideProjectInstall(
-        "mkdir -p app && cd app && npm init -y && npm install zod",
-        [{ dir: "/work/app", ecosystem: "node" }],
-        options({ kind: "private", plan: planOf(tree) }),
-    );
+    await verdictOf("mkdir -p app && cd app && npm init -y && npm install zod", [{ dir: "/work/app", ecosystem: "node" }], gateOf({ kind: "private", plan: planOf(tree) }));
     expect(await ignored(tree, "app/node_modules/")).toBe(true);
 });
 
@@ -105,7 +127,7 @@ test("a project whose own .gitignore already covers it gets no exclude line", as
     await mkdir(join(tree, "web"), { recursive: true });
     await writeFile(join(tree, "web", ".gitignore"), "node_modules/\n");
     await writeFile(join(tree, "web", "package.json"), "{}");
-    await decideProjectInstall("pnpm add zod", [{ dir: "/work/web", ecosystem: "node" }], options({ kind: "private", plan: planOf(tree) }));
+    await verdictOf("pnpm add zod", [{ dir: "/work/web", ecosystem: "node" }], gateOf({ kind: "private", plan: planOf(tree) }));
     const exclude = await readFile(join(tree, ".git", "info", "exclude"), "utf8");
     expect(exclude).not.toContain("/web/");
 });
@@ -114,14 +136,16 @@ test("a python project's virtualenv is kept out of the land at the project, not 
     const tree = await worktree();
     await mkdir(join(tree, "svc"), { recursive: true });
     await writeFile(join(tree, "svc", "pyproject.toml"), "[project]\nname = 'svc'\n");
-    await decideProjectInstall("uv sync", [{ dir: "/work/svc", ecosystem: "python" }], options({ kind: "private", plan: planOf(tree) }));
+    await verdictOf("uv sync", [{ dir: "/work/svc", ecosystem: "python" }], gateOf({ kind: "private", plan: planOf(tree) }));
     expect(await readFile(join(tree, ".git", "info", "exclude"), "utf8")).toContain("/svc/.venv/");
 });
 
 test("an install outside the conversation's tree prepares nothing and still runs", async () => {
     const tree = await worktree();
-    const verdict = await decideProjectInstall("npm install", [{ dir: "/tmp/scratch", ecosystem: "node" }], options({ kind: "private", plan: planOf(tree) }));
-    expect(verdict).toMatchObject({ allow: true, unprepared: [] });
+    const consulted = run("npm install", [{ dir: "/tmp/scratch", ecosystem: "node" }], gateOf({ kind: "private", plan: planOf(tree) }));
+    expect(await consulted.verdict).toMatchObject({ allow: true, unprepared: [] });
+    // Nothing of the tree to name; the chat still hears where it writes.
+    expect(consulted.events).toEqual([{ kind: "install", reach: "own-copy", projects: [] }]);
 });
 
 test("the install root is the nearest lockfile, since pnpm installs a whole workspace from any package in it", async () => {
@@ -157,69 +181,93 @@ test("without a namespace, the links under the install root become the worktree'
 
 describe("the owner's setting", () => {
     const shared: InstallPlacement = { kind: "shared" };
+    const ROOT_INSTALL: readonly ProjectInstall[] = [{ dir: "/work", ecosystem: "node" }];
 
     test("never refuses, and says the manifest change still installs at the land", async () => {
-        const verdict = await decideProjectInstall("pnpm add zod", [{ dir: "/work", ecosystem: "node" }], options(shared, { mode: "never" }));
-        expect(verdict).toMatchObject({ allow: false, reason: expect.stringContaining("installs when the owner lands the work") });
+        const consulted = run("pnpm add zod", ROOT_INSTALL, gateOf(shared, { mode: "never" }));
+        expect(await consulted.verdict).toMatchObject({ allow: false, reason: expect.stringContaining("installs when the owner lands the work") });
+        expect(consulted.events).toEqual([]);
     });
 
     test("a persona without the power to change the workspace is refused whatever the setting", async () => {
-        const verdict = await decideProjectInstall("pnpm add zod", [{ dir: "/work", ecosystem: "node" }], options(shared, { canInstall: false }));
-        expect(verdict).toMatchObject({ allow: false, reason: expect.stringContaining("ask the owner") });
+        expect(await verdictOf("pnpm add zod", ROOT_INSTALL, gateOf(shared, { canInstall: false }))).toMatchObject({
+            allow: false,
+            reason: expect.stringContaining("ask the owner"),
+        });
     });
 
     test("ask parks one card; allowing it once runs this install and asks again next time", async () => {
-        const gate = options(shared, { mode: "ask" });
-        const pending = decideProjectInstall("pnpm add zod", [{ dir: "/work", ecosystem: "node" }], gate);
+        const gate = gateOf(shared, { mode: "ask" });
+        const first = run("pnpm add zod", ROOT_INSTALL, gate);
         await settled();
-        expect(cardOf(gate.events)).toMatchObject({
+        expect(cardOf(first.events)).toMatchObject({
             kind: "permission",
             toolName: "Bash",
             title: "Install project dependencies",
             program: { text: "pnpm add zod", language: "bash", truncated: false },
             alwaysLabel: "Allow installs for this conversation",
         });
-        expect(answer(gate.events, "once")).toBe("settled");
-        expect(await pending).toMatchObject({ allow: true });
-        expect(gate.events.some((event) => event.kind === "resolved")).toBe(true);
-        expect(gate.grants.has(gate.conversationId ?? "")).toBe(false);
+        expect(answer(first.events, "once")).toBe("settled");
+        expect(await first.verdict).toMatchObject({ allow: true });
+        expect(first.events.map((event) => event.kind)).toEqual(["permission", "resolved", "install"]);
+        expect(await gate.grants?.has()).toBe(false);
+        const second = run("pnpm add vue", ROOT_INSTALL, gate);
+        await settled();
+        expect(cardOf(second.events)).toMatchObject({ kind: "permission" });
+        answer(second.events, "once");
+        await second.verdict;
     });
 
-    test("allowing for the conversation stops the asking for its later installs", async () => {
-        const gate = options(shared, { mode: "ask" });
-        const pending = decideProjectInstall("pnpm add zod", [{ dir: "/work", ecosystem: "node" }], gate);
+    test("allowing for the conversation is kept, and stops the asking for its later installs", async () => {
+        const gate = gateOf(shared, { mode: "ask" });
+        const first = run("pnpm add zod", ROOT_INSTALL, gate);
         await settled();
-        expect(answer(gate.events, "always")).toBe("settled");
-        expect(await pending).toMatchObject({ allow: true });
-        const before = gate.events.length;
-        expect(await decideProjectInstall("pnpm add vue", [{ dir: "/work", ecosystem: "node" }], gate)).toMatchObject({ allow: true });
-        expect(gate.events.length).toBe(before);
+        expect(answer(first.events, "always")).toBe("settled");
+        expect(await first.verdict).toMatchObject({ allow: true });
+        expect(await gate.grants?.has()).toBe(true);
+        const later = run("pnpm add vue", ROOT_INSTALL, gate);
+        expect(await later.verdict).toMatchObject({ allow: true });
+        expect(later.events).toEqual([{ kind: "install", reach: "main-tree", projects: [""] }]);
     });
 
     test("a declined card refuses with the owner's own words when they gave some", async () => {
-        const gate = options(shared, { mode: "ask" });
-        const pending = decideProjectInstall("pnpm add left-pad", [{ dir: "/work", ecosystem: "node" }], gate);
+        const consulted = run("pnpm add left-pad", ROOT_INSTALL, gateOf(shared, { mode: "ask" }));
         await settled();
-        expect(answer(gate.events, "deny", "Use the standard library.")).toBe("settled");
-        expect(await pending).toEqual({ allow: false, reason: "Use the standard library." });
+        expect(answer(consulted.events, "deny", "Use the standard library.")).toBe("settled");
+        expect(await consulted.verdict).toEqual({ allow: false, reason: "Use the standard library." });
     });
 
-    test("an unattended turn is refused without a card, unless somebody has since steered it", async () => {
-        const nobody = options(shared, { mode: "ask", unattended: true });
-        expect(await decideProjectInstall("pnpm add zod", [{ dir: "/work", ecosystem: "node" }], nobody)).toMatchObject({
-            allow: false,
-            reason: expect.stringContaining("running unattended"),
+    // Nobody answering yet is not a refusal: the install waits on its card for as long as the answer takes.
+    test("an unanswered card keeps the install waiting rather than refusing it", async () => {
+        const consulted = run("pnpm add zod", ROOT_INSTALL, gateOf(shared, { mode: "ask" }));
+        let done = false;
+        void consulted.verdict.then(() => {
+            done = true;
         });
-        expect(nobody.events).toEqual([]);
-        const steered = options(shared, { mode: "ask", unattended: true, steered: () => true });
-        const pending = decideProjectInstall("pnpm add zod", [{ dir: "/work", ecosystem: "node" }], steered);
+        for (let tick = 0; tick < 20; tick += 1) {
+            await settled();
+        }
+        expect(done).toBe(false);
+        answer(consulted.events, "once");
+        expect(await consulted.verdict).toMatchObject({ allow: true });
+    });
+
+    test("a runtime that cannot pause is refused rather than asked", async () => {
+        const consulted = run("pnpm add zod", ROOT_INSTALL, gateOf(shared, { mode: "ask" }), { ...ASKING, canPark: false });
+        expect(await consulted.verdict).toMatchObject({ allow: false, reason: expect.stringContaining("cannot pause to ask") });
+        expect(consulted.events).toEqual([]);
+    });
+
+    test("a turn with no conversation is asked without the offer to allow for the conversation", async () => {
+        const consulted = run("pnpm add zod", ROOT_INSTALL, gateOf(shared, { mode: "ask", grants: undefined }));
         await settled();
-        expect(answer(steered.events, "once")).toBe("settled");
-        expect(await pending).toMatchObject({ allow: true });
+        expect(cardOf(consulted.events)?.alwaysLabel).toBeUndefined();
+        answer(consulted.events, "once");
+        await consulted.verdict;
     });
 
     test("automatic in the main tree runs, and says it takes the install lane", async () => {
-        expect(await decideProjectInstall("pnpm add zod", [{ dir: "/work", ecosystem: "node" }], options(shared))).toMatchObject({
+        expect(await verdictOf("pnpm add zod", ROOT_INSTALL, gateOf(shared))).toMatchObject({
             allow: true,
             note: expect.stringContaining("install lane"),
             unprepared: [],

@@ -75,12 +75,13 @@ describe("which tools mount", () => {
         expect(Object.keys(cursorCustomTools(request(), guard(allowing()), push()))).toEqual(["ask"]);
     });
 
-    it("an unattended turn with no engine gets nothing", () => {
-        expect(Object.keys(cursorCustomTools(request({ policy: { unattended: true } }), guard(allowing()), push()))).toEqual([]);
+    // Its question waits for the owner like any other card, so an unattended turn keeps the ask.
+    it("an unattended turn with no engine gets the ask too", () => {
+        expect(Object.keys(cursorCustomTools(request({ policy: { unattended: true } }), guard(allowing()), push()))).toEqual(["ask"]);
     });
 
     /* `providers` rides with `spawn` and is never separated from it: the spawn door requires a provider and a model. */
-    it("the engine brings the supervision set, and unattended keeps it: a child deadlocks nothing", () => {
+    it("the engine brings the supervision set, attended or not", () => {
         const children = supervisor();
         expect(Object.keys(cursorCustomTools(request({ hooks: { children } }), guard(allowing()), push()))).toEqual([
             "ask",
@@ -93,6 +94,7 @@ describe("which tools mount", () => {
             "merge",
         ]);
         expect(Object.keys(cursorCustomTools(request({ hooks: { children }, policy: { unattended: true } }), guard(allowing()), push()))).toEqual([
+            "ask",
             "spawn",
             "providers",
             "wait",

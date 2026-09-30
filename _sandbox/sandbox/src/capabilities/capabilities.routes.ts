@@ -457,8 +457,6 @@ export const createCapabilitiesRoutes = (services: Services) => {
                 lane: "otp",
                 detail: `a one-time code for ${input.id}`,
                 conversationId: context.headers.get("x-intentic-conversation") ?? undefined,
-                // Always false: whether anyone is watching is for the gate to discover, not for this route to claim.
-                unattended: false,
                 signal: signal ?? new AbortController().signal,
             });
             if (!verdict.allow) {

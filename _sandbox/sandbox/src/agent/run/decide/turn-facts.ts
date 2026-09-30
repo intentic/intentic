@@ -239,7 +239,8 @@ export const gatherTurnFacts = async (services: TurnFactsDeps, input: RoutedTurn
         runtime,
         settings,
     );
-    const [gates, accountRoute] = await Promise.all([gatesOf(services), accountRouteOf(services, input, entry)]);
+    // The stored releases are in before they are copied, so a yes from before a restart reaches this turn.
+    const [gates, accountRoute] = await Promise.all([gatesOf(services), accountRouteOf(services, input, entry), services.credentialGrants.ready]);
     // A conversation's own grants (personas/conversation-grants.ts) widen its persona from the turn after they are given.
     const grant = input.conversationId === undefined ? undefined : await services.conversationGrants.of(input.conversationId);
     const premise = premiseOf({ entry, settings, personas, areas, grant }, input, runtime);

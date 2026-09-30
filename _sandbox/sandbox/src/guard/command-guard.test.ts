@@ -11,6 +11,8 @@ import type { JudgeFacts } from "../agent/tools/command-judge.js";
 import { JS_TOOL_NAME } from "../execution/js-tool.js";
 import { commandGateHooks, type CommandGuardOptions } from "./command-guard.js";
 import { createTurnTaint, NO_TAINT } from "./turn-taint.js";
+import type { ClassifiedInstall } from "../environment/runtime-installs.js";
+import type { ProjectInstallGate } from "../agent/providers/project-installs.js";
 import { parkedCards } from "../conversations/actor/parked-cards.js";
 import { memoryFleet } from "../testing.js";
 
@@ -26,6 +28,8 @@ const always =
 
 interface Harness {
     readonly run: (command: unknown) => Promise<SyncHookJSONOutput>;
+    // The same Bash call from a shell standing in `cwd`, as Claude Code's hook input names it.
+    readonly runAt: (command: string, cwd: string) => Promise<SyncHookJSONOutput>;
     // Second source: a JS run, with the script passed as tool_input.code.
     readonly runCode: (code: unknown) => Promise<SyncHookJSONOutput>;
     readonly events: AgentEvent[];
@@ -93,6 +97,10 @@ const harness = (options: Partial<CommandGuardOptions> = {}): Harness => {
         abort: () => controller.abort(),
         run: (command) =>
             hookFor("Bash")({ hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command } }, undefined, {
+                signal: controller.signal,
+            }) as Promise<SyncHookJSONOutput>,
+        runAt: (command, cwd) =>
+            hookFor("Bash")({ hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command }, cwd }, undefined, {
                 signal: controller.signal,
             }) as Promise<SyncHookJSONOutput>,
         runCode: (code) =>
@@ -256,27 +264,34 @@ describe("command gate: verdicts", () => {
         expect((await pending).hookSpecificOutput).toMatchObject({ permissionDecision: "deny" });
     });
 
-    // Unattended is decided before the gate ever tries to park a card, since nobody could answer one.
-    test("an ask on an unattended turn refuses, and tells the agent not to retry", async () => {
+    // Nobody watching is not a reason to refuse: the card waits for the owner however long that takes
+    // (docs/architecture/conventions.md, A person's answers).
+    test("an ask on an unattended turn raises a card and waits for the owner, never refusing", async () => {
         const gate = harness({ judge: always("ask"), unattended: true });
-        const out = await gate.run(FORCE_PUSH);
-        expect(out.hookSpecificOutput).toMatchObject({ permissionDecision: "deny" });
-        expect(reasonOf(out)).toContain("unattended");
-        expect(reasonOf(out)).toContain("Do not retry");
-        expect(gate.events).toEqual([]);
+        const pending = gate.run(FORCE_PUSH);
+        let done = false;
+        void pending.then(() => {
+            done = true;
+        });
+        for (let tick = 0; tick < 20; tick += 1) {
+            await settled();
+        }
+        // cardOf throws when nothing was raised, so reaching here is the assertion that it asked rather than refused.
+        const card = cardOf(gate.events);
+        expect(done).toBe(false);
+        cards.resolve({ kind: "permission", requestId: card.requestId, decision: "once" });
+        expect(await pending).toEqual({});
+        expect(gate.logged).toMatchObject([{ outcome: "allowed", answer: "allowed" }]);
     });
 
-    // A steering message is somebody typing into this turn. The card goes to the same chat they typed in, so the
-    // refusal above would be refusing the one person who is demonstrably there.
-    test("an ask on an unattended turn a person has steered raises a card instead of refusing", async () => {
+    // A steering message is somebody typing into this turn: the card goes to the same chat they typed in.
+    test("an ask on an unattended turn a person has steered raises a card too", async () => {
         const gate = harness({ judge: always("ask"), unattended: true, steered: () => true });
         const pending = gate.run(FORCE_PUSH);
         await settled();
-        // cardOf throws when nothing was raised, so reaching here is the assertion that it asked rather than refused.
         const card = cardOf(gate.events);
         cards.resolve({ kind: "permission", requestId: card.requestId, decision: "once" });
         await pending;
-        // The log is where "asked, and they said yes" is recorded; the unattended refusal above never reaches it.
         expect(gate.logged).toMatchObject([{ outcome: "allowed", answer: "allowed" }]);
     });
 
@@ -424,10 +439,12 @@ describe("command gate: the hard rule", () => {
         expect(gate.events).toEqual([]);
     });
 
-    test("unattended, it refuses instead of parking", async () => {
-        const out = await harness({ judge: always("allow"), unattended: true }).run("mkfs.ext4 /dev/sda1");
-        expect(out.hookSpecificOutput).toMatchObject({ permissionDecision: "deny" });
-        expect(reasonOf(out)).toContain("unattended");
+    test("unattended, it still parks, and waits for the owner", async () => {
+        const gate = harness({ judge: always("allow"), unattended: true });
+        const pending = gate.run("mkfs.ext4 /dev/sda1");
+        await settled();
+        cards.resolve({ kind: "permission", requestId: cardOf(gate.events).requestId, decision: "deny" });
+        expect((await pending).hookSpecificOutput).toMatchObject({ permissionDecision: "deny" });
     });
 });
 
@@ -452,10 +469,13 @@ describe("command gate: no judge", () => {
         expect((await pending).hookSpecificOutput).toBeUndefined();
     });
 
-    test("unattended and unjudgeable, the hard rule refuses and everything else runs", async () => {
+    test("unattended and unjudgeable, the hard rule still asks and everything else runs", async () => {
         const gate = harness({ judge: BROKEN, unattended: true });
-        expect((await gate.run("mkfs.ext4 /dev/sda1")).hookSpecificOutput).toMatchObject({ permissionDecision: "deny" });
         expect((await gate.run(FORCE_PUSH)).hookSpecificOutput).toBeUndefined();
+        const pending = gate.run("mkfs.ext4 /dev/sda1");
+        await settled();
+        cards.resolve({ kind: "permission", requestId: cardOf(gate.events).requestId, decision: "once" });
+        expect((await pending).hookSpecificOutput).toBeUndefined();
     });
 
     // A failed judgment is not cached; the next command is judged again.
@@ -663,8 +683,8 @@ describe("command gate: the log", () => {
         expect(rowsOf(gate.logged)).toEqual([{ ...FORCE_PUSH_ROW, decision: "ask", outcome: "refused", answer: "declined" }]);
     });
 
-    test("an unanswerable ask is recorded as the refusal it became", async () => {
-        const gate = harness({ judge: always("ask"), unattended: true });
+    test("an ask a runtime cannot park is recorded as the refusal it became", async () => {
+        const gate = harness({ judge: always("ask"), canPark: false });
         await gate.run(FORCE_PUSH);
         expect(rowsOf(gate.logged)).toEqual([{ ...FORCE_PUSH_ROW, decision: "ask", outcome: "refused" }]);
     });
@@ -754,5 +774,85 @@ describe("the gate over JS runs", () => {
         expect(gate.seen[0]?.facts.language).toBe("javascript");
         expect(cards.resolve({ kind: "permission", requestId: card.requestId, decision: "once" })).toBe("settled");
         expect(await pending).toEqual({});
+    });
+});
+
+// Installs are decided by the gate itself, ahead of the safety tiers, so every runtime that consults it (this hook,
+// Codex's approval request, Cursor's shell hook) meets the same answer. A root no machine has, so the project names do
+// not depend on what the test machine keeps at /work.
+describe("the gate over installs", () => {
+    const ROOT = "/nonexistent-workspace";
+    const installsOf = (over: Partial<ProjectInstallGate> = {}): ProjectInstallGate => ({
+        placement: { kind: "shared" },
+        root: ROOT,
+        mode: "automatic",
+        canInstall: true,
+        grants: undefined,
+        ...over,
+    });
+    const contextOf = (out: SyncHookJSONOutput): string | undefined => (out.hookSpecificOutput as { additionalContext?: string } | undefined)?.additionalContext;
+
+    test.each([
+        "pnpm install",
+        "npm install --save-dev vitest",
+        "npm ci",
+        "pnpm add zod",
+        "pnpm --filter app update",
+        "yarn remove zod",
+        "bun install",
+        "uv sync",
+        "poetry install",
+        "python3 -m venv .venv && .venv/bin/pip install pillow",
+        "source .venv/bin/activate && pip install requests",
+        // Still found inside the tmux wrapper the Bash hook rewrites to.
+        "/usr/local/bin/tmux-run -c 'pnpm install' agent-abc 'nice bash -c pnpm-install' install",
+    ])("a project install meets the owner's answer: %s", async (command) => {
+        const out = await harness({ judge: always("allow"), installs: installsOf({ mode: "never" }) }).run(command);
+        expect(out.hookSpecificOutput).toMatchObject({ permissionDecision: "deny" });
+        expect(reasonOf(out)).toContain("turned agent installs off");
+    });
+
+    test("an allowed install runs, tells the chat where it writes, and tells the model once", async () => {
+        const gate = harness({ judge: always("allow"), installs: installsOf() });
+        const first = await gate.runAt("pnpm add zod", `${ROOT}/video`);
+        expect(first.hookSpecificOutput).toMatchObject({ hookEventName: "PreToolUse", additionalContext: expect.stringContaining("install lane") });
+        expect(gate.events).toEqual([{ kind: "install", reach: "main-tree", projects: ["video"] }]);
+        // The shell's own cwd places the next one too; the note is not repeated.
+        expect(contextOf(await gate.runAt("npm install", `${ROOT}/site`))).toBeUndefined();
+        expect(gate.events.at(-1)).toEqual({ kind: "install", reach: "main-tree", projects: ["site"] });
+    });
+
+    test("a persona without write and shell power is refused and sent to the owner", async () => {
+        const out = await harness({ judge: always("allow"), installs: installsOf({ canInstall: false }) }).run("pnpm install");
+        expect(reasonOf(out)).toContain("ask the owner");
+        expect(reasonOf(out)).not.toContain("mcp__deps__install");
+    });
+
+    test("an install the safety tiers refuse is refused, whatever the install rule said", async () => {
+        const gate = harness({ judge: always("refuse"), installs: installsOf() });
+        const out = await gate.run("rm -rf node_modules && pnpm install");
+        expect(out.hookSpecificOutput).toMatchObject({ permissionDecision: "deny" });
+    });
+
+    test("a script is judged as a script, not read for installs", async () => {
+        const gate = harness({ judge: always("allow"), installs: installsOf({ mode: "never" }) });
+        expect(await gate.runCode('console.log("pnpm install")')).toEqual({});
+        expect(gate.events).toEqual([]);
+    });
+
+    test("an image install is recorded for the ledger, unwrapped from tmux, and nothing is said to the model", async () => {
+        const recorded: { installs: readonly ClassifiedInstall[]; command: string }[] = [];
+        const gate = harness({ judge: always("allow"), installs: installsOf(), onImageInstall: (installs, command) => recorded.push({ installs, command }) });
+        expect(await gate.run("apt-get install -y imagemagick")).toEqual({});
+        await gate.run("/usr/local/bin/tmux-run agent-abc 'apt-get install -y ffmpeg' install-ffmpeg");
+        await gate.run("pip install pillow");
+        // A global flag after the name is still the image's, never a project mutation.
+        expect(await gate.run("npm install typescript --global")).toEqual({});
+        expect(recorded).toEqual([
+            { installs: [{ kind: "apt", tool: "imagemagick" }], command: "apt-get install -y imagemagick" },
+            { installs: [{ kind: "apt", tool: "ffmpeg" }], command: "apt-get install -y ffmpeg" },
+            { installs: [{ kind: "pip", tool: "pillow" }], command: "pip install pillow" },
+            { installs: [{ kind: "npm", tool: "typescript" }], command: "npm install typescript --global" },
+        ]);
     });
 });

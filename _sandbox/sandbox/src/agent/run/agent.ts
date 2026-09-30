@@ -39,8 +39,7 @@ import { searchNoticeHooks } from "../verification/agent-search.js";
 import { editDiagnosticsHooks } from "../verification/agent-diagnostics.js";
 import { createShellEditTracker } from "../tools/agent-shell-edits.js";
 import { EDIT_TOOL_NAMES } from "../../rules/edit-tools.js";
-import { type InstallSteering, installSteeringHooks } from "../providers/agent-installs.js";
-import { INSTALL_GRANTS, installPlacementOf } from "../providers/project-installs.js";
+import { installSteeringHooks } from "../providers/agent-installs.js";
 import { redactionHooks } from "../tools/agent-redaction.js";
 import { secretCommandHooks } from "../tools/agent-secrets.js";
 import { commandGateHooks } from "../../guard/command-guard.js";
@@ -218,18 +217,12 @@ export const mergeHooks = (...sets: Partial<Record<HookEvent, HookCallbackMatche
 // True only for a non-empty rulebook, so an absent or empty one wires no hook and costs nothing.
 const hasRules = <T extends object>(rules: T | undefined): rules is T => rules !== undefined && Object.keys(rules).length > 0;
 
-// Tools that converse with the user rather than act on the workspace; withheld from an unattended turn.
-const PLAN_TOOLS = ["EnterPlanMode", "ExitPlanMode"];
-
 // CLI scheduling tools are dead here (the process dies at turn end); automations and the watch tools replace them.
 const CLI_SCHEDULER_TOOLS = ["ScheduleWakeup", "CronCreate", "CronDelete", "CronList"];
 
-// Tools removed from the model: scheduler tools always, the caller's own list, plus plan tools on an unattended turn.
-const disallowedToolsOf = (request: HarnessRequest): string[] => [
-    ...CLI_SCHEDULER_TOOLS,
-    ...(request.policy.disallowedTools ?? []),
-    ...(request.policy.unattended === true ? PLAN_TOOLS : []),
-];
+// Tools removed from the model: scheduler tools always, and the caller's own list. Plan and question tools stay on an
+// unattended turn: their cards wait for the owner like every other.
+const disallowedToolsOf = (request: HarnessRequest): string[] => [...CLI_SCHEDULER_TOOLS, ...(request.policy.disallowedTools ?? [])];
 
 // The SDK writes every MCP server onto the CLI's argv as one inline JSON document. `/proc/<pid>/cmdline` is readable by
 // anything running as this user, the agent's own Bash tool included, so that argv is both a credential leak (bearer
@@ -289,26 +282,6 @@ const runtimeSpawn =
         child.once("error", config.dispose);
         return child;
     };
-
-// A project install is judged by where it writes (the turn's placement) and the owner's setting; an image install is
-// recorded for the ledger.
-const installSteeringOf = (request: HarnessRequest, push: (event: AgentEvent) => void): InstallSteering => ({
-    projectInstalls: {
-        placement: installPlacementOf(request.spec.isolation),
-        mode: request.policy.projectInstalls,
-        canInstall: request.policy.dependencyInstallAllowed === true,
-        conversationId: request.spec.conversationId,
-        grants: INSTALL_GRANTS,
-        cards: request.hooks.cards,
-        push,
-        signal: request.signal,
-        unattended: request.policy.unattended === true,
-        // Read per install, like the command gate: attendance can arrive after the turn starts.
-        steered: () => request.hooks.steered?.() === true,
-    },
-    cwd: request.spec.cwd,
-    ...opt("onImageInstall", request.hooks.onImageInstall),
-});
 
 // On a 401 the CLI asks this callback for a refreshed token and resumes on what comes back; the same token ends the
 // turn. Untyped in sdk.d.ts (present in sdk.mjs), hence the OauthRecoveryOptions extension.
@@ -395,10 +368,16 @@ const baseOptions = (
                 cards: request.hooks.cards,
                 taint,
                 cwd: request.spec.cwd,
+                // Whether that cwd is this conversation's own copy; without it `git switch` in a worktree reads as moving a
+                // checkout somebody else shares.
+                ...opt("ownCheckout", request.spec.ownCheckout),
                 judge: request.hooks.judge,
                 log: request.hooks.logSafety,
                 answered: request.hooks.safetyAnswered,
                 remember: request.hooks.rememberSafety,
+                // The same install rule and ledger every runtime's gate is built with (vendor-gate.ts).
+                installs: request.hooks.projectInstalls,
+                onImageInstall: request.hooks.onImageInstall,
             }),
             // Wraps content pulled in mid-turn (a fetched page, a foreign MCP result); sets the taint the gate reads.
             outsideResultHooks((source) => {
@@ -421,7 +400,7 @@ const baseOptions = (
                   : {},
             // Masks every stored credential to its reference in any tool result, not just Bash's.
             request.tools.secrets !== undefined ? redactionHooks(request.tools.secrets.list) : {},
-            installSteeringHooks(installSteeringOf(request, push)),
+            installSteeringHooks(),
             // Checks classified outbound calls against owner action rules before they run, even under
             // bypassPermissions.
             hasRules(request.policy.actionRules) ? outboundGuardHooks(request.policy.actionRules) : {},
@@ -637,17 +616,6 @@ const relativePath = (absolute: string | undefined, cwd: string): string | undef
     return rel === "" || rel.startsWith("..") ? absolute : rel.split(sep).join("/");
 };
 
-// Whether a card raised now would reach nobody: how the turn STARTED, corrected by whether a person has since steered
-// it. An unattended turn somebody is typing into has an audience, and a card is pushed to that same chat, so refusing
-// it refuses the one person who is demonstrably there (agent-steering.ts).
-const nobodyToAsk = (request: HarnessRequest): boolean => request.policy.unattended === true && request.hooks.steered?.() !== true;
-
-// Refuses rather than parks: nobody can answer, and a hung card would read as the agent freezing.
-const unanswerable = (toolName: string): PermissionResult => ({
-    behavior: "deny",
-    message: `${toolName} needs a person to answer, and this turn is running unattended. Proceed another way.`,
-});
-
 /* What an approval card would show: the turn's latest prose, else a plan file it wrote, with that file attached when it
  * says more than the prose does. Consumes the prose either way, so a retry reads the next one, not this one again. */
 const planRequest = (documents: TurnDocuments, prose: TurnProse): { text: string; document?: RequestDocument } | undefined => {
@@ -674,10 +642,8 @@ const permissionGate = (
     posture: TurnPosture,
 ): CanUseTool => {
     // The plan card: raised from the turn's latest prose, answered by the owner.
+    // Raised whoever started the turn: an unattended turn's plan waits for the owner's answer like any other card.
     const decidePlan = async (input: Record<string, unknown>): Promise<PermissionResult> => {
-        if (nobodyToAsk(request)) {
-            return unanswerable("ExitPlanMode");
-        }
         const card = planRequest(documents, prose);
         // A blank card approves nothing; keep plan mode and let the next prose, or a written plan file, retry.
         if (card === undefined) {
@@ -766,9 +732,6 @@ const permissionGate = (
         if (posture.mode !== "default") {
             return { behavior: "allow", updatedInput: input };
         }
-        if (nobodyToAsk(request)) {
-            return unanswerable(toolName);
-        }
         // Consumes an answer already given by a restored card, so the resumed turn's re-ask doesn't re-prompt.
         const granted = request.hooks.restoredGrant?.(toolName);
         if (granted !== undefined) {
@@ -817,7 +780,7 @@ export async function* runAgent(
     const posture: TurnPosture = { mode: permissionMode };
     const tmuxEnabled = tmuxRunEnabled();
     // Read after the SDK copy is pinned, since the intentic base is cut from that copy's own preset.
-    const systemPrompt = await sdkSystemPrompt(promptInputOf(request, terminalMounted(request, tmuxEnabled)), request.spec.cwd);
+    const systemPrompt = await sdkSystemPrompt(promptInputOf(request, terminalMounted(tmuxEnabled)), request.spec.cwd);
     // Shared handle for every agent this turn starts; no conversation means nothing to file children under.
     const subagents: SubagentTurn | undefined =
         request.spec.conversationId === undefined
@@ -843,18 +806,18 @@ export async function* runAgent(
         spawnClaudeCodeProcess: runtimeSpawn(request.spec.isolation?.anchor, request.spec.spawnDepth ?? 0, (data) => {
             stderr += data;
         }),
-        // Backs AskUserQuestion; withheld on an unattended turn, since nobody is there to answer.
+        // Backs AskUserQuestion, on every turn: a question an unattended turn asks waits for the owner's answer.
         mcpServers: {
             // External MCP capabilities first, so every daemon-owned server below wins a name collision: a capability
             // whose id is `ui`, `code` or a browser router can't replace the real one. The capability routes refuse
             // those ids (reserved-servers.ts), and this last-wins order is the structural backstop behind that refusal.
             ...mcpServersOf(request.tools.remote ?? []),
-            ...(request.policy.unattended === true ? {} : { ui: askServer(conversations, request, push, shell, documents) }),
+            ui: askServer(conversations, request, push, shell, documents),
             // Accounts tools get the same live stream and abort signal handles the ask tool does.
             ...(request.tools.accountsServer === undefined ? {} : { accounts: request.tools.accountsServer(push, request.signal) }),
             // Hands the terminal to the owner with the same handles plus `shell`, naming which tmux session commands
             // run in.
-            ...(!terminalMounted(request, tmuxEnabled)
+            ...(!terminalMounted(tmuxEnabled)
                 ? {}
                 : {
                       terminal: terminalHelpServer({

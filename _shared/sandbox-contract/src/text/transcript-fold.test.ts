@@ -408,6 +408,32 @@ describe("foldTurn", () => {
         });
     });
 
+    // An agent's own install, let through the command gate, says where it writes before its output arrives.
+    it("says where an agent's own install writes, naming its projects", () => {
+        expect(foldOf("go", [{ kind: "install", reach: "own-copy", projects: ["video"] }]).at(-1)).toEqual({
+            role: "notice",
+            text: "Installing packages in video/ into this conversation's own copy. The manifest and lockfile land with the work, and the review lists what it adds.",
+            noticeCode: { code: "installing", params: { ownCopy: true, projects: "video/" } },
+        });
+        expect(foldOf("go", [{ kind: "install", reach: "main-tree", projects: [""] }]).at(-1)).toEqual({
+            role: "notice",
+            text: "Installing packages in the workspace root in the main tree, one install at a time.",
+            noticeCode: { code: "installing", params: { ownCopy: false, root: true } },
+        });
+        // The workspace root is named first, and counts toward the three named.
+        expect(foldOf("go", [{ kind: "install", reach: "main-tree", projects: ["a", "", "b", "c", "d"] }]).at(-1)).toEqual({
+            role: "notice",
+            text: "Installing packages in the workspace root, a/, b/ and 2 more in the main tree, one install at a time.",
+            noticeCode: { code: "installing", params: { ownCopy: false, root: true, projects: "a/, b/", more: 2 } },
+        });
+        expect(foldOf("go", [{ kind: "install", reach: "main-tree", projects: ["a", "b", "c", "d", "e"] }]).at(-1)?.text).toBe(
+            "Installing packages in a/, b/, c/ and 2 more in the main tree, one install at a time.",
+        );
+        expect(foldOf("go", [{ kind: "install", reach: "own-copy", projects: [] }]).at(-1)?.text).toBe(
+            "Installing packages into this conversation's own copy. The manifest and lockfile land with the work, and the review lists what it adds.",
+        );
+    });
+
     // The reconciler starts a land's install within seconds, in the install lane; it never waits for turns to end, so
     // the notice must not say it does.
     it("says a land's dependency install is on its way, not waiting for other agents", () => {

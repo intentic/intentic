@@ -15,6 +15,16 @@
     {
       "type": "{ by?: string; capabilities?: string[]; folders?: string[]; shelves?: (\"files\" | \"shell\" | \"code\" | \"web\" | \"browser\" | \"delegate\" | \"sandbox\")[]; updatedAt: number }",
       "since": "v1.317.0"
+    },
+    {
+      "type": "{ by?: string; capabilities?: string[]; folders?: string[]; installs?: boolean; shelves?: (\"files\" | \"shell\" | \"code\" | \"web\" | \"browser\" | \"delegate\" | \"sandbox\")[]; updatedAt: number }",
+      "since": "unreleased"
+    }
+  ],
+  "auth:credential-releases.json": [
+    {
+      "type": "Record<string, { approvedBy: string; at: number }>",
+      "since": "unreleased"
     }
   ],
   "auth:extension-secrets.json": [

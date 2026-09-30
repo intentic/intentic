@@ -37,8 +37,8 @@ export type HarnessPlanDeps = HarnessCredentialDeps &
 // here to avoid a second, driftable copy.
 const SETTINGS_DEFAULTS = SandboxSettingsSchema.parse({});
 
-// Credential resolution, the settings read and the safety policy, run together rather than chained, so a turn later
-// refused for its credential doesn't also pay for an unused settings read first.
+// Credential resolution and the settings read, run together rather than chained, so a turn later refused for its
+// credential doesn't also pay for an unused settings read first. The safety policy is planTurn's (turn-safety.ts).
 const harnessReads = (deps: HarnessPlanDeps, input: RoutedAgentTurn, context: TurnContext) =>
     Promise.all([
         deps.perf.track("turn.plan.credentials", { provider: input.agent }, () =>
@@ -49,9 +49,6 @@ const harnessReads = (deps: HarnessPlanDeps, input: RoutedAgentTurn, context: Tu
         context.settings === undefined
             ? deps.perf.track("turn.plan.settings", {}, () => deps.sandboxSettings.get())
             : Promise.resolve(context.settings),
-        // Read once here and carried on the request, so a turn is judged against one snapshot rather than three versions of
-        // a policy someone is mid-edit on.
-        deps.safetyPolicy.text(),
     ]);
 
 // The last planning I/O, run together rather than chained: the plugin dirs the Skills list also derives from, and the
@@ -117,12 +114,7 @@ const delegationCaps = (settings: SandboxSettings): Pick<TurnPolicy, "subagentsA
     ...(settings.subagentDepth !== SETTINGS_DEFAULTS.subagentDepth ? { subagentDepth: settings.subagentDepth } : {}),
 });
 
-const harnessPolicy = (
-    base: TurnPolicy,
-    input: RoutedAgentTurn,
-    settings: SandboxSettings,
-    safetyPolicy: string,
-): TurnPolicy => ({
+const harnessPolicy = (base: TurnPolicy, settings: SandboxSettings): TurnPolicy => ({
     ...base,
     // hashlineEdits owns file mutation via its own MCP server, so native Edit/Write are dropped (Read stays, for viewing
     // images/PDFs).
@@ -130,22 +122,13 @@ const harnessPolicy = (
     ...delegationCaps(settings),
     // The sniffer's rulebook, forwarded only when the owner wrote a rule, the same no-hook economy as above.
     ...(Object.keys(settings.actionRules).length > 0 ? { actionRules: settings.actionRules } : {}),
-    // Wired unconditionally, unlike the sniffer's rulebook: triage and the hard rule are facts about the command.
-    safetyPolicy,
-    judging: settings.commandJudge,
-    // Read by the install hook: whether an agent's own project install runs, asks first, or is refused.
-    projectInstalls: settings.projectInstalls,
-    // Whether outside content caused this turn, the same distinction the admission floor draws, read for the taint.
-    ...opt("outsideWake", input.outsideWake),
 });
 
-// The Bash pipeline's filters and heavy table: the output-cleaner spec (empty lets the filter's own default apply), the
-// holdout fraction, and the heavy-command table, always: a heavy program keeps its class where nothing queues it
-// (agent-terminals.ts asks whether bin/queue-run is there).
-const shellTools = (deps: HarnessPlanDeps, settings: SandboxSettings): Pick<TurnTools, "outputCleaners" | "outputHoldout" | "heavyCommands" | "offloadCommands"> => ({
+// The Bash pipeline's filters: the output-cleaner spec (empty lets the filter's own default apply), the holdout fraction,
+// and where heavy work may go instead. The heavy-command table itself rides every runtime's base (turn-safety.ts).
+const shellTools = (deps: HarnessPlanDeps, settings: SandboxSettings): Pick<TurnTools, "outputCleaners" | "outputHoldout" | "offloadCommands"> => ({
     ...(settings.outputCleaners !== "" ? { outputCleaners: settings.outputCleaners } : {}),
     ...(settings.outputHoldout > 0 ? { outputHoldout: settings.outputHoldout } : {}),
-    heavyCommands: () => deps.heavyCommands.read(),
     // Read per command like the rules, so sending a kind of work elsewhere binds on the next line.
     ...(offloadRunEnabled() ? { offloadCommands: async () => (await deps.sandboxSettings.get()).offload.commands } : {}),
 });
@@ -158,7 +141,7 @@ export const planHarnessTurn = async (
     context: TurnContext,
     granted: readonly Capability[],
 ): Promise<TurnArmPlan> => {
-    const [resolved, settings, safetyPolicy] = await harnessReads(deps, input, context);
+    const [resolved, settings] = await harnessReads(deps, input, context);
     if (!resolved.ok) {
         return { ok: false, ...opt("code", resolved.code), message: resolved.message, ...opt("account", resolved.account) };
     }
@@ -196,7 +179,7 @@ export const planHarnessTurn = async (
     const gated = await deps.perf.track("turn.plan.hooks", {}, () =>
         withSettingsHookGate(deps.config.historyRoot, input.conversationId, {
             spec: harnessSpec(deps, input, context, resolved.credentials),
-            policy: harnessPolicy(context.base.policy, input, settings, safetyPolicy),
+            policy: harnessPolicy(context.base.policy, settings),
         }),
     );
     return armPlan(
@@ -207,13 +190,7 @@ export const planHarnessTurn = async (
             tools,
             credential: harnessCredentialOf(resolved.credentials),
             hooks: {
-                ...harnessHooks(
-                    deps,
-                    input,
-                    context,
-                    standing(settings.rules, "file.edited"),
-                    { settings, policy: safetyPolicy },
-                ),
+                ...harnessHooks(deps, context, standing(settings.rules, "file.edited")),
                 // A `run_in_background` job outlives this turn, so its completion is delivered to a conversation rather
                 // than to the process that started it; the same profile the watch takes, for the same reason.
                 ...(input.conversationId === undefined

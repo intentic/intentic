@@ -118,6 +118,15 @@ export interface HeavyEnvOptions {
     readonly offload?: Readonly<Record<string, string>>;
 }
 
+// What a heavy program is judged by as it starts, one spec for the shell-line prefix and the process environment alike.
+const heavySpec = (config: HeavyCommands, options: HeavyEnvOptions) => ({
+    rules: config,
+    queue: config.queue && options.queueRun !== undefined,
+    ...(options.queueRun === undefined ? {} : { queueRun: options.queueRun }),
+    ...(options.offloadRun === undefined || options.offload === undefined ? {} : { offloadRun: options.offloadRun, offload: options.offload }),
+    klass: priorityOf({ class: "toolchain" }),
+});
+
 /**
  * The environment, as an `env NAME=value … ` prefix for a shell command (so it may follow exec-ing wrappers like nice or
  * nsenter), under which every program the line starts is judged as it starts: node programs through the hook in
@@ -125,14 +134,22 @@ export interface HeavyEnvOptions {
  * a runner as the table says.
  */
 export const heavyEnvPrefix = (config: HeavyCommands, options: HeavyEnvOptions): string => {
-    const toolchain = priorityOf({ class: "toolchain" });
-    const spec = {
-        rules: config,
-        queue: config.queue && options.queueRun !== undefined,
-        ...(options.queueRun === undefined ? {} : { queueRun: options.queueRun }),
-        ...(options.offloadRun === undefined || options.offload === undefined ? {} : { offloadRun: options.offloadRun, offload: options.offload }),
-        klass: toolchain,
-    };
     const shims = existsSync(HEAVY_SHIMS_DIR) ? `PATH=${HEAVY_SHIMS_DIR}:"$PATH" INTENTIC_HEAVY_EXEC=${shellQuote(HEAVY_EXEC)} ` : "";
-    return `env INTENTIC_HEAVY=${shellQuote(JSON.stringify(spec))} NODE_OPTIONS="--require ${HEAVY_HOOK} \${NODE_OPTIONS:-}" ${shims}`;
+    return `env INTENTIC_HEAVY=${shellQuote(JSON.stringify(heavySpec(config, options)))} NODE_OPTIONS="--require ${HEAVY_HOOK} \${NODE_OPTIONS:-}" ${shims}`;
+};
+
+/**
+ * The same environment as variables, for a runtime whose shell the daemon never writes a line for (Codex's app-server,
+ * Cursor's session): set once for the turn, it judges every program that shell starts exactly as a Claude Code turn's
+ * line does, so an install takes the one install lane whichever runtime ran it. `inherited` is the environment the
+ * variables extend; its PATH and NODE_OPTIONS are kept behind the wrappers.
+ */
+export const heavyEnvVariables = (config: HeavyCommands, options: HeavyEnvOptions, inherited: Readonly<Record<string, string | undefined>>): Record<string, string> => {
+    const nodeOptions = inherited["NODE_OPTIONS"];
+    const path = inherited["PATH"];
+    return {
+        INTENTIC_HEAVY: JSON.stringify(heavySpec(config, options)),
+        NODE_OPTIONS: nodeOptions === undefined || nodeOptions === "" ? `--require ${HEAVY_HOOK}` : `--require ${HEAVY_HOOK} ${nodeOptions}`,
+        ...(existsSync(HEAVY_SHIMS_DIR) ? { PATH: path === undefined || path === "" ? HEAVY_SHIMS_DIR : `${HEAVY_SHIMS_DIR}:${path}`, INTENTIC_HEAVY_EXEC: HEAVY_EXEC } : {}),
+    };
 };

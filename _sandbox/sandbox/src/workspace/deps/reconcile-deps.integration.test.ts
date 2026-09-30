@@ -402,3 +402,28 @@ test("the daemon's own install runs as the line its lane gives it", async () => 
     await settle(() => started.length > 0);
     expect(commands).toEqual(["queued-in-lane pnpm install"]);
 });
+
+test("a root-repo land is credited with a folder of its own, and not with a nested repo inside it", async () => {
+    const root = await workspace();
+    await drifted(root, "video", "remotion");
+    await drifted(root, "nested", "vue");
+    // A nested repo's checkout: its own `.git`, which is what makes it a repository apart from the root.
+    await mkdir(join(root, "nested", ".git"), { recursive: true });
+    const deps = coordinator(root, []);
+    const origins: Array<{ dir: string; kind: string }> = [];
+    deps.subscribe(({ dir, origin }) => origins.push({ dir, kind: origin.kind }));
+
+    const outcome = await deps.reconcileLand({
+        kind: "land",
+        agentId: "agent-1",
+        branch: "agent/agent-1",
+        repos: [{ repo: "root", from: "abc", dir: join(root, "no-such-checkout") }],
+    });
+    await settle(() => origins.length === 2);
+
+    expect(outcome?.missing).toBe(1);
+    expect(origins.toSorted((a, b) => a.dir.localeCompare(b.dir))).toEqual([
+        { dir: "nested", kind: "external" },
+        { dir: "video", kind: "land" },
+    ]);
+});

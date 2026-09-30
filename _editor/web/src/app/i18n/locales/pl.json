@@ -1532,7 +1532,13 @@
             "contextTrim": "Wysłano w wersji odchudzonej, bo okno tego modelu ma {window}.",
             "contextTrimOmitted": "Wysłano w wersji odchudzonej, bo okno tego modelu ma {window}. Pominięto: {omitted}.",
             "contextTrimBase": "Podstawowe instrukcje samego agenta też zastąpiono krótkim akapitem.",
-            "contextTrimKept": "Reguły Twojej przestrzeni roboczej, persona tej tury i miejsce jej plików i tak zostały wysłane."
+            "contextTrimKept": "Reguły Twojej przestrzeni roboczej, persona tej tury i miejsce jej plików i tak zostały wysłane.",
+            "installingOwn": "Trwa instalacja pakietów we własnej kopii tej rozmowy. Manifest i plik blokady trafią razem z pracą, a przegląd pokaże, co dodają.",
+            "installingOwnIn": "Trwa instalacja pakietów w {where} we własnej kopii tej rozmowy. Manifest i plik blokady trafią razem z pracą, a przegląd pokaże, co dodają.",
+            "installingMain": "Trwa instalacja pakietów w głównym drzewie, po jednej instalacji naraz.",
+            "installingMainIn": "Trwa instalacja pakietów w {where} w głównym drzewie, po jednej instalacji naraz.",
+            "installRoot": "katalogu głównym przestrzeni roboczej",
+            "installMore": "{named} i jeszcze {more}"
         },
         "chatJobRow": {
             "ended": "Zakończone po {elapsed}",

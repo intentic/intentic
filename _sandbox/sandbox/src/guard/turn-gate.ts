@@ -3,7 +3,7 @@ import { type CommandGuard, type CommandGuardOptions, createCommandGuard } from 
 import { clearTurnTaint, createTurnTaint, publishTurnTaint, type TurnTaint } from "./turn-taint.js";
 
 // One place every vendor runtime mints a gate and publishes a taint bit, instead of copying it into Codex, OpenCode,
-// ACP and Pi. Claude Code builds its own, since only its PostToolUse hook can mark taint mid-turn. Publishing matters
+// ACP and Pi. The gate itself is the one Claude Code's hook builds too, install rule included (command-guard.ts). Claude Code builds its own, since only its PostToolUse hook can mark taint mid-turn. Publishing matters
 // even where nothing marks: the wallet reads `conversationTainted` from outside the turn generator.
 
 export interface TurnGateInput {
@@ -17,8 +17,13 @@ export interface TurnGateInput {
     readonly log?: CommandGuardOptions["log"];
     readonly answered?: CommandGuardOptions["answered"];
     readonly remember?: CommandGuardOptions["remember"];
-    // Nobody is at a composer, so an ask refuses instead of parking on a card.
+    // Nobody is at a composer; told to the judge, while a card still waits for the owner.
     readonly unattended?: boolean;
+    // Whether a person has since steered this turn, read per command: somebody typing into it can be asked after all.
+    readonly steered?: () => boolean;
+    // The turn's project-install rule and image-install ledger, the same ones Claude Code's gate is built with.
+    readonly installs?: CommandGuardOptions["installs"];
+    readonly onImageInstall?: CommandGuardOptions["onImageInstall"];
     // What caused this wake when the owner didn't write it (a listener, a webchat visitor); taint's birth half.
     readonly outsideWake?: string;
     // Which conversation to publish the bit under; absent means nothing is published (a bench turn, a one-shot).
@@ -65,6 +70,7 @@ export const createTurnGate = (turn: TurnGateInput): TurnGate => {
             policy: turn.safetyPolicy ?? DEFAULT_SAFETY_POLICY,
             judging: turn.judging ?? "on",
             unattended: turn.unattended === true,
+            steered: turn.steered,
             ...(canParkFor(turn.rulebook) ? {} : { canPark: false }),
             ...(turn.cwd === undefined ? {} : { cwd: turn.cwd }),
             ...(turn.ownCheckout === true ? { ownCheckout: true } : {}),
@@ -75,6 +81,8 @@ export const createTurnGate = (turn: TurnGateInput): TurnGate => {
             log: turn.log,
             answered: turn.answered,
             remember: turn.remember,
+            installs: turn.installs,
+            onImageInstall: turn.onImageInstall,
         }),
         release: () => {
             if (turn.conversationId !== undefined) {

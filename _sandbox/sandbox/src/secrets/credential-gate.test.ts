@@ -66,7 +66,6 @@ const asked = (over: Partial<CredentialCheck> = {}): CredentialCheck => ({
     lane: "shell",
     detail: "psql $DATABASE_URL -c 'select 1'",
     conversationId: "conv-1",
-    unattended: false,
     signal: new AbortController().signal,
     ...over,
 });
@@ -178,15 +177,6 @@ it("tells a decline apart from a deadline, and receipts only the decline", async
     expect(verdict).toEqual({ allow: false, reason: expect.stringContaining("went unanswered and expired") });
     expect((verdict as { reason: string }).reason).toContain("bob@corp.com");
     expect(expired.frames.some((frame) => frame.kind === "credential_receipt")).toBe(false);
-});
-
-it("refuses an unattended turn without raising a card, and names who could have released it", async () => {
-    const { deps, frames } = fake([policy()]);
-    const verdict = await createCredentialGate(deps).check(asked({ unattended: true }));
-    expect(verdict).toEqual({ allow: false, reason: expect.stringContaining("unattended") });
-    expect((verdict as { reason: string }).reason).toContain("bob@corp.com");
-    expect((verdict as { reason: string }).reason).toContain("Do not retry");
-    expect(frames).toEqual([]);
 });
 
 it("refuses when there is no live conversation to raise the card in", async () => {

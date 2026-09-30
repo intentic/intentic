@@ -61,7 +61,7 @@ const guidanceOf = ({ capabilities, request }: DisclosureInput, leading: string,
         ? ""
         : [
               ...(capabilities.runtime === "claude-code"
-                  ? harnessGuidance({ ...promptInputOf(request, terminalMounted(request, tmuxRunEnabled())), append: undefined })
+                  ? harnessGuidance({ ...promptInputOf(request, terminalMounted(tmuxRunEnabled())), append: undefined })
                   : []),
               ...(leading === "" ? [] : [leading]),
           ].join("\n\n");

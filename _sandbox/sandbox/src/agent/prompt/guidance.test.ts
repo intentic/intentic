@@ -96,9 +96,14 @@ test("either form names a mounted mechanism only on the turns that mounted it", 
     }
 });
 
-test("an unattended turn is not told about cards nobody can click, in either form", () => {
+// Its cards wait for the owner rather than being refused, so an unattended turn keeps the ask guidance and is told that
+// nobody is watching right now.
+test("an unattended turn is told its cards wait for the owner, in either form, and keeps the ask guidance", () => {
     for (const variant of ["full", "lean"] as const) {
-        expect(guidanceBlock(variant, { ...NOTHING_MOUNTED, unattended: true })).not.toContain("AskUserQuestion");
+        const unwatched = guidanceBlock(variant, { ...NOTHING_MOUNTED, unattended: true });
+        expect(unwatched).toContain("AskUserQuestion");
+        expect(unwatched).toContain("Nobody is watching this turn right now");
+        expect(guidanceBlock(variant, NOTHING_MOUNTED)).not.toContain("Nobody is watching this turn right now");
     }
 });
 

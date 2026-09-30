@@ -256,6 +256,12 @@ export const ConversationGrantSchema = z.object({
     capabilities: z.array(z.string()).default([]).describe("Connected capabilities it may use although its persona leaves them out."),
     folders: z.array(z.string()).default([]).describe("Workspace folders its file tools may touch beyond its fence."),
     shelves: z.array(GrantShelfSchema).default([]).describe("Shelves of tools opened for it."),
+    // Answered on an install card's "Allow installs for this conversation", read live by the command gate, so it holds
+    // from the install that asked onward, this turn included, and across restarts.
+    installs: z
+        .boolean()
+        .default(false)
+        .describe("Whether its own dependency installs run without asking, where the owner's setting would otherwise ask first."),
     updatedAt: z.number().describe("When it last changed, in milliseconds."),
     by: z.string().optional().describe("Who last allowed something here."),
 });
@@ -270,11 +276,12 @@ export const StandingGrantsSchema = z.object({
             capabilities: z.array(z.string()).describe("Connected capabilities allowed although its persona leaves them out."),
             folders: z.array(z.string()).describe("Workspace folders its file tools may touch beyond its fence."),
             shelves: z.array(GrantShelfSchema).describe("Shelves of tools opened for it."),
+            installs: z.boolean().default(false).describe("Whether its own dependency installs run without asking."),
             by: z.string().optional().describe("Who last allowed one of those."),
             updatedAt: z.number().optional().describe("When one of those last changed, in milliseconds."),
             releases: z
                 .array(z.object({ subject: z.string(), approvedBy: z.string(), at: z.number() }))
-                .describe("Gated credentials released to it, until the daemon restarts or somebody takes one back."),
+                .describe("Gated credentials released to it, until somebody takes one back."),
         }),
     ),
 });
@@ -282,8 +289,10 @@ export type StandingGrants = z.infer<typeof StandingGrantsSchema>;
 
 export const GrantRevokeSchema = z.object({
     conversationId: z.string(),
-    kind: z.enum(["capability", "folder", "shelf", "release"]).describe("Which kind of yes: a grant past the persona or area, or a credential's release."),
-    what: z.string().describe("The capability id, folder, shelf or released credential it named."),
+    kind: z
+        .enum(["capability", "folder", "shelf", "release", "install"])
+        .describe("Which kind of yes: a grant past the persona or area, a credential's release, or letting its installs run unasked."),
+    what: z.string().describe("The capability id, folder, shelf or released credential it named; empty for installs."),
 });
 export type GrantRevoke = z.infer<typeof GrantRevokeSchema>;
 
