@@ -186,6 +186,7 @@ export const strayStandings = async (
         (await worktrees.elsewhere(id, repos)).map(async ({ repo, branch }) => {
             const worktree = worktrees.worktreeDir(id, repo);
             const [head, marker, status] = await Promise.all([
+                // allow(silent-catch): a worktree with no readable HEAD has nothing carried, which is what undefined reports.
                 headSha(worktree, git).catch(() => undefined),
                 shaOrUndefined(worktrees.mainDir(repo), carriedRef(id), git),
                 git(worktree, ["status", "--porcelain", "--untracked-files=no"]).catch(() => ({ stdout: "" })),

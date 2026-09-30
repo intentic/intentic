@@ -37,9 +37,6 @@ import ApprovalRail, { type ApprovalScope } from "./ApprovalRail.vue";
 import { approvalsAttention } from "./extension";
 import HookSetBody from "./HookSetBody.vue";
 import { host } from "./host";
-
-// Where an empty queue points: what agents ask while they work is answered from Needs you.
-const needsLink = appLink(host().href(`/needs`), () => host().navigate(`/needs`));
 import PostBody from "./PostBody.vue";
 import { countdownWords, limitOf, postsATitle } from "./postText";
 import PostEditor from "./PostEditor.vue";
@@ -50,6 +47,9 @@ import { useHookRequests, waitingHooksOf } from "./useHookRequests";
 import { usePlatformCatalog } from "./usePlatformCatalog";
 import { usePostEdit } from "./usePostEdit";
 import { t } from "./i18n.js";
+
+// Where an empty queue points: what agents ask while they work is answered from Needs you.
+const needsLink = appLink(host().href(`/needs`), () => host().navigate(`/needs`));
 
 // The approval inbox: the agent proposes a post or an action, and only the owner's click makes it real. Approving isn't
 // instant: it starts a one-minute hold with a live countdown and a way to call it back. Sections are ordered by what's

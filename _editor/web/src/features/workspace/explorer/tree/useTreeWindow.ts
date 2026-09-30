@@ -1,6 +1,6 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, type Ref, ref } from "vue";
-import { variableRows } from "../../../../lib/rowWindow";
-import { useRowWindow } from "../../../../lib/useRowWindow";
+import { variableRows } from "../../../../lib/windowing/rowWindow";
+import { useRowWindow } from "../../../../lib/windowing/useRowWindow";
 import type { InlineEdit } from "./inlineEdit";
 import type { MoreRow, Row } from "./treeRows";
 
