@@ -220,22 +220,22 @@
 .chat-mark-bar {
     padding-block: 0.125rem;
 }
-/* Thinking and a collapsed run stand in the lane as icons, not plates — no chip chrome at rest. */
-.chat-turn-asides .chat-mark-lane .ui-chip {
+/* Marks in the lane stand as icons and counts, not plates — no chip chrome at rest. */
+.chat-mark-bar .ui-chip {
     border-color: transparent;
     background: transparent;
 }
-.chat-turn-asides .chat-mark-lane .ui-chip:hover:not(:disabled) {
+.chat-mark-bar .ui-chip:hover:not(:disabled) {
     background: transparent;
     color: var(--color-content);
 }
-.chat-turn-asides .chat-mark-lane .ui-chip-on,
-.chat-turn-asides .chat-mark-lane .ui-chip-on:hover:not(:disabled) {
+.chat-mark-bar .ui-chip-on,
+.chat-mark-bar .ui-chip-on:hover:not(:disabled) {
     background: transparent;
     border-color: transparent;
     color: var(--color-link);
 }
-.chat-turn-asides .chat-mark-lane .ui-chip.border-danger\/40 {
+.chat-mark-bar .ui-chip.border-danger\/40 {
     border-color: transparent;
 }
 /* A ROW PAINT-CLIPS AT ITS OWN EDGE (content-visibility), and a mark standing on that edge draws a focus ring outside
@@ -301,11 +301,9 @@
 .chat-message:has(.chat-mark-open) {
     content-visibility: visible;
 }
-/* Stuck in the column the marks float over their own text and need the turn's fill behind them; out in the lane that
-   fill is what is already there. */
+/* Stuck in the column the marks float over their own text; out in the lane that fill is what is already there. */
 .chat-mark-open .chat-mark-lane {
     border-radius: 9999px;
-    background-color: var(--color-card);
 }
 /* HOW WHAT A MARK STANDS FOR ARRIVES (the Transition in ChatAsideLane): at its full height at once, its words fading in
    as they settle the last few pixels down, and gone at once when shut. Folding the height (grid rows 0fr to 1fr) laid
