@@ -16,7 +16,9 @@ use std::sync::{LazyLock, Mutex};
 use std::time::Duration;
 
 use tauri::{AppHandle, Manager};
-use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
+use tauri_plugin_dialog::{
+    DialogExt, MessageDialogButtons, MessageDialogKind, MessageDialogResult,
+};
 
 use crate::scripts::AgentSilence;
 use crate::setup_link::{LocalVerb, SetupArgs, SyncArgs};
@@ -360,24 +362,79 @@ pub fn start(app: &AppHandle, root: PathBuf) {
     };
     let handle = app.clone();
     let name = folder_name(&root);
-    app.dialog()
+    let dialog = app
+        .dialog()
         .message(copy_first(&root, &caution_text))
         .title(format!("Work on {name} with an agent?"))
-        .kind(MessageDialogKind::Info)
-        .buttons(MessageDialogButtons::OkCancelCustom(
-            "Create sandbox".into(),
-            "Cancel".into(),
-        ))
-        .show(move |confirmed| {
-            if !confirmed {
-                return;
-            }
-            *handle.state::<AppState>().pending_project.lock().unwrap() = Some(root);
-            crate::windows::show_workspace_at(
-                &handle,
-                Some(&format!("/setup?project={}", urlencode(&name))),
-            );
-        });
+        .kind(MessageDialogKind::Info);
+    // With this computer's engine up, the sandbox runs here unless the owner picks one of intentic's machines in the
+    // same question. Without one, the setup page decides, as it always has: a machine of ours where one can be started.
+    if crate::scripts::engine_listening() {
+        dialog
+            .buttons(MessageDialogButtons::YesNoCancelCustom(
+                HERE_LABEL.into(),
+                HOSTED_LABEL.into(),
+                "Cancel".into(),
+            ))
+            .show_with_result(move |result| {
+                if let Some(placement) = placement_of(&result) {
+                    park_and_open(&handle, root, &name, Some(placement));
+                }
+            });
+    } else {
+        dialog
+            .buttons(MessageDialogButtons::OkCancelCustom(
+                "Create sandbox".into(),
+                "Cancel".into(),
+            ))
+            .show(move |confirmed| {
+                if confirmed {
+                    park_and_open(&handle, root, &name, None);
+                }
+            });
+    }
+}
+
+/// Where a folder's sandbox runs, as its question answered: on this computer, or on one of intentic's machines.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Placement {
+    Here,
+    Hosted,
+}
+
+/// The answer that makes the sandbox on this computer, the first and default one.
+const HERE_LABEL: &str = "Create sandbox here";
+/// The answer that asks intentic for a machine instead.
+const HOSTED_LABEL: &str = "Use an intentic machine";
+
+/// The placement a pressed button chose, or none for Cancel. A custom button answers with its own label; a dialog
+/// that answers yes or no instead is read by position, the same order the buttons were given in.
+fn placement_of(result: &MessageDialogResult) -> Option<Placement> {
+    match result {
+        MessageDialogResult::Custom(label) if label == HERE_LABEL => Some(Placement::Here),
+        MessageDialogResult::Custom(label) if label == HOSTED_LABEL => Some(Placement::Hosted),
+        MessageDialogResult::Yes => Some(Placement::Here),
+        MessageDialogResult::No => Some(Placement::Hosted),
+        _ => None,
+    }
+}
+
+/// The setup page a folder's answer opens: the project's name, and where it runs when the question asked. The page
+/// takes `machine` as the reader's own pick (setupArrival.ts `requestedMachine`), so `mine` installs here at once and
+/// `hosted` starts one of intentic's machines; none leaves the choice to the page.
+fn setup_path(name: &str, placement: Option<Placement>) -> String {
+    let machine = match placement {
+        Some(Placement::Here) => "&machine=mine",
+        Some(Placement::Hosted) => "&machine=hosted",
+        None => "",
+    };
+    format!("/setup?project={}{machine}", urlencode(name))
+}
+
+/// Parks the folder for the setup that follows (`bind` takes it), and opens that setup.
+fn park_and_open(app: &AppHandle, root: PathBuf, name: &str, placement: Option<Placement>) {
+    *app.state::<AppState>().pending_project.lock().unwrap() = Some(root);
+    crate::windows::show_workspace_at(app, Some(&setup_path(name, placement)));
 }
 
 /// A setup link for a project, bound to the folder this app parked for it: the one place a project's folder
@@ -860,6 +917,45 @@ mod tests {
         let taken = [PathBuf::from("/var/home/me/code/app")];
         assert!(refusal(Path::new("/var/home/me/code/app/web"), None, &taken).is_some());
         assert!(refusal(Path::new("/var/home/me/code"), None, &taken).is_some());
+    }
+
+    /// The owner's answer is where the sandbox runs, and Cancel makes nothing.
+    #[test]
+    fn the_answer_says_where_the_sandbox_runs_and_cancel_makes_nothing() {
+        assert_eq!(
+            placement_of(&MessageDialogResult::Custom(HERE_LABEL.into())),
+            Some(Placement::Here)
+        );
+        assert_eq!(
+            placement_of(&MessageDialogResult::Custom(HOSTED_LABEL.into())),
+            Some(Placement::Hosted)
+        );
+        assert_eq!(
+            placement_of(&MessageDialogResult::Yes),
+            Some(Placement::Here)
+        );
+        assert_eq!(
+            placement_of(&MessageDialogResult::No),
+            Some(Placement::Hosted)
+        );
+        assert_eq!(
+            placement_of(&MessageDialogResult::Custom("Cancel".into())),
+            None
+        );
+        assert_eq!(placement_of(&MessageDialogResult::Cancel), None);
+    }
+
+    #[test]
+    fn the_setup_page_is_told_where_the_owner_chose_and_left_to_decide_otherwise() {
+        assert_eq!(
+            setup_path("my app", Some(Placement::Here)),
+            "/setup?project=my+app&machine=mine"
+        );
+        assert_eq!(
+            setup_path("my-app", Some(Placement::Hosted)),
+            "/setup?project=my-app&machine=hosted"
+        );
+        assert_eq!(setup_path("my-app", None), "/setup?project=my-app");
     }
 
     /// The question says what copy-first is, in the order it happens: a copy, kept up to date from here, changed by

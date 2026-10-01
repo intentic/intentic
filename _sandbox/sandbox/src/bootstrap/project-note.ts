@@ -12,17 +12,20 @@ import { mergeFenced } from "../migrations/merge.js";
 
 export const PROJECT_NOTE_FENCE = "intentic:project";
 
-// `folder` is the path agents reach it by: `/work/<name>` in the container.
+// `folder` is the path agents reach it by: `/work/<name>` in the container. Copy-first is the default (the machine agent's
+// README, "Copy-first projects"), and which way a folder syncs is the owner's switch on their computer, which this
+// daemon does not see: so the note says what copy-first does, and keeps the warning two-way would need.
 export const projectNote = (folder: string): string =>
     [
         "## The owner's project folder",
         "",
-        `\`${folder}\` is the owner's own folder, synced live with their computer: an edit made there is on their disk at ` +
-            "once, and theirs arrive here the same way. So does a deletion: clearing it out (`rm -rf` of what it holds, " +
-            "`git clean`, `git stash -u`, `git reset --hard`) clears their copy, and nothing on the way stops it, so never do " +
-            "that unless they ask. Its git history stays on their computer. The sandbox tracks the " +
-            "folder in a repository of its own, so their commits and branches are not here, and nothing committed here " +
-            "reaches theirs. Work inside it, not at the workspace root, unless they ask otherwise.",
+        `\`${folder}\` is a copy of the owner's own folder on their computer. Their edits arrive here as they make them; ` +
+            "what you change here stays in the sandbox until they bring it back, after a restore point, and a file you " +
+            "delete is put back from their copy. If they have switched this folder to two-way sync, an edit made here is on " +
+            "their disk at once and so is a deletion: clearing it out (`rm -rf` of what it holds, `git clean`, `git stash -u`, " +
+            "`git reset --hard`) would clear their copy, so never do that unless they ask. Its git history stays on their " +
+            "computer. The sandbox tracks the folder in a repository of its own, so their commits and branches are not here, " +
+            "and nothing committed here reaches theirs. Work inside it, not at the workspace root, unless they ask otherwise.",
     ].join("\n");
 
 // True when it wrote. A boot that finds the note current leaves the file alone, so it never reads as a change in the

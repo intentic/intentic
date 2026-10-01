@@ -11,7 +11,7 @@ import {
 } from "@intentic/sandbox-contract";
 import { stubGlobal } from "@intentic/testing/bun";
 import { agentLine, buildSkewLine, conflictLines, linkLine, pairingLine, statusSummary } from "../../status.js";
-import { enrollKey, placementChange, placementOf, projectAskedWithoutFlag, selectPairings, syncSwitchPlan } from "../commands.js";
+import { enrollKey, placementChange, placementOf, projectAskedWithoutFlag, selectPairings, setupOutcome, syncSwitchPlan, transportFor } from "../commands.js";
 import type { Pairing, SyncState } from "../config.js";
 import { syncSessionNames } from "../mutagen.js";
 
@@ -183,6 +183,48 @@ describe("placementOf", () => {
         expect(() => placementOf({ remoteDir: "/work/my-app", project: false })).toThrow(
             "--remote-dir /work/my-app is a project folder, so pass --project",
         );
+    });
+});
+
+// How a new pairing reaches its sandbox: through Docker only for a project folder whose sandbox runs on this machine's
+// own engine, ssh for everything else, and an explicit ask that cannot be met refused before the token is spent.
+describe("transportFor", () => {
+    const url = "https://sandbox-0123456789ab.sbx.example.dev";
+    const here = async (): Promise<string | undefined> => "intentic-sandbox-sandbox-0123456789ab";
+    const elsewhere = async (): Promise<string | undefined> => undefined;
+    const project = { project: true as const };
+
+    it("reaches a project on this machine's engine through Docker, naming its container", async () => {
+        expect(await transportFor("auto", project, url, here)).toEqual({ transport: "docker", container: "intentic-sandbox-sandbox-0123456789ab" });
+        expect(await transportFor("docker", project, url, here)).toEqual({ transport: "docker", container: "intentic-sandbox-sandbox-0123456789ab" });
+    });
+
+    // Stored as nothing, the shape every pairing made before Docker pairings has.
+    it("keeps ssh for a sandbox elsewhere, for a workspace pairing, and whenever ssh is asked for", async () => {
+        expect(await transportFor("auto", project, url, elsewhere)).toEqual({});
+        expect(await transportFor("auto", {}, url, here)).toEqual({});
+        expect(await transportFor("ssh", project, url, here)).toEqual({});
+    });
+
+    it("refuses Docker asked for where it cannot work", async () => {
+        await expect(transportFor("docker", project, url, elsewhere)).rejects.toThrow(
+            `--transport docker needs this sandbox's container running on this machine's Docker engine, and none here serves ${url}.`,
+        );
+        await expect(transportFor("docker", {}, url, here)).rejects.toThrow("--transport docker is for a project folder (--project)");
+    });
+});
+
+// What setup says it did must be what the folder now is: a copy-first project is a copy, not the same files.
+describe("setupOutcome", () => {
+    it("tells a copy-first project that agents' changes come back only when brought back", () => {
+        expect(setupOutcome({ project: true, remoteDir: "/work/my-app" })).toBe(
+            "That folder is copied into your sandbox's /work/my-app, and your edits keep flowing in. What agents change there reaches this folder only when you bring it back (`intentic-machine sync bring-back`), after a restore point.",
+        );
+    });
+
+    it("keeps 'the same files' for a two-way pairing", () => {
+        expect(setupOutcome({})).toBe("That folder and your sandbox's /work are now the same files.");
+        expect(setupOutcome({ project: true, remoteDir: "/work/my-app", direction: "both" })).toBe("That folder and your sandbox's /work/my-app are now the same files.");
     });
 });
 

@@ -7,7 +7,8 @@ import { readResidentPid } from "../resident.js";
 import { isProjectPairing, type Pairing, pairingRemoteDir, type ProjectDirection, readState, setProjectDirection } from "./config.js";
 import { canonicalFolder, foldersOverlap, sameFolder } from "./folders.js";
 import { ensureMutagen, sessionName } from "./mutagen.js";
-import { mutagenSession, realProjectRunner, sandboxCopy } from "./project-remote.js";
+import { pairingEndpoint } from "./endpoint.js";
+import { mutagenSession, projectShell, realProjectRunner, sandboxCopy } from "./project-remote.js";
 import {
     type BringBackResult,
     bringBack,
@@ -22,7 +23,7 @@ import {
     restorePoints,
 } from "./project-transfer.js";
 import type { Skipped } from "./restore-points.js";
-import { mutagenSshPath, sshAlias } from "./ssh.js";
+import { mutagenSshPath } from "./ssh.js";
 
 // THE COPY-FIRST COMMANDS the desktop app's "Bring back changes" runs, under `intentic-machine sync`: `changes`,
 // `bring-back`, `restore-points`, `restore` and `direction`. Each names its project by the folder (`--dir`), and with
@@ -79,11 +80,16 @@ const pairingAt = async (dir: string | undefined): Promise<ProjectPairing> => {
     return await projectPairingFor((await readState()).pairings, dir);
 };
 
-// Reaching the sandbox the way file sync does: the client Mutagen drives, over the pairing's alias.
+// Reaching the sandbox the way file sync does (endpoint.ts): the ssh client Mutagen drives over the pairing's alias, or
+// `docker exec` into the container of a sandbox on this machine's own engine.
 const contextFor = async (pairing: ProjectPairing): Promise<ProjectContext> => ({
     pairing,
     stateDir: baseDir,
-    sandbox: sandboxCopy(realProjectRunner, mutagenSshPath(process.platform, process.env["MUTAGEN_SSH_PATH"]), sshAlias(pairing.sandboxId), pairingRemoteDir(pairing)),
+    sandbox: sandboxCopy(
+        realProjectRunner,
+        projectShell(pairingEndpoint(pairing), mutagenSshPath(process.platform, process.env["MUTAGEN_SSH_PATH"])),
+        pairingRemoteDir(pairing),
+    ),
     session: mutagenSession(realProjectRunner, await ensureMutagen(), sessionName(pairing.sandboxId)),
 });
 

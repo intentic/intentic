@@ -115,6 +115,13 @@ describe("pairingSshConfig", () => {
     it("is empty when nothing is paired, so unpairing the last sandbox leaves no dangling alias", () => {
         expect(pairingSshConfig([])).toBe("");
     });
+
+    // A pairing reached through Docker rides no ssh, so it gets no alias: one would be a door to a listener never bound.
+    it("leaves out a pairing reached through Docker", () => {
+        const fragment = pairingSshConfig([...pairings, { sandboxId: "sandbox-local", transport: "docker", container: "intentic-sandbox-sandbox-local" }]);
+        expect(fragment.match(/^Host /gm)).toHaveLength(2);
+        expect(fragment).not.toContain(sshAlias("sandbox-local"));
+    });
 });
 
 describe("the managed ssh-config include", () => {
@@ -184,7 +191,7 @@ describe("resolvedEndpoint", () => {
 const spec: SyncSessionSpec = {
     name: "intentic-x",
     localDir: "/home/u/proj",
-    alias: "intentic-sync-x",
+    remote: { kind: "ssh", alias: "intentic-sync-x" },
     remoteDir: WORKSPACE_ROOT,
     mode: "two-way-safe",
     ignores: IGNORES,
@@ -200,7 +207,7 @@ const linkless: SyncSessionSpec = { ...spec, symlinks: "ignore" };
 const backup: SyncSessionSpec = {
     name: "intentic-x-state",
     localDir: "/home/u/proj/.intentic",
-    alias: "intentic-sync-x",
+    remote: { kind: "ssh", alias: "intentic-sync-x" },
     remoteDir: `${WORKSPACE_ROOT}/.intentic`,
     mode: "one-way-replica",
     ignores: BACKUP_IGNORES,
@@ -487,7 +494,7 @@ describe("a project pairing's sessions", () => {
         expect(projectSpec).toEqual({
             name: "intentic-x",
             localDir: "/home/u/code/my-app",
-            alias: "intentic-sync-x",
+            remote: { kind: "ssh", alias: "intentic-sync-x" },
             remoteDir: "/work/my-app",
             mode: "one-way-safe",
             ignores: PROJECT_IGNORES,
@@ -531,6 +538,32 @@ describe("a project pairing's sessions", () => {
         const moved = { ...onWorkspace, mode: "one-way-safe", beta: { host: "intentic-sync-x", path: "/work/my-app" } };
         expect(sessionMatchesSpec(moved, projectSpec)).toBe(true);
         expect(sameEnds(moved, projectSpec)).toBe(true);
+    });
+
+    // A project whose sandbox runs on this machine's own engine is reached through Docker (endpoint.ts): the same session,
+    // made with a docker:// URL, and a session made over ssh is a different pair of ends from it.
+    const throughDocker = sessionSpec({ ...project, transport: "docker", container: "intentic-sandbox-sandbox-x" }, "portable");
+
+    it("makes a docker pairing's session with a docker:// URL and every other rule of the ssh one", () => {
+        expect(throughDocker).toEqual({ ...projectSpec, remote: { kind: "docker", container: "intentic-sandbox-sandbox-x" } });
+        expect(mutagenCreateArgs(throughDocker, false).slice(-2)).toEqual(["/home/u/code/my-app", "docker://intentic-sandbox-sandbox-x/work/my-app"]);
+        expect(mutagenCreateArgs(throughDocker, false).slice(0, -1)).toEqual(mutagenCreateArgs(projectSpec, false).slice(0, -1));
+    });
+
+    it("reads a session made over ssh as drifted once the pairing reaches its sandbox through Docker, and the other way round", () => {
+        const overSsh = {
+            mode: "one-way-safe",
+            alpha: { protocol: "local", path: "/home/u/code/my-app" },
+            beta: { protocol: "ssh", host: "intentic-sync-x", path: "/work/my-app" },
+            ignore: { paths: [...PROJECT_IGNORES] },
+        };
+        const overDocker = { ...overSsh, beta: { protocol: "docker", host: "intentic-sandbox-sandbox-x", path: "/work/my-app" } };
+        expect(sameEnds(overSsh, throughDocker)).toBe(false);
+        expect(convergePlan([overSsh], throughDocker)).toBe("replace");
+        expect(sessionMatchesSpec(overDocker, throughDocker)).toBe(true);
+        expect(sameEnds(overDocker, projectSpec)).toBe(false);
+        // Mutagen prints the protocol; an end read without one is the ssh every earlier session was made over.
+        expect(sameEnds({ alpha: { path: "/home/u/code/my-app" }, beta: { host: "intentic-sync-x", path: "/work/my-app" } }, projectSpec)).toBe(true);
     });
 
     it("is replaced when the pairing changes kind, since the ignore list changes with it", () => {

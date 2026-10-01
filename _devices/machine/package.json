@@ -1,7 +1,7 @@
 {
     "name": "@intentic/machine",
     "version": "0.0.0",
-    "description": "The one agent that lives on a user's own device: lets an intentic sandbox work on it (outbound WebSocket, MCP tools, scopes enforced here) and keeps folders and ports mirrored with it (Mutagen over tunnel SSH)",
+    "description": "The one agent that lives on a user's own device: lets an intentic sandbox work on it (outbound WebSocket, MCP tools, scopes enforced here) and keeps folders and ports mirrored with it (Mutagen over tunnel SSH, or through Docker for a project on this machine)",
     "license": "MIT",
     "type": "module",
     "repository": {

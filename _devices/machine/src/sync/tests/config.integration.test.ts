@@ -7,7 +7,7 @@ import { join } from "node:path";
 // (dynamic import, after the env is set), landing the state file in temp rather than the real ~/.intentic/machine.
 process.env["HOME"] = mkdtempSync(join(tmpdir(), "sync-config-"));
 process.env["USERPROFILE"] = process.env["HOME"];
-const { readState, removePairing, setMirrorOff, setPortIgnored, updateState, upsertPairing } = await import("../config.js");
+const { pairingTransport, readState, removePairing, setMirrorOff, setPortIgnored, updateState, upsertPairing } = await import("../config.js");
 const { readFile, rm, writeFile } = await import("node:fs/promises");
 const { agentHome } = await import("@intentic/local-agent");
 const syncStatePath = join(agentHome("machine").dir, "sync.json");
@@ -241,5 +241,43 @@ describe("a pairing's remote dir", () => {
             `the pairing for ${web.sandboxId} remoteDir "/work/refs" is neither /work nor /work/<name>`,
         );
         expect((await readState()).pairings).toEqual([local]);
+    });
+});
+
+// A pairing reached through this machine's Docker engine names the container its folder is written into, so that name
+// is held to a sandbox container's on the way in and out, and only a project pairing may be one (endpoint.ts).
+describe("a pairing reached through Docker", () => {
+    const project = {
+        ...pairing("sandbox-5a1b2c3d4e5f-intentic-dev", "/home/dev/code/my-app"),
+        remoteDir: `${WORKSPACE_ROOT}/my-app`,
+        project: true as const,
+    };
+    const throughDocker = { ...project, transport: "docker" as const, container: "intentic-sandbox-sandbox-5a1b2c3d4e5f" };
+
+    it("round-trips a project pairing with its container", async () => {
+        await upsertPairing(local);
+        await upsertPairing(throughDocker);
+
+        expect((await readState()).pairings).toEqual([local, throughDocker]);
+    });
+
+    it.each([
+        ["a workspace pairing", { ...local, transport: "docker", container: "intentic-sandbox-sandbox-0738cd6b5027" }, "reaches its sandbox through Docker, which only a project pairing may"],
+        ["no container", { ...project, transport: "docker" }, "reaches its sandbox through Docker but names no sandbox container (undefined)"],
+        ["a container that is not a sandbox's", { ...project, transport: "docker", container: "postgres" }, `names no sandbox container ("postgres")`],
+        ["a container name docker would not take", { ...project, transport: "docker", container: "intentic-sandbox-a;rm" }, "names no sandbox container"],
+    ])("refuses a state file holding %s, whole, when it is read", async (_what, held, said) => {
+        await writeFile(syncStatePath, JSON.stringify({ pairings: [web, held] }));
+
+        await expect(readState()).rejects.toThrow(said);
+    });
+
+    // A transport a later release wrote is not a reason to stop syncing: it reads as ssh, which reaches every sandbox.
+    it("keeps a pairing whose transport this build has no word for, and reaches it over ssh", async () => {
+        await writeFile(syncStatePath, JSON.stringify({ pairings: [{ ...throughDocker, transport: "vm" }] }));
+
+        const [held] = (await readState()).pairings;
+        expect(held?.localDir).toBe(project.localDir);
+        expect(pairingTransport(held ?? throughDocker)).toBe("ssh");
     });
 });

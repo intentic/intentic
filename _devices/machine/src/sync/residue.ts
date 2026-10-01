@@ -2,6 +2,7 @@ import { readdir, rm } from "node:fs/promises";
 import { join, posix } from "node:path";
 import type { Log } from "@intentic/local-agent";
 import { clearableOnDevice, type DeviceConflict } from "@intentic/sandbox-contract";
+import type { SandboxEndpoint } from "./endpoint.js";
 
 // BUILD OUTPUT IS NOT A CONFLICT. Two-way-safe exists to stop one person's edit overwriting another's, and for that it
 // is right; but the standoff it produces most often on a workspace has no two sides at all. An agent moves or deletes a
@@ -101,18 +102,26 @@ export interface ResidueExec {
     readonly run: (command: string, args: readonly string[]) => Promise<string | undefined>;
 }
 
-// `$0` is the placeholder ssh's remote shell needs before positional arguments; `$1` is the sync root, and the rest are
-// the paths. Quoted here rather than by a helper because ssh joins its argv into one string that the far side re-parses:
-// these quotes are what survive that. No single quote appears inside, which is what makes the wrapping pair safe.
-const ABSENT_PROBE = `'d=$1; shift; for p in "$@"; do [ -e "$d/$p" ] || printf "%s\\n" "$p"; done'`;
+// `$0` is the placeholder a shell needs before positional arguments; `$1` is the sync root, and the rest are the paths.
+// Over ssh it is quoted here rather than by a helper, because ssh joins its argv into one string that the far side
+// re-parses: these quotes are what survive that. No single quote appears inside, which is what makes the wrapping pair
+// safe. `docker exec` hands its argv straight to the program, so there the script goes in as it is.
+const ABSENT_SCRIPT = `d=$1; shift; for p in "$@"; do [ -e "$d/$p" ] || printf "%s\\n" "$p"; done`;
+const ABSENT_PROBE = `'${ABSENT_SCRIPT}'`;
+
+// The probe's command line for the way the pairing reaches its sandbox (endpoint.ts).
+export const absentProbeArgv = (remote: SandboxEndpoint, remoteDir: string, askable: readonly string[]): { readonly command: string; readonly args: readonly string[] } =>
+    remote.kind === "ssh"
+        ? { command: "ssh", args: ["-o", "BatchMode=yes", remote.alias, "sh", "-c", ABSENT_PROBE, "_", remoteDir, ...askable] }
+        : { command: "docker", args: ["exec", remote.container, "sh", "-c", ABSENT_SCRIPT, "_", remoteDir, ...askable] };
 
 // Which of these paths the sandbox does NOT have, while their parent directory still exists there. Both halves matter:
 // absence alone would sweep a whole tree against a sandbox that is mid-rebuild with an empty /work, whereas a parent
-// that is still present says the directory really was removed from somewhere that remains. One ssh call, and undefined
-// when it failed — a sandbox that did not answer must remove nothing.
+// that is still present says the directory really was removed from somewhere that remains. One call, and undefined when
+// it failed — a sandbox that did not answer must remove nothing.
 export const absentInSandbox = async (
     exec: ResidueExec,
-    alias: string,
+    remote: SandboxEndpoint,
     remoteDir: string,
     paths: readonly string[],
 ): Promise<ReadonlySet<string> | undefined> => {
@@ -120,7 +129,8 @@ export const absentInSandbox = async (
     if (askable.length === 0) {
         return new Set();
     }
-    const out = await exec.run("ssh", ["-o", "BatchMode=yes", alias, "sh", "-c", ABSENT_PROBE, "_", remoteDir, ...askable]);
+    const probe = absentProbeArgv(remote, remoteDir, askable);
+    const out = await exec.run(probe.command, probe.args);
     if (out === undefined) {
         return undefined;
     }
@@ -199,7 +209,7 @@ export const clearConflictResidue = async (args: {
 export const sweepDerivedResidue = async (args: {
     readonly exec: ResidueExec;
     readonly root: string;
-    readonly alias: string;
+    readonly remote: SandboxEndpoint;
     readonly remoteDir: string;
     readonly ignores: readonly string[];
     readonly log: Log;
@@ -211,7 +221,7 @@ export const sweepDerivedResidue = async (args: {
     }
     const absent = await absentInSandbox(
         args.exec,
-        args.alias,
+        args.remote,
         args.remoteDir,
         [...husks, ...husks.map(parentOf)].filter((path) => path !== ""),
     );

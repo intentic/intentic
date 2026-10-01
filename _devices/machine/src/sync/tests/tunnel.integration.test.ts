@@ -147,6 +147,25 @@ describe("tunnelTargets", () => {
             { sandboxId: "a", base: "http://127.0.0.1:29293", syncToken: "tok" },
         ]);
     });
+
+    // A project reached through this machine's Docker engine (endpoint.ts) sends nothing over ssh, so no listener is bound
+    // for it; its token still serves the ports read and the report, which are not this transport's.
+    it("binds no transport for a pairing reached through Docker", () => {
+        const local: Pairing = {
+            sandboxId: "b",
+            sandboxUrl: "https://b.dev",
+            mode: "sync",
+            syncToken: "tok",
+            localDir: "/home/u/app",
+            remoteDir: "/work/app",
+            project: true,
+            transport: "docker",
+            container: "intentic-sandbox-sandbox-b",
+        };
+        expect(tunnelTargets([dialed("a", "https://a.dev", "tok"), { pairing: local, base: "http://127.0.0.1:29294" }])).toEqual([
+            { sandboxId: "a", base: "https://a.dev", syncToken: "tok" },
+        ]);
+    });
 });
 
 describe("bridgeConnection", () => {

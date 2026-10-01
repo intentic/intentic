@@ -57,6 +57,9 @@ export interface FakeProject {
 }
 
 export const FAKE_SSH = "fake-ssh";
+// `docker exec` as a docker pairing's bring-back spells it (endpoint.ts remoteShell): the same remote command, handed to
+// `sh -c` in the container rather than to ssh's far side, so the very same programs run either way.
+export const FAKE_DOCKER = "fake-docker";
 export const FAKE_MUTAGEN = "fake-mutagen";
 
 const programOf = (command: string): SshProgram => {
@@ -108,13 +111,19 @@ export const fakeProject = (session: FakeSessionState = "running"): FakeProject 
                 if (command === FAKE_MUTAGEN) {
                     return mutagenVerb(fake, args[1] ?? "");
                 }
-                if (command !== FAKE_SSH) {
+                if (command !== FAKE_SSH && command !== FAKE_DOCKER) {
                     throw new Error(`the fake runner does not run ${command}`);
                 }
-                // The alias and ssh's own options are dropped; the remote command is the last argument, run here.
+                // A docker call is held to the one shape a docker pairing sends, so a test passes only if the remote
+                // command really is what `sh -c` in the container is given.
+                if (command === FAKE_DOCKER && (args[0] !== "exec" || args.at(-3) !== "sh" || args.at(-2) !== "-c")) {
+                    throw new Error(`the fake docker runs only \`exec … sh -c <command>\`, not \`${args.join(" ")}\``);
+                }
+                // The alias, the container and each transport's own options are dropped; the remote command is the last
+                // argument, run here.
                 const remote = args.at(-1) ?? "";
                 const program = programOf(remote);
-                fake.calls.push(`ssh ${program}`);
+                fake.calls.push(`${command === FAKE_DOCKER ? "docker" : "ssh"} ${program}`);
                 const hook = fake.before[program];
                 if (hook === undefined) {
                     return realProjectRunner.spawn("sh", ["-c", remote], options);

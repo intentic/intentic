@@ -215,10 +215,13 @@ fn connect(
             }
             if tty::have_tty() {
                 println!("This starts a NEW sandbox alongside them.");
-                println!("  [c] continue (start alongside)");
+                println!("  [c] continue (start alongside), or press Enter");
                 println!("  [r] remove some first…");
                 println!("  [q] quit");
-                match tty::ask("Choose [c/r/q]: ").as_deref() {
+                // Enter continues: whoever pasted this setup command asked for one more sandbox, so the bare key is
+                // that ask, not a reason to throw the setup code away. Quitting is a letter, as is cleaning up first,
+                // and a closed input (no answer at all) still starts nothing.
+                match tty::ask("Choose [C/r/q]: ").as_deref() {
                     Some("r") | Some("R") => {
                         println!("intentic: opening cleanup…");
                         let _ = remove::run(remove::Args {
@@ -230,11 +233,11 @@ fn connect(
                         });
                         println!("intentic: continuing with this sandbox…");
                     }
-                    Some("q") | Some("Q") | Some("") | None => {
+                    Some("q") | Some("Q") | None => {
                         println!("intentic: aborted — no sandbox started.");
                         return Ok(());
                     }
-                    _ => {} // c (or anything else) → start alongside
+                    _ => {} // c, Enter (or anything else) → start alongside
                 }
             } else {
                 eprintln!("intentic: no terminal to prompt — starting alongside them (pass -y to silence this, or run cleanup first).");

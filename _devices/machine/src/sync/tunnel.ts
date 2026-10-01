@@ -2,7 +2,7 @@ import { connect, createServer, type Server, type Socket } from "node:net";
 import { pollUntil } from "@intentic/base/async";
 import type { Log } from "@intentic/local-agent";
 import type { Dialed } from "../daemon-base.js";
-import type { Pairing } from "./config.js";
+import { type Pairing, pairingTransport } from "./config.js";
 
 // A loopback port on this machine that is the sandbox's sshd: Mutagen speaks only SSH, so something must front it
 // with TCP. One socket per SSH connection, opened on demand, closed with it; a failed socket just fails the TCP
@@ -53,11 +53,11 @@ export interface TunnelTarget {
 }
 
 // Only pairings with a sync token get a transport; otherwise a bound listener would accept ssh and fail every
-// connection, worse than none. Bases arrive pre-resolved, shared with the ports poll and report, avoiding a third
-// probe.
+// connection, worse than none. A pairing reached through Docker (endpoint.ts) needs none either: nothing of it rides
+// ssh. Bases arrive pre-resolved, shared with the ports poll and report, avoiding a third probe.
 export const tunnelTargets = (dialed: readonly Dialed<Pairing>[]): readonly TunnelTarget[] =>
     dialed.flatMap(({ pairing, base }) =>
-        pairing.syncToken === undefined ? [] : [{ sandboxId: pairing.sandboxId, base, syncToken: pairing.syncToken }],
+        pairing.syncToken === undefined || pairingTransport(pairing) === "docker" ? [] : [{ sandboxId: pairing.sandboxId, base, syncToken: pairing.syncToken }],
     );
 
 // Bridges one accepted TCP connection to one WebSocket. Exported so a test can drive it without binding a real

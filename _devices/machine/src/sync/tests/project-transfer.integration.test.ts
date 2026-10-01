@@ -4,10 +4,10 @@ import { chmod, lstat, mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { pidFileBody } from "@intentic/local-agent";
-import { FAKE_MUTAGEN, FAKE_SSH, type FakeProject, fakeProject, type FakeSessionState, mutagenConflict } from "../../testing.js";
+import { FAKE_DOCKER, FAKE_MUTAGEN, FAKE_SSH, type FakeProject, fakeProject, type FakeSessionState, mutagenConflict } from "../../testing.js";
 import { HELD_CHANGED_HERE, HELD_NOT_RUNNING } from "../project-files.js";
 import { listingRecordPath } from "../project-local.js";
-import { mutagenSession, sandboxCopy } from "../project-remote.js";
+import { mutagenSession, projectShell, sandboxCopy } from "../project-remote.js";
 import { bringBack, projectChanges, type ProjectContext, type ProjectPairing, restorePoint, restorePoints } from "../project-transfer.js";
 import { expiredPoints, pointId, type PointOnDisk, pruneRestorePoints, restoreDir } from "../restore-points.js";
 
@@ -33,7 +33,7 @@ const setUp = async (session: FakeSessionState = "running"): Promise<void> => {
     context = {
         pairing,
         stateDir: join(root, "state"),
-        sandbox: sandboxCopy(fake.runner, FAKE_SSH, "intentic-sync-sandbox-a", remote),
+        sandbox: sandboxCopy(fake.runner, projectShell({ kind: "ssh", alias: "intentic-sync-sandbox-a" }, FAKE_SSH), remote),
         session: mutagenSession(fake.runner, FAKE_MUTAGEN, "intentic-sandbox-a"),
     };
 };
@@ -278,6 +278,32 @@ describe("sync bring-back and sync restore", () => {
         await chmod(join(remote, "run.sh"), 0o755);
         await bringBack(context, []);
         expect((await lstat(join(local, "run.sh"))).mode & 0o100).toBe(0o100);
+    });
+});
+
+// A project whose sandbox runs on this machine's own engine brings its changes back through `docker exec` (endpoint.ts):
+// the same listing and fetch programs, handed to `sh -c` in the container, so a bring-back is the same either way.
+describe("a bring-back through Docker", () => {
+    beforeEach(() => {
+        const shell = projectShell({ kind: "docker", container: "intentic-sandbox-sandbox-a" }, FAKE_SSH);
+        context = { ...context, sandbox: sandboxCopy(fake.runner, { ...shell, command: FAKE_DOCKER }, remote) };
+    });
+
+    it("lists and fetches through docker exec, and lands what the agent changed after a restore point", async () => {
+        await same("src/index.ts", "one");
+        await projectChanges(context);
+        await put(remote, "src/index.ts", "two");
+        await put(remote, ODD, "agent's notes");
+        fake.calls.length = 0;
+
+        const brought = await bringBack(context, []);
+        expect(brought.applied).toEqual([
+            { path: ODD, kind: "added" },
+            { path: "src/index.ts", kind: "modified" },
+        ]);
+        expect(brought.point).toMatch(/^\d{8}T\d{6}\.\d{3}Z$/);
+        expect([await read(local, "src/index.ts"), await read(local, ODD)]).toEqual(["two", "agent's notes"]);
+        expect(fake.calls).toEqual(["mutagen list", "mutagen flush", "mutagen list", "mutagen pause", "docker list", "docker fetch", "mutagen resume"]);
     });
 });
 

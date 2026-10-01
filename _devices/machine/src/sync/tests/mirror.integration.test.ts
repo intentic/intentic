@@ -470,7 +470,7 @@ describe("retireMirroredPort", () => {
 describe("mutagen forward args", () => {
     it("names sessions per sandbox + port and dials the recorded loopback host (::1 bracketed)", () => {
         expect(forwardSessionName("sandbox-abc.example.dev", 47145)).toBe("intentic-fwd-sandbox-abc-example-dev-47145");
-        expect(mutagenForwardArgs({ name: "n", port: 6480, alias: "intentic-x", host: "127.0.0.1" })).toEqual([
+        expect(mutagenForwardArgs({ name: "n", port: 6480, remote: { kind: "ssh", alias: "intentic-x" }, host: "127.0.0.1" })).toEqual([
             "forward",
             "create",
             "--name",
@@ -478,6 +478,18 @@ describe("mutagen forward args", () => {
             "tcp:127.0.0.1:6480",
             "intentic-x:tcp:127.0.0.1:6480",
         ]);
-        expect(mutagenForwardArgs({ name: "n", port: 47145, alias: "intentic-x", host: "::1" }).at(-1)).toBe("intentic-x:tcp:[::1]:47145");
+        expect(mutagenForwardArgs({ name: "n", port: 47145, remote: { kind: "ssh", alias: "intentic-x" }, host: "::1" }).at(-1)).toBe("intentic-x:tcp:[::1]:47145");
+    });
+
+    // A project on this machine's own engine has its ports forwarded straight into its container (endpoint.ts).
+    it("dials a docker pairing's container through Docker, binding the same local port", () => {
+        expect(mutagenForwardArgs({ name: "n", port: 5173, remote: { kind: "docker", container: "intentic-sandbox-sandbox-x" }, host: "::1" })).toEqual([
+            "forward",
+            "create",
+            "--name",
+            "n",
+            "tcp:127.0.0.1:5173",
+            "docker://intentic-sandbox-sandbox-x:tcp:[::1]:5173",
+        ]);
     });
 });

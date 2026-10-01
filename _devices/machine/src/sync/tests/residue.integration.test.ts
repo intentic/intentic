@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { IGNORES } from "../ssh.js";
 import {
     absentInSandbox,
+    absentProbeArgv,
     clearConflictResidue,
     findDerivedHusks,
     ignoreMatcher,
@@ -205,7 +206,7 @@ describe("absentInSandbox", () => {
                     return `pkg-a\n`;
                 },
             },
-            `intentic-sync-box`,
+            { kind: `ssh`, alias: `intentic-sync-box` },
             WORKSPACE_ROOT,
             [`pkg-a`, `pkg-b`, `awkward name`],
         );
@@ -217,8 +218,33 @@ describe("absentInSandbox", () => {
         expect(seen[0]).not.toContain(`awkward name`);
     });
 
+    // `docker exec` gets the script as one argument with no ssh-style quoting around it: a quoted script would reach the
+    // container's shell as a single word and probe nothing.
+    it("asks a docker pairing's container the same question through docker exec", async () => {
+        const seen: { command: string; args: string[] }[] = [];
+        const absent = await absentInSandbox(
+            {
+                run: async (command, args) => {
+                    seen.push({ command, args: [...args] });
+                    return `pkg-b\n`;
+                },
+            },
+            { kind: `docker`, container: `intentic-sandbox-sandbox-box` },
+            WORKSPACE_ROOT,
+            [`pkg-a`, `pkg-b`],
+        );
+        expect(absent).toEqual(new Set([`pkg-b`]));
+        expect(seen).toEqual([
+            {
+                command: `docker`,
+                args: [`exec`, `intentic-sandbox-sandbox-box`, `sh`, `-c`, expect.not.stringMatching(/^'/), `_`, `/work`, `pkg-a`, `pkg-b`],
+            },
+        ]);
+        expect(absentProbeArgv({ kind: `ssh`, alias: `intentic-sync-box` }, `/work`, [`pkg-a`]).args[5]).toMatch(/^'.*'$/);
+    });
+
     it("answers undefined when ssh failed, which must never read as 'the sandbox does not have it'", async () => {
-        expect(await absentInSandbox({ run: async () => undefined }, `alias`, `/work`, [`pkg`])).toBeUndefined();
+        expect(await absentInSandbox({ run: async () => undefined }, { kind: `ssh`, alias: `alias` }, `/work`, [`pkg`])).toBeUndefined();
     });
 });
 

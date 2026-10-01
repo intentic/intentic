@@ -18,9 +18,10 @@ import {
 import { binDir } from "../config.js";
 import { archToken, download, exe, osToken, renameIfPresent } from "../release.js";
 import { isProjectPairing, mutagenDaemonLogPath, type Pairing, pairingRemoteDir, projectDirection } from "./config.js";
+import { dockerEndpointAnswers, liveIdentity, mutagenForwardUrl, mutagenUrl, pairingEndpoint, type SandboxEndpoint } from "./endpoint.js";
 import { runProcess } from "./exec.js";
 import { clearConflictResidue, type ResidueOutcome, sweepDerivedResidue } from "./residue.js";
-import { BACKUP_IGNORES, ignoresFor, mutagenSshPath, sanitizeId, sshAlias, sshTransportAnswers } from "./ssh.js";
+import { BACKUP_IGNORES, ignoresFor, mutagenSshPath, sanitizeId, sshTransportAnswers } from "./ssh.js";
 import { deviceSymlinks, type SymlinkMode } from "./symlinks.js";
 
 // The pinned Mutagen version this agent downloads when the machine has no install of its own.
@@ -109,11 +110,12 @@ const orphanForwardSessions = (mutagen: string, keptSandboxIds: readonly string[
     parseOrphanForwardNames(listSessionNames(mutagen, "forward"), keptSandboxIds);
 
 // Binds the same local port and pipes it to the sandbox's recorded loopback address; `host` matters because a
-// `localhost` bind inside the sandbox can land on ::1 only (Vite), where 127.0.0.1 is refused.
+// `localhost` bind inside the sandbox can land on ::1 only (Vite), where 127.0.0.1 is refused. The sandbox's side is
+// reached the way its pairing reaches it (endpoint.ts): over ssh, or straight into its container through Docker.
 export const mutagenForwardArgs = (args: {
     readonly name: string;
     readonly port: number;
-    readonly alias: string;
+    readonly remote: SandboxEndpoint;
     readonly host: string;
 }): string[] => [
     "forward",
@@ -121,15 +123,16 @@ export const mutagenForwardArgs = (args: {
     "--name",
     args.name,
     `tcp:127.0.0.1:${args.port}`,
-    `${args.alias}:tcp:${args.host.includes(":") ? `[${args.host}]` : args.host}:${args.port}`,
+    mutagenForwardUrl(args.remote, `tcp:${args.host.includes(":") ? `[${args.host}]` : args.host}:${args.port}`),
 ];
 
 // Everything a file-sync session is made of: the two endpoints plus the findable name. One shape describes both
-// what to create and what a live session is compared against.
+// what to create and what a live session is compared against. `remote` is how the sandbox's side is reached
+// (endpoint.ts), part of the session's identity: a session made over ssh is not the one a docker pairing wants.
 export interface SyncSessionSpec {
     readonly name: string;
     readonly localDir: string;
-    readonly alias: string;
+    readonly remote: SandboxEndpoint;
     readonly remoteDir: string;
     // Two-way for the both-edited workspace; one-way replica for the backup, whose only writer is the sandbox; one-way
     // safe for a copy-first project (syncMode).
@@ -160,7 +163,7 @@ export const syncMode = (pairing: Pick<Pairing, "project" | "direction">): "two-
 export const sessionSpec = (pairing: Pairing & { readonly localDir: string }, symlinks: SymlinkMode): SyncSessionSpec => ({
     name: sessionName(pairing.sandboxId),
     localDir: pairing.localDir,
-    alias: sshAlias(pairing.sandboxId),
+    remote: pairingEndpoint(pairing),
     remoteDir: pairingRemoteDir(pairing),
     mode: syncMode(pairing),
     ignores: ignoresFor(pairing),
@@ -174,7 +177,7 @@ export const sessionSpec = (pairing: Pairing & { readonly localDir: string }, sy
 const backupSpec = (pairing: Pairing & { readonly localDir: string }, symlinks: SymlinkMode): SyncSessionSpec => ({
     name: backupSessionName(pairing.sandboxId),
     localDir: join(pairing.localDir, STATE_DIR),
-    alias: sshAlias(pairing.sandboxId),
+    remote: pairingEndpoint(pairing),
     remoteDir: `${WORKSPACE_ROOT}/${STATE_DIR}`,
     mode: "one-way-replica",
     ignores: BACKUP_IGNORES,
@@ -192,7 +195,7 @@ const SANDBOX_POLL_SECONDS = 2;
 // No --ignore-vcs: it misses the pointer-file .git this layout leaves; IGNORES' bare `.git` covers that instead.
 export const mutagenCreateArgs = (spec: SyncSessionSpec, paused: boolean): string[] => {
     const local = spec.localDir;
-    const remote = `${spec.alias}:${spec.remoteDir}`;
+    const remote = mutagenUrl(spec.remote, spec.remoteDir);
     // Which endpoint the SANDBOX is for this session, since the backup runs the other way round: polling the device
     // faster instead would cost a rescan of the laptop's disk and still leave the unwatched side on 10 seconds.
     const sandboxSide = spec.from === "local" ? "beta" : "alpha";
@@ -246,6 +249,18 @@ interface LiveConflict {
     readonly betaChanges?: readonly LiveChange[];
 }
 
+// One end of a live session, as `sync list --template {{json .}}` prints it.
+export interface LiveEndpoint {
+    readonly protocol?: string;
+    readonly host?: string;
+    readonly path?: string;
+}
+
+// The protocol a live end was made with. Mutagen prints it, but a reader of an end that carries none (a fixture, an
+// older print) can still tell: no host is this machine, and a host with no protocol is the ssh every session before
+// docker pairings was made over.
+export const liveProtocol = (end: LiveEndpoint): string => end.protocol ?? (end.host === undefined ? "local" : "ssh");
+
 export interface LiveSession {
     // `mode` in `sync list --template {{json .}}`, spelled as `--sync-mode` takes it; absent on a session created
     // without that flag, which Mutagen runs two-way-safe (liveMode).
@@ -253,9 +268,10 @@ export interface LiveSession {
     // What tells one session from another under a shared name. Names are not unique; identifiers are.
     readonly identifier?: string;
     // Both ends carry an optional host since a session may run either way (the backup's alpha is the sandbox);
-    // protobuf omits a local endpoint's host, so undefined means "this machine".
-    readonly alpha: { readonly host?: string; readonly path?: string };
-    readonly beta: { readonly host?: string; readonly path?: string };
+    // protobuf omits a local endpoint's host, so undefined means "this machine". `protocol` is `local`, `ssh` or
+    // `docker` as Mutagen prints it; read with a fallback (liveProtocol), since nothing before this build compared it.
+    readonly alpha: LiveEndpoint;
+    readonly beta: LiveEndpoint;
     readonly ignore: { readonly paths?: readonly string[]; readonly vcs?: boolean };
     // No mode means the session was created without `--symlink-mode`, which every Mutagen version reads as portable.
     readonly symlink?: { readonly mode?: string };
@@ -450,19 +466,15 @@ export const resumeAutoPausedSync = (mutagen: string, pairing: Pairing): boolean
 // Whether a live session joins the same two folders the spec does, in the same direction. Which endpoint should hold
 // what follows the spec's direction; a backup with reversed ends must never read as "close enough" — it would upload
 // instead of download. A remote dir that moved (a pairing set up again for another folder in the sandbox) is a
-// different pair of ends as much as a local one is.
+// different pair of ends as much as a local one is, and so is the same folder reached another way: a session made over
+// ssh is replaced once its pairing reaches the sandbox through Docker, and the other way round.
 export const sameEnds = (session: Pick<LiveSession, "alpha" | "beta">, spec: SyncSessionSpec): boolean => {
-    const [alpha, beta] =
-        spec.from === "local"
-            ? [
-                  { host: undefined, path: spec.localDir },
-                  { host: spec.alias, path: spec.remoteDir },
-              ]
-            : [
-                  { host: spec.alias, path: spec.remoteDir },
-                  { host: undefined, path: spec.localDir },
-              ];
-    return session.alpha.path === alpha.path && session.alpha.host === alpha.host && session.beta.path === beta.path && session.beta.host === beta.host;
+    const local: Required<Pick<LiveEndpoint, "protocol" | "path">> & { readonly host: undefined } = { protocol: "local", host: undefined, path: spec.localDir };
+    const remote = { ...liveIdentity(spec.remote), path: spec.remoteDir };
+    const [alpha, beta] = spec.from === "local" ? [local, remote] : [remote, local];
+    const matches = (live: LiveEndpoint, wanted: { readonly protocol: string; readonly host: string | undefined; readonly path: string }): boolean =>
+        live.path === wanted.path && live.host === wanted.host && liveProtocol(live) === wanted.protocol;
+    return matches(session.alpha, alpha) && matches(session.beta, beta);
 };
 
 // The mode a live session runs in. Protobuf JSON omits the default, and a session created without `--sync-mode` (none of
@@ -502,8 +514,9 @@ export const ensureSyncSession = async (mutagen: string, pairing: Pairing, log: 
     // Both sessions, converged in order, sequential since they share one ssh transport and daemon; workspace first
     // since that's what the user is waiting on. An unreachable sandbox leaves both alone, never half-converged.
     let converged = true;
+    const answers = transportAnswers(pairing);
     for (const spec of sessionSpecs(held, symlinks.mode)) {
-        converged = (await convergeSession(mutagen, spec, log)) && converged;
+        converged = (await convergeSession(mutagen, spec, log, answers)) && converged;
     }
     retireStrayBackup(mutagen, pairing, log);
     return converged;
@@ -608,9 +621,9 @@ const readyForReplacement = async (mutagen: string, spec: SyncSessionSpec, live:
     // session reads a directory this device holds and the sandbox does not as something to CREATE there, and pushes
     // the husk back as an empty directory in /work.
     await sweepDerivedResidue({
-        exec: { run: async (command, args) => await sshAnswer(command, args) },
+        exec: { run: async (command, args) => await remoteAnswer(command, args) },
         root: spec.localDir,
-        alias: spec.alias,
+        remote: spec.remote,
         remoteDir: spec.remoteDir,
         ignores: spec.ignores,
         log,
@@ -620,12 +633,22 @@ const readyForReplacement = async (mutagen: string, spec: SyncSessionSpec, live:
 
 // stdout when the command SUCCEEDED, undefined when it did not — including an empty answer from a successful run,
 // which means "every path is still there" and must never be read as the failure that sweeps nothing.
-const sshAnswer = async (command: string, args: readonly string[]): Promise<string | undefined> => {
+const remoteAnswer = async (command: string, args: readonly string[]): Promise<string | undefined> => {
     const result = await runProcess(command, args, { timeoutMs: SWEEP_TIMEOUT_MS });
     return result.status === 0 ? result.stdout : undefined;
 };
 
-const convergeSession = async (mutagen: string, spec: SyncSessionSpec, log: Log): Promise<boolean> => {
+// Whether the sandbox's side answers the way this pairing reaches it, asked before a session is torn down for a
+// replacement and, for a docker pairing, before any session is made: a container name outlives what runs under it, and
+// one that is no longer this sandbox (a removed sandbox, a new one on the same engine) must never receive the folder.
+export const transportAnswers = (pairing: Pick<Pairing, "sandboxId" | "sandboxUrl" | "transport" | "container">): (() => Promise<boolean>) => {
+    const endpoint = pairingEndpoint(pairing);
+    return endpoint.kind === "docker"
+        ? async () => await dockerEndpointAnswers(endpoint.container, pairing.sandboxUrl)
+        : async () => await sshTransportAnswers(mutagenSshPath(process.platform, process.env["MUTAGEN_SSH_PATH"]), endpoint.alias);
+};
+
+const convergeSession = async (mutagen: string, spec: SyncSessionSpec, log: Log, answers: () => Promise<boolean>): Promise<boolean> => {
     const sessions = retireSurplus(mutagen, spec.name, log);
     const plan = convergePlan(sessions, spec);
     if (plan === "keep") {
@@ -635,11 +658,17 @@ const convergeSession = async (mutagen: string, spec: SyncSessionSpec, log: Log)
     if (sessions.length > 1) {
         log(`${spec.name}: ${sessions.length} sync sessions share this name, which conflict with each other; replacing them with one.`);
     }
+    if (plan === "create" && spec.remote.kind === "docker" && !(await answers())) {
+        log(
+            `${spec.name}: ${spec.remote.container} is not running on this machine's Docker engine as this sandbox, so no file sync is made into it. Retrying later.`,
+        );
+        return false;
+    }
     if (plan === "replace") {
         // Never tears down a session it can't replace: `sync create` needs the sandbox to answer, so the transport is
         // probed first, and an unreachable sandbox keeps its drifted session (retried on the watcher's cadence) rather
         // than losing sync entirely.
-        if (!(await sshTransportAnswers(mutagenSshPath(process.platform, process.env["MUTAGEN_SSH_PATH"]), spec.alias))) {
+        if (!(await answers())) {
             log(
                 `${spec.name}: the sandbox is not answering, so its existing file sync is left running as it is rather than terminated for a replacement that cannot be created. Retrying later.`,
             );

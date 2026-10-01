@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { homeDir, writeSecretFile } from "@intentic/local-agent";
 import { type PortSkipReason, type PortSummary, projectDirNameOf } from "@intentic/sandbox-contract";
+import { SANDBOX_CONTAINER_PREFIX } from "@intentic/sandbox-run";
 import { z } from "zod";
 import { baseDir } from "../config.js";
 
@@ -55,6 +56,19 @@ export interface SkippedPort {
 // holder), "mirror" = port mirroring only (unlimited collaborators).
 export type SyncMode = "sync" | "mirror";
 
+// HOW THIS DEVICE REACHES THE SANDBOX'S SIDE of a pairing (endpoint.ts). "ssh" is the sandbox's own sync door, through
+// its loopback address or its tunnel, and reaches a sandbox wherever it runs, a hosted one included. "docker" is this
+// machine's own Docker engine, for a project folder whose sandbox container runs on it: Mutagen's `docker://` transport
+// and `docker exec` carry the files, so no key, listener or public address sits on the data path. Absent is ssh, which
+// every pairing made before the field existed is.
+export type SyncTransport = "ssh" | "docker";
+
+// A name this agent may hand to `docker://` and `docker exec`: a sandbox container as ic names one (sandboxNames in
+// @intentic/sandbox-run), and nothing else on the engine. The container is where the folder's files are written, so a
+// name that drifted to another container would sync the owner's project into somebody else's sandbox.
+export const isSandboxContainerName = (name: string | undefined): name is string =>
+    name !== undefined && name.startsWith(SANDBOX_CONTAINER_PREFIX) && /^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/.test(name) && name.length > SANDBOX_CONTAINER_PREFIX.length;
+
 // One paired sandbox. sandboxId namespaces the ssh alias, the Mutagen sessions and the loopback port, and is
 // the key. syncToken is the enrollment-minted credential for GET /ports, the self-revoke on uninstall, and the
 // SSH transport itself; a pairing without one can do nothing but exist. mirroredPorts/skippedPorts are the last
@@ -69,6 +83,8 @@ export type SyncMode = "sync" | "mirror";
 // pairing made before it existed); `project` marks the owner's own folder synced into `/work/<name>`, which carries
 // no state backup and no git bridge (`isProjectPairing`), and the two only ever come together (`pairingProblem`).
 // `direction` is which way a project's files flow (`projectDirection`), and means nothing on any other pairing.
+// `transport` is how the sandbox's side is reached (`SyncTransport`), and `container` the sandbox container a docker
+// pairing reaches: only a project pairing's, and only ever a sandbox container's name (`pairingProblem`).
 export interface Pairing {
     readonly sandboxUrl: string;
     readonly sandboxId: string;
@@ -85,7 +101,14 @@ export interface Pairing {
     readonly remoteDir?: string | undefined;
     readonly project?: true | undefined;
     readonly direction?: ProjectDirection | undefined;
+    readonly transport?: SyncTransport | undefined;
+    readonly container?: string | undefined;
 }
+
+// Read leniently, as `direction` is: anything but a docker pairing that names its container is ssh, the transport that
+// reaches every sandbox, so a value a later release wrote is never read as a reason to stop syncing.
+export const pairingTransport = (pairing: Pick<Pairing, "transport" | "container">): SyncTransport =>
+    pairing.transport === "docker" && pairing.container !== undefined ? "docker" : "ssh";
 
 // COPY-FIRST unless the owner opted into two-way. "to-sandbox": the folder flows one way into the sandbox, and what an
 // agent changes there comes back only through `sync bring-back`, after a restore point; "both": the two-way sync every
@@ -108,8 +131,20 @@ export const isProjectPairing = (pairing: Pick<Pairing, "project">): boolean => 
 // What is wrong with a pairing's remote side, or undefined. `remoteDir` is where Mutagen writes in the sandbox and,
 // through the two-way session, what lands in this device's folder, so it is held to exactly two shapes: /work, or
 // one project folder directly under it. A project pairing must be the second (its ignore list no longer shields the
-// sandbox's state dir, which only /work holds), and the second is only ever a project's.
-export const pairingProblem = (pairing: Pick<Pairing, "remoteDir" | "project">): string | undefined => {
+// sandbox's state dir, which only /work holds), and the second is only ever a project's. A pairing reached through
+// Docker is held to two more: it is a project's (a workspace pairing's git bridge and state backup ride ssh), and the
+// container it names is a sandbox container, since that container is where the folder's files are written.
+export const pairingProblem = (
+    pairing: Pick<Pairing, "remoteDir" | "project" | "container"> & { readonly transport?: string | undefined },
+): string | undefined => {
+    if (pairing.transport === "docker") {
+        if (!isProjectPairing(pairing)) {
+            return `reaches its sandbox through Docker, which only a project pairing may`;
+        }
+        if (!isSandboxContainerName(pairing.container)) {
+            return `reaches its sandbox through Docker but names no sandbox container (${JSON.stringify(pairing.container)})`;
+        }
+    }
     const inProject = pairing.remoteDir !== undefined && projectDirNameOf(pairing.remoteDir) !== undefined;
     if (pairing.remoteDir !== undefined && pairing.remoteDir !== WORKSPACE_ROOT && !inProject) {
         return `remoteDir ${JSON.stringify(pairing.remoteDir)} is neither ${WORKSPACE_ROOT} nor ${WORKSPACE_ROOT}/<name> (a name starting with a letter or digit, of letters, digits, ".", "_" and "-", and not one the sandbox keeps for itself)`;
@@ -123,12 +158,15 @@ export const pairingProblem = (pairing: Pick<Pairing, "remoteDir" | "project">):
     return undefined;
 };
 
-// The two fields that decide where a pairing's files go, parsed where the file is read; the rest of a pairing is taken
-// as this agent wrote it, as it always has been.
+// The fields that decide where a pairing's files go, parsed where the file is read; the rest of a pairing is taken as
+// this agent wrote it, as it always has been. `transport` stays a plain string here so a word a later release wrote is
+// read as ssh (`pairingTransport`) rather than refusing the file; only a docker pairing's container is held to a shape.
 const PlacementSchema = z.object({
     sandboxId: z.string(),
     remoteDir: z.string().optional(),
     project: z.literal(true).optional(),
+    transport: z.string().optional(),
+    container: z.string().optional(),
 });
 
 // Every pairing, or the first that is wrong, as the one error it is. A file with a pairing like that is refused whole,

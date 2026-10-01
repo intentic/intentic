@@ -17,6 +17,7 @@ import {
     type SkippedPort,
     updateState,
 } from "./config.js";
+import { pairingEndpoint } from "./endpoint.js";
 import { createDaemonBases, type DaemonBases, type Dialed, dialedPairings } from "../daemon-base.js";
 import { readSwapRecords } from "../device/sandbox-rounds/swap-records.js";
 import { realBridgeExec, runGitBridge } from "./git-bridge.js";
@@ -40,7 +41,7 @@ import {
 } from "./mutagen.js";
 import { quieted } from "./repeats.js";
 import { deviceReport, scopedReport } from "./report.js";
-import { pairingSshConfig, sshAlias, writeManagedSshConfig } from "./ssh.js";
+import { pairingSshConfig, writeManagedSshConfig } from "./ssh.js";
 import { holdsSync, recordOf, RELEASE_FORWARDS_MS, shouldReleaseForwards, swapPauseStep } from "./swap-pause.js";
 import { createTunnelPool, tunnelTargets } from "./tunnel.js";
 
@@ -141,7 +142,7 @@ const mutagenExecutor = (mutagen: string, pairing: Pairing, log: Log): ForwardEx
             mutagenForwardArgs({
                 name: forwardSessionName(pairing.sandboxId, summary.port),
                 port: summary.port,
-                alias: sshAlias(pairing.sandboxId),
+                remote: pairingEndpoint(pairing),
                 host: summary.host,
             }),
             log,

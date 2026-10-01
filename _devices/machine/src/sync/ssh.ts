@@ -9,7 +9,7 @@ import { REFERENCE_DIR, STATE_DIR } from "@intentic/constants";
 import { homeDir, type Log, writeSecretFile } from "@intentic/local-agent";
 import { SshHostKeySchema, STATE_GROUPS, stateGroupPaths, UNBACKED_STATE_PATHS } from "@intentic/sandbox-contract";
 import { baseDir } from "../config.js";
-import { isProjectPairing, knownHostsPath, type Pairing, sshConfigName, sshConfigPath, sshDir, sshKeyPath, userSshConfigPath } from "./config.js";
+import { isProjectPairing, knownHostsPath, type Pairing, pairingTransport, sshConfigName, sshConfigPath, sshDir, sshKeyPath, userSshConfigPath } from "./config.js";
 import { runProcess } from "./exec.js";
 import { syncSshPort } from "./tunnel.js";
 
@@ -206,9 +206,11 @@ export const ensureSshKey = async (): Promise<string> => {
 };
 
 // One Host block per pairing, regenerated from the full list rather than appended, so adding or dropping a
-// sandbox can't duplicate or strip a sibling's block.
-export const pairingSshConfig = (pairings: readonly { readonly sandboxId: string }[]): string =>
+// sandbox can't duplicate or strip a sibling's block. A pairing reached through Docker (endpoint.ts) gets none: nothing
+// of it rides ssh, so an alias for it would only be a door to a listener this agent never binds.
+export const pairingSshConfig = (pairings: readonly Pick<Pairing, "sandboxId" | "transport" | "container">[]): string =>
     pairings
+        .filter((pairing) => pairingTransport(pairing) === "ssh")
         .map((pairing) =>
             sshConfigBlock({
                 alias: sshAlias(pairing.sandboxId),

@@ -3,6 +3,7 @@ import { createHash, type Hash } from "node:crypto";
 import { type FileHandle, open } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
+import { type RemoteShell, remoteShell, type SandboxEndpoint } from "./endpoint.js";
 import { type Listing, parseListing } from "./project-files.js";
 
 // THE SANDBOX'S SIDE of a copy-first project, reached the way file sync reaches it: over the pairing's ssh alias, one
@@ -278,22 +279,33 @@ export interface SandboxCopy {
     readonly fetch: (paths: readonly string[], staging: string) => Promise<ReadonlyMap<string, Fetched | NotFetched>>;
 }
 
-const failure = (what: string, exited: Exited): Error => {
+// How the bring-back reaches the sandbox's copy, the way its pairing does (endpoint.ts): ssh with the options above, or
+// `docker exec` into the container on this machine's engine.
+export const projectShell = (endpoint: SandboxEndpoint, ssh: string): RemoteShell => remoteShell(endpoint, ssh, SSH_OPTIONS);
+
+const failure = (what: string, exited: Exited, shell?: RemoteShell): Error => {
     const said = exited.stderr.trim().split("\n").at(-1) ?? "";
-    const why = exited.status === 255 ? "ssh could not reach the sandbox" : exited.status === null ? "it did not finish in time" : `it exited with ${exited.status}`;
+    const why =
+        shell?.unreachable !== undefined && exited.status === shell.unreachable.status
+            ? shell.unreachable.sentence
+            : exited.status === null
+              ? "it did not finish in time"
+              : `it exited with ${exited.status}`;
     return new Error(`${what} failed: ${why}${said === "" ? "" : ` (${said})`}`);
 };
 
-export const sandboxCopy = (runner: ProjectRunner, ssh: string, alias: string, remoteDir: string): SandboxCopy => {
-    const command = (program: string, input: string): string[] => [...SSH_OPTIONS, alias, remoteNodeCommand(program, input)];
+export const sandboxCopy = (runner: ProjectRunner, shell: RemoteShell, remoteDir: string): SandboxCopy => {
+    const command = (program: string, input: string): readonly string[] => shell.argsFor(remoteNodeCommand(program, input));
     return {
         list: async (ignoreExpressions) => {
-            const listed = await collect(runner.spawn(ssh, command(LISTING_PROGRAM, JSON.stringify({ root: remoteDir, ignore: ignoreExpressions })), { timeoutMs: TRANSFER_TIMEOUT_MS }));
+            const listed = await collect(
+                runner.spawn(shell.command, command(LISTING_PROGRAM, JSON.stringify({ root: remoteDir, ignore: ignoreExpressions })), { timeoutMs: TRANSFER_TIMEOUT_MS }),
+            );
             if (listed.status === 3) {
                 throw new Error(`the sandbox has no ${remoteDir}: its copy of this folder is gone`);
             }
             if (listed.status !== 0) {
-                throw failure(`listing the sandbox's copy (${remoteDir})`, listed);
+                throw failure(`listing the sandbox's copy (${remoteDir})`, listed, shell);
             }
             return parseListing(listed.stdout.toString("utf8"));
         },
@@ -301,14 +313,14 @@ export const sandboxCopy = (runner: ProjectRunner, ssh: string, alias: string, r
             if (paths.length === 0) {
                 return new Map();
             }
-            const spawned = runner.spawn(ssh, command(FETCH_PROGRAM, JSON.stringify({ root: remoteDir })), {
+            const spawned = runner.spawn(shell.command, command(FETCH_PROGRAM, JSON.stringify({ root: remoteDir })), {
                 input: paths.map((path) => `${path}\0`).join(""),
                 timeoutMs: TRANSFER_TIMEOUT_MS,
             });
             const answers = await receiveFiles(spawned.stdout, paths, staging);
             const exited = await spawned.exit;
             // Whatever did not arrive says why the transfer stopped.
-            const stopped = exited.status === 0 ? "the sandbox did not send it" : failure("fetching from the sandbox", exited).message;
+            const stopped = exited.status === 0 ? "the sandbox did not send it" : failure("fetching from the sandbox", exited, shell).message;
             return new Map(paths.map((path) => [path, answers.get(path) ?? { skipped: stopped }]));
         },
     };

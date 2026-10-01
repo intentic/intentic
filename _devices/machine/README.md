@@ -8,7 +8,7 @@ flowchart LR
     machine -->|"outbound WebSocket"| daemon["Sandbox daemon"]
     daemon -->|"MCP tool calls"| policy["Scope check<br/>device/policy.ts"]
     policy --> local["Shell, files, screen,<br/>browser, local sandboxes"]
-    machine -->|"Mutagen over tunnelled SSH"| daemon
+    machine -->|"Mutagen over tunnelled SSH,<br/>or through Docker on this machine"| daemon
     machine --> folder["Local folder<br/>and mirrored ports"]
     machine -->|"Windows only"| distros["Agent in each<br/>WSL distro"]
 ```
@@ -35,9 +35,11 @@ flowchart LR
   is not ([`tools/ic-binary.ts`](src/device/tools/ic-binary.ts)), since a new verb here arrives with a new verb there.
   A fetch that fails is logged with its reason and reported in the device's facts (`icOutOfDate`, beside `features`),
   so a stale `ic` explains why logs and saving a shape are missing; the next sandbox action tries again.
-- **sync** (`src/sync/`): `sync setup` enrolls an SSH key and runs Mutagen against the sandbox's sshd, reached
-  through a loopback port tunnelled over a WebSocket. It keeps a folder two-way synced (a project copy-first, below),
-  forwards every workspace port to the same localhost port, and fast-forwards local git clones from the sandbox.
+- **sync** (`src/sync/`): `sync setup` enrolls this machine and runs Mutagen against the sandbox: over ssh to its
+  sshd, reached through a loopback port tunnelled over a WebSocket, or, for a project whose sandbox container runs on
+  this machine's own Docker engine, through Docker itself (below). It keeps a folder two-way synced (a project
+  copy-first, below), forwards every workspace port to the same localhost port, and fast-forwards local git clones
+  from the sandbox.
 - A **project pairing** (`sync setup --remote-dir /work/<name> --project`, what the desktop app asks for when it
   makes a sandbox for a folder the owner picked) syncs that folder with `/work/<name>` rather than `/work`, and nothing
   of the sandbox's is written into it: no state backup session, no git bridge, and an ignore list that keeps a
@@ -45,6 +47,22 @@ flowchart LR
   shapes, and refuses `sync.json` whole otherwise). `setup` refuses a folder that is, holds or sits inside another
   sandbox's, and a set-up-again that would change where a paired sandbox's folder syncs. It is **copy-first** unless
   its owner opted into two-way: see [Copy-first projects](#copy-first-projects).
+- **Through Docker** ([`sync/endpoint.ts`](src/sync/endpoint.ts)): with `setup --transport auto`, the default, a
+  project's sandbox is reached through this machine's own Docker engine when the container `ic` named after the
+  pairing URL's slug is running there with that URL as its `SANDBOX_PUBLIC_URL`. Anything else stays on ssh: a hosted
+  sandbox, one on another computer, a workspace pairing (its git bridge and state backup ride ssh).
+  - The session is `docker://<container>/work/<name>` and the forwards are `docker://<container>:tcp:…`. The
+    bring-back's listing and fetch and the residue probe run through `docker exec`, with the same programs ssh carries.
+  - Setup therefore skips `known_hosts`, the ssh-config block, the tunnel listener and the ssh probes.
+  - The pairing records `transport: "docker"` and its `container`. `sync.json` holds that name to a sandbox
+    container's, and the container is checked to still be this sandbox before any session is made through it.
+  - Enrollment, the ports read and the report still go to the sandbox's own address, so the tunnel is untouched.
+  - Existing ssh pairings keep ssh until they are set up again.
+
+  (2026-10-01) Measured on Docker Desktop from Windows and from WSL: a session was up in 2–4 s, against up to 90 s
+  through the tunnel. Bind-mounting the folder into the container was rejected: a land or an agent's `rm -rf` would
+  write straight into the owner's folder, the daemon would move its `.git` onto `/history`, and on Windows and macOS
+  every read would cross 9p or virtiofs, with no inotify for the owner's own edits.
 - Only the resident agent creates Mutagen sessions: `setup` records the pairing and waits for the session to
   appear, since two creators racing left one name holding two identical sessions. The agent keeps one session per
   name, terminating any extras, and recreates a session whose rules drifted (its ignores, its folders, its sync mode,
@@ -128,6 +146,10 @@ driving this agent's own session code and CLI (alpha is this device, beta the sa
 |---|---|
 | edits, creates or deletes a file | carries it to the sandbox, except over a file the sandbox changed, which is kept |
 | deletes a file the sandbox changed | the sandbox keeps its version, and the conflict clears |
+
+Through Docker the transport changes and these rules do not. Re-measured on Docker Desktop, from Windows and from WSL:
+an agent's edit and an agent's new file stayed in the sandbox, and the owner's later edit of the same file was
+reported as a conflict, with the agent's copy kept.
 
 A fresh session over two copies that already differ (what any replacement starts from) deletes nothing on either side.
 One-way-safe copies what only this folder has into the sandbox and keeps every sandbox file that differs, as a conflict.
@@ -298,7 +320,7 @@ clock.
 - [src/resident.ts](src/resident.ts) — the resident process that holds links, pairings and WSL distros.
 - [src/device/mcp.ts](src/device/mcp.ts) — every tool a sandbox can call on this device.
 - [src/device/policy.ts](src/device/policy.ts) — scope checks and the file-root boundary.
-- [src/sync/tunnel.ts](src/sync/tunnel.ts) — the loopback SSH port that fronts the sandbox's sshd.
+- [src/sync/endpoint.ts](src/sync/endpoint.ts) — how a pairing reaches its sandbox: the tunnelled sshd (`tunnel.ts`), or Docker for a project on this machine.
 - [src/environments/machine.ts](src/environments/machine.ts) — the Windows root and its WSL children.
 
 ## Commands

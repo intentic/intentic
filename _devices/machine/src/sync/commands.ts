@@ -20,6 +20,7 @@ import {
     isProjectPairing,
     type Pairing,
     pairingRemoteDir,
+    projectDirection,
     readState,
     removePairing,
     setAutoHealOff,
@@ -27,8 +28,10 @@ import {
     setPortIgnored,
     type SyncMode,
     type SyncState,
+    type SyncTransport,
     upsertPairing,
 } from "./config.js";
+import { localSandboxContainer } from "./endpoint.js";
 import { overlappingPairing } from "./folders.js";
 import { realBridgeExec, runGitBridge } from "./git-bridge.js";
 import { retireMirroredPort, retirePairingMirror, teardownAllForwards } from "./mirror.js";
@@ -164,7 +167,47 @@ interface SetupFlags {
     readonly takeover: boolean;
     readonly remoteDir?: string;
     readonly project: boolean;
+    readonly transport?: TransportAsk;
 }
+
+// What `--transport` may ask for: a transport by name, or `auto`, the default, which lets transportFor decide.
+type TransportAsk = "auto" | SyncTransport;
+
+const parseTransport = (value: string): TransportAsk => {
+    if (value !== "auto" && value !== "ssh" && value !== "docker") {
+        throw new Error(`"${value}" is not a transport: auto (the default), ssh or docker.`);
+    }
+    return value;
+};
+
+// HOW A NEW PAIRING REACHES ITS SANDBOX (endpoint.ts). A project folder whose sandbox container runs on this machine's
+// own Docker engine is reached through Docker, with nothing on ssh, the tunnel or a public address on the data path;
+// every other pairing over ssh, as before. `--transport` overrides the choice, and docker asked for where it cannot work
+// is refused before the pairing token is spent. Stored as absent for ssh, the shape every earlier pairing has.
+export const transportFor = async (
+    asked: TransportAsk,
+    placement: Pick<Pairing, "project">,
+    sandboxUrl: string,
+    locate: (sandboxUrl: string) => Promise<string | undefined> = localSandboxContainer,
+): Promise<Pick<Pairing, "transport" | "container">> => {
+    if (asked === "ssh") {
+        return {};
+    }
+    if (!isProjectPairing(placement)) {
+        if (asked === "docker") {
+            throw new Error("--transport docker is for a project folder (--project): a workspace pairing's git bridge and state backup ride ssh.");
+        }
+        return {};
+    }
+    const container = await locate(sandboxUrl);
+    if (container === undefined) {
+        if (asked === "docker") {
+            throw new Error(`--transport docker needs this sandbox's container running on this machine's Docker engine, and none here serves ${sandboxUrl}.`);
+        }
+        return {};
+    }
+    return { transport: "docker", container };
+};
 
 // `--remote-dir`, held to the two shapes a pairing may take (config.ts pairingProblem) before anything is enrolled.
 const parseRemoteDir = (value: string): string => {
@@ -204,7 +247,9 @@ const wantedFolder = (flags: Pick<SetupFlags, "dir" | "url">, sandboxId: string)
     );
 
 const setup = buildCommand<SetupFlags>({
-    docs: { brief: "Enroll an SSH key with a pairing token and start a Mutagen sync of the local dir ↔ sandbox /work (or a project folder in it)" },
+    docs: {
+        brief: "Enroll this machine with a pairing token and start a Mutagen sync of the local dir ↔ sandbox /work (or a project folder in it), over ssh or, for a project on this machine's Docker engine, through Docker",
+    },
     parameters: {
         flags: {
             url: { kind: "parsed", parse: String, brief: "The sandbox's public URL (e.g. https://sandbox-xxx.example.dev)" },
@@ -226,6 +271,12 @@ const setup = buildCommand<SetupFlags>({
             project: {
                 kind: "boolean",
                 brief: "The local dir is your own project: sync it into --remote-dir with no state backup and no git bridge writing into it",
+            },
+            transport: {
+                kind: "parsed",
+                parse: parseTransport,
+                optional: true,
+                brief: "How the sandbox is reached: auto (the default: Docker for a project whose sandbox runs on this machine's engine, ssh otherwise), ssh or docker",
             },
         },
     },
@@ -288,7 +339,12 @@ export const projectAskedWithoutFlag = (flags: Pick<SetupFlags, "project">, env:
 // syncs to, whether this sandbox already syncs it somewhere else, and whether another sandbox's pairing holds it.
 const planSetup = async (
     flags: SetupFlags,
-): Promise<{ readonly sandboxId: string; readonly placement: Pick<Pairing, "remoteDir" | "project">; readonly folder: string }> => {
+): Promise<{
+    readonly sandboxId: string;
+    readonly placement: Pick<Pairing, "remoteDir" | "project">;
+    readonly folder: string;
+    readonly reach: Pick<Pairing, "transport" | "container">;
+}> => {
     const skewed = projectAskedWithoutFlag(flags);
     if (skewed !== undefined) {
         throw new Error(skewed);
@@ -310,12 +366,13 @@ const planSetup = async (
             `${folder} overlaps ${clash.localDir}, which already syncs with ${clash.sandboxId}: two syncs over one folder overwrite each other's files. Choose a folder that neither is, holds nor sits inside one this machine syncs (\`intentic-machine status\` lists them).`,
         );
     }
-    return { sandboxId, placement, folder };
+    const reach = await transportFor(flags.transport ?? "auto", placement, flags.url);
+    return { sandboxId, placement, folder, reach };
 };
 
 const runSetup = async (ui: Ui, out: Log, flags: SetupFlags): Promise<void> => {
     ui.step("sync-enrolling", "enrolling this machine with your sandbox…");
-    const { sandboxId, placement, folder } = await planSetup(flags);
+    const { sandboxId, placement, folder, reach } = await planSetup(flags);
     const publicKey = await ensureSshKey();
     // Enrollment can retry for ~30s while the sandbox tunnel warms; overlapped with the two binary downloads
     // (independent: distinct endpoints, distinct install paths).
@@ -328,10 +385,8 @@ const runSetup = async (ui: Ui, out: Log, flags: SetupFlags): Promise<void> => {
     ]);
     out(`enrolled SSH key with ${flags.url}`);
 
-    const alias = sshAlias(sandboxId);
-    // Enrolling again is the owner vouching that this is the same sandbox, whatever key its sshd presents now: the one
-    // known_hosts holds for the alias is replaced, which is the only moment a changed key is ever accepted.
-    await replaceKnownHost(alias, syncSshPort(sandboxId), hostKey);
+    const container = dockerContainerOf(reach, mode);
+    await pinHostKey(sandboxId, hostKey, container);
 
     // A project folder is only ever file sync: an enrollment that came back ports-only (another machine holds this
     // sandbox's sync) would leave the owner's project unsynced under a card that says it is, so it is handed back.
@@ -358,7 +413,7 @@ const runSetup = async (ui: Ui, out: Log, flags: SetupFlags): Promise<void> => {
         sandboxId,
         mode,
         syncToken,
-        ...(localDir === undefined ? {} : { localDir, ...placement }),
+        ...(localDir === undefined ? {} : { localDir, ...placement, ...reach }),
     };
 
     ui.step("sync-linking", "linking the folder to your sandbox…");
@@ -370,20 +425,10 @@ const runSetup = async (ui: Ui, out: Log, flags: SetupFlags): Promise<void> => {
     // The ssh fragment is regenerated from the whole pairing list, so every paired sandbox keeps its alias.
     await writeManagedSshConfig(pairingSshConfig(pairings));
 
-    // The transport is a listener the resident agent holds (tunnel.ts), bound on its next pass; not fatal on timeout.
     ui.step("sync-starting", "starting the sync engine…");
     await ensureResident(out);
     await completeSetup(out);
-    const port = syncSshPort(sandboxId);
-    if (!(await tunnelReady(port, TUNNEL_READY_MS))) {
-        out(`note: the sync transport for ${sandboxId} isn't listening on 127.0.0.1:${port} yet, syncing starts as soon as it is.`);
-    }
-
-    // Prove the transport before handing it to Mutagen, using the very client Mutagen will pick: on Windows that
-    // is not the `ssh` on PATH but the first hit in its own hardcoded list (see ssh.ts).
-    const ssh = mutagenSshPath(process.platform, process.env["MUTAGEN_SSH_PATH"]);
-    assertSshConfigVisible(ssh, alias, port);
-    await probeSshTransport(ssh, alias, out);
+    await proveTransport(out, sandboxId, container);
 
     // THIS pairing's file sync is the agent's to start (mirror.ts prepares every setup it has not seen), never this
     // command's as well. The two used to race, and one name ended up holding two identical sessions. Waiting for it is
@@ -399,29 +444,72 @@ const runSetup = async (ui: Ui, out: Log, flags: SetupFlags): Promise<void> => {
     // Register the Mutagen daemon to autostart and resume sessions across reboots; it holds both sync and forward
     // sessions, so this covers mirror-only too. Best-effort: already-registered isn't worth failing on.
     registerMutagenAutostart(mutagen, machineLauncher(), out);
-    // Say the fleet out loud, before the ending block: pairing a sandbox on a machine that already had one is the
-    // exact moment the user needs to know the others are still syncing.
+    finishSetup(ui, flags.url, pairing, pairings);
+};
+
+// The container a new file-sync pairing reaches its sandbox through, or undefined for one reached over ssh. A mirror-only
+// enrollment has no folder, so whatever transportFor chose for it is moot.
+const dockerContainerOf = (reach: Pick<Pairing, "transport" | "container">, mode: SyncMode): string | undefined =>
+    mode === "sync" && reach.transport === "docker" ? reach.container : undefined;
+
+// Enrolling again is the owner vouching that this is the same sandbox, whatever key its sshd presents now: the one
+// known_hosts holds for the alias is replaced, which is the only moment a changed key is ever accepted. A pairing reached
+// through Docker never dials that sshd, so it pins nothing.
+const pinHostKey = async (sandboxId: string, hostKey: string | undefined, container: string | undefined): Promise<void> => {
+    if (container === undefined) {
+        await replaceKnownHost(sshAlias(sandboxId), syncSshPort(sandboxId), hostKey);
+    }
+};
+
+// Proves the way this pairing reaches its sandbox before Mutagen is handed it. Over ssh: the listener the resident agent
+// binds on its next pass (tunnel.ts; not fatal on a timeout), then the very client Mutagen will pick, which on Windows
+// is not the `ssh` on PATH but the first hit in its own hardcoded list (ssh.ts). Through Docker nothing rides ssh
+// (endpoint.ts): whether the container is this sandbox was checked before the token was spent, and is checked again
+// before each session is made.
+const proveTransport = async (out: Log, sandboxId: string, container: string | undefined): Promise<void> => {
+    if (container !== undefined) {
+        out(`reaching ${sandboxId} through Docker on this machine (${container}): no ssh key, tunnel or public address on the data path`);
+        return;
+    }
+    const alias = sshAlias(sandboxId);
+    const port = syncSshPort(sandboxId);
+    if (!(await tunnelReady(port, TUNNEL_READY_MS))) {
+        out(`note: the sync transport for ${sandboxId} isn't listening on 127.0.0.1:${port} yet, syncing starts as soon as it is.`);
+    }
+    const ssh = mutagenSshPath(process.platform, process.env["MUTAGEN_SSH_PATH"]);
+    assertSshConfigVisible(ssh, alias, port);
+    await probeSshTransport(ssh, alias, out);
+};
+
+// The ending block. The fleet is said out loud first: pairing a sandbox on a machine that already had one is the exact
+// moment the user needs to know the others are still syncing. The address a person acts on is the folder, the thing
+// they open, and an immediately visible path is the anchor that setup worked.
+const finishSetup = (ui: Ui, sandboxUrl: string, pairing: Pairing, pairings: readonly Pairing[]): void => {
     if (pairings.length > 1) {
         ui.note(`This machine now syncs ${pairings.length} sandboxes:`);
         for (const held of pairings) {
             ui.note(`  ${held.sandboxId}${held.localDir === undefined ? " (ports only)" : ` → ${held.localDir}`}`);
         }
     }
+    const syncing = pairing.mode === "sync";
     ui.finished(
-        mode === "sync" ? "Desktop sync is running." : "Enrolled for port mirroring.",
-        // The address a person acts on. For file sync that is the folder, the thing they open, and an
-        // immediately-visible
-        // path is the anchor that setup worked.
-        mode === "sync" ? localDir : undefined,
-        mode === "sync"
-            ? `That folder and your sandbox's ${pairingRemoteDir(pairing)} are now the same files.`
-            : `Ports from ${flags.url} now answer on this machine's localhost (mirror-only, no file sync).`,
+        syncing ? "Desktop sync is running." : "Enrolled for port mirroring.",
+        syncing ? pairing.localDir : undefined,
+        syncing ? setupOutcome(pairing) : `Ports from ${sandboxUrl} now answer on this machine's localhost (mirror-only, no file sync).`,
         [
             ["check it", "intentic-machine status"],
             ["remove it", "intentic-machine sync uninstall"],
         ],
     );
 };
+
+// What a finished setup means for the folder, in the terms its direction gives it. A copy-first project is a copy: the
+// owner's edits flow in, and nothing an agent does there reaches the folder until it is brought back. Only a two-way
+// pairing makes the folder and the sandbox's side the same files.
+export const setupOutcome = (pairing: Pick<Pairing, "project" | "direction" | "remoteDir">): string =>
+    isProjectPairing(pairing) && projectDirection(pairing) === "to-sandbox"
+        ? `That folder is copied into your sandbox's ${pairingRemoteDir(pairing)}, and your edits keep flowing in. What agents change there reaches this folder only when you bring it back (\`intentic-machine sync bring-back\`), after a restore point.`
+        : `That folder and your sandbox's ${pairingRemoteDir(pairing)} are now the same files.`;
 
 // How long `setup` waits for the watcher it just started to bind this pairing's port. Bounded by process
 // startup, not by any work the watcher does.
