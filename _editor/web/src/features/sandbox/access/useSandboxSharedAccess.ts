@@ -46,6 +46,7 @@ const rememberedKey = (sandboxId: string): string => `intentic.sharedAccess.${sa
 const recall = (sandboxId: string | undefined): boolean => {
     try {
         return sandboxId !== undefined && localStorage.getItem(rememberedKey(sandboxId)) === `1`;
+        // allow(silent-catch): Unavailable local storage supplies no cached shared-access row; the live response decides.
     } catch {
         return false;
     }
@@ -54,6 +55,7 @@ const recall = (sandboxId: string | undefined): boolean => {
 const remember = (sandboxId: string, shared: boolean): void => {
     try {
         localStorage.setItem(rememberedKey(sandboxId), shared ? `1` : `0`);
+        // allow(silent-catch): Denied storage disables only the cached first frame, never the access decision.
     } catch {
         // Unavailable storage costs the next start its first-frame row, nothing else.
     }

@@ -80,6 +80,7 @@ self.addEventListener("notificationclick", (event) => {
                 if (url.pathname === "/popout.html") {
                     continue;
                 }
+                // allow(silent-catch): A browser may refuse focus; still route the notification to the existing client.
                 await client.focus().catch(() => undefined);
                 // The open app routes there itself (shell/notifications/notificationTaps.ts), keeping its streams and
                 // what it has painted; a navigation reloads the whole app. A window that does not answer (a page
@@ -87,6 +88,7 @@ self.addEventListener("notificationclick", (event) => {
                 // does not, focusing is still the win.
                 const routed = await routedInPlace(client, `${target.pathname}${target.search}${target.hash}`);
                 if (!routed && typeof client.navigate === "function") {
+                    // allow(silent-catch): The client may close during navigation; notification handling has already found its window.
                     await client.navigate(target.href).catch(() => undefined);
                 }
                 return;

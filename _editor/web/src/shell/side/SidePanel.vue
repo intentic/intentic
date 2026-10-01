@@ -224,7 +224,13 @@ onBeforeUnmount(() => {
         />
 
         <!-- What was opened beside: the strip, then every tab's body stacked in one box, the one on screen visible. -->
-        <section v-if="tabsOnScreen" class="side-tabs flex min-h-0 flex-col" :class="stacked ? `` : `flex-1`" :style="tabsStyle" :aria-label="t(`shell.sidePanel.tabs`)">
+        <section
+            v-if="tabsOnScreen"
+            class="side-tabs flex min-h-0 flex-col"
+            :class="stacked ? `` : `flex-1`"
+            :style="tabsStyle"
+            :aria-label="t(`shell.sidePanel.tabs`)"
+        >
             <!-- `.view-header`, so the desktop app's window buttons take their corner from this bar when it reaches it. -->
             <div class="view-header flex items-stretch border-b border-line bg-card">
                 <SideStrip
@@ -253,7 +259,7 @@ onBeforeUnmount(() => {
                         type="button"
                         :class="ui.iconButton(`h-7 w-7 rounded`)"
                         :aria-label="t(`shell.sidePanel.openIn`, { section: activeHome.label })"
-                        v-tooltip.bottom="t(`shell.sidePanel.openIn`, { section: activeHome.label })"
+                        v-tooltip.bottom="{ title: t(`shell.sidePanel.openIn`, { section: activeHome.label }) }"
                         @click="openHome(activeTab)"
                     >
                         <Icon name="expand" class="text-xs" />
@@ -264,7 +270,9 @@ onBeforeUnmount(() => {
                         :class="ui.iconButton(`h-7 w-7 rounded`)"
                         :aria-label="folded ? t(`shell.sidePanel.unfold`) : t(`shell.sidePanel.fold`)"
                         :aria-expanded="!folded"
-                        v-tooltip.bottom="folded ? t(`shell.sidePanel.unfold`) : { title: t(`shell.sidePanel.fold`), note: t(`shell.sidePanel.foldNote`) }"
+                        v-tooltip.bottom="
+                            folded ? t(`shell.sidePanel.unfold`) : { title: t(`shell.sidePanel.fold`), note: t(`shell.sidePanel.foldNote`) }
+                        "
                         @click="toggleCollapsed()"
                     >
                         <Icon :name="folded ? `chevron-down` : `chevron-up`" class="text-xs" />

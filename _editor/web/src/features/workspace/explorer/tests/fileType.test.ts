@@ -1,0 +1,197 @@
+import { codeLangForPath } from "@intentic/code-read";
+import { formatOf } from "@intentic/ui/file-format";
+import { rendersAsBytes, resolveFile, TEXT_EDIT_MAX_BYTES } from "../fileType";
+
+// Empty (0-byte) files: text types stay editable (code/markdown); binary ones show the "empty" fallback.
+describe(`resolveFile empty files`, () => {
+    it(`empty text files resolve to an editable mode`, () => {
+        expect(resolveFile(`new.ts`, 0)).toEqual({ mode: `code`, lang: `typescript` });
+        expect(resolveFile(`README.md`, 0)).toEqual({ mode: `markdown`, lang: `markdown` });
+        expect(resolveFile(`.gitignore`, 0)).toEqual({ mode: `code`, lang: `gitignore` });
+        // SVG is text here too: the picture is a viewers extension's job, the markup is the core's.
+        expect(resolveFile(`icon.svg`, 0)).toEqual({ mode: `code`, lang: `xml` });
+    });
+
+    it(`empty binary files stay "empty"`, () => {
+        expect(resolveFile(`logo.png`, 0)).toEqual({ mode: `empty` });
+        expect(resolveFile(`doc.pdf`, 0)).toEqual({ mode: `empty` });
+        expect(resolveFile(`archive.zip`, 0)).toEqual({ mode: `empty` });
+        expect(resolveFile(`song.mp3`, 0)).toEqual({ mode: `empty` });
+        expect(resolveFile(`clip.mp4`, 0)).toEqual({ mode: `empty` });
+        expect(resolveFile(`report.docx`, 0)).toEqual({ mode: `empty` });
+        expect(resolveFile(`sheet.xlsx`, 0)).toEqual({ mode: `empty` });
+    });
+});
+
+// Markdown and code both carry a grammar (not just `code`): the diff view is one shared component and needs the
+// language from resolution, not per-mode.
+describe(`resolveFile text modes carry a lang`, () => {
+    it(`resolves a grammar for markdown`, () => {
+        expect(resolveFile(`ARCHITECTURE.md`, 1000)).toEqual({ mode: `markdown`, lang: `markdown` });
+        expect(resolveFile(`notes.markdown`, 1000)).toEqual({ mode: `markdown`, lang: `markdown` });
+        expect(resolveFile(`page.mdx`, 1000)).toEqual({ mode: `markdown`, lang: `markdown` });
+    });
+
+    it(`resolves svg markup as xml`, () => {
+        expect(resolveFile(`icon.svg`, 1000)).toEqual({ mode: `code`, lang: `xml` });
+        // Same answer whichever surface asks; the chat's Read card colors from this too.
+        expect(codeLangForPath(`icon.svg`)).toBe(`xml`);
+    });
+
+    // Component formats hold markup, script and styles in one file; each needs its own grammar for the diff view too.
+    it(`resolves a grammar for component files`, () => {
+        expect(codeLangForPath(`Card.vue`)).toBe(`vue`);
+        expect(codeLangForPath(`Card.svelte`)).toBe(`svelte`);
+        expect(resolveFile(`docs/extensions/build.astro`, 1000)).toEqual({ mode: `code`, lang: `astro` });
+    });
+
+    it(`applies the highlight cap to every text mode, not just code`, () => {
+        expect(resolveFile(`huge.md`, 1_000_000)).toEqual({ mode: `markdown` });
+        expect(resolveFile(`huge.svg`, 1_000_000)).toEqual({ mode: `code` });
+    });
+});
+
+// .env files have no regular extension (dot at index 0), so langFor matches them by name.
+describe(`resolveFile dotenv`, () => {
+    it(`highlights .env variants as dotenv`, () => {
+        expect(resolveFile(`.env`, 100)).toEqual({ mode: `code`, lang: `dotenv` });
+        expect(resolveFile(`.env.example`, 100)).toEqual({ mode: `code`, lang: `dotenv` });
+        expect(resolveFile(`.env.local`, 100)).toEqual({ mode: `code`, lang: `dotenv` });
+        expect(resolveFile(`config/prod.env`, 100)).toEqual({ mode: `code`, lang: `dotenv` });
+    });
+});
+
+// Config dotfiles have no usable extension, so langFor matches by name: generic for the `.xxxignore` family, exact for
+// the rest.
+describe(`resolveFile config dotfiles`, () => {
+    it(`highlights ignore files as gitignore`, () => {
+        expect(resolveFile(`.gitignore`, 100)).toEqual({ mode: `code`, lang: `gitignore` });
+        expect(resolveFile(`.dockerignore`, 100)).toEqual({ mode: `code`, lang: `gitignore` });
+        expect(resolveFile(`.prettierignore`, 100)).toEqual({ mode: `code`, lang: `gitignore` });
+        expect(resolveFile(`.gitattributes`, 100)).toEqual({ mode: `code`, lang: `gitignore` });
+    });
+
+    it(`maps known config names to shipped grammars`, () => {
+        expect(resolveFile(`.npmrc`, 100)).toEqual({ mode: `code`, lang: `ini` });
+        expect(resolveFile(`.editorconfig`, 100)).toEqual({ mode: `code`, lang: `ini` });
+        expect(resolveFile(`.prettierrc`, 100)).toEqual({ mode: `code`, lang: `json` });
+        expect(resolveFile(`.zshrc`, 100)).toEqual({ mode: `code`, lang: `bash` });
+        expect(resolveFile(`Makefile`, 100)).toEqual({ mode: `code`, lang: `make` });
+        expect(resolveFile(`manifest.webmanifest`, 100)).toEqual({ mode: `code`, lang: `json` });
+    });
+
+    it(`leaves unknown dotfiles plain`, () => {
+        expect(resolveFile(`.foorc`, 100)).toEqual({ mode: `code`, lang: undefined });
+    });
+});
+
+// Formats a viewers extension renders: the core just answers `binary` (opaque, download, no size gate), so disabling
+// that extension degrades to a download, not mojibake.
+describe(`resolveFile leaves extension-owned formats binary`, () => {
+    it(`claims no picture, document, or recording for itself`, () => {
+        for (const name of [`logo.png`, `photo.jpeg`, `anim.gif`, `doc.pdf`, `report.docx`, `budget.xlsx`]) {
+            expect(resolveFile(name, 1000)).toEqual({ mode: `binary` });
+        }
+        for (const ext of [`mp3`, `wav`, `flac`, `ogg`, `opus`, `m4a`, `aac`, `mp4`, `mov`, `webm`, `mkv`, `avi`]) {
+            expect(resolveFile(`clip.${ext}`, 1000)).toEqual({ mode: `binary` });
+        }
+    });
+
+    it(`applies no size gate: a viewer that streams has no ceiling to pre-empt`, () => {
+        expect(resolveFile(`film.mp4`, 2_000_000_000)).toEqual({ mode: `binary` });
+    });
+});
+
+// Which diffs the byte viewer takes over: the daemon's `binary` flag decides for extension-less files; the path decides
+// when that flag misses, e.g. an oversized image flagged `truncated`, not `binary`.
+describe(`rendersAsBytes`, () => {
+    it(`takes the daemon's word when a file has NUL bytes and no telling extension`, () => {
+        expect(rendersAsBytes(`data`, true)).toBe(true);
+        expect(rendersAsBytes(`notes.txt`, true)).toBe(true);
+    });
+
+    it(`claims every non-text path regardless of what the response said`, () => {
+        // Case this exists for: a big screenshot reported `truncated`, not `binary`.
+        expect(rendersAsBytes(`shots/rg-2.png`, undefined)).toBe(true);
+        expect(rendersAsBytes(`doc.pdf`, undefined)).toBe(true);
+        expect(rendersAsBytes(`fonts/Inter.woff2`, undefined)).toBe(true);
+        expect(rendersAsBytes(`bundle.zip`, undefined)).toBe(true);
+    });
+
+    it(`leaves text to the text diff, including the genuinely oversized kind`, () => {
+        expect(rendersAsBytes(`src/main.ts`, undefined)).toBe(false);
+        expect(rendersAsBytes(`README.md`, undefined)).toBe(false);
+        // SVG is text, diffable as lines; the viewer offers a source toggle.
+        expect(rendersAsBytes(`icon.svg`, undefined)).toBe(false);
+        // A recording is not diffable as text, however many viewers can play it.
+        expect(rendersAsBytes(`clip.mp4`, undefined)).toBe(true);
+        expect(rendersAsBytes(`LICENSE`, undefined)).toBe(false);
+    });
+});
+
+// Text always resolves to text regardless of size; FileViewer decides editable vs. windowed from the size the daemon
+// reports.
+describe(`resolveFile large text`, () => {
+    it(`resolves text to text at any size`, () => {
+        expect(resolveFile(`build.log`, TEXT_EDIT_MAX_BYTES * 60)).toEqual({ mode: `code` });
+        expect(resolveFile(`app.ts`, TEXT_EDIT_MAX_BYTES * 60)).toEqual({ mode: `code` });
+        expect(resolveFile(`ARCHITECTURE.md`, TEXT_EDIT_MAX_BYTES * 60)).toEqual({ mode: `markdown` });
+    });
+
+    it(`drops the tokenizer past the highlight cap, whatever the extension says`, () => {
+        expect(resolveFile(`app.ts`, 1_000_000)).toEqual({ mode: `code` });
+        expect(resolveFile(`app.ts`, 1000)).toEqual({ mode: `code`, lang: `typescript` });
+    });
+
+    it(`treats an unknown size optimistically: the read is bounded either way`, () => {
+        expect(resolveFile(`mystery.log`, undefined)).toEqual({ mode: `code`, lang: `log` });
+    });
+});
+
+// Which diffs open as tracked changes over rendered text: the formats fileq reads, minus the ones that are looked at.
+describe(`the format table's diff readings`, () => {
+    it(`reads documents, spreadsheets, decks, books, notebooks and archives as the text fileq renders`, () => {
+        for (const name of [
+            `Brief.DOCX`,
+            `a/b.pdf`,
+            `deck.pptx`,
+            `book.epub`,
+            `sheet.xlsx`,
+            `sheet.ods`,
+            `notes.odt`,
+            `notes.rtf`,
+            `nb.ipynb`,
+            `dist.zip`,
+            `lib.jar`,
+            `pkg.whl`,
+            `dump.tar`,
+            `dump.tgz`,
+        ]) {
+            expect(formatOf(name).reads, name).toBe(`document`);
+        }
+    });
+
+    it(`leaves pictures, recordings, fonts and code to their own diffs, and prose and tables to theirs`, () => {
+        expect([`shot.png`, `logo.svg`, `clip.mp4`, `song.mp3`, `Inter.woff2`, `main.ts`, `.gitignore`].map((name) => formatOf(name).reads)).toEqual([
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+        ]);
+        expect([`README.md`, `notes.txt`, `d.csv`, `e.TSV`].map((name) => formatOf(name).reads)).toEqual([`markdown`, `plain`, `table`, `table`]);
+    });
+
+    it(`draws a grid of cells only for the workbook formats`, () => {
+        expect([`a.xlsx`, `b.ODS`, `c.ots`, `a.docx`, `d.csv`, `e.pptx`].map((name) => formatOf(name).sheet === true)).toEqual([
+            true,
+            true,
+            true,
+            false,
+            false,
+            false,
+        ]);
+    });
+});

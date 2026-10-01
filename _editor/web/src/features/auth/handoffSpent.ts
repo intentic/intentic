@@ -20,6 +20,7 @@ const SpentSchema = z.record(z.string(), z.number());
 const read = (): Record<string, number> => {
     try {
         return SpentSchema.safeParse(JSON.parse(localStorage.getItem(KEY) ?? `{}`)).data ?? {};
+        // allow(silent-catch): Unavailable or malformed local storage is an empty replay cache, not a failed sign-in.
     } catch {
         return {};
     }
@@ -39,6 +40,7 @@ export const markHandoffSpent = (state: string, now: number = Date.now()): void 
         .slice(0, KEEP_COUNT - 1);
     try {
         localStorage.setItem(KEY, JSON.stringify(Object.fromEntries([[state, now], ...kept])));
+        // allow(silent-catch): Refused local storage disables only the cross-reload replay cache.
     } catch {
         // Storage refused (a private window's quota): the tab then restarts as before, which is no worse than today.
     }

@@ -325,8 +325,8 @@ export const createAgentWorktrees = (
         }
         const admins = join(common, "worktrees");
         const wanted = join(target, ".git");
-        for (const name of await readdir(admins).catch(() => [])) {
-            const back = (await readFile(join(admins, name, "gitdir"), "utf8").catch(() => "")).trim();
+        for (const name of (await readdir(admins).catch(undefinedIfMissing)) ?? []) {
+            const back = ((await readFile(join(admins, name, "gitdir"), "utf8").catch(undefinedIfMissing)) ?? "").trim();
             if (back !== "" && resolve(admins, name, back) === wanted) {
                 return join(admins, name);
             }
@@ -338,6 +338,7 @@ export const createAgentWorktrees = (
     // over the checkout, whose files are the agent's work), whose `.git` then moves in; `repair` points main's admin dir
     // back at it. Throws when git refuses (the branch is checked out elsewhere), before the checkout is touched.
     const freshPointer = async (main: string, target: string, branch: string): Promise<string> => {
+        // allow(silent-catch): Pruning stale metadata is optional; the subsequent add or sweep reports its own failure.
         await git(main, ["worktree", "prune"]).catch(() => undefined);
         const scratch = await mkdtemp(join(tmpdir(), "intentic-relink-"));
         try {
@@ -366,7 +367,7 @@ export const createAgentWorktrees = (
             const admin = await adminOf(main, target);
             const pointer = admin === undefined ? await freshPointer(main, target, branch) : `gitdir: ${admin}\n`;
             const stray = join(target, ".git");
-            if ((await lstat(stray).catch(() => undefined)) !== undefined) {
+            if ((await lstat(stray).catch(undefinedIfMissing)) !== undefined) {
                 const trashed = join(historyRoot, "trash", `${encodeURIComponent(repo)}-${id}-git-${Date.now()}`);
                 await mkdir(dirname(trashed), { recursive: true });
                 await rename(stray, trashed);
@@ -484,7 +485,7 @@ export const createAgentWorktrees = (
                 // checkout can carry the other mode's form and must converge here.
                 // A stale symlink would loop back into the worktree from inside a namespace; a stale mount point
                 // resolves nothing outside one.
-                const entry = await lstat(target).catch(() => undefined);
+                const entry = await lstat(target).catch(undefinedIfMissing);
                 if (isolated) {
                     // A symlink left standing under the mount point would loop back into /work from inside the namespace.
                     if (entry?.isSymbolicLink() && !(await removedLink(target, repo, rel))) {
@@ -497,6 +498,7 @@ export const createAgentWorktrees = (
                 }
                 if (entry?.isDirectory()) {
                     // rmdir refuses a non-empty dir, so a real install the agent made stays put.
+                    // allow(silent-catch): A nonempty install must stay; the symlink attempt below reports any remaining obstruction.
                     await rmdir(target).catch(() => undefined);
                 }
                 // "junction" on Windows: a dir symlink needs a privilege accounts lack; a junction resolves it
@@ -536,7 +538,7 @@ export const createAgentWorktrees = (
                 .filter((rel) => !covered.has(rel))
                 .map(async (rel) => {
                     const target = join(worktree, rel);
-                    if ((await lstat(target).catch(() => undefined))?.isSymbolicLink() !== true) {
+                    if ((await lstat(target).catch(undefinedIfMissing))?.isSymbolicLink() !== true) {
                         return;
                     }
                     logger.warn({ repo, mirror: rel }, "agents: mirror left unlinked, this repo un-ignores it");
@@ -678,7 +680,12 @@ export const createAgentWorktrees = (
             const wanted = async (): Promise<readonly { repo: string; base: string | undefined }[]> => {
                 const live = base === undefined ? (await liveRepos()).map((repo) => ({ repo, base: undefined })) : base;
                 const picked = selection === undefined ? live : live.filter(({ repo }) => repo === "root" || selection.includes(repo));
-                const reachable = new Set(fencedComposition(fence, picked.map(({ repo }) => repo)));
+                const reachable = new Set(
+                    fencedComposition(
+                        fence,
+                        picked.map(({ repo }) => repo),
+                    ),
+                );
                 return picked.filter(({ repo }) => reachable.has(repo));
             };
             if (recorded.length > 0) {
@@ -759,7 +766,7 @@ export const createAgentWorktrees = (
         },
         prune: async (knownIds, archivedIds) => {
             // Asked of the registry at the decision, so a conversation minted after this sweep started is never unnamed.
-            const unnamed = (await readdir(worktreesRoot).catch(() => [])).filter((name) => !knownIds().includes(name));
+            const unnamed = ((await readdir(worktreesRoot).catch(undefinedIfMissing)) ?? []).filter((name) => !knownIds().includes(name));
             if (unnamed.length > 0) {
                 logger.info({ count: unnamed.length }, "agents: checkouts no conversation record names, left in place");
             }
@@ -768,6 +775,7 @@ export const createAgentWorktrees = (
                 // touch too.
                 await withRepoLock(repo, async () => {
                     const main = mainDir(repo);
+                    // allow(silent-catch): Pruning stale metadata is optional; the subsequent add or sweep reports its own failure.
                     await git(main, ["worktree", "prune"]).catch(() => undefined);
                     // The ref half of the sweep: converges an archive that lost its repo lock to a crash.
                     const parked = await parkAgentRefs(main, new Set(archivedIds()), git).catch((error: unknown) => {

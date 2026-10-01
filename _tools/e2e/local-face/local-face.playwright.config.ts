@@ -6,7 +6,7 @@ import { defineConfig } from "@playwright/test";
 export default defineConfig({
     testDir: `.`,
     testMatch: `*.spec.ts`,
-    globalSetup: `./global-setup`,
+    globalSetup: `./local-global-setup`,
     workers: 1,
     // A failure here is the editor or the sidecar disagreeing about a route, which a second attempt only hides.
     retries: 0,

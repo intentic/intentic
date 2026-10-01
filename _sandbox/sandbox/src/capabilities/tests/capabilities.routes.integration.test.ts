@@ -1,0 +1,277 @@
+import { execFileSync } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { RESERVED_MCP_SERVER_NAMES, stashedMarker, VAULTED } from "@intentic/sandbox-contract";
+
+import { createApp } from "../../app.js";
+import { hasSession, markConnected, sessionDir } from "../../browser/sessions/session-store.js";
+
+import { clientFor, collect, errorCode } from "../../harness/route-client.testing.js";
+import { tempWorkspace } from "../../harness/route-fakes.testing.js";
+import { fakeFiles } from "../../workspace/workspace-slice.testing.js";
+import { services } from "../../harness/route-services.testing.js";
+import { memoryPersonasStore } from "../../harness/route-stores.testing.js";
+import { testConfig } from "../../testing.js";
+import { memoryCapabilitiesStore, memoryDismissalsStore } from "../capabilities-slice.testing.js";
+import { capabilitiesDocument, fileCapabilitiesStore } from "../capabilities-store.js";
+import { publicKeyOf } from "../credentials/ssh-keys.js";
+
+// Capabilities routes, driven over the HTTP surface exactly as the browser does; split from app.integration.test.ts.
+// Fakes and the client are shared (route-services.testing.ts and its siblings); what lives here is what these routes
+// do.
+
+test("capabilities.list reports each capability with its status; devops can't be removed, unknown is NOT_FOUND", async () => {
+    // Isolated workspace so recommendations depend on this test's tree, not whatever's checked out under /work.
+    const client = clientFor(
+        createApp(services({ workspace: tempWorkspace([]), capabilities: memoryCapabilitiesStore([{ id: "devops", kind: "devops", config: {} }]) })),
+    );
+    // devops status is derived from the repos on disk: absent under test, so it reads inactive.
+    expect(await client.capabilities.list()).toEqual({
+        // `secrets` names the credential keys an edit form must not treat as empty: devops holds none.
+        capabilities: [{ id: "devops", kind: "devops", status: { state: "inactive" }, config: {}, secrets: [] }],
+        recommendations: [],
+    });
+    // DevOps has no teardown (deleting the repos is data loss): CONFLICT; an unknown id is NOT_FOUND.
+    expect(await errorCode(client.capabilities.remove({ id: "devops" }))).toBe("CONFLICT");
+    expect(await errorCode(client.capabilities.remove({ id: "ghost" }))).toBe("NOT_FOUND");
+});
+
+// Docker's own error ("Cannot connect to the Docker daemon") never names the capability; this is where that gets fixed.
+test("capabilities.list recommends docker when a repo in the workspace carries a compose file", async () => {
+    const workspace = tempWorkspace([{ name: "app" }]);
+    writeFileSync(join(workspace.root, "app", "docker-compose.yml"), "");
+    const client = clientFor(createApp(services({ workspace, capabilities: memoryCapabilitiesStore([]) })));
+    expect((await client.capabilities.list()).recommendations).toEqual([
+        { entry: "docker", evidence: "app/docker-compose.yml", reason: "your workspace has a compose stack to run", prefill: {} },
+    ]);
+});
+
+// Evidence is recorded daemon-side, not client-supplied, so the record matches what was actually on screen.
+test("capabilities.dismiss takes a recommendation off the catalog and records what it was declined against", async () => {
+    const workspace = tempWorkspace([{ name: "app" }]);
+    writeFileSync(join(workspace.root, "app", "docker-compose.yml"), "");
+    const dismissals = memoryDismissalsStore();
+    const client = clientFor(createApp(services({ workspace, capabilities: memoryCapabilitiesStore([]), capabilityDismissals: dismissals })));
+    expect(await client.capabilities.dismiss({ entry: "docker" })).toEqual({ ok: true });
+    expect(await dismissals.list()).toEqual([{ entry: "docker", evidence: "app/docker-compose.yml" }]);
+    expect((await client.capabilities.list()).recommendations).toEqual([]);
+    // Nothing is being suggested for a entry nobody was offered: there is no claim to record a "no" against.
+    expect(await errorCode(client.capabilities.dismiss({ entry: "github" }))).toBe("NOT_FOUND");
+});
+
+// Preserve the browser profile and its accounts across capability renames.
+test("capabilities.rename carries the browser profile and repoints everything that named the old id", async () => {
+    const workspace = tempWorkspace([]);
+    const personas = memoryPersonasStore([{ id: "front", capabilities: ["me", "reddit"] }]);
+    const client = clientFor(
+        createApp(
+            services({
+                workspace,
+                personas,
+                capabilities: memoryCapabilitiesStore([
+                    { id: "me", kind: "identity", config: { email: "ada@example.com", openAccounts: "off" } },
+                    { id: "reddit", kind: "browser", config: { platform: "reddit", identity: "me" } },
+                ]),
+            }),
+        ),
+    );
+    // The finished sign-in, the thing worth carrying: a marker beside a profile directory.
+    await markConnected(workspace.root, "me");
+    mkdirSync(sessionDir(workspace.root, "me"), { recursive: true });
+
+    expect(await client.capabilities.rename({ id: "me", to: "ada" })).toEqual({ ok: true });
+
+    const { capabilities } = await client.capabilities.list();
+    expect(capabilities.map((capability) => capability.id).toSorted()).toEqual(["ada", "reddit"]);
+    // The account still lives in that identity's browser, and the persona still speaks through both.
+    expect(capabilities.find((capability) => capability.id === "reddit")?.config["identity"]).toBe("ada");
+    expect((await personas.get("front"))?.capabilities).toEqual(["ada", "reddit"]);
+    // Still signed in, under the new name: profile and marker both followed.
+    expect(hasSession(workspace.root, "ada")).toBe(true);
+    expect(hasSession(workspace.root, "me")).toBe(false);
+    expect(existsSync(sessionDir(workspace.root, "ada"))).toBe(true);
+});
+
+test("capabilities.rename refuses a name already in use, an unknown connection, and a kind whose name isn't its own", async () => {
+    const client = clientFor(
+        createApp(
+            services({
+                workspace: tempWorkspace([]),
+                capabilities: memoryCapabilitiesStore([
+                    { id: "docker", kind: "docker", config: { gpu: "off" } },
+                    { id: "notes", kind: "mcp", config: { url: "https://notes.example.com/mcp" } },
+                    { id: "tasks", kind: "mcp", config: { url: "https://tasks.example.com/mcp" } },
+                ]),
+            }),
+        ),
+    );
+    expect(await errorCode(client.capabilities.rename({ id: "notes", to: "tasks" }))).toBe("CONFLICT");
+    expect(await errorCode(client.capabilities.rename({ id: "ghost", to: "spirit" }))).toBe("NOT_FOUND");
+    // The engine is part of the sandbox rather than a connection somebody named: its handler says so.
+    expect(await errorCode(client.capabilities.rename({ id: "docker", to: "containers" }))).toBe("CONFLICT");
+    // A name the add form would refuse never reaches a handler: the wire schema is the same rule.
+    expect(await errorCode(client.capabilities.rename({ id: "notes", to: "-nope" }))).toBe("BAD_REQUEST");
+});
+
+// An mcp capability's id becomes its `mcp__<id>__` server name, so it must not be one a daemon server already owns, or
+// a same-named external server would shadow it. Discovered from the contract's reserved list rather than enumerated.
+test("capabilities.add and rename refuse an id that collides with a daemon server, for a kind whose id becomes a server", async () => {
+    const client = clientFor(
+        createApp(
+            services({
+                workspace: tempWorkspace([]),
+                capabilities: memoryCapabilitiesStore([{ id: "notes", kind: "mcp", config: { url: "https://notes.example.com/mcp" } }]),
+            }),
+        ),
+    );
+    const addFailure = (id: string): Promise<string | undefined> =>
+        errorCode((async () => collect(await client.capabilities.add({ id, kind: "mcp", config: { url: "https://x.example.com/mcp" } })))());
+    for (const reserved of RESERVED_MCP_SERVER_NAMES) {
+        expect(await addFailure(reserved), `add ${reserved}`).toBe("CONFLICT");
+        expect(await errorCode(client.capabilities.rename({ id: "notes", to: reserved })), `rename to ${reserved}`).toBe("CONFLICT");
+    }
+    // An ordinary id for the same kind is not refused by this rule: the add streams and records it.
+    expect(await addFailure("komodo")).toBeUndefined();
+});
+
+// The page's own writes are committed as they land (seams/settings-versions.ts): left uncommitted, capabilities.json
+// read as the owner's edits and a land touching it was refused.
+test("a connection added or removed on its page is committed on its own, leaving nothing for the owner to save", async () => {
+    const workspace = tempWorkspace([]);
+    const git = (...args: string[]): string => execFileSync("git", args, { cwd: workspace.root, encoding: "utf8" }).trim();
+    git("init", "-q");
+    git("-c", "user.name=owner", "-c", "user.email=owner@example.com", "commit", "-q", "--allow-empty", "-m", "Initialize workspace");
+    const agentWorktrees = { ...services().agentWorktrees, mainDir: () => workspace.root };
+    const capabilities = fileCapabilitiesStore(join(workspace.root, capabilitiesDocument.path));
+    const client = clientFor(createApp(services({ workspace, capabilities, agentWorktrees })));
+
+    await collect(await client.capabilities.add({ id: "notes", kind: "mcp", config: { url: "https://notes.example.com/mcp" } }));
+    expect(git("log", "-1", "--format=%s", "--name-only").split("\n")).toEqual(["Settings: connection notes", "", capabilitiesDocument.path]);
+
+    await client.capabilities.remove({ id: "notes" });
+    expect(git("log", "-1", "--format=%s")).toBe("Settings: removed connection notes");
+    expect(git("status", "--porcelain", "--", capabilitiesDocument.path)).toBe("");
+});
+
+test("capabilities.add composes the entry's image fragment into the overlay and nags for the rebuild; remove drops it", async () => {
+    const disk = new Map<string, string>();
+    const memoryFiles = fakeFiles({
+        read: async (path) => disk.get(path),
+        write: async (path, content) => {
+            disk.set(path, content as string);
+        },
+        remove: async (path) => {
+            disk.delete(path);
+        },
+    });
+    // vpn writes ~/.wireguard on the real fs; point HOME at a temp dir, as vpn.handler.integration.test.ts does.
+    process.env["HOME"] = mkdtempSync(join(tmpdir(), "app-vpn-home-"));
+    const client = clientFor(createApp(services({ files: memoryFiles, capabilities: memoryCapabilitiesStore() })));
+
+    const events = await collect(
+        // Auto-connect on with no VPN tooling yet: apply must still land in the manifest and prompt the install
+        // rebuild.
+        await client.capabilities.add({
+            id: "office",
+            kind: "vpn",
+            config: { provider: "wireguard", config: "[Interface]\nPrivateKey = P\n", autoConnect: "on" },
+        }),
+    );
+    expect(events.some((event) => "message" in event && typeof event["message"] === "string" && event["message"].includes("rebuild"))).toBe(true);
+    const approvedFile = disk.get("/work/.intentic/local/environment.approved.Dockerfile");
+    expect(approvedFile).toContain("wireguard-tools");
+    expect(approvedFile).toContain("# intentic:runtime --device=/dev/net/tun");
+
+    // Removing the last fragment-bearing capability recomposes the overlay away (stock container, no custom).
+    await client.capabilities.remove({ id: "office" });
+    expect(disk.get("/work/.intentic/local/environment.approved.Dockerfile")).toBeUndefined();
+});
+
+// VAULTED lets an edit keep a credential the sender never saw: empty fails to dial, an absent key fails the schema.
+// Refusing a marker with nothing behind it matters too: letting it through writes the literal marker into a conf file.
+test("capabilities.add keeps a credential the sender never saw, and refuses to keep one that isn't there", async () => {
+    process.env["HOME"] = mkdtempSync(join(tmpdir(), "app-vpn-edit-home-"));
+    const disk = new Map<string, string>();
+    const memoryFiles = fakeFiles({
+        read: async (path) => disk.get(path),
+        write: async (path, content) => {
+            disk.set(path, content as string);
+        },
+        remove: async (path) => {
+            disk.delete(path);
+        },
+    });
+    const store = memoryCapabilitiesStore();
+    const client = clientFor(createApp(services({ files: memoryFiles, capabilities: store })));
+    const conf = "[Interface]\nPrivateKey = REAL\n";
+    // `add` streams, so its refusal arrives on the iteration rather than on the call: both are awaited here.
+    const addFailure = (input: Parameters<typeof client.capabilities.add>[0]): Promise<string | undefined> =>
+        errorCode((async () => collect(await client.capabilities.add(input)))());
+
+    await collect(await client.capabilities.add({ id: "office", kind: "vpn", config: { provider: "wireguard", config: conf, autoConnect: "on" } }));
+    // What a browser is told it holds: the shape and the names of its credentials, never the values.
+    const [listed] = (await client.capabilities.list()).capabilities;
+    expect(listed?.config).toEqual({ provider: "wireguard", autoConnect: "on" });
+    expect(listed?.secrets).toEqual(["config"]);
+
+    // The edit: one answer changed, the credential kept.
+    await collect(
+        await client.capabilities.add({ id: "office", kind: "vpn", config: { provider: "wireguard", config: VAULTED, autoConnect: "off" } }),
+    );
+    expect((await store.get("office"))?.config).toEqual({ provider: "wireguard", config: conf, autoConnect: "off" });
+
+    // Nothing stored behind the marker: a fresh id has no credential to keep.
+    expect(await addFailure({ id: "fresh", kind: "vpn", config: { provider: "wireguard", config: VAULTED } })).toBe("BAD_REQUEST");
+});
+
+// The one refusal this route can give without touching the network. It matters because the alternative is silent: git
+// asked for an unknown host key with no terminal to answer on would sit there until the form gave up.
+test("capabilities.refs refuses a remote git could only read by prompting someone", async () => {
+    const client = clientFor(createApp(services({ workspace: tempWorkspace([]), capabilities: memoryCapabilitiesStore([]) })));
+    expect(await errorCode(client.capabilities.refs({ url: "ssh://git@github.com/owner/repo.git" }))).toBe("BAD_REQUEST");
+});
+
+// The key the sandbox makes for an ssh form, over the wire: the answer is the public half and a token, never the private
+// half; the add trades the token for the key once; the list shows the public half again and withholds the rest.
+test("capabilities.sshKey answers a public key and a one-time token, which one add trades for the private half", async () => {
+    process.env["HOME"] = mkdtempSync(join(tmpdir(), "app-ssh-key-home-"));
+    const disk = new Map<string, string>();
+    const memoryFiles = fakeFiles({
+        read: async (path) => disk.get(path),
+        write: async (path, content) => {
+            disk.set(path, String(content));
+        },
+        remove: async (path) => {
+            disk.delete(path);
+        },
+    });
+    const store = memoryCapabilitiesStore();
+    const config = { ...testConfig, sandbox: { ...testConfig.sandbox, name: "Ada's box" } };
+    const client = clientFor(createApp(services({ files: memoryFiles, capabilities: store, config })));
+    const addFailure = (input: Parameters<typeof client.capabilities.add>[0]): Promise<string | undefined> =>
+        errorCode((async () => collect(await client.capabilities.add(input)))());
+
+    const key = await client.capabilities.sshKey();
+    // Only what the browser may hold: the line to authorize, and the token standing in for the rest.
+    expect(Object.keys(key).toSorted()).toEqual(["publicKey", "token"]);
+    expect(key.publicKey).toMatch(/^ssh-ed25519 AAAAC3NzaC1lZDI1NTE5\S+ intentic-Ada-s-box$/);
+
+    const form = { auth: "generated" as const, host: "box.example.com", port: 22, user: "deploy", privateKey: stashedMarker(key.token) };
+    await collect(await client.capabilities.add({ id: "box", kind: "ssh", config: form }));
+
+    // Stored is the key that public line belongs to, never the marker.
+    const stored = await store.get("box");
+    const storedKey = stored?.kind === "ssh" && stored.config.auth === "generated" ? stored.config.privateKey : "";
+    expect(publicKeyOf(storedKey)).toBe(key.publicKey);
+    const [listed] = (await client.capabilities.list()).capabilities;
+    expect(listed?.config).toEqual({ host: "box.example.com", port: 22, user: "deploy", auth: "generated", publicKey: key.publicKey });
+    expect(listed?.secrets).toEqual(["privateKey"]);
+
+    // The token has done its one job: a second add naming it is refused, as is a token never issued.
+    expect(await addFailure({ id: "again", kind: "ssh", config: form })).toBe("BAD_REQUEST");
+    expect(await addFailure({ id: "forged", kind: "ssh", config: { ...form, privateKey: stashedMarker("never-issued") } })).toBe("BAD_REQUEST");
+    expect(await store.get("again")).toBeUndefined();
+});

@@ -1,3 +1,4 @@
+import { STATE_DIR } from "@intentic/constants";
 import type { IconName, Tip } from "@intentic/ui";
 import type { LandConflict, LandConflictReason } from "@intentic/sandbox-contract";
 import { errands, errandPrompt } from "../../chat/run/errands";
@@ -34,11 +35,11 @@ export const userBlockers = (blockers: readonly Blocker[]): readonly Blocker[] =
 // edits, one took three Accepts, a trip to Changes and a redo to get a land through.
 export type SettingsPage = `personas` | `capabilities` | `agent`;
 const SETTINGS_FILES: readonly (readonly [path: string, page: SettingsPage])[] = [
-    [`.intentic/config/personas.json`, `personas`],
-    [`.intentic/config/personas/`, `personas`],
-    [`.intentic/config/capabilities.json`, `capabilities`],
-    [`.intentic/config/settings.json`, `agent`],
-    [`.intentic/config/safety.md`, `agent`],
+    [`${STATE_DIR}/config/personas.json`, `personas`],
+    [`${STATE_DIR}/config/personas/`, `personas`],
+    [`${STATE_DIR}/config/capabilities.json`, `capabilities`],
+    [`${STATE_DIR}/config/settings.json`, `agent`],
+    [`${STATE_DIR}/config/safety.md`, `agent`],
 ];
 
 export const settingsPageOf = (blocker: Blocker): SettingsPage | undefined =>
@@ -63,7 +64,9 @@ export const settingsPageName = (page: SettingsPage): string =>
 // The pages behind the owner's half of a land report, named and joined as the report's heading names them; undefined
 // unless a page wrote every file in it. The board card reads it too, so the two never name one refusal differently.
 export const settingsPagesOf = (conflicts: readonly LandConflict[] | undefined): string | undefined =>
-    settingsOrigin(userBlockers(blockersOf(conflicts)))?.map(settingsPageName).join(`, `);
+    settingsOrigin(userBlockers(blockersOf(conflicts)))
+        ?.map(settingsPageName)
+        .join(`, `);
 
 // Per-cause copy shared by the group heading and row mark; `icon` links them so they can't drift. Order below is
 // the report's group order (agent causes first, then the user's):

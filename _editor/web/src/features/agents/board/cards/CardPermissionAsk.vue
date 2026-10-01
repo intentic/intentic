@@ -49,7 +49,7 @@ const answer = async (choice: BoardAnswer): Promise<void> => {
                 severity="secondary"
                 :text="true"
                 :disabled="disabled || sending !== undefined"
-                v-tooltip.top="t(`chat.chatMessageView.skipCall`)"
+                v-tooltip.top="{ title: t(`ui.action.skip`), note: t(`chat.chatMessageView.skipCall`) }"
                 class="whitespace-nowrap"
                 @click.stop="answer(`skip`)"
             >

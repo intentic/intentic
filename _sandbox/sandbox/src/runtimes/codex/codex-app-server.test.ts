@@ -1,3 +1,4 @@
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import {
     type AppServerNotification,
     type CodexAppServerConnector,
@@ -127,14 +128,35 @@ test("a subagent's thread reads under the spawn call that started it, and its co
         { method: "item/started", params: { threadId: "thr-new", turnId: "turn-1", item: spawn("inProgress", [], {}) } },
         {
             method: "item/started",
-            params: { threadId: "thr-child", turnId: "turn-c1", item: { id: "cmd-c1", type: "commandExecution", command: "rg purge", status: "inProgress", aggregatedOutput: "" } },
+            params: {
+                threadId: "thr-child",
+                turnId: "turn-c1",
+                item: { id: "cmd-c1", type: "commandExecution", command: "rg purge", status: "inProgress", aggregatedOutput: "" },
+            },
         },
-        { method: "item/completed", params: { threadId: "thr-new", turnId: "turn-1", item: spawn("completed", ["thr-child"], { "thr-child": { status: "pendingInit", message: null } }) } },
-        { request: "item/commandExecution/requestApproval", params: { threadId: "thr-child", turnId: "turn-c1", command: "rm -rf dist", cwd: "/work/app" } },
-        { method: "item/completed", params: { threadId: "thr-child", turnId: "turn-c1", item: { id: "msg-c1", type: "agentMessage", text: "Ported." } } },
+        {
+            method: "item/completed",
+            params: {
+                threadId: "thr-new",
+                turnId: "turn-1",
+                item: spawn("completed", ["thr-child"], { "thr-child": { status: "pendingInit", message: null } }),
+            },
+        },
+        {
+            request: "item/commandExecution/requestApproval",
+            params: { threadId: "thr-child", turnId: "turn-c1", command: "rm -rf dist", cwd: `${WORKSPACE_ROOT}/app` },
+        },
+        {
+            method: "item/completed",
+            params: { threadId: "thr-child", turnId: "turn-c1", item: { id: "msg-c1", type: "agentMessage", text: "Ported." } },
+        },
         {
             method: "thread/tokenUsage/updated",
-            params: { threadId: "thr-child", turnId: "turn-c1", tokenUsage: { total: { inputTokens: 500, outputTokens: 50 }, last: { inputTokens: 500, outputTokens: 50 } } },
+            params: {
+                threadId: "thr-child",
+                turnId: "turn-c1",
+                tokenUsage: { total: { inputTokens: 500, outputTokens: 50 }, last: { inputTokens: 500, outputTokens: 50 } },
+            },
         },
         { method: "turn/completed", params: { threadId: "thr-child", turn: { id: "turn-c1", status: "completed" } } },
         { method: "turn/completed", params: { threadId: "thr-new", turn: { id: "turn-1", status: "completed" } } },
@@ -165,7 +187,14 @@ test("a subagent's thread reads under the spawn call that started it, and its co
     // Asked, not waved through: nothing answered the subagent's command before the card did.
     expect(answered).toEqual([]);
     expect(events.find((event) => event.type === "item.completed" && event.item.type === "collab_agent_tool_call")).toMatchObject({
-        item: { tool: "spawnAgent", status: "completed", prompt: "Port the purge job\nRetire rows past 30 days.", model: "gpt-5.6-luna", receivers: ["thr-child"], states: { "thr-child": { status: "pendingInit" } } },
+        item: {
+            tool: "spawnAgent",
+            status: "completed",
+            prompt: "Port the purge job\nRetire rows past 30 days.",
+            model: "gpt-5.6-luna",
+            receivers: ["thr-child"],
+            states: { "thr-child": { status: "pendingInit" } },
+        },
     });
 });
 

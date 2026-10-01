@@ -1,6 +1,7 @@
 // jsdom: the subject is what the card renders (a press, a stat), not something readable off the code.
 // Pins that the Land button reports progress only for its own action (not archiving), and that the stat row shows a
 // fact as soon as the agent has it, not only when a turn ends.
+import { STATE_DIR } from "@intentic/constants";
 import "@intentic/testing/dom";
 import type { AgentSummary } from "@intentic/sandbox-contract";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
@@ -363,7 +364,10 @@ it(`replaces the plain land rather than sitting beside it`, () => {
 // An agent that took landed work out did so on purpose (an orchestrator tidying a reviewer's patches away): the card names
 // it and offers nothing to put it back, and what is new on the branch still lands the plain way.
 it(`names the agent that took landed work out, offering Land now for what is new and no Land again`, () => {
-    const card = mount({ ...discarded(0, 4, `ready`), landedPresence: { landed: 4, present: 0, removedBy: { kind: `agent`, id: `o`, title: `Orchestrator` } } });
+    const card = mount({
+        ...discarded(0, 4, `ready`),
+        landedPresence: { landed: 4, present: 0, removedBy: { kind: `agent`, id: `o`, title: `Orchestrator` } },
+    });
     expect(card.textContent).toContain(`Removed by Orchestrator`);
     expect(relandButton(card)).toBeUndefined();
     expect(landButton(card)?.textContent?.trim()).toBe(`Land now`);
@@ -485,7 +489,7 @@ it(`says, without a press of its own, that a refusal is the user's own to clear`
 // G4: a refusal held only by files a Sandbox page wrote is not the owner's edits, and the card says so in the review's
 // own words, read off the same report the review shows.
 it(`names the Sandbox page when a page wrote every file holding the land`, () => {
-    const conflicts = [{ repo: `root`, clean: 3, paths: [{ path: `.intentic/config/personas.json`, reason: `workspace` as const }] }];
+    const conflicts = [{ repo: `root`, clean: 3, paths: [{ path: `${STATE_DIR}/config/personas.json`, reason: `workspace` as const }] }];
     queryClient.setQueryData(rpcKey(`agents.diff`, { id: `a1` }), { repos: [], conflicts });
     const el = mount(conflicted([`workspace`]));
     queryClient.removeQueries({ queryKey: rpcKey(`agents.diff`, { id: `a1` }) });

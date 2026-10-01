@@ -76,6 +76,9 @@ TARGET_DIR="${CARGO_TARGET_DIR:-$APP/src-tauri/target}"
 build_at() {
     local version="$1" out="$2"
     echo "==> building the AppImage at v${version}"
+    # The app bundles the local-files sidecar and its editor page, just as the release build does. Stamp the
+    # sidecar per pass so both versions carry their own binary rather than a stale runner's staged one.
+    INTENTIC_VERSION="$version" bash "$ROOT/_tools/scripts/desktop/stage-local-files.sh"
     # INTENTIC_VERSION is what reaches RUST (build.rs); the --config override is what stamps the bundle and is
     # where the two staged inputs go in. Both have to say the same version or the app would compare a manifest
     # against a number its own binary does not carry.

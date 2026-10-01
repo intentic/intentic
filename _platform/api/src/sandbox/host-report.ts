@@ -40,7 +40,8 @@ export const hostReportKey = (connectToken: string): string => createHmac(`sha25
 const reportKeyOf = (config: Config, encryptedToken: string): string | undefined => {
     try {
         return hostReportKey(decryptSecret(config, encryptedToken));
-    } catch {
+    } catch (error) {
+        console.warn("Could not derive the sandbox report key", error);
         return undefined;
     }
 };

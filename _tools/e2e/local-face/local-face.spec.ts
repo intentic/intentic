@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
 import { expect, type Page, test } from "@playwright/test";
-import { type FaceServer, type LocalFace, type Sidecar, serveFace, startSidecar } from "./stack.js";
+import { type FaceServer, type LocalFace, type Sidecar, serveFace, startSidecar } from "./local-stack.js";
 
 // A window on a folder, end to end: the built local face over a real sidecar, granted a temp folder. It fails on what an
 // editor refactor breaks without touching this package: a boot that throws, a screen that no longer lists or saves,
@@ -82,7 +82,8 @@ test.afterAll(async () => {
 // Everything the page asks of the network, split by who answers: the bundle's server, the sidecar, or anyone else.
 const record = async (page: Page): Promise<Seen> => {
     const seen: Seen = { sidecar: [], failed: [], foreign: [], errors: [] };
-    const ours = (url: URL): boolean => url.origin === bundle.origin || url.origin === sidecar.url || url.protocol === `data:` || url.protocol === `blob:`;
+    const ours = (url: URL): boolean =>
+        url.origin === bundle.origin || url.origin === sidecar.url || url.protocol === `data:` || url.protocol === `blob:`;
     // The fake platform origin (local/platform.ts) is answered inside the page's fetch and never reaches here, so any
     // other origin is a request that would leave the machine: recorded, and refused so the run stays hermetic.
     await page.context().route(
@@ -169,7 +170,9 @@ test(`a window on a folder lists it, opens, edits and saves a file, and asks the
             .log()
             .split(`\n`)
             .filter((line) => line.includes(`no route for`) || line.includes(`is left out`));
-        expect.soft(unserved, `the page asked the sidecar for routes it does not serve:\n${unserved.join(`\n`)}\n\nits log:\n${refusals.join(`\n`)}`).toEqual([]);
+        expect
+            .soft(unserved, `the page asked the sidecar for routes it does not serve:\n${unserved.join(`\n`)}\n\nits log:\n${refusals.join(`\n`)}`)
+            .toEqual([]);
         expect.soft(seen.failed, `requests to the sidecar that failed`).toEqual([]);
         expect.soft(seen.foreign, `requests that would have left the machine`).toEqual([]);
         // A run that reached the sidecar at all, so the two checks above are about something.

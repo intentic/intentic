@@ -106,6 +106,7 @@ export const loopbackPreviewTarget = (url: string, ports: readonly PortSummary[]
     let parsed: URL;
     try {
         parsed = new URL(url);
+        // allow(silent-catch): A malformed URL is an invalid preview target.
     } catch {
         return undefined;
     }
@@ -182,6 +183,7 @@ export const addressTarget = (typed: string | undefined): PreviewTarget | undefi
     let url: URL;
     try {
         url = new URL(withScheme);
+        // allow(silent-catch): A malformed user-entered URL is refused as a preview target.
     } catch {
         return undefined;
     }

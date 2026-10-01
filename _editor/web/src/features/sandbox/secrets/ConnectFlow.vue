@@ -77,6 +77,7 @@ const redirectTarget = computed(() => {
     try {
         const query = new URL(flow.value?.url ?? ``).searchParams;
         return (query.get(`redirect_uri`) ?? query.get(`redirect`) ?? ``).replace(/^https?:\/\//, ``);
+        // allow(silent-catch): A malformed authorization URL has no redirect target to display.
     } catch {
         return ``;
     }
@@ -240,6 +241,7 @@ const onReturn = (): void => {
                 pasted.value = value;
             }
         })
+        // allow(silent-catch): Clipboard permission may be refused; manual paste remains available.
         .catch(() => undefined);
 };
 
@@ -312,9 +314,7 @@ watch(flow, (live) => {
             </div>
             <p v-if="flow.code && codeCopied" :class="[bodyText, `text-subtle`]">{{ t(`sandbox.connectFlow.codeCopied`) }}</p>
             <!-- Kept beside the copied note: the wait is still on after the code went to the clipboard. -->
-            <p class="flex items-center gap-1.5 text-2xs text-subtle">
-                <Icon name="spinner" spin />{{ t(`sandbox.connectFlow.waitingApproval`) }}
-            </p>
+            <p class="flex items-center gap-1.5 text-2xs text-subtle"><Icon name="spinner" spin />{{ t(`sandbox.connectFlow.waitingApproval`) }}</p>
         </template>
 
         <!-- Watched on the owner's own machine: going is the whole of it, and the paste is folded behind "somewhere else". -->
@@ -420,7 +420,13 @@ watch(flow, (live) => {
                 <button v-if="!namingAccount" type="button" :class="ui.textAction(`text-2xs text-subtle`)" @click="namingAccount = true">
                     {{ t(`sandbox.connectFlow.nameAccount`) }}
                 </button>
-                <input v-else v-model="connectLabel" name="accountLabel" :placeholder="t(`sandbox.words.accountName`)" :class="ui.inputSm(`min-w-0`)" />
+                <input
+                    v-else
+                    v-model="connectLabel"
+                    name="accountLabel"
+                    :placeholder="t(`sandbox.words.accountName`)"
+                    :class="ui.inputSm(`min-w-0`)"
+                />
             </template>
         </template>
     </div>

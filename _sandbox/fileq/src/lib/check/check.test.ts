@@ -1,11 +1,24 @@
 import { strToU8 } from "fflate";
-import { deckBytes, field, inlinePicture, para, pdfBytes, pdfPagesBytes, pictureFrame, pngOfSize, tableFrame, textBox, wordBytes, workbookBytes } from "../../testing.js";
-import { checkDocx } from "./docx.js";
+import {
+    deckBytes,
+    field,
+    inlinePicture,
+    para,
+    pdfBytes,
+    pdfPagesBytes,
+    pictureFrame,
+    pngOfSize,
+    tableFrame,
+    textBox,
+    wordBytes,
+    workbookBytes,
+} from "../../testing.js";
+import { checkDocx } from "./check-docx.js";
 import { leftoverText, type CheckReport } from "./finding.js";
-import { checkPdf } from "./pdf.js";
-import { checkPptx } from "./pptx.js";
+import { checkPdf } from "./check-pdf.js";
+import { checkPptx } from "./check-pptx.js";
 import { estimateText, wrappedLines, type Paragraph } from "./text-fit.js";
-import { checkXlsx } from "./xlsx.js";
+import { checkXlsx } from "./check-xlsx.js";
 import { parseXml } from "./xml-tree.js";
 
 // Every checker against a document built with one known defect, and against a clean one, which must come back with
@@ -52,7 +65,9 @@ describe("pptx", () => {
     test("a drawing wholly off the slide is an error, one bleeding past an edge a warning with how far", () => {
         const report = checkPptx(
             deckBytes({
-                slides: [{ drawings: [textBox("Gone", { x: 14, y: 1, w: 2, h: 1 }, ["off"]), textBox("Bleed", { x: 12, y: 1, w: 3, h: 1 }, ["partly"])] }],
+                slides: [
+                    { drawings: [textBox("Gone", { x: 14, y: 1, w: 2, h: 1 }, ["off"]), textBox("Bleed", { x: 12, y: 1, w: 3, h: 1 }, ["partly"])] },
+                ],
             }),
         );
         expect(found(report)).toEqual([
@@ -100,7 +115,10 @@ describe("pptx", () => {
             deckBytes({
                 slides: [
                     {
-                        drawings: [pictureFrame("Gone", { x: 1, y: 1, w: 4, h: 3 }, "rId2"), pictureFrame("Undefined", { x: 6, y: 1, w: 4, h: 3 }, "rId9")],
+                        drawings: [
+                            pictureFrame("Gone", { x: 1, y: 1, w: 4, h: 3 }, "rId2"),
+                            pictureFrame("Undefined", { x: 6, y: 1, w: 4, h: 3 }, "rId9"),
+                        ],
                         rels: { rId2: { type: "image", target: "../media/missing.png" } },
                     },
                 ],
@@ -116,7 +134,12 @@ describe("pptx", () => {
     test("an image linked from outside the file is a warning naming where it points", () => {
         const report = checkPptx(
             deckBytes({
-                slides: [{ drawings: [pictureFrame("Logo", { x: 1, y: 1, w: 4, h: 3 }, "rId2")], rels: { rId2: { type: "image", target: "file:///C:/Users/me/logo.png", external: true } } }],
+                slides: [
+                    {
+                        drawings: [pictureFrame("Logo", { x: 1, y: 1, w: 4, h: 3 }, "rId2")],
+                        rels: { rId2: { type: "image", target: "file:///C:/Users/me/logo.png", external: true } },
+                    },
+                ],
             }),
         );
         expect(found(report)).toEqual([["warning", "linked-image", 'slide 1 · "Logo"']]);
@@ -128,7 +151,10 @@ describe("pptx", () => {
             deckBytes({
                 slides: [
                     {
-                        drawings: [pictureFrame("Wide", { x: 1, y: 1, w: 4, h: 1 }, "rId2"), pictureFrame("Cropped", { x: 6, y: 1, w: 4, h: 3 }, "rId2", { l: 60_000, r: 40_000 })],
+                        drawings: [
+                            pictureFrame("Wide", { x: 1, y: 1, w: 4, h: 1 }, "rId2"),
+                            pictureFrame("Cropped", { x: 6, y: 1, w: 4, h: 3 }, "rId2", { l: 60_000, r: 40_000 }),
+                        ],
                         rels: { rId2: IMAGE },
                     },
                 ],
@@ -147,7 +173,9 @@ describe("pptx", () => {
     test("a picture cropped to its box's proportions is not stretched", () => {
         const report = checkPptx(
             deckBytes({
-                slides: [{ drawings: [pictureFrame("Banner", { x: 1, y: 1, w: 4, h: 1.5 }, "rId2", { t: 25_000, b: 25_000 })], rels: { rId2: IMAGE } }],
+                slides: [
+                    { drawings: [pictureFrame("Banner", { x: 1, y: 1, w: 4, h: 1.5 }, "rId2", { t: 25_000, b: 25_000 })], rels: { rId2: IMAGE } },
+                ],
                 media: { "image1.png": pngOfSize(400, 300) },
             }),
         );
@@ -155,7 +183,8 @@ describe("pptx", () => {
     });
 
     test("text that cannot fit its box is a warning with the estimate, pointing at render", () => {
-        const long = "This is a very long sentence that will surely not fit in a small box of three inches at twenty four points, and it goes on and on.";
+        const long =
+            "This is a very long sentence that will surely not fit in a small box of three inches at twenty four points, and it goes on and on.";
         const report = checkPptx(
             deckBytes({
                 slides: [
@@ -177,7 +206,10 @@ describe("pptx", () => {
                     {
                         drawings: [
                             textBox("Fits", { x: 1, y: 1, w: 6, h: 1.2 }, ["Two lines of", "comfortable text"], { size: 24 }),
-                            textBox("Grows", { x: 1, y: 3, w: 3, h: 0.5 }, ["A sentence long enough to need three or four lines here."], { size: 18, autofit: "grow" }),
+                            textBox("Grows", { x: 1, y: 3, w: 3, h: 0.5 }, ["A sentence long enough to need three or four lines here."], {
+                                size: 18,
+                                autofit: "grow",
+                            }),
                         ],
                     },
                 ],
@@ -187,9 +219,14 @@ describe("pptx", () => {
     });
 
     test("shrink-on-overflow says PowerPoint shows it overflowing until edited", () => {
-        const long = "A paragraph much too long for its box, which PowerPoint only shrinks once somebody edits the text and LibreOffice shrinks at once.";
-        const report = checkPptx(deckBytes({ slides: [{ drawings: [textBox("Body", { x: 1, y: 1, w: 3, h: 0.6 }, [long], { size: 24, autofit: "shrink" })] }] }));
-        expect(messageOf(report, "text-overflow")).toContain("shrink-on-overflow is on, so LibreOffice shrinks it but PowerPoint shows it overflowing until the text is edited");
+        const long =
+            "A paragraph much too long for its box, which PowerPoint only shrinks once somebody edits the text and LibreOffice shrinks at once.";
+        const report = checkPptx(
+            deckBytes({ slides: [{ drawings: [textBox("Body", { x: 1, y: 1, w: 3, h: 0.6 }, [long], { size: 24, autofit: "shrink" })] }] }),
+        );
+        expect(messageOf(report, "text-overflow")).toContain(
+            "shrink-on-overflow is on, so LibreOffice shrinks it but PowerPoint shows it overflowing until the text is edited",
+        );
     });
 
     test("a table whose rows run past the bottom of the slide is a warning", () => {
@@ -233,7 +270,14 @@ describe("docx", () => {
     test("a well-made document has nothing to report", () => {
         const report = checkDocx(
             wordBytes({
-                body: [para("Report", "berschrift1"), para("The body of the report."), '<w:p><w:bookmarkStart w:id="0" w:name="results"/><w:bookmarkEnd w:id="0"/></w:p>', '<w:p><w:hyperlink w:anchor="results"><w:r><w:t>see results</w:t></w:r></w:hyperlink></w:p>', inlinePicture("rId5", 6, 3), field("PAGE", "1")],
+                body: [
+                    para("Report", "berschrift1"),
+                    para("The body of the report."),
+                    '<w:p><w:bookmarkStart w:id="0" w:name="results"/><w:bookmarkEnd w:id="0"/></w:p>',
+                    '<w:p><w:hyperlink w:anchor="results"><w:r><w:t>see results</w:t></w:r></w:hyperlink></w:p>',
+                    inlinePicture("rId5", 6, 3),
+                    field("PAGE", "1"),
+                ],
                 rels: { rId5: DOC_IMAGE },
                 media: { "image1.png": pngOfSize(600, 300) },
             }),
@@ -243,13 +287,21 @@ describe("docx", () => {
     });
 
     test("a link to a bookmark that is not there is an error, located by its paragraph", () => {
-        const report = checkDocx(wordBytes({ body: [para("Intro", "berschrift1"), '<w:p><w:hyperlink w:anchor="nowhere"><w:r><w:t>see section</w:t></w:r></w:hyperlink></w:p>'] }));
+        const report = checkDocx(
+            wordBytes({
+                body: [para("Intro", "berschrift1"), '<w:p><w:hyperlink w:anchor="nowhere"><w:r><w:t>see section</w:t></w:r></w:hyperlink></w:p>'],
+            }),
+        );
         expect(found(report)).toEqual([["error", "broken-link", 'paragraph 2 · "see section"']]);
-        expect(messageOf(report, "broken-link")).toBe('the link "see section" points to bookmark "nowhere", which is not in the document, so clicking it goes nowhere');
+        expect(messageOf(report, "broken-link")).toBe(
+            'the link "see section" points to bookmark "nowhere", which is not in the document, so clicking it goes nowhere',
+        );
     });
 
     test("a cross-reference to a missing bookmark, and a field showing Word's error, are errors said once", () => {
-        const report = checkDocx(wordBytes({ body: [field("PAGEREF _Ref999 \\h", "3"), field("REF _Ref123 \\h", "Error! Reference source not found.")] }));
+        const report = checkDocx(
+            wordBytes({ body: [field("PAGEREF _Ref999 \\h", "3"), field("REF _Ref123 \\h", "Error! Reference source not found.")] }),
+        );
         expect(found(report)).toEqual([
             ["error", "broken-reference", 'paragraph 1 · "3"'],
             ["error", "field-error", 'paragraph 2 · "Error! Reference source not found."'],
@@ -281,7 +333,9 @@ describe("docx", () => {
             ["error", "missing-image", "paragraph 2"],
             ["warning", "wide-image", "paragraph 1"],
         ]);
-        expect(messageOf(report, "wide-image")).toBe("a picture is 9 in wide in a 6.5 in text column, so it runs into the margin or is cut off; scale it to fit");
+        expect(messageOf(report, "wide-image")).toBe(
+            "a picture is 9 in wide in a 6.5 in text column, so it runs into the margin or is cut off; scale it to fit",
+        );
     });
 
     test("what a draft leaves behind: tracked changes, comments, a control showing its prompt, filler text", () => {
@@ -289,7 +343,7 @@ describe("docx", () => {
             wordBytes({
                 body: [
                     '<w:p><w:ins w:id="1" w:author="a"><w:r><w:t>new words</w:t></w:r></w:ins></w:p>',
-                    '<w:sdt><w:sdtPr><w:showingPlcHdr/></w:sdtPr><w:sdtContent><w:p><w:r><w:t>Click or tap here to enter text.</w:t></w:r></w:p></w:sdtContent></w:sdt>',
+                    "<w:sdt><w:sdtPr><w:showingPlcHdr/></w:sdtPr><w:sdtContent><w:p><w:r><w:t>Click or tap here to enter text.</w:t></w:r></w:p></w:sdtContent></w:sdt>",
                     para("Lorem ipsum dolor sit amet."),
                 ],
                 comments: ["check this figure"],
@@ -316,7 +370,9 @@ const cell = (ref: string, inner: string, type?: string): string => `<c r="${ref
 
 describe("xlsx", () => {
     test("a workbook of values and computed formulas has nothing to report", () => {
-        const report = checkXlsx(workbookBytes([{ name: "Sheet1", rows: `<row r="1">${cell("A1", "<v>1</v>")}${cell("B1", "<f>A1*2</f><v>2</v>")}</row>` }]));
+        const report = checkXlsx(
+            workbookBytes([{ name: "Sheet1", rows: `<row r="1">${cell("A1", "<v>1</v>")}${cell("B1", "<f>A1*2</f><v>2</v>")}</row>` }]),
+        );
         expect(report.extent).toBe("1 sheet");
         expect(report.findings).toEqual([]);
     });
@@ -336,7 +392,9 @@ describe("xlsx", () => {
         const rows = `<row r="1">${cell("A1", "<v>1</v>")}${cell("B1", "<f>A1+1</f>")}${cell("C1", "<f>A1+2</f>")}</row>`;
         const plain = checkXlsx(workbookBytes([{ name: "Data", rows }]));
         expect(found(plain)).toEqual([["warning", "formula-uncached", "Data"]]);
-        expect(messageOf(plain, "formula-uncached")).toContain("2 formulas saved with no value (B1, C1): Excel, LibreOffice and Google Sheets compute them on open");
+        expect(messageOf(plain, "formula-uncached")).toContain(
+            "2 formulas saved with no value (B1, C1): Excel, LibreOffice and Google Sheets compute them on open",
+        );
         const flagged = checkXlsx(workbookBytes([{ name: "Data", rows }], { calcPr: '<calcPr fullCalcOnLoad="1"/>' }));
         expect(messageOf(flagged, "formula-uncached")).toContain("the workbook asks to be recalculated on open");
     });
@@ -365,12 +423,19 @@ describe("pdf", () => {
     });
 
     test("a blank page is an error; a page with only a drawing is not blank", async () => {
-        const report = await checkPdf(pdfPagesBytes([{ content: "BT /F1 12 Tf 72 720 Td (Cover) Tj ET" }, { content: "" }, { content: "0 0 1 rg 10 10 100 100 re f" }]));
+        const report = await checkPdf(
+            pdfPagesBytes([{ content: "BT /F1 12 Tf 72 720 Td (Cover) Tj ET" }, { content: "" }, { content: "0 0 1 rg 10 10 100 100 re f" }]),
+        );
         expect(found(report)).toEqual([["error", "blank-page", "page 2"]]);
     });
 
     test("text in a font the file does not carry is a warning; the fourteen standard fonts are not", async () => {
-        const report = await checkPdf(pdfPagesBytes([{ content: "BT /F1 12 Tf 72 720 Td (Hello) Tj ET", font: "Calibri" }, { content: "BT /F1 12 Tf 72 720 Td (Again) Tj ET", font: "Calibri" }]));
+        const report = await checkPdf(
+            pdfPagesBytes([
+                { content: "BT /F1 12 Tf 72 720 Td (Hello) Tj ET", font: "Calibri" },
+                { content: "BT /F1 12 Tf 72 720 Td (Again) Tj ET", font: "Calibri" },
+            ]),
+        );
         expect(found(report)).toEqual([["warning", "font-not-embedded", "page 1, 2"]]);
         expect(messageOf(report, "font-not-embedded")).toContain("text is set in Calibri, which the file does not carry");
     });
@@ -384,7 +449,12 @@ describe("pdf", () => {
 
     test("a link to a named destination the file does not define is an error", async () => {
         const report = await checkPdf(
-            pdfPagesBytes([{ content: "BT /F1 12 Tf 72 720 Td (See results) Tj ET", extra: "/Annots [<< /Type /Annot /Subtype /Link /Rect [72 700 200 730] /Dest (results) >>]" }]),
+            pdfPagesBytes([
+                {
+                    content: "BT /F1 12 Tf 72 720 Td (See results) Tj ET",
+                    extra: "/Annots [<< /Type /Annot /Subtype /Link /Rect [72 700 200 730] /Dest (results) >>]",
+                },
+            ]),
         );
         expect(found(report)).toEqual([["error", "broken-link", "page 1"]]);
     });
@@ -422,7 +492,9 @@ describe("xml tree", () => {
     });
 
     test("entities decode, CDATA is text, whitespace is kept only inside a text element", () => {
-        const tree = parseXml('<w:p xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">\n  <w:t> A &amp; B </w:t><w:t><![CDATA[<raw>]]></w:t>\n</w:p>');
+        const tree = parseXml(
+            '<w:p xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">\n  <w:t> A &amp; B </w:t><w:t><![CDATA[<raw>]]></w:t>\n</w:p>',
+        );
         expect(tree.children).toEqual([
             { name: "w:t", attrs: {}, children: [" A & B "] },
             { name: "w:t", attrs: {}, children: ["<raw>"] },

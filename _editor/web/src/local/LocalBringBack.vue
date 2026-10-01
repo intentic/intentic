@@ -111,7 +111,7 @@ const syncBothWays = (): void => {
             type="button"
             :class="ui.textAction()"
             :disabled="state.switching"
-            v-tooltip.top="t(`local.localBringBack.copyFirstHint`)"
+            v-tooltip.top="{ title: t(`local.localBringBack.switchToCopyFirst`), note: t(`local.localBringBack.copyFirstHint`) }"
             @click="switchTo(`to-sandbox`)"
         >
             {{ t(`local.localBringBack.switchToCopyFirst`) }}

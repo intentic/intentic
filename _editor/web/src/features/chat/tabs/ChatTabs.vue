@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { AnchoredOverlay, ContextMenu, FACE_SIZES, isOverlayTarget, PersonaFace, SearchBar, type Tip } from "@intentic/ui";
+import { AnchoredOverlay, Button, ContextMenu, FACE_SIZES, isOverlayTarget, PersonaFace, SearchBar, type Tip } from "@intentic/ui";
 import { createInlineRename } from "@intentic/ui/inline-rename";
 import type { Disposable } from "@intentic/extension-api";
 import type { MenuItem } from "primevue/menuitem";
@@ -194,7 +194,12 @@ const barVerbs = (): MenuItem[] => [
         command: () => emit(`close`, tabsInLane(`finished`)),
     },
     { label: t(`chat.words.closeAll`), shortcut: commandShortcut(`chat.closeAllTabs`), command: () => emit(`close`, allTabs()) },
-    { label: t(`chat.words.reopenClosedChat`), disabled: !hasClosed.value, shortcut: commandShortcut(`chat.reopenClosed`), command: () => reopenClosed() },
+    {
+        label: t(`chat.words.reopenClosedChat`),
+        disabled: !hasClosed.value,
+        shortcut: commandShortcut(`chat.reopenClosed`),
+        command: () => reopenClosed(),
+    },
     { separator: true },
     // The chat's other two homes, in the header buttons' own order: move within this window, then leave it.
     {
@@ -569,14 +574,11 @@ const openHistory = (event: Event): void => {
 
         <!-- Foot of the rail: New agent (the fleet board's own wording) and Past chats, labelled and sized to match, no ellipsis (there's no chooser to promise). -->
         <div v-else class="flex shrink-0 flex-wrap items-center justify-center gap-2 pb-2.5 pt-3">
-            <!-- One pill either way, its lead a disc: the "+" of New agent, or scoped to a persona their face, since the chat
-                 it starts speaks as them, like their tile's own "+". Drawn on the card ground with the page's own text, so it
-                 reads in every look rather than taking a skin's primary fill. -->
-            <button
-                type="button"
-                class="flex h-8 items-center gap-2 rounded-full border border-line-strong bg-card py-1 pl-1 pr-3.5 text-xs font-medium text-content transition-colors hover:border-primary-500/60 hover:bg-primary-500/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-500"
+            <!-- Both actions take the kit's compact secondary tier; the face names who a scoped chat speaks as. -->
+            <Button
+                size="small"
+                severity="secondary"
                 :aria-label="railPersona === undefined ? undefined : t(`chat.chatPersonaRail.newChatAs`, { label: railPersona.label })"
-                v-tooltip.top="railPersona === undefined ? undefined : t(`chat.chatPersonaRail.newChatAs`, { label: railPersona.label })"
                 @click="railPersona === undefined ? startAgent() : startAgent(undefined, railPersona.id)"
             >
                 <span class="flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary-500/15 text-link">
@@ -585,14 +587,21 @@ const openHistory = (event: Event): void => {
                 </span>
                 <!-- Both labels share one grid cell, the idle one hidden, so the pill keeps the wider one's width either way. -->
                 <span class="grid leading-none">
-                    <span class="col-start-1 row-start-1 text-center" :class="{ invisible: railPersona !== undefined }">{{ t(`chat.words.newAgent`) }}</span>
-                    <span class="col-start-1 row-start-1 text-center" :class="{ invisible: railPersona === undefined }" :aria-hidden="railPersona === undefined">{{ t(`chat.words.newChat`) }}</span>
+                    <span class="col-start-1 row-start-1 text-center" :class="{ invisible: railPersona !== undefined }">{{
+                        t(`chat.words.newAgent`)
+                    }}</span>
+                    <span
+                        class="col-start-1 row-start-1 text-center"
+                        :class="{ invisible: railPersona === undefined }"
+                        :aria-hidden="railPersona === undefined"
+                        >{{ t(`chat.words.newChat`) }}</span
+                    >
                 </span>
-            </button>
-            <button type="button" class="composer-ghost h-8 gap-1.5 rounded-full px-3 text-xs" @click="openHistory">
+            </Button>
+            <Button size="small" severity="secondary" @click="openHistory">
                 <Icon name="history" class="text-xs" />
                 <span>{{ t(`chat.chatTabs.pastChats`) }}</span>
-            </button>
+            </Button>
         </div>
 
         <!-- Pinned to the column's width, capped so the transcript is never fully covered. -->

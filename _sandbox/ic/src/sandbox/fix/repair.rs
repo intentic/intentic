@@ -1,7 +1,7 @@
 use std::time::{Duration, Instant};
 
 use super::desktop::{self, Applied, Done};
-use super::host::HostFacts;
+use super::host::DeviceFacts;
 use super::model::Repair;
 use crate::docker;
 use crate::sandbox::lock::{self, Wait};
@@ -16,7 +16,7 @@ const HEALTH_WAIT: Duration = Duration::from_secs(90);
 
 /// `slug` is the sandbox a sandbox repair is for; `patient` whether to wait for another ic run on it (a person does,
 /// the machine agent's `--auto` comes back later).
-pub fn apply(repair: &Repair, slug: Option<&str>, host: &HostFacts, patient: bool) -> Done {
+pub fn apply(repair: &Repair, slug: Option<&str>, host: &DeviceFacts, patient: bool) -> Done {
     match repair {
         Repair::StartDesktop => desktop::start(host),
         Repair::RestartDesktop => desktop::restart(host),

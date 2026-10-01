@@ -73,6 +73,7 @@ const StoredStateSchema = z.object({
 const readStored = (raw: string): z.infer<typeof StoredStateSchema> | undefined => {
     try {
         return StoredStateSchema.safeParse(JSON.parse(raw)).data;
+        // allow(silent-catch): Malformed stored JSON restores an empty panel, never unchecked tabs.
     } catch {
         return undefined;
     }
@@ -100,7 +101,8 @@ const parseState = (raw: string): SideState | undefined => {
 };
 
 const scopedSandboxId = sandboxValue(() => activeSandboxId.value);
-const restored = (): SideState => (scopedSandboxId.value === undefined ? undefined : readWindowState(storageKey(scopedSandboxId.value), parseState)) ?? EMPTY;
+const restored = (): SideState =>
+    (scopedSandboxId.value === undefined ? undefined : readWindowState(storageKey(scopedSandboxId.value), parseState)) ?? EMPTY;
 
 const state = sandboxRef<SideState>(restored);
 // Where each tab was last asked to land; seq bumps so the same line asked twice still scrolls. Not stored: a reload

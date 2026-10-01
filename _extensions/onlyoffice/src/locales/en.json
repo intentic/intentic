@@ -10,7 +10,7 @@
         "downloadingEditorPercent": "Downloading the editor, once: {percent}%…",
         "downloadingPercent": "Downloading ONLYOFFICE Docs, {percent}%…",
         "edit": "Edit",
-        "editHint": "Open this document for editing",
+        "editHint": "Edit document",
         "editorNeedsAddressBrowser": "The editor needs an address the browser can reach. Your sandbox isn't reachable from outside yet: finish setup so it registers its address.",
         "extensionSettings": "Extension settings",
         "keepBoth": "Keep both",

@@ -1,13 +1,22 @@
 <!-- A hover preview of the file a `path:line` link names: the lines around that line, the top of a file named without one, or why there is nothing to show. -->
 <script setup lang="ts">
-import { AnchoredOverlay, type CodeToken, explorerColorClass, formatBytes, iconForEntry, useHighlighter, useHoverIntent, useLatest } from "@intentic/ui";
+import {
+    AnchoredOverlay,
+    type CodeToken,
+    explorerColorClass,
+    formatBytes,
+    iconForEntry,
+    useHighlighter,
+    useHoverIntent,
+    useLatest,
+} from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { basename, parentDir } from "@intentic/ui/path";
 import { computed, ref, shallowRef, watch } from "vue";
 import { sandboxRpc } from "../../../sandbox/client/sandboxRpc";
 import { resolveFile } from "../../explorer/fileType";
 import { readFileWindow } from "../fileWindow";
-import { createPeekCache, PEEK_SPAN, peekKey, type PeekFile, type PeekIo, peekView, peekWantsMore, readPeek } from "./filePeek";
+import { createPeekCache, PEEK_SPAN, peekKey, type PeekFile, type PeekIo, peekView, peekWantsMore, readPeek } from "./fileRefQuickLook";
 import { openWorkspaceRef, sharedStatePath } from "./openFileRef";
 import { resolveWorkspaceRef } from "./resolveFileRef";
 
@@ -37,7 +46,11 @@ const targetOf = (link: HTMLAnchorElement): PeekTarget | undefined => {
     }
     const line = Number(link.dataset[`line`]);
     // `.intentic` is the same folder in every tree, so it is read from the shared one, as opening it does.
-    return { written, line: Number.isInteger(line) && line > 0 ? line : undefined, agent: sharedStatePath(written) ? undefined : link.dataset[`agent`] };
+    return {
+        written,
+        line: Number.isInteger(line) && line > 0 ? line : undefined,
+        agent: sharedStatePath(written) ? undefined : link.dataset[`agent`],
+    };
 };
 
 const sameTarget = (a: PeekTarget | undefined, b: PeekTarget): boolean => a?.written === b.written && a.line === b.line && a.agent === b.agent;
@@ -167,6 +180,7 @@ const onOver = (event: PointerEvent): void => {
     quiet(link);
     const next = targetOf(link);
     if (next !== undefined) {
+        // allow(silent-catch): Hover prefetch is optional; opening the card fetches again and renders the error.
         prefetch.enter(() => void fetchPeek(next).catch(() => undefined));
     }
     hover.enter(() => raise(link));
@@ -338,7 +352,12 @@ watch(
 const rows = computed(() => {
     const shown = view.value;
     return shown?.kind === `lines`
-        ? shown.lines.map((text, index) => ({ number: shown.first + index, text, tokens: tokens.value?.[index], marked: shown.first + index === shown.target }))
+        ? shown.lines.map((text, index) => ({
+              number: shown.first + index,
+              text,
+              tokens: tokens.value?.[index],
+              marked: shown.first + index === shown.target,
+          }))
         : [];
 });
 
@@ -379,9 +398,11 @@ const placeholders = PLACEHOLDER_WIDTHS.slice(0, PEEK_SPAN);
                         class="flex"
                         :class="row.marked ? `bg-primary-500/15 shadow-[inset_2px_0_0_var(--color-primary-500)]` : ``"
                     >
-                        <span class="w-12 shrink-0 pr-3 text-right tabular-nums select-none" :class="row.marked ? `font-medium text-content` : `text-subtle`">{{
-                            row.number
-                        }}</span>
+                        <span
+                            class="w-12 shrink-0 pr-3 text-right tabular-nums select-none"
+                            :class="row.marked ? `font-medium text-content` : `text-subtle`"
+                            >{{ row.number }}</span
+                        >
                         <span class="min-w-0 flex-1 overflow-hidden pr-3 text-ellipsis whitespace-pre text-content"
                             ><template v-if="row.tokens !== undefined"
                                 ><span v-for="(token, at) in row.tokens" :key="at" class="file-peek-token" :style="token.htmlStyle">{{
@@ -392,7 +413,10 @@ const placeholders = PLACEHOLDER_WIDTHS.slice(0, PEEK_SPAN);
                     </div>
                 </div>
                 <!-- A line after the file's end: its last lines are shown, and this says why the named one isn't marked. -->
-                <p v-if="view.past && view.total !== undefined && target?.line !== undefined" class="border-t border-line px-3 py-1.5 text-2xs text-muted">
+                <p
+                    v-if="view.past && view.total !== undefined && target?.line !== undefined"
+                    class="border-t border-line px-3 py-1.5 text-2xs text-muted"
+                >
                     {{ t(`workspace.fileRefPeek.past`, { line: target.line.toLocaleString(), total: view.total.toLocaleString() }) }}
                 </p>
             </template>

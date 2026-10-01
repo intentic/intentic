@@ -22,8 +22,7 @@ import { type ProcedureOutput, sandboxRpc } from "../../sandbox/client/sandboxRp
 // `catchers` are the owner's devices and browsers watching where a redirect lands, so it finishes without the paste;
 // empty for a sandbox (or an older daemon) with nobody watching.
 export const translatorConnectFlow = sandboxRef<
-    | { provider: KeyedProvider; url: string; code: string; state: string; flow: "device" | "redirect"; catchers: readonly SignInCatcher[] }
-    | undefined
+    { provider: KeyedProvider; url: string; code: string; state: string; flow: "device" | "redirect"; catchers: readonly SignInCatcher[] } | undefined
 >(() => undefined);
 
 // Whether the reader has actually been handed to the provider's page this handshake. A paste sign-in is two
@@ -83,6 +82,7 @@ const pollTranslatorOnce = async (target: KeyedProvider, deadline: number): Prom
             error.value = `The ${translatorProviderLabel(target)} sign-in failed: ${result.error}`;
             return;
         }
+        // allow(silent-catch): The handshake polls again after transient transport failure, bounded by its deadline.
     } catch {
         // Transient (sandbox or translator blip); keep polling until the deadline.
     }
@@ -212,7 +212,10 @@ const settleConnect = (): void => {
 export const cancelConnect = (): void => {
     const flow = nativeConnectFlow.value;
     if (flow !== undefined) {
-        void sandboxRpc.accounts.cancel({ provider: flow.provider as NativeProvider, handshake: flow.handshake }).catch(() => undefined);
+        void sandboxRpc.accounts.cancel({ provider: flow.provider as NativeProvider, handshake: flow.handshake }).catch((cause: unknown) => {
+            console.warn("Could not cancel the sign-in handshake", cause);
+            return undefined;
+        });
     }
     settleConnect();
 };
@@ -243,6 +246,7 @@ const pollNativeOnce = async (target: AgentProvider, deadline: number): Promise<
             void loadProviderModels(target);
             return;
         }
+        // allow(silent-catch): The handshake polls again after transient transport failure, bounded by its deadline.
     } catch {
         // Transient (sandbox blip); keep polling until the deadline.
     }
@@ -287,6 +291,7 @@ const pollNativeStatusOnce = async (target: AgentProvider, deadline: number): Pr
             error.value = `The ${providerLabel(target)} sign-in failed: ${result.error}`;
             return;
         }
+        // allow(silent-catch): The handshake polls again after transient transport failure, bounded by its deadline.
     } catch {
         // Transient (sandbox blip); keep polling until the deadline.
     }

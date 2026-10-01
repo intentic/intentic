@@ -121,12 +121,14 @@ const memoryLine = computed(() => {
             <Icon name="pause" class="shrink-0" />
             <span class="min-w-[12rem] flex-1">{{ memoryLine }}</span>
             <span class="flex shrink-0 items-center gap-1">
-                <Button size="small" :disabled="!props.canDrive" v-tooltip.top="sendAnywayTip()" @click="resumeQueue()">{{ t(`chat.chatHeld.sendAnyway`) }}</Button>
+                <Button size="small" :disabled="!props.canDrive" v-tooltip.top="sendAnywayTip()" @click="resumeQueue()">{{
+                    t(`chat.chatHeld.sendAnyway`)
+                }}</Button>
                 <Button
                     size="small"
                     severity="secondary"
                     :text="true"
-                    v-tooltip.top="t(`chat.chatWaitingBar.waitHint`)"
+                    v-tooltip.top="{ title: t(`chat.chatWaitingBar.wait`), note: t(`chat.chatWaitingBar.waitHint`) }"
                     @click="leftHeld = holdKey"
                     >{{ t(`chat.chatWaitingBar.wait`) }}</Button
                 >

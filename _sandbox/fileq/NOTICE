@@ -18,12 +18,12 @@ changed:
 
   src/skill-authoring.ts     authoring rules, from
                              docker/sandbox/skills/{pptx,docx,xlsx,pdf}/SKILL.md
-  src/lib/check/pptx.ts      geometry, crop and missing-media rules, from
+  src/lib/check/check-pptx.ts      geometry, crop and missing-media rules, from
                              surfsense_backend/app/artifacts/verification/formats/pptx.py
-  src/lib/check/docx.ts      the literal-bullet rule, from .../formats/docx.py
-  src/lib/check/xlsx.ts      error-value and missing-cached-value rules, from
+  src/lib/check/check-docx.ts      the literal-bullet rule, from .../formats/docx.py
+  src/lib/check/check-xlsx.ts      error-value and missing-cached-value rules, from
                              .../formats/xlsx.py
-  src/lib/check/pdf.ts       blank-page and unembedded-font rules, from
+  src/lib/check/check-pdf.ts       blank-page and unembedded-font rules, from
                              .../formats/pdf.py
 
 The code in those files is written for fileq, in TypeScript; what it carries

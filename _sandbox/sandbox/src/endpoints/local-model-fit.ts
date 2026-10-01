@@ -77,8 +77,11 @@ export const freeMemoryFrom = (readings: {
 export const hostMemory = async (): Promise<{ bytes: number; capped: boolean; freeBytes: number | undefined }> => {
     const [cgroupMax, cgroupCurrent, cgroupStat, meminfo] = await Promise.all([
         readFile("/sys/fs/cgroup/memory.max", "utf8").catch(() => "max"),
+        // allow(silent-catch): Absent or unreadable kernel counters contribute no cgroup reading; meminfo is the fallback.
         readFile("/sys/fs/cgroup/memory.current", "utf8").catch(() => ""),
+        // allow(silent-catch): Absent or unreadable kernel counters contribute no cgroup reading; meminfo is the fallback.
         readFile("/sys/fs/cgroup/memory.stat", "utf8").catch(() => ""),
+        // allow(silent-catch): Unavailable procfs leaves free memory unknown rather than inventing a reading.
         readFile("/proc/meminfo", "utf8").catch(() => ""),
     ]);
     return { ...memoryFrom(cgroupMax, meminfo), freeBytes: freeMemoryFrom({ cgroupMax, cgroupCurrent, cgroupStat, meminfo }) };
@@ -112,9 +115,7 @@ export const gpuMemory = async (): Promise<GpuReading> => {
     if (localModelGpu() !== "granted") {
         return { totalBytes: 0, freeBytes: 0 };
     }
-    const result = await forkedExec("nvidia-smi", ["--query-gpu=memory.total,memory.free", "--format=csv,noheader,nounits"]).catch(
-        () => undefined,
-    );
+    const result = await forkedExec("nvidia-smi", ["--query-gpu=memory.total,memory.free", "--format=csv,noheader,nounits"]).catch(() => undefined);
     return gpuReadingFrom(result?.stdout ?? "");
 };
 

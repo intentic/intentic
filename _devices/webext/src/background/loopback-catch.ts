@@ -16,6 +16,7 @@ const LOOPBACK_ORIGINS = { localhost: "http://localhost/*", "127.0.0.1": "http:/
 const allowedOn = async (host: LoopbackCatch["host"]): Promise<boolean> => {
     try {
         return await chrome.permissions.contains({ origins: [LOOPBACK_ORIGINS[host]] });
+        // allow(silent-catch): An unavailable browser permission API refuses the catch, never grants it.
     } catch {
         return false;
     }
@@ -36,6 +37,7 @@ export const isLanding = (spec: Pick<LoopbackCatch, "port" | "path">, url: strin
             parsed.port === String(spec.port) &&
             parsed.pathname === spec.path
         );
+        // allow(silent-catch): An invalid navigation URL cannot match the watched callback address.
     } catch {
         return false;
     }
@@ -71,6 +73,7 @@ export async function* catchLoopback(spec: LoopbackCatch, signal: AbortSignal | 
         queue.push({ type: "landed", url: landed.toString() });
         nudge();
         // The page cannot load; closing it returns the person to where they started the sign-in.
+        // allow(silent-catch): The callback tab may already be closed; its URL was delivered before this cleanup.
         void chrome.tabs.remove(tabId).catch(() => undefined);
     };
     chrome.tabs.onUpdated.addListener(onUpdated);

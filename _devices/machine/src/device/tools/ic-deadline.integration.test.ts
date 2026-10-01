@@ -1,3 +1,4 @@
+import { STATE_DIR } from "@intentic/constants";
 import { readFileSync } from "node:fs";
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -19,7 +20,7 @@ const HOME_BEFORE = process.env["HOME"];
 beforeAll(async () => {
     home = await mkdtemp(join(tmpdir(), "intentic-machine-deadline-"));
     process.env["HOME"] = home;
-    const bin = join(home, ".intentic", "ic", "bin");
+    const bin = join(home, STATE_DIR, "ic", "bin");
     await mkdir(bin, { recursive: true });
     // Prints a progress line, starts a child that would outlive it, records that child's pid, and waits forever.
     const script = [

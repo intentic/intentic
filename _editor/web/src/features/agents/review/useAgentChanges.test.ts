@@ -1,3 +1,4 @@
+import { STATE_DIR } from "@intentic/constants";
 import { mocked } from "@intentic/testing/bun";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 
@@ -121,7 +122,7 @@ it("commits the settings files a refusal held before landing again, and nothing 
     mocked(landAgent).mockClear();
     mocked(landAgent).mockResolvedValue({ landed: true, changed: true });
 
-    await changes.land(`check`, undefined, false, [`.intentic/config/personas.json`]);
+    await changes.land(`check`, undefined, false, [`${STATE_DIR}/config/personas.json`]);
     expect(stub.commits).toEqual([{ repo: `root`, message: `Settings: saved before landing`, stage: { paths: [`.intentic/config/personas.json`] } }]);
     expect(mocked(landAgent)).toHaveBeenCalledTimes(1);
 
@@ -149,7 +150,7 @@ it("re-lands work taken out after landing, but not work an agent took out on pur
 it("refuses to save the settings files while other work is staged, and lands nothing", async () => {
     const changes = useAgentChanges(ref(`c1`));
     mocked(landAgent).mockClear();
-    stub.staged.push(`.intentic/config/personas.json`, `src/app.ts`);
+    stub.staged.push(`${STATE_DIR}/config/personas.json`, `src/app.ts`);
 
     await expect(changes.land(`check`, undefined, false, [`.intentic/config/personas.json`])).rejects.toThrow(`1 other change staged`);
     expect(stub.commits).toEqual([]);

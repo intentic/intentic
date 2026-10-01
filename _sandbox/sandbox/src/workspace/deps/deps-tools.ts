@@ -83,7 +83,10 @@ const branchOnly = async (worktree: string | undefined, known: readonly ProjectS
     if (worktree === undefined) {
         return [];
     }
-    const mine = await discoverProjects(worktree).catch(() => []);
+    const mine = await discoverProjects(worktree).catch((cause: unknown) => {
+        console.warn("Could not discover branch projects", cause);
+        return [];
+    });
     return mine.filter((project) => !known.some((main) => main.dir === project.dir));
 };
 
@@ -115,7 +118,11 @@ const settle = async (dirs: readonly string[], deps: DepsToolDeps): Promise<Sett
             }
         }
         if (done.size < dirs.length) {
-            await sleep(deps.pollMs ?? DEFAULT_POLL_MS, { signal: deps.signal }).catch(() => undefined);
+            await sleep(deps.pollMs ?? DEFAULT_POLL_MS, { signal: deps.signal }).catch((cause: unknown) => {
+                if (deps.signal?.aborted !== true) {
+                    throw cause;
+                }
+            });
         }
     }
     return dirs.map((dir) => done.get(dir) ?? { dir, outcome: "waiting" });
@@ -214,7 +221,9 @@ export const installTool = (deps: DepsToolDeps) => {
                         .map((project) => `Not installed: ${line(project, deps.canInstall, isolated)}`),
                     ...unknownDirs.map((dir) => {
                         const branch = mine.find((project) => project.dir === dir);
-                        return branch === undefined ? `Not installed: no project at \`${dir}\`. Call \`mcp__deps__status\` for the names.` : branchOnlyLine(branch);
+                        return branch === undefined
+                            ? `Not installed: no project at \`${dir}\`. Call \`mcp__deps__status\` for the names.`
+                            : branchOnlyLine(branch);
                     }),
                 ]
                     .filter((text) => text !== "")
@@ -228,4 +237,5 @@ export const installTool = (deps: DepsToolDeps) => {
 // `install` is withheld from a persona that cannot change the workspace; `status` says why in its description.
 export const depsTools = (deps: DepsToolDeps) => (deps.canInstall ? [statusTool(deps), installTool(deps)] : [statusTool(deps)]);
 
-export const createDepsServer = (deps: DepsToolDeps): McpSdkServerConfigWithInstance => sdk().createSdkMcpServer({ name: "deps", tools: depsTools(deps) });
+export const createDepsServer = (deps: DepsToolDeps): McpSdkServerConfigWithInstance =>
+    sdk().createSdkMcpServer({ name: "deps", tools: depsTools(deps) });

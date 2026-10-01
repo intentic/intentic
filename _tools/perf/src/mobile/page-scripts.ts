@@ -99,7 +99,11 @@ export function observePerformance(): void {
     };
     const record: Gathering = { paints: [], lcp: [], longTasks: [], shifts: [], events: [], frames: [] };
     window.perfMobile = record;
-    const observe = <Entry extends PerformanceEntry>(type: string, is: (entry: PerformanceEntry) => entry is Entry, each: (entry: Entry) => void): void => {
+    const observe = <Entry extends PerformanceEntry>(
+        type: string,
+        is: (entry: PerformanceEntry) => entry is Entry,
+        each: (entry: Entry) => void,
+    ): void => {
         // Event timing reports only events at least this long; 16ms is the least it accepts.
         const init = { type, buffered: true, durationThreshold: 16 };
         try {
@@ -110,6 +114,7 @@ export function observePerformance(): void {
                     }
                 }
             }).observe(init);
+            // allow(silent-catch): Unsupported performance entry types supply no measurements on that browser.
         } catch {
             // An entry type this browser does not have records nothing.
         }
@@ -126,7 +131,9 @@ export function observePerformance(): void {
         return `${where} (${script.invoker.slice(0, 40)}) ${Math.round(script.duration)}ms`;
     };
     observe(`paint`, any, (entry) => record.paints.push({ name: entry.name, start: Math.round(entry.startTime) }));
-    observe(`largest-contentful-paint`, isLargest, (entry) => record.lcp.push({ start: Math.round(entry.startTime), element: describe(entry.element) }));
+    observe(`largest-contentful-paint`, isLargest, (entry) =>
+        record.lcp.push({ start: Math.round(entry.startTime), element: describe(entry.element) }),
+    );
     observe(`longtask`, any, (entry) => record.longTasks.push({ start: Math.round(entry.startTime), duration: Math.round(entry.duration) }));
     observe(`layout-shift`, isShift, (entry) =>
         record.shifts.push({

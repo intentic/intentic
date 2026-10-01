@@ -75,7 +75,8 @@ export const describeTab = (tab: SideTab): SideViewLabel | undefined => {
     }
     try {
         return entry.describe(tab.input);
-    } catch {
+    } catch (error) {
+        console.warn("Could not describe a side view", error);
         return { title: entry.label, icon: `extensions` };
     }
 };
@@ -84,7 +85,8 @@ export const describeTab = (tab: SideTab): SideViewLabel | undefined => {
 export const homeOf = (tab: SideTab): SideHome | undefined => {
     try {
         return sideViewOf(tab.view)?.home?.(tab.input);
-    } catch {
+    } catch (error) {
+        console.warn("Could not resolve a side view home", error);
         return undefined;
     }
 };

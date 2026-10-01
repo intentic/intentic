@@ -161,7 +161,9 @@ const shortfall = computed<number>(() => (table === undefined ? 0 : shortfallOf(
                             :class="[
                                 line.mark,
                                 line.tip === undefined ? `` : `cursor-help`,
-                                line.tip !== undefined && !line.settled ? `underline decoration-line-strong decoration-dotted underline-offset-[3px]` : ``,
+                                line.tip !== undefined && !line.settled
+                                    ? `underline decoration-line-strong decoration-dotted underline-offset-3`
+                                    : ``,
                             ]"
                             >{{ line.result }}</span
                         >

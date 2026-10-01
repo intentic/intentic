@@ -172,7 +172,10 @@ export const renderByContent = async (
     absPath: string,
     now: () => Date = () => new Date(),
 ): Promise<ContentOutcome> => {
-    const format = await detectFormat(absPath).catch(() => undefined);
+    const format = await detectFormat(absPath).catch((cause: unknown) => {
+        console.warn("Could not detect the document format", cause);
+        return undefined;
+    });
     if (format === undefined) {
         return { kind: "failed", reason: "unsupported or missing" };
     }

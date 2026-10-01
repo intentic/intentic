@@ -10,7 +10,7 @@ use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 
 use desktop::Applied;
-use host::{HostFacts, Os};
+use host::{DeviceFacts, Os};
 use model::{Check, Outcome, Repair, Source, Stage, State, Who};
 use report::{Poster, Target};
 
@@ -62,7 +62,7 @@ struct Sandbox {
 }
 
 struct Snapshot {
-    host: HostFacts,
+    host: DeviceFacts,
     /// prerequisites, docker-app, docker, wsl, disk, agent: whichever apply here.
     host_checks: Vec<Check>,
     sandboxes: Vec<Sandbox>,
@@ -781,8 +781,8 @@ mod tests {
     use super::*;
     use model::Fix;
 
-    fn host_facts() -> HostFacts {
-        HostFacts {
+    fn host_facts() -> DeviceFacts {
+        DeviceFacts {
             os: Os::Linux,
             windows: None,
             desktop: host::Desktop::Absent,

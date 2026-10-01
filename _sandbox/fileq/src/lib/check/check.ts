@@ -1,11 +1,11 @@
 import { readFile, stat } from "node:fs/promises";
 import { errorMessage, isMissing } from "@intentic/base/errors";
 import { claimedFormat, type Format } from "../formats.js";
-import { checkDocx } from "./docx.js";
+import { checkDocx } from "./check-docx.js";
 import type { CheckReport } from "./finding.js";
-import { checkPdf } from "./pdf.js";
-import { checkPptx } from "./pptx.js";
-import { checkXlsx } from "./xlsx.js";
+import { checkPdf } from "./check-pdf.js";
+import { checkPptx } from "./check-pptx.js";
+import { checkXlsx } from "./check-xlsx.js";
 
 // `fileq check`'s routing: which formats have a checker, and the one read of the file every checker works from.
 

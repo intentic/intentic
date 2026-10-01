@@ -52,10 +52,10 @@ const ALLOWED = new Map([
         ]),
     ],
     [
-        `_editor/web/src/features/workspace/page/WorkspaceMobile.vue`,
+        `_editor/ui/src/components/layout/FloatingAction.vue`,
         new Map([
             [
-                `h-14 w-14 px-0 py-0 shadow-lg`,
+                "h-14 py-0 labelled ? `gap-2 px-5 text-sm font-semibold` : `w-14 px-0`",
                 `THE UPLOAD FAB, and the exception the vocabulary already names (see ui.ts). A floating action button is a 56px circle by definition — the size IS the affordance on a phone — so it is the one control in the app whose box is not a tier's.`,
             ],
             [`rounded`, `The same FAB: a circle is what a floating action button is. Nothing else in the app may take this prop.`],

@@ -119,6 +119,7 @@ const uploadKeyReal = async (host: GitHost, publicKey: string, title: string): P
         });
         // 422 means the key is already registered; treated as success (idempotent).
         if (!response.ok && response.status !== 422) {
+            // allow(silent-catch): The failed HTTP status is still thrown when its optional response body cannot be read.
             throw new Error(`GitHub SSH key upload failed (${response.status}): ${await response.text().catch(() => "")}`);
         }
         return;
@@ -130,6 +131,7 @@ const uploadKeyReal = async (host: GitHost, publicKey: string, title: string): P
     });
     // 400 means the fingerprint's already taken; GitLab's idempotent-success equivalent.
     if (!response.ok && response.status !== 400) {
+        // allow(silent-catch): The failed HTTP status is still thrown when its optional response body cannot be read.
         throw new Error(`GitLab SSH key upload failed (${response.status}): ${await response.text().catch(() => "")}`);
     }
 };
@@ -147,6 +149,7 @@ const deleteKeyReal = async (host: GitHost, title: string): Promise<void> => {
         for (const key of keys.filter((entry) => entry.title === title)) {
             await fetch(`${host.apiBase}/user/keys/${key.id}`, { method: "DELETE", headers: listHeaders });
         }
+        // allow(silent-catch): Offline or revoked credentials must not prevent local connection teardown.
     } catch {}
 };
 

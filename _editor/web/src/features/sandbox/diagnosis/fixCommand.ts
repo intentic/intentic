@@ -33,7 +33,8 @@ const mint = async (sandboxId: string): Promise<FixCode | undefined> => {
         const fresh = await apiClient.sandbox.fixCode({ sandboxId });
         minted.set(sandboxId, fresh);
         return fresh;
-    } catch {
+    } catch (error) {
+        console.warn("Could not mint a sandbox fix code", error);
         // A platform from before fix codes, or one that refused: the command runs without reporting back.
         return undefined;
     }

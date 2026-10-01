@@ -1,3 +1,4 @@
+import { STATE_DIR } from "@intentic/constants";
 import type { LandConflict } from "@intentic/sandbox-contract";
 import { errands, errandOf } from "../../chat/run/errands";
 import { agentBlockers, blockerLabel, blockersOf, resolvePrompt, settingsOrigin, settingsPageName, userBlockers } from "./conflictResolution";
@@ -53,10 +54,10 @@ describe(`settingsOrigin`, () => {
 
     it(`names the pages that wrote every held file, each once`, () => {
         const pages = settingsOrigin([
-            held(`root`, `.intentic/config/personas.json`),
-            held(`root`, `.intentic/config/capabilities.json`),
-            held(`root`, `.intentic/config/personas/studio/PROMPT.md`),
-            held(`root`, `.intentic/config/settings.json`),
+            held(`root`, `${STATE_DIR}/config/personas.json`),
+            held(`root`, `${STATE_DIR}/config/capabilities.json`),
+            held(`root`, `${STATE_DIR}/config/personas/studio/PROMPT.md`),
+            held(`root`, `${STATE_DIR}/config/settings.json`),
         ]);
 
         expect(pages).toEqual([`personas`, `capabilities`, `agent`]);

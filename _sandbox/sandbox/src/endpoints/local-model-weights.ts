@@ -4,7 +4,7 @@ import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { once } from "node:events";
 import { basename, dirname, join } from "node:path";
 import { downloadFile } from "@huggingface/hub";
-import { errorMessage } from "@intentic/base/errors";
+import { undefinedIfMissing, errorMessage } from "@intentic/base/errors";
 import { type Capability, LOCAL_MODEL_INSTANT, LOCAL_MODEL_WINDOW_DEFAULT, type LocalModelPrefetch } from "@intentic/sandbox-contract";
 import { opt } from "../opt.js";
 import { type LocalModelSource, localModelSource, localModelWeightsPath } from "./local-model.js";
@@ -51,8 +51,8 @@ export const weightsTrusted = async (source: LocalModelSource, destination: stri
         return true;
     }
     const [record, info] = await Promise.all([
-        readFile(digestRecordPath(destination), "utf8").catch(() => ""),
-        stat(destination).catch(() => undefined),
+        readFile(digestRecordPath(destination), "utf8").catch(undefinedIfMissing),
+        stat(destination).catch(undefinedIfMissing),
     ]);
     return info !== undefined && record === digestRecord(source.sha256, info);
 };
@@ -188,6 +188,7 @@ const downloadWeights = async (source: LocalModelSource, destination: string, si
         throw new Error(`the part file for ${source.file} is larger than the model, discarded it; press Update to download again.`);
     }
     if (stream.total > 0 && have === stream.total) {
+        // allow(silent-catch): The staged file is already complete; closing the redundant response cannot invalidate its bytes.
         await stream.body.cancel().catch(() => undefined);
         await settle(staged, destination, source, source.sha256 === undefined ? undefined : await hashOf(staged));
         return;

@@ -1,6 +1,8 @@
 import { apiContract } from "@intentic/api-contract";
 import { generateKeyPairSync } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { repoRoot } from "@intentic/constants/node";
 import { FREE_TIER, type HostedTier, PAID_TIERS, WORKSPACE_ROOT } from "@intentic/constants";
 import { FLY_VOLUME_PATH } from "@intentic/sandbox-run/fly";
 import { Prisma } from "@intentic/prisma";
@@ -291,7 +293,7 @@ interface ProjectDirCases {
 }
 // SAFETY: the fixture is this repository's own file, written to this shape; one that drifted fails every case below.
 const PROJECT_DIR_CASES = JSON.parse(
-    readFileSync(new URL(`../../../../../_shared/sandbox-contract/src/ids/project-dir.fixture.json`, import.meta.url), `utf8`),
+    readFileSync(join(repoRoot(import.meta.url), `_shared/sandbox-contract/src/ids/project-dir.fixture.json`), `utf8`),
 ) as ProjectDirCases;
 
 /* A HOSTED PROJECT'S FOLDER NAME is held at the door to the rule `ic` and the desktop app hold it to: a name that could
@@ -641,9 +643,11 @@ describe(`provisionHosted`, () => {
         const prisma = fakePrisma({
             hostedMachine: { create: jest.fn().mockResolvedValue({}) },
             hostedPoolMachine: {
-                findMany: jest.fn().mockResolvedValue([
-                    { ...poolRow, image: `ghcr.io/intentic/sandbox@sha256:0000000000000000000000000000000000000000000000000000000000000000` },
-                ]),
+                findMany: jest
+                    .fn()
+                    .mockResolvedValue([
+                        { ...poolRow, image: `ghcr.io/intentic/sandbox@sha256:0000000000000000000000000000000000000000000000000000000000000000` },
+                    ]),
                 updateMany: jest.fn().mockResolvedValue({ count: 1 }),
                 delete: poolDelete,
             },
@@ -842,7 +846,16 @@ const machineIn = (fly: FakeFly): FakeFlyMachine => {
     return machine;
 };
 // The row a restart reads: a stock machine on the free rung.
-const RESTART_ROW = { id: `h1`, sandboxId: `s1`, appName: `intentic-sbx-a`, machineId: `m1`, volumeId: `vol_1`, region: `iad`, wokeAt: null, tier: `free` };
+const RESTART_ROW = {
+    id: `h1`,
+    sandboxId: `s1`,
+    appName: `intentic-sbx-a`,
+    machineId: `m1`,
+    volumeId: `vol_1`,
+    region: `iad`,
+    wokeAt: null,
+    tier: `free`,
+};
 
 describe(`wakeHosted`, () => {
     it(`treats "already running" as success, the browser's daemon probe is the real verdict`, async () => {
@@ -903,7 +916,10 @@ describe(`wakeHosted`, () => {
                 ),
             }),
         ],
-        [`a grant for another sandbox`, () => ({ ...currentTunnelEnv(), SANDBOX_GRANT: mintReachabilityGrant(testIngressConfig.signingKey, `0123456789ab`, Date.now()) })],
+        [
+            `a grant for another sandbox`,
+            () => ({ ...currentTunnelEnv(), SANDBOX_GRANT: mintReachabilityGrant(testIngressConfig.signingKey, `0123456789ab`, Date.now()) }),
+        ],
     ])(`re-applies the config of a machine with %s`, async (_, env) => {
         const fly = configuredFly(env());
         await expect(wakeHosted(config(), WAKE_TARGET, wakeArgs)).resolves.toBe(true);
@@ -943,7 +959,11 @@ describe(`wakeHosted`, () => {
      * on the digest the machine already runs, and the wake answers as a woken machine. */
     it(`heals the tunnel on the version the machine runs when today's digest cannot convert its state`, async () => {
         const fly = configuredFly(PRE_TUNNEL_ENV);
-        fly.commands.answer = () => ({ exit_code: 0, stdout: JSON.stringify({ ...CLEAR_STATE_PLAN, ok: false, failures: [{ document: `a.json`, detail: `no` }] }), stderr: `` });
+        fly.commands.answer = () => ({
+            exit_code: 0,
+            stdout: JSON.stringify({ ...CLEAR_STATE_PLAN, ok: false, failures: [{ document: `a.json`, detail: `no` }] }),
+            stderr: ``,
+        });
         await expect(wakeHosted(config(), WAKE_TARGET, wakeArgs)).resolves.toBe(true);
         expect(finalConfigOf(fly).image).toBe(PINNED);
         expect(finalConfigOf(fly).env[`INGRESS_URL`]).toBe(testIngressConfig.url);
@@ -968,7 +988,11 @@ describe(`wakeHosted`, () => {
         let wake: Promise<unknown> | undefined;
         fly.commands.answer = () => {
             wake ??= wakeHosted(config(), WAKE_TARGET, wakeArgs).catch((error: unknown) => error);
-            return { exit_code: 0, stdout: JSON.stringify({ ...CLEAR_STATE_PLAN, ok: false, failures: [{ document: `a.json`, detail: `no` }] }), stderr: `` };
+            return {
+                exit_code: 0,
+                stdout: JSON.stringify({ ...CLEAR_STATE_PLAN, ok: false, failures: [{ document: `a.json`, detail: `no` }] }),
+                stderr: ``,
+            };
         };
         await expect(refreshHosted(config(), wakeArgs(), { ...WAKE_TARGET, volumeId: `vol_1` }, logger)).rejects.toBeInstanceOf(HostedImageKept);
         expect(await wake).toBeInstanceOf(HostedMachineBusy);
@@ -1309,7 +1333,9 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
                     }),
                 },
                 // The forty free hours, spent on this machine before it moved up a rung.
-                hostedUsage: { groupBy: jest.fn().mockResolvedValue([{ sandboxId: `s1`, tier: FREE_TIER.id, _sum: { minutes: FREE_TIER.monthlyHours * 60 } }]) },
+                hostedUsage: {
+                    groupBy: jest.fn().mockResolvedValue([{ sandboxId: `s1`, tier: FREE_TIER.id, _sum: { minutes: FREE_TIER.monthlyHours * 60 } }]),
+                },
                 hostedPlan: { findUnique: jest.fn().mockResolvedValue(plan) },
                 // The account's one machine as the meter reads it, and the row the wake opens its stretch on.
                 hostedMachine: {
@@ -1321,7 +1347,9 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         await expect(call(sandboxRoutes.wake, { sandboxId: `s1` }, { context: routeContext({ prisma: spent(FREE_TIER.id, slot) }) })).rejects.toThrow(
             /free hosted hours of this sandbox's owner are used up/u,
         );
-        expect(await call(sandboxRoutes.wake, { sandboxId: `s1` }, { context: routeContext({ prisma: spent(PAID.id, slot) }) })).toEqual({ ok: true });
+        expect(await call(sandboxRoutes.wake, { sandboxId: `s1` }, { context: routeContext({ prisma: spent(PAID.id, slot) }) })).toEqual({
+            ok: true,
+        });
         await expect(
             call(sandboxRoutes.wake, { sandboxId: `s1` }, { context: routeContext({ prisma: spent(PAID.id, { ...slot, status: `past_due` }) }) }),
         ).rejects.toMatchObject({ code: `PAYMENT_REQUIRED` });
@@ -1516,7 +1544,8 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         const prisma = fakePrisma({
             sandbox: {
                 findFirst: jest.fn().mockResolvedValue({ ...ownedRow, lastSeenAt }),
-                findUniqueOrThrow: jest.fn()
+                findUniqueOrThrow: jest
+                    .fn()
                     .mockResolvedValueOnce({ ...ownedRow, lastSeenAt, hosted: { id: `h1`, appName: `intentic-sbx-a`, wokeAt: null } })
                     .mockResolvedValue({ ...ownedRow, hosted: null }),
             },
@@ -1563,13 +1592,24 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         // The digest it ran before is the way back the owner's rollback takes.
         expect(update).toHaveBeenCalledWith({
             where: { id: `h1` },
-            data: { previousImage: PINNED, previousEnvironmentHash: null, unprovenImage: null, skippedDigest: null, image: null, environmentHash: null, baseImage: null, baseDigest: null },
+            data: {
+                previousImage: PINNED,
+                previousEnvironmentHash: null,
+                unprovenImage: null,
+                skippedDigest: null,
+                image: null,
+                environmentHash: null,
+                baseImage: null,
+                baseDigest: null,
+            },
         });
         // Restart replaces the config too, so it must observe the machine running rather than merely asking it to.
         const lastUpdate = fly.calls.findLastIndex((entry) => entry.method === `POST` && entry.path.endsWith(`/machines/m1`));
         expect(fly.calls.findLastIndex((entry) => entry.path.endsWith(`/machines/m1/start`))).toBeGreaterThan(lastUpdate);
         expect(runningIn(fly)).toBe(true);
-        expect(prisma.hostedMachine.update).toHaveBeenCalledWith(expect.objectContaining({ where: { id: `h1` }, data: expect.objectContaining({ wokeAt: expect.any(Date) }) }));
+        expect(prisma.hostedMachine.update).toHaveBeenCalledWith(
+            expect.objectContaining({ where: { id: `h1` }, data: expect.objectContaining({ wokeAt: expect.any(Date) }) }),
+        );
     });
 
     /* THE STATE GATE'S REFUSAL, where the owner reads it. Today's digest cannot convert this sandbox's stored state, so
@@ -1587,7 +1627,9 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
             sandbox: { findFirst: jest.fn().mockResolvedValue(ownedRow) },
             hostedMachine: { findUnique: jest.fn().mockResolvedValue({ ...RESTART_ROW }), update: stretch },
         });
-        const refused = await call(sandboxRoutes.hostedRestart, { sandboxId: `s1` }, { context: routeContext({ prisma }) }).catch((error: unknown) => error);
+        const refused = await call(sandboxRoutes.hostedRestart, { sandboxId: `s1` }, { context: routeContext({ prisma }) }).catch(
+            (error: unknown) => error,
+        );
         expect(refused).toBeInstanceOf(ORPCError);
         expect(refused).toMatchObject({
             code: `CONFLICT`,
@@ -1596,7 +1638,9 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         expect(finalConfigOf(fly).image).toBe(PINNED);
         expect(finalConfigOf(fly).env[STATE_PROBE_ENV]).toBeUndefined();
         expect(runningIn(fly)).toBe(true);
-        expect(stretch).toHaveBeenCalledWith(expect.objectContaining({ where: { id: `h1` }, data: expect.objectContaining({ wokeAt: expect.any(Date) }) }));
+        expect(stretch).toHaveBeenCalledWith(
+            expect.objectContaining({ where: { id: `h1` }, data: expect.objectContaining({ wokeAt: expect.any(Date) }) }),
+        );
     });
 
     /* A RESTART MUST NOT SILENTLY UNDO A ROLLBACK. The owner went back from today's `:stable`; while `:stable` still
@@ -1605,7 +1649,10 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         const fly = configuredFly(currentTunnelEnv(), `started`);
         const prisma = fakePrisma({
             sandbox: { findFirst: jest.fn().mockResolvedValue(ownedRow), findUnique: checkingIn({ tokenDigest: sha256Hex(`t0k3n`) }) },
-            hostedMachine: { findUnique: jest.fn().mockResolvedValue({ ...RESTART_ROW, skippedDigest: STABLE_DIGEST }), update: jest.fn().mockResolvedValue({}) },
+            hostedMachine: {
+                findUnique: jest.fn().mockResolvedValue({ ...RESTART_ROW, skippedDigest: STABLE_DIGEST }),
+                update: jest.fn().mockResolvedValue({}),
+            },
         });
         expect(await call(sandboxRoutes.hostedRestart, { sandboxId: `s1` }, { context: routeContext({ prisma }) })).toEqual({ ok: true });
         expect(finalConfigOf(fly).image).toBe(PINNED);
@@ -1646,7 +1693,16 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         const fly = configuredFly(currentTunnelEnv(), `started`);
         machineIn(fly).config = { image: `ghcr.io/intentic/sandbox@${STABLE_DIGEST}`, env: currentTunnelEnv() };
         const update = jest.fn().mockResolvedValue({});
-        const row = { ...RESTART_ROW, cpuKind: `shared`, cpus: 2, memoryMb: 4096, volumeGb: 10, image: null, previousImage: PINNED, previousEnvironmentHash: null };
+        const row = {
+            ...RESTART_ROW,
+            cpuKind: `shared`,
+            cpus: 2,
+            memoryMb: 4096,
+            volumeGb: 10,
+            image: null,
+            previousImage: PINNED,
+            previousEnvironmentHash: null,
+        };
         const prisma = fakePrisma({
             sandbox: { findFirst: jest.fn().mockResolvedValue(ownedRow), findUnique: checkingIn({ tokenDigest: sha256Hex(`t0k3n`) }) },
             hostedMachine: { findUnique: jest.fn().mockResolvedValue(row), update },
@@ -1671,7 +1727,9 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
                 baseDigest: null,
             },
         });
-        expect(update).toHaveBeenCalledWith(expect.objectContaining({ where: { id: `h1` }, data: expect.objectContaining({ wokeAt: expect.any(Date) }) }));
+        expect(update).toHaveBeenCalledWith(
+            expect.objectContaining({ where: { id: `h1` }, data: expect.objectContaining({ wokeAt: expect.any(Date) }) }),
+        );
     });
 
     it(`says a hosted machine can go back once the platform kept the image it ran before`, async () => {
@@ -1876,7 +1934,9 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         expect(grant?.sandboxId).toBe(hostOwnerId(new URL(env[`SANDBOX_PUBLIC_URL`] ?? ``).host));
         expect(runningIn(fly)).toBe(true);
         // Metered as a wake: the stretch opens on the row once the machine runs.
-        expect(stretch).toHaveBeenCalledWith(expect.objectContaining({ where: { id: `h1` }, data: expect.objectContaining({ wokeAt: expect.any(Date) }) }));
+        expect(stretch).toHaveBeenCalledWith(
+            expect.objectContaining({ where: { id: `h1` }, data: expect.objectContaining({ wokeAt: expect.any(Date) }) }),
+        );
 
         // The api the daemon reports to, as a whole app: the route authenticates by the connect token alone.
         const appConfig = configSchema.parse({

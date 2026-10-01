@@ -1,3 +1,4 @@
+import { undefinedIfMissing } from "@intentic/base/errors";
 import { execFile } from "node:child_process";
 import { lstat, mkdir, readFile, rm, stat } from "node:fs/promises";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
@@ -42,7 +43,10 @@ export interface InstallGrants {
 
 // A conversation's grant as the kept store holds it; `by` is whoever answered, when the turn knows.
 export const installGrantsOf = (
-    store: { readonly installsAllowed: (id: string) => Promise<boolean>; readonly allowInstalls: (id: string, by: string | undefined) => Promise<void> },
+    store: {
+        readonly installsAllowed: (id: string) => Promise<boolean>;
+        readonly allowInstalls: (id: string, by: string | undefined) => Promise<void>;
+    },
     conversationId: string,
     by?: string,
 ): InstallGrants => ({
@@ -85,8 +89,7 @@ export interface InstallAsking {
 
 export type ProjectInstallVerdict =
     // `note` says where the install writes and what lasts of it; `unprepared`, what could not be set up for it.
-    | { readonly allow: true; readonly note: string; readonly unprepared: readonly string[] }
-    | { readonly allow: false; readonly reason: string };
+    { readonly allow: true; readonly note: string; readonly unprepared: readonly string[] } | { readonly allow: false; readonly reason: string };
 
 type AskAnswer = { readonly allow: true } | { readonly allow: false; readonly reason: string };
 
@@ -99,7 +102,18 @@ const SHARED_NOTE =
     "This turn works in the main tree, so the install takes the sandbox's install lane: it waits for any other install " +
     "in progress (the daemon's own included) and then runs here, for every conversation.";
 
-const LOCKFILES = ["pnpm-workspace.yaml", "pnpm-lock.yaml", "package-lock.json", "npm-shrinkwrap.json", "yarn.lock", "bun.lock", "bun.lockb", "uv.lock", "poetry.lock", "Pipfile.lock"];
+const LOCKFILES = [
+    "pnpm-workspace.yaml",
+    "pnpm-lock.yaml",
+    "package-lock.json",
+    "npm-shrinkwrap.json",
+    "yarn.lock",
+    "bun.lock",
+    "bun.lockb",
+    "uv.lock",
+    "poetry.lock",
+    "Pipfile.lock",
+];
 const MANIFESTS = ["package.json", "pyproject.toml", "requirements.txt", "Pipfile"];
 
 const present = async (path: string): Promise<boolean> =>
@@ -185,13 +199,12 @@ export const detachMirrors = async (plan: IsolationPlan, root: string): Promise<
     const rel = relative(plan.worktree, root).split(sep).join("/");
     const under = plan.mirrors.filter(
         (mirror) =>
-            (basename(mirror) === "node_modules" || basename(mirror) === ".venv") &&
-            (rel === "" || mirror === rel || mirror.startsWith(`${rel}/`)),
+            (basename(mirror) === "node_modules" || basename(mirror) === ".venv") && (rel === "" || mirror === rel || mirror.startsWith(`${rel}/`)),
     );
     const detached: string[] = [];
     for (const mirror of under) {
         const link = join(plan.worktree, mirror);
-        if ((await lstat(link).catch(() => undefined))?.isSymbolicLink() !== true) {
+        if ((await lstat(link).catch(undefinedIfMissing))?.isSymbolicLink() !== true) {
             continue;
         }
         await rm(link, { force: true });
@@ -333,7 +346,11 @@ export async function* consultProjectInstall(
         }
     }
     const unprepared = await prepare(gate.placement, installs);
-    yield { kind: "install", reach: gate.placement.kind === "shared" ? "main-tree" : "own-copy", projects: await projectsOf(gate.placement, gate.root, installs) };
+    yield {
+        kind: "install",
+        reach: gate.placement.kind === "shared" ? "main-tree" : "own-copy",
+        projects: await projectsOf(gate.placement, gate.root, installs),
+    };
     return { allow: true, note: gate.placement.kind === "shared" ? SHARED_NOTE : PRIVATE_NOTE, unprepared };
 }
 

@@ -32,6 +32,7 @@ const timedOut = (rejection: DOMException | Error | string | undefined): boolean
 const readVitals = async (response: Response): Promise<SandboxVitals | undefined> => {
     try {
         return parseVitals(await response.json());
+        // allow(silent-catch): An unreadable or malformed diagnostic response supplies no trusted vitals.
     } catch {
         return undefined;
     }

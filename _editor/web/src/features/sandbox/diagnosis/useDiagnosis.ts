@@ -47,7 +47,8 @@ const platformAnswers = async (): Promise<Evidence[`platform`]> => {
     try {
         await refresh();
         return `ok`;
-    } catch {
+    } catch (error) {
+        console.warn("Could not read platform status", error);
         return `down`;
     }
 };
@@ -55,7 +56,8 @@ const platformAnswers = async (): Promise<Evidence[`platform`]> => {
 const hostedState = async (sandboxId: string): Promise<HostedMachineState | undefined> => {
     try {
         return (await apiClient.sandbox.hostedStatus({ sandboxId })).machine;
-    } catch {
+    } catch (error) {
+        console.warn("Could not read hosted machine status", error);
         return undefined;
     }
 };
@@ -94,7 +96,13 @@ const gather = async (sandboxId: string, daemonUrl: string): Promise<Evidence> =
     if (front.kind === `edge`) {
         noteVerdict(sandboxId, front.verdict);
     }
-    const loopback = !hosted && owner && tunnelDown(front) ? await answersHere().catch(() => undefined) : undefined;
+    const loopback =
+        !hosted && owner && tunnelDown(front)
+            ? await answersHere().catch((cause: unknown) => {
+                  console.warn("Could not probe the local sandbox", cause);
+                  return undefined;
+              })
+            : undefined;
     return { at: Date.now(), online: globalThis.navigator?.onLine !== false, platform, front, loopback, hosted: machine };
 };
 
@@ -123,7 +131,10 @@ const probe = async (): Promise<void> => {
                 held.value = { sandboxId: now.sandboxId, outage: now.outage, evidence };
             }
         })
-        .catch(() => undefined)
+        .catch((cause: unknown) => {
+            console.warn("Could not collect sandbox diagnosis", cause);
+            return undefined;
+        })
         .finally(() => {
             inflight = undefined;
             schedule();

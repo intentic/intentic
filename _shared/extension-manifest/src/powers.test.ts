@@ -76,6 +76,7 @@ const ROWS: readonly Row[] = [
     {
         power: "files:${path}",
         without: contributes({ files: [] }),
+        // path-literals: content, the extension manifest fixture declares a contributed file path.
         with: contributes({ files: [{ path: ".intentic/config/acme.json", invalidates: ["acme"] }] }),
         adds: ["files:.intentic/config/acme.json", "is told when .intentic/config/acme.json changes"],
     },
@@ -139,14 +140,12 @@ const ROWS: readonly Row[] = [
         with: contributes({ environment: { fragment: "environment/Dockerfile" } }),
         adds: ["environment", "bakes an environment fragment into the sandbox image"],
     },
-    ...CARDS.map(
-        (card): Row => ({
-            power: "capability:${id}",
-            without: contributes({ capabilities: [] }),
-            with: contributes({ capabilities: [card] }),
-            adds: [`capability:${card.id}`, `a ${card.kind} capability card "Acme"`],
-        }),
-    ),
+    ...CARDS.map((card): Row => ({
+        power: "capability:${id}",
+        without: contributes({ capabilities: [] }),
+        with: contributes({ capabilities: [card] }),
+        adds: [`capability:${card.id}`, `a ${card.kind} capability card "Acme"`],
+    })),
     {
         power: "capability-tools:${id}",
         without: contributes({ capabilities: [CLI_CARD] }, SERVER),

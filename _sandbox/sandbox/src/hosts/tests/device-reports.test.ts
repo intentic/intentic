@@ -1,0 +1,816 @@
+import {
+    type HostSummary,
+    type DeviceFlowLine,
+    type DeviceReport,
+    type DeviceSandboxFlow,
+    HOST_NATIVE_ENVIRONMENT,
+    hostConnectionKey,
+    hostRunningSandbox,
+} from "@intentic/sandbox-contract";
+import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
+import { ORPCError } from "@orpc/server";
+import { waitFor } from "@intentic/testing/bun";
+import type { Services } from "../../composition.js";
+import { enrolledFleet, type SyncEnrollmentRow } from "../desktop-sync.js";
+import { devices, manageDeviceSandbox, mergeDevices, type PullResult, runDeviceAgentFlow, sandboxesFromTool } from "../device-reports.js";
+import { HOST_CARD_RULE } from "../host-peer.js";
+
+// The push half, recorded rather than fed to a live /events feed: subscribing for real would start the runtime
+// sampler (tmux, procfs) for a fact this file states in one line.
+const { published } = { published: [] as string[] };
+jest.mock("../../seams/runtime-feed.js", () => ({ publishRuntimeChange: (...domains: string[]) => published.push(...domains) }));
+
+const report = (hostname: string, overrides: Partial<DeviceReport> = {}): DeviceReport => ({
+    hostname,
+    os: "linux",
+    pairings: [],
+    ports: [],
+    agent: { running: true, installed: "0.1.0" },
+    capturedAt: 1_700_000_000_000,
+    ...overrides,
+});
+
+// platform is always set on a host capability; connected-machine facts appear only once it has answered. Every card
+// has at least its native environment, whose state IS the machine's — the same shape `hostSummaries` builds.
+const host = (id: string, overrides: Partial<HostSummary> = {}): HostSummary => {
+    const summary = { id, platform: "linux", online: true, ...overrides };
+    return {
+        ...summary,
+        environments: overrides.environments ?? [
+            {
+                key: HOST_NATIVE_ENVIRONMENT,
+                online: summary.online,
+                ...(summary.facts === undefined ? {} : { facts: summary.facts }),
+            },
+        ],
+    };
+};
+
+// One desktop-sync enrollment fixture: a machine name and which sync mode it holds.
+const enrolled = (machine: string, mode: "sync" | "mirror" = "sync"): SyncEnrollmentRow => ({ machine, mode });
+
+test("reads the fleet the machine's own tool answered", () => {
+    const fleet = [{ slug: "work", container: "intentic-sandbox-work", running: true, image: "img" }];
+    expect(sandboxesFromTool(JSON.stringify(fleet, undefined, 2), false)).toEqual(fleet);
+});
+
+test("a container's resources ride through the fleet reading untouched", () => {
+    const fleet = [
+        {
+            slug: "work",
+            container: "intentic-sandbox-work",
+            running: true,
+            image: "img",
+            resources: { memoryBytes: 12 * 1024 ** 3, cpus: 4, privileged: true, gpu: false, hostRuntime: ["--privileged"], overlayRuntime: [] },
+        },
+    ];
+    expect(sandboxesFromTool(JSON.stringify(fleet), false)).toEqual(fleet);
+});
+
+test("an agent without the tool, or an answer that is not the fleet, is no reading rather than an empty fleet", () => {
+    expect(sandboxesFromTool(`This device has no tool called "list_sandboxes".`, true)).toBeUndefined();
+    expect(sandboxesFromTool("not json", false)).toBeUndefined();
+    expect(sandboxesFromTool(`{"slug":"work"}`, false)).toBeUndefined();
+    expect(sandboxesFromTool("[]", false)).toEqual([]);
+});
+
+test("keeps an enrolled machine that has never reported, and says why it is empty", () => {
+    const merged = mergeDevices([enrolled("laptop")], [], []);
+    expect(merged).toEqual([{ key: "laptop", label: "laptop", sync: enrolled("laptop"), gap: "unreported" }]);
+});
+
+test("says what a connected device is even when it reported nothing", () => {
+    const facts = { os: "Windows 11 Pro (build 10.0.26100)", arch: "x64", shell: "PowerShell 7", home: "C:\\Users\\ada", roots: ["C:\\Users\\ada"] };
+    const merged = mergeDevices(
+        [],
+        [],
+        [{ host: host("my-pc", { platform: "windows", facts, version: "0.5.1", lastSeen: 1_700_000_000_000 }), result: { gap: "unreported" } }],
+    );
+    expect(merged[0]).toEqual({
+        key: "my-pc",
+        label: "my-pc",
+        hostId: "my-pc",
+        card: "my-pc",
+        online: true,
+        platform: "windows",
+        facts,
+        agentVersion: "0.5.1",
+        lastSeen: 1_700_000_000_000,
+        gap: "unreported",
+    });
+});
+
+// The report's os field is `os.platform()`'s spelling (win32/darwin), mapped here to platform names.
+test("reads a sync-only machine's platform off its report", () => {
+    const merged = mergeDevices(
+        [enrolled("laptop"), enrolled("mac")],
+        [
+            { machine: "laptop", report: report("laptop-box", { os: "win32" }) },
+            { machine: "mac", report: report("mac-box", { os: "darwin" }) },
+        ],
+        [],
+    );
+    expect(merged.map((row) => row.platform)).toEqual(["windows", "macos"]);
+});
+
+// ROWS JOIN ON THE MACHINE, never on a name (setup's own card, further down, is the one exception). A sync enrollment and
+// a host connection are one row when both name the same computer and the same OS install on it; the enrollment name,
+// the card id and the hostname can each differ, and a hostname is shared by a PC and every WSL distro on it.
+const ROG = "m-rog-0123456789";
+const OMEN = "m-omen-012345678";
+const stamped = (machine: string, machineId: string, environment = HOST_NATIVE_ENVIRONMENT): SyncEnrollmentRow => ({
+    ...enrolled(machine),
+    machineId,
+    environment,
+});
+const saidBy = (machineId: string, environment?: string): Pick<HostSummary, "facts"> => ({
+    facts: {
+        os: "Windows",
+        arch: "x64",
+        shell: "pwsh",
+        home: "C:\\",
+        roots: [],
+        machineId,
+        ...(environment === undefined ? {} : { wsl: { distro: environment } }),
+    },
+});
+
+test("folds a sync enrollment and a host connection into one row when both name the same machine and install", () => {
+    const pulled: PullResult = {
+        report: report("blackbox"),
+        sandboxes: [{ slug: "work", container: "intentic-sandbox-work", running: true, image: "img" }],
+    };
+    const merged = mergeDevices(
+        [stamped("laptop", ROG)],
+        [{ machine: "laptop", report: report("whitebox") }],
+        [{ host: host("my-pc", saidBy(ROG)), result: pulled }],
+    );
+
+    expect(merged).toHaveLength(1);
+    expect(merged[0]).toMatchObject({
+        key: "whitebox",
+        label: "laptop",
+        sync: stamped("laptop", ROG),
+        hostId: "my-pc",
+        machineId: ROG,
+        online: true,
+    });
+    // The containers arrive through the host door and land on the row, never inside the volunteered report.
+    expect(merged[0]?.sandboxes).toHaveLength(1);
+});
+
+// A side asleep since this daemon booted has no facts; its enrollment still says which computer it was last on.
+test("joins an offline device to the machine it is already syncing, by the machine its enrollment recorded", () => {
+    const asleep = host("rog", {
+        online: false,
+        platform: "windows",
+        environments: [{ key: HOST_NATIVE_ENVIRONMENT, online: false, machineId: ROG }],
+    });
+    const merged = mergeDevices(
+        [stamped("radarsu-rog", ROG)],
+        [{ machine: "radarsu-rog", report: report("radarsu-rog") }],
+        [{ host: asleep, result: { gap: "offline" } }],
+    );
+    expect(merged).toHaveLength(1);
+    expect(merged[0]).toMatchObject({ label: "radarsu-rog", hostId: "rog", machineId: ROG, online: false, platform: "windows" });
+    expect(merged[0]?.gap).toBeUndefined();
+});
+
+// An enrollment made by an agent too old to say is stamped by its first report; until then the report itself speaks.
+test("reads the machine off a sync report its enrollment has not been stamped with yet", () => {
+    const merged = mergeDevices(
+        [enrolled("radarsu-rog")],
+        [{ machine: "radarsu-rog", report: report("radarsu-rog", { machineId: ROG }) }],
+        [{ host: host("rog", saidBy(ROG)), result: { gap: "scope-off" } }],
+    );
+    expect(merged).toHaveLength(1);
+    expect(merged[0]).toMatchObject({ hostId: "rog", sync: enrolled("radarsu-rog") });
+});
+
+// WSL hands a distro the Windows machine's own hostname, and the distro is usually named after the machine too. Folding
+// them would put one install's buttons on the other's row; the machine is shared, the install is not.
+test("keeps a WSL distro apart from the Windows install on the same machine", () => {
+    const merged = mergeDevices(
+        [stamped("radarsu-rog", ROG, "wsl:Arch")],
+        [{ machine: "radarsu-rog", report: report("radarsu-rog", { wsl: { distro: "Arch" }, machineId: ROG }) }],
+        [{ host: host("rog", { platform: "windows", ...saidBy(ROG) }), result: { report: report("radarsu-rog", { os: "win32" }) } }],
+    );
+    expect(merged).toHaveLength(2);
+    expect(merged.map((row) => row.hostId)).toEqual([undefined, "rog"]);
+});
+
+test("folds one distro seen through both doors, by its connection's own environment", () => {
+    const distro = host(hostConnectionKey("rog", "wsl:Arch"), {
+        environments: [{ key: "wsl:Arch", online: true, machineId: ROG }],
+    });
+    const merged = mergeDevices([stamped("radarsu-rog", ROG, "wsl:Arch")], [], [{ host: distro, result: { gap: "scope-off" } }]);
+    expect(merged).toHaveLength(1);
+    expect(merged[0]).toMatchObject({ hostId: "rog::wsl:Arch", sync: stamped("radarsu-rog", ROG, "wsl:Arch") });
+});
+
+// An agent too old to carry a machine id leaves its rows apart. The hostname it would once have been joined on is the
+// thing that joined a PC to a distro inside it, so no name stands in for an id nobody said.
+test("keeps rows apart while either door has not said which machine it is, however their names agree", () => {
+    const merged = mergeDevices(
+        [enrolled("radarsu-rog")],
+        [{ machine: "radarsu-rog", report: report("radarsu-rog") }],
+        [{ host: host("radarsu-rog"), result: { report: report("radarsu-rog") } }],
+    );
+    expect(merged).toHaveLength(2);
+    expect(merged.map((row) => row.hostId)).toEqual([undefined, "radarsu-rog"]);
+});
+
+// SETUP'S CARD IS THE ONE EXCEPTION. The installer syncs the PC it runs on and connects it as a device under a card
+// named after it. A device half that never said which machine it is (its connect step failed, or its agent predates
+// machine ids and the PC lost the link) used to leave that PC as two devices for good: one syncing, one offline.
+const setupOrphan = (card = "radarsu-rog", environment = HOST_NATIVE_ENVIRONMENT): HostSummary =>
+    host(hostConnectionKey(card, environment), { card, online: false, platform: "windows", environments: [{ key: environment, online: false }] });
+const syncingRog = { machine: "radarsu-rog", report: report("radarsu-rog", { os: "win32", machineId: ROG }) };
+
+test("folds setup's never-identified card into the PC it synced, as one row whose device door is offline", () => {
+    const merged = mergeDevices([stamped("radarsu-rog", ROG)], [syncingRog], [{ host: setupOrphan(), result: { gap: "offline" } }], "radarsu-rog");
+    expect(merged).toHaveLength(1);
+    expect(merged[0]).toMatchObject({
+        label: "radarsu-rog",
+        sync: stamped("radarsu-rog", ROG),
+        hostId: "radarsu-rog",
+        card: "radarsu-rog",
+        online: false,
+    });
+    // The sync report still describes the machine, so the row says its device door is shut rather than calling it offline.
+    expect(merged[0]?.gap).toBeUndefined();
+});
+
+test("places setup's card by the name setup gave it, the way hostIdFrom spells a Windows computer name", () => {
+    const merged = mergeDevices([stamped("RADARSU-ROG.lan", ROG)], [], [{ host: setupOrphan(), result: { gap: "offline" } }], "radarsu-rog");
+    expect(merged).toHaveLength(1);
+});
+
+test("keeps any other card that never said which machine it is apart, however its name agrees", () => {
+    const merged = mergeDevices([stamped("radarsu-rog", ROG)], [syncingRog], [{ host: setupOrphan(), result: { gap: "offline" } }]);
+    expect(merged.map((row) => row.hostId)).toEqual([undefined, "radarsu-rog"]);
+});
+
+test("keeps setup's card apart from a WSL distro that shares the PC's name", () => {
+    const merged = mergeDevices(
+        [stamped("radarsu-rog", ROG, "wsl:archlinux")],
+        [],
+        [{ host: setupOrphan(), result: { gap: "offline" } }],
+        "radarsu-rog",
+    );
+    expect(merged.map((row) => row.hostId)).toEqual([undefined, "radarsu-rog"]);
+});
+
+test("keeps setup's card apart when two synced machines carry its name", () => {
+    const merged = mergeDevices(
+        [stamped("radarsu-rog", ROG), stamped("radarsu-rog", OMEN)],
+        [],
+        [{ host: setupOrphan(), result: { gap: "offline" } }],
+        "radarsu-rog",
+    );
+    expect(merged.map((row) => row.hostId)).toEqual([undefined, undefined, "radarsu-rog"]);
+});
+
+test("once setup's card says which machine it is, that machine decides and the name no longer does", () => {
+    const elsewhere = host("radarsu-rog", { card: "radarsu-rog", platform: "windows", ...saidBy(OMEN) });
+    const merged = mergeDevices([stamped("radarsu-rog", ROG)], [syncingRog], [{ host: elsewhere, result: { gap: "scope-off" } }], "radarsu-rog");
+    expect(merged.map((row) => row.hostId)).toEqual([undefined, "radarsu-rog"]);
+});
+
+test("a connection that said which machine it is claims the synced row before setup's card is placed by name", () => {
+    const identified = host("rog", { card: "rog", platform: "windows", ...saidBy(ROG) });
+    const merged = mergeDevices(
+        [stamped("radarsu-rog", ROG)],
+        [syncingRog],
+        // Listed first, so a claim made in list order would hand the orphan the row.
+        [
+            { host: setupOrphan(), result: { gap: "offline" } },
+            { host: identified, result: { gap: "scope-off" } },
+        ],
+        "radarsu-rog",
+    );
+    expect(merged.map((row) => row.hostId)).toEqual(["rog", "radarsu-rog"]);
+});
+
+test("keeps two devices apart when they report one hostname", () => {
+    const merged = mergeDevices(
+        [],
+        [],
+        [
+            { host: host("win"), result: { report: report("radarsu-rog") } },
+            { host: host("wsl"), result: { report: report("radarsu-rog") } },
+        ],
+    );
+    expect(merged.map((row) => row.hostId)).toEqual(["win", "wsl"]);
+    expect(new Set(merged.map((row) => row.key)).size).toBe(2);
+});
+
+test("keeps two machines apart when they name different machines", () => {
+    const merged = mergeDevices(
+        [stamped("ada-laptop", ROG)],
+        [{ machine: "ada-laptop", report: report("ada-box") }],
+        [{ host: host("grace-pc", saidBy(OMEN)), result: { report: report("grace-box") } }],
+    );
+    expect(merged.map((row) => row.key)).toEqual(["ada-box", "grace-box"]);
+    expect(merged.map((row) => row.sync?.mode)).toEqual(["sync", undefined]);
+});
+
+// Gap reasons (offline, scope-off, unreported) must reach the UI distinct, not flattened.
+test("carries the reason a reachable device produced nothing", () => {
+    const merged = mergeDevices(
+        [],
+        [],
+        [
+            { host: host("asleep", { online: false }), result: { gap: "offline" } },
+            { host: host("locked-down"), result: { gap: "scope-off" } },
+            { host: host("silent"), result: { gap: "unreported" } },
+        ],
+    );
+    expect(merged.map((row) => row.gap)).toEqual(["offline", "scope-off", "unreported"]);
+    expect(merged.every((row) => row.sync === undefined)).toBe(true);
+});
+
+// Cache/dedupe tests: the pull cache is module-level, so each test uses its own machine id, not a shared one.
+
+// A nonexistent path: sync contributes nothing, and no test here needs a real temp directory for history.
+const NO_HISTORY = "/nonexistent/machine-reports-history";
+
+// `tool` is the MCP tool's name, or "report" for the typed call on the device connection.
+interface FakeCall {
+    readonly id: string;
+    readonly tool: string;
+    readonly signal: AbortSignal | undefined;
+}
+
+const answer = (text: string, isError = false): unknown => ({ result: { content: [{ text }], isError } });
+
+// Both doors of one machine, every call recorded: `report` on its connection, `list_sandboxes` on its MCP door.
+const fakeServices = (id: string, respond: (call: FakeCall) => Promise<unknown>): { services: Services; calls: FakeCall[] } => {
+    const calls: FakeCall[] = [];
+    const ask = async (call: FakeCall): Promise<unknown> => {
+        calls.push(call);
+        return await respond(call);
+    };
+    const services = {
+        config: { historyRoot: NO_HISTORY },
+        // The real reader over a history root that holds nothing, which is the empty fleet these cases assume.
+        syncFleet: () => enrolledFleet(NO_HISTORY),
+        perf: { track: async <T>(_op: string, _fields: unknown, run: () => Promise<T>): Promise<T> => await run() },
+        capabilities: { list: async () => [{ kind: "device", id, config: { platform: "linux" } }] },
+        // One enrollment per card here, named after it: these machines have a single OS install.
+        hosts: { list: async () => [{ id, ...HOST_CARD_RULE.pairing(id) }] },
+        hostHub: {
+            state: () => ({ online: true, version: "0.1.0" }),
+            // One connection per card here, named after it: these machines have a single OS install.
+            known: () => ["ada-laptop", "guest"],
+            client: (asked: string) => ({
+                report: async (_input: undefined, options?: { signal?: AbortSignal }) =>
+                    await ask({ id: asked, tool: "report", signal: options?.signal }),
+            }),
+            mcp: async (asked: string, payload: unknown, options?: { signal?: AbortSignal }) =>
+                await ask({ id: asked, tool: (payload as { params?: { name?: string } }).params?.name ?? "", signal: options?.signal }),
+        },
+    } as unknown as Services;
+    return { services, calls };
+};
+
+afterEach(() => {
+    jest.useRealTimers();
+    published.length = 0;
+});
+
+test("waits for the first reading of a machine, then serves it while refreshing behind the answer", async () => {
+    jest.useFakeTimers();
+    let hostname = "first";
+    const { services, calls } = fakeServices("cached-pc", async (call) => (call.tool === "report" ? report(hostname) : answer("[]")));
+
+    expect((await devices(services))[0]?.report?.hostname).toBe("first");
+    expect(calls).toHaveLength(2);
+
+    hostname = "second";
+    expect((await devices(services))[0]?.report?.hostname).toBe("first");
+    expect(calls).toHaveLength(2);
+
+    jest.setSystemTime(Date.now() + 31_000);
+    expect((await devices(services))[0]?.report?.hostname).toBe("first");
+    await waitFor(() => expect(calls).toHaveLength(4));
+    expect((await devices(services))[0]?.report?.hostname).toBe("second");
+});
+
+// Handing over a reading the view would already call quiet is what made a healthy machine look dead the moment its
+// page opened: the answer was contradicted a second later by the refresh behind it.
+test("waits for the answer rather than serving a reading old enough to read as quiet", async () => {
+    jest.useFakeTimers();
+    let hostname = "before";
+    const { services } = fakeServices("quiet-pc", async (call) =>
+        call.tool === "report" ? report(hostname, { capturedAt: Date.now() }) : answer("[]"),
+    );
+
+    expect((await devices(services))[0]?.report?.hostname).toBe("before");
+
+    hostname = "after";
+    jest.setSystemTime(Date.now() + 61_000);
+    expect((await devices(services))[0]?.report?.hostname).toBe("after");
+});
+
+// The browser maps `hosts` to its Devices read, so a machine that answers after the reader stopped waiting is on
+// screen in a second instead of at the next ten-second poll. Silent on a routine refresh: news it already has.
+test("announces only a landing that changes what the view says", async () => {
+    jest.useFakeTimers();
+    const { services, calls } = fakeServices("push-pc", async (call) =>
+        call.tool === "report" ? report("push", { capturedAt: Date.now() }) : answer("[]"),
+    );
+
+    // The machine's first reading: nothing was known about it before, so watchers are told.
+    await devices(services);
+    expect(published).toEqual(["hosts"]);
+    published.length = 0;
+
+    // A refresh of a reading still young enough to serve: same answer, no frame.
+    jest.setSystemTime(Date.now() + 31_000);
+    await devices(services);
+    await waitFor(() => expect(calls).toHaveLength(4));
+    expect(published).toEqual([]);
+
+    // A reading that had gone quiet, replaced: the frame is the whole point of the wait ending early.
+    jest.setSystemTime(Date.now() + 61_000);
+    await devices(services);
+    expect(published).toEqual(["hosts"]);
+});
+
+test("coalesces concurrent readers into a single round trip", async () => {
+    let release = (): void => {};
+    const held = new Promise<void>((resolve) => (release = resolve));
+    const { services, calls } = fakeServices("busy-pc", async (call) => {
+        await held;
+        return call.tool === "report" ? report("busy") : answer("[]");
+    });
+
+    const readers = [devices(services), devices(services), devices(services)];
+    release();
+    const answers = await Promise.all(readers);
+
+    expect(answers.every((rows) => rows[0]?.report?.hostname === "busy")).toBe(true);
+    expect(calls.filter((call) => call.tool === "report")).toHaveLength(1);
+});
+
+// An agent without the call answers through its RPC layer; the fleet call must still fire beside it, not after it.
+test("asks for the report and the fleet in one go, and bounds the pair with one deadline", async () => {
+    const { services, calls } = fakeServices("old-pc", async (call) =>
+        call.tool === "report" ? Promise.reject(new ORPCError("NOT_FOUND", { message: "no such procedure" })) : answer("[]"),
+    );
+
+    expect((await devices(services))[0]?.gap).toBe("unreported");
+    expect(calls.map((call) => call.tool).toSorted()).toEqual(["list_sandboxes", "report"]);
+    expect(calls[0]?.signal).toBeInstanceOf(AbortSignal);
+    expect(calls[0]?.signal).toBe(calls[1]?.signal);
+});
+
+// Between the liveness read and the call the socket can go; a machine with no connection is not asked at all.
+test("a machine whose connection is gone by the time it is asked reads as offline", async () => {
+    const { services, calls } = fakeServices("gone-pc", async () => answer("[]"));
+    (services.hostHub as { client: (id: string) => undefined }).client = () => undefined;
+    const row = (await devices(services))[0];
+    expect(row?.hostId).toBe("gone-pc");
+    expect(row?.gap).toBe("offline");
+    expect(row?.online).toBe(true);
+    expect(row?.report).toBeUndefined();
+    expect(row?.sandboxes).toBeUndefined();
+    expect(calls).toEqual([]);
+});
+
+// THE GAP THIS CLOSES. A PC's Windows side and the distro on it hold separate agent binaries behind separate sockets,
+// and only the side named after the card was ever read or addressed — so a distro's agent had no door to be updated
+// through, and drifted versions behind the machine it runs on with nothing on screen able to move it.
+test("gives every environment of one machine its own door, read through its own connection", async () => {
+    const distro = hostConnectionKey("pc-rog", "wsl:Arch");
+    const asked: string[] = [];
+    const windowsFacts = {
+        os: "Microsoft Windows 11 Home",
+        arch: "x64",
+        shell: "PowerShell 7",
+        home: "C:\\Users\\radar",
+        roots: [],
+        hostname: "pc-rog",
+    };
+    const archFacts = {
+        os: "Arch Linux",
+        arch: "x64",
+        shell: "/usr/bin/zsh",
+        home: "/home/radarsu",
+        roots: [],
+        hostname: "pc-rog",
+        wsl: { distro: "Arch" },
+    };
+    const services = {
+        config: { historyRoot: NO_HISTORY },
+        syncFleet: () => enrolledFleet(NO_HISTORY),
+        perf: { track: async <T>(_op: string, _fields: unknown, run: () => Promise<T>): Promise<T> => await run() },
+        capabilities: { list: async () => [{ kind: "device", id: "pc-rog", config: { platform: "windows" } }] },
+        hosts: {
+            list: async () => [
+                { id: "pc-rog", ...HOST_CARD_RULE.pairing("pc-rog") },
+                { id: distro, ...HOST_CARD_RULE.pairing(distro) },
+            ],
+        },
+        hostHub: {
+            state: (key: string) => ({
+                online: true,
+                announced: { version: key === distro ? "1.278.0" : "1.286.0" },
+                facts: key === distro ? archFacts : windowsFacts,
+            }),
+            known: () => ["pc-rog", distro],
+            client: (id: string) => ({
+                report: async () => {
+                    asked.push(id);
+                    return report("pc-rog", id === distro ? { wsl: { distro: "Arch" } } : {});
+                },
+            }),
+            mcp: async () => answer("[]"),
+        },
+    } as unknown as Services;
+
+    const rows = await devices(services);
+    // Each side answers for itself: its own version, its own platform, its own connection key to send a verb to.
+    expect(rows.map((row) => [row.hostId, row.platform, row.agentVersion])).toEqual([
+        ["pc-rog", "windows", "1.286.0"],
+        [distro, "linux", "1.278.0"],
+    ]);
+    expect(new Set(asked)).toEqual(new Set(["pc-rog", distro]));
+});
+
+test("a machine that refuses to answer at all reads as offline", async () => {
+    const { services } = fakeServices("dead-pc", () => Promise.reject(new Error("socket is gone")));
+    expect((await devices(services))[0]).toMatchObject({ hostId: "dead-pc", gap: "offline" });
+});
+
+// The card setup writes for a new sandbox: "Manage sandboxes on this device" on, "Run commands" off. Its containers
+// are what every swap button is gated on (hostRunningSandbox), and dropping them over the refused report is what
+// made a fresh sandbox print a terminal command for its own first rebuild.
+test("keeps the containers of a machine whose report is refused", async () => {
+    const fleet = [{ slug: "work", container: "intentic-sandbox-work", running: true, image: "img" }];
+    const { services } = fakeServices("locked-pc", async (call) =>
+        call.tool === "report"
+            ? Promise.reject(new ORPCError("FORBIDDEN", { message: `"Run commands" is switched off.` }))
+            : answer(JSON.stringify(fleet)),
+    );
+
+    const row = (await devices(services))[0];
+    expect(row).toMatchObject({ hostId: "locked-pc", online: true, gap: "scope-off" });
+    expect(row?.sandboxes).toEqual(fleet);
+    expect(hostRunningSandbox(await devices(services), "work")).toBe("locked-pc");
+});
+
+// "None there" is a reading and "nobody could look" is not; a refused fleet call must not come back as an empty
+// machine, which would read as a docker with nothing in it.
+test("carries no container list at all when the machine refuses to list them", async () => {
+    const { services } = fakeServices("shy-pc", async (call) =>
+        call.tool === "report" ? report("shy") : answer(`This device has no tool called "list_sandboxes".`, true),
+    );
+    expect((await devices(services))[0]?.sandboxes).toBeUndefined();
+});
+
+// Runner lifecycle: the two ops the daemon fills in for.
+
+// Fixture exposing both the flow sent to the machine and what this side minted, revoked or disconnected.
+const runnerServices = (
+    overrides: {
+        publicUrl?: string;
+        platformUrl?: string;
+        online?: boolean;
+        approved?: string;
+        settings?: Record<string, unknown>;
+        features?: string[];
+    } = {},
+): { services: Services; sent: DeviceSandboxFlow[]; minted: string[]; revoked: string[]; disconnected: string[] } => {
+    const sent: DeviceSandboxFlow[] = [];
+    const minted: string[] = [];
+    const revoked: string[] = [];
+    const disconnected: string[] = [];
+    const services = {
+        config: {
+            historyRoot: NO_HISTORY,
+            sandbox: { publicUrl: overrides.publicUrl ?? "https://sandbox-x.intentic.dev" },
+            platform: { url: overrides.platformUrl ?? "https://host.docker.internal:6480" },
+        },
+        // Backs runner-up's best-effort reads; empty here so nothing extra appears in the assertions below.
+        workspace: { root: "/nowhere" },
+        files: { read: async () => overrides.approved },
+        sandboxSettings: { get: async () => ({ ...overrides.settings }) },
+        runners: {
+            mintPairing: (id: string) => {
+                minted.push(id);
+                return { token: `pair-for-${id}`, expiresIn: 600 };
+            },
+            revoke: async (id: string) => {
+                revoked.push(id);
+                return true;
+            },
+        },
+        runnerHub: { disconnect: (id: string) => disconnected.push(id) },
+        hostHub: {
+            state: () => ({ online: true, ...(overrides.features === undefined ? {} : { facts: { features: overrides.features } }) }),
+            client:
+                overrides.online === false
+                    ? () => undefined
+                    : () => ({
+                          runSandboxFlow: async (flow: DeviceSandboxFlow) => {
+                              sent.push(flow);
+                              return (async function* () {
+                                  yield { kind: "line", text: "working" } as const;
+                                  yield { kind: "result", message: "done" } as const;
+                              })();
+                          },
+                      }),
+        },
+    } as unknown as Services;
+    return { services, sent, minted, revoked, disconnected };
+};
+
+const drain = async (flow: AsyncGenerator<DeviceFlowLine>): Promise<DeviceFlowLine[]> => {
+    const lines: DeviceFlowLine[] = [];
+    for await (const line of flow) {
+        lines.push(line);
+    }
+    return lines;
+};
+
+// The daemon mints the pairing; a caller only names a machine and a runner, never carries a credential in.
+test("starting a runner fills in this sandbox's address and a pairing bound to the runner's own name", async () => {
+    const { services, sent, minted } = runnerServices();
+    await drain(manageDeviceSandbox(services, "rog", { op: "runner-up", slug: "rig" }));
+    expect(minted).toEqual(["rig"]);
+    expect(sent[0]).toEqual({ op: "runner-up", slug: "rig", parentUrl: "https://sandbox-x.intentic.dev", pair: "pair-for-rig" });
+});
+
+test("a sandbox with no public address refuses rather than leaving a container with no way home", async () => {
+    const { services, sent, minted } = runnerServices({ publicUrl: "" });
+    await expect(drain(manageDeviceSandbox(services, "rog", { op: "runner-up", slug: "rig" }))).rejects.toThrow(/public address/i);
+    expect(minted).toEqual([]);
+    expect(sent).toEqual([]);
+});
+
+// An agent that predates `later` strips it and reshapes at once: the save would restart the sandbox under everyone in it.
+test("saving a reshape for later is refused before it reaches an agent that does not say it can", async () => {
+    const { services, sent } = runnerServices();
+    await expect(drain(manageDeviceSandbox(services, "rog", { op: "reshape", slug: "work", resources: { gpu: true }, later: true }))).rejects.toThrow(
+        /too old.*Nothing was changed/,
+    );
+    expect(sent).toEqual([]);
+});
+
+test("saving a reshape for later reaches an agent that announces it, and an immediate reshape needs no announcement", async () => {
+    const { services, sent } = runnerServices({ features: ["reshape-later"] });
+    await drain(manageDeviceSandbox(services, "rog", { op: "reshape", slug: "work", resources: { gpu: true }, later: true }));
+    const old = runnerServices();
+    await drain(manageDeviceSandbox(old.services, "rog", { op: "reshape", slug: "work", resources: { gpu: true } }));
+    expect(sent).toEqual([{ op: "reshape", slug: "work", resources: { gpu: true }, later: true }]);
+    expect(old.sent).toEqual([{ op: "reshape", slug: "work", resources: { gpu: true } }]);
+});
+
+// An agent that predates `set-shape` would refuse the op by name; the daemon says why, and what to do, before sending it.
+test("setting or forgetting a shape is refused before it reaches an agent that does not say it can", async () => {
+    const shape = { memoryGib: 20, cpus: null, privileged: false, gpu: true };
+    const { services, sent } = runnerServices({ features: ["reshape-later"] });
+    await expect(drain(manageDeviceSandbox(services, "rog", { op: "set-shape", slug: "work", shape, when: "nextRestart" }))).rejects.toThrow(
+        /too old to set a sandbox's shape through ic\. Nothing was changed\./,
+    );
+    await expect(drain(manageDeviceSandbox(services, "rog", { op: "forget-shape", slug: "work" }))).rejects.toThrow(/too old/);
+    expect(sent).toEqual([]);
+});
+
+test("a shape reaches an agent that announces it only whole and with when it takes effect", async () => {
+    const shape = { memoryGib: null, cpus: 4, privileged: true, gpu: false };
+    const { services, sent } = runnerServices({ features: ["reshape-later", "set-shape"] });
+    await expect(drain(manageDeviceSandbox(services, "rog", { op: "set-shape", slug: "work", shape }))).rejects.toThrow(
+        /`shape` and `when` are both required/,
+    );
+    await drain(manageDeviceSandbox(services, "rog", { op: "set-shape", slug: "work", shape, when: "now" }));
+    await drain(manageDeviceSandbox(services, "rog", { op: "forget-shape", slug: "work" }));
+    expect(sent).toEqual([
+        { op: "set-shape", slug: "work", shape, when: "now" },
+        { op: "forget-shape", slug: "work" },
+    ]);
+});
+
+// The update card sends this by itself when it opens: an older agent would refuse it by name, so it never leaves here
+// for one, and the refusal says the agent's own timer still covers it.
+test("a background download reaches only an agent that says it can run one unattended", async () => {
+    const old = runnerServices({ features: ["set-shape"] });
+    await expect(drain(manageDeviceSandbox(old.services, "rog", { op: "prepare-background", slug: "work" }))).rejects.toThrow(
+        /too old to download an update in the background\. Nothing was changed; its own timer still downloads updates every few hours\./,
+    );
+    expect(old.sent).toEqual([]);
+    const current = runnerServices({ features: ["set-shape", "background-prepare"] });
+    await drain(manageDeviceSandbox(current.services, "rog", { op: "prepare-background", slug: "work" }));
+    expect(current.sent).toEqual([{ op: "prepare-background", slug: "work" }]);
+});
+
+// Pairing injection applies only to `runner-up`; every other op passes through untouched.
+test("no other op grows a pairing", async () => {
+    const { services, sent, minted } = runnerServices();
+    await drain(manageDeviceSandbox(services, "rog", { op: "update", slug: "work" }));
+    expect(sent[0]).toEqual({ op: "update", slug: "work" });
+    expect(minted).toEqual([]);
+});
+
+// The approved overlay ships byte-exact with its sha256 (checked again on the machine); non-default settings ship as a
+// definition seed.
+test("starting a runner ships the approved overlay with its pinning hash and the settings as a seed", async () => {
+    const approved = "FROM ghcr.io/intentic/sandbox:stable\nRUN true\n";
+    const { services, sent } = runnerServices({ approved, settings: { hashlineEdits: true } });
+    await drain(manageDeviceSandbox(services, "rog", { op: "runner-up", slug: "rig" }));
+    const flow = sent[0] as DeviceSandboxFlow;
+    expect(flow.overlay).toBe(approved);
+    expect(flow.overlayHash).toBe(sha256Hex(approved));
+    expect(flow.definition).toContain("hashlineEdits = true");
+    expect(flow.definition).not.toContain("[[capabilities]]");
+    expect(flow.definition).not.toContain("secrets");
+});
+
+// A setup code exists only on the platform that minted it; a device left to its default redeems it at production.
+test("a create or reconnect names this sandbox's platform, over anything the caller sent", async () => {
+    const { services, sent } = runnerServices();
+    await drain(manageDeviceSandbox(services, "rog", { op: "create", slug: "gate", setupCode: "code-abc" }));
+    await drain(
+        manageDeviceSandbox(services, "rog", { op: "reconnect", slug: "work", setupCode: "code-def", platformUrl: "https://elsewhere.example" }),
+    );
+    expect(sent).toEqual([
+        { op: "create", slug: "gate", setupCode: "code-abc", platformUrl: "https://host.docker.internal:6480" },
+        { op: "reconnect", slug: "work", setupCode: "code-def", platformUrl: "https://host.docker.internal:6480" },
+    ]);
+});
+
+test("a sandbox with no platform relays no setup code at all", async () => {
+    const { services, sent } = runnerServices({ platformUrl: "" });
+    await expect(drain(manageDeviceSandbox(services, "rog", { op: "create", slug: "gate", setupCode: "code-abc" }))).rejects.toThrow(
+        /not connected to a platform/i,
+    );
+    expect(sent).toEqual([]);
+});
+
+test("a removed runner loses its enrollment here, but only when the machine says it worked", async () => {
+    const { services, revoked, disconnected } = runnerServices();
+    await drain(manageDeviceSandbox(services, "rog", { op: "runner-remove", slug: "rig" }));
+    expect(revoked).toEqual(["rig"]);
+    expect(disconnected).toEqual(["rig"]);
+});
+
+// The agent's own two ops: both stop the process carrying the request, so the stream ending badly is the normal
+// ending, and only an answer the device's RPC layer actually sent is a failure worth printing.
+const agentServices = (said: () => AsyncGenerator<DeviceFlowLine>): Services =>
+    ({ hostHub: { client: () => ({ runAgentFlow: async () => said() }) } }) as unknown as Services;
+
+test("an update the device narrates all the way through keeps every frame it sent", async () => {
+    const lines = await drain(
+        runDeviceAgentFlow(
+            agentServices(async function* () {
+                yield { kind: "line", text: "Updating the agent on this device." };
+                yield { kind: "result", message: "The update ran on this device." };
+            }),
+            "rog",
+            { op: "upgrade" },
+        ),
+    );
+    expect(lines).toEqual([
+        { kind: "line", text: "Updating the agent on this device." },
+        { kind: "result", message: "The update ran on this device." },
+    ]);
+});
+
+// The transport dying with the process it just stopped is this flow working. The RPC layer's own abort text
+// ("[AsyncIdQueue] Queue[..] was closed or aborted while waiting for pulling.") is nothing a reader can act on,
+// and a `result` frame would tell the view the device answered when it never did.
+test("a connection that dies with the restarted process ends with one plain line and no result", async () => {
+    const lines = await drain(
+        runDeviceAgentFlow(
+            agentServices(async function* () {
+                yield { kind: "line", text: "90% of 82 MB" };
+                throw new Error("[AsyncIdQueue] Queue[14t] was closed or aborted while waiting for pulling.");
+            }),
+            "rog",
+            { op: "upgrade" },
+        ),
+    );
+    expect(lines).toEqual([
+        { kind: "line", text: "90% of 82 MB" },
+        { kind: "line", text: "Lost contact with rog — that is what restarting its agent does to this connection." },
+    ]);
+});
+
+// An agent too old to have this route answers through its RPC layer rather than dying, and that answer names
+// the one thing that fixes it.
+test("an answer the device's RPC layer sent comes through as the refusal it is", async () => {
+    const lines = await drain(
+        runDeviceAgentFlow(
+            agentServices(async function* () {
+                throw new ORPCError("NOT_FOUND", { message: "This device's agent has no such flow." });
+                // oxlint-disable-next-line no-unreachable -- the generator needs a yield to type as one
+                yield { kind: "line", text: "" };
+            }),
+            "rog",
+            { op: "upgrade" },
+        ),
+    );
+    expect(lines).toEqual([{ kind: "error", message: "This device's agent has no such flow. Run `intentic-machine upgrade` on that device." }]);
+});

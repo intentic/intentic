@@ -1,5 +1,6 @@
 // jsdom because the subject is the ladder: which rungs a refusal offers, and the sentence claiming them beside it,
 // both template decisions across five states.
+import { STATE_DIR } from "@intentic/constants";
 import "@intentic/testing/dom";
 import type { LandConflict } from "@intentic/sandbox-contract";
 import { type App, createApp, h, nextTick } from "vue";
@@ -124,8 +125,8 @@ const settingsHeld: LandConflict[] = [
         clean: 3,
         mainBranch: `main`,
         paths: [
-            { path: `.intentic/config/personas.json`, reason: `workspace` },
-            { path: `.intentic/config/capabilities.json`, reason: `workspace` },
+            { path: `${STATE_DIR}/config/personas.json`, reason: `workspace` },
+            { path: `${STATE_DIR}/config/capabilities.json`, reason: `workspace` },
         ],
     },
 ];
@@ -153,7 +154,9 @@ it(`offers the agent's rung first and the settings press beside it when both hal
 });
 
 it(`keeps sending the owner to Changes once any held file is their own`, async () => {
-    const conflicts: LandConflict[] = [{ ...settingsHeld[0]!, paths: [...settingsHeld[0]!.paths, { path: `src/db/schema.ts`, reason: `workspace` }] }];
+    const conflicts: LandConflict[] = [
+        { ...settingsHeld[0]!, paths: [...settingsHeld[0]!.paths, { path: `src/db/schema.ts`, reason: `workspace` }] },
+    ];
     const el = await mount({ conflicts });
 
     expect(hasButton(el, `Open Changes`)).toBe(true);

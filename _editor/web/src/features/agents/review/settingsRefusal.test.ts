@@ -1,4 +1,5 @@
 // jsdom: the composable reads a query, which needs a mounted scope to live and die with.
+import { STATE_DIR } from "@intentic/constants";
 import "@intentic/testing/dom";
 import type { LandConflict } from "@intentic/sandbox-contract";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
@@ -11,7 +12,9 @@ const { rpcKey } = await import("../../../lib/queryKeys");
 const { settingsChip, useSettingsRefusal } = await import("./settingsRefusal");
 const { settingsPagesOf } = await import("./conflictResolution");
 
-const held = (...paths: string[]): LandConflict[] => [{ repo: `root`, clean: 4, paths: paths.map((path) => ({ path, reason: `workspace` as const })) }];
+const held = (...paths: string[]): LandConflict[] => [
+    { repo: `root`, clean: 4, paths: paths.map((path) => ({ path, reason: `workspace` as const })) },
+];
 const reported = (id: string, conflicts: readonly LandConflict[]): void => {
     queryClient.setQueryData(rpcKey(`agents.diff`, { id }), { repos: [], conflicts });
 };
@@ -29,7 +32,10 @@ const mounted = (id: string, refusing: { value: boolean }) => {
     app = createApp(
         defineComponent({
             setup() {
-                const pages = useSettingsRefusal(() => ({ id }), () => refusing.value);
+                const pages = useSettingsRefusal(
+                    () => ({ id }),
+                    () => refusing.value,
+                );
                 read = () => pages.value;
                 return () => h(`div`);
             },
@@ -40,7 +46,7 @@ const mounted = (id: string, refusing: { value: boolean }) => {
 };
 
 test(`a refusal held only by files the Sandbox pages wrote names those pages, as the review heading does`, () => {
-    reported(`a1`, held(`.intentic/config/personas.json`, `.intentic/config/settings.json`));
+    reported(`a1`, held(`${STATE_DIR}/config/personas.json`, `${STATE_DIR}/config/settings.json`));
 
     const card = mounted(`a1`, ref(true));
 
@@ -48,7 +54,7 @@ test(`a refusal held only by files the Sandbox pages wrote names those pages, as
 });
 
 test(`one file of the owner's own among them names no page`, () => {
-    reported(`a1`, held(`.intentic/config/personas.json`, `src/config.ts`));
+    reported(`a1`, held(`${STATE_DIR}/config/personas.json`, `src/config.ts`));
 
     expect(mounted(`a1`, ref(true)).pages()).toBeUndefined();
     expect(settingsPagesOf(held(`src/config.ts`))).toBeUndefined();
@@ -62,7 +68,7 @@ test(`only a card refusing on the owner's half reads the report, and it stops on
 
     refusing.value = true;
     await nextTick();
-    reported(`b2`, held(`.intentic/config/capabilities.json`));
+    reported(`b2`, held(`${STATE_DIR}/config/capabilities.json`));
     expect(card.pages()).toBe(`Capabilities`);
     expect(diffRead(`b2`)?.getObserversCount()).toBe(1);
 

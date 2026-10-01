@@ -38,17 +38,17 @@ export const dependencyRequestsDocument = defineDocument({ root: "history", path
 
 // The schema's value as this store holds it: each origin spelled for exact optional types.
 const requestState = (parsed: z.output<typeof RequestStateSchema>): RequestState => ({
-        projects: Object.fromEntries(
-            Object.entries(parsed.projects).map(([dir, origin]) => [
-                dir,
-                {
-                    kind: "request" as const,
-                    ...(origin.conversationId === undefined ? {} : { conversationId: origin.conversationId }),
-                    ...(origin.title === undefined ? {} : { title: origin.title }),
-                },
-            ]),
-        ),
-    });
+    projects: Object.fromEntries(
+        Object.entries(parsed.projects).map(([dir, origin]) => [
+            dir,
+            {
+                kind: "request" as const,
+                ...(origin.conversationId === undefined ? {} : { conversationId: origin.conversationId }),
+                ...(origin.title === undefined ? {} : { title: origin.title }),
+            },
+        ]),
+    ),
+});
 
 export interface ReconcileOutcome {
     readonly missing: number;
@@ -390,7 +390,12 @@ export const createDependencyCoordinator = (deps: DependencyCoordinatorDeps): De
             const caused = stale.filter((project) => belongsToLand(deps.workspace.root, project.dir, origin));
             const declared = await Promise.all(
                 fresh.map(async (project) =>
-                    (await unresolvedDependencies(join(deps.workspace.root, project.dir)).catch(() => [])).reduce((total, entry) => total + entry.names.length, 0),
+                    (
+                        await unresolvedDependencies(join(deps.workspace.root, project.dir)).catch((cause: unknown) => {
+                            console.warn("Could not inspect project dependencies", cause);
+                            return [];
+                        })
+                    ).reduce((total, entry) => total + entry.names.length, 0),
                 ),
             );
             const missing = caused.reduce((total, project) => total + behindCount(project), 0) + declared.reduce((total, count) => total + count, 0);

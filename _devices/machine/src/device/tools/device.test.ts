@@ -3,7 +3,7 @@ import type { DeviceScopes } from "@intentic/sandbox-contract";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { type Caller, calling, createIndicator, type Indicator, PAUSE_HOTKEY } from "../indicator.js";
 import { ScopeError } from "../policy.js";
-import { fakeDesktop, fakeIndicatorDeps } from "../testing.js";
+import { fakeDesktop, fakeIndicatorDeps } from "../device-testing.js";
 import { act, type DeviceInput, describeAction } from "./device.js";
 
 /* The policy half of GUI control, driven against a fake desktop and an indicator over fakes, so no test here reads

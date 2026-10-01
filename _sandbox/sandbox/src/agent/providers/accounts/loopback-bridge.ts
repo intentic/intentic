@@ -86,7 +86,9 @@ const deviceCatchers = (hub: LoopbackBridgeDeps["hostHub"]): Catcher[] => {
     }
     return [...chosen.values()].flatMap(({ id, card }) => {
         const client = hub.client(id);
-        return client === undefined ? [] : [{ catcher: { kind: "device", label: card }, open: (spec, signal) => client.catchLoopback(spec, { signal }) }];
+        return client === undefined
+            ? []
+            : [{ catcher: { kind: "device", label: card }, open: (spec, signal) => client.catchLoopback(spec, { signal }) }];
     });
 };
 
@@ -116,6 +118,7 @@ const landingState = (target: LoopbackTarget, url: string): string | null => {
     try {
         const landed = new URL(url);
         return landed.port === String(target.port) && landed.pathname === target.path ? landed.searchParams.get("state") : null;
+        // allow(silent-catch): A malformed landing URL cannot satisfy the expected sign-in state.
     } catch {
         return null;
     }
@@ -191,10 +194,16 @@ export const loopbackRedirectOf = (authorizeUrl: string): Pick<LoopbackTarget, "
     try {
         const redirect = new URL(new URL(authorizeUrl).searchParams.get("redirect_uri") ?? "");
         const port = Number(redirect.port);
-        if (redirect.protocol !== "http:" || (redirect.hostname !== "localhost" && redirect.hostname !== "127.0.0.1") || !Number.isInteger(port) || port <= 0) {
+        if (
+            redirect.protocol !== "http:" ||
+            (redirect.hostname !== "localhost" && redirect.hostname !== "127.0.0.1") ||
+            !Number.isInteger(port) ||
+            port <= 0
+        ) {
             return undefined;
         }
         return { host: redirect.hostname, port, path: redirect.pathname };
+        // allow(silent-catch): A malformed authorization or redirect URL cannot supply a loopback target.
     } catch {
         return undefined;
     }

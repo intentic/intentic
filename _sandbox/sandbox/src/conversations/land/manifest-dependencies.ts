@@ -35,6 +35,7 @@ const PyprojectSchema = z.object({
 const parsedWith = <T>(schema: z.ZodType<T>, format: "json" | "toml", text: string): T | undefined => {
     try {
         return schema.safeParse(format === "json" ? JSON.parse(text) : parseToml(text)).data;
+        // allow(silent-catch): Malformed JSON or TOML declares no dependencies this review can trust.
     } catch {
         // Not JSON or TOML at all: a manifest mid-edit, which declares nothing this review can stand behind.
         return undefined;

@@ -1,3 +1,4 @@
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -23,7 +24,7 @@ const catalogOf = async (data: readonly { id: string; display_name?: string; max
 };
 
 test("a weights path is labelled by the model, not by where the file sits", async () => {
-    const catalog = await catalogOf([{ id: "/work/.intentic/local/cache/models/Qwen3.8-27B-UD-Q4_K_M.gguf" }]);
+    const catalog = await catalogOf([{ id: `${WORKSPACE_ROOT}/.intentic/local/cache/models/Qwen3.8-27B-UD-Q4_K_M.gguf` }]);
     expect(catalog.models).toEqual([{ id: "/work/.intentic/local/cache/models/Qwen3.8-27B-UD-Q4_K_M.gguf", label: "Qwen3.8-27B-UD-Q4_K_M" }]);
     // The id is what a turn dials, so it survives verbatim, including as the endpoint's default.
     expect(catalog.default).toBe("/work/.intentic/local/cache/models/Qwen3.8-27B-UD-Q4_K_M.gguf");
@@ -95,7 +96,7 @@ test("caps in a shape we don't know leave the window standing, and the model usa
 // serves the weights: llama-server lists them under the path it loaded.
 test("the curated quick-jobs model is helper-only by its weights file, and a turn with no model named avoids it", async () => {
     const instant = `/work/.intentic/local/cache/models/${LOCAL_MODEL_INSTANT.id.split("/").at(-1)}`;
-    const catalog = await catalogOf([{ id: instant }, { id: "/work/.intentic/local/cache/models/Qwen3.5-9B-Q4_K_M.gguf" }], {
+    const catalog = await catalogOf([{ id: instant }, { id: `${WORKSPACE_ROOT}/.intentic/local/cache/models/Qwen3.5-9B-Q4_K_M.gguf` }], {
         chat_template_caps: { supports_tool_calls: true },
     });
     expect(catalog.models.find((model) => model.id === instant)?.helperOnly).toBe("instant-tier");

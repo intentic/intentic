@@ -50,6 +50,7 @@ export const createEnvironmentRoutes = (services: Services, waiter: RebuildWhenI
             if (denied !== undefined) {
                 return denied;
             }
+            // allow(silent-catch): Unreadable JSON is refused by the required hash check below.
             const body = (await c.req.json().catch(() => undefined)) as { hash?: unknown } | undefined;
             const hash = typeof body?.hash === "string" ? body.hash : undefined;
             if (hash === undefined) {
@@ -88,6 +89,7 @@ export const createEnvironmentRoutes = (services: Services, waiter: RebuildWhenI
             if (denied !== undefined) {
                 return denied;
             }
+            // allow(silent-catch): Unreadable JSON is refused by the decision schema below.
             const body = EnvironmentRuntimeDecisionSchema.safeParse(await c.req.json().catch(() => undefined));
             if (!body.success) {
                 return c.json({ error: "tool and decision required" }, 400);
@@ -104,6 +106,7 @@ export const createEnvironmentRoutes = (services: Services, waiter: RebuildWhenI
             if (denied !== undefined) {
                 return denied;
             }
+            // allow(silent-catch): Unreadable JSON is refused by the removal schema below.
             const body = EnvironmentRemoveSchema.safeParse(await c.req.json().catch(() => undefined));
             if (!body.success) {
                 return c.json({ error: "block required" }, 400);
@@ -120,6 +123,7 @@ export const createEnvironmentRoutes = (services: Services, waiter: RebuildWhenI
             if (denied !== undefined) {
                 return denied;
             }
+            // allow(silent-catch): Unreadable JSON is refused by the rebuild schema below.
             const body = EnvironmentRebuildWhenIdleSchema.safeParse(await c.req.json().catch(() => undefined));
             if (!body.success) {
                 return c.json({ error: "host and hash required" }, 400);

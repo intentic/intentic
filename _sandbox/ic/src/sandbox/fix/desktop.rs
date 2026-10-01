@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::time::{Duration, Instant};
 
-use super::host::{HostFacts, Os};
+use super::host::{DeviceFacts, Os};
 use crate::docker::{self, Engine};
 
 /* DOCKER DESKTOP, WSL AND THE ENGINE, PUT RIGHT — per OS, every command bounded. The Windows recoveries are the ones the
@@ -29,12 +29,12 @@ const START_WAIT: Duration = Duration::from_secs(300);
 /// A restart of an app that has run here before.
 const RESTART_WAIT: Duration = Duration::from_secs(240);
 
-pub fn start(facts: &HostFacts) -> Done {
+pub fn start(facts: &DeviceFacts) -> Done {
     launch(facts)?;
     wait_engine(START_WAIT)
 }
 
-fn launch(facts: &HostFacts) -> std::result::Result<(), String> {
+fn launch(facts: &DeviceFacts) -> std::result::Result<(), String> {
     match facts.os {
         Os::Windows => windows_launch(facts),
         // `start` detaches it from this shell; run from a Windows folder, or cmd complains about the UNC path.
@@ -59,7 +59,7 @@ fn launch(facts: &HostFacts) -> std::result::Result<(), String> {
 }
 
 #[cfg(windows)]
-fn windows_facts(facts: &HostFacts) -> crate::prepare::plan::Facts {
+fn windows_facts(facts: &DeviceFacts) -> crate::prepare::plan::Facts {
     facts
         .windows
         .as_ref()
@@ -69,14 +69,14 @@ fn windows_facts(facts: &HostFacts) -> crate::prepare::plan::Facts {
 }
 
 #[cfg(windows)]
-fn windows_launch(facts: &HostFacts) -> std::result::Result<(), String> {
+fn windows_launch(facts: &DeviceFacts) -> std::result::Result<(), String> {
     crate::prepare::fix::start_docker_desktop(&windows_facts(facts))
         .map(|_| ())
         .map_err(trouble)
 }
 
 #[cfg(not(windows))]
-fn windows_launch(_facts: &HostFacts) -> std::result::Result<(), String> {
+fn windows_launch(_facts: &DeviceFacts) -> std::result::Result<(), String> {
     Err("Docker Desktop for Windows is started from Windows.".to_string())
 }
 
@@ -137,7 +137,7 @@ fn stop(os: Os) -> std::result::Result<(), String> {
 
 /// Up but not answering gets a restart, not more waiting: stop everything of Docker Desktop's, give it a moment, start
 /// it, and wait for the engine.
-pub fn restart(facts: &HostFacts) -> Done {
+pub fn restart(facts: &DeviceFacts) -> Done {
     stop(facts.os)?;
     std::thread::sleep(Duration::from_secs(8));
     launch(facts)?;
@@ -146,7 +146,7 @@ pub fn restart(facts: &HostFacts) -> Done {
 
 /// Windows' last resort: Docker Desktop stopped FIRST (a `wsl --shutdown` under a running Docker Desktop is what
 /// wedges it), WSL shut down, Docker Desktop started. Never offered from inside WSL, where it would end this run too.
-pub fn shutdown_wsl(facts: &HostFacts) -> Done {
+pub fn shutdown_wsl(facts: &DeviceFacts) -> Done {
     if facts.os != Os::Windows {
         return Err("WSL is restarted from Windows.".to_string());
     }
@@ -174,7 +174,7 @@ pub fn reapply_integration() -> Done {
     wait_engine(RESTART_WAIT)
 }
 
-pub fn linux_containers(facts: &HostFacts) -> Done {
+pub fn linux_containers(facts: &DeviceFacts) -> Done {
     #[cfg(windows)]
     {
         applied(crate::prepare::fix::switch_to_linux_containers(
@@ -189,7 +189,7 @@ pub fn linux_containers(facts: &HostFacts) -> Done {
 }
 
 /// One of `ic docker prepare`'s elevated fixes. Each asks Windows for permission itself.
-pub fn prerequisite(facts: &HostFacts, id: &str) -> Done {
+pub fn prerequisite(facts: &DeviceFacts, id: &str) -> Done {
     #[cfg(windows)]
     {
         match id {
@@ -227,7 +227,7 @@ pub fn start_engine() -> Done {
 }
 
 /// Docker Desktop's own start-at-sign-in, switched on where it keeps it.
-pub fn enable_autostart(facts: &HostFacts) -> Done {
+pub fn enable_autostart(facts: &DeviceFacts) -> Done {
     let dir = match facts.os {
         Os::Windows => std::env::var("APPDATA")
             .ok()

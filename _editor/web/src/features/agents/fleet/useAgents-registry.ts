@@ -36,8 +36,12 @@ export const readStoredRoster = (sandboxId: string | undefined, build: string): 
     try {
         // SAFETY: only saveRoster writes this key, as `{ build, agents }` from the registry; a record from another build is
         // refused by its build stamp before its agents are trusted, and anything unparsable lands in the catch.
-        const stored = JSON.parse(localStorage.getItem(`${ROSTER_PREFIX}${sandboxId}`) ?? `null`) as { build?: string; agents?: AgentSummary[] } | null;
+        const stored = JSON.parse(localStorage.getItem(`${ROSTER_PREFIX}${sandboxId}`) ?? `null`) as {
+            build?: string;
+            agents?: AgentSummary[];
+        } | null;
         return stored?.build === build && Array.isArray(stored.agents) ? stored.agents : [];
+        // allow(silent-catch): Unreadable storage discards only the cached roster; the live stream remains authoritative.
     } catch {
         return [];
     }
@@ -297,7 +301,10 @@ export const markSeen = (id: string): void => {
     }
     entry.seenAt = Date.now();
     forgetFingerprint(entry);
-    void sandboxRpc.agents.seen({ id }).catch(() => undefined);
+    void sandboxRpc.agents.seen({ id }).catch((cause: unknown) => {
+        console.warn("Could not mark the agent seen", cause);
+        return undefined;
+    });
 };
 
 // Clears every unread badge at once, instead of requiring a click through each card.
@@ -307,7 +314,10 @@ export const markAllSeen = (): void => {
         agent.seenAt = now;
         forgetFingerprint(agent);
     }
-    void sandboxRpc.agents.seenAll().catch(() => undefined);
+    void sandboxRpc.agents.seenAll().catch((cause: unknown) => {
+        console.warn("Could not mark all agents seen", cause);
+        return undefined;
+    });
 };
 
 // An open tab adopts the registry's title unconditionally: the daemon never promotes a title that would overwrite
@@ -380,6 +390,7 @@ export const refresh = async (): Promise<void> => {
     let body: ProcedureOutput<`agents.list`>;
     try {
         body = await sandboxRpc.agents.list();
+        // allow(silent-catch): Keep the last roster during an outage; the event stream refreshes it on reconnect.
     } catch {
         // Leave the last roster; the events stream repaints on reconnect.
         return;
@@ -469,6 +480,7 @@ const saveRoster = (): void => {
         if (json.length <= ROSTER_MAX_CHARS) {
             localStorage.setItem(`${ROSTER_PREFIX}${sandboxId}`, json);
         }
+        // allow(silent-catch): Denied or full storage disables only the next startup's cached roster.
     } catch {
         // A full or refused storage costs the next start its early board, nothing else.
     }

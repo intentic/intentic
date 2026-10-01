@@ -20,6 +20,7 @@ const audio = (): AudioContext | undefined => {
     if (context === undefined && Audio !== undefined) {
         try {
             context = new Audio();
+            // allow(silent-catch): A browser may refuse Web Audio; notifications still appear without their optional sound.
         } catch {
             return undefined;
         }
@@ -66,6 +67,7 @@ export const playChime = async (chime: Chime): Promise<void> => {
         return;
     }
     if (audioContext.state === `suspended`) {
+        // allow(silent-catch): Autoplay restrictions may refuse audio resume; the running-state check below suppresses sound.
         await audioContext.resume().catch(() => undefined);
     }
     if (audioContext.state !== `running`) {
@@ -92,6 +94,7 @@ export const claimChime = (storage: Pick<Storage, `getItem` | `setItem`>, now: n
 const claim = (): boolean => {
     try {
         return claimChime(localStorage, Date.now());
+        // allow(silent-catch): Without storage this window cannot coordinate, so it rings for itself.
     } catch {
         // No storage: this window cannot coordinate, so it rings for itself.
         return true;
@@ -102,6 +105,7 @@ const claim = (): boolean => {
 export const ringOnce = async (chime: Chime): Promise<void> => {
     // Typed as always there; a browser older than the Web Locks API has none.
     const locks: LockManager | undefined = navigator.locks;
+    // allow(silent-catch): Refused lock acquisition must not produce duplicate notification sounds.
     const won = locks === undefined ? claim() : await locks.request(`intentic.chime`, claim).catch(() => false);
     if (won) {
         await playChime(chime);

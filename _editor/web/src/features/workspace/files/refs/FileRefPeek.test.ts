@@ -1,3 +1,4 @@
+import { STATE_DIR } from "@intentic/constants";
 import "@intentic/testing/dom";
 import type { WorkspaceFileResponse } from "@intentic/api-contract";
 import { Icon } from "@intentic/ui";
@@ -5,7 +6,7 @@ import { type App, createApp, h, nextTick } from "vue";
 
 // The preview a transcript's file links raise, driven through the real component: the links live in v-html, so every
 // rule here is about delegated pointer, focus and key events on the surface, which a caller never sees. The reading
-// rules themselves are filePeek.test.ts's.
+// rules themselves are fileRefQuickLook.test.ts's.
 
 const reads: string[] = [];
 let answer: (path: string) => WorkspaceFileResponse = (path) => ({ present: false, path });
@@ -22,7 +23,7 @@ jest.mock("./openFileRef", () => ({
         opened.push(args);
         return Promise.resolve();
     },
-    sharedStatePath: (path: string) => path.startsWith(`.intentic/`),
+    sharedStatePath: (path: string) => path.startsWith(`${STATE_DIR}/`),
 }));
 jest.mock("../../../sandbox/client/sandboxRpc", () => ({
     sandboxRpc: { workspace: { children: () => Promise.resolve({ entries: [], hidden: 0 }) } },
@@ -66,7 +67,8 @@ const settle = async (): Promise<void> => {
 };
 
 const card = (): HTMLElement | null => document.querySelector<HTMLElement>(`.ui-anchored`);
-const over = (link: HTMLElement, pointerType = `mouse`): boolean => link.dispatchEvent(new PointerEvent(`pointerover`, { bubbles: true, pointerType }));
+const over = (link: HTMLElement, pointerType = `mouse`): boolean =>
+    link.dispatchEvent(new PointerEvent(`pointerover`, { bubbles: true, pointerType }));
 const out = (link: HTMLElement): boolean => link.dispatchEvent(new PointerEvent(`pointerout`, { bubbles: true, pointerType: `mouse` }));
 
 beforeEach(() => {
@@ -93,7 +95,9 @@ it(`opens only for a pointer that stays, on the named line among its neighbours`
     jest.advanceTimersByTime(1);
     await settle();
     // Each row as its number and its code.
-    const rows = [...(card()?.querySelectorAll<HTMLElement>(`[data-peek-line]`) ?? [])].map((row) => [...row.children].map((cell) => cell.textContent?.trim()));
+    const rows = [...(card()?.querySelectorAll<HTMLElement>(`[data-peek-line]`) ?? [])].map((row) =>
+        [...row.children].map((cell) => cell.textContent?.trim()),
+    );
     expect(card()?.textContent).toContain(`notes/plan.txt:5`);
     expect(card()?.textContent).toContain(`30 lines`);
     expect(rows).toEqual(Array.from({ length: 12 }, (_, index) => [`${index + 2}`, `line ${index + 2}`]));

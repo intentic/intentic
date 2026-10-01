@@ -1,3 +1,4 @@
+import { undefinedIfMissing } from "@intentic/base/errors";
 import { open, readdir, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -41,7 +42,7 @@ const LOG_HEAD_BYTES = 1024 * 1024;
 
 /** The running load on this port as its log tells it; undefined when there is no log to read. */
 export const readLoadReport = async (port: number): Promise<LoadReport | undefined> => {
-    const handle = await open(localModelLogPath(port), "r").catch(() => undefined);
+    const handle = await open(localModelLogPath(port), "r").catch(undefinedIfMissing);
     if (handle === undefined) {
         return undefined;
     }
@@ -100,7 +101,7 @@ export const llamaServerProcesses = async (): Promise<LlamaServerProcess[]> => {
         entries
             .filter((entry) => PROC_PID.test(entry))
             .map(async (entry): Promise<LlamaServerProcess | undefined> => {
-                const argv = (await readFile(`/proc/${entry}/cmdline`, "utf8").catch(() => "")).split("\0");
+                const argv = ((await readFile(`/proc/${entry}/cmdline`, "utf8").catch(undefinedIfMissing)) ?? "").split("\0");
                 const flag = argv.indexOf("--port");
                 const port = flag >= 0 ? Number(argv[flag + 1]) : Number.NaN;
                 if (argv[0]?.includes("llama-server") !== true || !Number.isInteger(port)) {

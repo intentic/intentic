@@ -87,7 +87,7 @@ pub enum Agent {
     Running,
 }
 
-pub struct HostFacts {
+pub struct DeviceFacts {
     pub os: Os,
     /// Windows: `ic docker prepare`'s reading of this PC; Err when it would not describe itself in time.
     pub windows: Option<std::result::Result<plan::Facts, String>>,
@@ -113,7 +113,7 @@ pub const WEDGE_PATIENCE: Duration = Duration::from_secs(90);
 
 /// Read the machine. `patience` is how long to watch an engine that Docker Desktop is running and that does not
 /// answer before calling it wedged: zero for doctor, which reports what it sees now.
-pub fn gather(os: Os, patience: Duration, agent_run: bool) -> HostFacts {
+pub fn gather(os: Os, patience: Duration, agent_run: bool) -> DeviceFacts {
     let windows = (os == Os::Windows).then(windows_facts);
     let mut engine = docker::engine(ENGINE_ASK);
     let (mut desktop, autostart) = desktop(os, windows.as_ref().and_then(|f| f.as_ref().ok()));
@@ -129,7 +129,7 @@ pub fn gather(os: Os, patience: Duration, agent_run: bool) -> HostFacts {
         None
     };
     let (free_gib, disk_place) = free_space(os, engine.up());
-    HostFacts {
+    DeviceFacts {
         os,
         windows,
         desktop,
@@ -501,7 +501,7 @@ const PREREQUISITE_IDS: [&str; 8] = [
     "wsl-kernel",
 ];
 
-pub fn prerequisites(facts: &HostFacts, tried: &dyn Fn(&Repair) -> bool) -> Option<Check> {
+pub fn prerequisites(facts: &DeviceFacts, tried: &dyn Fn(&Repair) -> bool) -> Option<Check> {
     let windows = facts.windows.as_ref()?;
     let facts = match windows {
         Ok(facts) => facts,
@@ -542,7 +542,7 @@ pub fn prerequisites(facts: &HostFacts, tried: &dyn Fn(&Repair) -> bool) -> Opti
     Some(check)
 }
 
-pub fn docker_app(facts: &HostFacts, tried: &dyn Fn(&Repair) -> bool) -> Option<Check> {
+pub fn docker_app(facts: &DeviceFacts, tried: &dyn Fn(&Repair) -> bool) -> Option<Check> {
     let check = match facts.desktop {
         Desktop::Absent => return None,
         Desktop::NotInstalled => Check::fail(
@@ -584,7 +584,7 @@ pub fn docker_app(facts: &HostFacts, tried: &dyn Fn(&Repair) -> bool) -> Option<
     Some(check)
 }
 
-pub fn docker(facts: &HostFacts, tried: &dyn Fn(&Repair) -> bool) -> Check {
+pub fn docker(facts: &DeviceFacts, tried: &dyn Fn(&Repair) -> bool) -> Check {
     let windowsish = matches!(facts.os, Os::Windows | Os::Wsl);
     match &facts.engine {
         Engine::Up(os) if os != "linux" => {
@@ -638,7 +638,7 @@ pub fn docker(facts: &HostFacts, tried: &dyn Fn(&Repair) -> bool) -> Check {
     }
 }
 
-fn wsl_integrated(facts: &HostFacts) -> bool {
+fn wsl_integrated(facts: &DeviceFacts) -> bool {
     matches!(
         facts.wsl,
         Wsl::Inside {
@@ -650,7 +650,7 @@ fn wsl_integrated(facts: &HostFacts) -> bool {
 }
 
 /// Docker Desktop is up and its engine is not: the state `wsl --shutdown` leaves it in, answering 500 for ever.
-fn wedged(facts: &HostFacts, engine: &Engine, tried: &dyn Fn(&Repair) -> bool) -> Check {
+fn wedged(facts: &DeviceFacts, engine: &Engine, tried: &dyn Fn(&Repair) -> bool) -> Check {
     let how = match engine {
         Engine::Erroring(_) => "answers every request with an error",
         Engine::Silent => "does not answer at all",
@@ -691,7 +691,7 @@ fn wedged(facts: &HostFacts, engine: &Engine, tried: &dyn Fn(&Repair) -> bool) -
 
 /// An engine that is not Docker Desktop's and does not answer.
 fn engine_down(
-    facts: &HostFacts,
+    facts: &DeviceFacts,
     engine: &Engine,
     windowsish: bool,
     tried: &dyn Fn(&Repair) -> bool,
@@ -732,7 +732,7 @@ fn engine_down(
 }
 
 /// The engine is up and refuses this account.
-fn denied(facts: &HostFacts, tried: &dyn Fn(&Repair) -> bool) -> Check {
+fn denied(facts: &DeviceFacts, tried: &dyn Fn(&Repair) -> bool) -> Check {
     match facts.windows.as_ref().and_then(|facts| facts.as_ref().ok()) {
         Some(windows) => {
             if windows.in_docker_users_group {
@@ -759,7 +759,7 @@ fn denied(facts: &HostFacts, tried: &dyn Fn(&Repair) -> bool) -> Check {
     }
 }
 
-pub fn wsl_check(facts: &HostFacts, tried: &dyn Fn(&Repair) -> bool) -> Option<Check> {
+pub fn wsl_check(facts: &DeviceFacts, tried: &dyn Fn(&Repair) -> bool) -> Option<Check> {
     let check = match &facts.wsl {
         Wsl::NotApplicable => return None,
         Wsl::Windows { running: None } => {
@@ -827,7 +827,7 @@ pub fn wsl_check(facts: &HostFacts, tried: &dyn Fn(&Repair) -> bool) -> Option<C
 /// refuse at the same line (checks::disk_outcome, plan::MIN_FREE_GIB).
 pub const DISK_FLOOR_GIB: u64 = plan::MIN_FREE_GIB;
 
-pub fn disk(facts: &HostFacts, tried: &dyn Fn(&Repair) -> bool) -> Check {
+pub fn disk(facts: &DeviceFacts, tried: &dyn Fn(&Repair) -> bool) -> Check {
     let Some(free) = facts.free_gib else {
         return Check::skip(
             DISK,
@@ -874,7 +874,7 @@ pub fn disk(facts: &HostFacts, tried: &dyn Fn(&Repair) -> bool) -> Check {
     Check::ok(DISK)
 }
 
-pub fn agent_check(facts: &HostFacts) -> Check {
+pub fn agent_check(facts: &DeviceFacts) -> Check {
     use super::model::AGENT;
     match facts.agent {
         Agent::Itself | Agent::Running => Check::ok(AGENT),
@@ -1044,8 +1044,8 @@ mod tests {
     use super::*;
     use crate::sandbox::fix::model::{State, Who};
 
-    fn base(os: Os) -> HostFacts {
-        HostFacts {
+    fn base(os: Os) -> DeviceFacts {
+        DeviceFacts {
             os,
             windows: None,
             desktop: Desktop::Running,
@@ -1081,7 +1081,7 @@ mod tests {
 
     #[test]
     fn a_stopped_docker_desktop_is_started_unasked_and_then_handed_to_a_person() {
-        let facts = HostFacts {
+        let facts = DeviceFacts {
             desktop: Desktop::Stopped,
             engine: Engine::Down("cannot connect".to_string()),
             ..base(Os::Windows)
@@ -1102,7 +1102,7 @@ mod tests {
 
     #[test]
     fn a_wedged_engine_escalates_from_a_restart_to_wsl_to_a_person() {
-        let facts = HostFacts {
+        let facts = DeviceFacts {
             engine: Engine::Erroring("request returned 500 Internal Server Error".to_string()),
             wsl: Wsl::Windows {
                 running: Some(vec!["Ubuntu".to_string()]),
@@ -1128,7 +1128,7 @@ mod tests {
             .as_deref()
             .is_some_and(|r| r.contains("open Docker Desktop and finish what it shows")));
         // On a Mac there is no WSL to restart: a person is next.
-        let mac = HostFacts {
+        let mac = DeviceFacts {
             engine: Engine::Silent,
             ..base(Os::Macos)
         };
@@ -1137,7 +1137,7 @@ mod tests {
 
     #[test]
     fn windows_containers_are_switched_with_consent() {
-        let facts = HostFacts {
+        let facts = DeviceFacts {
             engine: Engine::Up("windows".to_string()),
             ..base(Os::Windows)
         };
@@ -1149,7 +1149,7 @@ mod tests {
 
     #[test]
     fn a_stopped_linux_engine_under_systemd_is_started_with_consent() {
-        let facts = HostFacts {
+        let facts = DeviceFacts {
             desktop: Desktop::Absent,
             engine: Engine::Down("Cannot connect to the Docker daemon".to_string()),
             engine_service: Some(false),
@@ -1169,7 +1169,7 @@ mod tests {
 
     #[test]
     fn a_unix_permission_refusal_names_the_docker_group() {
-        let facts = HostFacts {
+        let facts = DeviceFacts {
             desktop: Desktop::Absent,
             engine: Engine::Denied("permission denied while trying to connect".to_string()),
             ..base(Os::Linux)
@@ -1184,7 +1184,7 @@ mod tests {
 
     #[test]
     fn autostart_off_is_a_warning_with_consent_never_a_failure() {
-        let facts = HostFacts {
+        let facts = DeviceFacts {
             autostart: Some(false),
             ..base(Os::Windows)
         };
@@ -1201,7 +1201,7 @@ mod tests {
 
     #[test]
     fn a_low_disk_is_tidied_then_pruned_with_consent_then_handed_to_a_person() {
-        let facts = HostFacts {
+        let facts = DeviceFacts {
             free_gib: Some(3),
             ..base(Os::Linux)
         };
@@ -1214,7 +1214,7 @@ mod tests {
         assert_eq!(second.who(), Some(Who::Consent));
         assert_eq!(disk(&facts, &always).who(), Some(Who::You));
         // A full disk with no engine to tidy through is a person's straight away.
-        let blocked = HostFacts {
+        let blocked = DeviceFacts {
             free_gib: Some(1),
             engine: Engine::Silent,
             ..base(Os::Windows)
@@ -1223,7 +1223,7 @@ mod tests {
         // The boundary, by value: 5 GiB is enough, 4 is not; under 15 warns.
         let at = |gib| {
             disk(
-                &HostFacts {
+                &DeviceFacts {
                     free_gib: Some(gib),
                     ..base(Os::Linux)
                 },
@@ -1239,7 +1239,7 @@ mod tests {
 
     #[test]
     fn inside_wsl_a_missing_integration_is_a_person_s_and_never_docker_engine_in_the_distro() {
-        let facts = HostFacts {
+        let facts = DeviceFacts {
             engine: Engine::NoCli,
             wsl: Wsl::Inside {
                 distro: "Ubuntu".to_string(),
@@ -1255,7 +1255,7 @@ mod tests {
         assert!(remedy.contains("Do not install Docker Engine"));
         assert_eq!(docker(&facts, &never).state, State::Skip);
         // Switched on and merely absent: re-applied with consent.
-        let absent = HostFacts {
+        let absent = DeviceFacts {
             engine: Engine::Down("Cannot connect".to_string()),
             wsl: Wsl::Inside {
                 distro: "Ubuntu".to_string(),
@@ -1272,7 +1272,7 @@ mod tests {
 
     #[test]
     fn a_wsl_that_never_answers_is_restarted_with_consent() {
-        let facts = HostFacts {
+        let facts = DeviceFacts {
             wsl: Wsl::Windows { running: None },
             ..base(Os::Windows)
         };
@@ -1360,7 +1360,7 @@ mod tests {
             (Agent::Stopped, State::Warn),
         ] {
             assert_eq!(
-                agent_check(&HostFacts {
+                agent_check(&DeviceFacts {
                     agent,
                     ..base(Os::Linux)
                 })
@@ -1383,7 +1383,7 @@ mod tests {
             docker_server_os: Some("linux".to_string()),
             ..plan::Facts::default()
         };
-        let facts = HostFacts {
+        let facts = DeviceFacts {
             windows: Some(Ok(features_off.clone())),
             ..base(Os::Windows)
         };
@@ -1392,7 +1392,7 @@ mod tests {
             repair_of(&check),
             Some(Repair::Prerequisite("wsl-features"))
         );
-        let pending = HostFacts {
+        let pending = DeviceFacts {
             windows: Some(Ok(plan::Facts {
                 reboot_pending: true,
                 ..features_off

@@ -4,10 +4,10 @@
 import { mkdir, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createRequire } from "node:module";
-import { fileURLToPath } from "node:url";
+import { repoRoot } from "@intentic/constants/node";
 
 // sharp is a dependency of @intentic/site, not @intentic/web.
-const require = createRequire(fileURLToPath(new URL(`../../../_site/site/package.json`, import.meta.url)));
+const require = createRequire(join(repoRoot(import.meta.url), `_site/site/package.json`));
 const sharp = require(`sharp`);
 
 const here = import.meta.dirname;

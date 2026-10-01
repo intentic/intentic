@@ -1043,10 +1043,10 @@
             "placeholder": "api.example.com or *.example.com",
             "removeHost": "Remove {host}",
             "title": "Host guard",
-            "turnOff": "Turn the host guard off",
-            "turnOffNote": "It will never ask where this goes",
+            "turnOff": "Turn off",
+            "turnOffNote": "Use anywhere without asking",
             "turnOn": "Turn on",
-            "turnOnNote": "Off its hosts, it asks first"
+            "turnOnNote": "Ask beyond these hosts"
         },
         "sshKeyField": {
             "authorizeAs": "Authorize it: run this on the server, signed in as {user}",
@@ -2311,7 +2311,7 @@
             "heldMemory": "Held: sandbox memory is low",
             "heldMemoryShare": "Held: sandbox memory is low ({share})",
             "wait": "Wait",
-            "waitHint": "Keeps your message held. Send it from the chat once there is room."
+            "waitHint": "Held until you send"
         }
     },
     "common": {
@@ -2507,7 +2507,7 @@
             "restoring": "Putting the folder back…",
             "restored": "Restored {count} file | Restored {count} files",
             "switchToCopyFirst": "Switch to copy-first",
-            "copyFirstHint": "Agents' changes then stay in the sandbox until you bring them back",
+            "copyFirstHint": "Bring changes back yourself",
             "syncBothWays": "Sync both ways…",
             "bothWaysHeader": "Sync both ways?",
             "bothWaysConfirm": "Sync both ways",
@@ -5640,7 +5640,7 @@
             "closeOthers": "Close Others",
             "doubleClickToKeep": "Double-click to keep",
             "fold": "Fold",
-            "foldNote": "The chat below gets the room",
+            "foldNote": "Chat gets the room",
             "gone": "{name} is no longer here",
             "goneNote": "It was moved or deleted after it was mentioned.",
             "label": "Side panel",

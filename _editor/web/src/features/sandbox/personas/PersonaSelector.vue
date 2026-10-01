@@ -74,7 +74,7 @@ const rename = createInlineRename(
             :class="ui.iconButton('absolute right-0.5 top-0.5 size-6 text-subtle hover:text-danger')"
             :aria-label="t(`sandbox.sandboxPersonas.removePersona`)"
             :aria-describedby="nameId"
-            v-tooltip.top="t(`sandbox.sandboxPersonas.removePersona`)"
+            v-tooltip.top="t(`sandbox.sandboxPersonas.removePersona2`)"
             @click="emit(`remove`)"
         >
             <Icon name="trash" class="text-2xs" />

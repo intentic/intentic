@@ -23,7 +23,10 @@ const reopeningOf = async (
     model: string | undefined,
     now: number,
 ): Promise<{ readonly reopensAt?: number; readonly shown?: number }> => {
-    const usage = await services.accountUsage.read().catch(() => undefined);
+    const usage = await services.accountUsage.read().catch((cause: unknown) => {
+        console.warn("Could not read account usage", cause);
+        return undefined;
+    });
     const state = headroomState(usage?.[account], model === undefined || model === "" ? undefined : { id: model });
     if (state.kind !== "spent") {
         return { reopensAt: Math.ceil(now / 1000) };
@@ -86,4 +89,3 @@ export const switchAccount = async (
     }
     return { kind: "moved" };
 };
-

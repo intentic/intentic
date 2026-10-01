@@ -44,7 +44,7 @@ module per file), served with brotli and immutable assets, and driven in Chromiu
 four times (`--cpu`), Lighthouse's own mobile setting. The network is not throttled: what a run shows is the CPU's
 share, the part the app decides.
 
-- Scenarios (`src/mobile/scenarios.ts`): a cold start on the board, a returning one (reloaded with what the first
+- Scenarios (`src/mobile/mobile-scenarios.ts`): a cold start on the board, a returning one (reloaded with what the first
   visit stored and cached, which is the start a phone's owner mostly has), the board left idle, a tap on a card into a long
   conversation (the fixture's rows copied up to `--rows`, 140 by default, with markdown, a table and TypeScript in every
   second answer), flinging through it, and typing in its composer.
@@ -68,7 +68,7 @@ those costs are a phone's CPU time, which only a throttled clock shows.
 
 - [src/baseline.ts](src/baseline.ts) — judges a run's budgets and reports its diff against a baseline, for both tracks.
 - [src/browser/browser-budgets.ts](src/browser/browser-budgets.ts) — the browser track's budgets, each with its claim.
-- [src/mobile/scenarios.ts](src/mobile/scenarios.ts) — what the phone lab times, and how each run reads its numbers.
+- [src/mobile/mobile-scenarios.ts](src/mobile/mobile-scenarios.ts) — what the phone lab times, and how each run reads its numbers.
 - [src/instr/scenarios](src/instr/scenarios) — one file per instruction scenario, found by name.
 - [src/browser/session.ts](src/browser/session.ts) — the fresh context, paused clock and flush that make counts exact.
 - [src/browser/scenarios.ts](src/browser/scenarios.ts) — the interactions the browser counts cover.

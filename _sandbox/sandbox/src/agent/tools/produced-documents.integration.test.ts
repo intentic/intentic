@@ -1,3 +1,4 @@
+import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -57,7 +58,7 @@ test("names are read from the root the agent sees and stat'ed in the daemon's co
     const since = Date.now() - 5;
     await tick();
     write(copy, "out/summary.xlsx");
-    const scan = scanProducedDocuments({ localCwd: copy, effectiveCwd: "/work" }, async () => []);
+    const scan = scanProducedDocuments({ localCwd: copy, effectiveCwd: WORKSPACE_ROOT }, async () => []);
     expect(await scan(since, ["saved /work/out/summary.xlsx"])).toEqual(["out/summary.xlsx"]);
 });
 
@@ -65,8 +66,8 @@ test("a name that climbs out of the workspace, a missing file, and a locked stat
     const root = tree();
     const since = Date.now() - 5;
     await tick();
-    write(root, ".intentic/secrets/auth/export.pdf");
-    const scan = scanProducedDocuments({ localCwd: root, effectiveCwd: root }, async () => [".intentic/secrets/auth/export.pdf", "gone.docx"]);
+    write(root, `${STATE_DIR}/secrets/auth/export.pdf`);
+    const scan = scanProducedDocuments({ localCwd: root, effectiveCwd: root }, async () => [`${STATE_DIR}/secrets/auth/export.pdf`, "gone.docx"]);
     expect(await scan(since, ["cp ../../etc/secret.pdf /elsewhere/copy.pdf"])).toEqual([]);
 });
 

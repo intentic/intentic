@@ -1,3 +1,4 @@
+import { STATE_DIR } from "@intentic/constants";
 import { execFileSync } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -20,7 +21,7 @@ const withStore = (personas: Persona[] = [studio]) => {
 };
 
 const kitFile = (root: string, ...tail: string[]): Promise<string | undefined> =>
-    readFile(join(root, ".intentic", "config", "personas", ...tail), "utf8").catch(() => undefined);
+    readFile(join(root, STATE_DIR, "config", "personas", ...tail), "utf8").catch(() => undefined);
 
 test("a persona with no kit reads as an empty one rather than a failure", async () => {
     const { client } = withStore();
@@ -110,7 +111,7 @@ test("a persona's prompt saved over a kit holding someone else's uncommitted cha
     git("-c", "user.name=owner", "-c", "user.email=owner@example.com", "commit", "-q", "--allow-empty", "-m", "Initialize workspace");
     const agentWorktrees = { ...services().agentWorktrees, mainDir: () => workspace.root };
     const client = clientFor(createApp(services({ workspace, personas: memoryPersonasStore([studio]), agentWorktrees })));
-    const landed = join(workspace.root, ".intentic", "config", "personas", "studio", "skills", "notes", "SKILL.md");
+    const landed = join(workspace.root, STATE_DIR, "config", "personas", "studio", "skills", "notes", "SKILL.md");
     await mkdir(dirname(landed), { recursive: true });
     await writeFile(landed, "---\nname: notes\n---\nTake notes.\n");
 

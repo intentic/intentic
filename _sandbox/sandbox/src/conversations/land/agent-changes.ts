@@ -1,3 +1,4 @@
+import { undefinedIfMissing } from "@intentic/base/errors";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { AddedDependencies, AgentSpan, GitChange, ScratchPath, WorkspaceModule } from "@intentic/sandbox-contract";
@@ -31,6 +32,7 @@ export const checkpointOf = async (
     if (head !== undefined && head !== tip) {
         try {
             merged = (await git(dir, ["merge-base", head, tip])).stdout.trim();
+            // allow(silent-catch): A missing or stale landed revision falls back to the merge base below.
         } catch {
             // Unrelated histories: no merge-base exists.
         }
@@ -73,6 +75,7 @@ export const carriesContent = async (dir: string, from: string, tip: string, git
     try {
         const [fromTree, tipTree] = (await git(dir, ["rev-parse", `${from}^{tree}`, `${tip}^{tree}`])).stdout.trim().split("\n");
         return fromTree === undefined || tipTree === undefined || fromTree !== tipTree;
+        // allow(silent-catch): An unreadable revision is treated as changed so landing surfaces the real error.
     } catch {
         // An unresolvable sha is not an emptiness claim; report content as changed and let land surface the real error.
         return true;
@@ -89,7 +92,9 @@ export const agentRepoChanges = async (
     git: GitRunner = defaultGit,
 ): Promise<GitChange[]> => {
     const { dir, attached, from, scratch } = await agentRepoScope(worktrees, entry, composed, span, git);
-    return attached ? changesAgainstBase(dir, from, scratch, git) : changesBetweenRefs(worktrees.mainDir(composed.repo), from, entry.placement.branch, git);
+    return attached
+        ? changesAgainstBase(dir, from, scratch, git)
+        : changesBetweenRefs(worktrees.mainDir(composed.repo), from, entry.placement.branch, git);
 };
 
 // Resolves the checkout/main repo, delta anchor and scratch together, so the answers cannot diverge. Only a live copy
@@ -107,7 +112,15 @@ const agentRepoScope = async (
     return {
         dir,
         attached,
-        from: await anchorOf(entry.placement, dir, main, entry.placement.branch, span === "outstanding" ? composed.landedTip : undefined, composed.base, git),
+        from: await anchorOf(
+            entry.placement,
+            dir,
+            main,
+            entry.placement.branch,
+            span === "outstanding" ? composed.landedTip : undefined,
+            composed.base,
+            git,
+        ),
         scratch: attached ? await scratchOf(dir, await scratchScopeOf(composed.repo, worktrees.mainDir("root")), git) : [],
     };
 };
@@ -153,17 +166,14 @@ const ADDING: ReadonlySet<GitChange["status"]> = new Set(["added", "modified", "
 const textAt = async (dir: string, spec: string, git: GitRunner): Promise<string | undefined> => {
     try {
         return (await git(dir, ["cat-file", "-p", spec])).stdout;
-    } catch {
+    } catch (error) {
+        console.warn("Could not read a revision's file", error);
         return undefined;
     }
 };
 
 const textOnDisk = async (path: string): Promise<string | undefined> => {
-    try {
-        return await readFile(path, "utf8");
-    } catch {
-        return undefined;
-    }
+    return readFile(path, "utf8").catch(undefinedIfMissing);
 };
 
 const NOTHING_DECLARED: ReadonlyMap<string, string> = new Map();
@@ -259,6 +269,7 @@ const untrackedMatches = async (main: string, tip: string, paths: readonly strin
                     matched.add(path);
                 }
             }
+            // allow(silent-catch): An unreadable batch stays outstanding; it is never falsely counted as absorbed.
         } catch {
             // A vanished file or bad ref leaves this batch reported as outstanding, not falsely absorbed.
         }

@@ -24,7 +24,10 @@ const serverSpawns = [] as { config?: unknown }[];
 const legacyReplies: { sessionID: string; permissionID: string; directory: string | undefined; response: string | undefined }[] = [];
 // The current route, whose refusal carries the reason back to the model.
 const permissionReplies: { requestID: string; directory: string | undefined; reply: string | undefined; message?: string }[] = [];
-const mcpCalls: ({ call: "add"; name: string; directory: string | undefined; config: unknown } | { call: "disconnect"; name: string; directory: string | undefined })[] = [];
+const mcpCalls: (
+    | { call: "add"; name: string; directory: string | undefined; config: unknown }
+    | { call: "disconnect"; name: string; directory: string | undefined }
+)[] = [];
 const streamEvents = [] as unknown[];
 // Every event subscription asked for, by directory; `refused` makes each one fail the way a dead server's does.
 const subscriptions = { refused: false, asked: [] as (string | undefined)[] };
@@ -41,14 +44,14 @@ jest.mock("@opencode-ai/sdk", () => ({
                     throw new Error("connect ECONNREFUSED");
                 }
                 return {
-                stream: {
-                    async *[Symbol.asyncIterator]() {
-                        yield* streamEvents;
-                        // Stays open like the real subscription; ending it would send the watcher round its retry
-                        // ladder mid-assertion.
-                        await new Promise(() => {});
+                    stream: {
+                        async *[Symbol.asyncIterator]() {
+                            yield* streamEvents;
+                            // Stays open like the real subscription; ending it would send the watcher round its retry
+                            // ladder mid-assertion.
+                            await new Promise(() => {});
+                        },
                     },
-                },
                 };
             },
         },
@@ -68,11 +71,20 @@ jest.mock("@opencode-ai/sdk/v2/client", () => ({
     createOpencodeClient: () => ({
         permission: {
             respond: async (parameters: { sessionID: string; permissionID: string; directory?: string; response?: string }) => {
-                legacyReplies.push({ sessionID: parameters.sessionID, permissionID: parameters.permissionID, directory: parameters.directory, response: parameters.response });
+                legacyReplies.push({
+                    sessionID: parameters.sessionID,
+                    permissionID: parameters.permissionID,
+                    directory: parameters.directory,
+                    response: parameters.response,
+                });
                 return {};
             },
             reply: async (parameters: { requestID: string; directory?: string; reply?: string; message?: string }) => {
-                const answered: (typeof permissionReplies)[number] = { requestID: parameters.requestID, directory: parameters.directory, reply: parameters.reply };
+                const answered: (typeof permissionReplies)[number] = {
+                    requestID: parameters.requestID,
+                    directory: parameters.directory,
+                    reply: parameters.reply,
+                };
                 if (parameters.message !== undefined) {
                     answered.message = parameters.message;
                 }
@@ -332,9 +344,19 @@ test("OpenCode 1.18's ask is judged by the same policy, and a refusal goes back 
     const { gate, release } = approvalGate(async () => ({ decision: "refuse", sentence: "Discards commits the remote has." }));
     streamEvents.push({
         type: "permission.asked",
-        properties: { id: "per_5", sessionID: "ses_asked", permission: "bash", patterns: ["git push --force*"], metadata: { command: "git push --force origin main" }, always: [] },
+        properties: {
+            id: "per_5",
+            sessionID: "ses_asked",
+            permission: "bash",
+            patterns: ["git push --force*"],
+            metadata: { command: "git push --force origin main" },
+            always: [],
+        },
     });
-    streamEvents.push({ type: "permission.asked", properties: { id: "per_6", sessionID: "ses_open", permission: "bash", patterns: ["rm -rf dist"], metadata: {}, always: [] } });
+    streamEvents.push({
+        type: "permission.asked",
+        properties: { id: "per_6", sessionID: "ses_open", permission: "bash", patterns: ["rm -rf dist"], metadata: {}, always: [] },
+    });
     const service = createOpenCodeService(xdg, { fetchImpl: forbiddenFetch, workspaceRoot: WORKSPACE_ROOT });
     service.judges.register("ses_asked", judgeOf(gate).judge);
     await service.client();
@@ -345,11 +367,11 @@ test("OpenCode 1.18's ask is judged by the same policy, and a refusal goes back 
     expect(permissionReplies.toSorted((left, right) => left.requestID.localeCompare(right.requestID))).toEqual([
         {
             requestID: "per_5",
-            directory: "/work",
+            directory: WORKSPACE_ROOT,
             reply: "reject",
             message: "Discards commits the remote has. Refused by your owner's safety policy. Do not retry.",
         },
-        { requestID: "per_6", directory: "/work", reply: "always" },
+        { requestID: "per_6", directory: WORKSPACE_ROOT, reply: "always" },
     ]);
     release();
 });
@@ -399,7 +421,9 @@ test("a hold parks on a card: the turn's clock is held until the person answers,
     await new Promise((resolve) => setTimeout(resolve, 20));
 
     // Parked: the card is out, the clock held, and OpenCode not yet answered.
-    expect(frames).toMatchObject([{ kind: "permission", toolName: "Bash", displayName: "Run command", program: { text: "git push --force origin main" } }]);
+    expect(frames).toMatchObject([
+        { kind: "permission", toolName: "Bash", displayName: "Run command", program: { text: "git push --force origin main" } },
+    ]);
     expect(holds).toEqual(["held"]);
     expect(permissionReplies).toEqual([]);
 
@@ -461,7 +485,14 @@ test("a consult that fails is answered as a refusal rather than left unanswered"
     const { judge, holds } = judgeOf(broken);
     streamEvents.push({
         type: "permission.asked",
-        properties: { id: "per_9", sessionID: "ses_broken", permission: "bash", patterns: ["git push*"], metadata: { command: "git push origin main" }, always: [] },
+        properties: {
+            id: "per_9",
+            sessionID: "ses_broken",
+            permission: "bash",
+            patterns: ["git push*"],
+            metadata: { command: "git push origin main" },
+            always: [],
+        },
     });
     const service = createOpenCodeService(xdg, { fetchImpl: forbiddenFetch, workspaceRoot: WORKSPACE_ROOT });
     service.judges.register("ses_broken", judge);
@@ -471,7 +502,7 @@ test("a consult that fails is answered as a refusal rather than left unanswered"
     expect(permissionReplies).toEqual([
         {
             requestID: "per_9",
-            directory: "/work",
+            directory: WORKSPACE_ROOT,
             reply: "reject",
             message:
                 "This could not be checked against your owner's safety policy, so it was refused. " +

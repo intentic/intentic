@@ -21,6 +21,7 @@ export const normalizeHostPattern = (raw: string): string | undefined => {
     if (/^[a-z][a-z0-9+.-]*:\/\//.test(text)) {
         try {
             text = new URL(text).hostname;
+            // allow(silent-catch): A malformed URL is refused as a secret host pattern.
         } catch {
             return undefined;
         }

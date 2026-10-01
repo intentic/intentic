@@ -7,7 +7,7 @@ import { chromium } from "playwright";
 import { attribute } from "./attribution.js";
 import { buildDemo } from "./build.js";
 import { median } from "./measures.js";
-import { SCENARIOS, type Measured, type Scenario } from "./scenarios.js";
+import { SCENARIOS, type Measured, type Scenario } from "./mobile-scenarios.js";
 import { serveBuild } from "./serve.js";
 import { wireClaim } from "./wire.js";
 
@@ -78,12 +78,18 @@ try {
     for (const scenario of selected) {
         const measured: Measured[] = [];
         for (let run = 0; run < runs; run += 1) {
-            measured.push(await scenario.run({ browser, origin: server.origin, cpu, replay, copies: Math.max(1, Math.round(rows / 7)), profile: profiling }));
+            measured.push(
+                await scenario.run({ browser, origin: server.origin, cpu, replay, copies: Math.max(1, Math.round(rows / 7)), profile: profiling }),
+            );
         }
         const names = Object.keys(measured[0]?.numbers ?? {});
         const numbers = Object.fromEntries(names.map((name) => [name, median(measured.map((one) => one.numbers[name] ?? 0))]));
         results[scenario.name] = { numbers, notes: measured[0]?.notes ?? [] };
-        say(`${scenario.name}  ${Object.entries(numbers).map(([name, value]) => `${name} ${value}`).join("  ")}`);
+        say(
+            `${scenario.name}  ${Object.entries(numbers)
+                .map(([name, value]) => `${name} ${value}`)
+                .join("  ")}`,
+        );
         for (const note of measured[0]?.notes ?? []) {
             say(`    ${note}`);
         }

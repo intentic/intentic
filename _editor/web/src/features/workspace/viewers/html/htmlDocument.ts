@@ -294,6 +294,7 @@ const LINK_GUIDE = `(() => {
         event.preventDefault();
         if (href.startsWith("#")) {
             let id = href.slice(1);
+            // allow(silent-catch): Malformed percent escapes leave the literal fragment usable as an element id.
             try { id = decodeURIComponent(id); } catch {}
             const target = id === "" ? null : document.getElementById(id) || document.getElementsByName(id)[0];
             if (target) target.scrollIntoView();
@@ -408,7 +409,12 @@ const seal = (doc: Document): void => {
 // a workspace file to open, named as a path inside the workspace, or an internet address to open in a tab.
 export const PreviewAskSchema = z.object({
     intenticHtmlPreview: z.union([
-        z.object({ open: z.string().min(1).refine((path) => !path.startsWith(`/`) && !path.split(`/`).includes(`..`)) }),
+        z.object({
+            open: z
+                .string()
+                .min(1)
+                .refine((path) => !path.startsWith(`/`) && !path.split(`/`).includes(`..`)),
+        }),
         z.object({ href: z.string().regex(/^https?:\/\//i) }),
     ]),
 });

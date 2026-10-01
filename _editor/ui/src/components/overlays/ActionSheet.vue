@@ -40,7 +40,7 @@ const afterHide = (): void => {
                 type="button"
                 role="menuitem"
                 :disabled="action.disabled"
-                class="flex min-h-12 items-center gap-3 rounded-lg px-3 py-2 text-left text-sm transition-colors active:bg-overlay disabled:opacity-40"
+                class="ui-row-select ui-off flex min-h-12 items-center gap-3 rounded-lg px-3 py-2 text-left text-sm transition-colors active:bg-overlay"
                 :class="action.danger === true ? `text-danger` : `text-content`"
                 @click="choose(action)"
             >

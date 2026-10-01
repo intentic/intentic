@@ -76,6 +76,7 @@ const drainPersist = (): void => {
             const client = latestClient;
             latestClient = undefined;
             // A refused write (a full or disabled IndexedDB) costs only the next reload's instant paint.
+            // allow(silent-catch): Refused IndexedDB writes lose only the next reload's cached paint.
             await write(client).catch(() => undefined);
         }
     })().finally(() => {
@@ -112,7 +113,10 @@ export const restorePersistedQueries = async (userId: string): Promise<void> => 
         // A Monday-morning open after Friday still paints; anything older restores as empty.
         maxAge: 7 * 24 * 60 * 60 * 1000,
         // The storage rule (`mirrors`, above), composed with the default so non-success queries stay out too.
-        dehydrateOptions: { shouldDehydrateQuery: (query: Parameters<typeof defaultShouldDehydrateQuery>[0]) => mirrors(query.queryKey) && defaultShouldDehydrateQuery(query) },
+        dehydrateOptions: {
+            shouldDehydrateQuery: (query: Parameters<typeof defaultShouldDehydrateQuery>[0]) =>
+                mirrors(query.queryKey) && defaultShouldDehydrateQuery(query),
+        },
     };
     // THE SNAPSHOT IS TAKEN ONCE PER WINDOW, AT IDLE. The persistence library dehydrates the whole cache on every cache
     // event, before the write's throttle ever sees it: a reconnect's hello invalidates every query at once, and each of
@@ -131,6 +135,7 @@ export const restorePersistedQueries = async (userId: string): Promise<void> => 
                 whenIdle(() => {
                     owed = false;
                     if (!stopped) {
+                        // allow(silent-catch): Persisting the query cache is optional; current in-memory data remains usable.
                         void persistQueryClientSave(options).catch(() => undefined);
                     }
                 }),
@@ -146,6 +151,7 @@ export const restorePersistedQueries = async (userId: string): Promise<void> => 
         }
     };
     // The cache is only an optimization; a failed restore is empty and must never block the awaited navigation.
+    // allow(silent-catch): A failed cache restore must not block navigation; live queries fill the empty cache.
     await persistQueryClientRestore(options).catch(() => undefined);
     if (stopped) {
         return;
@@ -167,12 +173,16 @@ export const clearPersistedQueries = async (): Promise<void> => {
     latestClient = undefined;
     await persisting;
     queryClient.clear();
-    await del(IDB_KEY).catch(() => undefined);
+    await del(IDB_KEY).catch((cause: unknown) => {
+        console.warn("Could not remove the persisted query cache", cause);
+        return undefined;
+    });
     // The boards' stored rosters (useAgents-registry.ts) belong to the account signing out as much as the cache does.
     try {
         for (const key of Object.keys(localStorage).filter((name) => name.startsWith(`intentic.roster.`))) {
             localStorage.removeItem(key);
         }
+        // allow(silent-catch): Denied local storage cannot yield readable cached rosters to remove.
     } catch {
         // No storage, then nothing was stored.
     }

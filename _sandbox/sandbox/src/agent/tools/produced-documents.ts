@@ -1,3 +1,4 @@
+import { undefinedIfMissing } from "@intentic/base/errors";
 import { stat } from "node:fs/promises";
 import { isAbsolute, join, posix, relative } from "node:path";
 import {
@@ -97,14 +98,9 @@ export const scanProducedDocuments =
                 .filter((path) => !isLockedWorkspacePath(path))
                 .slice(0, MAX_CHECKED)
                 .map(async (path) => {
-                    try {
-                        const file = await stat(join(place.localCwd, path));
-                        // ctime, not mtime: a file moved into place keeps its mtime, and a copy may be told to.
-                        return file.isFile() && file.ctimeMs >= since ? path : undefined;
-                    } catch {
-                        // Gone, or never there under that name: nothing to show.
-                        return undefined;
-                    }
+                    const file = await stat(join(place.localCwd, path)).catch(undefinedIfMissing);
+                    // ctime, not mtime: a file moved into place keeps its mtime, and a copy may be told to.
+                    return file?.isFile() === true && file.ctimeMs >= since ? path : undefined;
                 }),
         );
         return written.filter((path) => path !== undefined).sort();
@@ -131,7 +127,12 @@ const commandsRunning = (now: () => number): ((event: AgentEvent) => SettledComm
     return (event) => {
         if (event.kind === "tool_call") {
             if (event.category === "execute" && !settledStatus(event.status)) {
-                running.set(event.id, { since: now() - START_SLACK_MS, command: event.target ?? "", output: textOf(event.content), locations: event.locations });
+                running.set(event.id, {
+                    since: now() - START_SLACK_MS,
+                    command: event.target ?? "",
+                    output: textOf(event.content),
+                    locations: event.locations,
+                });
             }
             return undefined;
         }
@@ -195,7 +196,11 @@ const scansOwed = (scan: DocumentScan) => {
 // The turn's frames with each finished command's documents named on its card: a `tool_call_update` carrying the card's
 // locations plus the documents, sent once the scan answers. The command's own frames pass untouched and on time; the
 // update follows at the next frame, and every one still owed is sent before `done`, so the turn's record holds it.
-export async function* withProducedDocuments(frames: AsyncIterable<AgentEvent>, scan: DocumentScan, now: () => number = Date.now): AsyncGenerator<AgentEvent> {
+export async function* withProducedDocuments(
+    frames: AsyncIterable<AgentEvent>,
+    scan: DocumentScan,
+    now: () => number = Date.now,
+): AsyncGenerator<AgentEvent> {
     const settles = commandsRunning(now);
     const scans = scansOwed(scan);
     for await (const event of frames) {

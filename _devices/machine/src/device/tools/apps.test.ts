@@ -1,7 +1,7 @@
 import type { DeviceScopes } from "@intentic/sandbox-contract";
 import { createIndicator, type Indicator } from "../indicator.js";
 import { ScopeError } from "../policy.js";
-import { fakeDesktop, fakeIndicatorDeps, fakeWindow } from "../testing.js";
+import { fakeDesktop, fakeIndicatorDeps, fakeWindow } from "../device-testing.js";
 import { describeWindows, focusWindow, listWindows, openTarget, readClipboard, writeClipboard } from "./apps.js";
 
 // Operating applications, at the layer that decides what is allowed and what gets reported. The scope split:

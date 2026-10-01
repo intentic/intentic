@@ -1,7 +1,7 @@
 import { advanceTimersByTimeAsync, waitFor } from "@intentic/testing/bun";
 import { type Caller, createIndicator, IDLE_MS, PAUSE_HOTKEY } from "./indicator.js";
 import { ScopeError } from "./policy.js";
-import { fakeIndicatorDeps } from "./testing.js";
+import { fakeIndicatorDeps } from "./device-testing.js";
 
 /* The notice's state machine against a fake helper and a fake clock: when it opens, what it says, when it goes, and the
    pause the person at the machine holds. The helper's window itself is desktop-automation's, and a person's to judge. */

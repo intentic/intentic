@@ -381,5 +381,9 @@ export class TurnFailures {
 const rereadAccounts = (provider: AgentProvider): void =>
     importOrReload(
         () => import(`../accounts/useChat-accounts`),
-        (accounts) => accounts.refreshAccounts(provider).catch(() => undefined),
+        (accounts) =>
+            accounts.refreshAccounts(provider).catch((cause: unknown) => {
+                console.warn("Could not refresh provider accounts", cause);
+                return undefined;
+            }),
     );

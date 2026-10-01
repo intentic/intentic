@@ -103,7 +103,7 @@ python3 -m http.server 47159 --bind 127.0.0.1 --directory src/components/brand/a
 
 Use the color swatches or custom picker, switch accessories and backgrounds, and inspect the 22/36/64/96px
 samples. Card-size props carry the specialty; the smallest toolbar faces primarily carry color and silhouette.
-The [visual overview](src/components/brand/assistants/modular/overview.png) shows every preset combination.
+The [interactive preview](src/components/brand/assistants/modular/preview.html) shows every preset combination.
 
 ## Layout
 

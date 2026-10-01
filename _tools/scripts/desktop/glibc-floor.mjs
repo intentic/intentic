@@ -18,9 +18,9 @@
 import { execFileSync } from "node:child_process";
 import { closeSync, lstatSync, openSync, readdirSync, readFileSync, readSync } from "node:fs";
 import { join, relative } from "node:path";
-import { fileURLToPath } from "node:url";
+import { repoRoot } from "../../constants/src/node.mjs";
 
-export const DEFAULT_CONFIG = fileURLToPath(new URL("../../../_editor/desktop-app/src-tauri/tauri.conf.json", import.meta.url));
+export const DEFAULT_CONFIG = join(repoRoot(import.meta.url), "_editor/desktop-app/src-tauri/tauri.conf.json");
 
 const DEB_FLOOR = /^libc6\s*\(>=\s*(\d+(?:\.\d+)+)\)$/;
 
@@ -30,7 +30,9 @@ export function compareVersions(a, b) {
     const right = b.split(".").map(Number);
     for (let index = 0; index < Math.max(left.length, right.length); index++) {
         const delta = (left[index] ?? 0) - (right[index] ?? 0);
-        if (delta !== 0) {return delta;}
+        if (delta !== 0) {
+            return delta;
+        }
     }
     return 0;
 }
@@ -62,9 +64,13 @@ export function declaredFloor(config) {
 export function glibcImports(objdumpText) {
     const imports = [];
     for (const line of objdumpText.split("\n")) {
-        if (!line.includes("*UND*")) {continue;}
+        if (!line.includes("*UND*")) {
+            continue;
+        }
         const match = /\(?GLIBC_(\d+(?:\.\d+)+)\)?\s+(\S+)\s*$/.exec(line);
-        if (match) {imports.push({ version: match[1], symbol: match[2] });}
+        if (match) {
+            imports.push({ version: match[1], symbol: match[2] });
+        }
     }
     return imports;
 }
@@ -74,7 +80,9 @@ export function violations(files, floor) {
     const found = [];
     for (const { path, objdump } of files) {
         for (const { version, symbol } of glibcImports(objdump)) {
-            if (compareVersions(version, floor) > 0) {found.push({ path, version, symbol });}
+            if (compareVersions(version, floor) > 0) {
+                found.push({ path, version, symbol });
+            }
         }
     }
     return found.sort((a, b) => compareVersions(b.version, a.version) || a.path.localeCompare(b.path));
@@ -85,7 +93,9 @@ export function newestImport(files) {
     let newest = null;
     for (const { objdump } of files) {
         for (const { version } of glibcImports(objdump)) {
-            if (newest === null || compareVersions(version, newest) > 0) {newest = version;}
+            if (newest === null || compareVersions(version, newest) > 0) {
+                newest = version;
+            }
         }
     }
     return newest;
@@ -96,7 +106,9 @@ export function packageFloorProblems(kind, metadata, floor) {
     if (kind === "deb") {
         const entries = metadata.split(",").map((entry) => entry.trim());
         const declared = entries.map((entry) => DEB_FLOOR.exec(entry)?.[1]).filter(Boolean);
-        if (declared.length === 0) {return [`Depends names no libc6 floor (Depends: ${metadata.trim() || "empty"})`];}
+        if (declared.length === 0) {
+            return [`Depends names no libc6 floor (Depends: ${metadata.trim() || "empty"})`];
+        }
         return declared.filter((version) => version !== floor).map((version) => `Depends says libc6 (>= ${version}), the config says ${floor}`);
     }
     const requires = metadata.split("\n").map((line) => line.trim());
@@ -118,8 +130,11 @@ function elfFiles(dir) {
     const found = [];
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
         const path = join(dir, entry.name);
-        if (entry.isDirectory()) {found.push(...elfFiles(path));}
-        else if (entry.isFile() && lstatSync(path).size >= 4 && isElf(path)) {found.push(path);}
+        if (entry.isDirectory()) {
+            found.push(...elfFiles(path));
+        } else if (entry.isFile() && lstatSync(path).size >= 4 && isElf(path)) {
+            found.push(path);
+        }
     }
     return found;
 }
@@ -127,8 +142,12 @@ function elfFiles(dir) {
 const run = (command, args) => execFileSync(command, args, { encoding: "utf8", maxBuffer: 512 * 1024 * 1024, stdio: ["ignore", "pipe", "pipe"] });
 
 function packageMetadata(pkg) {
-    if (pkg.endsWith(".deb")) {return { kind: "deb", text: run("dpkg-deb", ["-f", pkg, "Depends"]) };}
-    if (pkg.endsWith(".rpm")) {return { kind: "rpm", text: run("rpm", ["-qp", "--requires", pkg]) };}
+    if (pkg.endsWith(".deb")) {
+        return { kind: "deb", text: run("dpkg-deb", ["-f", pkg, "Depends"]) };
+    }
+    if (pkg.endsWith(".rpm")) {
+        return { kind: "rpm", text: run("rpm", ["-qp", "--requires", pkg]) };
+    }
     throw new Error(`not a .deb or .rpm: ${pkg}`);
 }
 
@@ -156,9 +175,13 @@ function main(argv) {
         const { kind, text } = packageMetadata(pkg);
         problems.push(...packageFloorProblems(kind, text, floor));
     }
-    if (files.length === 0) {problems.push("no ELF files in the payload, so the floor was checked against nothing");}
+    if (files.length === 0) {
+        problems.push("no ELF files in the payload, so the floor was checked against nothing");
+    }
     if (problems.length > 0) {
-        for (const problem of problems) {console.error(`  ✗ ${label}: ${problem} (declared floor: glibc ${floor})`);}
+        for (const problem of problems) {
+            console.error(`  ✗ ${label}: ${problem} (declared floor: glibc ${floor})`);
+        }
         console.error(
             "    a newer import means the build base moved: raise both floors in tauri.conf.json and the releases the download page and _editor/desktop-app/README.md name, or link on an older base",
         );
