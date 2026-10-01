@@ -63,9 +63,11 @@ const mark = computed(() => (lead === `face` ? FACE_SIZES.row : ROW_TIERS[tier.v
         >
     </button>
 
-    <!-- `items-center`, never `mt-0.5` on the glyph: a nudged icon beside a multi-line paragraph aligns to nothing. -->
+    <!-- `items-center`, never `mt-0.5` on the glyph: a nudged icon beside a multi-line paragraph aligns to nothing.
+         The glyph is the tier's ROW icon, not the toggle's: a note sits in the same column as the rows around it,
+         and a smaller glyph started its sentence left of every title under it. -->
     <div v-else class="flex items-center text-muted" :class="[ROW_TIERS[tier].pad, ROW_TIERS[tier].gap, TEXT[tier]]">
-        <Icon v-if="icon !== undefined" :name="icon" aria-hidden="true" class="shrink-0" :class="[ROW_TOGGLE_SIZES[tier], ROW_TONES[tone]]" />
+        <Icon v-if="icon !== undefined" :name="icon" aria-hidden="true" class="shrink-0" :class="[ROW_TIERS[tier].icon, ROW_TONES[tone]]" />
         <span class="min-w-0"
             ><slot>{{ label }}</slot></span
         >
