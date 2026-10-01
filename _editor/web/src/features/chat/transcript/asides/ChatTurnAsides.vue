@@ -102,9 +102,11 @@ const tip = computed((): TooltipValue => {
         :style="calls === undefined ? undefined : { '--wash-calls': calls }"
     >
         <div class="chat-spine-bar">
+            <!-- Open, the band gives way to the calls; a run with no thought then keeps one quiet mark in the gutter, sticky
+                 down its material, as the way to fold it again. -->
             <ChatSpineNode
-                v-if="thought !== undefined"
-                icon="sparkles"
+                v-if="thought !== undefined || shown !== undefined"
+                :icon="thought === undefined ? `chevron-up` : `sparkles`"
                 :open="shown !== undefined"
                 :label="label"
                 :tip="tip"
@@ -116,7 +118,7 @@ const tip = computed((): TooltipValue => {
         <!-- The run's weight as the seam itself, never a number. Where a thought mark stands too, that mark is the
              control and the band only answers the pointer. -->
         <button
-            v-if="calls !== undefined"
+            v-if="calls !== undefined && shown === undefined"
             type="button"
             class="chat-spine-wash"
             :class="{

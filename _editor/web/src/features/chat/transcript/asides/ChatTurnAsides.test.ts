@@ -98,16 +98,19 @@ describe(`ChatTurnAsides run node`, () => {
 
         node.click();
         await nextTick();
-        expect(node.getAttribute(`aria-expanded`)).toBe(`true`);
+        // The band gives way to the calls; a gutter mark is what folds them again.
+        expect(wash(element)).toBeNull();
+        const fold = nodes(element)[0]!;
+        expect(fold.getAttribute(`aria-expanded`)).toBe(`true`);
         expect(element.querySelector(`.chat-spine`)?.classList.contains(`chat-spine-open`)).toBe(true);
         expect(element.textContent).toContain(`a.ts`);
         expect(element.textContent).toContain(`c.ts`);
 
-        node.click();
+        fold.click();
         await settle();
         // Dropped from the DOM, not merely hidden.
         expect(element.textContent).not.toContain(`a.ts`);
-        expect(node.getAttribute(`aria-expanded`)).toBe(`false`);
+        expect(wash(element)?.getAttribute(`aria-expanded`)).toBe(`false`);
     });
 
     it(`says how many steps it is offering to the screen reader, and what they were on hover`, () => {
