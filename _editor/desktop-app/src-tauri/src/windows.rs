@@ -1604,6 +1604,9 @@ pub fn handle_link(app: &AppHandle, link: &str, source: Source) {
             show_home_at(app, Some(FILES_ROUTE), Keyboard::Take);
         }
         Some(Link::Launcher { files: false }) => show_device(app),
+        // The workspace's sandboxes, for the local windows' switcher to list (state.rs `remember_roster`). Nothing is
+        // shown: the page sends it whenever its list changes, not because the reader asked for anything.
+        Some(Link::Roster(entries)) => app.state::<AppState>().remember_roster(entries),
         // The page saying what light it is drawn in; about this app's faces, not the workspace window.
         Some(Link::Window(WindowVerb::Mode(mode))) => apply_mode(app, mode),
         // The page's own title bar, working the window it is drawn in (`work_the_window`). Nothing is parked

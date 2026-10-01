@@ -1,4 +1,4 @@
-import { placementKind, sandboxPlacement, slugFromDaemonUrl } from "./placement";
+import { placementKind, placementOfKind, sandboxPlacement, slugFromDaemonUrl } from "./placement";
 
 // Words come from the catalog, which a node suite has not loaded; what is worth asserting here is the rule — which
 // kind, and therefore which glyph — since that is the part a reader has to trust at a glance.
@@ -50,6 +50,23 @@ describe(`sandboxPlacement`, () => {
         expect(figures({ hosted: null, owner: true, daemonUrl: `https://sunny-otter.intentic.dev` })).toEqual([`sunny-otter.intentic.dev`]);
         expect(figures({ hosted: null, owner: true })).toBeUndefined();
         expect(figures({ hosted: null, owner: false })).toBeUndefined();
+    });
+});
+
+describe(`placementOfKind`, () => {
+    it(`draws the kind a local window was handed with that kind's own glyph`, () => {
+        expect([`cloud`, `device`, `own`, `shared`].map((word) => [placementOfKind(word).kind, placementOfKind(word).icon])).toEqual([
+            [`cloud`, `cloud`],
+            [`device`, `desktop`],
+            [`own`, `server`],
+            [`shared`, `users`],
+        ]);
+    });
+
+    // A later workspace may mark a place this page has no glyph for; the coarse answer is the honest one.
+    it(`reads a kind it does not know as a machine of the owner's, and names no figure it was not given`, () => {
+        expect([placementOfKind(`orbit`).kind, placementOfKind(`orbit`).icon]).toEqual([`own`, `server`]);
+        expect([`cloud`, `device`, `own`, `shared`].map((word) => placementOfKind(word).tip.rows)).toEqual([undefined, undefined, undefined, undefined]);
     });
 });
 

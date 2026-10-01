@@ -16,7 +16,8 @@ const stage = (rows: readonly SandboxSummary[]) => {
     const select = jest.fn((id: string) => {
         active.value = id;
     });
-    const sandbox: SandboxArrivalHost = { list, select };
+    const missing = jest.fn();
+    const sandbox: SandboxArrivalHost = { list, select, missing };
     const router = createRouter({
         history: createMemoryHistory(),
         routes: [
@@ -33,7 +34,7 @@ const stage = (rows: readonly SandboxSummary[]) => {
             },
         ],
     });
-    return { active, list, select, router };
+    return { active, list, select, missing, router };
 };
 
 const MINE = sandboxSummary({ id: `mine`, lastSeenAt: `2026-09-23T10:00:00Z` });
@@ -68,13 +69,26 @@ it(`ignores an id the account does not list, and drops it all the same`, async (
     expect({ active: active.value, at: router.currentRoute.value.fullPath }).toEqual({ active: `mine`, at: `/workspace?focus=a1` });
 });
 
+// A local window lists the sandboxes the workspace last saw, so a row removed since lands here: on the sandbox open
+// before, which the reader did not pick, so they are told why.
+it(`says so once when the named sandbox is not listed, and never when it is`, async () => {
+    const gone = stage([MINE]);
+    await gone.router.push(`/?sandbox=removed-since`);
+    expect(gone.missing).toHaveBeenCalledTimes(1);
+
+    const listed = stage([MINE, PROJECT]);
+    await listed.router.push(`/?sandbox=project`);
+    expect(listed.missing).not.toHaveBeenCalled();
+});
+
 // vue-router hands a repeated key back as an array, which is no one sandbox's id.
 it(`ignores an id given twice`, async () => {
-    const { select, router } = stage([MINE, PROJECT]);
+    const { select, missing, router } = stage([MINE, PROJECT]);
 
     await router.push(`/workspace?sandbox=mine&sandbox=project`);
 
     expect(select).not.toHaveBeenCalled();
+    expect(missing).not.toHaveBeenCalled();
     expect(router.currentRoute.value.fullPath).toBe(`/workspace`);
 });
 

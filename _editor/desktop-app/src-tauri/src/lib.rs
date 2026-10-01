@@ -171,6 +171,7 @@ pub fn run() {
             local::local_open_path,
             local::local_recents,
             local::local_forget_recent,
+            local::local_sandboxes,
         ])
         .setup(|app| {
             app.manage(state::AppState::load(app.handle())?);

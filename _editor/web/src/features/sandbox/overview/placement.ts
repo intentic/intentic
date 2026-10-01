@@ -131,6 +131,20 @@ export const placementOf = (
 ): SandboxPlacement =>
     sandboxPlacement({ hosted: sandbox.hosted, owner: sandbox.role === `owner`, daemonUrl: sandbox.daemonUrl, ...refine });
 
+// A PLACEMENT KNOWN ONLY BY ITS KIND, as the desktop app hands a local window the account's sandboxes (localHost.ts
+// `LocalSandbox`): no region, host or device name rode with it, so each is worded by its kind alone. A `device` is
+// "your own machine" there, since which machine it is did not come along and "this computer" could be another one of
+// the owner's. A word this page does not know (a kind a later workspace added) reads as `own`, the coarse answer.
+const KINDS: readonly SandboxPlacementKind[] = [`cloud`, `device`, `own`, `shared`];
+export const placementOfKind = (word: string): SandboxPlacement => {
+    const kind = KINDS.find((known) => known === word) ?? `own`;
+    const title =
+        kind === `cloud` ? t(`sandbox.placement.cloudLabel`) : kind === `shared` ? t(`sandbox.placement.sharedLabel`) : t(`sandbox.placement.ownLabel`);
+    const detail =
+        kind === `cloud` ? t(`sandbox.placement.cloudDetail`) : kind === `shared` ? t(`sandbox.placement.sharedDetail`) : t(`sandbox.placement.ownDetail`);
+    return { kind, icon: PLACEMENT_ICON[kind], label: title, detail, tip: { title } };
+};
+
 // The container's slug on its host machine, as the daemon's own address spells it. Best-effort by design: behind the
 // owner's own Cloudflare zone the subdomain need not be the slug, and a slug that matches no device simply leaves the
 // placement at `own` rather than naming the wrong machine.

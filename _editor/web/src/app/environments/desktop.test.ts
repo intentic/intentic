@@ -197,3 +197,63 @@ test("links sent together reach the app one at a time, the first at once", async
         jest.useRealTimers();
     }
 });
+
+/* THE ACCOUNT'S SANDBOXES, handed to the app for its local windows: one row each, in a shape the app takes whole. */
+test("the roster link carries each sandbox's id, name, place and whether it is shared, and nothing else", async () => {
+    const { desktopRosterLink } = await load();
+    const link = new URL(
+        desktopRosterLink([
+            { id: `cm9x_01`, name: `Shop & API`, place: `cloud`, shared: false },
+            { id: `b-2`, name: `Kasia's`, place: `shared`, shared: true },
+        ]),
+    );
+    expect(`${link.protocol}//${link.host}`).toBe(`intentic://roster`);
+    expect(JSON.parse(link.searchParams.get(`list`) ?? ``)).toEqual([
+        { id: `cm9x_01`, name: `Shop & API`, place: `cloud`, shared: false },
+        { id: `b-2`, name: `Kasia's`, place: `shared`, shared: true },
+    ]);
+});
+
+// The app drops a whole list for one row it cannot take (setup_link.rs `is_roster_entry`), so the page meets its rules.
+test("a row the app would refuse is mended or left out, never sent as it is", async () => {
+    const { desktopRosterLink } = await load();
+    const ZS = `ż`.repeat(199);
+    const rows: unknown = JSON.parse(
+        new URL(
+            desktopRosterLink([
+                { id: `../escape`, name: `Out`, place: `own`, shared: false },
+                { id: `tabs`, name: ` a\tb\n `, place: `own`, shared: false },
+                { id: `blank`, name: `\u0007`, place: `own`, shared: false },
+                { id: `long`, name: `${ZS}😀😀`, place: `own`, shared: false },
+            ]),
+        ).searchParams.get(`list`) ?? ``,
+    );
+    expect(rows).toEqual([
+        { id: `tabs`, name: `a b`, place: `own`, shared: false },
+        { id: `blank`, name: `blank`, place: `own`, shared: false },
+        // Cut at 200 characters, between two of them: the emoji is whole or absent.
+        { id: `long`, name: `${ZS}😀`, place: `own`, shared: false },
+    ]);
+});
+
+test("the roster is told to the app only inside it, and only when it changed", async () => {
+    const { announceDesktopRoster } = await load();
+    const { sent } = recordedLocation();
+    const shop = { id: `s1`, name: `Shop`, place: `cloud`, shared: false };
+    // A browser has no app to tell.
+    announceDesktopRoster([shop]);
+    expect(sent).toEqual([]);
+    fakeWindow().__INTENTIC_DESKTOP__ = { version: `1.0.0`, installId: `id`, update: null };
+    jest.useFakeTimers();
+    try {
+        announceDesktopRoster([shop]);
+        announceDesktopRoster([{ ...shop }]);
+        jest.advanceTimersByTime(1_000);
+        // A sign-out's empty list is a change like any other.
+        announceDesktopRoster([]);
+        jest.advanceTimersByTime(1_000);
+    } finally {
+        jest.useRealTimers();
+    }
+    expect(sent.map((link) => new URL(link).searchParams.get(`list`))).toEqual([JSON.stringify([shop]), `[]`]);
+});

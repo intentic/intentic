@@ -2,6 +2,7 @@ import type { SandboxSummary, User } from "@intentic/api-contract";
 import { createAuthClient } from "better-auth/client";
 import { ref } from "vue";
 import { reloadOnHotUpdate } from "../../app/hotReload";
+import { announceDesktopRoster } from "../../app/environments/desktop";
 import { environment } from "../../app/environments/environment";
 import { clearPersistedQueries } from "../../lib/queryPersistence";
 import { useSandboxSession } from "../sandbox/session/sandboxSession";
@@ -23,6 +24,8 @@ onPlatformAuthInvalidated(async () => {
     user.value = null;
     clearCredential();
     clearSessions();
+    // The desktop app's local windows list this account's sandboxes from what this page told it; none are theirs now.
+    announceDesktopRoster([]);
     await clearPersistedQueries();
 });
 

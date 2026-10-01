@@ -17,12 +17,13 @@ test("a window the app handed a host answers with it, and any other with the lin
     expect((await load(host)).localHost()).toBe(host);
 });
 
-/* Without the app's host the shell reads nothing the app keeps: no account, no home folder, no recent places, no views. */
+/* Without the app's host the shell reads nothing the app keeps: no account, no home folder, no recent places, no sandboxes, no views. */
 test("the link-only host knows nothing of this computer and adds no view", async () => {
     const { LINK_HOST } = await load();
     expect([LINK_HOST.native, LINK_HOST.views]).toEqual([false, []]);
     expect(await LINK_HOST.facts()).toEqual({ accountSeen: false, homeFolder: `` });
     expect(await LINK_HOST.places()).toEqual([]);
+    expect(await LINK_HOST.sandboxes()).toEqual([]);
 });
 
 /* What it can do is what any local window could always ask by link: the system dialog, in a window of its own. */

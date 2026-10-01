@@ -28,10 +28,15 @@ flowchart LR
   folder of this computer. A panel the editor floats out gets a frameless window of its own. This package's own `src/`
   bundle (`index.html`) now draws one thing, the close question (`CloseConfirm.vue`).
 - **The main window.** The editor's shell with the sandbox shell's rail, holding what needs no sandbox and no
-  account: at the top the place chip (the folder this window shows, and every other place: the recent folders and
-  documents, the system's Open folder… and Open file…, the workspace or the sign-in, This device), then Files (the
-  folder's tree and documents, `/workspace`), then This device (`/device`), and at the foot the way to agents (a sign-in
-  in the default browser until an account has been seen, then the workspace). It opens on the folder it was last
+  account: at the top the place chip (the folder this window shows, and every other place, in the order the
+  workspace's sandbox switcher lists them too: this computer first, with its recent folders and documents and the
+  system's Open folder… and Open file… on one line, then the account's sandboxes, each opening the workspace on itself
+  at `/?sandbox=<id>`, or the sign-in before an account, then This device), then Files (the folder's tree and
+  documents, `/workspace`), then This device (`/device`), and at the foot the way to agents (a sign-in in the default
+  browser until an account has been seen, then the workspace). The sandboxes are the ones the workspace last listed:
+  its switcher hands them over on `intentic://roster` whenever its list changes, a sign-out empties it, and the app
+  keeps it in `roster.json` (`local_sandboxes`), with no address, token or logo, so a row carries a name, where it
+  runs and whether it is shared, and no count or state. Before the workspace has said, the row is the workspace itself. It opens on the folder it was last
   pointed at (`home-folder.json`), or on `~/intentic/local`, which a first launch creates: nothing is asked before the
   first screen. A folder picked on the place chip takes the window's place (`local_point`: a grant of its own, the old
   one revoked, the page reloaded onto the new face at `#/workspace`), after the page has asked about anything unsaved;
@@ -110,6 +115,12 @@ flowchart LR
   fails to open is said in a native dialog in the user's words (the place chip shows the same sentence under the row),
   and the original error goes to stderr.
 
+  (2026-10-01) The sandboxes joined the place chip, where "Your workspace" alone stood for them: a reader on this
+  computer took two presses and a face swap to reach the sandbox they meant, while the workspace's switcher reached
+  this computer in one. The local window cannot list them itself (its page reaches only loopback and the app, and the
+  app holds no session), so the workspace tells the app. Giving the local page a platform session and the platform
+  in its policy was rejected: that page draws documents nobody vouched for.
+
   (2026-09-30) The launcher window is gone. It was a card of its own design between the reader and everything else:
   Home (open a folder or a file, recents, sign-in), This device (Docker, the agent, sandboxes), and a handed-over setup,
   none of it in the editor's shell, and a first launch without an account opened on it. The main window replaced it,
@@ -179,6 +190,7 @@ every link and drops what an outside sender may not ask for. The editor builds t
 | `fix?slug=…[&code=…]` | app windows | Runs `ic sandbox fix` for that sandbox here and shows it on This device; `code` is the recovery panel's fix code, which `ic` claims so the panel follows the run. A slug or code that is not a plain token drops the link. |
 | `update` | app windows | Installs the downloaded update and restarts. |
 | `launcher[?to=files]` | app windows | Brings the main window back in the workspace's place: at This device (a setup's way back to its run, a sandbox's restart), or at its folder with `to=files` (the sandbox switcher's "This computer"). |
+| `roster?list=<JSON>` | app windows | The account's sandboxes as the workspace's switcher lists them (`id`, `name`, `place`, `shared`), kept in `roster.json` for the place chip; `[]` after a sign-out. One row out of shape (an id that is not a plain token, a name empty, over 200 characters or holding a control character, a place that is not a lowercase word) drops the list. |
 | `window?do=…` | app and local windows | The editor's own title bar: `ready`, `minimize`, `maximize`, `close[&confirmed=1]`, `dirty&value=0\|1`, `drag`, `raise`, `fit`, `mode`. |
 | `local?do=…` | local windows only | `open-folder` and `open-file` in the system dialog, `reveal[&path=…]` an entry of the window's own folder, `sandbox`, `ask&path=…`, and the project's `changes`, `bring-back[&paths=<JSON array>]`, `restore&point=…`, `direction&value=to-sandbox\|both`. |
 

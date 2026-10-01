@@ -2538,7 +2538,7 @@
             "trash": "Moved to the Trash"
         },
         "placeSwitcher": {
-            "switchPlace": "Switch folder: {name}",
+            "switchPlace": "Switch folder or sandbox: {name}",
             "onThisComputer": "On this computer",
             "showInFileManager": "Show in file manager",
             "movedOrDeleted": "Moved or deleted",
@@ -4235,7 +4235,9 @@
             "update": "Update",
             "waitingUnknown": "Waiting items unknown",
             "thisComputer": "This computer",
-            "thisComputerNote": "Your files, no sandbox needed"
+            "thisComputerNote": "Your files, no sandbox needed",
+            "notOnAccount": "That sandbox isn't on your account any more",
+            "notOnAccountDetail": "This is the sandbox you had open last."
         },
         "sandboxSyncToggles": {
             "filesAndPorts": "Files and ports",

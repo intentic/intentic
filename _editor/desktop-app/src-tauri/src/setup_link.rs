@@ -124,6 +124,42 @@ fn entries_of(json: &str) -> Option<Vec<String>> {
         .then_some(paths)
 }
 
+/// One sandbox of the account, as the workspace's sandbox switcher lists it (`intentic://roster`): what a local
+/// window's switcher draws a row from and opens the workspace on (`/?sandbox=<id>`). No address, token or logo: the
+/// row needs a name and a mark, and the workspace drops an id its account no longer lists (sandboxArrival.ts), so a
+/// stale entry costs a notice there, never access.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RosterEntry {
+    pub id: String,
+    pub name: String,
+    /// Where it runs, as the switcher marks it (placement.ts `SandboxPlacementKind`: `cloud`, `device`, `own`,
+    /// `shared`). A word rather than an enum, so a kind a later workspace adds reaches the page instead of dropping
+    /// the list; the page draws a word it does not know as `own`.
+    pub place: String,
+    /// Somebody else's sandbox, shared with this account.
+    pub shared: bool,
+}
+
+/// The most rows a roster carries; more than the switcher would ever draw, and a bound on what a link can make the app
+/// write.
+const ROSTER_MAX: usize = 200;
+
+fn is_roster_entry(entry: &RosterEntry) -> bool {
+    is_sandbox_id(&entry.id)
+        && (1..=200).contains(&entry.name.chars().count())
+        && !entry.name.chars().any(char::is_control)
+        && (1..=16).contains(&entry.place.len())
+        && entry.place.bytes().all(|byte| byte.is_ascii_lowercase())
+}
+
+/// `roster`'s `list`: a JSON array of [`RosterEntry`], empty for an account with none (or none any more, a sign-out).
+/// One malformed row drops the whole list rather than drawing the rest as if it were all of them.
+fn roster_of(json: &str) -> Option<Vec<RosterEntry>> {
+    let entries: Vec<RosterEntry> = serde_json::from_str(json).ok()?;
+    (entries.len() <= ROSTER_MAX && entries.iter().all(is_roster_entry)).then_some(entries)
+}
+
 /// `intentic://setup?code=…` — run the sandbox this setup code was minted for on this device.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -278,6 +314,10 @@ pub enum Link {
     Launcher {
         files: bool,
     },
+    /// `intentic://roster?list=<JSON>`: the account's sandboxes as the workspace's switcher lists them, sent whenever
+    /// that list changes and emptied by a sign-out, kept so a local window's switcher can list them too (state.rs
+    /// `remember_roster`). App-window only: a link from anywhere else could fill that list with rows of its choosing.
+    Roster(Vec<RosterEntry>),
     /// See [`WindowVerb`]: the workspace SPA's own title bar, which is a link channel rather than IPC for the
     /// same reason everything else here is.
     Window(WindowVerb),
@@ -352,6 +392,8 @@ pub fn parse_link(url: &str, source: Source) -> Option<Link> {
         "launcher" => source.is_app().then(|| Link::Launcher {
             files: get("to").as_deref() == Some("files"),
         }),
+        "roster" if source.is_app() => roster_of(&get("list")?).map(Link::Roster),
+        "roster" => None,
         // App-window only, like `update`, and for a sharper reason: see [`SyncArgs`]. There is nothing to
         // strip and keep — the url and the token ARE the request — so an external copy is refused whole.
         "sync" if source.is_app() => {
@@ -668,6 +710,78 @@ mod tests {
             Some(Link::Launcher { files: false })
         );
         assert_eq!(parse_link("intentic://launcher", Source::External), None);
+    }
+
+    fn roster_link(json: &str) -> String {
+        format!(
+            "intentic://roster?list={}",
+            url::form_urlencoded::byte_serialize(json.as_bytes()).collect::<String>()
+        )
+    }
+
+    /// The workspace's switcher, as the app keeps it for the local windows' switcher: every row, in its order.
+    #[test]
+    fn the_workspace_hands_over_its_sandboxes_and_nothing_else_can() {
+        let json = r#"[{"id":"cm9x_01","name":"Shop: API","place":"cloud","shared":false},{"id":"b2","name":"Kasia's","place":"shared","shared":true,"image":"data:x"}]"#;
+        assert_eq!(
+            parse_link(&roster_link(json), APP),
+            Some(Link::Roster(vec![
+                RosterEntry {
+                    id: "cm9x_01".into(),
+                    name: "Shop: API".into(),
+                    place: "cloud".into(),
+                    shared: false,
+                },
+                RosterEntry {
+                    id: "b2".into(),
+                    name: "Kasia's".into(),
+                    place: "shared".into(),
+                    shared: true,
+                },
+            ]))
+        );
+        // A sign-out empties it.
+        assert_eq!(
+            parse_link(&roster_link("[]"), APP),
+            Some(Link::Roster(Vec::new()))
+        );
+        assert_eq!(parse_link(&roster_link(json), Source::External), None);
+        assert_eq!(
+            parse_link(&roster_link(json), Source::Files { window: "home" }),
+            None
+        );
+        assert_eq!(parse_link("intentic://roster", APP), None);
+    }
+
+    /// One row the switcher could not draw honestly drops the list, rather than listing the rest as all of them.
+    #[test]
+    fn a_roster_with_one_malformed_row_is_dropped_whole() {
+        let row = |id: &str, name: &str, place: &str| {
+            roster_link(&format!(
+                r#"[{{"id":"ok","name":"Fine","place":"own","shared":false}},{{"id":{id:?},"name":{name:?},"place":{place:?},"shared":false}}]"#
+            ))
+        };
+        assert!(matches!(
+            parse_link(&row("b", "Second", "device"), APP),
+            Some(Link::Roster(rows)) if rows.len() == 2
+        ));
+        assert_eq!(parse_link(&row("../b", "Second", "own"), APP), None);
+        assert_eq!(
+            parse_link(&row(&"b".repeat(65), "Second", "own"), APP),
+            None
+        );
+        assert_eq!(parse_link(&row("b", "", "own"), APP), None);
+        assert_eq!(parse_link(&row("b", "line\nbreak", "own"), APP), None);
+        assert_eq!(parse_link(&row("b", &"n".repeat(201), "own"), APP), None);
+        assert_eq!(parse_link(&row("b", "Second", "Cloud"), APP), None);
+        assert_eq!(parse_link(&row("b", "Second", ""), APP), None);
+        assert_eq!(parse_link(&roster_link(r#"[{"id":"b"}]"#), APP), None);
+        assert_eq!(parse_link(&roster_link("not json"), APP), None);
+        let too_many = format!(
+            "[{}]",
+            vec![r#"{"id":"b","name":"B","place":"own","shared":false}"#; ROSTER_MAX + 1].join(",")
+        );
+        assert_eq!(parse_link(&roster_link(&too_many), APP), None);
     }
 
     #[test]

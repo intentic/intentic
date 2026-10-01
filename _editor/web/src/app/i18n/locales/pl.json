@@ -4051,7 +4051,9 @@
             "update": "Aktualizacja",
             "waitingUnknown": "Oczekujące nieznane",
             "thisComputer": "Ten komputer",
-            "thisComputerNote": "Twoje pliki, bez sandboxa"
+            "thisComputerNote": "Twoje pliki, bez sandboxa",
+            "notOnAccount": "Tego sandboxa nie ma już na Twoim koncie",
+            "notOnAccountDetail": "To sandbox, który był otwarty ostatnio."
         },
         "sandboxSyncToggles": {
             "filesAndPorts": "Pliki i porty",
@@ -6808,7 +6810,7 @@
             "trash": "Przeniesiono do Kosza"
         },
         "placeSwitcher": {
-            "switchPlace": "Zmień folder: {name}",
+            "switchPlace": "Zmień folder lub sandbox: {name}",
             "onThisComputer": "Na tym komputerze",
             "showInFileManager": "Pokaż w menedżerze plików",
             "movedOrDeleted": "Przeniesiono lub usunięto",

@@ -260,6 +260,16 @@ export const localOpenPath = (path: string): Promise<void> => invoke(`local_open
 export const localRecents = (): Promise<LocalRecent[]> => invoke(`local_recents`);
 /** Takes one entry off the recents, wherever it is in them; the folder or file itself is not touched. */
 export const localForgetRecent = (path: string): Promise<void> => invoke(`local_forget_recent`, { path });
+// The account's sandboxes as the workspace last listed them (src-tauri/src/setup_link.rs `RosterEntry`), in the shape
+// the shell reads (the web's localHost.ts `LocalSandbox`): empty before the workspace has said, and after a sign-out.
+export interface LocalSandbox {
+    id: string;
+    name: string;
+    // Where it runs, as the workspace's switcher marked it (placement.ts `SandboxPlacementKind`).
+    place: string;
+    shared: boolean;
+}
+export const localSandboxes = (): Promise<LocalSandbox[]> => invoke(`local_sandboxes`);
 
 /* WHAT THE SHELL AND THIS DEVICE ARE DRAWN FROM: facts the app keeps across launches (src-tauri/src/state.rs). */
 

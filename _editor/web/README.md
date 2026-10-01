@@ -69,14 +69,19 @@ flowchart LR
   `local/` holds the window's own parts: its shell (`LocalShell.vue`, the sandbox shell's rail from
   `shell/rail/iconRail.css`, holding the place chip `LocalPlaceSwitcher.vue`, Files, the views the app adds, and the way
   to agents `LocalAgentsTile.vue`), Ctrl+P, Ctrl+Shift+F and Ctrl+W (`localKeys.ts`), the close guard for unsaved edits
-  (`useUnsavedGuard.ts`), and a project folder's Bring back section (`LocalBringBack.vue`). What only the desktop app
-  can answer (the recent places, pointing the window at another folder, the account, This device) comes from the host
-  it installs before the editor runs (`app/environments/localHost.ts`); a page without one gets the link-only host.
+  (`useUnsavedGuard.ts`), and a project folder's Bring back section (`LocalBringBack.vue`). The place chip lists the
+  places in the sandbox switcher's order, this computer first and then the account's sandboxes, and the sandbox
+  switcher lists "This computer" first in the app's workspace window to match. What only the desktop app can answer
+  (the recent places, pointing the window at another folder, the account, the sandboxes the workspace last told it
+  of, This device) comes from the host it installs before the editor runs (`app/environments/localHost.ts`); a page
+  without one gets the link-only host. The workspace's switcher is what tells the app those sandboxes
+  (`announceDesktopRoster` in `app/environments/desktop.ts`), and a sign-out tells it there are none.
 - **Routes.** `/login` and `/setup` sit outside the shell. Everything else lives under `/` in
   `WorkspaceShell.vue`, guarded by `requireAuth` and `requireSetup`, which renders `ShellDesktop.vue` (rail, side
   panel and terminal) or `ShellMobile.vue` (tab bar, full-screen views). A link naming a sandbox (`/?sandbox=<id>`, the
-  desktop app's) opens the shell on it if the account lists it, and the id leaves the address either way
-  (`router/sandboxArrival.ts`). A desktop window on a local folder builds another table instead: `/` is
+  desktop app's, for a synced folder or a sandbox picked on a local window's place chip) opens the shell on it if the
+  account lists it, and otherwise says that sandbox is not on the account any more; the id leaves the address either
+  way (`router/sandboxArrival.ts`). A desktop window on a local folder builds another table instead: `/` is
   `local/LocalShell.vue`, with `workspace/:path*` (the folder) and one route per view the app adds (`device`), kept in
   the hash (`files/local#/device`), since the app serves that page at one address only.
 - **On a phone.** `ShellMobile.vue` shows one screen at a time. The Sandbox and Settings hubs open on an index of

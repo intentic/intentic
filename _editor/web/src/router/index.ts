@@ -31,6 +31,7 @@ import { localFace } from "../app/environments/local";
 import { localHost } from "../app/environments/localHost";
 import { receiveHandoff } from "../features/chat/drafts/localHandoff";
 import { setPageTitle } from "../shell/browser-tab/tabTitle";
+import { useNotifications } from "../shell/notifications/notifications";
 import { coldStartAtRoot, installedApp, lastRoute, rememberRoute } from "./recentRoute";
 import { afterPaint } from "../lib/afterPaint";
 
@@ -91,7 +92,12 @@ const requireSetup = async (): Promise<boolean | RouteLocationRaw> => {
 
 // A link naming a sandbox (`/?sandbox=<id>`) opens the shell on it; sandboxArrival.ts owns the rule. After the gate, so
 // the list it reads is the one the gate just fetched.
-const openNamedSandbox = (to: RouteLocationNormalized): Promise<true | RouteLocationRaw> => arriveOnSandbox(to, useSandbox());
+const openNamedSandbox = (to: RouteLocationNormalized): Promise<true | RouteLocationRaw> => {
+    const { list, select } = useSandbox();
+    const missing = (): void =>
+        useNotifications().report({ tone: `info`, title: t(`sandbox.sandboxSwitcher.notOnAccount`), detail: t(`sandbox.sandboxSwitcher.notOnAccountDetail`) });
+    return arriveOnSandbox(to, { list, select, missing });
+};
 
 // Menu and Terminal are full-screen tabs only on the mobile shell; the desktop shell docks the terminal and puts the
 // menu's contents on the rail, so a desktop hit lands on the workspace instead.

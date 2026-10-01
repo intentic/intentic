@@ -1,7 +1,7 @@
 import type { InvokeArgs } from "@tauri-apps/api/core";
 import { emit } from "@tauri-apps/api/event";
 import { mockIPC } from "@tauri-apps/api/mocks";
-import type { DesktopInfo, HomeFacts, LocalRecent, SandboxStatus, SetupArgs, UpdateStage } from "../src/desktop";
+import type { DesktopInfo, HomeFacts, LocalRecent, LocalSandbox, SandboxStatus, SetupArgs, UpdateStage } from "../src/desktop";
 
 // THE APP, STOOD IN FOR ON A DEV SERVER. The local face in a plain browser (`pnpm dev:local`) has no Tauri behind it, so
 // every command the shell and This device call would throw. This answers them from a few fixed machines, through Tauri's
@@ -10,7 +10,7 @@ import type { DesktopInfo, HomeFacts, LocalRecent, SandboxStatus, SetupArgs, Upd
 //
 // Which machine is chosen by `?machine=` on the dev address, kept for the tab's reloads:
 // - `fresh` (the default): a first launch. No account, no sandbox, no agent, no Docker.
-// - `host`: signed in, two sandboxes (one running, with a folder synced), the machine agent up.
+// - `host`: signed in, two sandboxes here (one running, with a folder synced) of the account's three, the machine agent up.
 // - `setup`: signed in, a setup handed over from the workspace, running its steps.
 
 type Machine = `fresh` | `host` | `setup`;
@@ -36,6 +36,13 @@ const recents: LocalRecent[] = [
     { path: `${HOME}\\Documents\\Taxes 2026`, folder: true, openedAt: NOW_S - 3 * 3600, exists: true, sandbox: false },
     { path: `${HOME}\\code\\shop`, folder: true, openedAt: NOW_S - 26 * 3600, exists: true, sandbox: true },
     { path: `${HOME}\\Desktop\\old-notes`, folder: true, openedAt: NOW_S - 9 * 86_400, exists: false, sandbox: false },
+];
+
+// The account's sandboxes as the workspace last listed them: one here, one in the cloud, one somebody shared.
+const ROSTER: LocalSandbox[] = [
+    { id: `cm1shop`, name: `shop`, place: `device`, shared: false },
+    { id: `cm2research`, name: `research`, place: `cloud`, shared: false },
+    { id: `cm3kasia`, name: `kasia-site`, place: `shared`, shared: true },
 ];
 
 const RESOURCES: NonNullable<SandboxStatus[`resources`]> = {
@@ -95,7 +102,7 @@ const runSetup = async (): Promise<void> => {
 };
 
 /** What a command answers: the app's own types, or nothing for a verb whose effect is elsewhere. */
-type Answer = DesktopInfo | HomeFacts | LocalRecent[] | UpdateStage | SandboxStatus[] | SetupArgs | string | boolean | null | Promise<void> | { memoryBytes: number; cpus: number };
+type Answer = DesktopInfo | HomeFacts | LocalRecent[] | LocalSandbox[] | UpdateStage | SandboxStatus[] | SetupArgs | string | boolean | null | Promise<void> | { memoryBytes: number; cpus: number };
 
 const DESKTOP_INFO: DesktopInfo = {
     version: `1.318.0`,
@@ -114,6 +121,7 @@ const ANSWERS = new Map<string, (machine: Machine) => Answer>([
     [`desktop_info`, () => DESKTOP_INFO],
     [`home_facts`, (machine) => ({ accountSeen: signedIn(machine), lastFace: `home`, hostsSandboxes: signedIn(machine), homeFolder: `${HOME}\\intentic\\local` })],
     [`local_recents`, () => recents],
+    [`local_sandboxes`, (machine) => (signedIn(machine) ? ROSTER : [])],
     [`update_state`, () => ({ kind: `current` })],
     [`docker_listening`, signedIn],
     [`docker_ready`, signedIn],

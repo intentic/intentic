@@ -5,7 +5,7 @@ use std::sync::Mutex;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
 
-use crate::setup_link::{RecreateArgs, SetupArgs, SyncArgs};
+use crate::setup_link::{RecreateArgs, RosterEntry, SetupArgs, SyncArgs};
 
 /* `APP_URL` is the SPA origin the daemon must allow through CORS. */
 pub const APP_URL: &str = "https://app.intentic.dev";
@@ -231,6 +231,10 @@ pub struct AppState {
     home_folder: Mutex<Option<PathBuf>>,
     /// `~/intentic/local` ([`default_home_folder`]), or a folder in the app's own config dir where the OS names no home.
     default_home: PathBuf,
+    /// The account's sandboxes as the workspace's switcher last listed them (`roster.json`, `intentic://roster`):
+    /// what a local window's switcher lists, since that window cannot ask the platform itself. Empty until the
+    /// workspace has said, and again after a sign-out.
+    roster: Mutex<Vec<RosterEntry>>,
 }
 
 impl AppState {
@@ -248,6 +252,7 @@ impl AppState {
         );
         let account_seen = read_json(&config_dir.join("account-seen.json")).unwrap_or(false);
         let home_folder = read_json(&config_dir.join("home-folder.json"));
+        let roster = read_json(&config_dir.join("roster.json")).unwrap_or_default();
         let default_home = app.path().home_dir().map_or_else(
             |_| config_dir.join("local"),
             |home| default_home_folder(&home),
@@ -270,6 +275,7 @@ impl AppState {
             pending_project: Mutex::new(None),
             home_folder: Mutex::new(home_folder),
             default_home,
+            roster: Mutex::new(roster),
         })
     }
 
@@ -336,6 +342,22 @@ impl AppState {
         }
         *held = true;
         write_json(&self.config_dir.join("account-seen.json"), &true);
+    }
+
+    /* THE ACCOUNT'S SANDBOXES, as the workspace last listed them. */
+
+    pub fn roster(&self) -> Vec<RosterEntry> {
+        self.roster.lock().unwrap().clone()
+    }
+
+    /// Written only on a change: the workspace says it on every load and every change to its list.
+    pub fn remember_roster(&self, entries: Vec<RosterEntry>) {
+        let mut held = self.roster.lock().unwrap();
+        if *held == entries {
+            return;
+        }
+        write_json(&self.config_dir.join("roster.json"), &entries);
+        *held = entries;
     }
 
     pub fn ui_mode(&self) -> Option<Mode> {
@@ -613,6 +635,7 @@ mod tests {
             pending_project: Mutex::new(None),
             home_folder: Mutex::new(read_json(&config_dir.join("home-folder.json"))),
             default_home: default_home_folder(&config_dir.join("home")),
+            roster: Mutex::new(read_json(&config_dir.join("roster.json")).unwrap_or_default()),
         }
     }
 
@@ -840,6 +863,26 @@ mod tests {
         assert!(state_in(&legacy).account_seen());
         std::fs::remove_dir_all(&dir).unwrap();
         std::fs::remove_dir_all(&legacy).unwrap();
+    }
+
+    /// The workspace's list outlives the launch, so a local window opened first thing next time lists it too; a
+    /// sign-out's empty list replaces it.
+    #[test]
+    fn the_workspaces_sandboxes_are_kept_until_it_says_otherwise() {
+        let dir = std::env::temp_dir().join(format!("intentic-roster-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        assert_eq!(state_in(&dir).roster(), Vec::new());
+        let shop = RosterEntry {
+            id: "s1".into(),
+            name: "Shop".into(),
+            place: "cloud".into(),
+            shared: false,
+        };
+        state_in(&dir).remember_roster(vec![shop.clone()]);
+        assert_eq!(state_in(&dir).roster(), vec![shop]);
+        state_in(&dir).remember_roster(Vec::new());
+        assert_eq!(state_in(&dir).roster(), Vec::new());
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     /// Forgetting takes exactly the one entry, and leaves the file untouched when there was nothing to forget.

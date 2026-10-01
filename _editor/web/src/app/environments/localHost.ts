@@ -5,7 +5,7 @@ import { askLocalApp } from "./local";
 // THE APP'S HALF OF A LOCAL WINDOW'S SHELL. The editor draws the shell around a folder of this computer (local/LocalShell.vue):
 // its rail, its Files view, the place chip and the way to agents. What only the desktop app can answer comes from here:
 // the folders and documents this computer has opened, pointing the window at another folder, whether this install has an
-// account, and the views the app adds to the rail (This device). The app installs its host on the window before the
+// account and which sandboxes the workspace last listed for it, and the views the app adds to the rail (This device). The app installs its host on the window before the
 // editor's modules run (`__INTENTIC_LOCAL_HOST__`, _editor/desktop-app/src/host.ts), so it is there when the router
 // builds its routes. A window without one (a dev server, a test) gets `LINK_HOST`: what any local window can ask by link.
 
@@ -27,6 +27,16 @@ export interface LocalFacts {
     readonly accountSeen: boolean;
     /** The folder the app opens its main window on when nothing else is asked for (`~/intentic/local` at first). */
     readonly homeFolder: string;
+}
+
+/** A sandbox of the account, as the workspace's switcher last listed it (the app's setup_link.rs `RosterEntry`). */
+export interface LocalSandbox {
+    readonly id: string;
+    readonly name: string;
+    /** Where it runs, as the workspace's switcher marked it: a placement kind, read by placement.ts `placementOfKind`. */
+    readonly place: string;
+    /** Somebody else's sandbox, shared with this account. */
+    readonly shared: boolean;
 }
 
 /** A view the app adds to the local shell: a rail tile and the route it opens (This device, in the desktop app). */
@@ -51,6 +61,11 @@ export interface LocalHost {
     facts(): Promise<LocalFacts>;
     /** The recent folders and documents, newest first. */
     places(): Promise<readonly LocalPlace[]>;
+    /**
+     * The account's sandboxes as the workspace last told the app (desktop.ts `announceDesktopRoster`): a local window
+     * cannot ask the platform itself. Empty before the workspace has said, and after a sign-out.
+     */
+    sandboxes(): Promise<readonly LocalSandbox[]>;
     /** Show `path`, a folder, in THIS window, in place of the folder it shows now. */
     point(path: string): Promise<void>;
     /** Open `path` where the app puts it: raised where a window shows it, handed to the folder window holding it, or a window of its own. */
@@ -81,6 +96,7 @@ export const LINK_HOST: LocalHost = {
     views: [],
     facts: () => Promise.resolve({ accountSeen: false, homeFolder: `` }),
     places: () => Promise.resolve([]),
+    sandboxes: () => Promise.resolve([]),
     point: nothing,
     open: nothing,
     pickFolder: () => {

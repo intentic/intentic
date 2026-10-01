@@ -39,7 +39,7 @@ import { useWorkspaceTree } from "../../workspace/explorer/useWorkspaceTree";
 import { manageDeviceSandbox, useHostRunning } from "../devices/useDevices";
 import HostedRollbackDialog from "../overview/version/HostedRollbackDialog.vue";
 import { bashCommand, psCommand } from "../../../app/environments/scriptCommand";
-import { DESKTOP_LAUNCHER_LINK, desktopApp, openDesktopLink } from "../../../app/environments/desktop";
+import { announceDesktopRoster, DESKTOP_LAUNCHER_LINK, desktopApp, openDesktopLink } from "../../../app/environments/desktop";
 import { homeViewId, PROJECTS_VIEW_ID } from "../../../core-views/registry";
 import { useEndpoint } from "../secrets/useEndpoint";
 import { addChoices, removalTakes } from "./switcherRows";
@@ -203,6 +203,16 @@ const toThisComputer = (): void => {
     open.value = false;
     openDesktopLink(`${DESKTOP_LAUNCHER_LINK}?to=files`);
 };
+
+// The app's local windows list these same sandboxes under their own switcher's This computer, and can learn them only
+// from this page (desktop.ts `announceDesktopRoster`): told on mount and again whenever a row or its mark changes.
+if (inDesktopApp) {
+    watch(
+        () => switchable.value.map((option) => ({ id: option.id, name: option.name, place: placementFor(option).kind, shared: option.role !== `owner` })),
+        announceDesktopRoster,
+        { immediate: true },
+    );
+}
 
 const adds = computed(() =>
     addChoices({ runsHere: usingLocal.value && sandbox.active.value?.role === `owner`, projectsHome: homeViewId() === PROJECTS_VIEW_ID }),
@@ -436,6 +446,27 @@ const confirmRemove = async (): Promise<void> => {
                 <div class="my-1 border-t border-line"></div>
             </template>
 
+            <!-- The app's other face, a place of the same rank as the sandboxes and first, as the local window's switcher
+                 lists it: this computer's own folder, no sandbox needed. Always there and always one row, so the
+                 sandboxes growing under it never move it. -->
+            <template v-if="inDesktopApp">
+                <button
+                    type="button"
+                    class="group flex items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors hover:bg-content/5"
+                    @click="toThisComputer"
+                >
+                    <span class="flex h-5 w-5 shrink-0 items-center justify-center text-muted">
+                        <Icon name="desktop" class="text-sm" />
+                    </span>
+                    <span class="flex min-w-0 flex-1 flex-col">
+                        <span class="truncate text-content">{{ t(`sandbox.sandboxSwitcher.thisComputer`) }}</span>
+                        <span class="truncate text-2xs text-subtle">{{ t(`sandbox.sandboxSwitcher.thisComputerNote`) }}</span>
+                    </span>
+                    <Icon name="arrow-up-right" class="shrink-0 text-2xs text-subtle" />
+                </button>
+                <div class="my-1 border-t border-line"></div>
+            </template>
+
             <div class="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-subtle">{{ t(`shared.sandboxes`) }}</div>
 
             <button
@@ -501,21 +532,6 @@ const confirmRemove = async (): Promise<void> => {
                     v-tooltip.top="option.role === 'owner' ? t(`ui.action.remove`) : t(`ui.action.leave`)"
                     class="shrink-0 text-xs opacity-0 transition-opacity hover:text-danger group-hover:opacity-60"
                 />
-            </button>
-
-            <!-- The app's other face, as a place beside the sandboxes: this computer's own folder, no sandbox needed. -->
-            <button
-                v-if="inDesktopApp"
-                type="button"
-                class="group flex items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors hover:bg-content/5"
-                v-tooltip.right="{ title: t(`sandbox.sandboxSwitcher.thisComputer`), note: t(`sandbox.sandboxSwitcher.thisComputerNote`) }"
-                @click="toThisComputer"
-            >
-                <span class="flex h-5 w-5 shrink-0 items-center justify-center text-muted">
-                    <Icon name="desktop" class="text-sm" />
-                </span>
-                <span class="min-w-0 flex-1 truncate text-content">{{ t(`sandbox.sandboxSwitcher.thisComputer`) }}</span>
-                <Icon name="arrow-up-right" class="shrink-0 text-2xs text-subtle" />
             </button>
 
             <!-- One add, or two where this computer already runs the sandbox: the second is quieter. -->

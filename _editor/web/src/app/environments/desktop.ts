@@ -111,6 +111,56 @@ export const announceDesktopMode = (scheme: `light` | `dark`): void => {
     openDesktopLink(`intentic://window?do=mode&mode=${scheme}`);
 };
 
+/* THE ACCOUNT'S SANDBOXES, AS THIS PAGE'S SWITCHER LISTS THEM, handed to the app for its local windows' switcher. */
+
+// A local window cannot ask the platform (it holds no session, and its page reaches nothing but loopback and the app),
+// so the sandboxes its switcher lists are the ones this page last told the app about. One row per sandbox in the
+// switcher's order, and nothing a row is not drawn from: no address, token or logo (a logo is an inline data URL,
+// too long to ride a link). The app takes this only from its own windows (setup_link.rs `roster`).
+export interface DesktopRosterEntry {
+    readonly id: string;
+    readonly name: string;
+    /** Where it runs, as the switcher marks it (placement.ts `SandboxPlacementKind`). */
+    readonly place: string;
+    /** Somebody else's sandbox, shared with this account. */
+    readonly shared: boolean;
+}
+
+// What the app holds a row to (setup_link.rs `is_roster_entry`), met here rather than refused there: a whole list is
+// dropped for one row it cannot take. A name is cut by characters, never inside one, and a control character is a space.
+const ROSTER_ID = /^[A-Za-z0-9_-]{1,64}$/;
+const ROSTER_NAME_MAX = 200;
+const CONTROL = /\p{Cc}/gu;
+const rosterRow = (entry: DesktopRosterEntry): DesktopRosterEntry | undefined => {
+    if (!ROSTER_ID.test(entry.id)) {
+        return undefined;
+    }
+    const name = Array.from(entry.name.replace(CONTROL, ` `).trim()).slice(0, ROSTER_NAME_MAX).join(``);
+    return { id: entry.id, name: name === `` ? entry.id : name, place: entry.place, shared: entry.shared };
+};
+
+export const desktopRosterLink = (entries: readonly DesktopRosterEntry[]): string => {
+    const rows = entries.map(rosterRow).filter((row): row is DesktopRosterEntry => row !== undefined);
+    return `intentic://roster?${new URLSearchParams({ list: JSON.stringify(rows) }).toString()}`;
+};
+
+// The last list handed over, so a switcher re-rendering with the same rows sends nothing.
+// allow(module-state): one app per page, and what it was last told is a fact about the page
+let rosterSent: string | undefined;
+
+/** Tells the app the account's sandboxes when they changed since it was last told; an empty list after a sign-out. */
+export const announceDesktopRoster = (entries: readonly DesktopRosterEntry[]): void => {
+    if (desktopVersion() === undefined) {
+        return;
+    }
+    const link = desktopRosterLink(entries);
+    if (link === rosterSent) {
+        return;
+    }
+    rosterSent = link;
+    openDesktopLink(link);
+};
+
 /* A drag is the one verb that cannot be held back the way `openDesktopLink` holds every early link: it is a press. */
 export const workDesktopWindow = (verb: DesktopWindowVerb): void => {
     if (verb === `drag` && !pageLoaded()) {
