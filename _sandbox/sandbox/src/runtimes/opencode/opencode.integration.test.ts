@@ -274,10 +274,11 @@ test("a permission ask on a watched directory is answered with a standing yes", 
 // A watcher that exhausted its retries answers nothing more; a directory still marked watched would leave every later
 // permission ask there unanswered until the turn's watchdog killed it.
 test("a permission watcher that gave up is reopened by the next turn in its directory", async () => {
-    jest.useFakeTimers();
     const xdg = await scratch();
     const service = createOpenCodeService(xdg, { fetchImpl: forbiddenFetch });
     await service.client();
+    // Boot polls for the spawned process on the real clock; only the watcher's retry ladder needs advancing.
+    jest.useFakeTimers();
     subscriptions.refused = true;
     const worktree = `${WORKSPACE_ROOT}/worktree`;
     await service.watch(worktree);

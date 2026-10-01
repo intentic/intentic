@@ -185,7 +185,6 @@ export const desktopRosterLink = (entries: readonly DesktopRosterEntry[], accoun
 };
 
 // The last link handed over, so a switcher re-rendering with the same rows and account sends nothing.
-// allow(module-state): one app per page, and what it was last told is a fact about the page
 let rosterSent: string | undefined;
 
 /** Tells the app the account and its sandboxes when either changed since it was last told; nothing after a sign-out. */
