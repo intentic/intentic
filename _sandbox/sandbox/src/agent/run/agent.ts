@@ -70,7 +70,7 @@ import { storedPromptTitle } from "../prompt/turn-preamble.js";
 import { noteChildWork } from "../subagents/child-verification.js";
 import { closeSubagents, subagentInParentTree, subagentHooks, type SubagentTurn } from "../subagents/subagents.js";
 import { ASK_TOOL_NAMES, answerFiles, formatAnswers } from "../tools/question-answers.js";
-import { imageBlock, loadAttachments } from "../../runtimes/decorators/attachment-images.js";
+import { imageBlock, loadAttachments } from "../prompt/attachment-images.js";
 import type { ConversationActors } from "../../conversations/actor/conversation-actors.js";
 
 // The request the Claude Code loop runs: it spends a stored account's token, a routed endpoint, the trial, or the

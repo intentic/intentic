@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { extname } from "node:path";
-import type { TurnSpec } from "../../agent/providers/agent-request.js";
-import { splitAttachments } from "../../agent/prompt/attachment-note.js";
+import type { TurnSpec } from "../providers/agent-request.js";
+import { splitAttachments } from "./attachment-note.js";
 
 // A turn's attachments as a vendor runtime takes them: pictures it can see natively read off disk, and everything else
 // left for the prompt to name for its read tool. A picture that cannot be read is named instead of dropped.

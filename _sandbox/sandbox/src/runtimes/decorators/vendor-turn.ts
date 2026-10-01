@@ -2,7 +2,7 @@ import type { AgentCapabilities, AgentEvent } from "@intentic/sandbox-contract";
 import type { AgentRequest } from "../../agent/providers/agent-request.js";
 import { withFileNote } from "../../agent/prompt/attachment-note.js";
 import type { CommandGuard } from "../../guard/command-guard.js";
-import { type AttachedImage, loadAttachments } from "./attachment-images.js";
+import { type AttachedImage, loadAttachments } from "../../agent/prompt/attachment-images.js";
 import { EXECUTE_PROMPT, PLAN_PREAMBLE, type PlanPhaseResult, planMode } from "./plan-mode.js";
 import { vendorTurnGate } from "./vendor-gate.js";
 

@@ -5,7 +5,7 @@ import { type AgentEvent, OPENCODE } from "@intentic/sandbox-contract";
 import { whenAborted } from "@intentic/base/async";
 import type { AgentRequest, ContainerCredential } from "../../agent/providers/agent-request.js";
 import { withFileNote } from "../../agent/prompt/attachment-note.js";
-import { loadAttachments } from "../decorators/attachment-images.js";
+import { loadAttachments } from "../../agent/prompt/attachment-images.js";
 import { type EmulatedPlan, EXECUTE_PROMPT, PLAN_PREAMBLE, planMode } from "../decorators/plan-mode.js";
 import { beforeDeadline, DEFAULT_TURN_TIMEOUTS, EXPIRED, type TurnTimeouts, type TurnWatchdog, turnWatchdog } from "../decorators/turn-watchdog.js";
 import { isRateLimited, vendorFailureFrame, type VendorRule } from "../decorators/vendor-errors.js";

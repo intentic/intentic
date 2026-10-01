@@ -4,7 +4,7 @@ import { agentSessionName } from "@intentic/sandbox-contract/session-names";
 import { whenAborted } from "@intentic/base/async";
 import type { AgentRequest, ContainerCredential } from "../../agent/providers/agent-request.js";
 import type { CommandGuard } from "../../guard/command-guard.js";
-import { imageBlock } from "../decorators/attachment-images.js";
+import { imageBlock } from "../../agent/prompt/attachment-images.js";
 import type { PlanPhaseResult } from "../decorators/plan-mode.js";
 import {
     DEFAULT_TURN_TIMEOUTS,

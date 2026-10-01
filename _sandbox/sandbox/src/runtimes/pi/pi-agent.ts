@@ -1,7 +1,7 @@
 import { type AcpAgentConfig, type AgentCommand, type AgentEvent, PI } from "@intentic/sandbox-contract";
 import { whenAborted } from "@intentic/base/async";
 import type { AgentRequest, ContainerCredential } from "../../agent/providers/agent-request.js";
-import { imageBlock } from "../decorators/attachment-images.js";
+import { imageBlock } from "../../agent/prompt/attachment-images.js";
 import {
     DEFAULT_TURN_TIMEOUTS,
     EXPIRED,
