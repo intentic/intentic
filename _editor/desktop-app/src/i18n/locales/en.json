@@ -104,7 +104,7 @@
     "requirements": {
         "beforeSandboxRunHere": "Before your sandbox can run here:",
         "checkAgain": "Check again",
-        "deviceCantRunSandbox": "This device can't run a sandbox yet:",
+        "deviceCantRunSandbox": "This computer can't run a sandbox yet:",
         "hideSteps": "Hide the steps",
         "restartNow": "Restart now",
         "runOnMachineWe": "Run it on a machine we host",
@@ -129,7 +129,7 @@
         "seeAllSteps": "See all {count} steps"
     },
     "device": {
-        "title": "This device",
+        "title": "This computer",
         "lead": "The sandboxes that run on this computer, its machine agent, and the Docker engine they run in.",
         "thisDevice": "this device",
         "dockerIsntRunning": "Docker isn't running, so the sandboxes on this computer aren't either.",

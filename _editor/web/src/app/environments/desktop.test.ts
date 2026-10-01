@@ -3,6 +3,7 @@ import { freshImport } from "@intentic/testing/bun";
 /* The page's window, as the module reads it: a browser's until a test marks it as the app's (`__INTENTIC_DESKTOP__`). */
 interface FakeWindow {
     __INTENTIC_DESKTOP__?: unknown;
+    __INTENTIC_OPEN__?: (path: string) => void;
     close?: () => void;
     focus?: () => void;
     resizeTo?: (width: number, height: number) => void;
@@ -236,6 +237,26 @@ test("a row the app would refuse is mended or left out, never sent as it is", as
     ]);
 });
 
+// Who is signed in rides beside the list, for the local window's rail: an address always, a name and an https avatar
+// when there are any; an uploaded avatar (a data URL) and an address the app would refuse are not sent.
+test("the account rides beside the sandboxes, in the shape the app takes", async () => {
+    const { desktopRosterLink } = await load();
+    const accountOf = (link: string): string | null => new URL(link).searchParams.get(`account`);
+    expect([
+        accountOf(desktopRosterLink([], { email: `ada@example.com`, name: ` Ada\tL `, image: `https://lh3.example.com/a.png` })),
+        accountOf(desktopRosterLink([], { email: `ada@example.com`, name: ``, image: `data:image/png;base64,AAAA` })),
+        accountOf(desktopRosterLink([], { email: `ada@example.com`, name: null, image: `http://lh3.example.com/a.png` })),
+        accountOf(desktopRosterLink([], { email: `not an address`, name: `Ada` })),
+        accountOf(desktopRosterLink([])),
+    ]).toEqual([
+        JSON.stringify({ email: `ada@example.com`, name: `Ada L`, image: `https://lh3.example.com/a.png` }),
+        JSON.stringify({ email: `ada@example.com` }),
+        JSON.stringify({ email: `ada@example.com` }),
+        null,
+        null,
+    ]);
+});
+
 test("the roster is told to the app only inside it, and only when it changed", async () => {
     const { announceDesktopRoster } = await load();
     const { sent } = recordedLocation();
@@ -246,14 +267,57 @@ test("the roster is told to the app only inside it, and only when it changed", a
     fakeWindow().__INTENTIC_DESKTOP__ = { version: `1.0.0`, installId: `id`, update: null };
     jest.useFakeTimers();
     try {
-        announceDesktopRoster([shop]);
-        announceDesktopRoster([{ ...shop }]);
+        announceDesktopRoster([shop], { email: `ada@example.com` });
+        announceDesktopRoster([{ ...shop }], { email: `ada@example.com` });
         jest.advanceTimersByTime(1_000);
-        // A sign-out's empty list is a change like any other.
+        // The same rows under another account is a change.
+        announceDesktopRoster([shop], { email: `bo@example.com` });
+        jest.advanceTimersByTime(1_000);
+        // A sign-out's empty list, with nobody signed in, is a change like any other.
         announceDesktopRoster([]);
         jest.advanceTimersByTime(1_000);
     } finally {
         jest.useRealTimers();
     }
-    expect(sent.map((link) => new URL(link).searchParams.get(`list`))).toEqual([JSON.stringify([shop]), `[]`]);
+    expect(sent.map((link) => [new URL(link).searchParams.get(`list`), new URL(link).searchParams.get(`account`)])).toEqual([
+        [JSON.stringify([shop]), JSON.stringify({ email: `ada@example.com` })],
+        [JSON.stringify([shop]), JSON.stringify({ email: `bo@example.com` })],
+        [`[]`, null],
+    ]);
+});
+
+/* THE APP TAKING A LOADED PAGE TO A PATH WITHOUT A RELOAD (windows.rs `open_in_place`). */
+test("the page registers its opener only inside the app, and routes only its own paths", async () => {
+    const { installDesktopOpener } = await load();
+    const went: string[] = [];
+    const go = async (path: string): Promise<void> => {
+        went.push(path);
+    };
+    // A browser has no app to call it.
+    installDesktopOpener(go);
+    expect(fakeWindow()).toEqual({});
+
+    fakeWindow().__INTENTIC_DESKTOP__ = { version: `1.0.0`, installId: `id`, update: null };
+    installDesktopOpener(go);
+    const open = fakeWindow().__INTENTIC_OPEN__;
+    open?.(`/?sandbox=cm2research`);
+    open?.(`/setup`);
+    // Not a path of this page: another host, or no root at all.
+    open?.(`//elsewhere.example/x`);
+    open?.(`https://elsewhere.example/`);
+    open?.(`setup`);
+    expect(went).toEqual([`/?sandbox=cm2research`, `/setup`]);
+});
+
+test("a path the page could not route in place is loaded, as the app would have loaded it", async () => {
+    const { installDesktopOpener } = await load();
+    const { sent } = recordedLocation();
+    fakeWindow().__INTENTIC_DESKTOP__ = { version: `1.0.0`, installId: `id`, update: null };
+    const quiet = jest.spyOn(console, `error`).mockImplementation(() => undefined);
+    installDesktopOpener(() => Promise.reject(new Error(`no route`)));
+    fakeWindow().__INTENTIC_OPEN__?.(`/?sandbox=gone`);
+    await Promise.resolve();
+    await Promise.resolve();
+    quiet.mockRestore();
+    expect(sent).toEqual([`/?sandbox=gone`]);
 });

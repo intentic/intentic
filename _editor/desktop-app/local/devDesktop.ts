@@ -1,7 +1,7 @@
 import type { InvokeArgs } from "@tauri-apps/api/core";
 import { emit } from "@tauri-apps/api/event";
 import { mockIPC } from "@tauri-apps/api/mocks";
-import type { DesktopInfo, HomeFacts, LocalRecent, LocalSandbox, SandboxStatus, SetupArgs, UpdateStage } from "../src/desktop";
+import type { DesktopInfo, HomeFacts, LocalRecent, LocalRoster, LocalSandbox, SandboxStatus, SetupArgs, UpdateStage } from "../src/desktop";
 
 // THE APP, STOOD IN FOR ON A DEV SERVER. The local face in a plain browser (`pnpm dev:local`) has no Tauri behind it, so
 // every command the shell and This device call would throw. This answers them from a few fixed machines, through Tauri's
@@ -39,7 +39,7 @@ const recents: LocalRecent[] = [
 ];
 
 // The account's sandboxes as the workspace last listed them: one here, one in the cloud, one somebody shared.
-const ROSTER: LocalSandbox[] = [
+const SANDBOXES: LocalSandbox[] = [
     { id: `cm1shop`, name: `shop`, place: `device`, shared: false },
     { id: `cm2research`, name: `research`, place: `cloud`, shared: false },
     { id: `cm3kasia`, name: `kasia-site`, place: `shared`, shared: true },
@@ -102,7 +102,7 @@ const runSetup = async (): Promise<void> => {
 };
 
 /** What a command answers: the app's own types, or nothing for a verb whose effect is elsewhere. */
-type Answer = DesktopInfo | HomeFacts | LocalRecent[] | LocalSandbox[] | UpdateStage | SandboxStatus[] | SetupArgs | string | boolean | null | Promise<void> | { memoryBytes: number; cpus: number };
+type Answer = DesktopInfo | HomeFacts | LocalRecent[] | LocalRoster | UpdateStage | SandboxStatus[] | SetupArgs | string | boolean | null | Promise<void> | { memoryBytes: number; cpus: number };
 
 const DESKTOP_INFO: DesktopInfo = {
     version: `1.318.0`,
@@ -121,7 +121,10 @@ const ANSWERS = new Map<string, (machine: Machine) => Answer>([
     [`desktop_info`, () => DESKTOP_INFO],
     [`home_facts`, (machine) => ({ accountSeen: signedIn(machine), lastFace: `home`, hostsSandboxes: signedIn(machine), homeFolder: `${HOME}\\intentic\\local` })],
     [`local_recents`, () => recents],
-    [`local_sandboxes`, (machine) => (signedIn(machine) ? ROSTER : [])],
+    [
+        `local_roster`,
+        (machine) => (signedIn(machine) ? { account: { email: `ada@example.com`, name: `Ada Lovelace` }, sandboxes: SANDBOXES } : { account: null, sandboxes: [] }),
+    ],
     [`update_state`, () => ({ kind: `current` })],
     [`docker_listening`, signedIn],
     [`docker_ready`, signedIn],

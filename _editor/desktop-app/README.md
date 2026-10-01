@@ -29,14 +29,17 @@ flowchart LR
   bundle (`index.html`) now draws one thing, the close question (`CloseConfirm.vue`).
 - **The main window.** The editor's shell with the sandbox shell's rail, holding what needs no sandbox and no
   account: at the top the place chip (the folder this window shows, and every other place, in the order the
-  workspace's sandbox switcher lists them too: this computer first, with its recent folders and documents and the
-  system's Open folder… and Open file… on one line, then the account's sandboxes, each opening the workspace on itself
-  at `/?sandbox=<id>`, or the sign-in before an account, then This device), then Files (the folder's tree and
-  documents, `/workspace`), then This device (`/device`), and at the foot the way to agents (a sign-in in the default
-  browser until an account has been seen, then the workspace). The sandboxes are the ones the workspace last listed:
-  its switcher hands them over on `intentic://roster` whenever its list changes, a sign-out empties it, and the app
-  keeps it in `roster.json` (`local_sandboxes`), with no address, token or logo, so a row carries a name, where it
-  runs and whether it is shared, and no count or state. Before the workspace has said, the row is the workspace itself. It opens on the folder it was last
+  workspace's sandbox switcher lists them too: this computer first, with its settings on its heading (This device),
+  its recent folders and documents, and the system's Open folder… and Open file… on one line, then the account's
+  sandboxes, each opening the workspace on itself at `/?sandbox=<id>` and picked from anywhere in the window by
+  Alt+1–9 as in the workspace, or the sign-in before an account), then Files (the folder's tree and documents,
+  `/workspace`), then This device (`/device`), and at the foot the account as the sandbox shell draws it (who is
+  signed in, the workspace, and the account's settings, where signing out is), or the sign-in in the default browser
+  until an account has been seen. The sandboxes and the account are what the workspace last told the app: its
+  switcher hands them over on `intentic://roster` whenever either changes, a sign-out empties them, and the app keeps
+  them in `roster.json` (`local_roster`), with no address, token or logo, so a row carries a name, where it runs and
+  whether it is shared, and no count or state, and the account an address, a name and an `https` avatar. Before the
+  workspace has said, the row is the workspace itself and the account has no name. It opens on the folder it was last
   pointed at (`home-folder.json`), or on `~/intentic/local`, which a first launch creates: nothing is asked before the
   first screen. A folder picked on the place chip takes the window's place (`local_point`: a grant of its own, the old
   one revoked, the page reloaded onto the new face at `#/workspace`), after the page has asked about anything unsaved;
@@ -46,7 +49,9 @@ flowchart LR
   since the asset protocol answers `files/local` with the local page and an address below it with the bundle's other
   page.
 - **This device.** A view this app adds to the local shell (`src/host.ts`, the web's
-  `app/environments/localHost.ts`), where the launcher's card used to be: this computer's sandboxes with every verb the
+  `app/environments/localHost.ts`), titled This computer on screen, the name the workspace's switcher, the tray and the
+  place chip give this machine (this page and the code keep This device as the view's name), where the launcher's card
+  used to be: this computer's sandboxes with every verb the
   workspace's Devices tab has for them (start, stop, restart, update, rollback, resources, logs, remove), its machine
   agent and its Restart, the Docker engine they run in, and the app's own work here, which leads the page while it runs: a
   setup handed over from the workspace, with its requirements and its plan, and a sync enrollment. Its state is a store
@@ -56,6 +61,12 @@ flowchart LR
   one is for and offered the way to one, and nothing about Docker. Only the main window takes the work the app parks
   for its face (a setup, a recreate, a sync, a sleeping engine); every local window draws the same view and runs its
   verbs. The machine is read when the page opens and every 30 seconds while it is on screen.
+- **The workspace, opened somewhere.** A press that opens the workspace at a path (a sandbox on the place chip, the
+  account's settings) swaps the workspace into the main window's frame and, when its page is already loaded, tells
+  that page the path instead of loading it again (`open_in_place` in `windows.rs`): a script the app runs in the page
+  calls the opener the page registered (`__INTENTIC_OPEN__`, the web's `installDesktopOpener`), which selects the
+  sandbox the path names and routes there in place. A page that registered none, from another origin or still
+  loading, is loaded at the address, as before the opener existed.
 - **Native work is the public scripts.** Setup, sync and everything done to a sandbox run the same `connect`,
   `sync` and `recreate` scripts the copy-paste one-liners run. `stage-desktop-scripts.sh` copies them from
   `_site/site/public/scripts` at the current commit, so an uncommitted script edit does not reach `tauri dev` or a
@@ -119,7 +130,11 @@ flowchart LR
   computer took two presses and a face swap to reach the sandbox they meant, while the workspace's switcher reached
   this computer in one. The local window cannot list them itself (its page reaches only loopback and the app, and the
   app holds no session), so the workspace tells the app. Giving the local page a platform session and the platform
-  in its policy was rejected: that page draws documents nobody vouched for.
+  in its policy was rejected: that page draws documents nobody vouched for. With them came the rest of the sandbox
+  shell's shape: the same digits for the same places in both windows (Alt+0 this computer, Alt+1–9 the sandboxes),
+  the account at the rail's foot where the way to agents was (that way is the place chip now), one name for this
+  machine on screen, and a switch that does not reload the workspace. Renaming the view This computer everywhere
+  was rejected: the workspace's Devices tab says "This device" of a paired machine, a different thing.
 
   (2026-09-30) The launcher window is gone. It was a card of its own design between the reader and everything else:
   Home (open a folder or a file, recents, sign-in), This device (Docker, the agent, sandboxes), and a handed-over setup,
@@ -190,7 +205,7 @@ every link and drops what an outside sender may not ask for. The editor builds t
 | `fix?slug=…[&code=…]` | app windows | Runs `ic sandbox fix` for that sandbox here and shows it on This device; `code` is the recovery panel's fix code, which `ic` claims so the panel follows the run. A slug or code that is not a plain token drops the link. |
 | `update` | app windows | Installs the downloaded update and restarts. |
 | `launcher[?to=files]` | app windows | Brings the main window back in the workspace's place: at This device (a setup's way back to its run, a sandbox's restart), or at its folder with `to=files` (the sandbox switcher's "This computer"). |
-| `roster?list=<JSON>` | app windows | The account's sandboxes as the workspace's switcher lists them (`id`, `name`, `place`, `shared`), kept in `roster.json` for the place chip; `[]` after a sign-out. One row out of shape (an id that is not a plain token, a name empty, over 200 characters or holding a control character, a place that is not a lowercase word) drops the list. |
+| `roster?list=<JSON>[&account=<JSON>]` | app windows | The account's sandboxes as the workspace's switcher lists them (`id`, `name`, `place`, `shared`) and who is signed in (`email`, `name`, `image`), kept in `roster.json` for the place chip and the rail's foot; `[]` and no account after a sign-out. One value out of shape drops the link: an id that is not a plain token, a name empty, over 200 characters or holding a control character, a place that is not a lowercase word, an account without an address, an avatar that is not an `https` address. |
 | `window?do=…` | app and local windows | The editor's own title bar: `ready`, `minimize`, `maximize`, `close[&confirmed=1]`, `dirty&value=0\|1`, `drag`, `raise`, `fit`, `mode`. |
 | `local?do=…` | local windows only | `open-folder` and `open-file` in the system dialog, `reveal[&path=…]` an entry of the window's own folder, `sandbox`, `ask&path=…`, and the project's `changes`, `bring-back[&paths=<JSON array>]`, `restore&point=…`, `direction&value=to-sandbox\|both`. |
 
@@ -248,7 +263,7 @@ reloaded onto their new address and token.
 - [src-tauri/src/local.rs](src-tauri/src/local.rs) — the local windows: the main one and its folder, each window's grant, pointing a window at another folder, the warm window, handoffs, launch arguments; the `intentic-files` process itself, its generations and trash asks, is `sidecar.rs`.
 - [src-tauri/src/setup_link.rs](src-tauri/src/setup_link.rs) — every `intentic://` link and which senders it is believed from.
 - [src-tauri/src/commands.rs](src-tauri/src/commands.rs) — the Tauri commands This device calls, and the script each run starts.
-- [src/host.ts](src/host.ts) — this app's half of the local shell: its places, the way to agents, and the This device view it adds to the rail.
+- [src/host.ts](src/host.ts) — this app's half of the local shell: its places, the account and its sandboxes, and the This device view it adds to the rail.
 - [src/device/useDevice.ts](src/device/useDevice.ts) — This device's store: the machine's sandboxes, agent and engine, and the setups, recreates and syncs the app runs here.
 
 ## Building

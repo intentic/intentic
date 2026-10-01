@@ -1,23 +1,25 @@
 <script setup lang="ts">
 import { AnchoredOverlay, ConfirmDialog, formatDateTime, freshness, Notice, SandboxLogo, type Tip, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
-import { computed, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
 import { askLocalApp, localFace } from "../app/environments/local";
 import { type LocalFacts, type LocalPlace, type LocalSandbox, localHost } from "../app/environments/localHost";
 import { placementOfKind } from "../features/sandbox/overview/placement";
+import { formatChord, isApplePlatform } from "../shell/commands/keybindings";
+import { sandboxSlot, sandboxSlotChord } from "./localKeys";
 import { externalDirtyPaths } from "../features/workspace/files/externalDirty";
 import { useEditBuffers } from "../features/workspace/files/useEditBuffers";
 import { nameOf, openedAtMs, otherPlaces, whereOf } from "./places";
 
 // THE PLACE CHIP: the top of a local window's rail, where the sandbox shell keeps its sandbox switcher, and the same
 // control. It says which folder of this computer the window shows, and opens onto every other place, in the order the
-// sandbox switcher lists them too: this computer first (the folders and documents it opened lately, and any other one by
-// the system's own dialog), then each of the account's sandboxes. A folder picked here takes this window's place (the
+// sandbox switcher lists them too: this computer first (the folders and documents it opened lately, any other one by the
+// system's own dialog, and its settings on its heading), then each of the account's sandboxes. A folder picked here takes this window's place (the
 // app re-points the window, localHost.ts `point`); a document opens where the app puts it, beside the folder that holds
 // it; a sandbox opens the workspace on it, which in the main window takes this window's place too.
 //
-// The sandboxes are the ones the workspace last told the app about (localHost.ts `sandboxes`): this page cannot ask
+// The sandboxes are the ones the workspace last told the app about (localHost.ts `roster`): this page cannot ask
 // the platform. So a row carries what came with it (a name, where it runs, whether it is shared) and no count or state,
 // which would be as old as the workspace's last look. Until the workspace has said, the row is the workspace itself.
 
@@ -47,11 +49,11 @@ const reload = async (): Promise<void> => {
     reads += 1;
     const read = reads;
     try {
-        const [listed, known, boxes] = await Promise.all([host.places(), host.facts(), host.sandboxes()]);
+        const [listed, known, roster] = await Promise.all([host.places(), host.facts(), host.roster()]);
         if (read === reads) {
             places.value = listed;
             facts.value = known;
-            sandboxes.value = boxes;
+            sandboxes.value = roster.sandboxes;
         }
     } catch (error) {
         console.error(`[local] the recent places could not be read:`, error);
@@ -148,6 +150,36 @@ const pickSandbox = (box: LocalSandbox): void =>
     void attempt(sandboxKey(box), () => host.openWorkspace(`/?${new URLSearchParams({ sandbox: box.id }).toString()}`));
 const addSandbox = (): void => void attempt(`:add`, () => host.openWorkspace(`/setup`));
 
+// Alt+1…9 from anywhere in the window, as in the workspace: the list is read fresh, so the digit names the sandbox the
+// workspace last listed in that place even while this menu has never been opened.
+const isMac = isApplePlatform();
+const slotLabel = (at: number): string | undefined => {
+    const chord = sandboxSlotChord(at);
+    return chord === undefined ? undefined : formatChord(chord, isMac);
+};
+const pickSlot = async (at: number): Promise<void> => {
+    try {
+        sandboxes.value = (await host.roster()).sandboxes;
+    } catch (error) {
+        console.error(`[local] the sandboxes could not be read:`, error);
+        return;
+    }
+    const box = sandboxes.value[at];
+    if (box !== undefined) {
+        pickSandbox(box);
+    }
+};
+const onKeydown = (event: KeyboardEvent): void => {
+    const at = sandboxSlot(event, isMac);
+    if (at === undefined) {
+        return;
+    }
+    event.preventDefault();
+    void pickSlot(at);
+};
+onMounted(() => window.addEventListener(`keydown`, onKeydown));
+onUnmounted(() => window.removeEventListener(`keydown`, onKeydown));
+
 const rowClass = `group flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors hover:bg-content/5`;
 // Open folder and Open file share one line: a pair of the same verb, and the list under them grows with the sandboxes.
 const halfRowClass = `flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors hover:bg-content/5`;
@@ -181,7 +213,24 @@ const agentsFailure = computed(() => failedAt(`:agents`, `:add`));
 
     <AnchoredOverlay v-model="open" :anchor="trigger ?? undefined" side="right" cross="start">
         <div class="flex w-72 flex-col gap-0.5 p-1">
-            <div class="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-subtle">{{ t(`local.placeSwitcher.onThisComputer`) }}</div>
+            <!-- This computer's own heading, and its settings beside it (This device's screen, the app's view): the one
+                 machine has one name here, and its settings sit with it as Sandbox settings sit with a sandbox. -->
+            <div class="flex items-center gap-1 px-2 py-1">
+                <span class="min-w-0 flex-1 truncate text-2xs font-semibold uppercase tracking-wide text-subtle">{{
+                    t(`local.placeSwitcher.onThisComputer`)
+                }}</span>
+                <RouterLink
+                    v-for="view in host.views"
+                    :key="view.path"
+                    :to="`/${view.path}`"
+                    :class="ui.iconButton(`h-5 w-5 rounded text-subtle`)"
+                    :aria-label="view.title()"
+                    v-tooltip.top="{ title: view.title(), note: t(`local.placeSwitcher.computerSettingsNote`) }"
+                    @click="open = false"
+                >
+                    <Icon name="cog" class="text-xs" />
+                </RouterLink>
+            </div>
 
             <!-- The folder this window shows: lit, as the sandbox switcher lights the sandbox open, with its way to the file manager. -->
             <div class="flex items-center gap-2 rounded-md bg-primary-600/15 px-2 py-1 text-xs">
@@ -275,7 +324,7 @@ const agentsFailure = computed(() => failedAt(`:agents`, `:add`));
             <!-- The other kind of place: the account's sandboxes, where agents work, each opening the workspace on itself. -->
             <div class="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-subtle">{{ t(`shared.sandboxes`) }}</div>
             <template v-if="facts?.accountSeen === true">
-                <template v-for="box in sandboxes" :key="box.id">
+                <template v-for="(box, at) in sandboxes" :key="box.id">
                     <button type="button" :class="rowClass" @click="pickSandbox(box)">
                         <span v-if="working === sandboxKey(box)" class="flex h-5 w-5 shrink-0 items-center justify-center text-subtle">
                             <Icon name="spinner" spin class="text-xs" />
@@ -291,6 +340,10 @@ const agentsFailure = computed(() => failedAt(`:agents`, `:add`));
                             :aria-label="placementOfKind(box.place).detail"
                         />
                         <span v-if="box.shared" class="ui-status-pill shrink-0 bg-content/10 text-2xs font-medium text-subtle">{{ t(`shared.shared`) }}</span>
+                        <!-- The same chord as the workspace's row for this sandbox, the only place it can be learned here. -->
+                        <kbd v-if="slotLabel(at)" class="shrink-0 rounded border border-line px-1 font-mono text-2xs font-normal leading-4 text-subtle">{{
+                            slotLabel(at)
+                        }}</kbd>
                         <!-- Only where the workspace opens in another window: from the main one it takes this one's place. -->
                         <Icon v-if="!inMainWindow" name="arrow-up-right" class="shrink-0 text-2xs text-subtle" />
                     </button>
@@ -331,17 +384,6 @@ const agentsFailure = computed(() => failedAt(`:agents`, `:add`));
                 <Notice tone="danger" class="text-2xs">{{ agentsFailure }}</Notice>
             </div>
 
-            <!-- This device: this computer's own settings, where the sandbox switcher ends on the sandbox's. The rail offers it too. -->
-            <template v-if="host.views.length > 0">
-                <div class="my-1 border-t border-line"></div>
-                <RouterLink v-for="view in host.views" :key="view.path" :to="`/${view.path}`" :class="rowClass" @click="open = false">
-                    <span class="flex h-5 w-5 shrink-0 items-center justify-center text-muted">
-                        <Icon name="desktop" class="text-sm" />
-                    </span>
-                    <span class="min-w-0 flex-1 truncate text-content">{{ view.title() }}</span>
-                    <Icon name="chevron-right" class="shrink-0 text-2xs text-subtle" />
-                </RouterLink>
-            </template>
         </div>
     </AnchoredOverlay>
 

@@ -141,23 +141,75 @@ pub struct RosterEntry {
     pub shared: bool,
 }
 
+/// Who is signed in to the workspace, as its account control shows them: what a local window's rail foot draws. The
+/// avatar only as an `https` address: an uploaded one is an inline data URL, too long to ride a link.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RosterAccount {
+    pub email: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image: Option<String>,
+}
+
+/// What the workspace tells the app about its account (`intentic://roster`): who is signed in, and their sandboxes in
+/// the switcher's order. Both empty after a sign-out.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Roster {
+    #[serde(default)]
+    pub account: Option<RosterAccount>,
+    #[serde(default)]
+    pub sandboxes: Vec<RosterEntry>,
+}
+
 /// The most rows a roster carries; more than the switcher would ever draw, and a bound on what a link can make the app
 /// write.
 const ROSTER_MAX: usize = 200;
 
+/// Text a row or the account shows: present, bounded, and on one line.
+fn is_shown_text(text: &str, max: usize) -> bool {
+    (1..=max).contains(&text.chars().count()) && !text.chars().any(char::is_control)
+}
+
+fn is_roster_account(account: &RosterAccount) -> bool {
+    is_shown_text(&account.email, 320)
+        && account.email.contains('@')
+        && !account.email.contains(char::is_whitespace)
+        && account
+            .name
+            .as_deref()
+            .is_none_or(|name| is_shown_text(name, 200))
+        && account.image.as_deref().is_none_or(|image| {
+            image.len() <= 2048 && url::Url::parse(image).is_ok_and(|url| url.scheme() == "https")
+        })
+}
+
 fn is_roster_entry(entry: &RosterEntry) -> bool {
     is_sandbox_id(&entry.id)
-        && (1..=200).contains(&entry.name.chars().count())
-        && !entry.name.chars().any(char::is_control)
+        && is_shown_text(&entry.name, 200)
         && (1..=16).contains(&entry.place.len())
         && entry.place.bytes().all(|byte| byte.is_ascii_lowercase())
 }
 
-/// `roster`'s `list`: a JSON array of [`RosterEntry`], empty for an account with none (or none any more, a sign-out).
-/// One malformed row drops the whole list rather than drawing the rest as if it were all of them.
-fn roster_of(json: &str) -> Option<Vec<RosterEntry>> {
-    let entries: Vec<RosterEntry> = serde_json::from_str(json).ok()?;
-    (entries.len() <= ROSTER_MAX && entries.iter().all(is_roster_entry)).then_some(entries)
+/// `roster`'s `list`, a JSON array of [`RosterEntry`] (empty for an account with none, or none any more: a sign-out),
+/// and its `account`, a [`RosterAccount`] (absent after a sign-out). One malformed row, or an account out of shape,
+/// drops the whole link rather than drawing the rest as if it were all of it.
+fn roster_of(list: &str, account: Option<&str>) -> Option<Roster> {
+    let sandboxes: Vec<RosterEntry> = serde_json::from_str(list).ok()?;
+    if sandboxes.len() > ROSTER_MAX || !sandboxes.iter().all(is_roster_entry) {
+        return None;
+    }
+    let account = match account {
+        Some(json) => Some(
+            serde_json::from_str::<RosterAccount>(json)
+                .ok()
+                .filter(is_roster_account)?,
+        ),
+        None => None,
+    };
+    Some(Roster { account, sandboxes })
 }
 
 /// `intentic://setup?code=…` — run the sandbox this setup code was minted for on this device.
@@ -314,10 +366,10 @@ pub enum Link {
     Launcher {
         files: bool,
     },
-    /// `intentic://roster?list=<JSON>`: the account's sandboxes as the workspace's switcher lists them, sent whenever
-    /// that list changes and emptied by a sign-out, kept so a local window's switcher can list them too (state.rs
-    /// `remember_roster`). App-window only: a link from anywhere else could fill that list with rows of its choosing.
-    Roster(Vec<RosterEntry>),
+    /// `intentic://roster?list=<JSON>[&account=<JSON>]`: who is signed in to the workspace and the sandboxes its
+    /// switcher lists, sent whenever either changes and emptied by a sign-out, kept so a local window can show them too
+    /// (state.rs `remember_roster`). App-window only: a link from anywhere else could fill them with what it chose.
+    Roster(Roster),
     /// See [`WindowVerb`]: the workspace SPA's own title bar, which is a link channel rather than IPC for the
     /// same reason everything else here is.
     Window(WindowVerb),
@@ -392,7 +444,9 @@ pub fn parse_link(url: &str, source: Source) -> Option<Link> {
         "launcher" => source.is_app().then(|| Link::Launcher {
             files: get("to").as_deref() == Some("files"),
         }),
-        "roster" if source.is_app() => roster_of(&get("list")?).map(Link::Roster),
+        "roster" if source.is_app() => {
+            roster_of(&get("list")?, get("account").as_deref()).map(Link::Roster)
+        }
         "roster" => None,
         // App-window only, like `update`, and for a sharper reason: see [`SyncArgs`]. There is nothing to
         // strip and keep — the url and the token ARE the request — so an external copy is refused whole.
@@ -725,25 +779,28 @@ mod tests {
         let json = r#"[{"id":"cm9x_01","name":"Shop: API","place":"cloud","shared":false},{"id":"b2","name":"Kasia's","place":"shared","shared":true,"image":"data:x"}]"#;
         assert_eq!(
             parse_link(&roster_link(json), APP),
-            Some(Link::Roster(vec![
-                RosterEntry {
-                    id: "cm9x_01".into(),
-                    name: "Shop: API".into(),
-                    place: "cloud".into(),
-                    shared: false,
-                },
-                RosterEntry {
-                    id: "b2".into(),
-                    name: "Kasia's".into(),
-                    place: "shared".into(),
-                    shared: true,
-                },
-            ]))
+            Some(Link::Roster(Roster {
+                account: None,
+                sandboxes: vec![
+                    RosterEntry {
+                        id: "cm9x_01".into(),
+                        name: "Shop: API".into(),
+                        place: "cloud".into(),
+                        shared: false,
+                    },
+                    RosterEntry {
+                        id: "b2".into(),
+                        name: "Kasia's".into(),
+                        place: "shared".into(),
+                        shared: true,
+                    },
+                ],
+            }))
         );
         // A sign-out empties it.
         assert_eq!(
             parse_link(&roster_link("[]"), APP),
-            Some(Link::Roster(Vec::new()))
+            Some(Link::Roster(Roster::default()))
         );
         assert_eq!(parse_link(&roster_link(json), Source::External), None);
         assert_eq!(
@@ -751,6 +808,57 @@ mod tests {
             None
         );
         assert_eq!(parse_link("intentic://roster", APP), None);
+    }
+
+    /// Who is signed in rides beside the list: an address, and a name and an `https` avatar when there are any.
+    #[test]
+    fn the_account_rides_with_the_sandboxes_and_only_in_its_shape() {
+        let with = |account: &str| {
+            format!(
+                "{}&account={}",
+                roster_link("[]"),
+                url::form_urlencoded::byte_serialize(account.as_bytes()).collect::<String>()
+            )
+        };
+        assert_eq!(
+            parse_link(
+                &with(
+                    r#"{"email":"ada@example.com","name":"Ada L","image":"https://lh3.example.com/a.png"}"#
+                ),
+                APP
+            ),
+            Some(Link::Roster(Roster {
+                account: Some(RosterAccount {
+                    email: "ada@example.com".into(),
+                    name: Some("Ada L".into()),
+                    image: Some("https://lh3.example.com/a.png".into()),
+                }),
+                sandboxes: Vec::new(),
+            }))
+        );
+        assert!(matches!(
+            parse_link(&with(r#"{"email":"ada@example.com"}"#), APP),
+            Some(Link::Roster(Roster {
+                account: Some(RosterAccount {
+                    name: None,
+                    image: None,
+                    ..
+                }),
+                ..
+            }))
+        ));
+        // Out of shape, and the whole link goes: no address, an address that is not one, a line break in the name,
+        // an avatar that is not an https address.
+        for account in [
+            r#"{"name":"Ada"}"#,
+            r#"{"email":"ada example.com"}"#,
+            r#"{"email":"ada@example.com","name":"Ada
+L"}"#,
+            r#"{"email":"ada@example.com","image":"data:image/png;base64,AAAA"}"#,
+            r#"{"email":"ada@example.com","image":"http://lh3.example.com/a.png"}"#,
+        ] {
+            assert_eq!(parse_link(&with(account), APP), None, "{account}");
+        }
     }
 
     /// One row the switcher could not draw honestly drops the list, rather than listing the rest as all of them.
@@ -763,7 +871,7 @@ mod tests {
         };
         assert!(matches!(
             parse_link(&row("b", "Second", "device"), APP),
-            Some(Link::Roster(rows)) if rows.len() == 2
+            Some(Link::Roster(roster)) if roster.sandboxes.len() == 2
         ));
         assert_eq!(parse_link(&row("../b", "Second", "own"), APP), None);
         assert_eq!(

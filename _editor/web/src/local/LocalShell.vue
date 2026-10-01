@@ -9,12 +9,13 @@ import { railFrame } from "../shell/rail/railFrame";
 import RailTile from "../shell/rail/RailTile.vue";
 import { useIconRailSize } from "../shell/rail/useIconRailSize";
 import { navigatedPath } from "./appEvents";
-import LocalAgentsTile from "./LocalAgentsTile.vue";
+import LocalAccountTile from "./LocalAccountTile.vue";
 import LocalPlaceSwitcher from "./LocalPlaceSwitcher.vue";
 
 // THE SHELL OF A DESKTOP WINDOW ON A FOLDER OF THIS COMPUTER: the sandbox shell's rail and page, holding what needs no
-// sandbox and no account. At the top, the place this window shows (LocalPlaceSwitcher); under it Files, the folder
-// itself, then every view the app adds (This device, localHost.ts); at the foot, the way to agents (LocalAgentsTile). The
+// sandbox and no account. At the top, the place this window shows and every other one, the account's sandboxes
+// included (LocalPlaceSwitcher); under it Files, the folder itself, then every view the app adds (This device, titled
+// This computer, localHost.ts); at the foot, the account, or the sign-in before there is one (LocalAccountTile). The
 // tiles are the sandbox shell's own (shell/rail/iconRail.css), so signing in changes what the rail holds, never what it is.
 
 const t = useT();
@@ -77,9 +78,9 @@ onUnmounted(() => window.removeEventListener(LOCAL_NAVIGATE_EVENT, onNavigate));
                 />
             </div>
 
-            <!-- At the foot, where the sandbox shell keeps the account: the way to agents, which is the one thing an account adds. -->
+            <!-- At the foot, where the sandbox shell keeps the account: the account, or the sign-in that brings one. -->
             <div class="mt-auto flex flex-col items-center">
-                <LocalAgentsTile />
+                <LocalAccountTile />
             </div>
         </nav>
 

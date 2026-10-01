@@ -2555,12 +2555,11 @@
             "switchAnyway": "Switch anyway",
             "switchingDiscardsUnsaved": "Opening another folder here discards their unsaved edits. This can't be undone.",
             "reveal": "Reveal folder",
-            "forgetNote": "Only from this list"
+            "forgetNote": "Only from this list",
+            "computerSettingsNote": "Sandboxes, agent, Docker, updates"
         },
         "agentsTile": {
-            "workspace": "Your workspace",
             "putAgentsToWork": "Put agents to work",
-            "workspaceLead": "Your agents and sandboxes are in your workspace. It opens in this window, and this computer's files stay one click away.",
             "agentsLead": "Agents work in a sandbox: on this computer, in Docker, or on a machine we host. Sign in to set one up.",
             "finishInBrowser": "Finish signing in in your browser. Your workspace opens here when you're done.",
             "openWorkspace": "Open workspace",
@@ -4237,7 +4236,8 @@
             "thisComputer": "This computer",
             "thisComputerNote": "Your files, no sandbox needed",
             "notOnAccount": "That sandbox isn't on your account any more",
-            "notOnAccountDetail": "This is the sandbox you had open last."
+            "notOnAccountDetail": "This is the sandbox you had open last.",
+            "switchToThisComputer": "Switch to This computer"
         },
         "sandboxSyncToggles": {
             "filesAndPorts": "Files and ports",

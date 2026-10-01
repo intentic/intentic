@@ -417,6 +417,9 @@ pub fn show_workspace_at(app: &AppHandle, path: Option<&str>) {
     state.remember_last_face(Face::Workspace);
     crate::offer_workspace(app);
     let base = state.app_url();
+    let origin = url::Url::parse(&base)
+        .map(|url| url.origin().ascii_serialization())
+        .unwrap_or_default();
     let target = match path {
         Some(path) => format!("{}{path}", base.trim_end_matches('/')),
         None => base,
@@ -428,12 +431,19 @@ pub fn show_workspace_at(app: &AppHandle, path: Option<&str>) {
         // The workspace coming back is the cheapest evidence this machine is awake and being used, which the
         // six-hourly timer cannot see through a night of sleep (update.rs).
         crate::update::nudge(app);
-        if path.is_some() {
-            match target.parse() {
-                Ok(url) => {
-                    let _ = window.navigate(url);
+        if let Some(path) = path {
+            // Told to the page already loaded, which routes there itself: a sandbox picked in a local window's
+            // switcher is a switch, not a reload of the whole workspace (`open_in_place`).
+            if let Err(error) = window.eval(open_in_place(&origin, path, &target)) {
+                eprintln!(
+                    "the workspace could not be told where to go ({error}); loading {target}"
+                );
+                match target.parse() {
+                    Ok(url) => {
+                        let _ = window.navigate(url);
+                    }
+                    Err(error) => eprintln!("workspace path is not a url: {target} ({error})"),
                 }
-                Err(error) => eprintln!("workspace path is not a url: {target} ({error})"),
             }
         }
         return;
@@ -491,6 +501,24 @@ pub fn show_workspace_at(app: &AppHandle, path: Option<&str>) {
 
 pub fn show_workspace(app: &AppHandle) {
     show_workspace_at(app, None);
+}
+
+/// What the workspace page registers to be told a path without a reload (the web's desktop.ts
+/// `installDesktopOpener`).
+const PAGE_OPENER: &str = "__INTENTIC_OPEN__";
+
+/// The script that takes a loaded workspace page to `path`: through the page's own opener, which routes in place and
+/// selects a sandbox the path names, when the page is the workspace's and has one; otherwise by loading `target`, as
+/// every app did before the opener existed, so a page older than this app (or one still loading) is never left where
+/// it was. Each value rides as a JSON string, which is a JavaScript string literal, so a path cannot end the statement.
+fn open_in_place(origin: &str, path: &str, target: &str) -> String {
+    let literal = |value: &str| serde_json::to_string(value).unwrap_or_else(|_| "\"\"".to_string());
+    format!(
+        "(() => {{ const open = window.{PAGE_OPENER}; if (location.origin === {origin} && typeof open === 'function') {{ open({path}); }} else {{ location.href = {target}; }} }})();",
+        origin = literal(origin),
+        path = literal(path),
+        target = literal(target),
+    )
 }
 
 /// This computer, because the user asked for it (a launch into it, the tray's "This computer", "Open Intentic" on an
@@ -1604,9 +1632,9 @@ pub fn handle_link(app: &AppHandle, link: &str, source: Source) {
             show_home_at(app, Some(FILES_ROUTE), Keyboard::Take);
         }
         Some(Link::Launcher { files: false }) => show_device(app),
-        // The workspace's sandboxes, for the local windows' switcher to list (state.rs `remember_roster`). Nothing is
-        // shown: the page sends it whenever its list changes, not because the reader asked for anything.
-        Some(Link::Roster(entries)) => app.state::<AppState>().remember_roster(entries),
+        // The workspace's account and sandboxes, for the local windows to show (state.rs `remember_roster`). Nothing
+        // is shown now: the page sends it whenever either changes, not because the reader asked for anything.
+        Some(Link::Roster(roster)) => app.state::<AppState>().remember_roster(roster),
         // The page saying what light it is drawn in; about this app's faces, not the workspace window.
         Some(Link::Window(WindowVerb::Mode(mode))) => apply_mode(app, mode),
         // The page's own title bar, working the window it is drawn in (`work_the_window`). Nothing is parked
@@ -2208,6 +2236,21 @@ mod frame_tests {
         assert!(script.contains("\"state\":\"running\""), "{script}");
         // The quotes inside the name are escaped, so the script is still one statement.
         assert!(script.contains("my \\\"site\\\" </script>"), "{script}");
+    }
+
+    /// A loaded workspace is told the path through its own opener, and falls back to loading the address; the path
+    /// arrives as one string however it is spelled.
+    #[test]
+    fn a_loaded_workspace_is_told_the_path_and_loads_it_only_without_an_opener() {
+        let script = open_in_place(
+            "https://app.intentic.dev",
+            "/?sandbox=a\"b');x",
+            "https://app.intentic.dev/?sandbox=a\"b');x",
+        );
+        assert_eq!(
+            script,
+            "(() => { const open = window.__INTENTIC_OPEN__; if (location.origin === \"https://app.intentic.dev\" && typeof open === 'function') { open(\"/?sandbox=a\\\"b');x\"); } else { location.href = \"https://app.intentic.dev/?sandbox=a\\\"b');x\"; } })();"
+        );
     }
 
     /// The close confirmation opens in the MIDDLE of the window it is asking about, not on its corner — which

@@ -23,7 +23,7 @@ import { mintsOnArrival } from "../features/auth/handoffSpent";
 import { useSandbox } from "../features/sandbox/client/useSandbox";
 import { useRole } from "../features/sandbox/secrets/useRole";
 import { retryOnEntry } from "./platformRetry";
-import { arriveOnSandbox } from "./sandboxArrival";
+import { arriveOnSandbox, type SandboxArrivalRoute } from "./sandboxArrival";
 import { setupRedirect } from "./setupGate";
 import { signInAt } from "./signIn";
 import { t } from "@intentic/ui/i18n";
@@ -92,11 +92,24 @@ const requireSetup = async (): Promise<boolean | RouteLocationRaw> => {
 
 // A link naming a sandbox (`/?sandbox=<id>`) opens the shell on it; sandboxArrival.ts owns the rule. After the gate, so
 // the list it reads is the one the gate just fetched.
-const openNamedSandbox = (to: RouteLocationNormalized): Promise<true | RouteLocationRaw> => {
+const openNamedSandbox = (to: SandboxArrivalRoute): Promise<true | RouteLocationRaw> => {
     const { list, select } = useSandbox();
     const missing = (): void =>
         useNotifications().report({ tone: `info`, title: t(`sandbox.sandboxSwitcher.notOnAccount`), detail: t(`sandbox.sandboxSwitcher.notOnAccountDetail`) });
     return arriveOnSandbox(to, { list, select, missing });
+};
+
+// THE DESKTOP APP TAKING THIS PAGE TO A PATH WITHOUT A RELOAD (app/environments/desktop.ts `installDesktopOpener`): a
+// sandbox picked in a local window's switcher. Inside the shell the named sandbox is chosen here, the way a link
+// arriving would choose it, since the shell's entry guard does not run again for a shell already entered; outside it,
+// the guards do as they would for the address.
+export const openInPage = async (path: string): Promise<void> => {
+    if (router.currentRoute.value.matched[0]?.path !== `/`) {
+        await router.push(path);
+        return;
+    }
+    const settled = await openNamedSandbox(router.resolve(path));
+    await router.push(settled === true ? path : settled);
 };
 
 // Menu and Terminal are full-screen tabs only on the mobile shell; the desktop shell docks the terminal and puts the

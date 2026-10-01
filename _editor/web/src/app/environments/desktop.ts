@@ -111,12 +111,12 @@ export const announceDesktopMode = (scheme: `light` | `dark`): void => {
     openDesktopLink(`intentic://window?do=mode&mode=${scheme}`);
 };
 
-/* THE ACCOUNT'S SANDBOXES, AS THIS PAGE'S SWITCHER LISTS THEM, handed to the app for its local windows' switcher. */
+/* WHO IS SIGNED IN, AND THE SANDBOXES THIS PAGE'S SWITCHER LISTS, handed to the app for its local windows. */
 
 // A local window cannot ask the platform (it holds no session, and its page reaches nothing but loopback and the app),
-// so the sandboxes its switcher lists are the ones this page last told the app about. One row per sandbox in the
-// switcher's order, and nothing a row is not drawn from: no address, token or logo (a logo is an inline data URL,
-// too long to ride a link). The app takes this only from its own windows (setup_link.rs `roster`).
+// so the account its rail shows and the sandboxes its switcher lists are what this page last told the app. One row per
+// sandbox in the switcher's order, and nothing a row is not drawn from: no address, token or logo (a logo is an inline
+// data URL, too long to ride a link). The app takes this only from its own windows (setup_link.rs `roster`).
 export interface DesktopRosterEntry {
     readonly id: string;
     readonly name: string;
@@ -126,39 +126,117 @@ export interface DesktopRosterEntry {
     readonly shared: boolean;
 }
 
-// What the app holds a row to (setup_link.rs `is_roster_entry`), met here rather than refused there: a whole list is
-// dropped for one row it cannot take. A name is cut by characters, never inside one, and a control character is a space.
+/** The signed-in account as the rail's account control shows it. */
+export interface DesktopRosterAccount {
+    readonly email: string;
+    readonly name?: string | null;
+    readonly image?: string | null;
+}
+
+// What the app holds a row and the account to (setup_link.rs `is_roster_entry`, `is_roster_account`), met here rather
+// than refused there: the whole link is dropped for one value it cannot take. Text is cut by characters, never inside
+// one, and a control character is a space; an account with no usable address is not sent, and an avatar only as an
+// https address (an uploaded one is an inline data URL).
 const ROSTER_ID = /^[A-Za-z0-9_-]{1,64}$/;
 const ROSTER_NAME_MAX = 200;
 const CONTROL = /\p{Cc}/gu;
+const EMAIL = /^[^\s@]+@[^\s@]+$/;
+const IMAGE_MAX = 2048;
+const shownText = (text: string): string => Array.from(text.replace(CONTROL, ` `).trim()).slice(0, ROSTER_NAME_MAX).join(``);
 const rosterRow = (entry: DesktopRosterEntry): DesktopRosterEntry | undefined => {
     if (!ROSTER_ID.test(entry.id)) {
         return undefined;
     }
-    const name = Array.from(entry.name.replace(CONTROL, ` `).trim()).slice(0, ROSTER_NAME_MAX).join(``);
+    const name = shownText(entry.name);
     return { id: entry.id, name: name === `` ? entry.id : name, place: entry.place, shared: entry.shared };
 };
-
-export const desktopRosterLink = (entries: readonly DesktopRosterEntry[]): string => {
-    const rows = entries.map(rosterRow).filter((row): row is DesktopRosterEntry => row !== undefined);
-    return `intentic://roster?${new URLSearchParams({ list: JSON.stringify(rows) }).toString()}`;
+const httpsImage = (image: string | null | undefined): string | undefined =>
+    image !== null && image !== undefined && image.length <= IMAGE_MAX && URL.canParse(image) && new URL(image).protocol === `https:` ? image : undefined;
+// The account as the link carries it (setup_link.rs `RosterAccount`): a name and an avatar only where there are any.
+interface SentAccount {
+    email: string;
+    name?: string;
+    image?: string;
+}
+const rosterAccount = (account: DesktopRosterAccount): SentAccount | undefined => {
+    if (account.email.length > 320 || !EMAIL.test(account.email)) {
+        return undefined;
+    }
+    const sent: SentAccount = { email: account.email };
+    const name = shownText(account.name ?? ``);
+    if (name !== ``) {
+        sent.name = name;
+    }
+    const image = httpsImage(account.image);
+    if (image !== undefined) {
+        sent.image = image;
+    }
+    return sent;
 };
 
-// The last list handed over, so a switcher re-rendering with the same rows sends nothing.
+export const desktopRosterLink = (entries: readonly DesktopRosterEntry[], account?: DesktopRosterAccount): string => {
+    const rows = entries.map(rosterRow).filter((row): row is DesktopRosterEntry => row !== undefined);
+    const params = new URLSearchParams({ list: JSON.stringify(rows) });
+    const signedIn = account === undefined ? undefined : rosterAccount(account);
+    if (signedIn !== undefined) {
+        params.set(`account`, JSON.stringify(signedIn));
+    }
+    return `intentic://roster?${params.toString()}`;
+};
+
+// The last link handed over, so a switcher re-rendering with the same rows and account sends nothing.
 // allow(module-state): one app per page, and what it was last told is a fact about the page
 let rosterSent: string | undefined;
 
-/** Tells the app the account's sandboxes when they changed since it was last told; an empty list after a sign-out. */
-export const announceDesktopRoster = (entries: readonly DesktopRosterEntry[]): void => {
+/** Tells the app the account and its sandboxes when either changed since it was last told; nothing after a sign-out. */
+export const announceDesktopRoster = (entries: readonly DesktopRosterEntry[], account?: DesktopRosterAccount): void => {
     if (desktopVersion() === undefined) {
         return;
     }
-    const link = desktopRosterLink(entries);
+    const link = desktopRosterLink(entries, account);
     if (link === rosterSent) {
         return;
     }
     rosterSent = link;
     openDesktopLink(link);
+};
+
+/* THE APP TAKING THIS PAGE SOMEWHERE WITHOUT A RELOAD: a sandbox picked in a local window's switcher (windows.rs
+   `open_in_place`). The app calls what the page registers here; a page without it is loaded at the address instead. */
+
+declare global {
+    interface Window {
+        __INTENTIC_OPEN__?: (path: string) => void;
+    }
+}
+
+// A path of this page, as the app builds them (`/?sandbox=<id>`, `/setup`): rooted, and never `//`, which a
+// navigation would read as another host.
+const PAGE_PATH = /^\/(?!\/)/;
+
+/**
+ * Registers how this page goes to a path it is told: `go` routes in place. Inside the app only; a path that is not one
+ * of this page's is ignored, and one `go` fails on is loaded the way the app would have loaded it, so the reader still
+ * ends up where they asked.
+ */
+export const installDesktopOpener = (go: (path: string) => Promise<void>): void => {
+    if (desktopVersion() === undefined) {
+        return;
+    }
+    window.__INTENTIC_OPEN__ = (path: string): void => {
+        if (PAGE_PATH.test(path)) {
+            void goOrLoad(go, path);
+        }
+    };
+};
+
+const goOrLoad = async (go: (path: string) => Promise<void>, path: string): Promise<void> => {
+    try {
+        await go(path);
+    } catch (error) {
+        console.error(`[desktop] could not open ${path} in place; loading it:`, error);
+        globalThis.location.href = path;
+    }
 };
 
 /* A drag is the one verb that cannot be held back the way `openDesktopLink` holds every early link: it is a press. */

@@ -5,7 +5,8 @@ import { askLocalApp } from "./local";
 // THE APP'S HALF OF A LOCAL WINDOW'S SHELL. The editor draws the shell around a folder of this computer (local/LocalShell.vue):
 // its rail, its Files view, the place chip and the way to agents. What only the desktop app can answer comes from here:
 // the folders and documents this computer has opened, pointing the window at another folder, whether this install has an
-// account and which sandboxes the workspace last listed for it, and the views the app adds to the rail (This device). The app installs its host on the window before the
+// account, who the workspace last said is signed in and which sandboxes it listed, and the views the app adds to the
+// rail (This device, titled This computer). The app installs its host on the window before the
 // editor's modules run (`__INTENTIC_LOCAL_HOST__`, _editor/desktop-app/src/host.ts), so it is there when the router
 // builds its routes. A window without one (a dev server, a test) gets `LINK_HOST`: what any local window can ask by link.
 
@@ -39,6 +40,20 @@ export interface LocalSandbox {
     readonly shared: boolean;
 }
 
+/** Who is signed in to the workspace, as it last told the app (the app's setup_link.rs `RosterAccount`). */
+export interface LocalAccount {
+    readonly email: string;
+    readonly name?: string;
+    /** An https address; an uploaded avatar does not ride along. */
+    readonly image?: string;
+}
+
+/** What the workspace last told the app about its account: who is signed in, and its sandboxes in the switcher's order. */
+export interface LocalRoster {
+    readonly account: LocalAccount | null;
+    readonly sandboxes: readonly LocalSandbox[];
+}
+
 /** A view the app adds to the local shell: a rail tile and the route it opens (This device, in the desktop app). */
 export interface LocalView {
     /** The route's path under the shell, without its slash (`device`), which is also the route's name. */
@@ -62,10 +77,11 @@ export interface LocalHost {
     /** The recent folders and documents, newest first. */
     places(): Promise<readonly LocalPlace[]>;
     /**
-     * The account's sandboxes as the workspace last told the app (desktop.ts `announceDesktopRoster`): a local window
-     * cannot ask the platform itself. Empty before the workspace has said, and after a sign-out.
+     * Who is signed in and the account's sandboxes, as the workspace last told the app (desktop.ts
+     * `announceDesktopRoster`): a local window cannot ask the platform itself. Empty before the workspace has said, and
+     * after a sign-out.
      */
-    sandboxes(): Promise<readonly LocalSandbox[]>;
+    roster(): Promise<LocalRoster>;
     /** Show `path`, a folder, in THIS window, in place of the folder it shows now. */
     point(path: string): Promise<void>;
     /** Open `path` where the app puts it: raised where a window shows it, handed to the folder window holding it, or a window of its own. */
@@ -96,7 +112,7 @@ export const LINK_HOST: LocalHost = {
     views: [],
     facts: () => Promise.resolve({ accountSeen: false, homeFolder: `` }),
     places: () => Promise.resolve([]),
-    sandboxes: () => Promise.resolve([]),
+    roster: () => Promise.resolve({ account: null, sandboxes: [] }),
     point: nothing,
     open: nothing,
     pickFolder: () => {

@@ -42,6 +42,7 @@ import { bashCommand, psCommand } from "../../../app/environments/scriptCommand"
 import { announceDesktopRoster, DESKTOP_LAUNCHER_LINK, desktopApp, openDesktopLink } from "../../../app/environments/desktop";
 import { homeViewId, PROJECTS_VIEW_ID } from "../../../core-views/registry";
 import { useEndpoint } from "../secrets/useEndpoint";
+import { useAuth } from "../../auth/useAuth";
 import { addChoices, removalTakes } from "./switcherRows";
 import { useT } from "@intentic/ui/i18n";
 
@@ -204,12 +205,18 @@ const toThisComputer = (): void => {
     openDesktopLink(`${DESKTOP_LAUNCHER_LINK}?to=files`);
 };
 
-// The app's local windows list these same sandboxes under their own switcher's This computer, and can learn them only
-// from this page (desktop.ts `announceDesktopRoster`): told on mount and again whenever a row or its mark changes.
+// The app's local windows list these same sandboxes in their own switcher and show this account at their rail's foot,
+// and can learn either only from this page (desktop.ts `announceDesktopRoster`): told on mount and again whenever a
+// row, its mark or the account changes.
+const { user } = useAuth();
 if (inDesktopApp) {
     watch(
-        () => switchable.value.map((option) => ({ id: option.id, name: option.name, place: placementFor(option).kind, shared: option.role !== `owner` })),
-        announceDesktopRoster,
+        () =>
+            [
+                switchable.value.map((option) => ({ id: option.id, name: option.name, place: placementFor(option).kind, shared: option.role !== `owner` })),
+                user.value === null ? undefined : { email: user.value.email, name: user.value.name, image: user.value.image },
+            ] as const,
+        ([rows, account]) => announceDesktopRoster(rows, account),
         { immediate: true },
     );
 }
@@ -262,17 +269,34 @@ const syncSwitchCommands = (options: readonly SandboxSummary[]): void => {
 // Held rather than left to the component's scope, so the watcher stops in the same breath the commands are released.
 let stopSync: WatchStopHandle | undefined;
 
+// ALT+0 IS THIS COMPUTER, the place listed first, beside Alt+1…9 for the sandboxes under it; a local window binds the
+// same digits to the same sandboxes (local/localKeys.ts). Only inside the app, the one place this computer is a place.
+let thisComputerCommand: Disposable | undefined;
+
 onMounted(() => {
     if (sandbox.sandboxes.value.length === 0) {
         void sandbox.list();
     }
     stopSync = watch(switchable, syncSwitchCommands, { immediate: true });
+    if (inDesktopApp) {
+        thisComputerCommand = registerCommand({
+            owner: `builtin`,
+            command: `sandbox.thisComputer`,
+            title: t(`sandbox.sandboxSwitcher.switchToThisComputer`),
+            category: SANDBOX,
+            icon: `desktop`,
+            keybinding: `Alt+0`,
+            handler: toThisComputer,
+        });
+    }
 });
 
 onUnmounted(() => {
     stopSync?.();
     stopSync = undefined;
     release();
+    thisComputerCommand?.dispose();
+    thisComputerCommand = undefined;
 });
 
 // The sandbox awaiting removal confirmation; removal is non-destructive, the daemon keeps running.
@@ -405,7 +429,7 @@ const confirmRemove = async (): Promise<void> => {
 
     <!-- Zeroed padding: PrimeVue's popover padding reads as a frame around rows with their own inset. -->
     <AnchoredOverlay v-model="open" :anchor="trigger ?? undefined" side="right" cross="start">
-        <div class="flex w-60 flex-col gap-0.5 p-1">
+        <div class="flex w-64 flex-col gap-0.5 p-1">
             <!-- The badge's detail: one row per pending item, routing to the hub tab that resolves it. -->
             <template v-if="attention.length > 0">
                 <div class="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-subtle">{{ t(`shared.needs`) }}</div>
@@ -448,7 +472,8 @@ const confirmRemove = async (): Promise<void> => {
 
             <!-- The app's other face, a place of the same rank as the sandboxes and first, as the local window's switcher
                  lists it: this computer's own folder, no sandbox needed. Always there and always one row, so the
-                 sandboxes growing under it never move it. -->
+                 sandboxes growing under it never move it. No arrow: the app shows it in this window's own frame, as
+                 picking a sandbox does. -->
             <template v-if="inDesktopApp">
                 <button
                     type="button"
@@ -462,7 +487,11 @@ const confirmRemove = async (): Promise<void> => {
                         <span class="truncate text-content">{{ t(`sandbox.sandboxSwitcher.thisComputer`) }}</span>
                         <span class="truncate text-2xs text-subtle">{{ t(`sandbox.sandboxSwitcher.thisComputerNote`) }}</span>
                     </span>
-                    <Icon name="arrow-up-right" class="shrink-0 text-2xs text-subtle" />
+                    <kbd
+                        v-if="commandShortcut(`sandbox.thisComputer`)"
+                        class="shrink-0 rounded border border-line px-1 font-mono text-2xs font-normal leading-4 text-subtle"
+                        >{{ commandShortcut(`sandbox.thisComputer`) }}</kbd
+                    >
                 </button>
                 <div class="my-1 border-t border-line"></div>
             </template>

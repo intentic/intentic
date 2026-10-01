@@ -12,7 +12,7 @@ import { initAnalytics } from "./app/analytics";
 import { startAudienceSync } from "./app/audienceSync";
 import { dropOutdatedMirrors } from "./app/buildEpoch";
 import { describeError, installClientDiagnostics, reportClient } from "./app/clientDiagnostics";
-import { installDesktopLinks } from "./app/environments/desktop";
+import { installDesktopLinks, installDesktopOpener } from "./app/environments/desktop";
 import { installPerfConsole, installPerfReporter, observeLongFrames } from "./app/perf";
 import { installRenderTrace } from "./app/renderTrace";
 import { queryClient } from "./lib/queryPersistence";
@@ -21,7 +21,7 @@ import { installDocumentAppearance } from "./features/settings/documentAppearanc
 import "./features/sandbox/client/sandboxScope";
 import "./features/sandbox/client/sandboxScreen";
 import "./extension-host/hostModules";
-import { router } from "./router";
+import { openInPage, router } from "./router";
 import { routePatternOf } from "./router/routePattern";
 import { installNotificationTaps } from "./shell/notifications/notificationTaps";
 import "./styles.css";
@@ -48,6 +48,8 @@ highlightInWorker();
 // Runs in every window too, and does nothing outside the desktop app: there, `target="_blank"` reaches the app only
 // because of this.
 installDesktopLinks();
+// Also the app's alone: a loaded workspace is taken to a sandbox picked in a local window without a reload.
+installDesktopOpener(openInPage);
 
 // Loads the SDK itself at the page's first idle moment (analytics.ts), so it never stands in front of the first screen.
 void initAnalytics((path) => routePatternOf(router, path));

@@ -1234,10 +1234,11 @@ pub fn local_forget_recent(app: AppHandle, path: String) {
     app.state::<AppState>().forget_recent(&path);
 }
 
-/// The account's sandboxes as the workspace last listed them, for the place chip's Sandboxes: a local window cannot ask
-/// the platform itself (it holds no session, and its page reaches nothing but loopback and the app).
+/// Who is signed in to the workspace and the sandboxes it last listed, for the place chip's Sandboxes and the rail's
+/// account: a local window cannot ask the platform itself (it holds no session, and its page reaches nothing but
+/// loopback and the app).
 #[tauri::command]
-pub fn local_sandboxes(app: AppHandle) -> Vec<crate::setup_link::RosterEntry> {
+pub fn local_roster(app: AppHandle) -> crate::setup_link::Roster {
     app.state::<AppState>().roster()
 }
 

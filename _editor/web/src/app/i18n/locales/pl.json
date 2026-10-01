@@ -4053,7 +4053,8 @@
             "thisComputer": "Ten komputer",
             "thisComputerNote": "Twoje pliki, bez sandboxa",
             "notOnAccount": "Tego sandboxa nie ma już na Twoim koncie",
-            "notOnAccountDetail": "To sandbox, który był otwarty ostatnio."
+            "notOnAccountDetail": "To sandbox, który był otwarty ostatnio.",
+            "switchToThisComputer": "Przełącz na Ten komputer"
         },
         "sandboxSyncToggles": {
             "filesAndPorts": "Pliki i porty",
@@ -6827,12 +6828,11 @@
             "switchAnyway": "Przełącz mimo to",
             "switchingDiscardsUnsaved": "Otwarcie tu innego folderu odrzuci ich niezapisane zmiany. Tego nie da się cofnąć.",
             "reveal": "Pokaż folder",
-            "forgetNote": "Tylko z tej listy"
+            "forgetNote": "Tylko z tej listy",
+            "computerSettingsNote": "Sandboxy, agent, Docker, aktualizacje"
         },
         "agentsTile": {
-            "workspace": "Twoja przestrzeń robocza",
             "putAgentsToWork": "Zaprzęgnij agentów do pracy",
-            "workspaceLead": "Twoi agenci i sandboxy są w Twojej przestrzeni roboczej. Otworzy się w tym oknie, a pliki tego komputera zostaną o jedno kliknięcie stąd.",
             "agentsLead": "Agenci pracują w sandboxie: na tym komputerze w Dockerze albo na maszynie, którą utrzymujemy my. Zaloguj się, żeby go utworzyć.",
             "finishInBrowser": "Dokończ logowanie w przeglądarce. Twoja przestrzeń robocza otworzy się tutaj, gdy skończysz.",
             "openWorkspace": "Otwórz przestrzeń roboczą",

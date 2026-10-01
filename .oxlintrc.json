@@ -51,6 +51,8 @@
                     "__INTENTIC_LOCAL__",
                     // The desktop app's half of that window's shell, set by its bootstrap (desktop-app/src/host.ts).
                     "__INTENTIC_LOCAL_HOST__",
+                    // How a loaded workspace page is taken to a path without a reload (web desktop.ts `installDesktopOpener`).
+                    "__INTENTIC_OPEN__",
                     "__termFrames",
                     "__name",
                     "_core",

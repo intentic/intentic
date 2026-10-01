@@ -2,7 +2,7 @@ import { t } from "@intentic/ui/i18n";
 import type { LocalFace } from "@intentic/web/local";
 import type { LocalHost, LocalView } from "@intentic/web/local-host";
 import { computed } from "vue";
-import { homeFacts, localForgetRecent, localOpenPath, localPick, localPoint, localRecents, localSandboxes, signIn, workspaceOpen } from "./desktop";
+import { homeFacts, localForgetRecent, localOpenPath, localPick, localPoint, localRecents, localRoster, signIn, workspaceOpen } from "./desktop";
 import { deviceBadge } from "./device/badge";
 import { useDevice } from "./device/useDevice";
 
@@ -44,7 +44,7 @@ export const nativeHost = (): LocalHost => ({
         return { accountSeen: facts.accountSeen, homeFolder: facts.homeFolder };
     },
     places: () => localRecents(),
-    sandboxes: () => localSandboxes(),
+    roster: () => localRoster(),
     point: (path) => localPoint(path),
     open: (path) => localOpenPath(path),
     pickFolder: () => localPick(true),

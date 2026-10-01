@@ -65,5 +65,5 @@ const COMMANDS: &[&str] = &[
     "local_open_path",
     "local_recents",
     "local_forget_recent",
-    "local_sandboxes",
+    "local_roster",
 ];

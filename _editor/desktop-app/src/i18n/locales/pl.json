@@ -104,7 +104,7 @@
     "requirements": {
         "beforeSandboxRunHere": "Zanim Twój sandbox będzie mógł tu działać:",
         "checkAgain": "Sprawdź ponownie",
-        "deviceCantRunSandbox": "To urządzenie nie może jeszcze uruchomić sandboxa:",
+        "deviceCantRunSandbox": "Ten komputer nie może jeszcze uruchomić sandboxa:",
         "hideSteps": "Ukryj kroki",
         "restartNow": "Uruchom ponownie teraz",
         "runOnMachineWe": "Uruchom go na maszynie, którą my hostujemy",
@@ -129,7 +129,7 @@
         "seeAllSteps": "Zobacz wszystkie kroki ({count})"
     },
     "device": {
-        "title": "To urządzenie",
+        "title": "Ten komputer",
         "lead": "Sandboxy działające na tym komputerze, jego agent maszyny i silnik Dockera, w którym działają.",
         "thisDevice": "to urządzenie",
         "dockerIsntRunning": "Docker nie działa, więc sandboxy na tym komputerze też nie.",

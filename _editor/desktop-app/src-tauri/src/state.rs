@@ -5,7 +5,7 @@ use std::sync::Mutex;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
 
-use crate::setup_link::{RecreateArgs, RosterEntry, SetupArgs, SyncArgs};
+use crate::setup_link::{RecreateArgs, Roster, RosterEntry, SetupArgs, SyncArgs};
 
 /* `APP_URL` is the SPA origin the daemon must allow through CORS. */
 pub const APP_URL: &str = "https://app.intentic.dev";
@@ -231,10 +231,10 @@ pub struct AppState {
     home_folder: Mutex<Option<PathBuf>>,
     /// `~/intentic/local` ([`default_home_folder`]), or a folder in the app's own config dir where the OS names no home.
     default_home: PathBuf,
-    /// The account's sandboxes as the workspace's switcher last listed them (`roster.json`, `intentic://roster`):
-    /// what a local window's switcher lists, since that window cannot ask the platform itself. Empty until the
-    /// workspace has said, and again after a sign-out.
-    roster: Mutex<Vec<RosterEntry>>,
+    /// Who is signed in to the workspace and the sandboxes its switcher last listed (`roster.json`,
+    /// `intentic://roster`): what a local window shows of the account, since that window cannot ask the platform
+    /// itself. Empty until the workspace has said, and again after a sign-out.
+    roster: Mutex<Roster>,
 }
 
 impl AppState {
@@ -252,7 +252,7 @@ impl AppState {
         );
         let account_seen = read_json(&config_dir.join("account-seen.json")).unwrap_or(false);
         let home_folder = read_json(&config_dir.join("home-folder.json"));
-        let roster = read_json(&config_dir.join("roster.json")).unwrap_or_default();
+        let roster = read_roster(&config_dir);
         let default_home = app.path().home_dir().map_or_else(
             |_| config_dir.join("local"),
             |home| default_home_folder(&home),
@@ -344,20 +344,20 @@ impl AppState {
         write_json(&self.config_dir.join("account-seen.json"), &true);
     }
 
-    /* THE ACCOUNT'S SANDBOXES, as the workspace last listed them. */
+    /* THE ACCOUNT AND ITS SANDBOXES, as the workspace last told them. */
 
-    pub fn roster(&self) -> Vec<RosterEntry> {
+    pub fn roster(&self) -> Roster {
         self.roster.lock().unwrap().clone()
     }
 
-    /// Written only on a change: the workspace says it on every load and every change to its list.
-    pub fn remember_roster(&self, entries: Vec<RosterEntry>) {
+    /// Written only on a change: the workspace says it on every load and every change to either.
+    pub fn remember_roster(&self, roster: Roster) {
         let mut held = self.roster.lock().unwrap();
-        if *held == entries {
+        if *held == roster {
             return;
         }
-        write_json(&self.config_dir.join("roster.json"), &entries);
-        *held = entries;
+        write_json(&self.config_dir.join("roster.json"), &roster);
+        *held = roster;
     }
 
     pub fn ui_mode(&self) -> Option<Mode> {
@@ -561,6 +561,26 @@ impl AppState {
 
 /// The file's value, or None when it is absent or unusable. A file that won't parse is set aside as
 /// `<name>.json.unreadable` rather than left for the next write to replace; every failure but absence is logged.
+/// `roster.json` as either shape it has had: the account and its sandboxes, or the bare list of sandboxes it was first
+/// written as (before the account rode with them), read as that list with nobody named.
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum StoredRoster {
+    Current(Roster),
+    Sandboxes(Vec<RosterEntry>),
+}
+
+fn read_roster(config_dir: &Path) -> Roster {
+    match read_json::<StoredRoster>(&config_dir.join("roster.json")) {
+        Some(StoredRoster::Current(roster)) => roster,
+        Some(StoredRoster::Sandboxes(sandboxes)) => Roster {
+            account: None,
+            sandboxes,
+        },
+        None => Roster::default(),
+    }
+}
+
 fn read_json<T: for<'de> Deserialize<'de>>(path: &Path) -> Option<T> {
     let text = match std::fs::read_to_string(path) {
         Ok(text) => text,
@@ -635,7 +655,7 @@ mod tests {
             pending_project: Mutex::new(None),
             home_folder: Mutex::new(read_json(&config_dir.join("home-folder.json"))),
             default_home: default_home_folder(&config_dir.join("home")),
-            roster: Mutex::new(read_json(&config_dir.join("roster.json")).unwrap_or_default()),
+            roster: Mutex::new(read_roster(config_dir)),
         }
     }
 
@@ -871,17 +891,37 @@ mod tests {
     fn the_workspaces_sandboxes_are_kept_until_it_says_otherwise() {
         let dir = std::env::temp_dir().join(format!("intentic-roster-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
-        assert_eq!(state_in(&dir).roster(), Vec::new());
-        let shop = RosterEntry {
-            id: "s1".into(),
-            name: "Shop".into(),
-            place: "cloud".into(),
-            shared: false,
+        assert_eq!(state_in(&dir).roster(), Roster::default());
+        let told = Roster {
+            account: Some(crate::setup_link::RosterAccount {
+                email: "ada@example.com".into(),
+                name: Some("Ada".into()),
+                image: None,
+            }),
+            sandboxes: vec![RosterEntry {
+                id: "s1".into(),
+                name: "Shop".into(),
+                place: "cloud".into(),
+                shared: false,
+            }],
         };
-        state_in(&dir).remember_roster(vec![shop.clone()]);
-        assert_eq!(state_in(&dir).roster(), vec![shop]);
-        state_in(&dir).remember_roster(Vec::new());
-        assert_eq!(state_in(&dir).roster(), Vec::new());
+        state_in(&dir).remember_roster(told.clone());
+        assert_eq!(state_in(&dir).roster(), told);
+        state_in(&dir).remember_roster(Roster::default());
+        assert_eq!(state_in(&dir).roster(), Roster::default());
+        // The file as it was first written, a bare list, is read as that list with nobody named.
+        std::fs::write(
+            dir.join("roster.json"),
+            r#"[{"id":"s1","name":"Shop","place":"cloud","shared":false}]"#,
+        )
+        .unwrap();
+        assert_eq!(
+            state_in(&dir).roster(),
+            Roster {
+                account: None,
+                sandboxes: told.sandboxes.clone(),
+            }
+        );
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

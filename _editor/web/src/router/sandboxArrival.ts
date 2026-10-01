@@ -16,10 +16,13 @@ export interface SandboxArrivalHost {
     readonly missing?: () => void;
 }
 
+/** What the rule reads of a route: a guard's route and one the router resolved for the desktop app alike (index.ts). */
+export type SandboxArrivalRoute = Pick<RouteLocationNormalized, `path` | `query` | `hash` | `redirectedFrom`>;
+
 // Selects the named sandbox before the shell mounts, so nothing connects to the one active before, then replays the
 // link without the id. The replay passes the home redirect again, which already chose a landing by the old sandbox's
 // role (a guest's home is its chat), and every other query key rides along.
-export const arriveOnSandbox = async (to: RouteLocationNormalized, sandbox: SandboxArrivalHost): Promise<true | RouteLocationRaw> => {
+export const arriveOnSandbox = async (to: SandboxArrivalRoute, sandbox: SandboxArrivalHost): Promise<true | RouteLocationRaw> => {
     const named = to.query[`sandbox`];
     if (named === undefined) {
         return true;
