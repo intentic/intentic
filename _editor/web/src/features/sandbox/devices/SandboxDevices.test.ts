@@ -905,19 +905,24 @@ it(`names every sandbox a machine holds, and what each one came to, without bein
 
 it(`gives every computer its own named card and keeps board controls outside the cards`, () => {
     const el = mount([busyMachine(), { ...syncOnly(), key: `other`, label: `other-pc` }]);
-    const cards = [...el.querySelectorAll(`a.bg-card`)];
+    const cards = [...el.querySelectorAll(`a[aria-labelledby]`)];
     expect(cards).toHaveLength(2);
     // A screen reader names the link by the computer, not by every fact and sandbox on its face.
     expect(cards.map((card) => document.getElementById(card.getAttribute(`aria-labelledby`) ?? ``)?.textContent).toSorted()).toEqual([
         `other-pc`,
         `radarsu-rog`,
     ]);
-    expect(cards.map((card) => card.classList.contains(`border`))).toEqual([true, true]);
+    // Each fills a surface of its own, rather than being rows of one shared panel.
+    const surfaces = cards.map((card) => card.parentElement);
+    expect(new Set(surfaces).size).toBe(2);
+    expect(surfaces.map((surface) => surface?.classList.contains(`bg-card`))).toEqual([true, true]);
     // One target per card: search, pairing and any future toolbar controls must not become nested interactions.
     expect(cards.flatMap((card) => [...card.querySelectorAll(`a, button, input`)])).toEqual([]);
     expect(el.querySelector(`input`)?.closest(`a`)).toBeNull();
     expect(el.querySelector(`button`)?.closest(`a`)).toBeNull();
-    expect(el.querySelector(`h2`)?.textContent).toBe(`Devices`);
+    // The board's header is a group label above the cards, as on every other sandbox list.
+    const headers = [...el.querySelectorAll(`span`)].filter((span) => span.textContent === `Devices`);
+    expect(headers.map((header) => header.closest(`a`))).toEqual([null]);
 });
 
 // The board is an index of links, so a machine is deep-linkable, ⌘-clickable and survives a reload.
@@ -1794,10 +1799,18 @@ it(`draws a Windows PC and its distro as one card, with the container once and e
     expect(cards).toHaveLength(2);
     const pc = cards.find((card) => card.textContent?.includes(`Microsoft Windows 11 Home`));
     expect(pc?.textContent?.match(/work/g)).toHaveLength(1);
-    // A lone environment stays in its header; the PC separates its connections from its sandbox preview.
+    // A lone machine is a single row, its one environment being the machine itself. The PC is its own row, then one
+    // row per side, then one block of what runs there.
     const lone = cards.find((card) => card.textContent?.includes(`radarsu-omen`));
-    expect([...lone!.querySelectorAll(`section`)].map((section) => section.getAttribute(`aria-label`))).toEqual([]);
-    expect([...pc!.querySelectorAll(`section`)].map((section) => section.getAttribute(`aria-label`))).toEqual([`Environments`, `Sandboxes`]);
+    expect(lone?.children).toHaveLength(1);
+    const sides = [`Microsoft Windows 11 Home`, `Arch Linux on WSL`];
+    expect([...pc!.children].map((child) => sides.find((side) => child.textContent?.includes(side)))).toEqual([
+        undefined,
+        `Microsoft Windows 11 Home`,
+        `Arch Linux on WSL`,
+        undefined,
+    ]);
+    expect(pc?.children[3]?.textContent).toContain(`work`);
 });
 
 it(`opens the PC as one page: an environment row per side, the sandbox once, and the distros the Windows side lists`, async () => {
