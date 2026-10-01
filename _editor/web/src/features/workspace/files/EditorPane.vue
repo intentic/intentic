@@ -87,8 +87,9 @@ const diffOutline = useLoadingReveal(
         @pointerdown="focusPane(pane)"
         @focusin="focusPane(pane)"
     >
-        <!-- The pane's one bar: left slot, open tabs, the file's own context, right slot. -->
-        <div class="view-header flex items-stretch border-b border-line bg-card">
+        <!-- The pane's one bar: left slot, open tabs, the file's own context, right slot. `tabbar`: the viewer controls
+             hoisted into it size their words against the pane, since the context they sit in is capped to a share of it. -->
+        <div class="view-header @container/tabbar flex items-stretch border-b border-line bg-card">
             <slot name="lead" />
             <FileTabs
                 :tabs="state.tabs"

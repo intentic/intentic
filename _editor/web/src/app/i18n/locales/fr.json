@@ -4883,11 +4883,17 @@
         },
         "htmlPreview": {
             "failed": "Impossible de préparer cette page pour l'aperçu.",
-            "missing": "{count} fichier à côté de cette page n'a pas pu être chargé | {count} fichiers à côté de cette page n'ont pas pu être chargés",
-            "remote": "{count} élément d'internet n'a pas été chargé | {count} éléments d'internet n'ont pas été chargés",
-            "remoteWhy": "L'aperçu n'a pas de réseau : les scripts, polices ou images que la page cherche sur internet restent dehors.",
-            "scriptsOff": "La page cherchait sans cesse à aller ailleurs, ses scripts sont donc désactivés.",
-            "strayed": "La page a tenté d'aller à une autre adresse et a été ramenée ici.",
+            "missing": "{count} fichier non chargé | {count} fichiers non chargés",
+            "missingMore": "Et {count} de plus",
+            "missingTitle": "Fichiers non chargés",
+            "missingWhy": "Absent ou trop volumineux",
+            "remote": "{count} élément web bloqué | {count} éléments web bloqués",
+            "remoteTitle": "Éléments web bloqués",
+            "remoteWhy": "L'aperçu n'a pas de réseau",
+            "scriptsOff": "Scripts désactivés",
+            "scriptsOffWhy": "La page partait sans cesse",
+            "strayed": "Navigation bloquée",
+            "strayedWhy": "Ramenée sur cette page",
             "title": "Aperçu de {name}"
         },
         "imageCompareView": {

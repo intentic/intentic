@@ -17,7 +17,9 @@ const scope = inject(CHROME_SCOPE, `main`);
 
 <template>
     <Teleport defer :to="`#${contextTarget(scope)}`" :disabled="!hoisted">
-        <div :class="hoisted ? `flex min-w-0 items-center gap-1.5` : `flex h-8 shrink-0 items-center gap-1.5 border-b border-line bg-card px-3`">
+        <!-- A band of its own is `viewerbar`, the container a viewer's controls size their words against (the tab row they
+             ride when hoisted is `tabbar`, EditorPane). -->
+        <div :class="hoisted ? `flex min-w-0 items-center gap-1.5` : `@container/viewerbar flex h-8 shrink-0 items-center gap-1.5 border-b border-line bg-card px-3`">
             <!-- Members looking at the same file as you, live. -->
             <PresenceAvatars :members="viewersOfPath(path)" :label="t(`workspace.fileBreadcrumb.alsoViewingFile`)" />
             <!-- Viewer's own controls, teleported in here. -->

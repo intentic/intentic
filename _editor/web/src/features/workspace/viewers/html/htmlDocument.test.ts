@@ -165,7 +165,7 @@ describe(`buildPreviewDocument`, () => {
 });
 
 describe(`PreviewAskSchema`, () => {
-    const ask = (data: unknown): { open: string } | { href: string } | undefined => {
+    const ask = (data: unknown): { open: string } | { href: string } | { pointer: boolean } | undefined => {
         const parsed = PreviewAskSchema.safeParse(data);
         return parsed.success ? parsed.data.intenticHtmlPreview : undefined;
     };
@@ -173,6 +173,11 @@ describe(`PreviewAskSchema`, () => {
     it(`lets a frame ask for a workspace file or an internet address, and nothing else`, () => {
         expect(ask({ intenticHtmlPreview: { open: `site/about.html` } })).toEqual({ open: `site/about.html` });
         expect(ask({ intenticHtmlPreview: { href: `https://example.com/a` } })).toEqual({ href: `https://example.com/a` });
+    });
+
+    it(`lets a frame tell whether a mouse is over it, as a yes or a no and nothing else`, () => {
+        expect([true, false].map((pointer) => ask({ intenticHtmlPreview: { pointer } }))).toEqual([{ pointer: true }, { pointer: false }]);
+        expect([`true`, 1, null].map((pointer) => ask({ intenticHtmlPreview: { pointer } }))).toEqual([undefined, undefined, undefined]);
     });
 
     it(`refuses a path out of the workspace or from its root, another scheme, and anything else a page could post`, () => {

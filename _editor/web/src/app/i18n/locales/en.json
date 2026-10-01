@@ -6464,11 +6464,17 @@
         },
         "htmlPreview": {
             "failed": "This page could not be prepared for the preview.",
-            "missing": "{count} file beside this page could not be loaded | {count} files beside this page could not be loaded",
-            "remote": "{count} item from the internet was not loaded | {count} items from the internet were not loaded",
-            "remoteWhy": "The preview has no network, so a script, font or picture the page names on the internet stays out.",
-            "scriptsOff": "The page kept going to other addresses, so its scripts are off.",
-            "strayed": "The page tried to go to another address and was put back.",
+            "missing": "{count} file not loaded | {count} files not loaded",
+            "missingMore": "And {count} more",
+            "missingTitle": "Files not loaded",
+            "missingWhy": "Missing, or too large",
+            "remote": "{count} web item blocked | {count} web items blocked",
+            "remoteTitle": "Web items blocked",
+            "remoteWhy": "The preview has no network",
+            "scriptsOff": "Scripts off",
+            "scriptsOffWhy": "The page kept leaving",
+            "strayed": "Navigation blocked",
+            "strayedWhy": "Put back on this page",
             "title": "Preview of {name}"
         },
         "imageCompareView": {

@@ -6208,11 +6208,17 @@
         },
         "htmlPreview": {
             "failed": "Nie udało się przygotować tej strony do podglądu.",
-            "missing": "Nie udało się wczytać {count} pliku obok tej strony | Nie udało się wczytać {count} plików obok tej strony | Nie udało się wczytać {count} plików obok tej strony",
-            "remote": "Nie wczytano {count} elementu z internetu | Nie wczytano {count} elementów z internetu | Nie wczytano {count} elementów z internetu",
-            "remoteWhy": "Podgląd nie ma dostępu do sieci, więc skrypty, czcionki i obrazy z internetu, które wskazuje strona, zostają na zewnątrz.",
-            "scriptsOff": "Strona wciąż próbowała przejść pod inne adresy, więc jej skrypty są wyłączone.",
-            "strayed": "Strona próbowała przejść pod inny adres i została przywrócona.",
+            "missing": "Nie wczytano {count} pliku | Nie wczytano {count} plików | Nie wczytano {count} plików",
+            "missingMore": "I jeszcze {count}",
+            "missingTitle": "Nie wczytano plików",
+            "missingWhy": "Brak pliku albo jest za duży",
+            "remote": "{count} element z sieci zablokowany | {count} elementy z sieci zablokowane | {count} elementów z sieci zablokowanych",
+            "remoteTitle": "Zablokowano elementy z sieci",
+            "remoteWhy": "Podgląd nie ma dostępu do sieci",
+            "scriptsOff": "Skrypty wyłączone",
+            "scriptsOffWhy": "Strona ciągle uciekała",
+            "strayed": "Nawigacja zablokowana",
+            "strayedWhy": "Przywrócona na tę stronę",
             "title": "Podgląd: {name}"
         },
         "imageCompareView": {

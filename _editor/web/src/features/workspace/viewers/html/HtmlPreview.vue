@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { IconName, Tip, TipRow } from "@intentic/ui";
 import { useLatest } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, useTemplateRef, watch } from "vue";
@@ -29,7 +30,12 @@ const frame = useTemplateRef<HTMLIFrameElement>(`frame`);
 // Bumped for every document the frame is handed, which mounts a fresh frame; its first load is that document.
 const shown = ref(0);
 let loads = 0;
-watch(shown, () => (loads = 0));
+// Whether a mouse is over the page, as the frame says (htmlDocument.ts): the window's own hover stops at the frame.
+const pointerIn = ref(false);
+watch(shown, () => {
+    loads = 0;
+    pointerIn.value = false;
+});
 const strays = ref(0);
 const onLoad = (): void => {
     loads += 1;
@@ -79,40 +85,112 @@ const onMessage = (event: MessageEvent): void => {
         return;
     }
     const ask = parsed.data.intenticHtmlPreview;
-    if (`open` in ask) {
+    if (`pointer` in ask) {
+        pointerIn.value = ask.pointer;
+    } else if (`open` in ask) {
         emit(`open`, ask.open);
     } else {
         window.open(ask.href, `_blank`, `noopener,noreferrer`);
     }
 };
-onMounted(() => window.addEventListener(`message`, onMessage));
-onBeforeUnmount(() => window.removeEventListener(`message`, onMessage));
+// The window sees the pointer only while it is off the frame, so a move here ends a hover the frame told of, even one
+// whose leave the frame was never told.
+const offFrame = (): void => {
+    pointerIn.value = false;
+};
+onMounted(() => {
+    window.addEventListener(`message`, onMessage);
+    window.addEventListener(`pointermove`, offFrame, { passive: true });
+});
+onBeforeUnmount(() => {
+    window.removeEventListener(`message`, onMessage);
+    window.removeEventListener(`pointermove`, offFrame);
+});
 
 const name = computed(() => props.path.slice(props.path.lastIndexOf(`/`) + 1));
 
-// The lines over the page, only when something was left out or put back.
-const notes = computed(() => {
+// What the preview left out or put back, only when it did: a few words for the bar over the page, beside the Preview
+// chip they qualify (FileViewer draws them, so no band of their own opens over the page), and the rest on hover. A file
+// the page names that could not be carried is the one an author can fix, so it alone is tinted.
+interface PreviewNote {
+    readonly key: string;
+    readonly icon: IconName;
+    readonly text: string;
+    // What a bar too narrow for the words shows beside the icon instead; the tip then has to say the rest alone.
+    readonly count?: number;
+    readonly tip: Tip;
+    readonly warn: boolean;
+}
+
+// Files named on the card before the rest are counted instead, so a page with dozens missing keeps a card that fits.
+const MISSING_LISTED = 6;
+
+const missingRows = (missing: readonly string[]): { readonly rows: TipRow[]; readonly unlisted: number } => {
+    const listed = missing.length <= MISSING_LISTED ? missing : missing.slice(0, MISSING_LISTED - 1);
+    const rows = listed.map((file) => {
+        const slash = file.lastIndexOf(`/`);
+        return { label: file.slice(slash + 1), value: slash < 0 ? `/` : file.slice(0, slash) };
+    });
+    return { rows, unlisted: missing.length - listed.length };
+};
+
+const notes = computed((): PreviewNote[] => {
     const document = built.value;
-    const lines: { readonly text: string; readonly detail?: string }[] = [];
-    if (document !== undefined && document.remote > 0) {
-        lines.push({ text: t(`workspace.htmlPreview.remote`, { count: document.remote }, document.remote), detail: t(`workspace.htmlPreview.remoteWhy`) });
-    }
+    const lines: PreviewNote[] = [];
     if (document !== undefined && document.missing.length > 0) {
-        lines.push({ text: t(`workspace.htmlPreview.missing`, { count: document.missing.length }, document.missing.length), detail: document.missing.join(`\n`) });
+        const count = document.missing.length;
+        const { rows, unlisted } = missingRows(document.missing);
+        lines.push({
+            key: `missing`,
+            icon: `link-broken`,
+            text: t(`workspace.htmlPreview.missing`, { count }, count),
+            count,
+            warn: true,
+            tip: {
+                title: t(`workspace.htmlPreview.missingTitle`),
+                tone: `warn`,
+                rows,
+                note: unlisted > 0 ? t(`workspace.htmlPreview.missingMore`, { count: unlisted }) : t(`workspace.htmlPreview.missingWhy`),
+            },
+        });
+    }
+    if (document !== undefined && document.remote > 0) {
+        lines.push({
+            key: `remote`,
+            icon: `globe`,
+            text: t(`workspace.htmlPreview.remote`, { count: document.remote }, document.remote),
+            count: document.remote,
+            warn: false,
+            tip: { title: t(`workspace.htmlPreview.remoteTitle`), note: t(`workspace.htmlPreview.remoteWhy`) },
+        });
     }
     if (strays.value > 0) {
-        lines.push({ text: scripted.value ? t(`workspace.htmlPreview.strayed`) : t(`workspace.htmlPreview.scriptsOff`) });
+        lines.push(
+            scripted.value
+                ? {
+                      key: `strayed`,
+                      icon: `shield`,
+                      text: t(`workspace.htmlPreview.strayed`),
+                      warn: false,
+                      tip: { title: t(`workspace.htmlPreview.strayed`), note: t(`workspace.htmlPreview.strayedWhy`) },
+                  }
+                : {
+                      key: `scriptsOff`,
+                      icon: `shield`,
+                      text: t(`workspace.htmlPreview.scriptsOff`),
+                      warn: false,
+                      tip: { title: t(`workspace.htmlPreview.scriptsOff`), note: t(`workspace.htmlPreview.scriptsOffWhy`) },
+                  },
+        );
     }
     return lines;
 });
+
+defineExpose({ notes, pointerIn });
 </script>
 
 <template>
     <div class="flex h-full min-h-0 flex-col">
-        <div v-for="note in notes" :key="note.text" class="flex shrink-0 items-center gap-2 border-b border-line px-3 py-1.5 text-2xs text-muted">
-            <Icon name="shield" class="text-[0.7rem]" />
-            <span class="flex-1" v-tooltip.bottom="note.detail">{{ note.text }}</span>
-        </div>
         <div v-if="failed" class="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
             <Icon name="exclamation-triangle" class="text-3xl text-danger" />
             <p class="text-sm text-danger">{{ t(`workspace.htmlPreview.failed`) }}</p>

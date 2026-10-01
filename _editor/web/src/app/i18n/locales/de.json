@@ -4908,11 +4908,17 @@
         },
         "htmlPreview": {
             "failed": "Diese Seite ließ sich nicht für die Vorschau vorbereiten.",
-            "missing": "{count} Datei neben dieser Seite ließ sich nicht laden | {count} Dateien neben dieser Seite ließen sich nicht laden",
-            "remote": "{count} Element aus dem Internet wurde nicht geladen | {count} Elemente aus dem Internet wurden nicht geladen",
-            "remoteWhy": "Die Vorschau hat kein Netzwerk, daher bleiben Skripte, Schriften und Bilder aus dem Internet draußen.",
-            "scriptsOff": "Die Seite wollte immer wieder zu anderen Adressen, daher sind ihre Skripte aus.",
-            "strayed": "Die Seite wollte zu einer anderen Adresse und wurde zurückgeholt.",
+            "missing": "{count} Datei nicht geladen | {count} Dateien nicht geladen",
+            "missingMore": "Und {count} weitere",
+            "missingTitle": "Dateien nicht geladen",
+            "missingWhy": "Fehlt oder ist zu groß",
+            "remote": "{count} Web-Element blockiert | {count} Web-Elemente blockiert",
+            "remoteTitle": "Web-Elemente blockiert",
+            "remoteWhy": "Die Vorschau hat kein Netzwerk",
+            "scriptsOff": "Skripte aus",
+            "scriptsOffWhy": "Die Seite wollte ständig weg",
+            "strayed": "Navigation blockiert",
+            "strayedWhy": "Zurück auf diese Seite geholt",
             "title": "Vorschau von {name}"
         },
         "imageCompareView": {

@@ -283,8 +283,8 @@ const firstCandidate = (srcset: string): string => srcset.trim().split(/\s+/, 1)
 
 // Clicks inside the frame, answered by the window that holds it: a link to another file in the workspace opens that
 // file, a link to the internet opens in a new tab, and a place in the page is scrolled to here, since a `srcdoc`
-// document resolves `#section` against the window's own address and would otherwise navigate away. Nothing else
-// leaves the frame; HtmlPreview.vue checks every message is this frame's before it acts.
+// document resolves `#section` against the window's own address and would otherwise navigate away. Beyond those, the
+// frame only says whether a mouse is over it; HtmlPreview.vue checks every message is this frame's before it acts.
 const LINK_GUIDE = `(() => {
     const say = (message) => parent.postMessage({ intenticHtmlPreview: message }, "*");
     addEventListener("click", (event) => {
@@ -304,6 +304,20 @@ const LINK_GUIDE = `(() => {
         say(path === null ? { href } : { open: path });
     }, true);
     addEventListener("submit", (event) => event.preventDefault(), true);
+    // A frame in a process of its own keeps the pointer's comings and goings from the window, whose hover never reaches
+    // the page, so the frame says a mouse is over it, again every little while it moves, since a leave is not always
+    // told to it and the window, which sees the pointer once it is back on its side, has then already counted it gone.
+    let told = 0;
+    addEventListener("pointermove", (event) => {
+        if (event.pointerType === "touch" || event.timeStamp - told < 150) return;
+        told = event.timeStamp;
+        say({ pointer: true });
+    }, true);
+    addEventListener("pointerout", (event) => {
+        if (event.relatedTarget !== null || event.pointerType === "touch") return;
+        told = 0;
+        say({ pointer: false });
+    }, true);
 })();`;
 
 // Where a page's references are carried in: the document, the page's own path, and the carrier every read goes through.
@@ -406,7 +420,8 @@ const seal = (doc: Document): void => {
 };
 
 // What a frame's message may ask of the window, parsed where it arrives since the page's own scripts can post anything:
-// a workspace file to open, named as a path inside the workspace, or an internet address to open in a tab.
+// a workspace file to open, named as a path inside the workspace, or an internet address to open in a tab; or what it
+// tells, whether a mouse is over it, which at worst shows a Copy button over the page.
 export const PreviewAskSchema = z.object({
     intenticHtmlPreview: z.union([
         z.object({
@@ -416,6 +431,7 @@ export const PreviewAskSchema = z.object({
                 .refine((path) => !path.startsWith(`/`) && !path.split(`/`).includes(`..`)),
         }),
         z.object({ href: z.string().regex(/^https?:\/\//i) }),
+        z.object({ pointer: z.boolean() }),
     ]),
 });
 

@@ -512,6 +512,11 @@ const saveNow = (): void => (markdownHere.value ? markdownView.value?.save() : e
 // (htmlPreviewed.ts); the choice sticks to the path for the session. Its text is the editor's, unsaved edits included.
 const previewOffered = computed(() => open.value.kind === `code` && text.value !== null && deliverableKindOf(path) === `html`);
 const previewing = computed(() => previewOffered.value && htmlPreviewed(path));
+// What the rendered page left out or put back, drawn in this bar beside the Preview chip rather than as a band over
+// the page; empty whenever no preview is mounted.
+const htmlView = ref<InstanceType<typeof HtmlPreview>>();
+const previewNotes = computed(() => (previewing.value ? (htmlView.value?.notes ?? []) : []));
+const pageHovered = computed(() => previewing.value && htmlView.value?.pointerIn === true);
 // A file beside the page, for the preview to carry in: read like the file itself, in the same scope, and not fetched
 // at all where the tree already says it is too large to carry. A read that fails is the preview's to report as a file
 // it could not load (htmlDocument.ts).
@@ -607,6 +612,23 @@ const onEditorSave = (value: string): void =>
                 <Icon :name="previewing ? 'code' : 'eye'" class="text-2xs" />
                 <span>{{ t(`workspace.fileViewer.preview`) }}</span>
             </button>
+            <!-- What that preview left out or put back, in a few words beside the chip they qualify; the detail is on hover
+                 or focus. A bar too narrow for the words (the tab row of a narrow pane, a slim band) keeps the icon and the
+                 count, the words left for a screen reader; truncation is only the last resort below that. -->
+            <span
+                v-for="note in previewNotes"
+                :key="note.key"
+                tabindex="0"
+                class="inline-flex min-w-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-2xs"
+                :class="note.warn ? `text-warning` : `text-muted`"
+                v-tooltip.bottom="note.tip"
+            >
+                <Icon :name="note.icon" class="shrink-0 text-[0.7rem]" />
+                <span class="truncate @max-4xl/tabbar:sr-only @max-sm/viewerbar:sr-only">{{ note.text }}</span>
+                <span v-if="note.count !== undefined" aria-hidden="true" class="hidden tabular-nums @max-4xl/tabbar:inline @max-sm/viewerbar:inline">{{
+                    note.count
+                }}</span>
+            </span>
             <!-- Tab row's chip says the view shows an agent's copy; this says this file specifically came from the shared workspace. -->
             <span
                 v-if="viewAgent !== undefined && fromShared"
@@ -668,10 +690,12 @@ const onEditorSave = (value: string): void =>
         </div>
 
         <div class="relative min-h-0 flex-1">
-            <!-- Floating copy button on the content's top-right corner on hover; inside the content, so it never covers a banner's action above. -->
+            <!-- Floating copy button on the content's top-right corner on hover; inside the content, so it never covers a banner's action above.
+                 Over a rendered page the window's hover stops at the frame, so the frame's own word stands in for it (pageHovered). -->
             <div
                 v-if="text !== null"
-                class="pointer-events-none absolute right-4 top-2 z-20 opacity-0 transition-opacity duration-150 group-hover/viewer:pointer-events-auto group-hover/viewer:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100"
+                :data-page-hovered="pageHovered"
+                class="pointer-events-none absolute right-4 top-2 z-20 opacity-0 transition-opacity duration-150 group-hover/viewer:pointer-events-auto group-hover/viewer:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100 data-[page-hovered=true]:pointer-events-auto data-[page-hovered=true]:opacity-100"
             >
                 <CopyButton
                     :text="editorSeed"
@@ -691,7 +715,7 @@ const onEditorSave = (value: string): void =>
                 <Icon name="spinner" class="text-xl" spin />
             </div>
             <!-- The page rendered in a sealed frame, from the same text the editor below holds (HtmlPreview). -->
-            <HtmlPreview v-else-if="previewing" :path="path" :source="editorSeed" :load="readAsset" @open="openLinked" />
+            <HtmlPreview v-else-if="previewing" ref="htmlView" :path="path" :source="editorSeed" :load="readAsset" @open="openLinked" />
             <CodeView
                 v-else-if="open.kind === 'code' && text !== null"
                 ref="editorView"
