@@ -234,7 +234,7 @@ const pushToCi = async (): Promise<void> => {
                 </RowGroup>
 
                 <!-- A person's own secrets need no DevOps: without it they go to the sandbox's own store, the one a need's card writes to too. -->
-                <RowGroup v-if="groupVisible(yours)" :label="t(`sandbox.sandboxSecrets.secrets`)" :count="yours.length">
+                <RowGroup v-if="groupVisible(yours)" :label="t(`sandbox.sandboxSecrets.secrets`)">
                     <SecretEntryRow
                         v-for="row in yours"
                         :key="row.entry.key"
