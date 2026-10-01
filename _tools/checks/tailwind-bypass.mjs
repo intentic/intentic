@@ -21,7 +21,7 @@ const BYPASS = /[\w-]*-\[(?:#[0-9a-fA-F]{3,8}|(?:rgb|hsl)a?\(|[0-9]+(?:\.[0-9]+)
 // Every framework's class attribute in one expression; a lookbehind stops `:class` matching twice.
 const CLASS_ATTR = /(?<![\w:-])(?:(?::|v-bind:)?class(?::list)?|className)\s*=\s*/gu;
 
-// The two remaining entries are numbers computed from the geometry around them, not a step on any scale; a token would
+// Each entry is a number the geometry around it decides, not a step on any scale; a token would
 // misname them, so the derivation is written out beside the value instead.
 const ALLOWED = new Map([
     [
@@ -39,6 +39,15 @@ const ALLOWED = new Map([
             [
                 `max-h-[142px]`,
                 `eight rows exactly: 8 x 16.5px (text-xs at leading-snug) + 8px of py-1 + the 2px border. max-h-36 (144px) would add a 2px sliver of a ninth row under the eighth, which is the visual bug this number was picked to avoid.`,
+            ],
+        ]),
+    ],
+    [
+        `_editor/web/src/features/sandbox/overview/version/UpdateWhatsNew.vue`,
+        new Map([
+            [
+                `rounded-[1px]`,
+                `softens the corners of a 6px lozenge (h-1.5 w-1.5 rotate-45) without rounding it into a dot: the smallest radius token, --radius-2xs, is 2px, a third of the side, which reads as a circle at this size. A one-off for a mark this small, not a missing step on the scale.`,
             ],
         ]),
     ],

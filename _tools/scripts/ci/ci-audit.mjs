@@ -27,16 +27,27 @@ const reachOf = (job) => (GATE_REACHES.test(job) ? "local" : GATE_PARTLY.test(jo
 const ERROR_LINE = /error TS\d+|\bFAIL\b|✗|✘|Error:|error\[E\d+\]|rustfmt|Diff in|ERR_PNPM|exit code \d+/;
 const LOG_LINES = 3_000;
 
+// GitHub answers a run's jobs with a 502 now and then (run 36844049361); one such answer among a hundred runs' worth of
+// reads is the API's, not this audit's, so a server error is asked again before it fails the job.
+const RETRIES = 3;
 const api = async (path, init = {}) => {
-    const response = await fetch(`https://api.github.com${path}`, {
-        ...init,
-        headers: {
-            accept: "application/vnd.github+json",
-            "user-agent": "intentic-ci-audit",
-            ...(token === undefined ? {} : { authorization: `Bearer ${token}` }),
-            ...init.headers,
-        },
-    });
+    let response;
+    for (let attempt = 0; ; attempt += 1) {
+        response = await fetch(`https://api.github.com${path}`, {
+            ...init,
+            headers: {
+                accept: "application/vnd.github+json",
+                "user-agent": "intentic-ci-audit",
+                ...(token === undefined ? {} : { authorization: `Bearer ${token}` }),
+                ...init.headers,
+            },
+        });
+        if (response.status < 500 || attempt >= RETRIES) {
+            break;
+        }
+        await response.body?.cancel();
+        await new Promise((resolve) => setTimeout(resolve, 2000 * 2 ** attempt));
+    }
     if (!response.ok) {
         throw new Error(`${path}: ${response.status} ${(await response.text()).slice(0, 200)}`);
     }

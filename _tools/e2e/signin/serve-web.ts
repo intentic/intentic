@@ -2,7 +2,7 @@ import { createReadStream, readFileSync, statSync } from "node:fs";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { extname, join, normalize, sep } from "node:path";
-import { WEB_DIST } from "./stack.js";
+import { WEB_DIST } from "./tier.js";
 
 // The web build served the way the platform's web image serves it (_editor/web nginx.conf + entrypoint.sh), minus what a
 // sign-in cannot tell apart: a file of `dist` when one matches, the SPA's index.html for every other path, and

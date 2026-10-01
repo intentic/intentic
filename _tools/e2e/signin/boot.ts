@@ -7,7 +7,7 @@ import { promisify } from "node:util";
 import { GenericContainer, type StartedTestContainer, Wait } from "testcontainers";
 import { newGoogleKey } from "./google.js";
 import { serveWeb, type WebServer } from "./serve-web.js";
-import { API_HARNESS, API_PACKAGE, CACHE_DIR, ENV_API_URL, ENV_GOOGLE_KEY, ENV_WEB_URL, POSTGRES_IMAGE, REPO, WEB_DIST } from "./stack.js";
+import { API_HARNESS, API_PACKAGE, CACHE_DIR, ENV_API_URL, ENV_GOOGLE_KEY, ENV_WEB_URL, POSTGRES_IMAGE, REPO, WEB_DIST } from "./tier.js";
 
 // Boots the sign-in tier and returns its teardown: Postgres with the migration history replayed, the api harness
 // (_platform/api/src/e2e/browser-api.ts) on it, and the web build served beside it. Everything listens on loopback
@@ -120,7 +120,7 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
         });
         await waitUp(`${apiUrl}/api/auth/ok`, `the api (browser-api.ts)`, log, api, 60_000);
 
-        // What the specs read (stack.ts `stackUrls`): Playwright hands each worker the environment this setup leaves.
+        // What the specs read (tier.ts `stackUrls`): Playwright hands each worker the environment this setup leaves.
         process.env[ENV_WEB_URL] = web.origin;
         process.env[ENV_API_URL] = apiUrl;
         process.env[ENV_GOOGLE_KEY] = google.privatePem;

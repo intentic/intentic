@@ -184,7 +184,7 @@
                 "promo/*.{mjs,js}",
                 "shots/*.mts",
                 "signin/*.spec.ts",
-                "signin/global-setup.ts"
+                "signin/boot.ts"
             ]
         }
     }

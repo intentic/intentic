@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { type Browser, type BrowserContext, expect, type Page, test } from "@playwright/test";
 import { becomeTheAppWebview, completePath, listenForDeepLinks, readAuthLink, startAttempt } from "./desktop.js";
 import { GOOGLE_BUTTON, newPerson, type Person, signInToGoogle } from "./google.js";
-import { ENV_GOOGLE_KEY, REPO, stackUrls } from "./stack.js";
+import { ENV_GOOGLE_KEY, REPO, stackUrls } from "./tier.js";
 
 // A person with no session signs in, every way the product lets one: on the web, and through the desktop app, whose
 // sign-in crosses from its window to the browser and back. Each spec is a new person on a new browser, so nothing here

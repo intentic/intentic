@@ -1,5 +1,5 @@
 import { defineConfig } from "@playwright/test";
-import { RESULTS_DIR } from "./stack.js";
+import { RESULTS_DIR } from "./tier.js";
 
 // THE SIGN-IN GATE: a person with no session signs in, on the web and through the desktop app, against the real web
 // build, the real api and real Postgres, with only Google stood in for (google.ts says where and why). CI runs it as
@@ -7,7 +7,7 @@ import { RESULTS_DIR } from "./stack.js";
 export default defineConfig({
     testDir: `.`,
     testMatch: `*.spec.ts`,
-    globalSetup: `./global-setup`,
+    globalSetup: `./boot`,
     // The specs share one api and one database; each makes its own person, but one worker keeps the api's log readable.
     workers: 1,
     // A sign-in that works on the second try is broken on the first, which is the try a person gets.
