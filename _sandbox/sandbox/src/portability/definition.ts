@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { STATE_DIR } from "@intentic/constants";
+import { FIELD_NOTES_FILE, STATE_DIR } from "@intentic/constants";
 import { errorMessage } from "@intentic/base/errors";
 import {
     type Capability,
@@ -97,6 +97,10 @@ export const DEFINITION_WORKSPACE: readonly { readonly path: string; readonly no
         note: "Workflow designs are inert until someone runs one. A release gate mints a fresh token here; the URL its pipelines were taught stays behind with the source.",
     },
     { path: ".intentic/config/loop-designs.json", note: "Loop designs are inert until someone runs one." },
+    {
+        path: FIELD_NOTES_FILE,
+        note: "The field-notes brief describes the sandbox it was drawn from; the target's own field-notes automation rewrites it from its own sessions.",
+    },
     { path: ".intentic/config/extension-settings.json", note: "Per-extension settings, beside the extensions they configure." },
     {
         path: ".intentic/config/extension-enablement.json",

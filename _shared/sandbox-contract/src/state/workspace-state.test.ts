@@ -160,7 +160,9 @@ describe(`WORKSPACE_STATE_FILES`, () => {
         for (const file of WORKSPACE_STATE_FILES.filter((entry) => entry.invalidates.length > 0)) {
             const isFamilyPrefix = file.path.endsWith(`.`);
             // .md is the safety policy: the one state file a model reads as prose rather than a parser reading JSON.
-            const isFile = file.path.endsWith(`.json`) || file.path.endsWith(`.Dockerfile`) || file.path.endsWith(`.md`);
+            // .toon is the field-notes brief, read by rank into every turn.
+            const isFile =
+                file.path.endsWith(`.json`) || file.path.endsWith(`.Dockerfile`) || file.path.endsWith(`.md`) || file.path.endsWith(`.toon`);
             expect(isFile || isFamilyPrefix || file.path.endsWith(`/`), file.path).toBe(true);
         }
     });
@@ -348,6 +350,9 @@ describe(`VERSIONED_STATE_PATHS`, () => {
             `${STATE_DIR}/config/extension-settings.json`,
             // Per-extension update posture (notify/agent/auto): a standing decision on what may run unattended.
             `${STATE_DIR}/config/extension-update-policy.json`,
+            // The field-notes brief every turn opens with. Tracked so the automation that rewrites it, which always
+            // runs isolated, can land its rewrite at all; and a new revision is worth a reviewable diff.
+            `${STATE_DIR}/config/field-notes.toon`,
             // Which commands count as heavy, and how many may run at once; a shared-box decision worth a `git log`
             // line.
             `${STATE_DIR}/config/heavy-commands.json`,

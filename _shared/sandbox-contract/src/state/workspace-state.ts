@@ -128,6 +128,17 @@ const STATE_FILES = [
     // Bash command. `carry`: a property of the workspace, not the machine. `versioned`: raising the limit is a decision
     // worth a diff.
     { path: ".intentic/config/heavy-commands.json", invalidates: ["settings"], portability: "carry", versioned: true },
+    // The field-notes brief composed into every turn (agent-context field-notes.ts), rewritten by the monthly
+    // `field-notes` automation. `versioned` is load-bearing, not just reviewability: automation wakes always run
+    // isolated, and an unversioned path is excluded from the root repo, so the rewrite would never leave its worktree.
+    // Feeds the agent-settings row (`settings.fieldNotes`).
+    {
+        path: ".intentic/config/field-notes.toon",
+        invalidates: ["settings"],
+        portability: "carry",
+        versioned: true,
+        outsideWriter: "the field-notes automation's agent turn (the daemon only reads it, through FIELD_NOTES_FILE)",
+    },
     // Last-fired stamps for the rule table. `derived`: records what happened on this machine, not carried.
     {
         path: ".intentic/local/rule-firings.json",
