@@ -3,30 +3,33 @@ import type { Disposable } from "@intentic/extension-api";
 import { ContextMenu, ResizeSeam, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import type { MenuItem } from "primevue/menuitem";
-import { type Component, computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, useId, useTemplateRef } from "vue";
+import { type Component, computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, useId } from "vue";
 import { chatInSidePanel } from "../../features/chat/panel/chatPanelLayout";
 import { SIDE_PANEL } from "../commands/categories";
 import { type CommandRegistration, registerCommand } from "../commands/useCommands";
 import { chatSlot } from "../window/panelSlots";
 import { toAppPx, toScreenPx, uiLength } from "../window/uiScale";
 import {
-    DEFAULT_SIDE_SPLIT,
+    defaultBesideWidth,
     defaultChatWidth,
     defaultFloatingSideWidth,
+    maxBesideWidth,
     maxChatWidth,
     maxFloatingSideWidth,
     MIN_CHAT_WIDTH,
+    MIN_PANE_PX,
     useLayout,
 } from "../window/useLayout";
-import { closeAllTabs, closeOtherTabs, closeTab, cycleTab, keepTab, activateTab, type SideTab, toggleCollapsed, useSidePanel } from "./sideTabs";
+import { closeAllTabs, closeOtherTabs, closeTab, cycleTab, keepTab, activateTab, type SideTab, useSidePanel } from "./sideTabs";
 import { describeTab, homeOf, shownSideActive, shownSideTabs, type SideViewEntry, type SideViewLabel, sideViewOf } from "./sideViews";
 import SideStrip, { type SideStripItem } from "./SideStrip.vue";
 import SideUnavailable from "./SideUnavailable.vue";
 
-// THE SHELL'S RIGHT-HAND COLUMN: what the reader opened beside the section the rail put in the main area, over the chat
-// when the chat's home is the side. Peeks stack above the chat rather than hiding it behind a tab, so the chat that
-// linked to a file, or the preview it is changing, stays in reach while you look. The column's width is the one the chat
-// column always had (`ui-chat-width`), so nobody's width moved when the chat became one of the panel's two parts.
+// THE SHELL'S RIGHT-HAND COLUMN: what the reader opened beside the section the rail put in the main area, and the chat
+// when the chat's home is the side. With both, they stand side by side, each the full height: what was opened in a column
+// of its own (`ui-side-beside-width`), then the chat in the width it always had (`ui-chat-width`). Stacked in one chat-wide
+// column instead, a preview became a phone-sized box and the chat under it lost the room its transcript reads in; side by
+// side, the chat that linked to a file, or the preview it is changing, stays in reach while you look, and neither shrinks.
 
 // `floating`: drawn in a popped-out chat's window, beside the chat rather than over it, at that window's own width.
 const { floating = false } = defineProps<{ floating?: boolean }>();
@@ -36,49 +39,42 @@ const layout = useLayout();
 const panel = useSidePanel();
 const uid = useId();
 
-// Heights in app pixels: the least a peek can be read at, and the least the chat needs for its bar and composer.
-const MIN_PEEK_PX = 160;
-const MIN_CHAT_PX = 240;
-
 const tabsOnScreen = computed(() => shownSideTabs.value.length > 0);
-// The chat under the tabs splits the column; alone, the tabs take all of it.
-const stacked = computed(() => tabsOnScreen.value && chatInSidePanel.value);
-const folded = computed(() => stacked.value && panel.collapsed.value);
+// The chat beside the tabs: two columns, each its own width. Alone, either takes the whole panel.
+const beside = computed(() => tabsOnScreen.value && chatInSidePanel.value);
 
-// The column's own element; the split's seam measures against its height.
-const root = useTemplateRef<HTMLElement>(`root`);
-const height = ref(0);
-let observer: ResizeObserver | undefined;
-onMounted(() => {
-    // A component-test DOM has no observer; nothing measures there, and the split draws from its fraction alone.
-    if (root.value === null || !(`ResizeObserver` in globalThis)) {
-        return;
-    }
-    observer = new ResizeObserver(([entry]) => {
-        height.value = entry?.contentRect.height ?? height.value;
-    });
-    observer.observe(root.value);
+// The seams speak pointer pixels; what is stored is app pixels. The panel's left edge sizes whatever stands there: the
+// beside column when there is one, else the one column the panel is (the chat's, or a popped-out window's own).
+const edgeSeam = computed<number>({
+    get: () => toScreenPx(beside.value ? layout.besideWidth.value : floating ? layout.floatingSideWidth.value : layout.chatWidth.value),
+    set: (px) =>
+        beside.value
+            ? layout.setBesideWidth(toAppPx(px))
+            : floating
+              ? layout.setFloatingSideWidth(toAppPx(px))
+              : layout.setChatWidth(toAppPx(px)),
 });
-onBeforeUnmount(() => observer?.disconnect());
-
-// The seams speak pointer pixels; what is stored is app pixels for the width and a fraction for the split.
-const widthSeam = computed<number>({
-    get: () => toScreenPx(floating ? layout.floatingSideWidth.value : layout.chatWidth.value),
-    set: (px) => (floating ? layout.setFloatingSideWidth(toAppPx(px)) : layout.setChatWidth(toAppPx(px))),
-});
-const splitSeam = computed<number>({
-    get: () => Math.round(layout.sideSplit.value * height.value),
+// Between the two columns the seam trades width between them, so the section in the main area never moves under it.
+const chatSeam = computed<number>({
+    get: () => toScreenPx(layout.chatWidth.value),
     set: (px) => {
-        if (height.value > 0) {
-            layout.setSideSplit(px / height.value);
-        }
+        const before = layout.chatWidth.value;
+        layout.setChatWidth(toAppPx(px));
+        layout.setBesideWidth(layout.besideWidth.value - (layout.chatWidth.value - before));
     },
 });
-// Drawn from the fraction in CSS rather than the measured height, so the first paint is already the right split.
-const tabsStyle = computed(() =>
-    stacked.value && !folded.value
-        ? { height: `${layout.sideSplit.value * 100}%`, minHeight: uiLength(MIN_PEEK_PX), maxHeight: `calc(100% - ${uiLength(MIN_CHAT_PX)})` }
-        : undefined,
+const edgeBounds = computed(() =>
+    beside.value
+        ? { min: MIN_PANE_PX, max: maxBesideWidth(), reset: defaultBesideWidth() }
+        : floating
+          ? { min: MIN_CHAT_WIDTH, max: maxFloatingSideWidth(), reset: defaultFloatingSideWidth() }
+          : { min: MIN_CHAT_WIDTH, max: maxChatWidth(), reset: defaultChatWidth() },
+);
+// Both shrink with a window too narrow for their sum, the chat in proportion to its width but never under its floor,
+// so its composer keeps its controls; what was opened beside gives way first.
+const tabsStyle = computed(() => (beside.value ? { flex: `0 1 ${uiLength(layout.besideWidth.value)}` } : undefined));
+const chatStyle = computed(() =>
+    beside.value ? { flex: `1 1 ${uiLength(layout.chatWidth.value)}`, minWidth: uiLength(MIN_CHAT_WIDTH) } : undefined,
 );
 
 // One element id per tab for as long as the panel lives, since a tab's own id is JSON and no fit for an attribute.
@@ -198,7 +194,6 @@ onMounted(() => {
         },
         { command: `side.keepTab`, title: t(`ui.action.keepOpen`), icon: `pin`, handler: acting((tab) => keepTab(tab.id)) },
         { command: `side.openInSection`, title: t(`shell.sidePanel.openInSection`), icon: `expand`, handler: acting(openHome) },
-        { command: `side.toggleFold`, title: t(`shell.sidePanel.fold`), icon: `chevron-up`, handler: toggleCollapsed },
     ];
     commandDisposables = entries.map((entry) => registerCommand({ owner: `builtin`, category: SIDE_PANEL, ...entry }));
 });
@@ -211,23 +206,13 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-    <aside ref="root" class="side-panel relative flex min-h-0 min-w-0 flex-col border-l border-line bg-card" style="grid-area: side">
-        <!-- The column's width, dragged from its left edge; an overlay seam, since the panel's own axis is the vertical stack. -->
-        <ResizeSeam
-            v-model="widthSeam"
-            place="edge"
-            pane="after"
-            :min="toScreenPx(MIN_CHAT_WIDTH)"
-            :max="toScreenPx(floating ? maxFloatingSideWidth() : maxChatWidth())"
-            :reset="toScreenPx(floating ? defaultFloatingSideWidth() : defaultChatWidth())"
-            :title="t(`ui.resizeSeam.doubleClickResets`)"
-        />
-
+    <!-- `flex-row`: with the chat here too, the two stand side by side rather than one over the other. -->
+    <aside class="side-panel relative flex min-h-0 min-w-0 border-l border-line bg-card" style="grid-area: side">
         <!-- What was opened beside: the strip, then every tab's body stacked in one box, the one on screen visible. -->
         <section
             v-if="tabsOnScreen"
-            class="side-tabs flex min-h-0 flex-col"
-            :class="stacked ? `` : `flex-1`"
+            class="side-tabs relative flex min-h-0 min-w-0 flex-col"
+            :class="beside ? `` : `flex-1`"
             :style="tabsStyle"
             :aria-label="t(`shell.sidePanel.tabs`)"
         >
@@ -264,26 +249,13 @@ onBeforeUnmount(() => {
                     >
                         <Icon name="expand" class="text-xs" />
                     </button>
-                    <button
-                        v-if="stacked"
-                        type="button"
-                        :class="ui.iconButton(`h-7 w-7 rounded`)"
-                        :aria-label="folded ? t(`shell.sidePanel.unfold`) : t(`shell.sidePanel.fold`)"
-                        :aria-expanded="!folded"
-                        v-tooltip.bottom="
-                            folded ? t(`shell.sidePanel.unfold`) : { title: t(`shell.sidePanel.fold`), note: t(`shell.sidePanel.foldNote`) }
-                        "
-                        @click="toggleCollapsed()"
-                    >
-                        <Icon :name="folded ? `chevron-down` : `chevron-up`" class="text-xs" />
-                    </button>
                 </div>
             </div>
             <!-- Every body stays mounted and in place: a hidden preview is never detached (which would reload the app) and a
                  file keeps where it was scrolled to. Hidden ones are invisible and inert, so nothing in them takes focus.
                  `inert` is bound to undefined, not false, on the one shown: Vue writes a false one as `inert="false"`, and
                  the attribute's presence alone makes a subtree inert. -->
-            <div v-show="!folded" class="relative min-h-0 flex-1 bg-canvas">
+            <div class="relative min-h-0 flex-1 bg-canvas">
                 <div
                     v-for="tab in panel.tabs.value"
                     :key="tab.id"
@@ -299,23 +271,38 @@ onBeforeUnmount(() => {
             </div>
         </section>
 
-        <!-- Between the tabs and the chat, dragging the share of the height the tabs take; double-click puts it back. -->
+        <!-- The chat's slot, the same element for as long as the chat lives here: tabs coming and going beside it never
+             move the chat, so its transcript keeps its place. -->
+        <section
+            v-if="chatInSidePanel"
+            class="side-chat relative flex min-h-0 min-w-0 flex-col"
+            :class="beside ? `border-l border-line` : `flex-1`"
+            :style="chatStyle"
+        >
+            <div ref="chatSlot" class="contents"></div>
+            <!-- Between the two columns: the chat's width, traded with the column beside it. -->
+            <ResizeSeam
+                v-if="beside"
+                v-model="chatSeam"
+                place="edge"
+                pane="after"
+                :min="toScreenPx(MIN_CHAT_WIDTH)"
+                :max="toScreenPx(Math.max(MIN_CHAT_WIDTH, layout.chatWidth.value + layout.besideWidth.value - MIN_PANE_PX))"
+                :reset="toScreenPx(defaultChatWidth())"
+                :title="t(`ui.resizeSeam.doubleClickResets`)"
+            />
+        </section>
+
+        <!-- The panel's left edge, sizing the column that stands there. Last, so it draws over either column's bar. -->
         <ResizeSeam
-            v-if="stacked && !folded"
-            v-model="splitSeam"
-            axis="y"
-            pane="before"
-            :min="toScreenPx(MIN_PEEK_PX)"
-            :max="Math.max(toScreenPx(MIN_PEEK_PX), height - toScreenPx(MIN_CHAT_PX))"
-            :reset="Math.round(DEFAULT_SIDE_SPLIT * height)"
+            v-model="edgeSeam"
+            place="edge"
+            pane="after"
+            :min="toScreenPx(edgeBounds.min)"
+            :max="toScreenPx(edgeBounds.max)"
+            :reset="toScreenPx(edgeBounds.reset)"
             :title="t(`ui.resizeSeam.doubleClickResets`)"
         />
-
-        <!-- The chat's slot, the same element for as long as the chat lives here: tabs coming and going above it never move
-             the chat, so its transcript keeps its place. -->
-        <section v-if="chatInSidePanel" class="side-chat flex min-h-0 flex-1 flex-col" :class="tabsOnScreen ? `border-t border-line` : ``">
-            <div ref="chatSlot" class="contents"></div>
-        </section>
 
         <ContextMenu ref="tabMenu" :model="menuItems" :min-width="12" />
     </aside>

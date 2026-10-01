@@ -495,10 +495,14 @@ const keepOnRail = (tile: SectionTile): void => {
 };
 
 // The side panel (shell/side) takes its column while it holds anything: the chat whose home is the side, or what was
-// opened beside the section. Empty, the column is 0 wide.
-const sideShown = computed(() => chatInSidePanel.value || shownSideTabs.value.length > 0);
+// opened beside the section. Empty, the column is 0 wide; holding both, it is wide enough for them side by side.
+const sideTabsShown = computed(() => shownSideTabs.value.length > 0);
+const sideShown = computed(() => chatInSidePanel.value || sideTabsShown.value);
+const sideWidth = computed(() =>
+    chatInSidePanel.value && sideTabsShown.value ? layout.chatWidth.value + layout.besideWidth.value : layout.chatWidth.value,
+);
 const gridStyle = computed(() => ({
-    "--side-width": sideShown.value ? uiLength(layout.chatWidth.value) : `0px`,
+    "--side-width": sideShown.value ? uiLength(sideWidth.value) : `0px`,
     // The rail's own measures, shared with a desktop window on a local folder (railFrame.ts, iconRail.css).
     ...railFrame(iconRailSize.value),
 }));

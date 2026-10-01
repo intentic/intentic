@@ -5650,8 +5650,6 @@
             "closeAll": "Close All",
             "closeOthers": "Close Others",
             "doubleClickToKeep": "Double-click to keep",
-            "fold": "Fold",
-            "foldNote": "Chat gets the room",
             "gone": "{name} is no longer here",
             "goneNote": "It was moved or deleted after it was mentioned.",
             "label": "Side panel",
@@ -5660,8 +5658,7 @@
             "previous": "Previous",
             "tabs": "Opened beside",
             "unavailable": "Not available",
-            "unavailableNote": "The extension that shows it is off or was removed.",
-            "unfold": "Unfold"
+            "unavailableNote": "The extension that shows it is off or was removed."
         },
         "useNavigationCommands": {
             "add": "Add…"

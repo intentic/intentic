@@ -1,5 +1,5 @@
 // The side panel mounted for real: what it draws for what it holds, and the one invariant the chat depends on, that the
-// chat's slot is the same element whatever comes and goes above it.
+// chat's slot is the same element whatever comes and goes beside it.
 import "@intentic/testing/dom";
 import { installUi } from "@intentic/ui";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
@@ -83,13 +83,18 @@ it(`draws the chat alone, as the column always looked, when nothing was opened b
     expect(chatSlot.value?.parentElement?.classList.contains(`side-chat`)).toBe(true);
 });
 
-it(`stacks what was opened beside above the chat, and never moves the chat to do it`, async () => {
+it(`stands what was opened beside the chat in its own column, and never moves the chat to do it`, async () => {
     const host = await mount();
     const slot = chatSlot.value;
     openBeside(`stub`, { n: 1 });
     await settle();
 
     expect(tabTitles(host)).toEqual([`Thing 1`]);
+    // Two columns, side by side and each the panel's full height: the tabs first, then the chat.
+    const columns = [...(host.querySelector(`.side-panel`)?.children ?? [])].filter((child) => child.tagName === `SECTION`);
+    expect(columns.map((column) => column.classList.contains(`side-tabs`) || column.classList.contains(`side-chat`))).toEqual([true, true]);
+    expect(columns[0]?.classList.contains(`side-tabs`)).toBe(true);
+    expect(host.querySelector<HTMLElement>(`.side-tabs`)?.style.flex).toContain(`0 1`);
     expect(host.querySelector(`.stub-body`)?.textContent).toBe(`body 1`);
     expect(chatSlot.value).toBe(slot);
 
@@ -107,8 +112,6 @@ it(`gives the tabs the whole column while the chat lives elsewhere`, async () =>
     expect(host.querySelector(`.side-chat`)).toBeNull();
     expect(chatSlot.value).toBeNull();
     expect(host.querySelector(`.side-tabs`)?.classList.contains(`flex-1`)).toBe(true);
-    // No chat below, so nothing to fold the tabs away for.
-    expect(button(host, `Fold`)).toBeNull();
 });
 
 it(`keeps every body mounted and shows only the tab on screen`, async () => {
@@ -162,21 +165,4 @@ it(`draws a tab whose side view is gone, so it can be read and closed`, async ()
 
     expect(tabTitles(host)).toEqual([`run`]);
     expect(host.querySelector(`[role="tabpanel"]`)?.textContent).toContain(`Not available`);
-});
-
-it(`folds the tabs to their strip, giving the chat the height, and unfolds them`, async () => {
-    openBeside(`stub`, { n: 1 });
-    const host = await mount();
-    const bodies = (): HTMLElement | null => host.querySelector<HTMLElement>(`[role="tabpanel"]`)?.parentElement ?? null;
-
-    button(host, `Fold`)?.click();
-    await settle();
-    expect(panel.collapsed.value).toBe(true);
-    expect(bodies()?.style.display).toBe(`none`);
-    expect(tabTitles(host)).toEqual([`Thing 1`]);
-
-    button(host, `Unfold`)?.click();
-    await settle();
-    expect(panel.collapsed.value).toBe(false);
-    expect(bodies()?.style.display).toBe(``);
 });

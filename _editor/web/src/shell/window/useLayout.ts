@@ -63,12 +63,9 @@ export const DEFAULT_SIDE_PANE_WIDTH = 560;
 const MIN_SIDE_PANE_WIDTH = MIN_PANE_PX;
 const MAX_SIDE_PANE_WIDTH = 4000;
 
-// How much of the side panel's height the things opened beside take while the chat shares the column, as a fraction of
-// it rather than pixels, so the split survives a window resize the way it was drawn.
-const SIDE_SPLIT_KEY = `ui-side-split`;
-export const DEFAULT_SIDE_SPLIT = 0.5;
-const MIN_SIDE_SPLIT = 0.15;
-const MAX_SIDE_SPLIT = 0.85;
+// The column what was opened beside takes next to a side-docked chat (shell/side): its own width, since a preview or a
+// file wants far more room than a chat column, and stacking it over the chat would leave both too short to use.
+const BESIDE_WIDTH_KEY = `ui-side-beside-width`;
 
 // The agent review panel's own file list width, separate from the workspace explorer's since the two never appear
 // together and a review list needs room for full paths.
@@ -154,14 +151,18 @@ export const maxFloatingSideWidth = (): number => Math.max(MIN_CHAT_WIDTH, toApp
 const clampFloatingSideWidth = (px: number): number => Math.round(Math.max(MIN_CHAT_WIDTH, Math.min(px, maxFloatingSideWidth())));
 export const defaultFloatingSideWidth = (): number => clampFloatingSideWidth(toAppPx(window.innerWidth) * 0.45);
 
+// The beside column shares the room the rail and the chat leave with the section in the main area: at most all of it
+// but one pane for that section, and half of it until dragged.
+const roomBesideChat = (): number => toAppPx(window.innerWidth - iconRailScreenPx(iconRailSize.value)) - chatWidth.value;
+export const maxBesideWidth = (): number => Math.max(MIN_PANE_PX, roomBesideChat() - MIN_PANE_PX);
+const clampBesideWidth = (px: number): number => Math.round(Math.max(MIN_PANE_PX, Math.min(px, maxBesideWidth())));
+export const defaultBesideWidth = (): number => clampBesideWidth(roomBesideChat() / 2);
+
 const clampSidebarWidth = (px: number): number => Math.round(Math.max(MIN_SIDEBAR_WIDTH, Math.min(px, MAX_SIDEBAR_WIDTH)));
 
 const clampReviewListWidth = (px: number): number => Math.round(Math.max(MIN_REVIEW_LIST_WIDTH, Math.min(px, MAX_REVIEW_LIST_WIDTH)));
 
 const clampSidePaneWidth = (px: number): number => Math.round(Math.max(MIN_SIDE_PANE_WIDTH, Math.min(px, MAX_SIDE_PANE_WIDTH)));
-
-// Two decimals are all a drag can mean, and all the stored string needs.
-const clampSideSplit = (fraction: number): number => Math.round(Math.max(MIN_SIDE_SPLIT, Math.min(fraction, MAX_SIDE_SPLIT)) * 100) / 100;
 
 // Three preference shapes built on definePreference, which owns storage, DOM and cross-window sync; only what a stored
 // string means differs between them.
@@ -197,14 +198,7 @@ const floatingSideWidth = widthPref(FLOATING_SIDE_WIDTH_KEY, clampFloatingSideWi
 const sidebarWidth = widthPref(SIDEBAR_WIDTH_KEY, clampSidebarWidth, defaultSidebarWidth);
 const reviewListWidth = widthPref(REVIEW_LIST_WIDTH_KEY, clampReviewListWidth, defaultReviewListWidth);
 const sidePaneWidth = widthPref(SIDE_PANE_WIDTH_KEY, clampSidePaneWidth, () => DEFAULT_SIDE_PANE_WIDTH);
-const sideSplit = definePreference<number>({
-    key: SIDE_SPLIT_KEY,
-    read: (raw) => {
-        const parsed = raw === null ? Number.NaN : Number.parseFloat(raw);
-        return Number.isFinite(parsed) ? clampSideSplit(parsed) : DEFAULT_SIDE_SPLIT;
-    },
-    write: String,
-});
+const besideWidth = widthPref(BESIDE_WIDTH_KEY, clampBesideWidth, defaultBesideWidth);
 const sidebarCollapsed = boolPref(SIDEBAR_COLLAPSED_KEY);
 const sidebarPanel = enumPref(SIDEBAR_PANEL_KEY, [`files`, `changes`, `history`] as const, `files`);
 const showIgnored = boolPref(SHOW_IGNORED_KEY);
@@ -279,9 +273,8 @@ const resetSidePaneWidth = (): void => {
     setSidePaneWidth(DEFAULT_SIDE_PANE_WIDTH);
 };
 
-// A fraction of the side panel's height, from its seam's drag.
-const setSideSplit = (fraction: number): void => {
-    sideSplit.value = clampSideSplit(fraction);
+const setBesideWidth = (px: number): void => {
+    besideWidth.value = clampBesideWidth(px);
 };
 
 const setSidebarCollapsed = (collapsed: boolean): void => {
@@ -360,7 +353,7 @@ export function useLayout() {
         sidebarWidth,
         reviewListWidth,
         sidePaneWidth,
-        sideSplit,
+        besideWidth,
         sidebarCollapsed,
         terminalOpen,
         sidebarPanel,
@@ -387,7 +380,7 @@ export function useLayout() {
         resetReviewListWidth,
         setSidePaneWidth,
         resetSidePaneWidth,
-        setSideSplit,
+        setBesideWidth,
         setSidebarCollapsed,
         toggleSidebar,
         setTerminalOpen,

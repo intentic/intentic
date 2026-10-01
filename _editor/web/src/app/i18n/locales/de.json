@@ -4239,8 +4239,6 @@
             "closeAll": "Alle schließen",
             "closeOthers": "Andere schließen",
             "doubleClickToKeep": "Doppelklick behält ihn",
-            "fold": "Einklappen",
-            "foldNote": "Der Chat darunter bekommt den Platz",
             "gone": "{name} ist nicht mehr da",
             "goneNote": "Verschoben oder gelöscht, nachdem es erwähnt wurde.",
             "label": "Seitenbereich",
@@ -4249,8 +4247,7 @@
             "previous": "Vorheriger",
             "tabs": "Daneben geöffnet",
             "unavailable": "Nicht verfügbar",
-            "unavailableNote": "Die Erweiterung, die es zeigt, ist aus oder wurde entfernt.",
-            "unfold": "Ausklappen"
+            "unavailableNote": "Die Erweiterung, die es zeigt, ist aus oder wurde entfernt."
         },
         "useNavigationCommands": {
             "add": "Hinzufügen…"

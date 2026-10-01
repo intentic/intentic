@@ -4262,8 +4262,6 @@
             "closeAll": "Cerrar todo",
             "closeOthers": "Cerrar las demás",
             "doubleClickToKeep": "Doble clic para fijar",
-            "fold": "Plegar",
-            "foldNote": "El chat de abajo gana el espacio",
             "gone": "{name} ya no está aquí",
             "goneNote": "Se movió o se eliminó después de mencionarse.",
             "label": "Panel lateral",
@@ -4272,8 +4270,7 @@
             "previous": "Anterior",
             "tabs": "Abierto al lado",
             "unavailable": "No disponible",
-            "unavailableNote": "La extensión que lo muestra está desactivada o se eliminó.",
-            "unfold": "Desplegar"
+            "unavailableNote": "La extensión que lo muestra está desactivada o se eliminó."
         },
         "useNavigationCommands": {
             "add": "Añadir…"

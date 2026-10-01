@@ -5409,8 +5409,6 @@
             "closeAll": "Zamknij wszystko",
             "closeOthers": "Zamknij pozostałe",
             "doubleClickToKeep": "Dwuklik, by zachować",
-            "fold": "Zwiń",
-            "foldNote": "Czat poniżej dostaje miejsce",
             "gone": "{name} już tu nie ma",
             "goneNote": "Przeniesiony lub usunięty po tym, jak o nim wspomniano.",
             "label": "Panel boczny",
@@ -5419,8 +5417,7 @@
             "previous": "Poprzedni",
             "tabs": "Otwarte obok",
             "unavailable": "Niedostępne",
-            "unavailableNote": "Rozszerzenie, które to pokazuje, jest wyłączone lub zostało usunięte.",
-            "unfold": "Rozwiń"
+            "unavailableNote": "Rozszerzenie, które to pokazuje, jest wyłączone lub zostało usunięte."
         },
         "useNavigationCommands": {
             "add": "Dodaj…"

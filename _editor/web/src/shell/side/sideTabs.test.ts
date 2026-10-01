@@ -22,7 +22,7 @@ const session = store(`sessionStorage`);
 const activeSandboxId = ref<string | undefined>(`sb1`);
 jest.mock("../../features/sandbox/overview/activeSandbox", () => ({ activeSandboxId }));
 
-const { activateTab, closeAllTabs, closeOtherTabs, closeTab, cycleTab, keepTab, openBeside, sideTabId, toggleCollapsed, useSidePanel } =
+const { activateTab, closeAllTabs, closeOtherTabs, closeTab, cycleTab, keepTab, openBeside, sideTabId, useSidePanel } =
     await import("./sideTabs");
 
 const panel = useSidePanel();
@@ -148,27 +148,10 @@ describe(`closing`, () => {
         expect(panel.active.value).toBeNull();
     });
 
-    it(`clears the peek with the peek's tab, and unfolds a panel left with nothing in it`, () => {
+    it(`clears the peek with the peek's tab`, () => {
         openBeside(`file`, file(`d.ts`));
-        toggleCollapsed();
-        expect(panel.collapsed.value).toBe(true);
-
         closeTab(idOf(`d.ts`));
         expect(panel.peek.value).toBeNull();
-        expect(panel.collapsed.value).toBe(true);
-
-        closeAllTabs();
-        expect(panel.collapsed.value).toBe(false);
-    });
-
-    it(`unfolds folded tabs when anything is opened or picked`, () => {
-        toggleCollapsed();
-        activateTab(idOf(`a.ts`));
-        expect(panel.collapsed.value).toBe(false);
-
-        toggleCollapsed();
-        openBeside(`file`, file(`e.ts`));
-        expect(panel.collapsed.value).toBe(false);
     });
 
     it(`walks the tabs with wrap-around`, () => {
@@ -183,7 +166,7 @@ describe(`closing`, () => {
 describe(`what survives a reload`, () => {
     const key = `intentic.sidePanel.sb1`;
 
-    it(`stores the tabs, the focus, the peek and the fold under this window's sandbox`, async () => {
+    it(`stores the tabs, the focus, and the peek under this window's sandbox`, async () => {
         openBeside(`file`, file(`a.ts`), { keep: true, line: 9 });
         openBeside(`file`, file(`b.ts`));
         await nextTick();
@@ -195,7 +178,6 @@ describe(`what survives a reload`, () => {
             ],
             active: idOf(`b.ts`),
             peek: idOf(`b.ts`),
-            collapsed: false,
         });
         expect(local.get(key)).toBe(session.get(key));
     });
@@ -221,7 +203,6 @@ describe(`what survives a reload`, () => {
         expect(paths()).toEqual([`a.ts`, `preview`]);
         expect(panel.active.value).toBe(sideTabId(`preview`, {}));
         expect(panel.peek.value).toBe(sideTabId(`preview`, {}));
-        expect(panel.collapsed.value).toBe(true);
     });
 
     it(`opens empty on a payload that is not the panel's`, () => {

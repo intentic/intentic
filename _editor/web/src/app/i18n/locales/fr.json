@@ -4220,8 +4220,6 @@
             "closeAll": "Tout fermer",
             "closeOthers": "Fermer les autres",
             "doubleClickToKeep": "Double-clic pour garder",
-            "fold": "Replier",
-            "foldNote": "Le chat en dessous prend la place",
             "gone": "{name} n'est plus là",
             "goneNote": "Déplacé ou supprimé après avoir été mentionné.",
             "label": "Panneau latéral",
@@ -4230,8 +4228,7 @@
             "previous": "Précédent",
             "tabs": "Ouvert à côté",
             "unavailable": "Indisponible",
-            "unavailableNote": "L'extension qui l'affiche est désactivée ou a été supprimée.",
-            "unfold": "Déplier"
+            "unavailableNote": "L'extension qui l'affiche est désactivée ou a été supprimée."
         },
         "useNavigationCommands": {
             "add": "Ajouter…"

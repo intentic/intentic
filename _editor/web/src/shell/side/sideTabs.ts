@@ -26,8 +26,6 @@ interface SideState {
     readonly active: string | null;
     // The tab opened as a look, which the next look replaces unless it is kept; null once kept or closed.
     readonly peek: string | null;
-    // The tabs folded down to their strip, giving the chat under them the height. Opening anything unfolds them.
-    readonly collapsed: boolean;
 }
 
 export interface OpenBesideOptions {
@@ -37,7 +35,7 @@ export interface OpenBesideOptions {
     readonly line?: number;
 }
 
-const EMPTY: SideState = { tabs: [], active: null, peek: null, collapsed: false };
+const EMPTY: SideState = { tabs: [], active: null, peek: null };
 
 // Keys sorted, so `{a, b}` and `{b, a}` are one tab.
 export const sideTabId = (view: string, input: SideInput): string =>
@@ -66,7 +64,6 @@ const StoredStateSchema = z.object({
     tabs: z.array(z.unknown()),
     active: z.string().nullish(),
     peek: z.string().nullish(),
-    collapsed: z.boolean().optional(),
 });
 
 // An unreadable payload counts as nothing remembered; the panel opens empty.
@@ -97,7 +94,7 @@ const parseState = (raw: string): SideState | undefined => {
         }
     }
     const names = (id: string | null | undefined): string | null => (tabs.some((tab) => tab.id === id) ? (id ?? null) : null);
-    return { tabs, active: names(stored.active) ?? tabs.at(-1)?.id ?? null, peek: names(stored.peek), collapsed: stored.collapsed === true };
+    return { tabs, active: names(stored.active) ?? tabs.at(-1)?.id ?? null, peek: names(stored.peek) };
 };
 
 const scopedSandboxId = sandboxValue(() => activeSandboxId.value);
@@ -116,7 +113,6 @@ const serialized = computed(() =>
         tabs: state.value.tabs.map(({ view, input }) => ({ view, input })),
         active: state.value.active,
         peek: state.value.peek,
-        collapsed: state.value.collapsed,
     }),
 );
 watch(serialized, (json) => {
@@ -153,13 +149,13 @@ export const openBeside = (view: string, input: SideInput, options: OpenBesideOp
         jumps.value = { ...jumps.value, [id]: { line: options.line, seq: ++jumpSeq } };
     }
     if (open) {
-        set({ active: id, collapsed: false, peek: options.keep === true && current.peek === id ? null : current.peek });
+        set({ active: id, peek: options.keep === true && current.peek === id ? null : current.peek });
         return;
     }
     const tab: SideTab = { id, view, input };
     const replacing = options.keep === true ? -1 : current.tabs.findIndex((candidate) => candidate.id === current.peek);
     const tabs = replacing === -1 ? [...current.tabs, tab] : current.tabs.with(replacing, tab);
-    set({ tabs, active: id, collapsed: false, peek: options.keep === true ? (replacing === -1 ? current.peek : null) : id });
+    set({ tabs, active: id, peek: options.keep === true ? (replacing === -1 ? current.peek : null) : id });
 };
 
 // Double-click, Keep open, or anything else that says the reader means to come back to it.
@@ -171,7 +167,7 @@ export const keepTab = (id: string): void => {
 
 export const activateTab = (id: string): void => {
     if (state.value.tabs.some((tab) => tab.id === id)) {
-        set({ active: id, collapsed: false });
+        set({ active: id });
     }
 };
 
@@ -192,7 +188,7 @@ export const closeTabs = (ids: ReadonlySet<string>): void => {
     const peek = current.peek !== null && ids.has(current.peek) ? null : current.peek;
     const kept = Object.fromEntries(Object.entries(jumps.value).filter(([id]) => !ids.has(id)));
     jumps.value = kept;
-    set({ tabs, active, peek, collapsed: tabs.length === 0 ? false : current.collapsed });
+    set({ tabs, active, peek });
 };
 
 export const closeTab = (id: string): void => closeTabs(new Set([id]));
@@ -203,12 +199,6 @@ export const closeAllTabs = (): void => closeTabs(new Set(state.value.tabs.map((
 
 // Every tab showing a view, e.g. when an extension goes and takes its side view with it.
 export const tabsOfView = (view: string): readonly SideTab[] => state.value.tabs.filter((tab) => tab.view === view);
-
-export const setCollapsed = (collapsed: boolean): void => {
-    set({ collapsed });
-};
-
-export const toggleCollapsed = (): void => setCollapsed(!state.value.collapsed);
 
 // The next or previous tab, wrapping; Alt+PageDown and Alt+PageUp from inside the panel.
 export const cycleTab = (step: 1 | -1, among: readonly SideTab[] = state.value.tabs): void => {
@@ -226,7 +216,6 @@ export const useSidePanel = () => ({
     tabs: computed(() => state.value.tabs),
     active: computed(() => state.value.active),
     peek: computed(() => state.value.peek),
-    collapsed: computed(() => state.value.collapsed),
     jumps: computed(() => jumps.value),
     neighbourOf: (id: string) => neighbourOf(state.value.tabs, id),
 });
