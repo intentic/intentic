@@ -611,6 +611,7 @@ const RERUN_WHY = {
     door: "its last attempt was turned away before anything ran",
     overflow: "its session outgrew the model's window",
     flagged: "its model's safety classifier stopped the last attempt and a person chose to go on",
+    continued: "a person chose to carry on after its last turn stopped",
     answered: "the sandbox restarted while it waited on an answer",
 } as const satisfies Record<ResumeReason, string>;
 

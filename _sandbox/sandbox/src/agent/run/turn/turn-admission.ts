@@ -207,7 +207,7 @@ export const together = (items: readonly QueuedItem[]): readonly QueuedItem[] =>
 // session, only on the runtime and account that minted it, by the one routing rule (agent/providers/accounts/routing.ts).
 // A `sessionId` a client sent is no say in it; an older editor sends one it worked out itself, which this ignores. Only
 // a conversation not on record yet takes the one it names: a past session resumed from the history menu has no record.
-const sessionFor = (services: Services, routing: Pick<Turn, "conversationId" | "agent" | "harness" | "account" | "sessionId">): string | undefined => {
+export const sessionFor = (services: Pick<Services, "agents" | "conversations">, routing: Pick<Turn, "conversationId" | "agent" | "harness" | "account" | "sessionId">): string | undefined => {
     const entry = services.agents.entry(routing.conversationId);
     if (entry === undefined) {
         return routing.sessionId;

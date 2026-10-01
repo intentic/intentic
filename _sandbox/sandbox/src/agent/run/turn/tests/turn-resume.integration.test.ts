@@ -820,7 +820,7 @@ test("autoResumeOnRestart off records the interruption and re-runs nothing", asy
         { role: "user", text: "finish the report", sentAt: 10_000, messageId: "m-report" },
         {
             role: "notice",
-            text: "The sandbox restarted before this turn finished. Send another message to continue from the saved worktree.",
+            text: "The sandbox restarted before this turn finished. Continue picks it up from the saved worktree.",
             noticeCode: { code: "restartInterrupted" },
         },
     ]);
@@ -865,7 +865,7 @@ test("an interrupted turn is recorded from the work it did, not from its prompt 
         { role: "assistant", text: "two chapters in, on s-partial since 10000" },
         {
             role: "notice",
-            text: "The sandbox restarted before this turn finished. Send another message to continue from the saved worktree.",
+            text: "The sandbox restarted before this turn finished. Continue picks it up from the saved worktree.",
             noticeCode: { code: "restartInterrupted" },
         },
     ]);

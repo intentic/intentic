@@ -9,7 +9,6 @@ import { providerAccounts, setAccountUsage } from "../accounts/providerAccounts"
 import { judgedOauth } from "../../../testing/judgedAccounts";
 import { SANDBOX_ROUTE_NAMES } from "@intentic/sandbox-contract";
 import { setDaemonRoutes } from "../../sandbox/overview/useDaemonRoutes";
-import { CONTINUATIONS } from "../transcript/transcript";
 import { useChat } from "../run/useChat";
 import { queryClient } from "../../../lib/queryPersistence";
 import { SANDBOX_BUSY_AFTER_MS } from "../../sandbox/overview/availability";
@@ -207,9 +206,10 @@ afterEach(() => {
     providerAccounts.value = { ...providerAccounts.value, claude: [] };
 });
 
-it(`offers the stopped turn a way on, and sends the sentence when it is pressed`, async () => {
+it(`offers the stopped turn a way on, and carries it on when pressed, saying nothing`, async () => {
     const conversation = stoppedChat();
     const say = jest.spyOn(conversation.turn, `say`).mockResolvedValue(undefined);
+    const carry = jest.spyOn(conversation.turn, `continueTurn`).mockResolvedValue(undefined);
     await mountPanel();
 
     expect(composerText()).toContain(`Turn stopped short · work kept`);
@@ -218,19 +218,22 @@ it(`offers the stopped turn a way on, and sends the sentence when it is pressed`
     continueButton()!.click();
     await settle();
 
-    expect(say).toHaveBeenCalledWith(CONTINUATIONS.plain);
+    expect(carry).toHaveBeenCalledTimes(1);
+    expect(say).not.toHaveBeenCalled();
 });
 
 it(`makes Enter on an empty composer continue, and says so under the box`, async () => {
     const conversation = stoppedChat();
     const say = jest.spyOn(conversation.turn, `say`).mockResolvedValue(undefined);
+    const carry = jest.spyOn(conversation.turn, `continueTurn`).mockResolvedValue(undefined);
     await mountPanel();
 
     expect(composerText()).toContain(`Enter to continue`);
     composer().dispatchEvent(new KeyboardEvent(`keydown`, { key: `Enter`, bubbles: true }));
     await settle();
 
-    expect(say).toHaveBeenCalledWith(CONTINUATIONS.plain);
+    expect(carry).toHaveBeenCalledTimes(1);
+    expect(say).not.toHaveBeenCalled();
 });
 
 it(`stands down the moment the user types something of their own`, async () => {
@@ -326,6 +329,7 @@ it(`offers only the answers this ending can take`, async () => {
 it(`counts an unheld allowance down instead of going quiet, and keeps the press inert until it resets`, async () => {
     const conversation = stoppedChat();
     const say = jest.spyOn(conversation.turn, `say`).mockResolvedValue(undefined);
+    const carry = jest.spyOn(conversation.turn, `continueTurn`).mockResolvedValue(undefined);
     conversation.pickUp.value = { reason: `limit`, readyAt: Date.now() + 3_600_000 };
     await mountPanel();
 
@@ -336,6 +340,7 @@ it(`counts an unheld allowance down instead of going quiet, and keeps the press 
     composer().dispatchEvent(new KeyboardEvent(`keydown`, { key: `Enter`, bubbles: true }));
     await settle();
     expect(say).not.toHaveBeenCalled();
+    expect(carry).not.toHaveBeenCalled();
 });
 
 it(`offers a held allowance the press straight away, and re-runs the turn instead of saying anything`, async () => {
@@ -370,7 +375,7 @@ it(`tells a mid-turn allowance failure apart from one that refused the turn outr
 
 it(`hands the press over once the allowance has reset`, async () => {
     const conversation = stoppedChat();
-    const say = jest.spyOn(conversation.turn, `say`).mockResolvedValue(undefined);
+    const carry = jest.spyOn(conversation.turn, `continueTurn`).mockResolvedValue(undefined);
     conversation.pickUp.value = { reason: `limit`, readyAt: Date.now() - 1_000 };
     await mountPanel();
 
@@ -379,7 +384,7 @@ it(`hands the press over once the allowance has reset`, async () => {
     continueButton()!.click();
     await settle();
 
-    expect(say).toHaveBeenCalledWith(CONTINUATIONS.plain);
+    expect(carry).toHaveBeenCalledTimes(1);
 });
 
 // The outage asks the same question in the same words, in the same card: nothing about it is a second shape.

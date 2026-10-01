@@ -73,3 +73,16 @@ test("a re-run's notice row names its reason beside its words", () => {
         noticeCode: { code: "resumed", params: { reason: "restart" } },
     });
 });
+
+// A Continue on a turn the sandbox kept nothing of sends the note alone: no words of the person's to strip back out, and
+// the row it records is the sandbox's line, never a message from them.
+test("a carried-on turn's note stands alone, leaves no words, and records as a notice", () => {
+    expect(withoutResumeNote(RESUME_NOTES.continued)).toBe("");
+    expect(withResumeNote(RESUME_NOTES.continued, RESUME_NOTES.limit)).toBe(RESUME_NOTES.continued);
+    const disclosure = resumeDisclosure(RESUME_NOTES.continued);
+    expect(disclosure?.kind === "notice" ? resumeNoticeRow(disclosure) : undefined).toEqual({
+        role: "notice",
+        text: "Carried on from where the last turn stopped.",
+        noticeCode: { code: "resumed", params: { reason: "continued" } },
+    });
+});

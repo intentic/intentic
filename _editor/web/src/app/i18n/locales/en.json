@@ -1475,7 +1475,7 @@
             "planApproved": "Plan approved.",
             "keptPlanning": "Kept planning.",
             "watching": "Watching for {note}, checked every {every}.",
-            "restartInterrupted": "The sandbox restarted before this turn finished. Send another message to continue from the saved worktree.",
+            "restartInterrupted": "The sandbox restarted before this turn finished. Continue picks it up from the saved worktree.",
             "depsInstalling": "Installing {count} dependency it added or changed; the project's checks run when that finishes, and the outcome lands in Activity. | Installing {count} dependencies it added or changed; the project's checks run when that finishes, and the outcome lands in Activity.",
             "depsQueued": "{count} dependency it added or changed is being installed in your tree: the install waits for any other install to finish, appears in Work terminals, and its outcome lands in Activity. | {count} dependencies it added or changed are being installed in your tree: the install waits for any other install to finish, appears in Work terminals, and its outcome lands in Activity.",
             "retrying": "{message} Retrying by itself: attempt {attempt} of {of}.",
@@ -1505,7 +1505,8 @@
                 "refused": "Sent again after the allowance refused it: nothing had run.",
                 "door": "Sent again: the first attempt was turned away before anything ran.",
                 "overflow": "Sent again in a fresh session after the last one outgrew the model's context window.",
-                "flagged": "Sent again after the model's safeguards stopped it, without the stopped response."
+                "flagged": "Sent again after the model's safeguards stopped it, without the stopped response.",
+                "continued": "Carried on from where the last turn stopped."
             },
             "watchWake": {
                 "met": "{note} — the watch fired after {elapsed}.",

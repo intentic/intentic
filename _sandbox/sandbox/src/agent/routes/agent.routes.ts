@@ -17,6 +17,7 @@ import { opt } from "../../opt.js";
 import { forgetRemoteRequest, remoteRequestOf } from "../../runners/runner-requests.js";
 import { applyReply } from "../run/turn/turn-interactions.js";
 import { notePlanAnswer } from "../run/stream-agent.js";
+import { carryOnTurn } from "../run/turn/turn-resume.js";
 
 export const createAgentRoutes = (services: Services) => {
     const i = implement(agentContract).$context<OrpcContext>();
@@ -67,7 +68,15 @@ export const createAgentRoutes = (services: Services) => {
             // Push rides the run's own lifecycle, not this request, since a tab may be asleep.
             // A client composes only the land-conflict errand (the editor's own words); every other errand is the sandbox's,
             // so a request naming one would pass its sender's words off as the sandbox's.
-            const { errand, ...asked } = input;
+            const { errand, continues, ...asked } = input;
+            // A Continue carries no words, so it skips the queue, which holds words: it starts the turn or is refused.
+            if (continues === true) {
+                const started = await carryOnTurn(services, { ...asked, conversationId, ...spokenBy(speaker), ...opt("areas", areasOf(context.identity)) });
+                if (started === undefined) {
+                    throw new ORPCError("CONFLICT", { message: "a turn is already running in that conversation" });
+                }
+                return { delivered: "started", run: started.id };
+            }
             const receipt = await services.turns.say({
                 voice: speaker === undefined ? "person" : speakerVoice(speaker),
                 turn: {

@@ -26,7 +26,7 @@ const failure = {
 };
 
 // The re-runs a resumed turn's row can name (events/resume.ts); a reason a reader does not know draws the row's text.
-const ResumeNoticeReasonSchema = z.enum(["auth", "outage", "restart", "stopped", "limit", "switched", "carried", "refused", "door", "overflow", "flagged"]);
+const ResumeNoticeReasonSchema = z.enum(["auth", "outage", "restart", "stopped", "limit", "switched", "carried", "refused", "door", "overflow", "flagged", "continued"]);
 export type ResumeNoticeReason = z.infer<typeof ResumeNoticeReasonSchema>;
 
 // Every code this build writes, one per sentence shape, each with the facts that shape needs.

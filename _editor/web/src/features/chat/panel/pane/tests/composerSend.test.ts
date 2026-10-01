@@ -330,10 +330,11 @@ describe(`what intercepts a press`, () => {
         expect(send.sendHint.value).toEqual({ title: t(`chat.chatPane.sandboxBusy`), tone: `warn`, note: t(`chat.chatPane.keepTyping`) });
     });
 
-    it(`continues a stopped turn when nothing is typed, recalling only what it sent`, async () => {
+    it(`continues a stopped turn when nothing is typed, leaving the recall ring alone`, async () => {
         const { chat, host, send } = composerOf();
         chat.pickUp.value = { reason: `stopped` };
-        const continued = jest.spyOn(chat.turn, `continueTurn`).mockResolvedValue(`Continue`);
+        const continued = jest.spyOn(chat.turn, `continueTurn`).mockResolvedValue(undefined);
+        const recalled = jest.spyOn(host.history.value, `record`);
         expect(send.continueStrip.value).toBe(true);
         expect(send.continueOffer.value).toBe(true);
 
@@ -341,7 +342,8 @@ describe(`what intercepts a press`, () => {
         await Promise.resolve();
 
         expect(continued).toHaveBeenCalledTimes(1);
-        expect(host.history.value.previous(``)).toBe(`Continue`);
+        // Nothing was said, so Up has nothing new to bring back.
+        expect(recalled).not.toHaveBeenCalled();
         expect(host.pin).toHaveBeenCalledTimes(1);
     });
 });

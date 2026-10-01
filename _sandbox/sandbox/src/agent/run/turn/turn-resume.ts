@@ -30,6 +30,7 @@ import { type Routing, routingFor } from "../../providers/accounts/routing.js";
 import { consumeEntry, type JournalEntry, type JournalledTurn, resumeBars, spendAttempt } from "./turn-journal.js";
 import type { StartedRun, StartOptions, TurnInput, TurnStarter } from "../../../seams/turn-starter.js";
 import { refusedBegin } from "../placement/turn-placement.js";
+import { sessionFor } from "./turn-admission.js";
 import { startTurnRun, type TurnRun } from "./turn-runs.js";
 import type { BeginRefusal } from "../../../conversations/actor/conversation-decide.js";
 import { type HeldRecord, windowShut } from "../../../conversations/actor/conversation-state.js";
@@ -180,6 +181,31 @@ export const fireHeldResume = async (
     }
     const started = await services.turns.start(rerunOf(held, routing));
     return typeof started === "string" ? undefined : started;
+};
+
+// A person's Continue (agent.run `continues`), whatever the last turn left. A held turn runs again on the press's
+// routing, an outage's included, since the person is asking for it now. A sign-in still being renewed goes first. With
+// nothing held (a Stop, a restart since), the conversation goes on in the session it continues, with the `continued`
+// note as the whole prompt: the person wrote nothing, so nothing is recorded as theirs, and the agent is not handed a
+// word it would read as theirs. A door refusal is the sandbox's to keep, since no composer holds these words, so the
+// next press runs it again. Undefined when a turn already holds the conversation; the caller reopens an archived one.
+export const carryOnTurn = async (
+    services: Pick<Services, "agents" | "conversations" | "turns">,
+    turn: TurnInput & { readonly conversationId: string },
+): Promise<StartedRun | undefined> => {
+    const { conversationId } = turn;
+    const held = services.conversations.state(conversationId)?.resume.held;
+    if (held?.reason === "auth") {
+        return undefined;
+    }
+    const { agent, harness } = withRuntimeDefaults(turn);
+    const { prompt: _words, attachments: _files, mentions: _mentions, editorContext: _looking, messageId: _id, sessionId: _asked, ...rest } = turn;
+    const started = await services.turns.start(
+        held === undefined
+            ? { ...rest, prompt: RESUME_NOTES.continued, resume: "continued", ...opt("sessionId", sessionFor(services, turn)) }
+            : rerunOf(held, { agent, harness, ...opt("account", turn.account), ...opt("model", turn.model) }),
+    );
+    return started === "busy" || started === "archived" ? undefined : started;
 };
 
 // The one reader for every ending's question. Two callers must agree about the same turn — the failure frame promises

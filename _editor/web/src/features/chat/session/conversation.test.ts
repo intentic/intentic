@@ -207,7 +207,8 @@ const turnDaemon = (
         }
         startTurn();
         requested = {
-            prompt: String(body[`prompt`] ?? ``),
+            // A Continue carries no words: the daemon's own note opens the run (agent.routes, carryOnTurn).
+            prompt: body[`continues`] === true ? RESUME_NOTES.continued : String(body[`prompt`] ?? ``),
             attachments: (body[`attachments`] as string[] | undefined) ?? [],
             messageId: body[`messageId`] as string | undefined,
         };
@@ -1926,8 +1927,8 @@ describe(`Conversation`, () => {
     });
 
     // If the daemon isn't actually holding the turn (a restart between refusal and press), the press must not become
-    // dead: it falls back to sending an ordinary "carry on" turn.
-    it(`falls back to saying carry on when the held turn has gone`, async () => {
+    // dead: the daemon carries the conversation on in its session, and nothing of the person's is drawn or recorded.
+    it(`has the daemon carry on, without a word of the person's, when the held turn has gone`, async () => {
         const conversation = new Conversation(`c1`);
         daemon.mockImplementation(
             turnDaemon([{ kind: `error`, code: `rate_limit`, message: `Claude usage limit reached.`, held: { ran: true } }, { kind: `done` }]),
@@ -1938,9 +1939,44 @@ describe(`Conversation`, () => {
         daemon.mockImplementation((procedure, input, options) =>
             procedure === `agent.resume` ? Promise.reject(daemonRefusal(404, `no held turn`)) : refusedResume(procedure, input, options),
         );
-        await expect(conversation.turn.continueTurn()).resolves.toBe(CONTINUATIONS.plain);
+        await conversation.turn.continueTurn();
 
-        expect(turnBodies().map((body) => body[`prompt`])).toEqual([`ship the parser`, CONTINUATIONS.plain]);
+        // The words still ride along, for a daemon from before `continues`, which reads past the field and takes them.
+        expect(turnBodies().map((body) => [body[`prompt`], body[`continues`]])).toEqual([
+            [`ship the parser`, undefined],
+            [CONTINUATIONS.plain, true],
+        ]);
+        expect(conversation.transcript.messages.value.map((message) => [message.role, message.text])).toEqual([
+            [`user`, `ship the parser`],
+            [`notice`, `Claude usage limit reached.`],
+            [`notice`, `Carried on from where the last turn stopped.`],
+            [`assistant`, `carrying on`],
+        ]);
+    });
+
+    // The everyday case: a person stops a turn, then presses Continue. The daemon keeps nothing of a stopped turn, so there
+    // is nothing to re-run and nothing to ask about it; the press goes straight to carrying the session on.
+    it(`carries a stopped turn on without drawing or sending a "Continue" of the person's`, async () => {
+        const conversation = new Conversation(`c1`);
+        daemon.mockImplementation(turnDaemon([{ kind: `delta`, text: `working` }], { stayOpen: true }));
+        const turn = conversation.turn.send(`ship the parser`, settings);
+        await waitFor(() => expect(conversation.transcript.messages.value.at(-1)).toMatchObject({ role: `assistant`, text: `working` }));
+        conversation.turn.stop();
+        await turn;
+        expect(conversation.pickUp.value).toEqual({ reason: `stopped` });
+
+        daemon.mockImplementation(turnDaemon([{ kind: `delta`, text: `carrying on` }, { kind: `done` }]));
+        await conversation.turn.continueTurn();
+
+        expect(daemon.mock.calls.map(([procedure]) => procedure)).not.toContain(`agent.resume`);
+        expect(turnBodies().map((body) => body[`continues`])).toEqual([undefined, true]);
+        expect(conversation.transcript.messages.value.filter((message) => message.role !== `notice` || message.text.startsWith(`Carried`)).map((message) => [message.role, message.text])).toEqual([
+            [`user`, `ship the parser`],
+            [`assistant`, `working`],
+            [`notice`, `Carried on from where the last turn stopped.`],
+            [`assistant`, `carrying on`],
+        ]);
+        expect(conversation.pickUp.value).toBeUndefined();
     });
 
     // The resume pass's own rung got there first, in a turn this window wasn't following: the press follows it, and

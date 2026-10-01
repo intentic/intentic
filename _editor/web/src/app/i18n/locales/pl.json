@@ -1475,7 +1475,7 @@
             "planApproved": "Plan zatwierdzony.",
             "keptPlanning": "Planowanie trwa dalej.",
             "watching": "Wypatruje: {note}, sprawdza co {every}.",
-            "restartInterrupted": "Sandbox uruchomił się ponownie, zanim ta tura się skończyła. Wyślij kolejną wiadomość, żeby kontynuować od zapisanego stanu pracy.",
+            "restartInterrupted": "Sandbox uruchomił się ponownie, zanim ta tura się skończyła. Kontynuuj, żeby wrócić do niej od zapisanego stanu pracy.",
             "depsInstalling": "Trwa instalacja {count} zależności, którą agent dodał lub zmienił; sprawdzenia projektu ruszą, gdy to się skończy, a wynik pojawi się w Aktywności. | Trwa instalacja {count} zależności, które agent dodał lub zmienił; sprawdzenia projektu ruszą, gdy to się skończy, a wynik pojawi się w Aktywności. | Trwa instalacja {count} zależności, które agent dodał lub zmienił; sprawdzenia projektu ruszą, gdy to się skończy, a wynik pojawi się w Aktywności.",
             "depsQueued": "{count} zależność, którą agent dodał lub zmienił, jest instalowana w Twoim drzewie: instalacja czeka, aż skończy się każda inna instalacja, pojawi się w Terminalach roboczych, a jej wynik trafi do Aktywności. | {count} zależności, które agent dodał lub zmienił, są instalowane w Twoim drzewie: instalacja czeka, aż skończy się każda inna instalacja, pojawi się w Terminalach roboczych, a jej wynik trafi do Aktywności. | {count} zależności, które agent dodał lub zmienił, jest instalowanych w Twoim drzewie: instalacja czeka, aż skończy się każda inna instalacja, pojawi się w Terminalach roboczych, a jej wynik trafi do Aktywności.",
             "retrying": "{message} Ponawia sam: próba {attempt} z {of}.",
@@ -1505,7 +1505,8 @@
                 "refused": "Wysłano ponownie po tym, jak limit ją odrzucił: nic się wcześniej nie wykonało.",
                 "door": "Wysłano ponownie: pierwsza próba została odrzucona, zanim cokolwiek się wykonało.",
                 "overflow": "Wysłano ponownie w nowej sesji, bo poprzednia przerosła okno kontekstu modelu.",
-                "flagged": "Wysłane ponownie po zatrzymaniu przez zabezpieczenia modelu, bez zatrzymanej odpowiedzi."
+                "flagged": "Wysłane ponownie po zatrzymaniu przez zabezpieczenia modelu, bez zatrzymanej odpowiedzi.",
+                "continued": "Kontynuowano od miejsca, w którym zatrzymała się poprzednia tura."
             },
             "watchWake": {
                 "met": "{note} — obserwacja zadziałała po {elapsed}.",

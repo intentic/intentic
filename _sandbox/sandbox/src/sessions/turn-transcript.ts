@@ -162,7 +162,7 @@ const recordSteerAnchors = async (
 };
 
 // Message a died-under turn's record ends with, kept beside the write it closes.
-export const RESTART_INTERRUPTED = "The sandbox restarted before this turn finished. Send another message to continue from the saved worktree.";
+export const RESTART_INTERRUPTED = "The sandbox restarted before this turn finished. Continue picks it up from the saved worktree.";
 
 // Recovers what an interrupted turn wrote from the provider's own session store, the only place it exists once a turn
 // never settles to disk. The opening row is restamped to the turn's start so its clock matches every other row's.

@@ -74,16 +74,9 @@ export const conversationView = (conversation: ComputedRef<Conversation>, cardOf
     // arms the strip immediately after a send, before that turn begins.
     pickUp: computed(() => (conversation.value.turn.streaming.value ? undefined : conversation.value.pickUp.value)),
     continuation: computed(() => continuationFor(conversation.value.transcript.messages.value)),
-    // The press itself, not the sentence it sends: continuing may re-run a held turn rather than send a message, a
-    // choice that reads state (`TurnClient.continueTurn`) no view should ask about directly.
-    continueTurn: (options?: { readonly carry?: boolean }): Promise<string | undefined> => {
-        // Tracks only a continuation that actually sends a message; a held-turn re-run says nothing new and must not
-        // count as one.
-        if (conversation.value.pickUp.value?.held === undefined) {
-            track(`message_sent`, { agent: conversation.value.selection.provider.value, queued: conversation.value.turn.streaming.value });
-        }
-        return conversation.value.turn.continueTurn(options);
-    },
+    // The press itself: continuing re-runs a held turn or has the daemon carry the session on, a choice that reads state
+    // (`TurnClient.continueTurn`) no view should ask about directly. Neither sends a message, so neither counts as one.
+    continueTurn: (options?: { readonly carry?: boolean }): Promise<void> => conversation.value.turn.continueTurn(options),
     // The standing version of continueTurn is not here: it is this conversation's answer to the ending's one question
     // (turnBreak.ts), owned by the daemon and read through the agent roster, so it survives this tab closing and
     // cannot disagree with the same switch on the board.

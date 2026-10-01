@@ -625,15 +625,66 @@ export class TurnClient {
         }
     }
 
-    // What "carry on" does: a held turn is re-run, adding nothing to the conversation; only a turn the daemon holds nothing
-    // of (a Stop, a restart since) is continued by saying so.
-    async continueTurn(options: { readonly carry?: boolean } = {}): Promise<string | undefined> {
+    // What "carry on" does: a held turn is re-run, and a turn the daemon holds nothing of (a Stop, a restart since) is
+    // carried on by the daemon in its own session. Neither adds a word of the person's to the conversation.
+    async continueTurn(options: { readonly carry?: boolean } = {}): Promise<void> {
         if (await this.resumeHeldTurn(options)) {
-            return undefined;
+            return;
         }
-        const text = continuationFor(this.host.transcript.messages.value);
-        await this.say(text);
-        return text;
+        await this.carryOn();
+    }
+
+    // Asks the daemon to carry the conversation on (agent.run `continues`): it re-runs a turn it holds after all, or goes
+    // on in the session with a note of its own, recorded as its own line. So nothing is drawn here, and this window follows
+    // the run that starts. A daemon from before the field takes the continuation words instead, as it always did, and its
+    // own row draws them.
+    private async carryOn(): Promise<void> {
+        if (this.unwinding) {
+            await this.afterEnding();
+        }
+        if (this.streaming.value) {
+            return;
+        }
+        const { host } = this;
+        host.error.value = null;
+        host.peek.value = false;
+        host.failures.cancelProbe();
+        const settings = host.selection.turnSettings();
+        host.selection.apply({ kind: `sent` });
+        const body = turnRequestBody({
+            messageId: uuid(),
+            text: continuationFor(host.transcript.messages.value),
+            conversationId: host.conversationId,
+            title: host.title.value,
+            isolated: host.isolated.value,
+            runner: host.runner.value,
+            box: host.box.value,
+            mode: host.selection.mode.value,
+            settings,
+            registered: host.registered.value,
+            session: host.session.value,
+            forkOf: undefined,
+            attachmentPaths: [],
+            mentionedPaths: [],
+            editorContext: undefined,
+            continues: true,
+        });
+        try {
+            const receipt = await this.post(body, new AbortController().signal);
+            // A 409 is a turn already running (another window's press, the resume pass's rung): that one is followed.
+            if (receipt instanceof SandboxHttpError && receipt.status !== 409) {
+                host.error.value = receipt.message;
+                return;
+            }
+            if (!(receipt instanceof SandboxHttpError) && receipt.delivered === `started`) {
+                this.ranOn(settings);
+            }
+        } catch (error) {
+            // Unreachable, not refused: said on the error line, and the strip stays for the next press.
+            host.error.value = errorMessage(error, `The sandbox did not answer.`);
+            return;
+        }
+        await this.reattach();
     }
 
     // Lets the conversation's held queue go, on the pick the composer holds now: what a fixed failure, a reconnected
@@ -704,7 +755,7 @@ export class TurnClient {
         this.host.agentBrowser.value = undefined;
     }
 
-    // Re-run the held turn: what Continue means when the daemon kept it; false falls back to a plain continuation.
+    // Re-run the held turn: what Continue means when the daemon kept it; false leaves it to carryOn.
     // No message is appended: a press is the same request again, so the daemon resumes with a note, not a repeat.
     async resumeHeldTurn(options: { readonly carry?: boolean } = {}): Promise<boolean> {
         if (this.streaming.value || this.host.pickUp.value?.held === undefined) {

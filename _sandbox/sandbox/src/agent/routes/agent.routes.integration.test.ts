@@ -5,7 +5,7 @@ import { waitFor, SETTLES } from "@intentic/testing/bun";
 
 import { createApp } from "../../app.js";
 
-import { type TranscriptRow, SandboxSettingsSchema } from "@intentic/sandbox-contract";
+import { RESUME_NOTES, type TranscriptRow, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { experimentArm } from "@intentic/agent-context/experiments";
 import { clientFor, collect, errorCode } from "../../harness/route-client.testing.js";
 import { gitOut, realCheckout } from "../../harness/route-fakes.testing.js";
@@ -960,6 +960,64 @@ test("agent.resume answers NOT_FOUND when nothing is held for the conversation",
         ),
     );
     expect(await errorCode(client.agent.resume({ conversationId: "conv-unheld" }))).toBe("NOT_FOUND");
+});
+
+// Nothing held (a Stop, a restart since, a failure that named its fix): a Continue carries the conversation on in its
+// own session with the sandbox's note as the whole prompt. The words a client still sends for an older daemon go
+// nowhere: the record gains the sandbox's line, never a "Continue" from the person.
+test("a Continue with nothing held carries the session on, adding no words of the person's", async () => {
+    const seen: { prompt: string; sessionId: string | undefined }[] = [];
+    const client = clientFor(
+        createApp(
+            services({
+                async *agent(request) {
+                    seen.push({ prompt: request.spec.prompt, sessionId: request.spec.sessionId });
+                    yield { kind: "session", sessionId: "s-kept" };
+                    yield { kind: "delta", text: seen.length === 1 ? "half done" : "the rest" };
+                    yield { kind: "done" };
+                },
+            }),
+        ),
+    );
+
+    await runAgentTurn(client, { prompt: "fix the pipeline", conversationId: "conv-carry" });
+    const { rows } = await runAgentTurn(client, { prompt: "Continue", conversationId: "conv-carry", continues: true });
+
+    expect(seen).toHaveLength(2);
+    expect(seen[1]!.prompt).toContain(RESUME_NOTES.continued);
+    expect(seen[1]!.prompt).not.toMatch(/^Continue$/im);
+    expect(seen[1]!.sessionId).toBe("s-kept");
+    expect(rows.map(({ role, text }) => ({ role, text }))).toEqual([
+        { role: "notice", text: "Carried on from where the last turn stopped." },
+        { role: "assistant", text: "the rest" },
+    ]);
+});
+
+// A Continue that finds a turn held after all (the window had not heard) runs that turn again, as agent.resume would.
+test("a Continue that finds a held turn runs it again rather than carrying on past it", async () => {
+    const seen: string[] = [];
+    let refuse = true;
+    const client = clientFor(
+        createApp(
+            services({
+                async *agent(request) {
+                    seen.push(request.spec.prompt);
+                    yield { kind: "session", sessionId: "s-void" };
+                    yield refuse ? { kind: "error", code: "rate_limit", message: "Claude usage limit reached." } : { kind: "delta", text: "on it" };
+                    yield { kind: "done" };
+                },
+            }),
+        ),
+    );
+
+    await runAgentTurn(client, { prompt: "ship the parser", conversationId: "conv-carry-held" });
+    refuse = false;
+    await runAgentTurn(client, { prompt: "Continue", conversationId: "conv-carry-held", continues: true });
+
+    expect(seen).toHaveLength(2);
+    expect(seen[1]).toContain("ship the parser");
+    expect(seen[1]).toMatch(/no part of the request below/i);
+    expect(seen[1]).not.toContain(RESUME_NOTES.continued);
 });
 
 test("dismissing a question ends the turn where the dismissal lands, and settles the card as finished", async () => {

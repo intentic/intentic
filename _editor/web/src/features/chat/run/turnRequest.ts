@@ -146,6 +146,8 @@ export const turnRequestBody = (input: {
     readonly errand?: TurnErrand | undefined;
     // A scheduled send's instant (ms): the daemon holds the words in the queue until then rather than starting a turn.
     readonly sendAt?: number | undefined;
+    // A Continue: the daemon carries the conversation on without the words, which only a daemon from before reads.
+    readonly continues?: boolean | undefined;
 }): ProcedureInput<`agent.run`> => {
     // Whether this body targets this sandbox; fields scoped to another box's store are dropped otherwise.
     const here = input.box === undefined;
@@ -190,6 +192,9 @@ export const turnRequestBody = (input: {
     };
     if (input.sendAt !== undefined) {
         body.sendAt = input.sendAt;
+    }
+    if (input.continues === true) {
+        body.continues = true;
     }
     return body;
 };

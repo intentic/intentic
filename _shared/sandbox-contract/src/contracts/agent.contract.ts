@@ -2,7 +2,7 @@ import { procedure } from "../protocol/route-meta.js";
 import { streamOf } from "../protocol/routes.js";
 import { AgentCommandsQuerySchema, AgentCommandsSchema } from "../events/requests.js";
 import { AttachFrameSchema } from "../events/agent-events.js";
-import { AgentTurnSchema, AttachTurnSchema, ConversationQueueSchema, MessageReceiptSchema, QueueResumedSchema, StartedTurnSchema } from "../schemas/agent.js";
+import { AgentRunSchema, AttachTurnSchema, ConversationQueueSchema, MessageReceiptSchema, QueueResumedSchema, StartedTurnSchema } from "../schemas/agent.js";
 import { ChatRouteAskSchema, ChatRouteSchema } from "../schemas/chat-route.js";
 import { RewindResultSchema, RewindTurnSchema } from "../schemas/history.js";
 import {
@@ -34,7 +34,7 @@ export const agentContract = {
         })
         // Driving agents is the collaborator grant; what leaves the sandbox stays at the maintainer default.
         .meta({ floor: "collaborator", guest: true, control: "editor" })
-        .input(AgentTurnSchema)
+        .input(AgentRunSchema)
         .output(MessageReceiptSchema),
     attach: procedure
         .route({

@@ -177,16 +177,13 @@ export const useComposerSend = (host: SendHost) => {
     // Everything a press needs: voice and edit intercept before `canSend`.
     const readyToSend = computed(() => connected.value && staged.value && refusal.value === undefined);
 
-    // Continuing may re-run a held turn rather than send; only a sent continuation joins the recall ring.
+    // Continuing says nothing of the person's (a held turn re-runs, or the daemon carries the session on), so nothing
+    // joins the recall ring.
     const continueTurn = (options?: { readonly carry?: boolean }): void => {
         if (!host.reachable.value) {
             return;
         }
-        void view.continueTurn(options).then((sent) => {
-            if (sent !== undefined) {
-                history.value?.record(sent);
-            }
-        });
+        void view.continueTurn(options);
         host.pin();
     };
 

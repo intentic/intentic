@@ -31,6 +31,10 @@ export const RESUME_NOTES = {
     // the same session with the stopped response cut away, so the model sees none of it, on whichever model the press
     // named.
     flagged: `The model provider's safety classifier stopped the previous attempt at this request partway, and it has been sent again after the person looking at this conversation chose to go on. The stopped response has been removed from this session. ${REPEATED}`,
+    // A person's Continue on a turn the sandbox kept nothing of (a Stop, a restart since): no request follows, since the
+    // session already holds it, and nothing of the person's is recorded, since they wrote nothing.
+    continued:
+        "The previous turn in this conversation ended before it finished (it was stopped, or something cut it short, such as a sandbox restart), and the person looking at this conversation chose to carry on without writing anything new: continue the work from where the conversation left off. Anything they declined along the way stays declined.",
     // A turn parked on the user when the daemon died; what follows the note is their actual answer, not a repeat.
     answered:
         "The sandbox restarted while this conversation was waiting for the user to respond; it is back, and their response follows below: continue from where the session left off.",
@@ -41,10 +45,14 @@ export const withResumeNote = (prompt: string, note: string): string =>
     Object.values(RESUME_NOTES).some((known) => prompt.startsWith(known)) ? prompt : `${note}\n\n${prompt}`;
 
 // The user's own words inside a resumed prompt, note and explanation stripped. Returns the prompt unchanged when it
-// isn't a resume, so any attach head can pass through it.
+// isn't a resume, so any attach head can pass through it. A note standing alone (`continued`) leaves no words.
 export const withoutResumeNote = (prompt: string): string => {
     const note = Object.values(RESUME_NOTES).find((known) => prompt.startsWith(known));
-    return note === undefined ? prompt : prompt.slice(prompt.indexOf("\n\n") + 2);
+    if (note === undefined) {
+        return prompt;
+    }
+    const rest = prompt.slice(note.length);
+    return rest.startsWith("\n\n") ? rest.slice(2) : rest;
 };
 
 export type ResumeReason = keyof typeof RESUME_NOTES;
@@ -71,6 +79,7 @@ const RESUME_DISCLOSURES: Record<ResumeReason, ResumeDisclosure> = {
     door: notice("door", "Sent again: the first attempt was turned away before anything ran."),
     overflow: notice("overflow", "Sent again in a fresh session after the last one outgrew the model's context window."),
     flagged: notice("flagged", "Sent again after the model's safeguards stopped it, without the stopped response."),
+    continued: notice("continued", "Carried on from where the last turn stopped."),
     answered: { kind: "note", note: { title: "Picked back up after a sandbox restart", text: RESUME_NOTES.answered } },
 };
 

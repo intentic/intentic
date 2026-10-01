@@ -337,6 +337,16 @@ export const AgentTurnSchema = AgentTurnFieldsSchema
         message: 'forkOf.files "then" requires isolated',
     });
 export type AgentTurn = z.infer<typeof AgentTurnSchema>;
+// What `agent.run` takes: a turn, plus the one field only a request carries and no stored turn keeps. A daemon from before
+// `continues` reads past it and takes `prompt` as the words, which is why a client still sends some.
+export const AgentRunSchema = AgentTurnSchema.safeExtend({
+    continues: z
+        .literal(true)
+        .optional()
+        .describe(
+            "Carry the conversation on from where its last turn stopped instead of saying anything: nothing of yours is added to the conversation, and `prompt` is ignored. A turn the sandbox still holds runs again as it was; otherwise the agent is told to continue in its own session. Refused while a turn is running.",
+        ),
+});
 // What a turn naming no provider or loop runs on, stated once. Applied where a request comes in (the daemon's turn port),
 // so nothing downstream defaults them again: the engine takes a turn with both named (withRuntimeDefaults).
 /** A turn with its provider and loop named, as the engine takes it past the door. */
