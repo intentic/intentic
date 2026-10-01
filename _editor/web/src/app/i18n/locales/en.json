@@ -4209,8 +4209,6 @@
             "showMoreAccounts": "Show {collapsedCredentialCount} more accounts"
         },
         "sandboxSwitcher": {
-            "addAnotherSandbox": "Add another sandbox",
-            "addProjectOrFolder": "Add a project or folder",
             "alsoDelete": "Also delete it from",
             "cleanupCommand": "Cleanup command",
             "containerFilesHistoryGone": "— its container there stops, and its files and history are kept for a week before they are deleted.",

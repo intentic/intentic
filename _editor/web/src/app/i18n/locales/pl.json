@@ -4026,8 +4026,6 @@
             "fewer": "Pokaż mniej"
         },
         "sandboxSwitcher": {
-            "addAnotherSandbox": "Dodaj kolejny sandbox",
-            "addProjectOrFolder": "Dodaj projekt lub folder",
             "alsoDelete": "Usuń go także z",
             "cleanupCommand": "Polecenie sprzątające",
             "containerFilesHistoryGone": "— tamtejszy kontener zostanie zatrzymany, a jego pliki i historia będą przechowywane przez tydzień, zanim zostaną usunięte.",

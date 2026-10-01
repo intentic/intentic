@@ -40,10 +40,8 @@ import { manageDeviceSandbox, useHostRunning } from "../devices/useDevices";
 import HostedRollbackDialog from "../overview/version/HostedRollbackDialog.vue";
 import { bashCommand, psCommand } from "../../../app/environments/scriptCommand";
 import { announceDesktopRoster, DESKTOP_LAUNCHER_LINK, desktopApp, openDesktopLink } from "../../../app/environments/desktop";
-import { homeViewId, PROJECTS_VIEW_ID } from "../../../core-views/registry";
-import { useEndpoint } from "../secrets/useEndpoint";
 import { useAuth } from "../../auth/useAuth";
-import { addChoices, removalTakes } from "./switcherRows";
+import { removalTakes } from "./switcherRows";
 import { useT } from "@intentic/ui/i18n";
 
 // Rail control to switch between the user's sandboxes or add another; selecting one re-points every sandbox-backed
@@ -192,9 +190,6 @@ const followRow = async (event: MouseEvent, to: string): Promise<void> => {
 // Resumes this row's setup rather than offering a blank create form.
 const resumeSetup = (option: SandboxSummary) => ({ path: `/setup`, query: { sandbox: option.id } });
 
-// What "add" offers (switcherRows.ts): a project or folder first while the owner's active sandbox runs on this very
-// computer, which only the loopback shortcut proves; another sandbox is the quieter row under it.
-const { usingLocal } = useEndpoint();
 // THIS COMPUTER, the desktop app's other face: its own window on a folder of this computer, with This device beside it
 // (the app's local shell). Offered only inside the app, whose workspace window this page then is; the app swaps the
 // two in one frame, so this list names every place the window can show. An app older than the local shell opens its
@@ -220,10 +215,6 @@ if (inDesktopApp) {
         { immediate: true },
     );
 }
-
-const adds = computed(() =>
-    addChoices({ runsHere: usingLocal.value && sandbox.active.value?.role === `owner`, projectsHome: homeViewId() === PROJECTS_VIEW_ID }),
-);
 
 // Alt+1…9 picks the Nth switchable sandbox; a digit past the end does nothing rather than clamping.
 const SWITCH_SLOTS = 9;
@@ -563,19 +554,15 @@ const confirmRemove = async (): Promise<void> => {
                 />
             </button>
 
-            <!-- One add, or two where this computer already runs the sandbox: the second is quieter. -->
             <RouterLink
-                v-for="add in adds"
-                :key="add.label"
-                :to="add.to"
-                class="flex w-full items-start gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors hover:bg-content/5"
-                :class="add.primary ? `text-content` : `text-muted`"
+                to="/setup"
+                class="flex w-full items-start gap-2 rounded-md px-2 py-1 text-left text-xs text-content transition-colors hover:bg-content/5"
                 @click="dismiss"
             >
                 <span class="flex h-5 w-5 shrink-0 items-center justify-center">
-                    <Icon :name="add.primary ? `plus` : `server`" :class="add.primary ? `text-base text-muted` : `text-xs text-subtle`" />
+                    <Icon name="plus" class="text-base text-muted" />
                 </span>
-                <span class="min-w-0 flex-1 self-center">{{ add.label }}</span>
+                <span class="min-w-0 flex-1 self-center">{{ t(`sandbox.words.addSandbox`) }}</span>
             </RouterLink>
 
             <!-- Setups that were never finished, as their own section below Add sandbox, since they're errands, not places to go. -->
