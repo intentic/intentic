@@ -18,6 +18,8 @@ const props = defineProps<{
     view: MainFailureView;
     // The action the view has in flight, by run key; the press here shares the run rows' lock.
     busy: string | undefined;
+    // The run whose fix press is out, by run key: the press then names its wait, as the run row's does.
+    starting?: string | undefined;
 }>();
 const emit = defineEmits<{ fix: [run: PipelineRun] }>();
 
@@ -151,7 +153,7 @@ const since = computed(() =>
 
                 <Button
                     v-if="press !== undefined"
-                    :label="press.label"
+                    :label="starting !== undefined && starting === runKey ? t(`pipelineRunRow.readingLogs`) : press.label"
                     size="small"
                     :severity="press.primary ? undefined : `secondary`"
                     :text="!press.primary"

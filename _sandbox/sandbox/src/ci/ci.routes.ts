@@ -89,7 +89,12 @@ export const createCiRoutes = (services: Services, fetchFn: FetchFn = fetch) => 
         }),
         fix: i.fix.handler(async ({ input, context }) => {
             const project = await resolve(input.repo);
-            const evidence = await ciFailureEvidence(project, input.runId, services.logger, fetchFn);
+            // Together, since the press waits on both before any agent exists: the run is usually cached, but a cold
+            // daemon lists the project's runs for it.
+            const [evidence, run] = await Promise.all([
+                ciFailureEvidence(project, input.runId, services.logger, fetchFn),
+                runOf(services, project, input.runId, fetchFn),
+            ]);
             // A run that died in its runner's own setup, or whose log names the fleet, never ran a line of this repository:
             // an agent opened on it would fix code that is fine, so it is refused with the reason unless forced.
             if (evidence.infra && input.force !== true) {
@@ -99,7 +104,6 @@ export const createCiRoutes = (services: Services, fetchFn: FetchFn = fetch) => 
                 });
             }
             // A run of a failing main-line branch is its streak's: the press continues the one fix agent on it.
-            const run = await runOf(services, project, input.runId, fetchFn);
             const streak = run === undefined ? undefined : await streakFixerFor(services, run);
             const outcome = await startCiFix(
                 services,

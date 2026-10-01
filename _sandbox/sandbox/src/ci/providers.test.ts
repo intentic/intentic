@@ -490,3 +490,77 @@ test("a failed job's log tail is plain text, not the runner's own bytes", async 
         expect(logs).toBe("--- job: verify (log tail) ---\nFAIL src/a.test.ts\ninstalling 2/2\n");
     }
 });
+
+// A Fix press waits on its run's job list before any agent exists, and the board's row read that list moments before to
+// draw its stage circles. A settled run's list is the one the press takes; a list still moving, or one a re-run made
+// stale, goes out again.
+const listCalls = (calls: readonly { url: string }[]): number => calls.filter(({ url }) => url.includes("/jobs?")).length;
+
+const githubSettledJobs = (status: string) => ({
+    "GET /actions/runs/": {
+        jobs: [
+            { id: 7, name: "verify-core", status: "completed", conclusion: "failure", steps: [{ name: "Run tests", conclusion: "failure" }] },
+            { id: 8, name: "lint", status, conclusion: status === "completed" ? "success" : null },
+        ].map((job) => ({ started_at: null, completed_at: null, html_url: null, ...job })),
+    },
+    "GET /actions/jobs/7/logs": "FAIL src/a.test.ts",
+});
+
+test("a fix takes the settled job list the board's row just read, in one request however many ways it reads it", async () => {
+    const calls: { method: string; url: string }[] = [];
+    const client = ciClientFor("github", scriptedFetch(githubSettledJobs("completed"), calls));
+    await client.allJobs(githubProject, 81);
+
+    const [jobs, steps, logs] = await Promise.all([
+        client.failedJobs(githubProject, 81),
+        client.failedSteps(githubProject, 81),
+        client.failedJobLogs(githubProject, 81, 24_000),
+    ]);
+
+    expect({ jobs, steps, logs }).toEqual({
+        jobs: ["verify-core"],
+        steps: [{ job: "verify-core", id: 7, step: "Run tests" }],
+        logs: `--- job: verify-core (log tail) ---\n"FAIL src/a.test.ts"`,
+    });
+    expect(listCalls(calls)).toBe(1);
+    // The board's own read is never the kept copy: its graph is always the vendor's word.
+    await client.allJobs(githubProject, 81);
+    expect(listCalls(calls)).toBe(2);
+});
+
+test("a job list with a job still going is shared while out, then read again", async () => {
+    const calls: { method: string; url: string }[] = [];
+    const client = ciClientFor("github", scriptedFetch(githubSettledJobs("in_progress"), calls));
+    await Promise.all([client.failedJobs(githubProject, 82), client.failedSteps(githubProject, 82)]);
+    expect(listCalls(calls)).toBe(1);
+
+    await client.failedSteps(githubProject, 82);
+    expect(listCalls(calls)).toBe(2);
+});
+
+test("a re-run from here forgets the job list kept for its run", async () => {
+    const calls: { method: string; url: string }[] = [];
+    const client = ciClientFor("github", scriptedFetch({ ...githubSettledJobs("completed"), "POST /actions/runs/83/rerun": {} }, calls));
+    await client.allJobs(githubProject, 83);
+    await client.rerun(githubProject, 83);
+
+    await client.failedSteps(githubProject, 83);
+    expect(listCalls(calls)).toBe(2);
+});
+
+test("a gitlab fix reads its failed jobs once for all three readings, and never keeps them", async () => {
+    const calls: { method: string; url: string }[] = [];
+    const client = ciClientFor(
+        "gitlab",
+        scriptedFetch({ "GET /pipelines/84/jobs": [{ id: 3, name: "test", failure_reason: "script_failure" }], "GET /jobs/3/trace": "FAIL" }, calls),
+    );
+    await Promise.all([
+        client.failedJobs(gitlabProject, 84),
+        client.failedSteps(gitlabProject, 84),
+        client.failedJobLogs(gitlabProject, 84, 24_000),
+    ]);
+    expect(listCalls(calls)).toBe(1);
+
+    await client.failedSteps(gitlabProject, 84);
+    expect(listCalls(calls)).toBe(2);
+});

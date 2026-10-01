@@ -17,7 +17,7 @@ import {
     type TallyItem,
     ProjectChip,
 } from "@intentic/extension-ui";
-import { computed, ref } from "vue";
+import { computed, onBeforeUnmount, ref } from "vue";
 import { branchFixes, branchKey, fixesByRun } from "./fixes/ciFixes";
 import { arrivesOpen, openFailures, supersededBy } from "./ciStreaks";
 import { useCiFixes } from "./fixes/useCiFixes";
@@ -193,21 +193,34 @@ const act = async (run: PipelineRun, action: typeof rerun | typeof cancel): Prom
     }
 };
 
+// The run whose fix is out, apart from `busy`, which a re-run or cancel holds too: only this press names what it waits
+// on, the failed jobs' logs the daemon reads before any agent exists (ci.fix), a wait of seconds.
+const starting = ref<string | undefined>();
+// The board was left while a press was out: its answer then starts the agent without pulling the reader back here.
+let left = false;
+onBeforeUnmount(() => {
+    left = true;
+});
+
 // `pick` is set only via the caret beside the row's button; the ordinary path opens on the sandbox's agent-run list.
 // `resume` is the verb that caret's panel was ended with over an attempt that already exists (Continue / Start over).
 const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined, resume: FixResume | undefined): Promise<void> => {
     busy.value = actionKey(run);
+    starting.value = actionKey(run);
     actionError.value = undefined;
     try {
         const { conversationId } = await fix.mutateAsync({ run, pick, mode: resume });
         // Not awaited: navigation below is the point, so the row shows 'Agent working' without delaying it.
         void refreshFixes();
         // Opens the fleet board, not the diff view: nothing to review yet. `?focus` waits for the roster.
-        api.navigate(`/agents?focus=${encodeURIComponent(conversationId)}`);
+        if (!left) {
+            api.navigate(`/agents?focus=${encodeURIComponent(conversationId)}`);
+        }
     } catch (failure) {
         actionError.value = errorMessage(failure);
     } finally {
         busy.value = undefined;
+        starting.value = undefined;
     }
 };
 </script>
@@ -314,6 +327,7 @@ const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined, resume
                                 :key="`${view.failure.repo}:${view.failure.branch}`"
                                 :view="view"
                                 :busy="busy"
+                                :starting="starting"
                                 @fix="(run) => fixRun(run, undefined, undefined)"
                             />
 
@@ -328,6 +342,7 @@ const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined, resume
                                 :key="actionKey(run)"
                                 :run="run"
                                 :busy="busy"
+                                :starting="starting"
                                 :recurring="recurringFor(run)"
                                 :open="open.has(run)"
                                 :superseded="superseded.get(run)"

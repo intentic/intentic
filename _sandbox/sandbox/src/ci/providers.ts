@@ -71,6 +71,73 @@ const epoch = (iso: string | undefined | null): number => {
 // Whether a run/job is over; only then is the span between its timestamps a duration, not elapsed-so-far or queue wait.
 const isSettled = (status: PipelineStatus): boolean => !isPipelineInFlight(status);
 
+// One run, as every per-run reading here is filed: the account's API, the project, the run.
+const runKey = (project: CiProject, runId: number): string => `${project.account.apiBase}\n${project.project}\n${runId}`;
+
+// ---- job lists, shared by their readers ----
+
+// A Fix press waits on its run's job list before any agent exists (ci-fix.ts ciFailureEvidence), and reads it three ways
+// at once; the board's row read the very same list moments before the press, to draw its stage circles. So readers share
+// one request while it is out, and a list is kept past it only once `settled` says it cannot move short of a re-run:
+// briefly, which bounds a re-run started outside this sandbox, while one started here forgets it at once. Kept per
+// transport, so one test's stand-in never answers another's read.
+const JOB_LISTS_FRESH_MS = 120_000;
+const JOB_LISTS_KEPT = 100;
+
+interface JobLists<T> {
+    // Always asks the vendor, and keeps what it answers: the board's own reads, so its graph is never a kept copy.
+    readonly read: (fetchFn: FetchFn, key: string, list: () => Promise<T[]>) => Promise<T[]>;
+    // The list as last read, while it is fresh; read otherwise.
+    readonly kept: (fetchFn: FetchFn, key: string, list: () => Promise<T[]>) => Promise<T[]>;
+    readonly forget: (fetchFn: FetchFn, key: string) => void;
+}
+
+const jobLists = <T>(settled: (jobs: readonly T[]) => boolean): JobLists<T> => {
+    const byTransport = new WeakMap<FetchFn, Map<string, { readonly at: number; readonly jobs: Promise<T[]> }>>();
+    const listsOf = (fetchFn: FetchFn): Map<string, { readonly at: number; readonly jobs: Promise<T[]> }> => {
+        const known = byTransport.get(fetchFn);
+        if (known !== undefined) {
+            return known;
+        }
+        const fresh = new Map<string, { readonly at: number; readonly jobs: Promise<T[]> }>();
+        byTransport.set(fetchFn, fresh);
+        return fresh;
+    };
+    const read: JobLists<T>["read"] = (fetchFn, key, list) => {
+        const lists = listsOf(fetchFn);
+        const jobs = list();
+        // Re-inserted, so the oldest entry is always the first one the map yields.
+        lists.delete(key);
+        lists.set(key, { at: Date.now(), jobs });
+        const oldest = lists.size > JOB_LISTS_KEPT ? lists.keys().next().value : undefined;
+        if (oldest !== undefined) {
+            lists.delete(oldest);
+        }
+        // Only this read's own entry: a later read of the same run may already stand in its place.
+        const drop = (): void => {
+            if (lists.get(key)?.jobs === jobs) {
+                lists.delete(key);
+            }
+        };
+        jobs.then((answered) => {
+            if (!settled(answered)) {
+                drop();
+            }
+        }, drop);
+        return jobs;
+    };
+    return {
+        read,
+        kept: (fetchFn, key, list) => {
+            const held = listsOf(fetchFn).get(key);
+            return held !== undefined && Date.now() - held.at < JOB_LISTS_FRESH_MS ? held.jobs : read(fetchFn, key, list);
+        },
+        forget: (fetchFn, key) => {
+            listsOf(fetchFn).delete(key);
+        },
+    };
+};
+
 // ---- github: Actions workflow runs ----
 
 // Pre-run states (accepted, not yet executing); an unrecognized non-terminal status reads as running.
@@ -161,6 +228,21 @@ const rememberWorkflowSource = (key: string, source: WorkflowSource): void => {
     }
 };
 
+// One job of a run's list as Actions serves it, read whole by both the row's graph (allJobs) and a fix (jobsOf).
+interface GithubJob {
+    readonly id: number;
+    readonly name: string;
+    readonly status: string;
+    readonly conclusion: string | null;
+    readonly started_at: string | null;
+    readonly completed_at: string | null;
+    readonly html_url: string | null;
+    readonly steps?: readonly { readonly name: string; readonly conclusion: string | null }[];
+}
+
+// Settled once every job has completed; an empty list is a run whose jobs have not been made yet.
+const githubJobLists = jobLists<GithubJob>((jobs) => jobs.length > 0 && jobs.every((job) => job.status === "completed"));
+
 // What a sandbox's hook on a GitHub repository delivers: each finished run, and each finished job, so a failure is heard
 // the moment its job fails rather than when the whole run does.
 const GITHUB_HOOK_EVENTS = ["workflow_run", "workflow_job"];
@@ -195,7 +277,7 @@ const githubClient = (fetchFn: FetchFn): CiClient => {
         return file.ok ? await file.text() : undefined;
     };
     const workflowSource = async (project: CiProject, runId: number): Promise<WorkflowSource | undefined> => {
-        const cacheKey = `${project.account.apiBase}\n${project.project}\n${runId}`;
+        const cacheKey = runKey(project, runId);
         const remembered = workflowSources.get(cacheKey);
         if (remembered !== undefined) {
             return remembered;
@@ -244,18 +326,18 @@ const githubClient = (fetchFn: FetchFn): CiClient => {
             what,
         );
     };
-    const jobsOf = async (
-        project: CiProject,
-        runId: number,
-    ): Promise<{ id: number; name: string; conclusion: string | null; steps?: { name: string; conclusion: string | null }[] }[]> => {
-        const listed = await json<{
-            jobs: { id: number; name: string; conclusion: string | null; steps?: { name: string; conclusion: string | null }[] }[];
-        }>(
-            await fetchFn(githubApi(project, `/actions/runs/${runId}/jobs?per_page=100`), { headers: githubHeaders(project.account.token) }),
-            "github jobs list",
+    const listJobs = (project: CiProject, runId: number, what: string) => async (): Promise<GithubJob[]> =>
+        (
+            await json<{ jobs: GithubJob[] }>(
+                await fetchFn(githubApi(project, `/actions/runs/${runId}/jobs?per_page=100`), { headers: githubHeaders(project.account.token) }),
+                what,
+            )
+        ).jobs;
+    // A fix's reading, which takes the list the board's row just read (githubJobLists) rather than waiting on it again.
+    const jobsOf = async (project: CiProject, runId: number): Promise<GithubJob[]> =>
+        (await githubJobLists.kept(fetchFn, runKey(project, runId), listJobs(project, runId, "github jobs list"))).filter(
+            (job) => job.conclusion !== null && githubStatus("completed", job.conclusion) === "failed",
         );
-        return listed.jobs.filter((job) => job.conclusion !== null && githubStatus("completed", job.conclusion) === "failed");
-    };
     // Redirects to a short-lived blob url; fetch follows it. An expired log is reported inline, not fatal.
     const logOf = async (project: CiProject, jobId: number, maxBytes: number): Promise<string> => {
         const response = await fetchFn(githubApi(project, `/actions/jobs/${jobId}/logs`), { headers: githubHeaders(project.account.token) });
@@ -279,20 +361,7 @@ const githubClient = (fetchFn: FetchFn): CiClient => {
         // fetched alongside the job list, not after; unreadable, jobs go out as before.
         allJobs: async (project, runId) => {
             const [listed, workflow] = await Promise.all([
-                json<{
-                    jobs: {
-                        id: number;
-                        name: string;
-                        status: string;
-                        conclusion: string | null;
-                        started_at: string | null;
-                        completed_at: string | null;
-                        html_url: string | null;
-                    }[];
-                }>(
-                    await fetchFn(githubApi(project, `/actions/runs/${runId}/jobs?per_page=100`), { headers: githubHeaders(project.account.token) }),
-                    "github all jobs",
-                ),
+                githubJobLists.read(fetchFn, runKey(project, runId), listJobs(project, runId, "github all jobs")),
                 workflowSource(project, runId),
             ]);
             const needs =
@@ -300,10 +369,10 @@ const githubClient = (fetchFn: FetchFn): CiClient => {
                     ? undefined
                     : resolveNeeds(
                           workflow.root,
-                          listed.jobs.map((job) => job.name),
+                          listed.map((job) => job.name),
                           workflow.called,
                       );
-            return listed.jobs.map((job) => {
+            return listed.map((job) => {
                 const status = githubStatus(job.status, job.conclusion);
                 const started = epoch(job.started_at);
                 const completed = epoch(job.completed_at);
@@ -331,7 +400,11 @@ const githubClient = (fetchFn: FetchFn): CiClient => {
         failedJobLogs: async (project, runId, maxBytes) =>
             logTails(await jobsOf(project, runId), maxBytes, (jobId, budget) => logOf(project, jobId, budget)),
         jobLog: (project, jobId, maxBytes) => logOf(project, jobId, maxBytes),
-        rerun: (project, runId) => post(project, `/actions/runs/${runId}/rerun`, "github rerun"),
+        // A re-run makes the run's jobs anew, so the list kept for it no longer describes it.
+        rerun: (project, runId) => {
+            githubJobLists.forget(fetchFn, runKey(project, runId));
+            return post(project, `/actions/runs/${runId}/rerun`, "github rerun");
+        },
         cancel: (project, runId) => post(project, `/actions/runs/${runId}/cancel`, "github cancel"),
         ensureHook: async (project, spec) => {
             const hooks = await json<{ id: number; events?: string[]; config?: { url?: string } }[]>(
@@ -507,6 +580,16 @@ interface GitlabCommit {
     readonly author_name?: string;
 }
 
+interface GitlabFailedJob {
+    readonly id: number;
+    readonly name: string;
+    readonly allow_failure?: boolean;
+    readonly failure_reason?: string;
+}
+
+// Never settled: the failed-only list a fix reads is shared while out (jobLists) and not kept past it.
+const gitlabFailedLists = jobLists<GitlabFailedJob>(() => false);
+
 const gitlabClient = (fetchFn: FetchFn): CiClient => {
     // Enrichment never fails the listing; every catch here is a deliberate swallow, not a rethrow.
     const metaFromJobs = async (project: CiProject): Promise<Map<number, GitlabRunMeta>> => {
@@ -561,12 +644,15 @@ const gitlabClient = (fetchFn: FetchFn): CiClient => {
             what,
         );
     };
-    // A job allowed to fail fails nothing, so it is none of the pipeline's failures.
-    const failedJobsOf = async (project: CiProject, runId: number): Promise<{ id: number; name: string; failure_reason?: string }[]> =>
+    // A job allowed to fail fails nothing, so it is none of the pipeline's failures. Shared by a fix's three readings of
+    // it (gitlabFailedLists), never kept: a failed-only list cannot say whether the pipeline is still going.
+    const failedJobsOf = async (project: CiProject, runId: number): Promise<GitlabFailedJob[]> =>
         (
-            await json<{ id: number; name: string; allow_failure?: boolean; failure_reason?: string }[]>(
-                await fetchFn(gitlabApi(project, `/pipelines/${runId}/jobs?scope[]=failed&per_page=100`), { headers: gitlabHeaders(project) }),
-                "gitlab jobs list",
+            await gitlabFailedLists.kept(fetchFn, runKey(project, runId), async () =>
+                json<GitlabFailedJob[]>(
+                    await fetchFn(gitlabApi(project, `/pipelines/${runId}/jobs?scope[]=failed&per_page=100`), { headers: gitlabHeaders(project) }),
+                    "gitlab jobs list",
+                ),
             )
         ).filter((job) => job.allow_failure !== true);
     const traceOf = async (project: CiProject, jobId: number, maxBytes: number): Promise<string> => {
