@@ -11,8 +11,6 @@ import { useRegistry } from "../extensions/useRegistry";
 import { useHostedBuild } from "./secrets/useHostedBuild";
 import { useRole } from "./secrets/useRole";
 import { useSandbox } from "./client/useSandbox";
-import { useSyncHealth } from "./devices/useDevices";
-import { devicesWorking } from "./devices/runners/deviceWork";
 import { type ActiveExtension, activationBadge, detectActivations } from "../../core-views/registry";
 import ExtensionView from "../../core-views/ExtensionView.vue";
 import HubLayout from "../../shell/hub/HubLayout.vue";
@@ -21,7 +19,6 @@ import { hubWorkKey, hubWorkRunning } from "../../shell/hub/hubWork";
 import SandboxAccess from "./access/SandboxAccess.vue";
 import SandboxAgent from "./overview/SandboxAgent.vue";
 import SandboxDeleted from "./deleted/SandboxDeleted.vue";
-import SandboxDevices from "./devices/SandboxDevices.vue";
 import SandboxEnvironment from "./environment/SandboxEnvironment.vue";
 import SandboxExtensions from "./extensions/SandboxExtensions.vue";
 import { toListing, updateCount } from "./extensions/discoverListing";
@@ -47,11 +44,11 @@ const openPersona = computed(() => (typeof route.query[`open`] === `string` ? ro
 // The route these sections live on, and half of the address their long-running work reports under.
 const HUB = `sandbox`;
 
-// The two counts the index carries, and whatever is running behind the row. Extensions counts installed extensions
-// with a newer registry commit; info, not warning, since nothing here auto-updates. A run is not an errand, so it
-// adds no count of its own: it rides `running`, which the row draws as a turning mark.
-const sectionBadge = (slug: string, updates: number, heldPorts: number, running: string | undefined): ViewBadge | undefined => {
-    const count = slug === `extensions` ? updates : slug === `devices` ? heldPorts : 0;
+// The count the index carries, and whatever is running behind the row. Extensions counts installed extensions with a
+// newer registry commit; info, not warning, since nothing here auto-updates. A run is not an errand, so it adds no
+// count of its own: it rides `running`, which the row draws as a turning mark.
+const sectionBadge = (slug: string, updates: number, running: string | undefined): ViewBadge | undefined => {
+    const count = slug === `extensions` ? updates : 0;
     if (count === 0 && running === undefined) {
         return undefined;
     }
@@ -63,8 +60,6 @@ const sandbox = useSandbox();
 const { canShip, isGuest } = useRole();
 // A guest's hub is one section, so it opens on it rather than on an overview the daemon would refuse.
 const defaultSlug = computed(() => (isGuest.value ? GUEST_SECTION : DEFAULT));
-// The one count in this index anyone looks for; rides the /system/sync poll the sandbox chip already does, free.
-const { heldPorts } = useSyncHealth();
 const { allPanels: panels, isLoading } = usePanels();
 const { capabilities } = useCapabilities();
 // Extensions row's count reads the cached registry only (`read: false`), never triggering a clone.
@@ -73,14 +68,12 @@ const { extensions: installedExtensions } = useExtensions();
 const updatable = computed(() => updateCount(listedExtensions.value.map((entry) => toListing(entry, installedExtensions.value))));
 
 // The environment build the platform runs for a hosted sandbox: minutes long, server-side, and followed here rather
-// than by the section, since the row has to keep saying so while the section is closed. Work on a machine has a ledger
-// of its own (devices/runners/deviceWork.ts), since an agent update outlives its call and its card on the board turns
-// for it too. Everything else a section starts reports itself through the hub's ledger as it runs (hubWork.ts).
+// than by the section, since the row has to keep saying so while the section is closed. Everything else a section
+// starts reports itself through the ledger as it runs (hubWork.ts).
 const hosted = computed(() => (sandbox.active.value?.hosted ? sandbox.active.value.id : undefined));
 const { build: hostedBuild } = useHostedBuild(() => hosted.value);
 const runningIn = (slug: string): string | undefined =>
     hubWorkRunning(hubWorkKey(HUB, slug), sandbox.activeSandboxId.value) ??
-    (slug === `devices` ? devicesWorking() : undefined) ??
     (slug === `environment` && hostedBuild.value?.state === `building` ? `Building your environment` : undefined);
 
 // A colliding activation key is dropped, not shadowed by the v-if chain; built-ins own their names.
@@ -111,7 +104,7 @@ const groups = computed<readonly NavGroup<HubTab>[]>(() => [
                 .filter((section) => (isGuest.value ? section.slug === GUEST_SECTION : canShip.value || section.maintainer !== true))
                 .map((section) => ({
                     ...section,
-                    badge: sectionBadge(section.slug, updatable.value, heldPorts.value.length, runningIn(section.slug)),
+                    badge: sectionBadge(section.slug, updatable.value, runningIn(section.slug)),
                 })),
         }))
         .filter((group) => group.items.length > 0),
@@ -140,7 +133,6 @@ const groups = computed<readonly NavGroup<HubTab>[]>(() => [
             <SandboxAreas v-else-if="slug === `areas`" />
             <SandboxAgent v-else-if="slug === `agent`" />
             <SandboxExtensions v-else-if="slug === `extensions`" />
-            <SandboxDevices v-else-if="slug === `devices`" />
             <SandboxDeleted v-else-if="slug === `deleted`" />
             <!-- Extension-contributed sections, with the same error boundary and lazy-view cache the rail's routed host uses. -->
             <ExtensionView v-else-if="extensionFor(slug) !== undefined" v-bind="extensionFor(slug)!" />

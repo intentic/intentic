@@ -6,6 +6,7 @@ import { acpProviders, endpointProviders } from "../../chat/accounts/providerCat
 import { accessKnown, providerReady } from "../../chat/session/access";
 import { useMissingSecretCount } from "../../capabilities/connect/useSecrets";
 import { useRole } from "../secrets/useRole";
+import { DEVICES_PATH } from "../devices/deviceLinks";
 import { useSyncHealth } from "../devices/useDevices";
 import { useEnvironment } from "../environment/useEnvironment";
 import { useSandboxVersion } from "./version/useSandboxVersion";
@@ -138,7 +139,7 @@ export function useSandboxAttention() {
                     icon: `desktop`,
                     tone: `warning`,
                     message: `Desktop sync stopped on ${stoppedOn.value.join(`, `)}, its folder isn't syncing`,
-                    to: `/sandbox/devices`,
+                    to: DEVICES_PATH,
                     kind: `needs`,
                 },
             },
@@ -162,7 +163,7 @@ export function useSandboxAttention() {
                     icon: `desktop`,
                     tone: `warning`,
                     message: t(`sandbox.sandboxAttention.filesOnlyOnCloudMachine`),
-                    to: `/sandbox/devices`,
+                    to: DEVICES_PATH,
                     kind: `needs`,
                 },
             },
@@ -188,7 +189,7 @@ export function useSandboxAttention() {
                     icon: `desktop`,
                     tone: `info`,
                     message: `${heldPorts.value.length} port${heldPorts.value.length === 1 ? `` : `s`} taken by another sandbox on your machine`,
-                    to: `/sandbox/devices`,
+                    to: DEVICES_PATH,
                     count: heldPorts.value.length,
                     kind: `note`,
                 },

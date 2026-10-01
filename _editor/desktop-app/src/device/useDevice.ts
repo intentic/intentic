@@ -46,7 +46,9 @@ export interface DeviceOptions {
 // download, rather than dropping a non-technical reader on docker.com to choose an edition.
 export const DOCKER_DOCS = `https://intentic.dev/docs/docker`;
 
-// Path to the workspace's Devices tab, which manages the same containers via the machine's own connection.
+// Path to the workspace's Devices view, which manages the same containers via the machine's own connection. Its old
+// hub address on purpose: a workspace from before the view moved to /devices serves only that one, and every one since
+// redirects it.
 export const DEVICES_PATH = `/sandbox/devices`;
 
 // While the view is on screen, the machine is read again this often: a sandbox started from the workspace, or an agent

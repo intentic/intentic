@@ -4,7 +4,7 @@ import { Button, ui, Code, Notice } from "@intentic/ui";
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { runDeviceCommand, useDevices } from "../useDevices";
 import { useDesktopSync } from "./useDesktopSync";
-import { useHubWork } from "../../../../shell/hub/hubWork";
+import { beginDeviceWork, machineKeyOf } from "../runners/deviceWork";
 import { desktopVersion, openDesktopLink } from "../../../../app/environments/desktop";
 import ScriptSourceSwitch from "../../../capabilities/connect/ScriptSourceSwitch.vue";
 import { useT } from "@intentic/ui/i18n";
@@ -29,8 +29,6 @@ const candidates = computed(() =>
     devices.value.filter((device) => device.hostId !== undefined && device.online === true && device.sync === undefined),
 );
 
-const hubWork = useHubWork();
-
 const installing = ref<string | undefined>(undefined);
 const installed = ref<string | undefined>(undefined);
 const installError = ref<string | undefined>(undefined);
@@ -46,8 +44,12 @@ const installOn = async (device: Device): Promise<void> => {
     installed.value = undefined;
     installError.value = undefined;
     // Installing the sync agent out there is a download and a first pass over the folder, not a switch being
-    // flipped, so the Devices row carries it while the reader looks elsewhere.
-    const endMark = hubWork.begin(`Setting file syncing up on ${device.label}`);
+    // flipped, so the machine's card and the Devices tile carry it while the reader looks elsewhere.
+    const endMark = beginDeviceWork({
+        machine: machineKeyOf(devices.value, device),
+        doing: `Setting file syncing up`,
+        what: `Setting file syncing up on ${device.label}`,
+    });
     try {
         const result = await runDeviceCommand(id, `sync-install`, {
             mode: portsOnly.value ? `mirror` : `sync`,

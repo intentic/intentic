@@ -285,6 +285,16 @@ const routes: RouteRecordRaw[] = [
                     ),
                 ),
             },
+            // The machines this sandbox reaches, a view of their own beside the hub rather than a section of it: the rail
+            // tiles it as This computer is tiled in a local window. The hub's old address keeps working, query and all, so
+            // a link out of an older build or a desktop app still lands on the machine it named.
+            {
+                path: `devices`,
+                name: `devices`,
+                meta: { title: () => t(`sandbox.words.devicesSection`) },
+                component: asyncView(() => import(`../features/sandbox/devices/DevicesView.vue`)),
+            },
+            { path: `sandbox/devices`, redirect: (to) => ({ name: `devices`, query: to.query, hash: to.hash }) },
             {
                 path: `sandbox/:tab?`,
                 name: `sandbox`,

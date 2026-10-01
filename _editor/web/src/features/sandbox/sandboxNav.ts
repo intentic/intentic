@@ -23,7 +23,7 @@ export interface SandboxSectionGroup {
 /** The section a param-less `/sandbox` shows; its row writes no param, so no section has two URLs. */
 export const SANDBOX_DEFAULT_SECTION = `overview`;
 
-// No live-status row or badge; Devices' contended-port count is the only thing here anyone looks for.
+// No live-status row or badge; Extensions' update count is the only thing here anyone looks for.
 export const sandboxSectionGroups = (): readonly SandboxSectionGroup[] => [
     {
         key: `box`,
@@ -56,10 +56,8 @@ export const sandboxSectionGroups = (): readonly SandboxSectionGroup[] => [
             // a grant, and reading it as configuration is how somebody edits one without noticing whose reach moved.
             { slug: `areas`, label: t(`sandbox.words.areas`), icon: `folder`, maintainer: true },
             // Who this box acts as outward; not beside `agent` in Configuration, easy to conflate, opposite in stakes.
+            // Devices was the last row here until 2026-10-01; it is a rail view of its own now (/devices).
             { slug: `personas`, label: t(`shared.personas`), icon: `user`, maintainer: true },
-            // "Devices", not "Sync": a machine is the thing that has folders, ports and sandboxes on it, and the
-            // enrollment this tab used to be named after is one property of one of them.
-            { slug: `devices`, label: t(`sandbox.words.devicesSection`), icon: `desktop`, maintainer: true },
         ],
     },
     {

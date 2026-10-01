@@ -53,7 +53,7 @@ import { useSandbox } from "../features/sandbox/client/useSandbox";
 import { useLiveLinks } from "../features/sandbox/devices/useLiveLinks";
 import { useSyncHealth } from "../features/sandbox/devices/useDevices";
 import { devicesWorking } from "../features/sandbox/devices/runners/deviceWork";
-import { sandboxSectionPath } from "../features/sandbox/sandboxNav";
+import { DEVICES_PATH } from "../features/sandbox/devices/deviceLinks";
 import { extensionsLoaded } from "../extension-host/loader";
 import AccountPanel from "./AccountPanel.vue";
 import ChatQuickBar from "../features/chat/panel/ChatQuickBar.vue";
@@ -237,7 +237,7 @@ const devicesBadge = (held: number, running: string | undefined): ViewBadge | un
     return running === undefined ? count : { ...count, running };
 };
 const devicesTile = computed<SectionTile>(() => {
-    const tile: SectionTile = { id: DEVICES_VIEW_ID, to: sandboxSectionPath(`devices`), label: t(`sandbox.words.devicesSection`), icon: `desktop` };
+    const tile: SectionTile = { id: DEVICES_VIEW_ID, to: DEVICES_PATH, label: t(`sandbox.words.devicesSection`), icon: `desktop` };
     const badge = devicesBadge(heldPorts.value.length, devicesWorking());
     return badge === undefined ? tile : { ...tile, badge };
 });

@@ -923,8 +923,8 @@ it(`gives every computer its own named card and keeps board controls outside the
     expect(cards.flatMap((card) => [...card.querySelectorAll(`a, button, input`)])).toEqual([]);
     expect(el.querySelector(`input`)?.closest(`a`)).toBeNull();
     expect(el.querySelector(`button`)?.closest(`a`)).toBeNull();
-    // The board's header is a group label above the cards, as on every other sandbox list.
-    const headers = [...el.querySelectorAll(`span`)].filter((span) => span.textContent === `Devices`);
+    // The board's header is the view's own title above the cards, as on every other rail view.
+    const headers = [...el.querySelectorAll(`h1`)].filter((heading) => heading.textContent === `Devices`);
     expect(headers.map((header) => header.closest(`a`))).toEqual([null]);
 });
 

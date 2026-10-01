@@ -8,7 +8,7 @@ import { containerNotices } from "../../overview/containerHealth";
 import { manageDeviceSandbox, useDevices, useHostRunning } from "../useDevices";
 import { useSandbox } from "../../client/useSandbox";
 import { useRole } from "../../secrets/useRole";
-import { useHubWork } from "../../../../shell/hub/hubWork";
+import { beginDeviceWork, machineKeyOf } from "../runners/deviceWork";
 import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
@@ -32,9 +32,8 @@ const host = computed<Device | undefined>(() =>
 // Owner-only: the platform rejects a non-owner's mint, so the button is hidden rather than left to fail.
 const canRepair = computed(() => isOwner.value && host.value !== undefined && ownSlug.value !== undefined);
 
-// The repair runs out on the machine and ends by replacing this container, so the row it was pressed on says so
-// for as long as it lasts.
-const hubWork = useHubWork();
+// The repair runs out on the machine and ends by replacing this container, so the machine's card and the Devices tile
+// say so for as long as it lasts.
 
 const busy = ref(false);
 const failure = ref<string | undefined>(undefined);
@@ -52,20 +51,24 @@ const repair = async (): Promise<void> => {
     failure.value = undefined;
     done.value = undefined;
     lines.value = [];
+    const machine = host.value === undefined ? undefined : machineKeyOf(devices.value, host.value);
+    const endMark =
+        machine === undefined
+            ? (): void => {}
+            : beginDeviceWork({ machine, sandboxes: [sandboxId], doing: `Reconnecting this sandbox`, what: `Reconnecting this sandbox` });
     try {
-        done.value = await hubWork.track(`Reconnecting this sandbox`, async () => {
-            // Minted fresh per call so the code is always current; never cached or reused.
-            const { code } = await apiClient.sandbox.setupCode({ sandboxId });
-            return manageDeviceSandbox(deviceId, slug, `reconnect`, {
-                setupCode: code,
-                onLine: (line) => (lines.value = [...lines.value, line]),
-            });
+        // Minted fresh per call so the code is always current; never cached or reused.
+        const { code } = await apiClient.sandbox.setupCode({ sandboxId });
+        done.value = await manageDeviceSandbox(deviceId, slug, `reconnect`, {
+            setupCode: code,
+            onLine: (line) => (lines.value = [...lines.value, line]),
         });
     } catch (error) {
         // The stream dying mid-flight is the success case: the daemon goes down with the container.
         failure.value = error instanceof Error ? error.message : String(error);
     } finally {
         busy.value = false;
+        endMark();
     }
 };
 </script>

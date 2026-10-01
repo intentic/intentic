@@ -1,13 +1,13 @@
 <script setup lang="ts">
-import { Button, Icon, Notice, type NoticeModel, RowGroup, SearchBar, SkeletonRows, ui } from "@intentic/ui";
+import { Icon, Notice, type NoticeModel, PageAction, PageHeader, RowGroup, SearchBar, SkeletonRows, ui } from "@intentic/ui";
 import { computed, ref } from "vue";
 import DeviceBoardCard from "./DeviceBoardCard.vue";
 import { type MachineRow, rowMatches, showFilter } from "./deviceRows";
 import { desktopApp } from "../../../app/environments/desktop";
 import { useT } from "@intentic/ui/i18n";
 
-// The paired machines, one card per PC however many environments it has. The header is a group label like every
-// other sandbox list's; the cards under it are surfaces of their own, and controls live on each machine's page.
+// The paired machines, one card per PC however many environments it has. The header is the Devices view's own, a rail
+// view's title like every other; the cards under it are surfaces of their own, and controls live on each machine's page.
 
 const t = useT();
 
@@ -36,13 +36,14 @@ const inDesktopApp = desktopApp() !== undefined;
 </script>
 
 <template>
-    <!-- `flat`: the cards bring their own surfaces, and one drawn around them would nest a card in a card. -->
-    <RowGroup :label="t(`sandbox.words.devicesSection`)" flat undivided>
+    <PageHeader :title="t(`sandbox.words.devicesSection`)">
         <template #actions>
-            <Button size="small" severity="secondary" :label="t(`sandbox.words.addDevice`)" @click="emit(`add`)">
-                <template #icon><Icon name="plus" /></template>
-            </Button>
+            <PageAction icon="plus" :label="t(`sandbox.words.addDevice`)" @click="emit(`add`)" />
         </template>
+    </PageHeader>
+
+    <!-- `flat`: the cards bring their own surfaces, and one drawn around them would nest a card in a card. -->
+    <RowGroup flat undivided>
 
         <div class="flex flex-col gap-3">
             <p v-if="inDesktopApp" class="flex items-center gap-2 px-1 text-xs text-muted">

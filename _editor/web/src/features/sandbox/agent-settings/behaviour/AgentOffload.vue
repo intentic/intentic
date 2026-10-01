@@ -36,7 +36,7 @@ const setKind = (kind: string, runner: string | undefined): void => {
             {{ t(`sandbox.agentOffload.intro`) }}
             <i18n-t v-if="noRunners" keypath="sandbox.agentOffload.noRunners" tag="span" scope="global">
                 <template #devices
-                    ><RouterLink :to="{ name: `sandbox`, params: { tab: `devices` }, query: {} }" class="underline">{{
+                    ><RouterLink :to="{ name: `devices` }" class="underline">{{
                         t(`sandbox.words.devicesSection`)
                     }}</RouterLink></template
                 >

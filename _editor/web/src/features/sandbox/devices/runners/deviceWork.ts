@@ -1,4 +1,4 @@
-import { agentBuildSkew, agentStalled, type Device, type DeviceAgentOp } from "@intentic/sandbox-contract";
+import { agentBuildSkew, agentStalled, type Device, type DeviceAgentOp, machinesOf } from "@intentic/sandbox-contract";
 import type { NoticeModel } from "@intentic/ui";
 import { shallowRef } from "vue";
 import { activeSandboxId } from "../../overview/activeSandbox";
@@ -82,6 +82,10 @@ export const AGENT_RETURN_DEADLINE_MS = 5 * 60_000;
 
 const recordKey = (sandboxId: string | undefined, device: string): string => `${sandboxId ?? ``}\n${device}`;
 const here = (sandboxId: string | undefined): boolean => sandboxId === activeSandboxId.value;
+
+/** The machine a device is an environment of, by the key its board card goes by; the device's own key when it stands alone. */
+export const machineKeyOf = (devices: readonly Device[], device: Device): string =>
+    machinesOf(devices).find((machine) => machine.environments.some((side) => side.key === device.key))?.key ?? device.key;
 
 /** Marks work on a machine until the returned end is called. Ending twice ends it once. */
 export const beginDeviceWork = (mark: DeviceWorkMark): (() => void) => {

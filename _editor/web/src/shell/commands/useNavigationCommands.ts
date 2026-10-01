@@ -6,6 +6,7 @@ import { useVocabulary } from "../../core-views/vocabulary";
 import { useCapabilities } from "../../features/capabilities/connect/useCapabilities";
 import { usePanels } from "../../features/extensions/usePanels";
 import { openPreview } from "../../features/preview/previewSurface";
+import { DEVICES_PATH } from "../../features/sandbox/devices/deviceLinks";
 import { sandboxBuiltInSlugs, sandboxSectionPath, sandboxSections } from "../../features/sandbox/sandboxNav";
 import { useRole } from "../../features/sandbox/secrets/useRole";
 import { useHostedPlan } from "../../features/settings/hosted-plan/useHostedPlan";
@@ -54,6 +55,8 @@ export function useNavigationCommands(): void {
         // Its tile leaves the rail when nothing is running; the palette is how you get back to a finished session.
         { command: `view.browsers`, title: t(`shared.browsers`), category: GO_TO, icon: `desktop`, to: `/browsers` },
         { command: `view.capabilities`, title: t(`shared.capabilities`), category: GO_TO, icon: `plus`, to: `/capabilities` },
+        // A rail view of its own since it left the sandbox hub; maintainer and up, as its tile is.
+        ...(canShip.value ? [{ command: `view.devices`, title: t(`sandbox.words.devicesSection`), category: GO_TO, icon: `desktop`, to: DEVICES_PATH }] : []),
     ]);
 
     // One command per rail-surface activation (not per view); the id carries the activation key unless it is a

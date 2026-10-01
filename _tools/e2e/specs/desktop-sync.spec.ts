@@ -5,7 +5,7 @@ import { expect, test } from "@playwright/test";
 // via POST /system/sync/pair, rendered as the copy-paste agent one-liner.
 test(`enabling desktop sync mints a pairing and renders the agent one-liner`, async ({ page }) => {
     // Pairing is a task, not a state to read, so it lives behind this button on the Devices board.
-    await page.goto(`/sandbox/devices`);
+    await page.goto(`/devices`);
     await page.getByRole(`button`, { name: `Add a device` }).click();
     await page.getByRole(`button`, { name: `Enable desktop sync` }).click();
 

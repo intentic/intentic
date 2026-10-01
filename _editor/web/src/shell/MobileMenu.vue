@@ -15,8 +15,11 @@ import {
     railBands,
     tabBarIds,
     WORKSPACE_VIEW_ID,
+    DEVICES_VIEW_ID,
 } from "../core-views/registry";
 import { sandboxHubPath } from "../features/sandbox/sandboxNav";
+import { DEVICES_PATH } from "../features/sandbox/devices/deviceLinks";
+import { devicesWorking } from "../features/sandbox/devices/runners/deviceWork";
 import { useVocabulary } from "../core-views/vocabulary";
 import { badgeChip, badgeClass, badgeToneClass, RUNNING_MARK_CLASS } from "../core-views/viewBadge";
 import { usePanels } from "../features/extensions/usePanels";
@@ -90,6 +93,13 @@ onMounted(() => {
 const { state: pushState } = usePushNotifications();
 const pushRow = computed(() => pushMenuRow(pushState.value));
 
+const { canShip, isGuest } = useRole();
+// The machines this sandbox reaches, turning while one of them is being worked on (devices/runners/deviceWork.ts).
+const devicesRow = computed<SectionRow>(() => {
+    const running = devicesWorking();
+    const row: SectionRow = { id: DEVICES_VIEW_ID, to: DEVICES_PATH, label: t(`sandbox.words.devicesSection`), icon: `desktop` };
+    return running === undefined ? row : { ...row, badge: { running } };
+});
 // Same detection and bands as ShellDesktop, but unfiltered by onRail — no tile scarcity here. The file tree is
 // not an extension, so it is stated here: Chat holds the tile it has on the desktop rail's tab bar counterpart.
 const words = useVocabulary();
@@ -98,6 +108,8 @@ const sectionBands = computed(() =>
     railBands(
         [
             filesRow.value,
+            // A view of its own, off the hub, so a phone reaches it here as the desktop reaches it from its rail tile.
+            ...(canShip.value ? [devicesRow.value] : []),
             ...detectActivations(panels.value, capabilities.value)
                 .filter(({ extension }) => extension.surface === `rail` && !tabBarIds().includes(extension.id))
                 .map(extensionRow),
@@ -106,7 +118,6 @@ const sectionBands = computed(() =>
     ),
 );
 // Matches the desktop rail's tail (terminal, +); terminal needs ship tier since a PTY is the whole sandbox.
-const { canShip, isGuest } = useRole();
 const { maker } = useAudience();
 // A guest connects nothing and runs no terminal; its Sandbox row opens on the one section it has.
 const sandboxRows = computed<readonly SectionRow[]>(() => [

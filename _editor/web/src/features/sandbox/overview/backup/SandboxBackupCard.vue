@@ -18,7 +18,7 @@ const { unbacked } = useSandboxBackup();
             <div class="flex flex-col gap-3">
                 <p class="text-xs text-muted">{{ t(`sandbox.sandboxBackupCard.detail`) }}</p>
                 <div class="flex flex-wrap items-center gap-2">
-                    <RouterLink to="/sandbox/devices">
+                    <RouterLink to="/devices">
                         <Button :label="t(`sandbox.sandboxBackupCard.turnOnSync`)" size="small">
                             <template #icon><Icon name="desktop" /></template>
                         </Button>

@@ -1,11 +1,14 @@
 import type { LocationQueryRaw, LocationQueryValue, RouteLocationRaw } from "vue-router";
 import type { DeviceCardFix } from "./health/deviceAttention";
 
-// The Devices tab's two addresses. Selection lives in the URL so a machine is deep-linkable and the back
-// button works; kept here so the board's cards, the device page's back link and the tab's own reader cannot
+// The Devices view's two addresses. Selection lives in the URL so a machine is deep-linkable and the back
+// button works; kept here so the board's cards, the device page's back link and the view's own reader cannot
 // disagree about the shape.
 
-const TAB = { name: `sandbox`, params: { tab: `devices` } } as const;
+const TAB = { name: `devices` } as const;
+
+/** The view's own path, for a link that names no machine: the rail's tile, an attention row. */
+export const DEVICES_PATH = `/devices`;
 
 /** The fleet board: every machine, nothing selected. */
 export const boardRoute = (): RouteLocationRaw => ({ ...TAB, query: {} });
