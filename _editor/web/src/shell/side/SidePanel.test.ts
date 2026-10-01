@@ -94,7 +94,6 @@ it(`stands what was opened beside the chat in its own column, and never moves th
     const columns = [...(host.querySelector(`.side-panel`)?.children ?? [])].filter((child) => child.tagName === `SECTION`);
     expect(columns.map((column) => column.classList.contains(`side-tabs`) || column.classList.contains(`side-chat`))).toEqual([true, true]);
     expect(columns[0]?.classList.contains(`side-tabs`)).toBe(true);
-    expect(host.querySelector<HTMLElement>(`.side-tabs`)?.style.flex).toContain(`0 1`);
     expect(host.querySelector(`.stub-body`)?.textContent).toBe(`body 1`);
     expect(chatSlot.value).toBe(slot);
 
@@ -165,4 +164,35 @@ it(`draws a tab whose side view is gone, so it can be read and closed`, async ()
 
     expect(tabTitles(host)).toEqual([`run`]);
     expect(host.querySelector(`[role="tabpanel"]`)?.textContent).toContain(`Not available`);
+});
+
+it(`fills the middle with what was opened beside the chat, and splits to bring the section back`, async () => {
+    openBeside(`stub`, { n: 1 });
+    const host = await mount();
+    const aside = (): HTMLElement | null => host.querySelector<HTMLElement>(`.side-panel`);
+    const tabs = (): HTMLElement | null => host.querySelector<HTMLElement>(`.side-tabs`);
+
+    expect(panel.split.value).toBe(false);
+    expect(aside()?.style.gridColumn).toBe(`workspace-start / side-end`);
+    expect(tabs()?.classList.contains(`flex-1`)).toBe(true);
+
+    button(host, `Show the section beside`)?.click();
+    await settle();
+    expect(panel.split.value).toBe(true);
+    expect(aside()?.style.gridArea).toBe(`side`);
+    expect(tabs()?.classList.contains(`flex-1`)).toBe(false);
+    expect(tabs()?.style.flex).toContain(`0 1`);
+
+    // The last tab gone, the next thing opened fills again.
+    closeAllTabs();
+    expect(panel.split.value).toBe(false);
+});
+
+it(`offers no split while the chat lives elsewhere, the tabs being the whole column`, async () => {
+    chatInSidePanel.value = false;
+    openBeside(`stub`, { n: 1 });
+    const host = await mount();
+
+    expect(button(host, `Show the section beside`)).toBeNull();
+    expect(host.querySelector<HTMLElement>(`.side-panel`)?.style.gridArea).toBe(`side`);
 });

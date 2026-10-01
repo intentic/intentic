@@ -26,6 +26,9 @@ interface SideState {
     readonly active: string | null;
     // The tab opened as a look, which the next look replaces unless it is kept; null once kept or closed.
     readonly peek: string | null;
+    // Beside a side-docked chat, what was opened takes the whole middle; split, the section the rail picked stands beside
+    // it again. Set by going to a section and by the reader; cleared with the last tab, so the next thing opened fills.
+    readonly split: boolean;
 }
 
 export interface OpenBesideOptions {
@@ -35,7 +38,7 @@ export interface OpenBesideOptions {
     readonly line?: number;
 }
 
-const EMPTY: SideState = { tabs: [], active: null, peek: null };
+const EMPTY: SideState = { tabs: [], active: null, peek: null, split: false };
 
 // Keys sorted, so `{a, b}` and `{b, a}` are one tab.
 export const sideTabId = (view: string, input: SideInput): string =>
@@ -64,6 +67,7 @@ const StoredStateSchema = z.object({
     tabs: z.array(z.unknown()),
     active: z.string().nullish(),
     peek: z.string().nullish(),
+    split: z.boolean().optional(),
 });
 
 // An unreadable payload counts as nothing remembered; the panel opens empty.
@@ -94,7 +98,7 @@ const parseState = (raw: string): SideState | undefined => {
         }
     }
     const names = (id: string | null | undefined): string | null => (tabs.some((tab) => tab.id === id) ? (id ?? null) : null);
-    return { tabs, active: names(stored.active) ?? tabs.at(-1)?.id ?? null, peek: names(stored.peek) };
+    return { tabs, active: names(stored.active) ?? tabs.at(-1)?.id ?? null, peek: names(stored.peek), split: tabs.length > 0 && stored.split === true };
 };
 
 const scopedSandboxId = sandboxValue(() => activeSandboxId.value);
@@ -113,6 +117,7 @@ const serialized = computed(() =>
         tabs: state.value.tabs.map(({ view, input }) => ({ view, input })),
         active: state.value.active,
         peek: state.value.peek,
+        split: state.value.split,
     }),
 );
 watch(serialized, (json) => {
@@ -188,7 +193,7 @@ export const closeTabs = (ids: ReadonlySet<string>): void => {
     const peek = current.peek !== null && ids.has(current.peek) ? null : current.peek;
     const kept = Object.fromEntries(Object.entries(jumps.value).filter(([id]) => !ids.has(id)));
     jumps.value = kept;
-    set({ tabs, active, peek });
+    set({ tabs, active, peek, split: tabs.length === 0 ? false : current.split });
 };
 
 export const closeTab = (id: string): void => closeTabs(new Set([id]));
@@ -199,6 +204,12 @@ export const closeAllTabs = (): void => closeTabs(new Set(state.value.tabs.map((
 
 // Every tab showing a view, e.g. when an extension goes and takes its side view with it.
 export const tabsOfView = (view: string): readonly SideTab[] => state.value.tabs.filter((tab) => tab.view === view);
+
+export const setSplit = (split: boolean): void => {
+    if (state.value.split !== split) {
+        set({ split });
+    }
+};
 
 // The next or previous tab, wrapping; Alt+PageDown and Alt+PageUp from inside the panel.
 export const cycleTab = (step: 1 | -1, among: readonly SideTab[] = state.value.tabs): void => {
@@ -216,6 +227,7 @@ export const useSidePanel = () => ({
     tabs: computed(() => state.value.tabs),
     active: computed(() => state.value.active),
     peek: computed(() => state.value.peek),
+    split: computed(() => state.value.split),
     jumps: computed(() => jumps.value),
     neighbourOf: (id: string) => neighbourOf(state.value.tabs, id),
 });

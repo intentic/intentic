@@ -4,7 +4,7 @@ import { STARTER_APP, STARTER_REPO } from "@intentic/sandbox-contract";
 import { AnchoredOverlay, browserOwnsClick, ui, ContextMenu, type IconName, type Tip, type TipTone, type TooltipValue } from "@intentic/ui";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
-import { RouterView, useRoute, useRouter } from "vue-router";
+import { isNavigationFailure, NavigationFailureType, RouterView, useRoute, useRouter } from "vue-router";
 import { useWallpaperedRoute } from "../skins/useWallpaper";
 import { agentsBadge, agentsScopeNote } from "../features/agents/board/agentsTile";
 import { useBrowsersQuery } from "../features/browsers/browsersQuery";
@@ -57,6 +57,8 @@ import { terminalSlot } from "./window/panelSlots";
 import SidePanel from "./side/SidePanel.vue";
 import { registerCoreSideViews } from "./side/coreSideViews";
 import { sideDocked } from "./side/sideTabs";
+import { besideChat, besideFills } from "./side/sideLayout";
+import { setSplit } from "./side/sideTabs";
 import { shownSideTabs } from "./side/sideViews";
 import { type RailTile, useRailMemory } from "./rail/railMemory";
 import { useRailPins } from "./rail/railPins";
@@ -495,11 +497,11 @@ const keepOnRail = (tile: SectionTile): void => {
 };
 
 // The side panel (shell/side) takes its column while it holds anything: the chat whose home is the side, or what was
-// opened beside the section. Empty, the column is 0 wide; holding both, it is wide enough for them side by side.
-const sideTabsShown = computed(() => shownSideTabs.value.length > 0);
-const sideShown = computed(() => chatInSidePanel.value || sideTabsShown.value);
+// opened beside the section. Empty, the column is 0 wide. Holding both, what was opened fills the middle, the panel
+// spanning the section's cell too (sideLayout.ts), or, split, the column is wide enough for the two side by side.
+const sideShown = computed(() => chatInSidePanel.value || shownSideTabs.value.length > 0);
 const sideWidth = computed(() =>
-    chatInSidePanel.value && sideTabsShown.value ? layout.chatWidth.value + layout.besideWidth.value : layout.chatWidth.value,
+    besideChat.value && !besideFills.value ? layout.chatWidth.value + layout.besideWidth.value : layout.chatWidth.value,
 );
 const gridStyle = computed(() => ({
     "--side-width": sideShown.value ? uiLength(sideWidth.value) : `0px`,
@@ -509,6 +511,25 @@ const gridStyle = computed(() => ({
 
 // Toggled by the rail tile or Ctrl+`; the panel docks below the workspace since sessions are sandbox-global.
 const terminal = useTerminalPanel();
+
+// Going to a section (a rail tile, the palette, a link; the section already on screen included) while what was opened
+// fills the middle brings the section back beside it, rather than leaving the click with nothing to show. So does the
+// terminal, which docks in the section's cell. A query alone changing is the section's own state, not a visit.
+const showSection = (): void => {
+    if (besideFills.value) {
+        setSplit(true);
+    }
+};
+const stopSectionVisits = router.afterEach((to, from, failure) => {
+    if (failure === undefined ? to.path !== from.path : isNavigationFailure(failure, NavigationFailureType.duplicated)) {
+        showSection();
+    }
+});
+onUnmounted(stopSectionVisits);
+watch(
+    () => terminal.open.value,
+    (open) => open && showSection(),
+);
 // Ship-tier only: a PTY is the whole sandbox, and the daemon refuses the socket below maintainer anyway.
 const { canShip, isGuest } = useRole();
 // The only affordance for the panel now; the Workspace view's own toggle is gone, since terminals are
@@ -753,7 +774,15 @@ const wallpapered = useWallpaperedRoute();
         <!-- The right-hand column: things opened beside the section, and the chat when its home is the side. -->
         <SidePanel v-if="sideShown" />
 
-        <main ref="page" class="relative flex min-w-0 flex-col overflow-hidden" style="grid-area: workspace">
+        <!-- Under what was opened while it fills the middle: hidden and inert, but mounted at its own size, so the section
+             comes back as it was left, scrolled where it was. -->
+        <main
+            ref="page"
+            class="relative flex min-w-0 flex-col overflow-hidden"
+            :class="{ invisible: besideFills }"
+            :inert="besideFills ? true : undefined"
+            style="grid-area: workspace"
+        >
             <SandboxGate>
                 <div class="min-h-0 flex-1 overflow-auto [scrollbar-gutter:stable]" :class="{ 'wallpaper-surface': wallpapered }">
                     <RouterView />

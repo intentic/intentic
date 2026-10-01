@@ -13,23 +13,24 @@ import {
     defaultBesideWidth,
     defaultChatWidth,
     defaultFloatingSideWidth,
-    maxBesideWidth,
     maxChatWidth,
     maxFloatingSideWidth,
     MIN_CHAT_WIDTH,
     MIN_PANE_PX,
+    roomBesideChat,
     useLayout,
 } from "../window/useLayout";
-import { closeAllTabs, closeOtherTabs, closeTab, cycleTab, keepTab, activateTab, type SideTab, useSidePanel } from "./sideTabs";
+import { besideChat, besideFills } from "./sideLayout";
+import { closeAllTabs, closeOtherTabs, closeTab, cycleTab, keepTab, activateTab, setSplit, type SideTab, useSidePanel } from "./sideTabs";
 import { describeTab, homeOf, shownSideActive, shownSideTabs, type SideViewEntry, type SideViewLabel, sideViewOf } from "./sideViews";
 import SideStrip, { type SideStripItem } from "./SideStrip.vue";
 import SideUnavailable from "./SideUnavailable.vue";
 
 // THE SHELL'S RIGHT-HAND COLUMN: what the reader opened beside the section the rail put in the main area, and the chat
-// when the chat's home is the side. With both, they stand side by side, each the full height: what was opened in a column
-// of its own (`ui-side-beside-width`), then the chat in the width it always had (`ui-chat-width`). Stacked in one chat-wide
-// column instead, a preview became a phone-sized box and the chat under it lost the room its transcript reads in; side by
-// side, the chat that linked to a file, or the preview it is changing, stays in reach while you look, and neither shrinks.
+// when the chat's home is the side. With both, they stand side by side, each the full height, the chat in the width it
+// always had (`ui-chat-width`) and what was opened taking the whole middle over the section (sideLayout.ts), or, split,
+// a column of its own (`ui-side-beside-width`) with the section beside it. Never stacked over the chat in its column: a
+// preview became a phone-sized box there, code wrapped on every line, and the chat lost the room its transcript reads in.
 
 // `floating`: drawn in a popped-out chat's window, beside the chat rather than over it, at that window's own width.
 const { floating = false } = defineProps<{ floating?: boolean }>();
@@ -40,42 +41,77 @@ const panel = useSidePanel();
 const uid = useId();
 
 const tabsOnScreen = computed(() => shownSideTabs.value.length > 0);
-// The chat beside the tabs: two columns, each its own width. Alone, either takes the whole panel.
-const beside = computed(() => tabsOnScreen.value && chatInSidePanel.value);
+// The chat beside the tabs: two columns, the tabs filling the middle or, split, their own width. Alone, either takes the
+// whole panel.
+const beside = computed(() => !floating && besideChat.value);
+const fills = computed(() => !floating && besideFills.value);
 
 // The seams speak pointer pixels; what is stored is app pixels. The panel's left edge sizes whatever stands there: the
-// beside column when there is one, else the one column the panel is (the chat's, or a popped-out window's own).
+// beside column when there is one, else the one column the panel is (the chat's, or a popped-out window's own). Beside the
+// chat it runs from one section-pane's width to all of the middle: drawn into the section's floor, it snaps to filling.
+const besideEdge = (px: number): void => {
+    const room = roomBesideChat();
+    if (px > room - MIN_PANE_PX / 2) {
+        // The drag here passed through the widest split, which would leave the section at its floor next time.
+        layout.setBesideWidth(defaultBesideWidth());
+        setSplit(false);
+        return;
+    }
+    layout.setBesideWidth(px);
+    setSplit(true);
+};
 const edgeSeam = computed<number>({
-    get: () => toScreenPx(beside.value ? layout.besideWidth.value : floating ? layout.floatingSideWidth.value : layout.chatWidth.value),
+    get: () =>
+        toScreenPx(
+            beside.value
+                ? fills.value
+                    ? roomBesideChat()
+                    : layout.besideWidth.value
+                : floating
+                  ? layout.floatingSideWidth.value
+                  : layout.chatWidth.value,
+        ),
     set: (px) =>
         beside.value
-            ? layout.setBesideWidth(toAppPx(px))
+            ? besideEdge(toAppPx(px))
             : floating
               ? layout.setFloatingSideWidth(toAppPx(px))
               : layout.setChatWidth(toAppPx(px)),
 });
-// Between the two columns the seam trades width between them, so the section in the main area never moves under it.
+const edgeBounds = computed(() =>
+    beside.value
+        ? { min: MIN_PANE_PX, max: roomBesideChat(), reset: roomBesideChat() }
+        : floating
+          ? { min: MIN_CHAT_WIDTH, max: maxFloatingSideWidth(), reset: defaultFloatingSideWidth() }
+          : { min: MIN_CHAT_WIDTH, max: maxChatWidth(), reset: defaultChatWidth() },
+);
+// Between the two columns. Filling, what was opened takes whatever the chat leaves; split, the seam trades width between
+// the two, so the section in the main area never moves under it. Either way what was opened keeps one pane's width.
 const chatSeam = computed<number>({
     get: () => toScreenPx(layout.chatWidth.value),
     set: (px) => {
         const before = layout.chatWidth.value;
         layout.setChatWidth(toAppPx(px));
-        layout.setBesideWidth(layout.besideWidth.value - (layout.chatWidth.value - before));
+        if (!fills.value) {
+            layout.setBesideWidth(layout.besideWidth.value - (layout.chatWidth.value - before));
+        }
     },
 });
-const edgeBounds = computed(() =>
-    beside.value
-        ? { min: MIN_PANE_PX, max: maxBesideWidth(), reset: defaultBesideWidth() }
-        : floating
-          ? { min: MIN_CHAT_WIDTH, max: maxFloatingSideWidth(), reset: defaultFloatingSideWidth() }
-          : { min: MIN_CHAT_WIDTH, max: maxChatWidth(), reset: defaultChatWidth() },
+const chatSeamMax = computed(() =>
+    Math.max(MIN_CHAT_WIDTH, layout.chatWidth.value + (fills.value ? roomBesideChat() : layout.besideWidth.value) - MIN_PANE_PX),
 );
-// Both shrink with a window too narrow for their sum, the chat in proportion to its width but never under its floor,
-// so its composer keeps its controls; what was opened beside gives way first.
-const tabsStyle = computed(() => (beside.value ? { flex: `0 1 ${uiLength(layout.besideWidth.value)}` } : undefined));
+// Split, both shrink with a window too narrow for their sum, the chat in proportion to its width but never under its
+// floor, so its composer keeps its controls; what was opened gives way first. Filling, the chat holds its width.
+const tabsStyle = computed(() => (beside.value && !fills.value ? { flex: `0 1 ${uiLength(layout.besideWidth.value)}` } : undefined));
 const chatStyle = computed(() =>
-    beside.value ? { flex: `1 1 ${uiLength(layout.chatWidth.value)}`, minWidth: uiLength(MIN_CHAT_WIDTH) } : undefined,
+    beside.value
+        ? fills.value
+            ? { flex: `0 0 ${uiLength(layout.chatWidth.value)}` }
+            : { flex: `1 1 ${uiLength(layout.chatWidth.value)}`, minWidth: uiLength(MIN_CHAT_WIDTH) }
+        : undefined,
 );
+// Filling, the panel spans the main area's cell as well as its own; the section stays mounted under it (ShellDesktop).
+const panelStyle = computed(() => (fills.value ? { gridRow: `1`, gridColumn: `workspace-start / side-end` } : { gridArea: `side` }));
 
 // One element id per tab for as long as the panel lives, since a tab's own id is JSON and no fit for an attribute.
 const domIds = new Map<string, string>();
@@ -194,6 +230,13 @@ onMounted(() => {
         },
         { command: `side.keepTab`, title: t(`ui.action.keepOpen`), icon: `pin`, handler: acting((tab) => keepTab(tab.id)) },
         { command: `side.openInSection`, title: t(`shell.sidePanel.openInSection`), icon: `expand`, handler: acting(openHome) },
+        {
+            command: `side.toggleSplit`,
+            title: t(`shell.sidePanel.toggleSplit`),
+            icon: `split-columns`,
+            when: `tabSurface == 'side'`,
+            handler: () => setSplit(fills.value),
+        },
     ];
     commandDisposables = entries.map((entry) => registerCommand({ owner: `builtin`, category: SIDE_PANEL, ...entry }));
 });
@@ -207,12 +250,12 @@ onBeforeUnmount(() => {
 
 <template>
     <!-- `flex-row`: with the chat here too, the two stand side by side rather than one over the other. -->
-    <aside class="side-panel relative flex min-h-0 min-w-0 border-l border-line bg-card" style="grid-area: side">
+    <aside class="side-panel relative flex min-h-0 min-w-0 border-l border-line bg-card" :class="{ 'side-fills': fills }" :style="panelStyle">
         <!-- What was opened beside: the strip, then every tab's body stacked in one box, the one on screen visible. -->
         <section
             v-if="tabsOnScreen"
             class="side-tabs relative flex min-h-0 min-w-0 flex-col"
-            :class="beside ? `` : `flex-1`"
+            :class="beside && !fills ? `` : `flex-1`"
             :style="tabsStyle"
             :aria-label="t(`shell.sidePanel.tabs`)"
         >
@@ -238,6 +281,18 @@ onBeforeUnmount(() => {
                         @click="keepTab(activeTab.id)"
                     >
                         <Icon name="pin" class="text-xs" />
+                    </button>
+                    <!-- The section the rail picked, back beside what was opened, or what was opened over all of the middle. -->
+                    <button
+                        v-if="beside"
+                        type="button"
+                        :class="ui.iconButton(`h-7 w-7 rounded`)"
+                        :aria-label="t(`shell.sidePanel.showSection`)"
+                        :aria-pressed="!fills"
+                        v-tooltip.bottom="fills ? t(`shell.sidePanel.showSection`) : t(`shell.sidePanel.fillMiddle`)"
+                        @click="setSplit(fills)"
+                    >
+                        <Icon name="split-columns" class="text-xs" />
                     </button>
                     <button
                         v-if="activeTab !== undefined && activeHome !== undefined"
@@ -287,7 +342,7 @@ onBeforeUnmount(() => {
                 place="edge"
                 pane="after"
                 :min="toScreenPx(MIN_CHAT_WIDTH)"
-                :max="toScreenPx(Math.max(MIN_CHAT_WIDTH, layout.chatWidth.value + layout.besideWidth.value - MIN_PANE_PX))"
+                :max="toScreenPx(chatSeamMax)"
                 :reset="toScreenPx(defaultChatWidth())"
                 :title="t(`ui.resizeSeam.doubleClickResets`)"
             />

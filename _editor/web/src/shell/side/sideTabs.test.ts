@@ -22,7 +22,7 @@ const session = store(`sessionStorage`);
 const activeSandboxId = ref<string | undefined>(`sb1`);
 jest.mock("../../features/sandbox/overview/activeSandbox", () => ({ activeSandboxId }));
 
-const { activateTab, closeAllTabs, closeOtherTabs, closeTab, cycleTab, keepTab, openBeside, sideTabId, useSidePanel } =
+const { activateTab, closeAllTabs, closeOtherTabs, closeTab, cycleTab, keepTab, openBeside, setSplit, sideTabId, useSidePanel } =
     await import("./sideTabs");
 
 const panel = useSidePanel();
@@ -148,10 +148,15 @@ describe(`closing`, () => {
         expect(panel.active.value).toBeNull();
     });
 
-    it(`clears the peek with the peek's tab`, () => {
+    it(`clears the peek with the peek's tab, and the split with the last tab`, () => {
         openBeside(`file`, file(`d.ts`));
+        setSplit(true);
         closeTab(idOf(`d.ts`));
         expect(panel.peek.value).toBeNull();
+        expect(panel.split.value).toBe(true);
+
+        closeAllTabs();
+        expect(panel.split.value).toBe(false);
     });
 
     it(`walks the tabs with wrap-around`, () => {
@@ -166,7 +171,7 @@ describe(`closing`, () => {
 describe(`what survives a reload`, () => {
     const key = `intentic.sidePanel.sb1`;
 
-    it(`stores the tabs, the focus, and the peek under this window's sandbox`, async () => {
+    it(`stores the tabs, the focus, the peek and the split under this window's sandbox`, async () => {
         openBeside(`file`, file(`a.ts`), { keep: true, line: 9 });
         openBeside(`file`, file(`b.ts`));
         await nextTick();
@@ -178,6 +183,7 @@ describe(`what survives a reload`, () => {
             ],
             active: idOf(`b.ts`),
             peek: idOf(`b.ts`),
+            split: false,
         });
         expect(local.get(key)).toBe(session.get(key));
     });
