@@ -1,15 +1,12 @@
 import type { WorkspaceSearchSpan, WorkspaceSearchTag } from "@intentic/sandbox-contract";
-import type { FileClass, EngineResult, RankedGroup, RankedHit } from "../types.js";
-import { classOf } from "../workspace/scan.js";
+import type { EngineResult, RankedGroup, RankedHit } from "../types.js";
+import { classPrior } from "./prior.js";
 import { pathTokens } from "./tokens.js";
 
 const RRF_K = 60;
 const DEF_BOOST = 1.5;
 const PATH_BOOST = 1.25;
 const RECENCY_HALF_LIFE_DAYS = 14;
-
-// Class prior for natural-language answers only; exact verbs (find/refs/def) skip it, a test hit counts fully.
-const CLASS_PRIOR: Record<FileClass, number> = { src: 1, config: 0.9, tests: 0.75, docs: 0.7 };
 
 export interface FuseContext {
     // The query's content words; a hit whose path is named after one gets a boost.
@@ -96,7 +93,7 @@ export const fuse = (results: readonly EngineResult[], context: FuseContext): Ra
             score *= 1 + 0.2 * 2 ** (-ageDays / RECENCY_HALF_LIFE_DAYS);
         }
         if (context.sourceFirst) {
-            score *= CLASS_PRIOR[classOf(hit.path)];
+            score *= classPrior(hit.path);
         }
         hits.push({ ...hit, tags: dedupeTags(hit.tags), score });
     }

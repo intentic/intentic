@@ -14,6 +14,8 @@ export const FEATURES = [
     "pathboost",
     "recency",
     "srcfirst",
+    // At most RERANK_PER_FILE hits per file in the cross-encoder pool, instead of the first files' hits filling it.
+    "spread",
     "pack",
 ] as const;
 

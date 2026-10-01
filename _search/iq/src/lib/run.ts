@@ -271,7 +271,7 @@ export const parseMultiLine = (line: string): MultiLine => {
     };
 };
 
-const readStdin = (): Promise<string> =>
+export const readStdin = (): Promise<string> =>
     new Promise<string>((resolve, reject) => {
         let data = "";
         process.stdin.setEncoding("utf8");

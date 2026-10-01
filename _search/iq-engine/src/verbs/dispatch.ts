@@ -15,6 +15,7 @@ import { disabledOf, type Feature } from "../features.js";
 import { classify } from "../plan/classify.js";
 import type { QueryScorer } from "../query/scorer.js";
 import { fuse, type FuseContext } from "../plan/fuse.js";
+import { classPrior } from "../plan/prior.js";
 import { queryTokens } from "../plan/tokens.js";
 import { estimateTokens } from "../render/budget.js";
 import { cursorId, decodeCursor, readSpool, writeSpool } from "../render/cursor.js";
@@ -363,6 +364,9 @@ const zeroHitHint = (request: QueryRequest): string | undefined => {
 };
 
 const RERANK_TOP = 32;
+// With `spread` on, at most this many of one file's hits (its best-fused) enter the cross-encoder pool, so a file
+// matching on many lines cannot take every slot from the files after it.
+const RERANK_PER_FILE = 4;
 // RRF constant blending the fused and cross-encoder orders; matches the k used in plan/fuse.ts.
 const RERANK_RRF_K = 60;
 // Below this sigmoid gap between the best and second-best file, the field counts as flat/ambiguous.
@@ -432,10 +436,13 @@ const rerankGroups = async (
     scorer: QueryScorer,
     query: string,
     groups: RankedGroup[],
+    stages: { readonly sourceFirst: boolean; readonly spread: boolean },
 ): Promise<{ groups: RankedGroup[]; margin: number; relevance: number } | undefined> => {
     const candidates: RankedHit[] = [];
     for (const group of groups) {
-        for (const hit of group.hits) {
+        // A group's hits are in line order; a capped pool takes each file's best-fused hits, not its first ones.
+        const hits = stages.spread ? group.hits.toSorted((a, b) => b.score - a.score || a.line - b.line).slice(0, RERANK_PER_FILE) : group.hits;
+        for (const hit of hits) {
             if (candidates.length >= RERANK_TOP) {
                 break;
             }
@@ -456,8 +463,9 @@ const rerankGroups = async (
     const rerankRanks = new Map(
         scored.toSorted((a, b) => b.logit - a.logit || a.fusedRank - b.fusedRank).map((entry, rank) => [entry.fusedRank, rank] as const),
     );
+    const prior = (entry: (typeof scored)[number]): number => (stages.sourceFirst ? classPrior(entry.hit.path) : 1);
     const rrf = (entry: (typeof scored)[number]): number =>
-        1 / (RERANK_RRF_K + entry.fusedRank) + 1 / (RERANK_RRF_K + rerankRanks.get(entry.fusedRank)!);
+        (1 / (RERANK_RRF_K + entry.fusedRank) + 1 / (RERANK_RRF_K + rerankRanks.get(entry.fusedRank)!)) * prior(entry);
     const blended = scored.toSorted((a, b) => rrf(b) - rrf(a) || a.fusedRank - b.fusedRank).map((entry) => entry.hit);
     const rest = groups.flatMap((group) => group.hits).filter((hit) => !scoredKeys.has(`${hit.path}:${hit.line}`));
     // Regroups by path in the new order: a group's rank is its best hit's rank.
@@ -513,7 +521,10 @@ const naturalPlan = async (
         }
     }
     let groups = toGroups(results, request.query, entries, context.features, on("srcfirst"));
-    const reranked = on("rerank") && groups.length > 0 ? await rerankGroups(context.db, context.scorer, request.query, groups) : undefined;
+    const reranked =
+        on("rerank") && groups.length > 0
+            ? await rerankGroups(context.db, context.scorer, request.query, groups, { sourceFirst: on("srcfirst"), spread: on("spread") })
+            : undefined;
     if (reranked !== undefined) {
         groups = reranked.groups;
         notes.push("reranked");

@@ -19,6 +19,7 @@ import { recent } from "./commands/recent.command.js";
 import { refs } from "./commands/refs.command.js";
 import { sessionsCommand } from "./commands/sessions/sessions.routes.js";
 import { sym } from "./commands/sym.command.js";
+import { verify } from "./commands/verify.command.js";
 import { who } from "./commands/who.command.js";
 
 // Agents read errors as one line, not a stack. IQ_DEBUG keeps the stack for humans chasing a bug.
@@ -50,6 +51,7 @@ natural language semantically: there is no second verb for questions:
   iq log "MAX_MATCHES" --path src         git history of a string
   iq who src/app.ts:15                    blame an anchor
   iq multi "def foo" "refs bar"           several queries, one spawn (or one per stdin line)
+  iq verify answer.md                     do an answer's paths, anchors and names exist? (stdin: -)
   iq sessions files "auth refresh"        files past sessions touched for a topic
 
 Read the first lines and stop: every answer opens with a capsule, \`answer:\` names the top
@@ -88,6 +90,7 @@ export const app = buildApplication(
             log,
             who,
             multi,
+            verify,
             index: indexCommand,
             sessions: sessionsCommand,
         },

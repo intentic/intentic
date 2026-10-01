@@ -19,6 +19,9 @@ import { claimIndexer, indexerAlive, releaseIndexer } from "./store/indexer-lock
 import type { FileEntry, IndexStatus, QueryOutcome, QueryRequest } from "./types.js";
 import { type Feature, FEATURES } from "./features.js";
 import { dispatch } from "./verbs/dispatch.js";
+import { type VerifyReport, verifyReferences } from "./verify/check.js";
+import { extractReferences } from "./verify/extract.js";
+import { indexLookup } from "./verify/lookup.js";
 import { IQ_DIR } from "./workspace/floor.js";
 import { sweep } from "./workspace/scan.js";
 
@@ -48,6 +51,7 @@ export { loadImportGraph } from "./engines/import-graph.js";
 export type { ImportGraph } from "./engines/import-graph.js";
 export { disabledOf, type Feature, FEATURES, parseFeatures } from "./features.js";
 export { estimateTokens } from "./render/budget.js";
+export { renderVerify, type VerifyIssue, type VerifyIssueKind, type VerifyReport } from "./verify/check.js";
 // The cross-encoder floor under which an answer reads "weak"; iq-bench marks it on its calibration sweep.
 export { WEAK_FLOOR } from "./verbs/dispatch.js";
 export { isIqDenied, IQ_DIR } from "./workspace/floor.js";
@@ -66,6 +70,8 @@ export interface EngineOptions {
 
 export interface Engine {
     run(request: QueryRequest): Promise<QueryOutcome>;
+    // Checks an answer's file paths, path:line anchors and code names against this workspace (`iq verify`).
+    verify(text: string): Promise<VerifyReport>;
     indexStatus(): Promise<IndexStatus>;
     indexRebuild(onProgress?: (message: string) => void): Promise<IndexStatus>;
     indexDrop(): void;
@@ -208,6 +214,14 @@ export const createEngine = (options: EngineOptions): Engine => {
                     request,
                     entries,
                 );
+            } finally {
+                db.close();
+            }
+        },
+        async verify(text) {
+            const { db, entries } = await opened();
+            try {
+                return verifyReferences(extractReferences(text), indexLookup(db, options.root, entries));
             } finally {
                 db.close();
             }

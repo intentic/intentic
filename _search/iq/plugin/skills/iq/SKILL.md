@@ -30,6 +30,7 @@ iq "where do we enforce the secrets floor?"
 | recent changes | `iq recent --since 2d` |
 | git history | `iq log "MAX_MATCHES" --path src` |
 | several at once | `iq multi "def foo" "refs bar"` |
+| do an answer's anchors hold? | `iq verify answer.md` (or pipe it in) |
 
 Every answer opens with a capsule (`answer:`, `candidates:`, `more:`). Read that and stop — do not pipe through `head`; `--budget` already caps output. Scope with `--in`, `--repo`, `--lang`, `--glob`. Wrong grep habits (`iq search`, `iq ask`) are rewritten to `q`; use canonical forms next time. Full verb list: `iq --help`.
 

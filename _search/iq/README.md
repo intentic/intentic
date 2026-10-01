@@ -14,6 +14,7 @@ flowchart LR
 - A bare query picks its own strategy: a path, an identifier, a regex or natural language, falling back to semantic search when nothing matches exactly. There is no separate verb for questions.
 - Every answer opens with a capsule: `answer:` names the top anchor, its enclosing symbol and a verdict, `confident`, `ambiguous`, or `weak` when nothing retrieved likely answers and the thing asked about may not exist; `candidates:` and `more:` follow. Output fits `--budget` tokens, capsule included.
 - Exit codes follow grep (0 hits, 1 none, 2 error). Common grep flags get a one-line redirect instead of a usage dump.
+- `iq verify` reads an answer (a file, or stdin) and checks every reference in it against the index: cited files exist, `path:line` anchors fall inside their file and near the names the same line cites, and code names are defined or at least written somewhere here. It exits 0 when all hold and 1 when any does not, so a hook or CI step can gate on it.
 - The index lives in `.intentic/local/cache/iq` and maintains itself; `iq index rebuild` is for a stale index only.
 - `plugin/` is a Claude Code plugin: the `iq` skill, a SessionStart nudge that ingests transcripts, and a prompt hook that suggests matching past sessions. The sandbox image bakes it and loads it for every agent.
 
@@ -26,6 +27,7 @@ iq refs createIgnoreScope --kind call         # who calls it
 iq outline src/app.ts                         # a file's shape without reading it
 iq read src/app.ts::Server::start             # one symbol's body
 iq impact                                     # what the uncommitted change reaches, and its tests
+iq verify answer.md                           # do an answer's paths, path:line anchors and names exist? exit 1 if not
 iq sessions files "auth refresh"              # files past sessions touched for a topic
 ```
 
@@ -34,5 +36,6 @@ iq sessions files "auth refresh"              # files past sessions touched for 
 - [src/app.ts](src/app.ts) — the verb table and the `--help` text agents read.
 - [src/lib/run.ts](src/lib/run.ts) — the executor every search verb shares: engine, path resolution, output mode, exit code.
 - [src/commands/q.command.ts](src/commands/q.command.ts) — the default verb behind a bare `iq "…"`.
+- [src/commands/verify.command.ts](src/commands/verify.command.ts) — `iq verify`, the grounding check for an answer's references.
 - [src/commands/sessions/sessions.routes.ts](src/commands/sessions/sessions.routes.ts) — session recall verbs over `iq-recall`.
 - [plugin/skills/iq/SKILL.md](plugin/skills/iq/SKILL.md) — which verb to reach for, as agents are taught it.

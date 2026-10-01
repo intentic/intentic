@@ -1,6 +1,8 @@
 import { existsSync } from "node:fs";
+import { mkdir, rm, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { requires } from "@intentic/testing/requires";
-import { createEngine, WEAK_FLOOR } from "../index.js";
+import { createEngine, parseFeatures, WEAK_FLOOR } from "../index.js";
 import { makeFixtureWorkspace } from "../testing.js";
 import type { QueryRequest } from "../types.js";
 
@@ -64,6 +66,29 @@ test.skipIf(!models.runs)(
         expect(absent.verdict?.relevance).toBeLessThan(WEAK_FLOOR);
         expect(absent.text).toMatch(/^answer: .* · weak · /m);
         expect(absent.result.hint).toMatch(/^weak match: /);
+    },
+    120_000,
+);
+
+// The cross-encoder is trained on web passages and scores prose that restates a question above the code that answers
+// it; the class prior applies after its blend too, or that preference undid it.
+test.skipIf(!models.runs)(
+    models.title("source first: a doc restating the question leads without the class prior and yields to the code with it"),
+    async () => {
+        await mkdir(join(root, "docs"), { recursive: true });
+        await writeFile(
+            join(root, "docs/widget-creation.md"),
+            "# Where is a widget created?\n\nA widget is created when you call the widget factory with a name: the new widget is created and returned.\n",
+        );
+        try {
+            const question = request("q", "where is a widget created?");
+            const without = await createEngine({ root, modelDir: MODEL_DIR }).run({ ...question, features: parseFeatures("-srcfirst") });
+            expect(without.result.groups[0]?.path).toBe("docs/widget-creation.md");
+            const withPrior = await createEngine({ root, modelDir: MODEL_DIR }).run(question);
+            expect(withPrior.result.groups[0]?.path).toBe("alpha/src/widget.ts");
+        } finally {
+            await rm(join(root, "docs"), { recursive: true, force: true });
+        }
     },
     120_000,
 );

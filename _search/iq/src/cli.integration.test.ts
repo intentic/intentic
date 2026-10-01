@@ -1,3 +1,6 @@
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { captureCli, type CliOutcome } from "@intentic/agent-cli/testing";
 import { makeFixtureWorkspace } from "@intentic/iq-engine/testing";
 import { app } from "./app.js";
@@ -348,4 +351,27 @@ test("multi: queries given as arguments need no stdin", async () => {
     expect(out).toContain("[1/2] iq: find createWidget --lang ts,");
     expect(out).toContain("[2/2] iq: def createWidget,");
     expect(context.process.exitCode).toBe(0);
+});
+
+test("verify: a grounded answer exits 0, a fabricated one exits 1 with one row per issue, --json carries the report", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "iq-verify-"));
+    try {
+        const good = join(dir, "good.md");
+        const bad = join(dir, "bad.md");
+        await writeFile(good, "`alpha/src/widget.ts:6` — `createWidget` builds one.\n");
+        await writeFile(bad, "`alpha/src/gadget.ts` builds one with `createGadget()`.\n");
+        const grounded = await invoke(["verify", good]);
+        expect(grounded.exitCode).toBe(0);
+        expect(grounded.out).toBe(`iq verify: ${good} · 1 files, 1 anchors, 1 names checked · grounded\n`);
+        const fabricated = await invoke(["verify", bad]);
+        expect(fabricated.exitCode).toBe(1);
+        expect(fabricated.out).toContain("2 issues");
+        expect(fabricated.out).toContain("missing file    alpha/src/gadget.ts");
+        expect(fabricated.out).toContain("unknown name    createGadget()");
+        const json = JSON.parse((await invoke(["verify", bad, "--json"])).out) as { source: string; issues: { kind: string }[] };
+        expect(json.source).toBe(bad);
+        expect(json.issues.map((issue) => issue.kind)).toEqual(["missing-file", "unknown-name"]);
+    } finally {
+        await rm(dir, { recursive: true, force: true });
+    }
 });

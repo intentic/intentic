@@ -25,6 +25,7 @@ export const CONFIGS: readonly BenchConfig[] = [
     config("no-symctx", "-symctx"),
     config("no-graph", "-graph"),
     config("no-srcfirst", "-srcfirst"),
+    config("no-spread", "-spread"),
     config("no-pack", "-pack"),
     config("lexical", "-semantic,-rerank,-prf"),
     config("bm25-only", "bm25"),
