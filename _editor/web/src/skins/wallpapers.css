@@ -62,8 +62,9 @@
     [data-wallpaper] .wallpaper-surface :is(.ui-card, .session-card, .bg-card, .p-dialog, .p-popover, input, textarea) {
         text-shadow: none;
     }
+    /* !important: a card's own `shadow-*` utility sits in a later layer and would otherwise keep its flat indoor shadow. */
     [data-wallpaper] .wallpaper-surface :is(.ui-card, .bg-card) {
-        box-shadow: var(--wallpaper-card-drop);
+        box-shadow: var(--wallpaper-card-drop) !important;
     }
     [data-wallpaper] .wallpaper-surface .session-card {
         --card-drop: var(--wallpaper-card-drop);
