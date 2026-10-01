@@ -313,6 +313,53 @@
         animation: none;
     }
 }
+/* A RUN'S WEIGHT IS THE SEAM ITSELF, NOT A NUMBER: the gap above the words the run led to becomes a band of the same
+   ground, 1% toward the ink (in oklab, over whatever ground it lies on) and each call making it 2px taller, so a
+   quiet step is barely a line and a busy one a longer pause. Flat, edge to edge: no glow, no rule. The exact
+   count and its breakdown are on hover. `--wash-calls` is set on the spine, capped (ChatTurnAsides). */
+.chat-spine {
+    --wash-height: calc(0.25rem + var(--wash-calls, 0) * 0.125rem);
+}
+.chat-spine-wash {
+    --wash-ink: var(--color-content);
+    --wash-depth: 1%;
+    display: block;
+    width: 100%;
+    height: var(--wash-height);
+    border-radius: var(--radius-sm);
+    background: color-mix(in oklab, var(--wash-ink) var(--wash-depth), transparent);
+    cursor: pointer;
+    transition: background-color 160ms ease-out;
+}
+.chat-spine-wash:hover {
+    --wash-depth: 5%;
+}
+.chat-spine-wash:focus-visible {
+    outline: 2px solid var(--color-link);
+    outline-offset: 1px;
+}
+.chat-spine-wash-on {
+    --wash-ink: var(--color-link);
+}
+.chat-spine-wash-failed {
+    --wash-ink: var(--color-danger);
+}
+.chat-spine-wash-live {
+    animation: chat-spine-breathe 1.8s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+    .chat-spine-wash-live {
+        animation: none;
+    }
+}
+/* A band is space the row takes on purpose: shut, it keeps the gap between it and the words, and a thought mark beside
+   it centres on it rather than on the bare seam. */
+.chat-spine-shut:has(> .chat-spine-wash),
+.chat-spine-shut:has(> .chat-spine-wash):last-child {
+    --chat-spine-top: calc(var(--wash-height) / 2);
+    min-height: 0;
+    margin-bottom: 0;
+}
 /* AN OPEN FIGURE FOLLOWS ITS OWN MATERIAL DOWN, as a lane mark does (.chat-mark-open below): it is the way to shut a
    long run, so it may not be left at the top of a screenful the reader has scrolled past. It parks a step under the
    pinned prompt, since it centres on the bar's edge and the band would take its top half. */

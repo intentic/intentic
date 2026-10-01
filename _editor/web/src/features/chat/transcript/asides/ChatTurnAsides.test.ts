@@ -1,5 +1,5 @@
-// Pins what an assistant row leaves on the spine: one node for the thought and the hidden run together, a count and
-// no more, and the same rows the shown mode draws once it is opened. Needs jsdom since all of it is render behavior,
+// Pins what an assistant row leaves on the spine: one control for the thought and the hidden run together, the run's
+// weight as a band that grows per call and never a number, and the same rows the shown mode draws once it is opened. Needs jsdom since all of it is render behavior,
 // not throws.
 import "@intentic/testing/dom";
 import { type App, createApp, h, nextTick } from "vue";
@@ -51,6 +51,12 @@ const settle = async (): Promise<void> => {
 };
 
 const nodes = (element: HTMLElement): HTMLButtonElement[] => [...element.querySelectorAll<HTMLButtonElement>(`.chat-spine-node`)];
+// The control a row offers: the thought's mark where there is one, else the run's wash.
+const controls = (element: HTMLElement): HTMLButtonElement[] => [
+    ...element.querySelectorAll<HTMLButtonElement>(`.chat-spine-node, .chat-spine-wash:not([tabindex="-1"])`),
+];
+const wash = (element: HTMLElement): HTMLButtonElement | null => element.querySelector<HTMLButtonElement>(`.chat-spine-wash`);
+const reads = (count: number): TranscriptTool[] => Array.from({ length: count }, (_, index) => read(`f${index}.ts`));
 
 let next = 0;
 const tool = (over: Partial<TranscriptTool> & Pick<TranscriptTool, "category">): TranscriptTool => ({
@@ -63,23 +69,31 @@ const read = (path: string): TranscriptTool => tool({ category: `read`, name: `R
 const edit = (path: string): TranscriptTool => tool({ category: `edit`, name: `Edit`, target: path });
 
 describe(`ChatTurnAsides run node`, () => {
-    it(`stands in for the whole run with its count alone, and nothing of the calls`, () => {
+    it(`stands in for the whole run as a wash with no figure, and nothing of the calls`, () => {
         const element = mount({ tools: [read(`a.ts`), read(`b.ts`), edit(`c.ts`)] });
-        const node = nodes(element)[0];
-        expect(node?.textContent?.trim()).toBe(`3`);
-        // One mark means one thing: no icon borrowed from whichever call ranked highest.
-        expect(node?.querySelector(`[data-icon]`)).toBeNull();
+        expect(nodes(element)).toHaveLength(0);
+        expect(wash(element)?.textContent?.trim()).toBe(``);
+        expect(wash(element)?.querySelector(`[data-icon]`)).toBeNull();
         expect(element.textContent).not.toContain(`a.ts`);
     });
 
-    it(`costs its row nothing while shut`, () => {
+    it(`grows a step per call, up to a cap, and no further`, () => {
+        const callsOf = (count: number): string | undefined =>
+            mount({ tools: reads(count) }).querySelector<HTMLElement>(`.chat-spine`)?.style.getPropertyValue(`--wash-calls`);
+        expect(callsOf(1)).toBe(`1`);
+        expect(callsOf(7)).toBe(`7`);
+        expect(callsOf(16)).toBe(`16`);
+        expect(callsOf(40)).toBe(`16`);
+    });
+
+    it(`stays shut until pressed`, () => {
         const element = mount({ tools: [read(`a.ts`)] });
         expect(element.querySelector(`.chat-spine`)?.classList.contains(`chat-spine-shut`)).toBe(true);
     });
 
     it(`opens onto the calls themselves, and closes again`, async () => {
         const element = mount({ tools: [read(`a.ts`), read(`b.ts`), edit(`c.ts`)] });
-        const node = nodes(element)[0]!;
+        const node = controls(element)[0]!;
         expect(node.getAttribute(`aria-expanded`)).toBe(`false`);
 
         node.click();
@@ -97,9 +111,9 @@ describe(`ChatTurnAsides run node`, () => {
     });
 
     it(`says how many steps it is offering to the screen reader, and what they were on hover`, () => {
-        expect(nodes(mount({ tools: [read(`a.ts`)] }))[0]?.getAttribute(`aria-label`)).toBe(`Show 1 step`);
+        expect(controls(mount({ tools: [read(`a.ts`)] }))[0]?.getAttribute(`aria-label`)).toBe(`Show 1 step`);
         tips = [];
-        expect(nodes(mount({ tools: [read(`a.ts`), read(`b.ts`), edit(`c.ts`)] }))[0]?.getAttribute(`aria-label`)).toBe(`Show 3 steps`);
+        expect(controls(mount({ tools: [read(`a.ts`), read(`b.ts`), edit(`c.ts`)] }))[0]?.getAttribute(`aria-label`)).toBe(`Show 3 steps`);
         expect(tips.at(-1)).toEqual({
             title: `3 steps`,
             rows: [
@@ -112,7 +126,7 @@ describe(`ChatTurnAsides run node`, () => {
 
     it(`turns and counts the failures on its card when a call failed`, () => {
         const element = mount({ tools: [read(`a.ts`), tool({ category: `execute`, name: `Bash`, status: `failed` })] });
-        expect(nodes(element)[0]?.classList.contains(`chat-spine-node-failed`)).toBe(true);
+        expect(wash(element)?.classList.contains(`chat-spine-wash-failed`)).toBe(true);
         expect(tips.at(-1)).toMatchObject({
             rows: [
                 { label: `Commands`, value: 1 },
@@ -125,21 +139,22 @@ describe(`ChatTurnAsides run node`, () => {
     it(`breathes while the row is being written, and never spins`, () => {
         const running = [read(`a.ts`), tool({ category: `execute`, name: `Bash`, status: `in_progress` })];
         const live = mount({ tools: running, live: true });
-        expect(nodes(live)[0]?.classList.contains(`chat-spine-node-live`)).toBe(true);
+        expect(wash(live)?.classList.contains(`chat-spine-wash-live`)).toBe(true);
         expect(live.querySelector(`[data-spin]`)).toBeNull();
         // Same run, replayed from history (live=false).
-        expect(nodes(mount({ tools: running, live: false }))[0]?.classList.contains(`chat-spine-node-live`)).toBe(false);
+        expect(wash(mount({ tools: running, live: false }))?.classList.contains(`chat-spine-wash-live`)).toBe(false);
     });
 
     it(`draws nothing at all for a row that made no calls and thought nothing`, () => {
         expect(mount({ tools: [] }).querySelector(`button`)).toBeNull();
     });
 
-    it(`draws the calls as rows, and counts none on a node, for a reader who asked to see them`, () => {
+    it(`draws the calls as rows, and no wash, for a reader who asked to see them`, () => {
         showToolCalls.value = true;
         const element = mount({ tools: [read(`a.ts`), edit(`c.ts`)] });
 
-        expect(nodes(element)).toHaveLength(0);
+        expect(controls(element)).toHaveLength(0);
+        expect(wash(element)).toBeNull();
         expect(element.textContent).toContain(`a.ts`);
         expect(element.textContent).toContain(`c.ts`);
     });
@@ -156,7 +171,10 @@ describe(`ChatTurnAsides thought on the node`, () => {
         const [node, ...others] = nodes(element);
         expect(others).toHaveLength(0);
         expect(node?.querySelector(`[data-icon="sparkles"]`)).not.toBeNull();
-        expect(node?.textContent?.trim()).toBe(`1`);
+        expect(node?.textContent?.trim()).toBe(``);
+        // The run still shows as a wash, which the pointer may press but the keyboard and screen reader skip.
+        expect(wash(element)?.getAttribute(`tabindex`)).toBe(`-1`);
+        expect(wash(element)?.getAttribute(`aria-hidden`)).toBe(`true`);
         expect(node?.getAttribute(`aria-label`)).toBe(`Show thinking and 1 step`);
         expect(shownText(element)).not.toContain(thinking);
 

@@ -57,6 +57,11 @@ const KIND_LABELS = {
     other: () => t(`chat.chatTurnAsides.kindOther`),
 } satisfies Record<RunKind, () => string>;
 
+// How hard the run worked, felt rather than counted: the seam above the words grows a step taller and a step deeper
+// per call (`.chat-spine-wash` in chat.css), capped so a long run is a band, not a wall. The figure is on hover.
+const WASH_CAP = 16;
+const calls = computed(() => (run.value === undefined ? undefined : Math.min(run.value.count, WASH_CAP)));
+
 // For the screen reader and for a node the pointer has not reached: what a press opens.
 const label = computed(() => {
     const count = run.value?.count;
@@ -88,16 +93,18 @@ const tip = computed((): TooltipValue => {
 
 <template>
     <!-- The row's first child, so its zero-height bar sits on the row's top edge and the figure centres on the seam above
-         the row's words. Shut, the whole of it costs the row nothing (chat.css cancels the gap after it). -->
+         the row's words. Shut, a thought alone costs the row nothing (chat.css cancels the gap after it); a run is a band
+         in that seam, as tall as the run was busy. -->
     <div
         v-if="thought !== undefined || run !== undefined"
         class="chat-spine flex w-full flex-col gap-1"
         :class="shown ? `chat-spine-open` : `chat-spine-shut`"
+        :style="calls === undefined ? undefined : { '--wash-calls': calls }"
     >
         <div class="chat-spine-bar">
             <ChatSpineNode
-                :icon="thought === undefined ? undefined : `sparkles`"
-                :count="run?.count"
+                v-if="thought !== undefined"
+                icon="sparkles"
                 :open="shown !== undefined"
                 :label="label"
                 :tip="tip"
@@ -106,6 +113,24 @@ const tip = computed((): TooltipValue => {
                 @toggle="toggle"
             />
         </div>
+        <!-- The run's weight as the seam itself, never a number. Where a thought mark stands too, that mark is the
+             control and the band only answers the pointer. -->
+        <button
+            v-if="calls !== undefined"
+            type="button"
+            class="chat-spine-wash"
+            :class="{
+                'chat-spine-wash-on': shown !== undefined,
+                'chat-spine-wash-failed': (run?.failed ?? 0) > 0,
+                'chat-spine-wash-live': live,
+            }"
+            :aria-expanded="shown !== undefined"
+            :aria-label="label"
+            :aria-hidden="thought === undefined ? undefined : `true`"
+            :tabindex="thought === undefined ? undefined : -1"
+            v-tooltip.top="tip"
+            @click="toggle"
+        />
         <!-- One node open or shut: beforematch reveals the element it fired on, and a swapped-in copy would lose the
              match. Cheap text, so it stays in the page while shut for find-in-page to reach. -->
         <div
