@@ -6,6 +6,7 @@
 // 4. the deep link, with the app not running and already running (different mechanisms)
 // 5. uninstall while the app is running (the ordinary state, since it lives in the tray)
 
+import { errorMessage } from "@intentic/base/errors";
 import type { WindowInfo } from "@intentic/desktop-automation";
 import { existsSync } from "node:fs";
 import { basename, join } from "node:path";
@@ -44,7 +45,16 @@ const box = (window: WindowInfo): string => `${window.title} — ${window.bounds
 const titleList = (desktop: readonly WindowInfo[]): string =>
     desktop.length === 0 ? `(no windows)` : desktop.map((window) => `- ${window.title}`).join(`\n`);
 
-const describeWindows = async (): Promise<string> => titleList(await windows());
+// Never throws: it only describes a failure already recorded. A listing that timed out on a swamped desktop (run
+// 36850369330: every poll of the setup screen had) would otherwise escape as an unhandled rejection, end the tier
+// mid-way and skip every assertion after it. The first line only: the rest of the message is the script it ran.
+const describeWindows = async (): Promise<string> => {
+    try {
+        return titleList(await windows());
+    } catch (error) {
+        return `(the windows could not be listed: ${errorMessage(error).split(`\n`)[0]!.trim()})`;
+    }
+};
 
 // Recorded only on refusal: a lost keystroke would otherwise leave later assertions timing out and reading as the app's
 // fault.
@@ -61,7 +71,14 @@ const DUPLICATE_SETTLE_MS = 3_000;
 /* ONE LINK, ONE QUESTION — the row neither smoke tier had, and the reason a duplicate shipped on Linux. */
 const assertAskedOnce = async (harness: Harness, app: string): Promise<void> => {
     await delay(DUPLICATE_SETTLE_MS);
-    const asked = (await appWindows(app)).filter((window) => window.title.includes(CONFIRM_TITLE)).length;
+    let own: WindowInfo[];
+    try {
+        own = await appWindows(app);
+    } catch (error) {
+        harness.fail(`the confirmations could not be counted`, errorMessage(error).split(`\n`)[0]!.trim());
+        return;
+    }
+    const asked = own.filter((window) => window.title.includes(CONFIRM_TITLE)).length;
     if (asked === 1) {
         harness.pass(`the link was asked about exactly once`);
         return;
