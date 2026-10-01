@@ -36,7 +36,7 @@ flowchart LR
 
 The platform never opens a connection to a sandbox:
 
-- The sandbox dials out: the tunnel to the ingress, and `POST /sandbox/announce` to tell the platform its URL and liveness ([`announce.ts`](../../_sandbox/sandbox/src/system/boot/announce.ts)). No inbound port or router rule is needed.
+- The sandbox dials out: the tunnel to the ingress, and `POST /sandbox/announce` to tell the platform its URL and liveness ([`announce.ts`](../../_sandbox/sandbox/src/system/boot/announce.ts)), with `POST /sandbox/adopt` when its owner reconnects it to a platform that lost its record. No inbound port or router rule is needed.
 - The machine a sandbox runs on reports on it when the sandbox cannot: `ic sandbox fix` (run by the machine agent by itself, by the recovery panel's command, or by the desktop app) posts what it found to `POST /host-report`, which is how a browser elsewhere learns that the machine is starting Docker Desktop or is out of disk. It is a report, never a request for instructions.
 - The browser and the devices dial the sandbox, through the ingress or on loopback.
 - The platform never calls a user's daemon. It flips a hosted machine's power through Fly's API, and nothing more.
@@ -51,6 +51,6 @@ The platform never opens a connection to a sandbox:
 | Device | act on its own machine within the switches its owner set | be widened by the sandbox: scopes are enforced on the device |
 
 - The daemon verifies the owner's Google ID token itself, binds the first owner, and mints its own session ([`auth.ts`](../../_sandbox/sandbox/src/auth/auth.ts)). Membership and role are checked on every request. Every other credential it accepts (control tokens, agent, extension and panel tokens, device enrollments) is in [`grants.ts`](../../_sandbox/sandbox/src/auth/grants.ts). A door that checks its own credential, such as the MCP door's per-turn mount bearer, is declared `auth: "door"` beside its route.
-- The platform's grant is an Ed25519 signature the ingress checks with the public key alone ([`ingress-contract.ts`](../../_shared/sandbox-contract/src/protocol/ingress-contract.ts)). Deleting the sandbox's registry row revokes it.
+- The platform's grant is an Ed25519 signature the ingress checks with the public key alone ([`ingress-contract.ts`](../../_shared/sandbox-contract/src/protocol/ingress-contract.ts)). A deletion record revokes it: the registry writes one for every deleted row and rotated token, and the ingress refuses a tunnel for that alone, never for an id the platform merely has no row for ([platform.md](platform.md#when-the-platform-forgets)).
 - Hosted machines are the exception: intentic's Fly token keeps access to every machine it creates ([`fly.ts`](../../_platform/api/src/sandbox/hosted/fly/fly.ts)), so a platform breach can reach hosted sandboxes and no other kind. The optional free trial also routes its turns through platform-owned model accounts.
 - A device enforces its scopes (`shell`, `write`, `screen`, `control` and the rest) in [`policy.ts`](../../_devices/machine/src/device/policy.ts) and logs every call on the device.

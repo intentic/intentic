@@ -13,6 +13,9 @@ import { acmeChallengeHolds, CloudflareTokenError, ensureLocalDnsRecord, setAcme
 import { edgeCertificateFor } from "./sandbox/edge-certificate.js";
 import { hostReportHttpRoutes } from "./sandbox/host-report.js";
 import { ingressEnabled, sandboxHostname } from "./sandbox/reachability.js";
+import { DaemonVersionSchema } from "./sandbox/daemon-version.js";
+import { identityField, isTombstoned } from "./sandbox/recovery.js";
+import { recoveryHttpRoutes } from "./sandbox/recovery.routes.js";
 import type { Config } from "./config.js";
 import { buildOrpcContext, type OrpcContext } from "./context.js";
 import { sandboxIdFromToken, sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
@@ -28,7 +31,6 @@ import { fleetHttpRoutes } from "./fleet/fleet.routes.js";
 import { walletHttpRoutes } from "./wallet/wallet.routes.js";
 import { trialRoutes } from "./trial/trial.routes.js";
 import { Prisma, type PrismaClient } from "@intentic/prisma";
-import { z } from "zod";
 
 // `Bindings` is Bun's server as Bun.serve hands it to `fetch`, of which only the per-request idle timeout is used; it is
 // absent wherever the app is not served by Bun (the suites' app.request).
@@ -55,13 +57,6 @@ const keepMachineChangesOpen: MiddlewareHandler<AppEnv> = async (c, next) => {
     }
     await next();
 };
-
-// What a daemon says it is on its announce: a release version, short. Anything else is not stored (the announce
-// itself still counts), since a stale or made-up version is worse than none.
-const DaemonVersionSchema = z
-    .string()
-    .max(64)
-    .regex(/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/u);
 
 // Accept only a valid https origin so a bogus value can't be stored as the sandbox's address.
 const isHttpsUrl = (value: string): boolean => {
@@ -102,7 +97,8 @@ const logUnexpectedError = (log: Logger, error: unknown): void => {
 };
 
 // The platform is a sandbox registry, never a relay: daemons announce over their own tunnel, the browser talks to them
-// directly. Public routes are /setup/claim and /api/reachability/:id; the rest are connect-token-authenticated relays.
+// directly. Public routes are /setup/claim, /api/reachability/:id and /api/identity; the rest are connect-token-authenticated
+// relays.
 export const createApp = (config: Config, prisma: PrismaClient, logger: Logger): { app: Hono<AppEnv>; auth: Auth } => {
     const auth = createAuth(config, prisma, logger);
 
@@ -217,7 +213,10 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
     // code for the report key, `/host-report` takes a report under that key (sandbox/host-report.ts).
     app.route(`/host-report`, hostReportHttpRoutes({ config, prisma }));
 
-    // The daemon's phone-home, authenticated by the connect token; 404 for unknown tokens (no oracle).
+    // The daemon's phone-home, authenticated by the connect token. A token with no row answers 410 when its id has a
+    // deletion record, else 404: the second is what a registry that forgot the sandbox says, and the daemon keeps
+    // asking (and its owner can have it adopted, POST /sandbox/adopt), where the first is final. Telling them apart
+    // takes possessing the token, so neither is an oracle. An accepted announce answers with this database's identity.
     app.post(`/sandbox/announce`, async (c) => {
         const token = c.req.header(`x-intentic-connect`);
         if (token === undefined || token === ``) {
@@ -239,7 +238,10 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
             include: { hosted: { select: { id: true } } },
         });
         if (!sandbox) {
-            return c.text(`error: unknown sandbox`, 404);
+            const tunnelId = sandboxIdFromToken(token);
+            return tunnelId !== undefined && (await isTombstoned(prisma, tunnelId))
+                ? c.text(`error: this sandbox was deleted`, 410)
+                : c.text(`error: unknown sandbox`, 404);
         }
         // Pinned to the address already known for this sandbox; a mismatch is refused and recorded, nothing else moves.
         const expected = expectedDaemonHost(config, sandbox);
@@ -266,8 +268,14 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
                 ...(sandbox.firstAnnouncedAt === null ? { firstAnnouncedAt: new Date() } : {}),
             },
         });
-        return announced.count === 0 ? c.text(`error: unknown sandbox`, 404) : c.json({ ok: true });
+        if (announced.count === 0) {
+            return c.text(`error: unknown sandbox`, 404);
+        }
+        return c.json({ ok: true, ...(await identityField(prisma)) });
     });
+
+    // The doors a platform that forgot a sandbox needs: adoption, and which database this is (recovery.routes.ts).
+    app.route(`/`, recoveryHttpRoutes({ config, prisma }));
 
     /* A deletion report records that the container is gone when absence alone is ambiguous. */
     app.post(`/sandbox/farewell`, async (c) => {
@@ -355,7 +363,12 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
         return updated.count === 0 ? c.text(`error: unknown sandbox`, 404) : c.json({ ok: true });
     });
 
-    // Unauthenticated by design (existence isn't secret); matches `tunnelId` exactly, never a prefix over it.
+    // Unauthenticated by design (existence isn't secret); matches `tunnelId` exactly, never a prefix over it. The edge
+    // refuses a tunnel on a 404 and on nothing else (ingress revocation.rs), so a 404 is a deletion record and only that
+    // (2026-10-02). An id with neither a row nor a record is one this database never knew or has forgotten, and answers
+    // `known: false` with a 200: the edge could only be asked about it by a daemon holding a grant this platform signed,
+    // and refusing it turned a restore or a wrong DATABASE_URL into every sandbox going dark within a minute. Rejected:
+    // keeping 404 for both, which is what made forgetting a sandbox indistinguishable from deleting it.
     app.get(`/api/reachability/:sandboxId`, async (c) => {
         const sandboxId = c.req.param(`sandboxId`);
         // Shape-checked before the query: outside the fixed alphabet/length can't be a sandbox, skip the database.
@@ -367,7 +380,9 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
             select: { id: true, hosted: { select: { id: true } } },
         });
         if (sandbox === null) {
-            return c.json({ error: `unknown sandbox` }, 404);
+            return (await isTombstoned(prisma, sandboxId))
+                ? c.json({ error: `deleted sandbox` }, 404)
+                : c.json({ ok: true, lane: `tunnel`, known: false });
         }
         // Today's edge reads only the status. `lane` stays for an edge build from before the replay lane went, which
         // replays a sandbox unless it is named `tunnel`: without it, a rolled-back edge would replay tunnel sandboxes.

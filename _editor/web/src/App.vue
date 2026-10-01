@@ -7,6 +7,7 @@ import { useAuth } from "./features/auth/useAuth";
 import { HANDOFF_ROUTE } from "./features/auth/handoffSpent";
 import { useSandbox } from "./features/sandbox/client/useSandbox";
 import { startNotificationSources } from "./shell/notifications/notificationSources";
+import { startRememberingSandboxes } from "./features/sandbox/recovery/rememberSandboxes";
 import NotificationHost from "./shell/notifications/NotificationHost.vue";
 import SignInWall from "./features/sandbox/gates/SignInWall.vue";
 import WindowControls from "./shell/window/WindowControls.vue";
@@ -26,6 +27,8 @@ const workspaceTab = computed(() => route.name !== HANDOFF_ROUTE);
 
 /* Every standing fact and open question the app can float, declared once from the root (composables/notificationSources.ts). */
 startNotificationSources();
+// What this device remembers of the account's sandboxes, for when the platform cannot list them (features/sandbox/recovery).
+startRememberingSandboxes();
 
 // A confirmed platform 401, server-side expiry, or another tab signing out clears the shared user ref. The
 // runtime above the route unmounts immediately; move the stale shell itself to login as the same global event.

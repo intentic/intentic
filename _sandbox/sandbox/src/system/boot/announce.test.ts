@@ -2,22 +2,44 @@ import { EventEmitter } from "node:events";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { version } from "../../version.js";
 
-// Each register attempt's outcome comes off a queue: `{ status }` acks with that code, `{ err: true }` simulates a
-// transport failure. Every body an attempt sent is kept, in order.
-const outcomes: Array<{ status?: number; err?: boolean }> = [];
-const bodies: unknown[] = [];
+// Each platform call's outcome comes off a queue: `{ status, body }` answers with that code and body, `{ err: true }`
+// simulates a transport failure, `{ hang: true }` accepts the connection and never answers (the socket's idle timeout,
+// armed by the exchange, is a fake timer here). Every call's path and body are kept, in order.
+const outcomes: Array<{ status?: number; body?: string; err?: boolean; hang?: boolean }> = [];
+const calls: Array<{ path: string; body: unknown }> = [];
+type FakeRequest = EventEmitter & {
+    end: (payload?: string) => void;
+    setTimeout: (ms: number, onIdle: () => void) => FakeRequest;
+    destroy: (error: Error) => void;
+};
 // The response is an emitter like the real one: the exchange reads its body to the end before it answers.
-const requestMock = jest.fn((_url: URL, _opts: unknown, cb: (res: EventEmitter & { statusCode: number; headers: Record<string, string> }) => void) => {
-    const req = new EventEmitter() as EventEmitter & { end: (payload?: string) => void };
+const requestMock = jest.fn((url: URL, _opts: unknown, cb: (res: EventEmitter & { statusCode: number; headers: Record<string, string> }) => void) => {
+    const req = new EventEmitter() as FakeRequest;
+    let idle: { ms: number; onIdle: () => void } | undefined;
+    req.setTimeout = (ms, onIdle) => {
+        idle = { ms, onIdle };
+        return req;
+    };
+    req.destroy = (error) => req.emit("error", error);
     req.end = (payload) => {
-        bodies.push(payload === undefined ? undefined : JSON.parse(payload));
+        calls.push({ path: url.pathname, body: payload === undefined ? undefined : JSON.parse(payload) });
         const outcome = outcomes.shift() ?? { status: 200 };
         if (outcome.err === true) {
             req.emit("error", new Error("boom"));
             return;
         }
+        if (outcome.hang === true) {
+            const armed = idle;
+            if (armed !== undefined) {
+                setTimeout(armed.onIdle, armed.ms);
+            }
+            return;
+        }
         const res = Object.assign(new EventEmitter(), { statusCode: outcome.status ?? 200, headers: {} });
         cb(res);
+        if (outcome.body !== undefined) {
+            res.emit("data", Buffer.from(outcome.body));
+        }
         res.emit("end");
     };
     return req;
@@ -28,7 +50,7 @@ const { createAnnouncer } = await import("./announce.js");
 
 const config = {
     platform: { url: "https://host.docker.internal:6480" },
-    sandbox: { publicUrl: "https://sandbox-x.intentic.dev" },
+    sandbox: { publicUrl: "https://sandbox-x.intentic.dev", grant: "ig1.grant" },
     connectToken: "tok",
 } as unknown as Parameters<typeof createAnnouncer>[0];
 const logger = { info: jest.fn(), warn: jest.fn() } as unknown as Parameters<typeof createAnnouncer>[1];
@@ -36,23 +58,31 @@ const logger = { info: jest.fn(), warn: jest.fn() } as unknown as Parameters<typ
 beforeEach(() => {
     jest.useFakeTimers();
     outcomes.length = 0;
-    bodies.length = 0;
+    calls.length = 0;
     requestMock.mockClear();
 });
 afterEach(() => jest.useRealTimers());
 
-// Request fires synchronously; the verdict lands a microtask later (the post is awaited), so this drains before reading
-// status().
+// Request fires synchronously; the verdict lands a few microtasks later (the exchange is awaited), so this drains before
+// reading status().
 const settle = async (): Promise<void> => {
-    await Promise.resolve();
-    await Promise.resolve();
+    for (let turn = 0; turn < 5; turn++) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- draining microtasks one turn at a time is the point
+        await Promise.resolve();
+    }
+};
+
+const failForever = (outcome: { err?: boolean; status?: number }): void => {
+    for (let i = 0; i < 500; i++) {
+        outcomes.push(outcome);
+    }
 };
 
 describe("createAnnouncer", () => {
     it("announces this build's version beside the address it is reached at", () => {
         outcomes.push({ status: 200 });
         createAnnouncer(config, logger).start();
-        expect(bodies).toEqual([{ daemonUrl: "https://sandbox-x.intentic.dev", version }]);
+        expect(calls).toEqual([{ path: "/sandbox/announce", body: { daemonUrl: "https://sandbox-x.intentic.dev", version } }]);
     });
 
     it("registers once on a 200 and then goes silent: never a heartbeat", () => {
@@ -76,16 +106,27 @@ describe("createAnnouncer", () => {
         expect(requestMock).toHaveBeenCalledTimes(2);
     });
 
-    it("stops scheduling after the give-up window when the platform is never reachable", async () => {
-        for (let i = 0; i < 200; i++) {
-            outcomes.push({ err: true });
-        }
+    // A platform that is down, or that forgot this sandbox, comes back on its own time: the daemon never stops asking,
+    // only slows to one attempt every five minutes once the first ten have passed.
+    it("keeps asking a platform it cannot reach, five minutes apart after the fast window", async () => {
+        failForever({ err: true });
         createAnnouncer(config, logger).start();
-        // 20 minutes is well past the 10-minute give-up bound; the retry loop must actually stop.
-        await advanceTimersByTimeAsync(20 * 60_000);
-        const settled = requestMock.mock.calls.length;
-        await advanceTimersByTimeAsync(20 * 60_000);
-        expect(requestMock).toHaveBeenCalledTimes(settled);
+        await advanceTimersByTimeAsync(30 * 60_000);
+        const at30 = requestMock.mock.calls.length;
+        await advanceTimersByTimeAsync(5 * 60_000);
+        expect(requestMock.mock.calls.length - at30).toBe(1);
+        await advanceTimersByTimeAsync(5 * 60_000);
+        expect(requestMock.mock.calls.length - at30).toBe(2);
+    });
+
+    it("cuts a platform that accepts the connection and never answers, and asks again", async () => {
+        outcomes.push({ hang: true }, { status: 200 });
+        const announcer = createAnnouncer(config, logger);
+        announcer.start();
+        await advanceTimersByTimeAsync(60_000);
+        expect(announcer.status()).toMatchObject({ state: "unreachable", retrying: true });
+        await advanceTimersByTimeAsync(2_000);
+        expect(announcer.status().state).toBe("registered");
     });
 
     // status() is what /health serves and ic's postflight/doctor read; each verdict below is a sentence a user actually
@@ -95,12 +136,20 @@ describe("createAnnouncer", () => {
             expect(createAnnouncer(config, logger).status()).toEqual({ state: "off" });
         });
 
-        it("reports registered after the ack", async () => {
-            outcomes.push({ status: 200 });
+        it("reports registered after the ack, with the identity of the database that took it", async () => {
+            outcomes.push({ status: 200, body: `{"ok":true,"identity":"a0028692-7cf2-4ef4-8429-86a98d60be8a"}` });
             const announcer = createAnnouncer(config, logger);
             announcer.start();
             await settle();
-            expect(announcer.status().state).toBe("registered");
+            expect(announcer.status()).toEqual({ state: "registered", identity: "a0028692-7cf2-4ef4-8429-86a98d60be8a", at: Date.now() });
+        });
+
+        it("reports registered without an identity from a platform too old to send one", async () => {
+            outcomes.push({ status: 200, body: `{"ok":true}` });
+            const announcer = createAnnouncer(config, logger);
+            announcer.start();
+            await settle();
+            expect(announcer.status()).toEqual({ state: "registered", at: Date.now() });
         });
 
         it("names a rejection with the platform's answer, still retrying", async () => {
@@ -108,26 +157,130 @@ describe("createAnnouncer", () => {
             const announcer = createAnnouncer(config, logger);
             announcer.start();
             await settle();
-            const rejected = announcer.status();
-            expect(rejected.state).toBe("rejected");
-            expect(rejected.detail).toContain("HTTP 409");
-            expect(rejected.retrying).toBe(true);
+            expect(announcer.status()).toEqual({
+                state: "rejected",
+                retrying: true,
+                detail: "the platform answered HTTP 409 to this sandbox's registration",
+                at: Date.now(),
+            });
             // Retry succeeds; the verdict moves from rejected to registered.
             await advanceTimersByTimeAsync(2_000);
             expect(announcer.status().state).toBe("registered");
         });
 
-        it("keeps the last failure's why after giving up, marked no-longer-retrying", async () => {
-            for (let i = 0; i < 200; i++) {
-                outcomes.push({ err: true });
-            }
+        it("names a platform with no record of the sandbox, and keeps asking", async () => {
+            failForever({ status: 404 });
+            const announcer = createAnnouncer(config, logger);
+            announcer.start();
+            await settle();
+            expect(announcer.status()).toEqual({
+                state: "rejected",
+                reason: "unknown",
+                retrying: true,
+                detail: "the platform has no record of this sandbox: if it lost track of it, open the app and press Reconnect",
+                at: Date.now(),
+            });
+            // Every 2, 4, 8 and 16 seconds, then every 30 to the ten-minute mark (24 attempts), then 30s, 60s, 120s and
+            // 240s apart on the way to the five-minute cap: 28 by the twentieth minute.
+            await advanceTimersByTimeAsync(20 * 60_000);
+            expect(requestMock).toHaveBeenCalledTimes(28);
+        });
+
+        it("stops at a deletion record, saying so: the one answer that ends the retrying", async () => {
+            failForever({ status: 410 });
+            const announcer = createAnnouncer(config, logger);
+            announcer.start();
+            await settle();
+            expect(announcer.status()).toEqual({
+                state: "rejected",
+                reason: "deleted",
+                retrying: false,
+                detail: "the platform says this sandbox was deleted: restore it from the trash in the app, or set up a new one",
+                at: Date.now(),
+            });
+            await advanceTimersByTimeAsync(30 * 60_000);
+            expect(requestMock).toHaveBeenCalledTimes(1);
+        });
+
+        it("stays retrying, with the last failure's why, long after the fast window", async () => {
+            failForever({ err: true });
             const announcer = createAnnouncer(config, logger);
             announcer.start();
             await advanceTimersByTimeAsync(20 * 60_000);
-            const settled = announcer.status();
-            expect(settled.state).toBe("unreachable");
-            expect(settled.detail).toContain("boom");
-            expect(settled.retrying).toBe(false);
+            expect(announcer.status()).toMatchObject({
+                state: "unreachable",
+                detail: "the platform could not be reached from inside the sandbox: boom",
+                retrying: true,
+            });
+        });
+    });
+
+    // The owner's Reconnect (POST /platform/relink).
+    describe("relink", () => {
+        const adoption = { ticket: "at1.ticket", owner: "owner@example.com", name: "intentic", image: undefined };
+
+        it("does nothing on a sandbox with no platform to register with", async () => {
+            expect(await createAnnouncer(config, logger).relink()).toEqual({ announce: { state: "off" } });
+            expect(requestMock).not.toHaveBeenCalled();
+        });
+
+        it("registers now, without waiting out the backoff", async () => {
+            failForever({ err: true });
+            const announcer = createAnnouncer(config, logger);
+            announcer.start();
+            await advanceTimersByTimeAsync(20 * 60_000);
+            outcomes.length = 0;
+            outcomes.push({ status: 200 });
+            expect(await announcer.relink()).toEqual({ announce: { state: "registered", at: Date.now() } });
+            expect(announcer.status().state).toBe("registered");
+        });
+
+        it("has a platform with no record of the sandbox adopt it, then registers", async () => {
+            const announcer = createAnnouncer(config, logger);
+            failForever({ status: 404 });
+            announcer.start();
+            await settle();
+            outcomes.length = 0;
+            outcomes.push({ status: 404 }, { status: 200, body: `{"ok":true,"sandboxId":"adopted"}` }, { status: 200, body: `{"ok":true,"identity":"id-2"}` });
+            calls.length = 0;
+            expect(await announcer.relink(adoption)).toEqual({
+                announce: { state: "registered", identity: "id-2", at: Date.now() },
+                adoption: { status: 200, detail: "adopted" },
+            });
+            expect(calls.map((call) => call.path)).toEqual(["/sandbox/announce", "/sandbox/adopt", "/sandbox/announce"]);
+            expect(calls[1]?.body).toEqual({
+                ticket: "at1.ticket",
+                grant: "ig1.grant",
+                daemonUrl: "https://sandbox-x.intentic.dev",
+                owner: "owner@example.com",
+                version,
+                name: "intentic",
+            });
+        });
+
+        it("passes on the platform's refusal of the adoption, and keeps the registration's verdict", async () => {
+            const announcer = createAnnouncer(config, logger);
+            failForever({ status: 404 });
+            announcer.start();
+            await settle();
+            outcomes.length = 0;
+            outcomes.push({ status: 404 }, { status: 410, body: "error: this sandbox was deleted from intentic: restore it from the trash, or set up a new one" });
+            failForever({ status: 404 });
+            const answer = await announcer.relink(adoption);
+            expect(answer.adoption).toEqual({ status: 410, detail: "this sandbox was deleted from intentic: restore it from the trash, or set up a new one" });
+            expect(answer.announce).toMatchObject({ state: "rejected", reason: "unknown", retrying: true });
+        });
+
+        it("asks for no adoption when the platform knows the sandbox after all", async () => {
+            const announcer = createAnnouncer(config, logger);
+            outcomes.push({ status: 404 });
+            announcer.start();
+            await settle();
+            outcomes.length = 0;
+            outcomes.push({ status: 200 });
+            calls.length = 0;
+            expect(await announcer.relink(adoption)).toEqual({ announce: { state: "registered", at: Date.now() } });
+            expect(calls.map((call) => call.path)).toEqual(["/sandbox/announce"]);
         });
     });
 });

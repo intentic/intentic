@@ -1,16 +1,18 @@
 // The outage screen. A reader who lands here has done nothing wrong and can do nothing useful, so the screen has to
 // let go of them by itself the moment the platform answers — pressing the button is an offer, not the only way out.
 import "@intentic/testing/dom";
-import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
+import { advanceTimersByTimeAsync, stubGlobal, unstubAllGlobals, waitFor } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import * as actualVueRouter from "vue-router";
 
 const replace = jest.fn();
+// Where the reader was headed; an /open link to a sandbox lands here carrying its address.
+const query = { returnTo: `/workspace` };
 jest.mock(`vue-router`, () => ({
     ...actualVueRouter,
     useRouter: () => ({ replace }) as never,
-    useRoute: () => ({ query: { returnTo: `/workspace` } }) as never,
+    useRoute: () => ({ query }) as never,
 }));
 
 // The shared rule has its own suite (router/platformRetry.test.ts); here it only stands for "the platform answered".
@@ -18,6 +20,11 @@ const platformRetry = jest.fn<() => Promise<string | undefined>>();
 jest.mock(`../../../router/platformRetry`, () => ({ platformRetry: () => platformRetry() }));
 
 const { default: PlatformUnavailable } = await import(`../PlatformUnavailable.vue`);
+// The same module instances the screen reads, to give the device something to remember and to see what opened.
+const { forgetAccount, rememberListed } = await import(`../../sandbox/recovery/deviceDirectory`);
+const { directMode } = await import(`../../sandbox/recovery/directState`);
+const { useSandbox } = await import(`../../sandbox/client/useSandbox`);
+const { sandboxSummary } = await import(`../../../testing/sandboxSummary`);
 
 let app: App | undefined;
 const mount = async (): Promise<HTMLElement> => {
@@ -42,9 +49,14 @@ const tryAgain = (el: HTMLElement): HTMLButtonElement => {
 // at all, not how often.
 const A_WHILE_MS = 30_000;
 
+const owner = { id: `u1`, email: `owner@example.com`, name: `Owner`, image: null };
+
 beforeEach(() => {
     platformRetry.mockReset().mockResolvedValue(undefined);
     replace.mockReset();
+    query.returnTo = `/workspace`;
+    forgetAccount(owner.email);
+    directMode.value = false;
 });
 
 afterEach(() => {
@@ -52,6 +64,7 @@ afterEach(() => {
     app = undefined;
     document.body.replaceChildren();
     jest.useRealTimers();
+    unstubAllGlobals();
 });
 
 it(`takes the reader where they were headed once the platform answers`, async () => {
@@ -108,4 +121,40 @@ it(`stops asking once it is gone`, async () => {
     globalThis.dispatchEvent(new Event(`online`));
 
     expect(platformRetry).not.toHaveBeenCalled();
+});
+
+// What still works while the platform is down: the sandboxes themselves, opened without it (recovery/directMode.ts).
+describe(`the sandboxes this device remembers`, () => {
+    const intentic = sandboxSummary({ id: `s1`, name: `intentic`, daemonUrl: `https://sandbox-82789f4106b4.radarsu.com`, lastSeenAt: `2026-10-01T18:00:09.479Z` });
+    const answering = () => stubGlobal(`fetch`, async () => new Response(JSON.stringify({ ok: true, sandboxId: `82789f4106b4` }), { status: 200 }));
+    const openButton = (el: HTMLElement): HTMLButtonElement | undefined => [...el.querySelectorAll(`button`)].find((entry) => entry.textContent?.trim() === `Open`);
+
+    it(`offers nothing on a device that remembers nothing`, async () => {
+        const el = await mount();
+        expect(el.textContent).not.toContain(`Your sandboxes on this device`);
+    });
+
+    it(`lists them, checks each from this browser, and opens one without the platform`, async () => {
+        answering();
+        rememberListed(owner, [intentic], `id-1`);
+        const el = await mount();
+        expect(el.textContent).toContain(`Your sandboxes on this device`);
+        await waitFor(() => expect(el.textContent).toContain(`sandbox-82789f4106b4.radarsu.com · Answering`));
+
+        openButton(el)!.click();
+        await waitFor(() => expect(replace).toHaveBeenCalledWith(`/`));
+        expect(directMode.value).toBe(true);
+        expect(useSandbox().activeSandboxId.value).toBe(`s1`);
+    });
+
+    it(`offers the sandbox an /open link named first, by its host when the device never listed it`, async () => {
+        answering();
+        rememberListed(owner, [intentic], `id-1`);
+        query.returnTo = `/open?url=${encodeURIComponent(`https://sandbox-8a8171848c91.sbx.intentic.dev/`)}`;
+        const el = await mount();
+        const first = el.querySelector(`li`);
+        expect(first?.textContent).toContain(`sandbox-8a8171848c91.sbx.intentic.dev`);
+        expect(first?.textContent).toContain(`The sandbox you opened`);
+        expect(el.querySelectorAll(`li`)).toHaveLength(2);
+    });
 });

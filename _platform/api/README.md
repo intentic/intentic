@@ -18,7 +18,19 @@ flowchart LR
   The api stores who owns which sandbox and where it answers; traffic between browser and sandbox never passes
   through it.
 - Reachability is a signed grant. The api holds the Ed25519 private key (`INGRESS_SIGNING_KEY`), the edge holds only
-  the public half, and deleting the sandbox row revokes it (`src/sandbox/reachability.ts`).
+  the public half, and a deletion record revokes it (`src/sandbox/reachability.ts`). A trigger on `sandbox` records
+  the tunnel id of every deleted row and every rotated token (`SandboxTombstone`), and `GET /api/reachability/:id`
+  answers 404 for those alone; an id with neither a row nor a record answers 200 with `known: false`. (2026-10-02)
+  Deleting the row used to be the revocation, which made a database that forgot a sandbox (a restore, a wrong
+  `DATABASE_URL`) take every sandbox off the edge within a minute.
+- When the platform forgets ([platform.md](../../docs/architecture/platform.md#when-the-platform-forgets),
+  `src/sandbox/recovery.ts`): every database carries a random identity (`platform_identity`), logged at boot and served
+  at `GET /api/identity`. Set `DATABASE_EXPECTED_IDENTITY` and the api refuses to start on any other, before a reaper
+  can read a foreign database as orphans; running, it exits if the identity under it changes. An announce for a token
+  with no row answers 410 when its id has a deletion record and 404 otherwise, which the daemon keeps retrying. The
+  owner gets the row back by adoption: `sandbox.lookup` tells the editor which remembered ids are unknown here,
+  `sandbox.adoptionTicket` mints a ten-minute ticket for one, and the daemon spends it at `POST /sandbox/adopt` with the
+  grant this platform signed for its token. A deleted sandbox is never adopted.
 - A hosted machine is reached only down the tunnel it dials to the edge, with the grant and edge address
   `hostedMachineConfig` puts in its environment; it declares no Fly service, so nothing on Fly routes to it. One that
   dials nothing (stopped, booting) answers the edge's `no-tunnel` verdict, and the editor's wake starts it, re-applying
@@ -156,7 +168,7 @@ flowchart LR
 ## Commands
 
 ```sh
-pnpm db:up                             # repo root: Postgres in Docker, migrations applied
+pnpm db:up                             # repo root: Postgres in Docker, migrations applied once DATABASE_URL is checked to reach it
 pnpm --filter @intentic/api dev        # watch mode, reads the root .env
 pnpm --filter @intentic/api test
 pnpm --filter @intentic/api fleet      # read-only: what the platform runs on Fly, and for whom

@@ -6,7 +6,7 @@ The hosted account service: Google sign-in, the registry that tells a browser wh
 flowchart LR
     browser["Editor in the browser"] -->|"/api/auth · /rpc"| api(["platform api"])
     machine["Machine running<br/>the setup command"] -->|"/setup/claim"| api
-    daemon["Sandbox daemon"] -->|"/sandbox/announce<br/>connect token"| api
+    daemon["Sandbox daemon"] -->|"/sandbox/announce · /sandbox/adopt<br/>connect token"| api
     host["ic sandbox fix<br/>on the owner's machine"] -->|"/host-report"| api
     api --> db["Postgres<br/>_platform/prisma"]
     api -->|"power · volumes"| fly["Fly Machines API"]
@@ -26,7 +26,7 @@ flowchart LR
 [`schema.prisma`](../../_platform/prisma/schema.prisma), in four groups:
 
 - **Accounts**: `User`, Better Auth's `Session`, `Account` and `Verification`, and `ApiToken` for provisioning from a script or an agent.
-- **The registry**: `Sandbox` (the daemon's public URL, its last-seen time, the encrypted connect token, the setup code, the last boot report, the recovery command's fix code and the last host report), `SandboxMember` for invitations, and `SandboxTrash` for a deleted sandbox that can still be restored. The daemon enforces membership; the platform only records it.
+- **The registry**: `Sandbox` (the daemon's public URL, its last-seen time, the encrypted connect token, the setup code, the last boot report, the recovery command's fix code and the last host report), `SandboxMember` for invitations, `SandboxTrash` for a deleted sandbox that can still be restored, `SandboxTombstone` for the deletion record of every tunnel id the registry let go of, and `PlatformIdentity`, which database this is. The daemon enforces membership; the platform only records it.
 - **Hosted sandboxes**: `HostedMachine` and the warm pool `HostedPoolMachine`, image builds, migrations, cleanups, awake-minute metering, the Stripe subscription mirror (`HostedPlan`, `HostedPlanItem`) and the abuse ledgers.
 - **Everything else**: the free trial's meter, the x402 wallet's custody handle and payments, APNs push devices, the desktop sign-in handoff, and admin statistics.
 
@@ -38,6 +38,38 @@ flowchart LR
 4. The editor lists the owner's sandboxes and talks to each daemon directly. The platform is never on that path.
 
 When the editor cannot reach a sandbox on the owner's own machine, the machine says why. `ic sandbox fix` checks it (Docker, WSL, disk, container, daemon, tunnel), repairs what it can, and posts what it found to `/host-report` under the sandbox's report key: HMAC-SHA256 over a fixed label keyed with the connect token, which `ic` derives from the container's env. A run started from the editor's recovery panel carries a thirty-minute fix code instead, redeemed at `/host-report/claim` for that key. The platform keeps the latest report on the sandbox's row and shows it on the owner's sandbox list, so a browser on another device can say what the machine is doing. It never calls the machine; the machine only reports ([`host-report.ts`](../../_platform/api/src/sandbox/host-report.ts)).
+
+## When the platform forgets
+
+A registry can lose rows without anyone deleting a sandbox: a restore from an older backup, an api pointed at the wrong
+database, a port on a developer's machine answered by another Postgres. Everything downstream acts on the difference
+between forgotten and deleted, so the platform keeps the difference explicit ([`recovery.ts`](../../_platform/api/src/sandbox/recovery.ts)):
+
+- **Deleted is recorded, never inferred.** A trigger on `sandbox` writes a `SandboxTombstone` for the tunnel id of every
+  deleted row and every rotated token, cascades included. The edge refuses a tunnel only for a recorded id
+  (`/api/reachability` answers 404 for those alone, 200 with `known: false` for an id it has no record of), a daemon is
+  told 410 rather than 404, and a recorded id is never adopted.
+- **Which database this is.** The migration that made `platform_identity` minted one random id for its database, served
+  at `GET /api/identity` and on every accepted announce. A deployment that sets `DATABASE_EXPECTED_IDENTITY` refuses to
+  start on any other, before its reapers could read a foreign database as a fleet of orphans, and a running api exits
+  when the identity under it changes. `pnpm db:up` checks that `DATABASE_URL` reaches the compose service's own
+  Postgres before it migrates.
+- **The sandbox keeps asking.** A daemon whose registration is refused or unanswered retries for as long as it runs,
+  every few seconds at first and every five minutes after; only a 410 ends it.
+- **The editor remembers.** Each device keeps, per account, where every listed sandbox answers (names and addresses,
+  never a token). With the platform down it opens them directly, since a daemon checks the reader's Google sign-in
+  itself; with the platform answering an empty list it offers them back instead of onboarding
+  ([`recovery`](../../_editor/web/src/features/sandbox/recovery)).
+- **Adoption puts a row back.** The owner presses Reconnect: the editor asks `sandbox.adoptionTicket` for a ten-minute
+  ticket naming the sandbox and the account, hands it to the daemon (`POST /platform/relink`, owner-only), and the
+  daemon presents it at `POST /sandbox/adopt` with its connect token and the grant this platform signed for it. The
+  platform makes the row again only for an id it has no record of, at the address the token derives, for the owner the
+  daemon bound. A hosted sandbox comes back as a row without its machine record, which is the operator's to restore.
+
+(2026-10-02) Absence used to mean deletion everywhere: the edge revoked on a missing row, the editor onboarded on an
+empty list, and the daemon stopped registering after ten minutes. On the night that made this, a developer's platform
+read a sandbox's empty database through a mirrored port, and every one of those turned an intact registry into what
+looked like a wiped one.
 
 ## Hosted sandboxes
 

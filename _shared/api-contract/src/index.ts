@@ -4,6 +4,7 @@ import { oc } from "@orpc/contract";
 import { z } from "zod";
 import {
     AddressOfferSchema,
+    AdoptionTicketSchema,
     OwnerTicketSchema,
     AdminActionResultSchema,
     AdminAttentionSchema,
@@ -36,6 +37,7 @@ import {
     PushDeviceInputSchema,
     PushSendSchema,
     PushSentSchema,
+    SandboxLookupSchema,
     SandboxSummarySchema,
     TrashedSandboxSchema,
     SetupCodeSchema,
@@ -119,6 +121,17 @@ export const sandboxContract = {
     addressOffer: oc.route({ method: "GET", path: "/sandbox/address-offer" }).output(AddressOfferSchema),
     // Signed way into a hosted sandbox for its owner; owner-only, hosted-only, 404 elsewhere.
     ownerTicket: oc.route({ method: "POST", path: "/sandbox/owner-ticket" }).input(sandboxIdInput).output(OwnerTicketSchema),
+    // What the registry holds of sandboxes the editor remembers but the list lacks, by their 12-hex ids.
+    lookup: oc
+        .route({ method: "POST", path: "/sandbox/lookup" })
+        .input(z.object({ sandboxIds: z.array(z.string()).max(50) }))
+        .output(SandboxLookupSchema),
+    // A ticket for adopting one sandbox the registry has no record of; CONFLICT when it holds one (anyone's), NOT_FOUND
+    // when it was deleted, PRECONDITION_FAILED on a platform that hands out no addresses and so cannot vouch.
+    adoptionTicket: oc
+        .route({ method: "POST", path: "/sandbox/adoption-ticket" })
+        .input(z.object({ sandboxId: z.string().regex(/^[0-9a-f]{12}$/) }))
+        .output(AdoptionTicketSchema),
     setupCode: oc.route({ method: "POST", path: "/sandbox/setup-code" }).input(sandboxIdInput.extend(profileInput.shape)).output(SetupCodeSchema),
     // A code for the recovery command (`FixCodeSchema`); minting one replaces the last. NOT_FOUND for a hosted sandbox.
     fixCode: oc.route({ method: "POST", path: "/sandbox/fix-code" }).input(sandboxIdInput).output(FixCodeSchema),

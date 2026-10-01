@@ -25,6 +25,8 @@ import { useRole } from "../features/sandbox/secrets/useRole";
 import { retryOnEntry } from "./platformRetry";
 import { arriveOnSandbox, type SandboxArrivalRoute } from "./sandboxArrival";
 import { setupRedirect } from "./setupGate";
+import { normalizeDaemonUrl } from "../features/setup/setupAttach";
+import { ownsMissingSandboxes } from "../features/sandbox/recovery/deviceDirectory";
 import { signInAt } from "./signIn";
 import { t } from "@intentic/ui/i18n";
 import { localFace } from "../app/environments/local";
@@ -49,14 +51,24 @@ declare module "vue-router" {
 // An unavailable platform gets its own retry screen, not treated as a sign-out.
 type Resolved = { readonly user: User } | { readonly redirect: RouteLocationRaw };
 
+// A platform that hangs rather than refuses must not hold the first paint on a blank screen: past this the reader gets
+// the outage screen, and with it the sandboxes this device can open without the platform (recovery/README.md). The
+// check keeps running, and the screen's own retry collects whatever it answers.
+const SESSION_BUDGET_MS = 10_000;
+
+const withinBudget = <T>(work: Promise<T>, budgetMs: number): Promise<T> =>
+    Promise.race([work, new Promise<T>((_resolve, reject) => setTimeout(() => reject(new Error(`the platform did not answer in time`)), budgetMs))]);
+
+const unavailable = (to: RouteLocationNormalized): RouteLocationRaw => ({ path: `/platform-unavailable`, query: { returnTo: to.fullPath } });
+
 const resolveUser = async (to: RouteLocationNormalized): Promise<Resolved> => {
     const { user, refresh } = useAuth();
     let current = user.value;
     if (current === null) {
         try {
-            current = await refresh();
+            current = await withinBudget(refresh(), SESSION_BUDGET_MS);
         } catch {
-            return { redirect: { path: `/platform-unavailable`, query: { returnTo: to.fullPath } } };
+            return { redirect: unavailable(to) };
         }
     }
     // Signed out: the login screen carries the page that asked for it.
@@ -84,10 +96,52 @@ const startGoogleMint = (to: RouteLocationNormalized): true => {
     return true;
 };
 
-// Gates the workspace shell on having a workspace to open; setupGate.ts owns the predicate.
-const requireSetup = async (): Promise<boolean | RouteLocationRaw> => {
+// Gates the workspace shell on having a workspace to open; setupGate.ts owns the predicate. A list the platform could
+// not give is not an empty one, so it never reads as "nothing to open" (it used to leave the page blank). And a list
+// that offers nothing to open while this device remembers sandboxes of the account's own goes to recovery rather than
+// onboarding (2026-10-02): a platform answering from a database that forgot them looks exactly like a new account.
+const requireSetup = async (to: RouteLocationNormalized): Promise<boolean | RouteLocationRaw> => {
     const { list } = useSandbox();
-    return setupRedirect(await list()) ?? true;
+    // allow(silent-catch): any failure to list means the same thing here, the platform could not be asked; the outage
+    // screen says so and retries.
+    const rows = await list().catch(() => undefined);
+    if (rows === undefined) {
+        return unavailable(to);
+    }
+    const setup = setupRedirect(rows);
+    if (setup === undefined) {
+        return true;
+    }
+    const account = useAuth().user.value;
+    return account !== null && ownsMissingSandboxes(account.email) ? `/recover` : setup;
+};
+
+// A sandbox's own address, handed over by the sandbox itself when someone opened it in a browser (the daemon's GET /):
+// the sandbox it names when the list has it, recovery when the list lacks it, and the outage screen (which offers it
+// first) when the platform cannot be asked.
+const openAddressed = async (to: RouteLocationNormalized): Promise<RouteLocationRaw> => {
+    const named = [to.query[`url`]].flat()[0];
+    const url = named === null || named === undefined ? undefined : normalizeDaemonUrl(named);
+    if (url === undefined) {
+        return `/`;
+    }
+    const resolved = await resolveUser(to);
+    if (!(`user` in resolved)) {
+        return resolved.redirect;
+    }
+    await restorePersistedQueries(resolved.user.id);
+    const { list, select } = useSandbox();
+    // allow(silent-catch): as in requireSetup, a list that could not be had sends the reader to the outage screen.
+    const rows = await list().catch(() => undefined);
+    if (rows === undefined) {
+        return unavailable(to);
+    }
+    const listed = rows.find((entry) => entry.daemonUrl !== null && normalizeDaemonUrl(entry.daemonUrl) === url);
+    if (listed === undefined) {
+        return { path: `/recover`, query: { url } };
+    }
+    select(listed.id);
+    return `/`;
 };
 
 // A link naming a sandbox (`/?sandbox=<id>`) opens the shell on it; sandboxArrival.ts owns the rule. After the gate, so
@@ -179,6 +233,22 @@ const routes: RouteRecordRaw[] = [
         // Wrapped although it is outside the shell: "Add sandbox" reaches it from the shell, and that click deserves
         // the same instant flip as any other. Full-screen wizard, so no outline to promise.
         component: asyncView(() => import(`../features/setup/Setup.vue`)),
+    },
+    {
+        // The sandboxes this device remembers and the account's list lacks, offered back (features/sandbox/recovery).
+        path: `/recover`,
+        name: `recover`,
+        meta: { title: () => t(`router.index.reconnectSandboxes`) },
+        beforeEnter: [requireAuth],
+        component: () => import(`../features/sandbox/recovery/Recover.vue`),
+    },
+    {
+        // A sandbox's own address, from the sandbox (its GET / sends a browser here). The guard always answers with
+        // somewhere else; the screen behind it is recovery's, for the address it names.
+        path: `/open`,
+        name: `open`,
+        beforeEnter: [openAddressed],
+        component: () => import(`../features/sandbox/recovery/Recover.vue`),
     },
     {
         // A floating panel's own window (chat, terminal or preview), no shell around it, nothing to navigate. Guarded

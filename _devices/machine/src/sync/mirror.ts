@@ -20,6 +20,7 @@ import {
 import { pairingEndpoint } from "./endpoint.js";
 import { createDaemonBases, type DaemonBases, type Dialed, dialedPairings } from "../daemon-base.js";
 import { readSwapRecords } from "../device/sandbox-rounds/swap-records.js";
+import { type PublishedPorts, publishedPortsReader } from "./docker-ports.js";
 import { realBridgeExec, runGitBridge } from "./git-bridge.js";
 import {
     ensureMutagen,
@@ -115,7 +116,8 @@ export const fetchWorkspacePorts = async (base: string, syncToken: string): Prom
 };
 
 // Whether the local port is free; called only after terminating this pairing's own prior forward and ruling out
-// other pairings, so a conflict is genuinely foreign.
+// other pairings, so a conflict is genuinely foreign. One instant's answer: a holder in the middle of a restart reads
+// as free, which is what `LocalHolds` is for.
 const localPortFree = (port: number): Promise<boolean> =>
     new Promise((resolvePort) => {
         const probe = net.createServer();
@@ -150,11 +152,24 @@ const mutagenExecutor = (mutagen: string, pairing: Pairing, log: Log): ForwardEx
     isLocalPortFree: localPortFree,
 });
 
-// Minimal-touch reconcile: leaves unchanged forwards alone, terminates vanished ports, (re)creates new or
-// family-moved ones. `claimedBy` names ports other pairings already hold; first-paired wins a contested port.
-// `ignored` is the owner's own standing answer for a number on this device (config.ts `setPortIgnored`), and it is
-// checked before everything else: a port nobody may take is not a contest to resolve, so no free-check is spent on it
-// and no forward of it survives the switch being thrown.
+// How long a port this machine was seen holding has to stay free before it is mirrored: well past the minutes Docker
+// Desktop takes to restart and bring its containers back, the window in which the bind probe finds a held port free.
+export const BUSY_GRACE_MS = 15 * 60_000;
+
+/** What a pass knows of this machine's own holders of a port, beyond the bind probe's one instant. */
+export interface LocalHolds {
+    // Host ports this machine's Docker engine publishes, with the containers publishing them (for the log line only);
+    // undefined when Docker could not be asked, which leaves the grace below to hold the line alone.
+    readonly docker: PublishedPorts | undefined;
+    // The ports the last pass that listed them found busy: the pairing's persisted skip set, so an agent restarted
+    // while their holder was down still knows. One of these is mirrored only once it has stayed free for BUSY_GRACE_MS.
+    readonly wasBusy: ReadonlySet<number>;
+    // When this process first saw each of those free (and unpublished) again. Kept by reconcile, in memory only: a
+    // restarted agent starts the grace over, which is the cautious way round.
+    readonly freeSince: Map<number, number>;
+    readonly now: number;
+}
+
 // The teardown half, split out so each half stays readable: every live forward this pass drops, and the reason it
 // says out loud. Ignored leads, since the owner's standing answer outranks whatever else became true of the number.
 const retireForwards = (
@@ -162,13 +177,20 @@ const retireForwards = (
     current: readonly MirroredPort[],
     desiredByPort: ReadonlyMap<number, PortSummary>,
     ignored: ReadonlySet<number>,
+    docker: PublishedPorts | undefined,
     log: Log,
 ): void => {
     for (const mirrored of current) {
         const match = desiredByPort.get(mirrored.port);
+        const publishers = docker?.get(mirrored.port);
         if (ignored.has(mirrored.port)) {
             executor.terminate(mirrored.port);
             log(`  localhost:${mirrored.port}: stopped (this device is set not to mirror that port)`);
+        } else if (publishers !== undefined) {
+            // What a forward taken while Docker restarted leaves behind: the container's own publish failed, Docker never
+            // retries it, and whatever dials the port reaches the sandbox instead.
+            executor.terminate(mirrored.port);
+            log(`  localhost:${mirrored.port}: stopped (a Docker container on this machine publishes that port: ${publishers})`);
         } else if (match === undefined) {
             executor.terminate(mirrored.port);
             log(`  localhost:${mirrored.port}: stopped (no longer listening in the sandbox)`);
@@ -178,22 +200,59 @@ const retireForwards = (
     }
 };
 
+// Whether a port none of this device's mirroring holds may be forwarded now: free to bind this instant and, if the last
+// pass found it busy, free ever since this process first saw it so, for the whole grace. Says why not.
+const mayTake = async (executor: ForwardExecutor, summary: PortSummary, holds: LocalHolds, log: Log): Promise<boolean> => {
+    const listening = summary.command ?? "unknown process";
+    if (!(await executor.isLocalPortFree(summary.port))) {
+        holds.freeSince.delete(summary.port);
+        log(`  localhost:${summary.port} is busy on this machine: skipped (${listening})`);
+        return false;
+    }
+    if (!holds.wasBusy.has(summary.port)) {
+        return true;
+    }
+    const since = holds.freeSince.get(summary.port) ?? holds.now;
+    holds.freeSince.set(summary.port, since);
+    if (holds.now - since >= BUSY_GRACE_MS) {
+        return true;
+    }
+    log(
+        `  localhost:${summary.port} was busy on this machine until recently: holding off until it has stayed free for ${BUSY_GRACE_MS / 60_000} minutes (${listening})`,
+    );
+    return false;
+};
+
+// Minimal-touch reconcile: leaves unchanged forwards alone, terminates vanished ports, (re)creates new or
+// family-moved ones. `claimedBy` names ports other pairings already hold; first-paired wins a contested port.
+// `ignored` is the owner's own standing answer for a number on this device (config.ts `setPortIgnored`), and it is
+// checked before everything else: a port nobody may take is not a contest to resolve, so no free-check is spent on it
+// and no forward of it survives the switch being thrown. A port this machine's Docker publishes comes next, on the same
+// terms. `holds` is what the bind probe cannot see: a holder that is down for a moment, Docker's or any other.
 export const reconcileForwards = async (
     executor: ForwardExecutor,
     current: readonly MirroredPort[],
     desired: readonly PortSummary[],
     claimedBy: ReadonlyMap<number, string>,
     ignored: ReadonlySet<number>,
+    holds: LocalHolds,
     log: Log,
 ): Promise<MirroredPort[]> => {
     const desiredByPort = new Map(desired.map((port) => [port.port, port]));
-    retireForwards(executor, current, desiredByPort, ignored, log);
+    retireForwards(executor, current, desiredByPort, ignored, holds.docker, log);
     const currentByPort = new Map(current.map((mirrored) => [mirrored.port, mirrored]));
     const next: MirroredPort[] = [];
     for (const summary of desired) {
         // First, and before the unchanged-forward shortcut below: a live forward on a newly-ignored port was just
         // terminated above, and keeping it in `next` would make the following pass believe it is still up.
         if (ignored.has(summary.port)) {
+            continue;
+        }
+        // The same for a port Docker publishes, and it counts as busy: the grace starts over once Docker lets it go.
+        const publishers = holds.docker?.get(summary.port);
+        if (publishers !== undefined) {
+            holds.freeSince.delete(summary.port);
+            log(`  localhost:${summary.port} is published by a Docker container on this machine (${publishers}): skipped (${summary.command ?? "unknown process"})`);
             continue;
         }
         const existing = currentByPort.get(summary.port);
@@ -211,13 +270,14 @@ export const reconcileForwards = async (
             executor.terminate(summary.port);
         }
         // oxlint-disable-next-line eslint/no-await-in-loop -- a handful of ports; sequenced keeps the log readable
-        if (!(await executor.isLocalPortFree(summary.port))) {
-            log(`  localhost:${summary.port} is busy on this machine: skipped (${summary.command ?? "unknown process"})`);
+        if (!(await mayTake(executor, summary, holds, log))) {
             continue;
         }
         // oxlint-disable-next-line eslint/no-await-in-loop -- a handful of ports, and each create dials the
         // sandbox over this process's own transport; sequencing keeps the log readable
         await executor.create(summary);
+        // Only once the forward exists: a create that failed leaves the grace served, so the next pass tries at once.
+        holds.freeSince.delete(summary.port);
         next.push({ port: summary.port, host: summary.host, command: summary.command });
         log(`  localhost:${summary.port} ← ${summary.command ?? "unknown process"}`);
     }
@@ -272,7 +332,9 @@ const sameSkippedSet = (a: readonly SkippedPort[], b: readonly SkippedPort[]): b
 // Ports this pairing wanted but didn't get, derived from what reconcile already decided rather than returned
 // separately, so reconcileForwards stays a pure port-set function. Persisted so a skip is visible off the log.
 // An ignored port is still listed: it is the only row the switch can be thrown back from, and dropping it would make
-// a choice somebody made look like a port the sandbox stopped serving.
+// a choice somebody made look like a port the sandbox stopped serving. "busy" covers every holder on this machine: a
+// bind now, a Docker publish, a grace still being served. It is also the next pass's memory (`busyLastPass`), and no
+// new reason is minted for the other two, since a daemon or an editor older than it would refuse the whole report.
 export const skippedPortsOf = (
     desired: readonly PortSummary[],
     mirrored: readonly MirroredPort[],
@@ -290,6 +352,29 @@ export const skippedPortsOf = (
             return { port: summary.port, host: summary.host, reason, heldBy: reason === "held-by-sandbox" ? heldBy : undefined, command: summary.command };
         });
 };
+
+// Whose forward each port is, off every pairing's record as a tick begins. A pairing's forwards bind their ports until
+// its own pass says otherwise, so a pairing listed before it finds them bound: named here, such a port is filed as held
+// by that sandbox rather than as busy, which would make it wait out the grace once that sandbox let it go.
+export const recordedForwards = (pairings: readonly Pick<Pairing, "sandboxId" | "mirroredPorts">[]): Map<number, string> =>
+    new Map(pairings.flatMap((held) => (held.mirroredPorts ?? []).map((port) => [port.port, held.sandboxId] as const)));
+
+// One finished pass's word on its own forwards, in place of its record's. A pass that failed says nothing: its forwards
+// are still up, and its record still speaks for them.
+export const handOver = (holding: Map<number, string>, sandboxId: string, mirrored: readonly MirroredPort[]): void => {
+    for (const [port, holder] of holding) {
+        if (holder === sandboxId) {
+            holding.delete(port);
+        }
+    }
+    for (const port of mirrored) {
+        holding.set(port.port, sandboxId);
+    }
+};
+
+// The forwards one pairing's skips are named off: every pairing's but its own.
+export const othersHolding = (holding: ReadonlyMap<number, string>, sandboxId: string): ReadonlyMap<number, string> =>
+    new Map([...holding].filter(([, holder]) => holder !== sandboxId));
 
 // Stamps the end of a pass; a failed write must not stop mirroring, so it silently under-claims.
 const beat = async (): Promise<void> => await writeFileAtomic(mirrorHeartbeatPath, String(Date.now())).catch(() => {});
@@ -313,15 +398,30 @@ const retireSwitchedOff = async (mutagen: string, pairing: Pairing, log: Log): P
     log(`  ${pairing.sandboxId}: port mirroring is off on this device; took ${plural(mirrored.length, "port")} off localhost.`);
 };
 
+// The ports this pairing's last pass found busy, read off its persisted skip set: what an agent restarted while their
+// holder was down still knows of them. Only that reason counts, so a port somebody stopped ignoring, or one a sibling
+// sandbox held, is taken as soon as it is free, as before.
+export const busyLastPass = (pairing: Pick<Pairing, "skippedPorts">): ReadonlySet<number> =>
+    new Set((pairing.skippedPorts ?? []).filter((skipped) => skipped.reason === "busy").map((skipped) => skipped.port));
+
+/** What the watcher keeps across passes about this machine's own holders of a port. */
+interface HolderMemory {
+    // Docker's answer, asked at most every DOCKER_ANSWER_MS and never throwing (docker-ports.ts).
+    readonly dockerPorts: () => Promise<PublishedPorts | undefined>;
+    // Per pairing, when each port its last pass found busy was first seen free again (`LocalHolds.freeSince`).
+    readonly freeSince: Map<string, Map<number, number>>;
+}
+
+const holdsFor = async (memory: HolderMemory, pairing: Pairing): Promise<LocalHolds> => {
+    const freeSince = memory.freeSince.get(pairing.sandboxId) ?? new Map<number, number>();
+    memory.freeSince.set(pairing.sandboxId, freeSince);
+    return { docker: await memory.dockerPorts(), wasBusy: busyLastPass(pairing), freeSince, now: Date.now() };
+};
+
 // One pairing's pass: reconciles its port forwards and returns what it ended up mirroring, so the caller can mark
 // those ports claimed for pairings after it. A SyncAuthError propagates for the caller to count.
-const servePairing = async (
-    mutagen: string,
-    pairing: Pairing,
-    base: string,
-    claimedBy: ReadonlyMap<number, string>,
-    log: Log,
-): Promise<readonly MirroredPort[]> => {
+const servePairing = async (context: PassContext, pairing: Pairing, base: string): Promise<readonly MirroredPort[]> => {
+    const { mutagen, claimedBy, holding, holders, say: log } = context;
     const baseline = pairing.mirroredPorts ?? [];
     // Ports are polled even with mirroring off: the read doubles as the pairing's liveness probe and the only way a
     // revoked enrollment is noticed. The switch only changes what's done with the answer.
@@ -331,8 +431,10 @@ const servePairing = async (
         return [];
     }
     const ignored = new Set(pairing.ignoredPorts ?? []);
-    const next = await reconcileForwards(mutagenExecutor(mutagen, pairing, log), baseline, ports, claimedBy, ignored, log);
-    const skipped = skippedPortsOf(ports, next, claimedBy, ignored);
+    const holds = await holdsFor(holders, pairing);
+    const next = await reconcileForwards(mutagenExecutor(mutagen, pairing, log), baseline, ports, claimedBy, ignored, holds, log);
+    // Named off every sibling's forwards, not only those of the pairings this tick has passed (`recordedForwards`).
+    const skipped = skippedPortsOf(ports, next, othersHolding(holding, pairing.sandboxId), ignored);
     // Either set changing triggers a write, even a port flipping mirrored-to-contended without changing set size.
     if (!sameMirrorSet(baseline, next) || !sameSkippedSet(pairing.skippedPorts ?? [], skipped)) {
         await savePorts(pairing.sandboxId, next, skipped);
@@ -590,10 +692,15 @@ interface PassContext {
     readonly tick: number;
     // Ports this tick's earlier pairings already took, added to as this one takes its own.
     readonly claimedBy: Map<number, string>;
+    // Whose forward every port is: each pairing's record as the tick began, replaced by its pass once that has run
+    // (`recordedForwards`, `handOver`). It only names a holder in a skip; `claimedBy` alone decides.
+    readonly holding: Map<number, string>;
     readonly tracking: PairingTracking;
     readonly bases: DaemonBases;
     // Pairings whose sandbox is mid-swap on this machine, held still this pass.
     readonly swapHeld: ReadonlySet<string>;
+    // What this machine's Docker publishes, and when each port a pass found busy was first seen free again.
+    readonly holders: HolderMemory;
     readonly say: Log;
 }
 
@@ -601,12 +708,12 @@ interface PassContext {
 // so the agent stays a list of what a tick does, rather than one function in which every branch is one pairing's
 // business.
 const runPairingPass = async (context: PassContext, pairing: Pairing, base: string): Promise<void> => {
-    const { mutagen, tick, claimedBy, tracking, bases, swapHeld, say } = context;
+    const { mutagen, tick, claimedBy, holding, tracking, bases, swapHeld, say } = context;
     const { rejectedPolls, unreachable, repos } = tracking;
     const swapping = swapHeld.has(pairing.sandboxId);
     let pausedThisPass = false;
     try {
-        const mirrored = await servePairing(mutagen, pairing, base, claimedBy, say);
+        const mirrored = await servePairing(context, pairing, base);
         rejectedPolls.delete(pairing.sandboxId);
         unreachable.delete(pairing.sandboxId);
         // Still pending if it was: a replacement put off while the sandbox slept is owed now that it answers. Not while
@@ -618,6 +725,7 @@ const runPairingPass = async (context: PassContext, pairing: Pairing, base: stri
         for (const port of mirrored) {
             claimedBy.set(port.port, pairing.sandboxId);
         }
+        handOver(holding, pairing.sandboxId, mirrored);
         // Only on a pass that reconciled, and with the list that pass produced: against a stale record this would
         // take down live forwards rather than stranded ones.
         if (tick % STRANDED_SWEEP_EVERY_TICKS === 0) {
@@ -693,6 +801,9 @@ export const runMirrorWatch = async (log: Log): Promise<void> => {
     const unreachable = new Map<string, Unreachable>();
     const repos = new Map<string, readonly string[]>();
     const tracking = { rejectedPolls, unreachable, repos, sessionsPending };
+    // What the bind probe cannot see, kept for the watcher's lifetime: Docker's answer, cached, and the grace each port a
+    // pass found busy is serving. Only the busy rows reach the disk, so a restart starts every grace over.
+    const holders: HolderMemory = { dockerPorts: publishedPortsReader(say), freeSince: new Map() };
     // Sandboxes with no machine-report route, retired from reporting for this watcher's lifetime.
     const reportUnsupported = new Set<string>();
     for (let tick = 0; ; tick += 1) {
@@ -731,6 +842,8 @@ export const runMirrorWatch = async (log: Log): Promise<void> => {
         });
         // Ports this tick's earlier pairings already own, so a later one is told who holds a port it wanted.
         const claimedBy = new Map<number, string>();
+        // And whose forward each port is meanwhile, so a pairing listed before its holder does not file it as busy.
+        const holding = recordedForwards(state.pairings);
         for (const { pairing, base } of dialed) {
             // A pairing that has been failing for a while is not polled every tick (pollBackoffMs). The record is kept
             // rather than cleared, so the hour that auto-pauses file sync still runs on wall-clock while it waits.
@@ -738,7 +851,7 @@ export const runMirrorWatch = async (log: Log): Promise<void> => {
                 continue;
             }
             // oxlint-disable-next-line eslint/no-await-in-loop -- One sandbox at a time keeps tunnel state ordered.
-            await runPairingPass({ mutagen, tick, claimedBy, tracking, bases, swapHeld, say }, pairing, base);
+            await runPairingPass({ mutagen, tick, claimedBy, holding, tracking, bases, swapHeld, holders, say }, pairing, base);
         }
         // Runs after the pairings: servePairing just persisted this tick's ports, and the report re-reads that state,
         // so

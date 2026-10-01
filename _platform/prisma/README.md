@@ -13,6 +13,10 @@ flowchart LR
 
 - Tables include Better Auth's users and sessions, sandboxes and their members, the hosted lane (machines, pool,
   builds, usage, plan), the wallet and admin stats. The comments in `schema.prisma` say what each column means.
+- Two things are kept in SQL Prisma does not model, from `20261002120000_platform_memory`: a trigger on `sandbox` that
+  writes a `sandbox_tombstone` for the tunnel id of every deleted row and rotated token (cascades included), and the
+  one `platform_identity` row that migration minted for its database. Neither appears in a `migrate diff`, and both are
+  what tells a forgotten sandbox from a deleted one ([platform.md](../../docs/architecture/platform.md#when-the-platform-forgets)).
 - Migrations are append-only. `_tools/scripts/verify/check-migrations.sh` (CI's `migrations` job) fails when an
   applied migration changes, when a new one adds a `NOT NULL` column with no `DEFAULT`, or when replaying the history
   does not produce `schema.prisma`.
@@ -31,7 +35,7 @@ flowchart LR
 ## Commands
 
 ```sh
-pnpm db:up                                                   # repo root: local Postgres, migrations applied
+pnpm db:up                                                   # repo root: local Postgres, migrations applied once DATABASE_URL is checked to reach it
 pnpm --filter @intentic/prisma migrate:dev --name <change>   # after editing schema.prisma
 pnpm --filter @intentic/prisma build                         # regenerate the client
 bash _tools/scripts/verify/check-migrations.sh               # the CI migration rules, locally

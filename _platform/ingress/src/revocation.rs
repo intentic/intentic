@@ -1,7 +1,9 @@
 //! Whether a sandbox still exists, asked of the platform (`GET /api/reachability/<id>`) and kept a minute. Only a
 //! definite 404 refuses: a timeout, a 5xx, an unreachable platform or none configured all answer that it exists, since
-//! reachability must not depend on the platform being up, and a failure is never kept. The answer's body (the lane it
-//! names) is not read: every sandbox is reached the same way, down the tunnel it dials, so existence is all that decides.
+//! reachability must not depend on the platform being up, and a failure is never kept. The platform answers 404 for a
+//! deletion record alone, and 200 for an id it has no record of either way, so a platform reading a database that forgot
+//! a sandbox does not take it off the edge (api app.ts, 2026-10-02). The answer's body (the lane it names) is not read:
+//! every sandbox is reached the same way, down the tunnel it dials, so existence is all that decides.
 
 use std::collections::HashMap;
 use std::sync::Mutex;

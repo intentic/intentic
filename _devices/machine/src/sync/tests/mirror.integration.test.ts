@@ -6,9 +6,10 @@ import { dirname, join } from "node:path";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { pidFileBody } from "@intentic/local-agent";
 import type { PortSummary } from "@intentic/sandbox-contract";
+import { unstubbed } from "@intentic/testing";
 import { stubGlobal } from "@intentic/testing/bun";
-import type { MirroredPort } from "../config.js";
-import type { ForwardExecutor } from "../mirror.js";
+import type { MirroredPort, Pairing, SkippedPort } from "../config.js";
+import type { ForwardExecutor, LocalHolds } from "../mirror.js";
 
 // config.ts reads homedir() at import time; HOME must point at a throwaway dir before the dynamic import below,
 // or machine.pid lands in the real ~/.intentic/machine.
@@ -16,14 +17,20 @@ process.env["HOME"] = mkdtempSync(join(tmpdir(), "machine-mirror-"));
 process.env["USERPROFILE"] = process.env["HOME"];
 const { runPidPath } = await import("../../config.js");
 const {
+    BUSY_GRACE_MS,
+    busyLastPass,
     fetchWorkspacePorts,
+    handOver,
     markPrepared,
+    othersHolding,
     pollBackoffMs,
     pollDue,
     reconcileForwards,
+    recordedForwards,
     retireMirroredPort,
     retirePairingMirror,
     shouldAutoPauseFileSync,
+    skippedPortsOf,
     strandedForwards,
     SyncAuthError,
     unpreparedSetups,
@@ -143,17 +150,25 @@ const ws = (port: number, host: "127.0.0.1" | "::1" = "127.0.0.1", command = "vi
     forwarded: false,
 });
 
-// A recording executor so the reconcile logic tests without Mutagen: `free` decides the local-bind check.
-const fakeExecutor = (free: (port: number) => boolean = () => true): { executor: ForwardExecutor; created: number[]; terminated: number[] } => {
+// A recording executor so the reconcile logic tests without Mutagen: `free` decides the local-bind check, and `probed`
+// is every port it was asked about.
+const fakeExecutor = (
+    free: (port: number) => boolean = () => true,
+): { executor: ForwardExecutor; created: number[]; terminated: number[]; probed: number[] } => {
     const created: number[] = [];
     const terminated: number[] = [];
+    const probed: number[] = [];
     return {
         created,
         terminated,
+        probed,
         executor: {
             terminate: (port) => void terminated.push(port),
             create: async (summary) => await Promise.resolve(void created.push(summary.port)),
-            isLocalPortFree: (port) => Promise.resolve(free(port)),
+            isLocalPortFree: async (port) => {
+                probed.push(port);
+                return await Promise.resolve(free(port));
+            },
         },
     };
 };
@@ -164,6 +179,9 @@ const log = (): void => {};
 const unclaimed = new Map<number, string>();
 // Nothing set aside on this device: the resting state every case below but the ignore ones runs under.
 const nothingIgnored = new Set<number>();
+// Nothing on this machine the bind probe cannot see: Docker answered and publishes nothing, and no port was busy last
+// pass. Fresh each time, since reconcile keeps its grace clock in it.
+const nothingHeld = (): LocalHolds => ({ docker: new Map(), wasBusy: new Set(), freeSince: new Map(), now: 0 });
 
 // The wire schema also carries title/purpose/origin, unused by the mirror but required to parse.
 const named = { title: "Vite dev server", purpose: "Started in one of your terminals.", origin: "terminal" as const };
@@ -214,7 +232,7 @@ describe("reconcileForwards (minimal-touch)", () => {
     it("leaves unchanged forwards alone and creates only new ports", async () => {
         const { executor, created, terminated } = fakeExecutor();
         const current: MirroredPort[] = [{ port: 3000, host: "127.0.0.1" }];
-        const next = await reconcileForwards(executor, current, [ws(3000), ws(4321)], unclaimed, nothingIgnored, log);
+        const next = await reconcileForwards(executor, current, [ws(3000), ws(4321)], unclaimed, nothingIgnored, nothingHeld(), log);
         // A carried-over row keeps its own shape; only a freshly created one learns what is listening behind it.
         expect(next).toEqual([
             { port: 3000, host: "127.0.0.1" },
@@ -230,7 +248,7 @@ describe("reconcileForwards (minimal-touch)", () => {
             { port: 3000, host: "127.0.0.1" },
             { port: 4321, host: "127.0.0.1" },
         ];
-        const next = await reconcileForwards(executor, current, [ws(3000)], unclaimed, nothingIgnored, log);
+        const next = await reconcileForwards(executor, current, [ws(3000)], unclaimed, nothingIgnored, nothingHeld(), log);
         expect(next).toEqual([{ port: 3000, host: "127.0.0.1" }]);
         expect(created).toEqual([]);
         expect(terminated).toEqual([4321]);
@@ -238,7 +256,7 @@ describe("reconcileForwards (minimal-touch)", () => {
 
     it("recreates a forward whose sandbox loopback family moved (127.0.0.1 → ::1)", async () => {
         const { executor, created, terminated } = fakeExecutor();
-        const next = await reconcileForwards(executor, [{ port: 3000, host: "127.0.0.1" }], [ws(3000, "::1")], unclaimed, nothingIgnored, log);
+        const next = await reconcileForwards(executor, [{ port: 3000, host: "127.0.0.1" }], [ws(3000, "::1")], unclaimed, nothingIgnored, nothingHeld(), log);
         expect(next).toEqual([{ port: 3000, host: "::1", command: "vite" }]);
         expect(terminated).toEqual([3000]);
         expect(created).toEqual([3000]);
@@ -246,7 +264,7 @@ describe("reconcileForwards (minimal-touch)", () => {
 
     it("skips a port a foreign local process already holds", async () => {
         const { executor, created } = fakeExecutor((port) => port !== 5000);
-        const next = await reconcileForwards(executor, [], [ws(5000)], unclaimed, nothingIgnored, log);
+        const next = await reconcileForwards(executor, [], [ws(5000)], unclaimed, nothingIgnored, nothingHeld(), log);
         expect(next).toEqual([]);
         expect(created).toEqual([]);
     });
@@ -256,7 +274,7 @@ describe("reconcileForwards (minimal-touch)", () => {
     it("yields a port another pairing already mirrors, without disturbing it", async () => {
         const { executor, created, terminated } = fakeExecutor();
         const claimed = new Map([[6480, "sandbox-first.example.dev"]]);
-        const next = await reconcileForwards(executor, [], [ws(6480), ws(7000)], claimed, nothingIgnored, log);
+        const next = await reconcileForwards(executor, [], [ws(6480), ws(7000)], claimed, nothingIgnored, nothingHeld(), log);
         expect(next).toEqual([{ port: 7000, host: "127.0.0.1", command: "vite" }]);
         expect(created).toEqual([7000]);
         // 6480 is neither created nor terminated: the other pairing's session keeps serving it.
@@ -266,7 +284,7 @@ describe("reconcileForwards (minimal-touch)", () => {
     // The whole point of the per-port switch: one number is left off localhost and every other port carries on.
     it("never creates a forward for a port this device was told to leave alone", async () => {
         const { executor, created, terminated } = fakeExecutor();
-        const next = await reconcileForwards(executor, [], [ws(5440), ws(5173)], unclaimed, new Set([5440]), log);
+        const next = await reconcileForwards(executor, [], [ws(5440), ws(5173)], unclaimed, new Set([5440]), nothingHeld(), log);
         expect(next).toEqual([{ port: 5173, host: "127.0.0.1", command: "vite" }]);
         expect(created).toEqual([5173]);
         // 5440 never reaches the free-check, so nothing is terminated for it either.
@@ -277,7 +295,7 @@ describe("reconcileForwards (minimal-touch)", () => {
     // next one as still established.
     it("takes down a live forward the moment its port is set aside", async () => {
         const { executor, created, terminated } = fakeExecutor();
-        const next = await reconcileForwards(executor, [{ port: 5440, host: "127.0.0.1" }], [ws(5440)], unclaimed, new Set([5440]), log);
+        const next = await reconcileForwards(executor, [{ port: 5440, host: "127.0.0.1" }], [ws(5440)], unclaimed, new Set([5440]), nothingHeld(), log);
         expect(next).toEqual([]);
         expect(terminated).toEqual([5440]);
         expect(created).toEqual([]);
@@ -288,10 +306,216 @@ describe("reconcileForwards (minimal-touch)", () => {
     it("keeps its own established forward even if the port is claimed", async () => {
         const { executor, created, terminated } = fakeExecutor();
         const claimed = new Map([[3000, "sandbox-other.example.dev"]]);
-        const next = await reconcileForwards(executor, [{ port: 3000, host: "127.0.0.1" }], [ws(3000)], claimed, nothingIgnored, log);
+        const next = await reconcileForwards(executor, [{ port: 3000, host: "127.0.0.1" }], [ws(3000)], claimed, nothingIgnored, nothingHeld(), log);
         expect(next).toEqual([{ port: 3000, host: "127.0.0.1" }]);
         expect(created).toEqual([]);
         expect(terminated).toEqual([]);
+    });
+});
+
+// THE BIND PROBE SEES ONE INSTANT. On 2026-10-01 a WSL and Docker Desktop restart let it find the host's own Postgres
+// port free (5440, a compose container that is `unless-stopped`) before Docker had published it again: the mirror took
+// it, Docker's publish then failed for good, and the host's API read the sandbox's empty database.
+describe("reconcileForwards (what the bind probe cannot see)", () => {
+    const T0 = 1_700_000_000_000;
+    const postgres = ws(5440, "127.0.0.1", "postgres");
+    const composed = new Map([[5440, "intentic-postgres-1"]]);
+    // Docker answered, and publishes nothing.
+    const nothingPublished = new Map<number, string>();
+    const busy5440: SkippedPort = { port: 5440, host: "127.0.0.1", reason: "busy", heldBy: undefined, command: "postgres" };
+
+    // A log that keeps what it was told, for the cases whose line is the point.
+    const heard = () => {
+        const lines: string[] = [];
+        return { lines, say: (line: string): void => void lines.push(line) };
+    };
+
+    // Passes as the watcher runs them (servePairing): each reads the busy rows the one before it recorded, starts from the
+    // forwards it left, and one grace clock runs across them all.
+    const passes = (executor: ForwardExecutor, desired: readonly PortSummary[], rows: readonly SkippedPort[]) => {
+        const freeSince = new Map<number, number>();
+        let current: readonly MirroredPort[] = [];
+        let skipped = rows;
+        return {
+            freeSince,
+            skipped: (): readonly SkippedPort[] => skipped,
+            run: async (now: number, docker: LocalHolds["docker"]): Promise<MirroredPort[]> => {
+                const holds = { docker, wasBusy: busyLastPass({ skippedPorts: skipped }), freeSince, now };
+                const next = await reconcileForwards(executor, current, desired, unclaimed, nothingIgnored, holds, log);
+                current = next;
+                skipped = skippedPortsOf(desired, next, unclaimed, nothingIgnored);
+                return next;
+            },
+        };
+    };
+
+    it("never mirrors a port a Docker container on this machine publishes, though the bind probe finds it free", async () => {
+        const { executor, created, probed } = fakeExecutor();
+        const { lines, say } = heard();
+        const desired = [postgres, ws(5173)];
+        const next = await reconcileForwards(executor, [], desired, unclaimed, nothingIgnored, { ...nothingHeld(), docker: composed }, say);
+        expect(next).toEqual([{ port: 5173, host: "127.0.0.1", command: "vite" }]);
+        expect(created).toEqual([5173]);
+        // Docker's answer stands over the probe's, which is never asked about the port.
+        expect(probed).toEqual([5173]);
+        // The container is named in this agent's own log and nowhere else: its record is the plain busy a report carries.
+        expect(lines).toEqual([
+            "  localhost:5440 is published by a Docker container on this machine (intentic-postgres-1): skipped (postgres)",
+            "  localhost:5173 ← vite",
+        ]);
+        expect(skippedPortsOf(desired, next, unclaimed, nothingIgnored)).toEqual([busy5440]);
+    });
+
+    // The forward the incident left behind: Docker never retries the publish it lost, so the forward is what gives way.
+    it("takes down a live forward on a port Docker publishes, and creates nothing in its place", async () => {
+        const terminated: number[] = [];
+        // Nothing else may happen to the port: neither a probe nor a create is stubbed, so either would throw by name.
+        const executor = unstubbed<ForwardExecutor>("executor", { terminate: (port) => void terminated.push(port) });
+        const { lines, say } = heard();
+        const live: MirroredPort[] = [{ port: 5440, host: "127.0.0.1", command: "postgres" }];
+        const next = await reconcileForwards(executor, live, [postgres], unclaimed, nothingIgnored, { ...nothingHeld(), docker: composed }, say);
+        expect(next).toEqual([]);
+        expect(terminated).toEqual([5440]);
+        expect(lines).toEqual([
+            "  localhost:5440: stopped (a Docker container on this machine publishes that port: intentic-postgres-1)",
+            "  localhost:5440 is published by a Docker container on this machine (intentic-postgres-1): skipped (postgres)",
+        ]);
+    });
+
+    // What the README promises, and well past the minutes Docker Desktop takes to restart and publish its ports again.
+    it("waits a quarter of an hour", () => {
+        expect(BUSY_GRACE_MS).toBe(15 * 60_000);
+    });
+
+    it("keeps skipping a port the last pass found busy, still recorded busy, while it has been free for less than the grace", async () => {
+        const { executor, created } = fakeExecutor();
+        const watcher = passes(executor, [postgres], [busy5440]);
+        expect(await watcher.run(T0, nothingPublished)).toEqual([]);
+        expect(await watcher.run(T0 + BUSY_GRACE_MS - 1, nothingPublished)).toEqual([]);
+        expect(created).toEqual([]);
+        // Still the busy row, so the next pass, or an agent restarted now, still holds it off.
+        expect(watcher.skipped()).toEqual([busy5440]);
+    });
+
+    it("mirrors that port once it has stayed free for the whole grace", async () => {
+        const { executor, created } = fakeExecutor();
+        const watcher = passes(executor, [postgres], [busy5440]);
+        await watcher.run(T0, nothingPublished);
+        expect(await watcher.run(T0 + BUSY_GRACE_MS, nothingPublished)).toEqual([{ port: 5440, host: "127.0.0.1", command: "postgres" }]);
+        expect(created).toEqual([5440]);
+        expect(watcher.skipped()).toEqual([]);
+        // The clock goes with the grace it measured.
+        expect(watcher.freeSince).toEqual(new Map());
+    });
+
+    // Continuously free, that is: a holder seen in between, by the probe or through Docker, starts the grace over.
+    it("starts the grace over each time the port is seen held again", async () => {
+        let free = true;
+        const { executor, created } = fakeExecutor(() => free);
+        const watcher = passes(executor, [postgres], [busy5440]);
+        await watcher.run(T0, nothingPublished);
+        free = false;
+        await watcher.run(T0 + 60_000, nothingPublished);
+        free = true;
+        await watcher.run(T0 + 2 * 60_000, nothingPublished);
+        // A quarter of an hour since it was first seen free, but not since it was last seen held.
+        expect(await watcher.run(T0 + BUSY_GRACE_MS, nothingPublished)).toEqual([]);
+        await watcher.run(T0 + BUSY_GRACE_MS + 60_000, composed);
+        await watcher.run(T0 + BUSY_GRACE_MS + 2 * 60_000, nothingPublished);
+        expect(await watcher.run(T0 + 2 * BUSY_GRACE_MS + 2 * 60_000 - 1, nothingPublished)).toEqual([]);
+        expect(created).toEqual([]);
+        expect(await watcher.run(T0 + 2 * BUSY_GRACE_MS + 2 * 60_000, nothingPublished)).toEqual([{ port: 5440, host: "127.0.0.1", command: "postgres" }]);
+        expect(created).toEqual([5440]);
+    });
+
+    it("mirrors a free port nobody was seen holding at once, as before", async () => {
+        const { executor, created } = fakeExecutor();
+        // 5440 was busy last pass and 5173 was not, so only 5440 owes the grace.
+        const watcher = passes(executor, [postgres, ws(5173)], [busy5440]);
+        expect(await watcher.run(T0, nothingPublished)).toEqual([{ port: 5173, host: "127.0.0.1", command: "vite" }]);
+        expect(created).toEqual([5173]);
+    });
+
+    // No docker on PATH, an engine down or restarting, a socket this user may not open: the busy memory still holds.
+    it("falls back to the busy memory alone when Docker could not be asked", async () => {
+        const { executor, created, probed } = fakeExecutor();
+        const { lines, say } = heard();
+        const desired = [postgres, ws(5173)];
+        const holds = { docker: undefined, wasBusy: new Set([5440]), freeSince: new Map<number, number>(), now: T0 };
+        expect(await reconcileForwards(executor, [], desired, unclaimed, nothingIgnored, holds, say)).toEqual([{ port: 5173, host: "127.0.0.1", command: "vite" }]);
+        expect(created).toEqual([5173]);
+        // Without Docker's answer every port goes to the probe, and the one seen busy waits out its grace.
+        expect(probed).toEqual([5440, 5173]);
+        expect(lines).toEqual([
+            "  localhost:5440 was busy on this machine until recently: holding off until it has stayed free for 15 minutes (postgres)",
+            "  localhost:5173 ← vite",
+        ]);
+    });
+
+    it("mirrors the port once its grace is served, with Docker never answering", async () => {
+        const { executor, created } = fakeExecutor();
+        const watcher = passes(executor, [postgres], [busy5440]);
+        expect(await watcher.run(T0, undefined)).toEqual([]);
+        expect(await watcher.run(T0 + BUSY_GRACE_MS - 1, undefined)).toEqual([]);
+        expect(await watcher.run(T0 + BUSY_GRACE_MS, undefined)).toEqual([{ port: 5440, host: "127.0.0.1", command: "postgres" }]);
+        expect(created).toEqual([5440]);
+    });
+
+    // The memory is the persisted busy row and nothing else: a port is held off only for a holder it was seen with.
+    it("remembers only the ports the last pass found busy", () => {
+        const rows: SkippedPort[] = [
+            { port: 5440, host: "127.0.0.1", reason: "ignored", command: "postgres" },
+            { port: 6480, host: "127.0.0.1", reason: "held-by-sandbox", heldBy: "scratch" },
+            { port: 8080, host: "::1", reason: "busy" },
+        ];
+        expect(busyLastPass({ skippedPorts: rows })).toEqual(new Set([8080]));
+        expect(busyLastPass({})).toEqual(new Set());
+    });
+
+    // `unignore` hands the port back with its "ignored" row: nothing was seen holding it here, so nothing is waited out.
+    it("mirrors a port somebody stopped ignoring as soon as it is free", async () => {
+        const { executor, created } = fakeExecutor();
+        const watcher = passes(executor, [postgres], [{ port: 5440, host: "127.0.0.1", reason: "ignored", command: "postgres" }]);
+        expect(await watcher.run(T0, nothingPublished)).toEqual([{ port: 5440, host: "127.0.0.1", command: "postgres" }]);
+        expect(created).toEqual([5440]);
+    });
+});
+
+// A pairing's forwards bind their ports until its own pass, so a pairing listed before it finds them bound. Filed as
+// busy, such a port would wait out the grace once its sibling let it go; filed as the sibling's, it is taken at once.
+describe("whose forward a port is", () => {
+    const first: Pairing = { sandboxUrl: "https://first.example.dev", sandboxId: "first", mode: "mirror" };
+    const second: Pairing = {
+        sandboxUrl: "https://second.example.dev",
+        sandboxId: "second",
+        mode: "mirror",
+        mirroredPorts: [{ port: 5173, host: "127.0.0.1", command: "vite" }],
+    };
+
+    it("names a later pairing's forward as the holder before that pairing has passed, so nothing waits out the grace", () => {
+        const holding = recordedForwards([first, second]);
+        // `first` passes first and finds 5173 bound by `second`'s forward.
+        const rows = skippedPortsOf([ws(5173)], [], othersHolding(holding, "first"), nothingIgnored);
+        expect(rows).toEqual([{ port: 5173, host: "127.0.0.1", reason: "held-by-sandbox", heldBy: "second", command: "vite" }]);
+        expect(busyLastPass({ skippedPorts: rows })).toEqual(new Set());
+    });
+
+    it("takes a finished pass's word over its record, and keeps the record of one that has not passed", () => {
+        const holding = recordedForwards([first, second]);
+        handOver(holding, "first", [{ port: 3000, host: "127.0.0.1" }]);
+        expect(holding).toEqual(
+            new Map([
+                [5173, "second"],
+                [3000, "first"],
+            ]),
+        );
+        // `second` stopped serving 5173: its pass lets it go, and nobody holds it any more.
+        handOver(holding, "second", []);
+        expect(holding).toEqual(new Map([[3000, "first"]]));
+    });
+
+    it("never names a pairing as its own holder", () => {
+        expect(othersHolding(recordedForwards([first, second]), "second")).toEqual(new Map());
     });
 });
 

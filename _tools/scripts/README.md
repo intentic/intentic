@@ -41,6 +41,7 @@ flowchart LR
 | [build/](build) | cross-compiled binaries (`ic`, machine agents, Windows launcher), signing, declaration emit, output cleaning, `move-files.mjs` |
 | [image/](image) | sandbox image trees and Dockerfile composition, image publish, smoke tests, multi-arch manifests, tag promotion |
 | [platform/](platform) | api and web image release, the platform and ingress deploys |
+| [db/](db) | the check `db:up` and `db:reset` run before migrating (`verify-target.mjs`): that `DATABASE_URL` reaches the compose service's own Postgres |
 | [desktop/](desktop) | desktop installer builds and install/update checks, `try-onboarding.mjs` |
 | [ci/](ci) | git hooks, runner setup, provider CLI installs, CI failure audit, SDLC scoreboard |
 | [engines/](engines) | agent engine version pins and the bumper behind `engines.yml` |

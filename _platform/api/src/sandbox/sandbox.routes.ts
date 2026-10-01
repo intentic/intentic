@@ -56,6 +56,7 @@ import { mintSetupCodeFor, ReachabilityUnavailable } from "./setup-code.js";
 import { sendSetupLinkEmail } from "./setup-email.js";
 import { mintOwnerTicket, OWNER_TICKET_TTL_MS } from "@intentic/sandbox-contract/owner-ticket";
 import { ingressEnabled } from "./reachability.js";
+import { ADOPTION_TICKET_TTL_MS, mintAdoptionTicket, standingsOf } from "./recovery.js";
 
 const os = implement(apiContract).$context<OrpcContext>();
 
@@ -542,6 +543,35 @@ export const sandboxRoutes = {
         return {
             ticket: mintOwnerTicket(context.config.ingress.signingKey, { sandboxId, email: user.email.toLowerCase(), issuedAtMs }),
             expiresAt: new Date(issuedAtMs + OWNER_TICKET_TTL_MS).toISOString(),
+        };
+    }),
+    // The recovery screen's question about sandboxes the editor remembers and the list lacks (recovery.ts).
+    lookup: os.sandbox.lookup.handler(async ({ context, input }) => {
+        const user = requireUser(context);
+        return { sandboxes: await standingsOf(context.prisma, user.id, input.sandboxIds) };
+    }),
+    // Only for a sandbox the registry has no record of: one it holds is listed already or someone else's, and one it
+    // deleted stays deleted. The ticket is spent by the daemon at POST /sandbox/adopt, never by this browser.
+    adoptionTicket: os.sandbox.adoptionTicket.handler(async ({ context, input }) => {
+        const user = requireUser(context);
+        if (!ingressEnabled(context.config)) {
+            throw new ORPCError(`PRECONDITION_FAILED`, {
+                message: `this platform hands out no addresses, so it cannot vouch for a sandbox: connect it by its address instead`,
+            });
+        }
+        const [held] = await standingsOf(context.prisma, user.id, [input.sandboxId]);
+        if (held?.standing === `yours` || held?.standing === `other`) {
+            throw new ORPCError(`CONFLICT`, {
+                message: held.standing === `yours` ? `this sandbox is already in your list` : `this sandbox is registered to another account`,
+            });
+        }
+        if (held?.standing === `deleted`) {
+            throw new ORPCError(`NOT_FOUND`, { message: `this sandbox was deleted from intentic: restore it from the trash, or set up a new one` });
+        }
+        const issuedAtMs = Date.now();
+        return {
+            ticket: mintAdoptionTicket(context.config.ingress.signingKey, { sandboxId: input.sandboxId, userId: user.id, issuedAtMs }),
+            expiresAt: new Date(issuedAtMs + ADOPTION_TICKET_TTL_MS).toISOString(),
         };
     }),
     // A boot announcement cannot make setup uncancellable.

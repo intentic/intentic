@@ -38,8 +38,8 @@ flowchart LR
 - **sync** (`src/sync/`): `sync setup` enrolls this machine and runs Mutagen against the sandbox: over ssh to its
   sshd, reached through a loopback port tunnelled over a WebSocket, or, for a project whose sandbox container runs on
   this machine's own Docker engine, through Docker itself (below). It keeps a folder two-way synced (a project
-  copy-first, below), forwards every workspace port to the same localhost port, and fast-forwards local git clones
-  from the sandbox.
+  copy-first, below), forwards every workspace port to the same localhost port (see [Mirrored ports](#mirrored-ports)),
+  and fast-forwards local git clones from the sandbox.
 - A **project pairing** (`sync setup --remote-dir /work/<name> --project`, what the desktop app asks for when it
   makes a sandbox for a folder the owner picked) syncs that folder with `/work/<name>` rather than `/work`, and nothing
   of the sandbox's is written into it: no state backup session, no git bridge, and an ignore list that keeps a
@@ -113,6 +113,32 @@ flowchart LR
   for at once (`prepare-background`) and follows while it runs (ic's `update-preparing.json`).
 - The install shims only put a first binary down and run `setup`; `install.ts` decides the rest. `status --json`
   is what the desktop app's tray reads.
+
+### Mirrored ports
+
+Every workspace port a paired sandbox listens on is forwarded to the same port on this device's localhost
+([`sync/mirror.ts`](src/sync/mirror.ts)). The watcher reads each sandbox's ports every five seconds. A port it does not
+put on localhost is still reported, with its reason:
+
+- `busy`: something on this machine holds the number. That is a process bound to it now, a container on this
+  machine's Docker that publishes it, or a holder seen too recently (below).
+- `held-by-sandbox`: another sandbox paired here already mirrors it.
+- `ignored`: this device was told to leave the number alone, by `intentic-machine sync mirror ignore --sandbox <id>
+  --port <n>` (without `--sandbox`, for every pairing). `unignore` hands it back, and it is mirrored once it is free.
+
+Two rules cover what a bind probe cannot see, a holder that is down for a moment:
+
+- **A port any container on this machine's Docker publishes is never mirrored**: a running container's, and a stopped
+  one's whose restart policy (`always` or `unless-stopped`) brings it back by itself. A forward already on such a port
+  is taken down. Docker is asked (`docker ps`, then `docker inspect`) at most every 30 seconds; when it cannot be asked,
+  the next rule holds alone. A container's name appears in the agent's log, never in a report.
+- **A port seen busy stays skipped until it has been free for 15 minutes**, which covers a Docker restart. Its `busy`
+  row in `sync.json` is the memory, so an agent restarted meanwhile still holds the port off, and starts the 15 minutes
+  over. A port held by another paired sandbox's forward is filed `held-by-sandbox` instead, and waits for nothing.
+
+(2026-10-02) Both rules replaced trusting one instant's bind probe on 127.0.0.1, which handed the host's own Postgres
+port to a sandbox during a Docker Desktop restart. The agent came back first and found 5440 free before Docker had
+published it again; Docker's own publish then failed for good, and the host's API read the sandbox's empty database.
 
 ### Copy-first projects
 

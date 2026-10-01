@@ -11,6 +11,7 @@ const listMock = mocked(apiClient.sandbox.list);
 const { queryClient } = await import("../../../../lib/queryPersistence");
 const { setDaemonBoot } = await import("../../overview/useDaemonBoot");
 const { signalConnection, useSandbox } = await import("../useSandbox");
+const { rememberListed, rememberedAccount } = await import("../../recovery/deviceDirectory");
 
 const summary = (id: string): SandboxSummary => ({
     id,
@@ -100,6 +101,20 @@ describe(`useSandbox list/mutation race`, () => {
         resolveStale!({ sandboxes: [a, b] });
         await stale;
         expect(sandbox.sandboxes.value).toEqual([a]);
+    });
+
+    // Removed on purpose, so a later list that lacks it is no reason to offer it back (recovery/deviceDirectory.ts).
+    it(`forgets a sandbox this device remembers once its removal lands`, async () => {
+        const owner = { id: `u1`, email: `owner@example.com`, name: `Owner`, image: null };
+        const a = { ...summary(`a`), daemonUrl: `https://sandbox-82789f4106b4.sbx.intentic.dev` };
+        const b = { ...summary(`b`), daemonUrl: `https://sandbox-574ea8038415.sbx.intentic.dev` };
+        rememberListed(owner, [a, b], `id-1`);
+        listMock.mockResolvedValue({ sandboxes: [a, b] });
+        const sandbox = useSandbox();
+        await sandbox.refresh();
+        mocked(apiClient.sandbox.delete).mockResolvedValue({ ok: true });
+        await sandbox.remove(b.id);
+        expect(rememberedAccount(`owner@example.com`)?.sandboxes.map((entry) => entry.id)).toEqual([`a`]);
     });
 
     it(`keeps a removing row gone even when a mid-flight list() reads pre-delete server truth`, async () => {

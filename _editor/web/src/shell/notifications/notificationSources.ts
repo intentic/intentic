@@ -21,6 +21,9 @@ import { usePushFlow } from "../../features/workspace/push/usePushFlow";
 import { useUploadQueue } from "../../features/workspace/files/upload/useUploadQueue";
 import { useSandboxEstablished } from "../../features/sandbox/gates/established";
 import { t } from "@intentic/ui/i18n";
+import { useRouter } from "vue-router";
+import { useDeviceDirectory } from "../../features/sandbox/recovery/deviceDirectory";
+import { directMode } from "../../features/sandbox/recovery/directState";
 
 // Every standing fact and open question this app floats, declared in one place as pure conditions fed to `hold`;
 // the lane draws them, in this file's registration order. Registered once from the root, above the router and
@@ -215,6 +218,66 @@ export const startNotificationSources = (): void => {
               }
             : undefined,
     );
+
+    // Open on a sandbox without the platform (features/sandbox/recovery/directMode.ts): what still works and what waits,
+    // until the next session check the platform answers takes the window back.
+    const { refresh: checkSession } = useAuth();
+    hold(`direct-mode`, () =>
+        directMode.value
+            ? {
+                  kind: `condition`,
+                  tone: `info`,
+                  icon: `cloud`,
+                  title: t(`shell.notificationSources.connectedDirectly`),
+                  detail: t(`shell.notificationSources.connectedDirectlyDetail`),
+                  actions: [
+                      {
+                          label: t(`ui.action.tryAgain`),
+                          severity: `secondary` as const,
+                          run: async () => {
+                              // allow(silent-catch): still down is this card staying up, which says so already.
+                              await checkSession().catch(() => undefined);
+                          },
+                      },
+                  ],
+              }
+            : undefined,
+    );
+
+    // Sandboxes of this account's own the platform answered it has no record of while they are missing from its list:
+    // a registry that forgot them, not a deletion (that answer drops them, rememberSandboxes.ts). Put away for the page's
+    // life once dismissed.
+    const router = useRouter();
+    const { directory } = useDeviceDirectory();
+    const lostDismissed = ref(false);
+    const lost = computed(() => {
+        const email = user.value?.email.toLowerCase();
+        const account = email === undefined ? undefined : directory.value.accounts[email];
+        return (account?.sandboxes ?? []).filter((entry) => entry.missingSince !== undefined && entry.standing === `unknown` && entry.role === `owner`).length;
+    });
+    hold(`lost-sandboxes`, () => {
+        if (lost.value === 0 || lostDismissed.value || directMode.value || router.currentRoute.value.name === `recover`) {
+            return undefined;
+        }
+        return {
+            kind: `condition`,
+            tone: `warning`,
+            title: t(`shell.notificationSources.lostSandboxes`, { count: lost.value }, lost.value),
+            detail: t(`shell.notificationSources.lostSandboxesDetail`),
+            actions: [
+                {
+                    label: t(`shell.notificationSources.reconnect`),
+                    severity: `secondary` as const,
+                    run: async () => {
+                        await router.push(`/recover`);
+                    },
+                },
+            ],
+            dismiss: () => {
+                lostDismissed.value = true;
+            },
+        };
+    });
 
     // Catches a Google identity mismatch before the daemon binds; suppressed once denied or already allowed.
     hold(`account-mismatch`, () => {

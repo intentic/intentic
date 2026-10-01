@@ -21,6 +21,14 @@ flowchart LR
   database, snapshots, logs) and sits outside `/work`.
 - Routes are declared in `@intentic/sandbox-contract`, implemented in `*.routes.ts` and assembled in `src/router.ts`.
   `/events` pushes file, git and fleet changes to the browser.
+- It registers with the platform at boot (`system/boot/announce.ts`) and goes quiet once accepted. A refusal or an
+  unreachable platform is retried for as long as the daemon runs, every few seconds for ten minutes and every five
+  minutes after; only a deletion record (410) ends it. `/health`'s `announce` says which no it got (`reason`: `unknown`
+  or `deleted`) and which database took it (`identity`). The owner's Reconnect (`POST /platform/relink`,
+  `system/boot/relink.routes.ts`) registers at once, first having a platform with no record of the sandbox adopt it
+  with the ticket the owner's browser got and the grant the daemon holds. A browser opening the sandbox's own address
+  is sent to the app's `/open` on it (`GET /`, `system/boot/open-in-app.ts`). (2026-10-02) It used to give up after
+  ten minutes and wait for a restart, which nobody knew to do while the platform said the sandbox did not exist.
 - One turn: `agent/run/turn/turn-admission.ts` admits it, `turn-plan.ts` picks a runtime, it runs in the
   conversation's worktree (or the main tree, or a remote runner), and `conversations/land/land.ts` lands the result as
   uncommitted changes. Nothing checks the turn when it ends or its work after it lands: the dependency reconciler

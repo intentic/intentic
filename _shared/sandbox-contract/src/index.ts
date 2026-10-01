@@ -220,6 +220,7 @@ export * from "./schemas/panels.js";
 export * from "./schemas/personas.js";
 export * from "./schemas/privacy.js";
 export * from "./schemas/providers/plan-limits.js";
+export * from "./schemas/platform-link.js";
 export * from "./schemas/ports.js";
 export * from "./schemas/providers/provider-oauth.js";
 export * from "./schemas/providers/provider-subscriptions.js";

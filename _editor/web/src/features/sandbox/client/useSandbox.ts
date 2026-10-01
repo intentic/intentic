@@ -10,13 +10,15 @@ import { apiClient } from "../../../lib/useApi";
 import { withConcurrency } from "../../../lib/concurrency";
 import { applyConnectionSignal, type ConnectionSignal, type ConnectionState, initialConnection } from "../live/connection";
 import { daemonReady } from "../overview/useDaemonBoot";
+import { forgetAddress } from "../recovery/deviceDirectory";
+import { directMode } from "../recovery/directState";
 
 // Browser's view of the user's sandboxes, as a module singleton. The registry (sandbox.list) is the source of
 // truth for each daemon's URL/lastSeenAt; `reachable` stays browser-owned since only this browser knows if it
 // can reach the active one.
 
 // Static key for the full list, excluded from disk by queryPersistence (rows carry connect tokens).
-const SANDBOX_LIST_KEY = [`sandbox`, `list`];
+export const SANDBOX_LIST_KEY = [`sandbox`, `list`];
 
 // Ids with an in-flight remove(); the queryFn filters them out since a fetch mid-teardown reads pre-delete truth.
 const removing = new Set<string>();
@@ -77,13 +79,15 @@ const reconcileActive = (live: SandboxSummary[]): SandboxSummary[] => {
 };
 
 // Loads sandboxes through the shared cache: concurrent callers coalesce to one request, and a call within
-// staleTime serves from cache.
-const list = async (): Promise<SandboxSummary[]> => reconcileActive(await queryClient.fetchQuery(sandboxListQuery));
+// staleTime serves from cache. Opened directly (recovery/directMode.ts), the list is the one this device remembers and
+// the platform is not asked: it is down, and a navigation a minute in must not send the reader back to say so.
+const list = async (): Promise<SandboxSummary[]> => reconcileActive(directMode.value ? sandboxes.value : await queryClient.fetchQuery(sandboxListQuery));
 
 // Forces a fresh list past staleTime, single-flighted so overlapping callers (onboarding, invite accept,
 // liveness recovery) share one round-trip.
 const refresh = withConcurrency<void, SandboxSummary[]>(
-    async (): Promise<SandboxSummary[]> => reconcileActive(await queryClient.fetchQuery({ ...sandboxListQuery, staleTime: 0 })),
+    async (): Promise<SandboxSummary[]> =>
+        reconcileActive(directMode.value ? sandboxes.value : await queryClient.fetchQuery({ ...sandboxListQuery, staleTime: 0 })),
     { mode: `singleFlight`, key: () => `sandbox.list` },
 );
 
@@ -229,6 +233,10 @@ const remove = async (id: string): Promise<void> => {
         throw error;
     }
     removing.delete(id);
+    // Removed on purpose, so not something to offer back if a later list lacks it (recovery/deviceDirectory.ts).
+    if (target.daemonUrl !== null) {
+        forgetAddress(target.daemonUrl);
+    }
 };
 
 export function useSandbox() {

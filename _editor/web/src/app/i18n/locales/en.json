@@ -2799,7 +2799,8 @@
             "login": "Login",
             "setup": "Setup",
             "signInToIntentic": "Sign in to Intentic",
-            "signingIn": "Signing in…"
+            "signingIn": "Signing in…",
+            "reconnectSandboxes": "Reconnect your sandboxes"
         }
     },
     "sandbox": {
@@ -5198,6 +5199,34 @@
             "fixInAppNote": "or run the command on another computer:",
             "showCommand": "Show the command for that computer",
             "fixCommandLabel": "Find and fix what's wrong"
+        },
+        "recover": {
+            "title": "Your sandboxes are still running",
+            "lostTrack": "intentic lost track of these sandboxes, but they still run on their machines. Reconnect them to keep working where you left off.",
+            "recordsReset": "intentic's records were reset, but your sandboxes still run on their machines. Reconnect them to keep working where you left off.",
+            "checking": "Checking whether it answers…",
+            "recoverable": "Running. intentic has no record of it.",
+            "reconnecting": "Reconnecting…",
+            "reconnected": "Back in your list.",
+            "reconnectedByAddress": "Back in your list by its address. Update this sandbox to restore its full link with intentic.",
+            "offline": "Not answering. Start it on its machine, then check again.",
+            "shared": "Shared with you. Ask its owner to invite you again.",
+            "reconnect": "Reconnect",
+            "reconnectAll": "Reconnect all",
+            "checkAgain": "Check again",
+            "forget": "Forget",
+            "openWorkspace": "Open workspace",
+            "setUpNew": "Set up a new sandbox instead"
+        },
+        "directSandboxes": {
+            "title": "Your sandboxes on this device",
+            "detail": "They don't need intentic to run. Open one directly: sharing, billing and new sandboxes come back when intentic does.",
+            "linked": "The sandbox you opened",
+            "checking": "Checking…",
+            "answering": "Answering",
+            "silent": "Not answering",
+            "open": "Open",
+            "signInFirst": "Sign in with Google to open it."
         }
     },
     "settings": {
@@ -5766,7 +5795,12 @@
             "transportHint": "HTTP/1.1: 6 live streams at once · re-checked every minute",
             "uploadedFailed": "Uploaded {done} of {count} · {failed} failed",
             "uploading": "Uploading {done} of {count}",
-            "workspaceStillHere": "Your workspace is still here."
+            "workspaceStillHere": "Your workspace is still here.",
+            "connectedDirectly": "Connected directly",
+            "connectedDirectlyDetail": "intentic isn't reachable, so this sandbox is open without it. Sharing, billing and new sandboxes come back when it is.",
+            "lostSandboxes": "intentic lost track of a sandbox | intentic lost track of {count} sandboxes",
+            "lostSandboxesDetail": "Still running on its machine, but missing from your list. Reconnect to bring it back.",
+            "reconnect": "Reconnect"
         },
         "pushMenuRow": {
             "addToHomeScreen": "Add to your Home Screen to get notified",

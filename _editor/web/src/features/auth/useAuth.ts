@@ -8,6 +8,8 @@ import { clearPersistedQueries } from "../../lib/queryPersistence";
 import { useSandboxSession } from "../sandbox/session/sandboxSession";
 import { useGoogleIdentity } from "./useGoogleIdentity";
 import { invalidatePlatformAuth, onPlatformAuthInvalidated } from "./authLifecycle";
+import { forgetAccount } from "../sandbox/recovery/deviceDirectory";
+import { directMode } from "../sandbox/recovery/directState";
 
 // Module-level Better Auth client, pointed at the API origin; callbackURL still returns to the SPA's own origin.
 const client = createAuthClient({ baseURL: environment.api.url });
@@ -22,6 +24,7 @@ let refreshing: Promise<User | null> | undefined;
 onPlatformAuthInvalidated(async () => {
     // Signed-in runtime stops first, before storage/cache cleanup, so no live daemon stream outlives the teardown.
     user.value = null;
+    directMode.value = false;
     clearCredential();
     clearSessions();
     // The desktop app's local windows list this account's sandboxes from what this page told it; none are theirs now.
@@ -46,6 +49,8 @@ const refresh = async (): Promise<User | null> => {
             return null;
         }
         user.value = { id: data.user.id, email: data.user.email, name: data.user.name, image: data.user.image ?? null };
+        // The platform answered with a session: whatever was opened directly is on it again.
+        directMode.value = false;
         return user.value;
     })().finally(() => {
         refreshing = undefined;
@@ -77,7 +82,19 @@ const signOut = async (): Promise<void> => {
     if (error) {
         throw new Error(error.message ?? `Sign out failed.`);
     }
+    // Only an explicit sign-out: a refused session (the teardown below) is when this device's memory is needed most.
+    if (user.value !== null) {
+        forgetAccount(user.value.email);
+    }
     await invalidatePlatformAuth();
+};
+
+// Opens this window as an account the platform cannot vouch for right now (recovery/directMode.ts): the account this
+// device last saw it list, whole, so everything keyed by it reads as before. The next session check the platform
+// answers replaces it, or signs out.
+const enterDirect = (account: User): void => {
+    user.value = account;
+    directMode.value = true;
 };
 
 // Settings profile update via Better Auth's update-user endpoint (validated server-side by auth.ts's user.update
@@ -117,7 +134,7 @@ globalThis.document?.addEventListener(`visibilitychange`, () => {
 });
 
 export function useAuth() {
-    return { user, refresh, signInWithGoogle, signInWithGoogleCredential, signOut, updateProfile, deleteAccount };
+    return { user, refresh, signInWithGoogle, signInWithGoogleCredential, signOut, updateProfile, deleteAccount, enterDirect };
 }
 
 // One signed-in account per window: a hot update that re-ran this module (a change to anything it imports, such as

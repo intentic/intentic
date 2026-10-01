@@ -4,7 +4,9 @@ import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { createApp } from "./app.js";
 import { configSchema, type Config } from "./config.js";
 import { HOST_REPORT_INTERVAL_MS } from "./sandbox/host-report.js";
-import { testIngressConfig } from "./testing.js";
+import { INGRESS_TEST_PRIVATE_KEY, testIngressConfig } from "./testing.js";
+import { mintReachabilityGrant } from "@intentic/sandbox-contract/ingress-contract";
+import { mintAdoptionTicket } from "./sandbox/recovery.js";
 import type { Logger } from "pino";
 import { Prisma, type PrismaClient } from "@intentic/prisma";
 
@@ -479,8 +481,44 @@ describe(`POST /sandbox/announce`, () => {
         expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ daemonVersion: null }) }));
     });
 
+    // A registry that forgot the sandbox says 404 and the daemon keeps asking; one that deleted it says 410, and that is
+    // final. Only the token's holder can tell the two apart, so neither is an oracle.
+    it(`410s a token whose sandbox was deleted, by the deletion record of the id it digests to`, async () => {
+        const tombstone = jest.fn().mockResolvedValue({ tunnelId: TUNNEL_ID });
+        const prisma = fakePrisma({ sandbox: { findUnique: jest.fn().mockResolvedValue(null) }, sandboxTombstone: { findUnique: tombstone } });
+        const res = await announce(prisma, `tok`, `https://${HOSTNAME}`);
+        expect(res.status).toBe(410);
+        expect(await res.text()).toBe(`error: this sandbox was deleted`);
+        expect(tombstone).toHaveBeenCalledWith({ where: { tunnelId: TUNNEL_ID }, select: { tunnelId: true } });
+    });
+
+    it(`answers an accepted announce with the identity of the database that took it`, async () => {
+        const prisma = fakePrisma({
+            sandbox: {
+                findUnique: jest.fn().mockResolvedValue({ id: `s1`, token: `tok`, setupPayload: null, daemonUrl: null, hosted: null }),
+                updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+            },
+            platformIdentity: { findUnique: jest.fn().mockResolvedValue({ id: 1, identity: `a0028692-7cf2-4ef4-8429-86a98d60be8a`, createdAt: new Date(0) }) },
+        });
+        const res = await announce(prisma, `tok`, `https://sandbox-abc.intentic.dev`);
+        expect(await res.json()).toEqual({ ok: true, identity: `a0028692-7cf2-4ef4-8429-86a98d60be8a` });
+    });
+
+    it(`still accepts the announce when the database cannot say which it is`, async () => {
+        const prisma = fakePrisma({
+            sandbox: {
+                findUnique: jest.fn().mockResolvedValue({ id: `s1`, token: `tok`, setupPayload: null, daemonUrl: null, hosted: null }),
+                updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+            },
+            platformIdentity: { findUnique: jest.fn().mockRejectedValue(new Error(`relation "platform_identity" does not exist`)) },
+        });
+        const res = await announce(prisma, `tok`, `https://sandbox-abc.intentic.dev`);
+        expect(res.status).toBe(200);
+        expect(await res.json()).toEqual({ ok: true });
+    });
+
     it(`404s an unknown token with no oracle`, async () => {
-        const prisma = fakePrisma({ sandbox: { findUnique: jest.fn().mockResolvedValue(null) } });
+        const prisma = fakePrisma({ sandbox: { findUnique: jest.fn().mockResolvedValue(null) }, sandboxTombstone: { findUnique: jest.fn().mockResolvedValue(null) } });
         expect((await announce(prisma, `nope`, `https://sandbox-abc.intentic.dev`)).status).toBe(404);
     });
 
@@ -666,9 +704,24 @@ describe(`GET /api/reachability/:sandboxId`, () => {
         expect(await own.json()).toEqual({ ok: true, lane: `tunnel` });
     });
 
-    it(`404s a sandbox that does not exist`, async () => {
-        const res = await ask(fakePrisma({ sandbox: { findUnique: jest.fn().mockResolvedValue(null) } }), id);
+    // The one refusal: a deletion record. 404 is what the edge refuses a tunnel on, so it means exactly this.
+    it(`404s a sandbox whose id has a deletion record`, async () => {
+        const tombstone = jest.fn().mockResolvedValue({ tunnelId: id });
+        const res = await ask(fakePrisma({ sandbox: { findUnique: jest.fn().mockResolvedValue(null) }, sandboxTombstone: { findUnique: tombstone } }), id);
         expect(res.status).toBe(404);
+        expect(await res.json()).toEqual({ error: `deleted sandbox` });
+        expect(tombstone).toHaveBeenCalledWith({ where: { tunnelId: id }, select: { tunnelId: true } });
+    });
+
+    // Absence is not deletion: a restored or foreign database knows nothing of a sandbox still holding this platform's
+    // grant, and refusing it would take that sandbox off the internet within a minute of the edge asking.
+    it(`serves an id it has neither a row nor a deletion record for, as unknown`, async () => {
+        const res = await ask(
+            fakePrisma({ sandbox: { findUnique: jest.fn().mockResolvedValue(null) }, sandboxTombstone: { findUnique: jest.fn().mockResolvedValue(null) } }),
+            id,
+        );
+        expect(res.status).toBe(200);
+        expect(await res.json()).toEqual({ ok: true, lane: `tunnel`, known: false });
     });
 
     it(`404s anything that isn't a 12-hex id, without querying`, async () => {
@@ -685,6 +738,80 @@ describe(`GET /api/reachability/:sandboxId`, () => {
         const res = await ask(fakePrisma({ sandbox: { findUnique: jest.fn().mockResolvedValue({ id: `s1`, hosted: null }) } }), id);
         expect(res.status).toBe(200);
         expect(await res.json()).toEqual({ ok: true, lane: `tunnel` });
+    });
+});
+
+// Which database the platform reads, asked by a browser before anyone signs in; a database that cannot say is a 503,
+// never an identity made up for it.
+describe(`GET /api/identity`, () => {
+    const ask = (prisma: PrismaClient) => createApp(config, prisma, logger).app.request(`/api/identity`);
+
+    it(`answers the database's identity and when it was given it, with no credential presented`, async () => {
+        const findUnique = jest.fn().mockResolvedValue({ id: 1, identity: `a0028692-7cf2-4ef4-8429-86a98d60be8a`, createdAt: new Date(`2026-10-01T22:42:40.466Z`) });
+        const res = await ask(fakePrisma({ platformIdentity: { findUnique } }));
+        expect(res.status).toBe(200);
+        expect(await res.json()).toEqual({ identity: `a0028692-7cf2-4ef4-8429-86a98d60be8a`, since: `2026-10-01T22:42:40.466Z` });
+    });
+
+    it(`503s when the database cannot say`, async () => {
+        const res = await ask(fakePrisma({ platformIdentity: { findUnique: jest.fn().mockRejectedValue(new Error(`connection refused`)) } }));
+        expect(res.status).toBe(503);
+        expect(await res.json()).toEqual({ error: `the platform's database cannot say which it is` });
+    });
+});
+
+// The daemon's half of a reconnect (recovery.ts decides; this pins what the route reads and how it answers).
+describe(`POST /sandbox/adopt`, () => {
+    const adopt = (prisma: PrismaClient, token: string | undefined, body: Record<string, unknown>) => {
+        const headers = new Headers({ "content-type": `application/json` });
+        if (token !== undefined) {
+            headers.set(`x-intentic-connect`, token);
+        }
+        return createApp(config, prisma, logger).app.request(`/sandbox/adopt`, { method: `POST`, headers, body: JSON.stringify(body) });
+    };
+    const body = () => ({
+        ticket: mintAdoptionTicket(INGRESS_TEST_PRIVATE_KEY, { sandboxId: TUNNEL_ID, userId: `u1`, issuedAtMs: Date.now() }),
+        grant: mintReachabilityGrant(INGRESS_TEST_PRIVATE_KEY, TUNNEL_ID, Date.now()),
+        daemonUrl: `https://${HOSTNAME}`,
+        owner: `owner@example.com`,
+        name: `intentic`,
+        version: `1.2.3`,
+    });
+    const registry = (tombstoned: boolean) => {
+        const create = jest.fn().mockResolvedValue({ id: `adopted` });
+        const prisma = fakePrisma({
+            user: { findUnique: jest.fn().mockResolvedValue({ email: `owner@example.com` }) },
+            sandbox: { findUnique: jest.fn().mockResolvedValue(null), create },
+            sandboxTombstone: { findUnique: jest.fn().mockResolvedValue(tombstoned ? { tunnelId: TUNNEL_ID } : null) },
+            platformIdentity: { findUnique: jest.fn().mockResolvedValue({ id: 1, identity: `id-1`, createdAt: new Date(0) }) },
+        });
+        return { prisma, create };
+    };
+
+    it(`makes the row again and answers with it and the database's identity`, async () => {
+        const { prisma, create } = registry(false);
+        const res = await adopt(prisma, `tok`, body());
+        expect(res.status).toBe(200);
+        expect(await res.json()).toEqual({ ok: true, sandboxId: `adopted`, identity: `id-1` });
+        expect(create).toHaveBeenCalledTimes(1);
+    });
+
+    it(`answers a refusal with its status and reason`, async () => {
+        const { prisma, create } = registry(true);
+        const res = await adopt(prisma, `tok`, body());
+        expect(res.status).toBe(410);
+        expect(await res.text()).toBe(`error: this sandbox was deleted from intentic: restore it from the trash, or set up a new one`);
+        expect(create).not.toHaveBeenCalled();
+    });
+
+    it(`refuses a missing token or a malformed body before reading the registry`, async () => {
+        const { prisma, create } = registry(false);
+        expect((await adopt(prisma, undefined, body())).status).toBe(400);
+        const missingGrant = await adopt(prisma, `tok`, { ...body(), grant: undefined });
+        expect(missingGrant.status).toBe(400);
+        expect(await missingGrant.text()).toBe(`error: an adoption names its ticket, its grant and an https daemonUrl`);
+        expect((await adopt(prisma, `tok`, { ...body(), daemonUrl: `http://${HOSTNAME}` })).status).toBe(400);
+        expect(create).not.toHaveBeenCalled();
     });
 });
 

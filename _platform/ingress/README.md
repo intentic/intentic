@@ -19,7 +19,9 @@ flowchart LR
 - No database and nothing durable: the tunnel registry is an in-memory map, so a restart drops every tunnel and each
   front redials. The newest tunnel for an id displaces the older one.
 - Holds only the platform's Ed25519 public key, so it verifies grants and can never mint one. Revocation is a
-  cached, fail-open `GET /api/reachability/<id>` to the api, at registration and on a miss.
+  cached, fail-open `GET /api/reachability/<id>` to the api, at registration and on a miss. A 404 there is a deletion
+  record and nothing else: the api answers 200 (`known: false`) for an id it has no record of either way, so an api
+  reading a database that forgot a sandbox does not take it off the edge (2026-10-02).
 - Routes on each request's Host, since HTTP/2 coalesces many hostnames onto one connection. A sandbox with no tunnel
   answers 502 with an `x-intentic-edge` header naming why (`edge-verdict.ts` in the contract), which the editor reads.
 - What the edge serves beyond HTTPS over TCP is declared, never probed for: binding the QUIC door

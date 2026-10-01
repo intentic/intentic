@@ -14,6 +14,10 @@ export const configSchema = z.object({
         url: z.string().min(1).meta({ secret: true }),
         // Per-process pg pool cap: replicas x poolMax must stay under Postgres max_connections with headroom.
         poolMax: z.coerce.number().int().positive().default(10),
+        // The identity of the database this deployment serves (platform_identity, logged at every boot). Set, the api
+        // refuses to start on any other: a platform reading a database not its own tells every browser its sandboxes are
+        // gone and points its reapers at their machines. Empty accepts whatever DATABASE_URL reaches (development).
+        expectedIdentity: z.string().default(``),
     }),
     betterAuth: z.object({
         // Also the key material for the hosted-standing hash (HKDF, carried-standing.ts): rotating it signs everyone out

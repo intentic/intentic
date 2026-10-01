@@ -22,6 +22,11 @@ flowchart LR
   through `sandboxRpc`, with a daemon-minted session that a Google ID token or a passkey establishes
   (`sandboxSession.ts`). The platform is not in that path. The daemon is reached over its tunnel, or over a
   certified loopback name when it runs on this machine (`features/sandbox/secrets/endpoint.ts`).
+- **When the platform is down or forgets.** Only the sandbox list needs the platform, so this device remembers it per
+  account, names and addresses only (`features/sandbox/recovery`). The outage screen opens a remembered sandbox
+  directly, the workspace running unchanged on that remembered list; a list that offers nothing to open while this
+  device remembers sandboxes of the account's own goes to `/recover` rather than onboarding; and a sandbox's own
+  address opens it through `/open?url=`. [recovery/README.md](src/features/sandbox/recovery/README.md) has the rules.
 - **Personas.** `/sandbox/personas` shows square selectors with the selected persona's editor below. Settings and
   the popped-out chat share `components/PersonaTile.vue` for the face, label and selected appearance; each view owns
   its selection and actions. Settings wraps the shared tile in `PersonaSelector.vue` for renaming and removal directly

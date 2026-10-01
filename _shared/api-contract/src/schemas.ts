@@ -751,6 +751,37 @@ export const OwnerTicketSchema = z.object({
 export type OwnerTicket = z.infer<typeof OwnerTicketSchema>;
 export type AddressOffer = z.infer<typeof AddressOfferSchema>;
 
+// What the registry holds of a sandbox named by its 12-hex id (the `sandboxId` its daemon's /health reports), for the
+// editor's recovery: `yours` the caller's own row, `other` another account's (a share that left the list included),
+// `deleted` a deletion record, `unknown` neither, which is how a registry that forgot a sandbox answers. Only an
+// `unknown` sandbox can be adopted.
+export const SandboxStandingSchema = z.enum(["yours", "other", "deleted", "unknown"]);
+export type SandboxStanding = z.infer<typeof SandboxStandingSchema>;
+
+export const SandboxLookupSchema = z.object({
+    // In the order asked, ids that are not 12-hex dropped; `id` is the caller's row id, on `yours` only.
+    sandboxes: z.array(z.object({ sandboxId: z.string(), standing: SandboxStandingSchema, id: z.string().optional() })),
+});
+export type SandboxLookup = z.infer<typeof SandboxLookupSchema>;
+
+// The owner's say-so for one sandbox's adoption, carried opaque by the browser to the daemon and by the daemon to
+// POST /sandbox/adopt; short-lived like the owner ticket.
+export const AdoptionTicketSchema = z.object({
+    ticket: z.string(),
+    // ISO, the moment it stops verifying.
+    expiresAt: z.string(),
+});
+export type AdoptionTicket = z.infer<typeof AdoptionTicketSchema>;
+
+// Which database the platform is reading (GET /api/identity): random per database, so a different one means the
+// registry is not the one a browser or a daemon last spoke to, however healthy it looks.
+export const PlatformIdentitySchema = z.object({
+    identity: z.string(),
+    // ISO, when this database was given its identity.
+    since: z.string(),
+});
+export type PlatformIdentityAnswer = z.infer<typeof PlatformIdentitySchema>;
+
 export const SandboxSummarySchema = z.object({
     id: z.string(),
     name: z.string(),

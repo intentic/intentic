@@ -2561,7 +2561,8 @@
             "login": "Logowanie",
             "setup": "Konfiguracja",
             "signInToIntentic": "Zaloguj się do Intentic",
-            "signingIn": "Logowanie…"
+            "signingIn": "Logowanie…",
+            "reconnectSandboxes": "Połącz ponownie swoje sandboxy"
         }
     },
     "sandbox": {
@@ -4960,6 +4961,34 @@
             "fixInAppNote": "albo uruchom polecenie na innym komputerze:",
             "showCommand": "Pokaż polecenie dla tamtego komputera",
             "fixCommandLabel": "Znajdź i napraw problem"
+        },
+        "recover": {
+            "title": "Twoje sandboxy nadal działają",
+            "lostTrack": "intentic stracił kontakt z tymi sandboxami, ale nadal działają one na swoich maszynach. Połącz je ponownie, aby wrócić do pracy tam, gdzie została przerwana.",
+            "recordsReset": "Dane intentic zostały zresetowane, ale Twoje sandboxy nadal działają na swoich maszynach. Połącz je ponownie, aby wrócić do pracy tam, gdzie została przerwana.",
+            "checking": "Sprawdzanie, czy odpowiada…",
+            "recoverable": "Działa. intentic nie ma o nim żadnego wpisu.",
+            "reconnecting": "Ponowne łączenie…",
+            "reconnected": "Z powrotem na Twojej liście.",
+            "reconnectedByAddress": "Z powrotem na Twojej liście, po adresie. Zaktualizuj ten sandbox, aby przywrócić jego pełne połączenie z intentic.",
+            "offline": "Nie odpowiada. Uruchom go na jego maszynie i sprawdź ponownie.",
+            "shared": "Udostępniony Tobie. Poproś właściciela o ponowne zaproszenie.",
+            "reconnect": "Połącz ponownie",
+            "reconnectAll": "Połącz wszystkie",
+            "checkAgain": "Sprawdź ponownie",
+            "forget": "Zapomnij",
+            "openWorkspace": "Otwórz przestrzeń roboczą",
+            "setUpNew": "Zamiast tego skonfiguruj nowy sandbox"
+        },
+        "directSandboxes": {
+            "title": "Twoje sandboxy na tym urządzeniu",
+            "detail": "Do działania nie potrzebują intentic. Otwórz jeden bezpośrednio: udostępnianie, płatności i nowe sandboxy wrócą razem z intentic.",
+            "linked": "Sandbox, który otwarto",
+            "checking": "Sprawdzanie…",
+            "answering": "Odpowiada",
+            "silent": "Nie odpowiada",
+            "open": "Otwórz",
+            "signInFirst": "Zaloguj się przez Google, aby go otworzyć."
         }
     },
     "settings": {
@@ -5525,7 +5554,12 @@
             "transportHint": "HTTP/1.1: 6 strumieni naraz · sprawdzane co minutę",
             "uploadedFailed": "Wysłano {done} z {count} · {failed} nieudanych",
             "uploading": "Wysyłanie {done} z {count}",
-            "workspaceStillHere": "Twoja przestrzeń robocza wciąż tu jest."
+            "workspaceStillHere": "Twoja przestrzeń robocza wciąż tu jest.",
+            "connectedDirectly": "Połączono bezpośrednio",
+            "connectedDirectlyDetail": "intentic jest nieosiągalny, więc ten sandbox działa bez niego. Udostępnianie, płatności i nowe sandboxy wrócą, gdy znów będzie dostępny.",
+            "lostSandboxes": "intentic stracił kontakt z sandboxem | intentic stracił kontakt z {count} sandboxami | intentic stracił kontakt z {count} sandboxami",
+            "lostSandboxesDetail": "Nadal działa na swojej maszynie, ale nie ma go na Twojej liście. Połącz ponownie, aby go przywrócić.",
+            "reconnect": "Połącz ponownie"
         },
         "pushMenuRow": {
             "addToHomeScreen": "Dodaj do ekranu głównego, żeby dostawać powiadomienia",

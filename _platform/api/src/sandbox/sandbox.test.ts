@@ -9,6 +9,7 @@ import { INGRESS_TEST_PUBLIC_KEY, testIngressConfig } from "../testing.js";
 import { RECOVERY_WINDOW_MS } from "../durations.js";
 import { FIX_CODE_TTL_MS } from "./host-report.js";
 import { sandboxRoutes } from "./sandbox.routes.js";
+import { verifyAdoptionTicket } from "./recovery.js";
 
 const user = { id: `u1`, email: `owner@example.com`, name: `Owner`, image: null };
 const sandboxRow = {
@@ -758,5 +759,71 @@ describe(`sandbox.list and the host report`, () => {
             { id: `s2`, role: `owner`, hostReport: null },
             { id: `s3`, role: `owner`, hostReport: null },
         ]);
+    });
+});
+
+// The recovery screen's two questions of the registry (recovery.ts): what it holds of ids the editor remembers, and a
+// ticket to adopt one it holds nothing of. A ticket is never minted for an id it holds (anyone's) or deleted.
+describe(`recovery`, () => {
+    const SANDBOX = `0123456789ab`;
+    const registry = (rows: { id: string; tunnelId: string; ownerId: string }[], tombstones: string[]) =>
+        fakePrisma({
+            sandbox: { findMany: jest.fn().mockResolvedValue(rows) },
+            sandboxTombstone: { findMany: jest.fn().mockResolvedValue(tombstones.map((tunnelId) => ({ tunnelId }))) },
+        });
+    // The refusal a call ended in, by code and the sentence the screen shows.
+    const refusalOf = async (promise: Promise<unknown>) => {
+        const thrown = await promise.then(
+            () => undefined,
+            (error: Error) => error,
+        );
+        if (!(thrown instanceof ORPCError)) {
+            throw new Error(`expected an ORPCError, got ${String(thrown)}`);
+        }
+        return { code: thrown.code, message: thrown.message };
+    };
+
+    it(`looks remembered ids up for the signed-in account`, async () => {
+        const prisma = registry([{ id: `s1`, tunnelId: SANDBOX, ownerId: `u1` }], [`cccccccccccc`]);
+        expect(await call(sandboxRoutes.lookup, { sandboxIds: [SANDBOX, `bbbbbbbbbbbb`, `cccccccccccc`] }, { context: context({ prisma }) })).toEqual({
+            sandboxes: [
+                { sandboxId: SANDBOX, standing: `yours`, id: `s1` },
+                { sandboxId: `bbbbbbbbbbbb`, standing: `unknown` },
+                { sandboxId: `cccccccccccc`, standing: `deleted` },
+            ],
+        });
+    });
+
+    it(`tickets an id the registry has no record of, for the signed-in account`, async () => {
+        const answer = await call(sandboxRoutes.adoptionTicket, { sandboxId: SANDBOX }, { context: context({ prisma: registry([], []) }) });
+        expect(verifyAdoptionTicket(INGRESS_TEST_PUBLIC_KEY, answer.ticket, Date.now())).toEqual({
+            sandboxId: SANDBOX,
+            userId: `u1`,
+            expiresAt: Math.floor(Date.parse(answer.expiresAt) / 1000) * 1000,
+        });
+    });
+
+    it(`refuses a ticket for an id the registry holds or deleted`, async () => {
+        const ask = (prisma: OrpcContext[`prisma`]) => refusalOf(call(sandboxRoutes.adoptionTicket, { sandboxId: SANDBOX }, { context: context({ prisma }) }));
+        expect(await ask(registry([{ id: `s1`, tunnelId: SANDBOX, ownerId: `u1` }], []))).toEqual({ code: `CONFLICT`, message: `this sandbox is already in your list` });
+        expect(await ask(registry([{ id: `s9`, tunnelId: SANDBOX, ownerId: `u2` }], []))).toEqual({
+            code: `CONFLICT`,
+            message: `this sandbox is registered to another account`,
+        });
+        expect(await ask(registry([], [SANDBOX]))).toEqual({
+            code: `NOT_FOUND`,
+            message: `this sandbox was deleted from intentic: restore it from the trash, or set up a new one`,
+        });
+    });
+
+    it(`refuses on a platform that hands out no addresses, which has no grant to vouch with`, async () => {
+        const addressless = context({ prisma: registry([], []) });
+        const refused = await refusalOf(
+            call(sandboxRoutes.adoptionTicket, { sandboxId: SANDBOX }, { context: { ...addressless, config: { ...addressless.config, ingress: { ...addressless.config.ingress, signingKey: `` } } } }),
+        );
+        expect(refused).toEqual({
+            code: `PRECONDITION_FAILED`,
+            message: `this platform hands out no addresses, so it cannot vouch for a sandbox: connect it by its address instead`,
+        });
     });
 });

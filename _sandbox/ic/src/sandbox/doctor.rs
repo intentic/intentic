@@ -333,6 +333,9 @@ fn classify_announce(health: Option<&serde_json::Value>, container: &str) -> Ver
     let retrying = announce
         .get("retrying")
         .and_then(serde_json::Value::as_bool);
+    // Which no, from a daemon new enough to say: `unknown` (the platform has no record of the sandbox, which one that
+    // lost track of it says too) or `deleted` (a deletion record, which ends the retrying).
+    let reason = announce.get("reason").and_then(serde_json::Value::as_str);
     match state {
         "registered" => Verdict::Settled(Outcome::Pass),
         "off" => Verdict::Settled(Outcome::Skip {
@@ -346,14 +349,22 @@ fn classify_announce(health: Option<&serde_json::Value>, container: &str) -> Ver
             ),
         }),
         "rejected" | "unreachable" => {
-            let remedy = if retrying == Some(false) {
-                format!(
+            let remedy = match reason {
+                Some("deleted") => {
+                    "it was deleted from intentic — restore it from the trash in the app, or set it up again."
+                        .to_string()
+                }
+                Some("unknown") => {
+                    "open the app and press Reconnect to have the platform take it back; the daemon keeps retrying meanwhile."
+                        .to_string()
+                }
+                // A daemon from before it retried forever, out of its window.
+                _ if retrying == Some(false) => format!(
                     "the daemon stopped retrying — restart it to retry: ic sandbox restart {}",
                     slug_of(container)
-                )
-            } else {
-                "it is still retrying; if this persists, check the container's outbound network."
-                    .to_string()
+                ),
+                _ => "it is still retrying; if this persists, check the container's outbound network."
+                    .to_string(),
             };
             Verdict::Pending(Outcome::Fail {
                 problem: detail,
@@ -564,6 +575,31 @@ mod tests {
                 assert!(remedy.contains("ic sandbox restart work"));
             }
             _ => panic!("a given-up registration must fail with the restart remedy"),
+        }
+
+        // A platform with no record of the sandbox (forgotten or never known) is the owner's Reconnect to fix; a
+        // deletion record is final, and restarting would only be refused again.
+        let unknown = serde_json::json!({ "announce": {
+            "state": "rejected", "reason": "unknown", "retrying": true,
+            "detail": "the platform has no record of this sandbox"
+        }});
+        match classify_announce(Some(&unknown), "c") {
+            Verdict::Pending(Outcome::Fail { remedy, .. }) => assert_eq!(
+                remedy,
+                "open the app and press Reconnect to have the platform take it back; the daemon keeps retrying meanwhile."
+            ),
+            _ => panic!("an unknown sandbox fails with the Reconnect remedy"),
+        }
+        let deleted = serde_json::json!({ "announce": {
+            "state": "rejected", "reason": "deleted", "retrying": false,
+            "detail": "the platform says this sandbox was deleted"
+        }});
+        match classify_announce(Some(&deleted), "c") {
+            Verdict::Pending(Outcome::Fail { remedy, .. }) => assert_eq!(
+                remedy,
+                "it was deleted from intentic — restore it from the trash in the app, or set it up again."
+            ),
+            _ => panic!("a deleted sandbox fails with the restore remedy, never the restart one"),
         }
 
         // An older daemon has no block: say the reading is unavailable, never invent a verdict.

@@ -8,6 +8,9 @@ import { runnerTranslatorPath } from "./runner-protocol.js";
 export const RAW_ROUTES = {
     // The "is a daemon there" probe every flow uses; it names the sandbox and says whether it is still converging.
     "GET /health": { auth: "door", beforeBoot: true },
+    // A person opening this sandbox's own address in a browser: sent to the app's /open on it, the address being what
+    // they may still hold when the platform has lost the rest. Anything else gets the same 401 as before it existed.
+    "GET /": { auth: "door", beforeBoot: true },
     "GET /diff/raw": { lane: "bulk" },
     // Arming the dictation model is a read any tier makes; dictating is writing a message, the collaborator's grant.
     "GET /speech/status": { guest: true },
@@ -59,6 +62,8 @@ export const RAW_ROUTES = {
     "POST /members": { control: "never" },
     "DELETE /members": { control: "never" },
     "DELETE /members/self": { floor: "viewer", guest: true, control: "never" },
+    // The owner's Reconnect: register with the platform now, having it adopt the sandbox first when it holds no record.
+    "POST /platform/relink": { control: "never" },
     "GET /environment": {},
     "GET /environment/contents": {},
     "POST /environment/approve": {},

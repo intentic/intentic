@@ -12,6 +12,8 @@ import { createPasskeyRoutes } from "./auth/passkeys/passkeys.routes.js";
 import { createAccessRoutes } from "./auth/access.routes.js";
 import { createControlTokenRoutes } from "./auth/tokens/control-tokens.routes.js";
 import { createMembersRoutes } from "./auth/members/members.routes.js";
+import { openInApp } from "./system/boot/open-in-app.js";
+import { createRelinkRoute } from "./system/boot/relink.routes.js";
 import { memberRefusal } from "./auth/role-floor.js";
 import { admitByGrant, grantsOf } from "./auth/grants.js";
 import { createAutomationFireRoute } from "./automations/fire.routes.js";
@@ -278,6 +280,9 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         }),
     );
 
+    // A browser opening this sandbox's own address lands in the app on it (system/boot/open-in-app.ts).
+    serve("GET /", (c) => openInApp(services.config, c));
+
     // Same bytes as one side of a diff instead of a tree file; off oRPC since the body is streamed binary.
     app.route("/", createDiffRawRoute(services));
 
@@ -344,6 +349,9 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     serve("POST /members", members.add);
     serve("DELETE /members", members.remove);
     serve("DELETE /members/self", members.removeSelf);
+
+    // The owner's Reconnect with the platform, adopting the sandbox first when the platform holds no record of it.
+    serve("POST /platform/relink", createRelinkRoute(services));
 
     // The agent-proposed overlay Dockerfile: members read, the owner approves, rejects, runtime-installs a line, takes
     // one tool out, or has the rebuild wait until no agent is mid-turn.

@@ -4,6 +4,8 @@ import { onUnmounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useT } from "@intentic/ui/i18n";
 import { platformRetry } from "../../router/platformRetry";
+import DirectSandboxes from "../sandbox/recovery/DirectSandboxes.vue";
+import { normalizeDaemonUrl } from "./setupAttach";
 
 const t = useT();
 
@@ -17,6 +19,12 @@ const retry = async (): Promise<void> => {
         await router.replace(target);
     }
 };
+
+// The sandbox an /open link named, carried here in `returnTo` when the platform could not be asked about it; offered
+// first among the ones this device remembers.
+const returnTo = [route.query[`returnTo`]].flat()[0];
+const opened = returnTo === null || returnTo === undefined || !returnTo.startsWith(`/open?`) ? null : new URLSearchParams(returnTo.slice(`/open?`.length)).get(`url`);
+const focusUrl = opened === null ? undefined : normalizeDaemonUrl(opened);
 
 // Asks again on its own while the screen is up, so a reader who leaves the tab open lands in the app the moment the
 // platform answers, without pressing anything. Only while the tab is visible: a backgrounded outage screen is free.
@@ -48,6 +56,8 @@ onUnmounted(() => {
                 <p class="mt-1 text-xs text-muted">{{ t(`setup.platformUnavailable.signInNotChanged`) }}</p>
             </div>
             <Button :label="t(`ui.action.tryAgain`)" severity="secondary" @click="retry" />
+            <!-- What still works: the sandboxes themselves, opened without intentic. -->
+            <DirectSandboxes :focus-url="focusUrl" />
         </section>
     </main>
 </template>

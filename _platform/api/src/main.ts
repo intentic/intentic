@@ -14,6 +14,7 @@ import { startHostedHealth } from "./sandbox/hosted/hosted-health.js";
 import { startHostedMeter } from "./sandbox/hosted/hosted-meter.js";
 import { checkHostedPlanPrices, hostedPlanEnabled } from "./sandbox/hosted/hosted-plan.js";
 import { startHostedPool } from "./sandbox/hosted/hosted-pool.js";
+import { bootIdentityOf, watchPlatformIdentity } from "./sandbox/recovery.js";
 import { startRetention } from "./retention.js";
 import { startTracing } from "./tracing.js";
 
@@ -44,6 +45,31 @@ if (hostedPlanEnabled(config) && !config.hostedPlan.stripeWebhookSecret) {
 void checkHostedPlanPrices(config, logger);
 
 const prisma = createPrisma(config);
+// Which database this is, decided before anything acts on it: the reapers below would otherwise read a database that
+// is not this platform's as a fleet of orphans (recovery.ts). Pinned, a mismatch or an unreadable identity refuses to
+// start; unpinned, the identity is logged for an operator to pin, and a database that cannot say is only warned about.
+const boot = await bootIdentityOf(prisma, config.database.expectedIdentity);
+switch (boot.kind) {
+    case `refuse`:
+        logger.fatal(boot.reason);
+        process.exit(1);
+        break;
+    case `unknown`:
+        logger.warn(boot.reason);
+        break;
+    case `serve`: {
+        const booted = boot.identity;
+        logger.info(
+            { identity: booted.identity, since: booted.since },
+            config.database.expectedIdentity === `` ? `database identity (unpinned: set DATABASE_EXPECTED_IDENTITY to pin it)` : `database identity (pinned)`,
+        );
+        watchPlatformIdentity(prisma, booted, (now) => {
+            logger.fatal({ booted: booted.identity, now: now.identity }, `the database under this platform changed: refusing to serve another registry`);
+            process.exit(1);
+        });
+        break;
+    }
+}
 startHostedCleanup(prisma, config, logger);
 startRetention(prisma, config, logger);
 // Keeps warm hosted machines built ahead of demand, and drains them when the pool is off (hosted-pool.ts).
