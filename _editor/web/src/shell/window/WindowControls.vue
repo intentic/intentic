@@ -9,7 +9,7 @@ import {
     desktopFrameless,
     workDesktopWindow,
 } from "../../app/environments/desktop";
-import { BAR, type BarEdges, barsChanged, type Corner, cornerBar } from "./controlsReserve";
+import { BAR, type BarEdges, barsChanged, type Corner, cornerHolder, SURFACE } from "./controlsReserve";
 import { handBackOwnPanel } from "./floating";
 import { domLayout, pressOf, windowGesture } from "./windowGesture";
 import { useT } from "@intentic/ui/i18n";
@@ -35,9 +35,17 @@ const close = (): void => {
 
 /* --- The corner ---------------------------------------------------------------------------------------------- */
 
-/* Measured rather than declared: which bar ends at the window's right edge is a fact about the layout (controlsReserve.ts). */
-const RESERVE = `padding-inline-end`;
-let reserved: HTMLElement | undefined;
+/* Measured rather than declared: which bar ends at the window's right edge is a fact about the layout (controlsReserve.ts).
+   A bar gives up its right end; a surface with no bar along its top is handed the band's height to keep clear. */
+interface Reserve {
+    readonly property: string;
+    readonly value: string;
+}
+const RESERVE: Readonly<Record<`width` | `band`, Reserve>> = {
+    width: { property: `padding-inline-end`, value: `var(--window-controls-width)` },
+    band: { property: `--window-band`, value: `var(--bar-height)` },
+};
+let reserved: { readonly box: HTMLElement; readonly reserve: Reserve } | undefined;
 let scheduled = 0;
 
 /* THE BARS, WATCHED FOR MOVING. */
@@ -77,16 +85,19 @@ const cornerOf = (): Corner => {
 const measure = (): void => {
     scheduled = 0;
     const bars = [...document.querySelectorAll<HTMLElement>(BAR)];
+    const surfaces = [...document.querySelectorAll<HTMLElement>(SURFACE)];
+    const occupants = [...bars, ...surfaces];
     // One box per bar, read once: `getBoundingClientRect` is a layout flush, and this runs on resize frames.
-    const boxes = new Map<HTMLElement, BarEdges>(bars.map((bar) => [bar, bar.getBoundingClientRect()]));
-    watchBars(bars);
-    const corner = cornerBar(bars, (bar) => boxes.get(bar) ?? NOWHERE, cornerOf());
-    if (corner === reserved) {
+    const boxes = new Map<HTMLElement, BarEdges>(occupants.map((bar) => [bar, bar.getBoundingClientRect()]));
+    watchBars(occupants);
+    const holder = cornerHolder(bars, surfaces, (bar) => boxes.get(bar) ?? NOWHERE, cornerOf());
+    const next = holder === undefined ? undefined : { box: holder.box, reserve: RESERVE[holder.gives] };
+    if (next?.box === reserved?.box && next?.reserve === reserved?.reserve) {
         return;
     }
-    reserved?.style.removeProperty(RESERVE);
-    corner?.style.setProperty(RESERVE, `var(--window-controls-width)`);
-    reserved = corner;
+    reserved?.box.style.removeProperty(reserved.reserve.property);
+    next?.box.style.setProperty(next.reserve.property, next.reserve.value);
+    reserved = next;
 };
 
 /* One measurement per frame at most, and only after something that can have moved a bar: the window resizing, a bar resizing (the observer above). */
@@ -249,7 +260,7 @@ onUnmounted(() => {
     if (scheduled !== 0) {
         cancelAnimationFrame(scheduled);
     }
-    reserved?.style.removeProperty(RESERVE);
+    reserved?.box.style.removeProperty(reserved.reserve.property);
     reserved = undefined;
 });
 </script>

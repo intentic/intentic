@@ -97,6 +97,13 @@
     --window-controls-width: calc(var(--window-controls-buttons) + 0.75rem);
 }
 
+/* WHAT A SURFACE WITH NO BAR ALONG ITS TOP KEEPS CLEAR AT IT, while it holds the corner: zero here, and the buttons'
+   band on the one the measurement hands it to, inline (controlsReserve.ts `SURFACE`). Reset on every such surface, so
+   one nested in another never reads its parent's band. */
+[data-window-band] {
+    --window-band: 0px;
+}
+
 /* The bar at the top of a shell column: the workspace's explorer switch and its file-tab row, the fleet board's title row, the preview's toolbar, an agent's detail row. */
 @layer components {
     .view-header {

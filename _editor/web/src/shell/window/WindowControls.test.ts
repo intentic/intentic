@@ -116,6 +116,27 @@ it(`hands the corner from one bar to the next as views come and go`, async () =>
     expect(barOf(second).style.getPropertyValue(RESERVE)).toBe(`var(--window-controls-width)`);
 });
 
+/* A SURFACE WITH NO BAR ALONG ITS TOP is handed the band to keep clear, and gives it back once a bar takes the corner. */
+it(`hands the band to a surface at the corner, and takes it back when a bar arrives there`, async () => {
+    mountControls();
+    frame();
+
+    const view = document.createElement(`div`);
+    view.innerHTML = `<div class="chat-panel" data-window-band><div class="pane"></div></div>`;
+    document.body.append(view);
+    await settle();
+    const surface = view.querySelector(`[data-window-band]`) as HTMLElement;
+
+    expect(surface.style.getPropertyValue(`--window-band`)).toBe(`var(--bar-height)`);
+    expect(surface.style.getPropertyValue(RESERVE)).toBe(``);
+
+    surface.insertAdjacentHTML(`afterbegin`, `<div class="view-header">chat tabs</div>`);
+    await settle();
+
+    expect(surface.style.getPropertyValue(`--window-band`), `a surface whose top row is a bar keeps no band`).toBe(``);
+    expect(barOf(view).style.getPropertyValue(RESERVE)).toBe(`var(--window-controls-width)`);
+});
+
 /* Nothing but the three buttons is drawn: no bar, no strip, no fill — the page under them is the handle. */
 it(`draws the window's three buttons and marks the document frameless for as long as it is up`, () => {
     mountControls();

@@ -252,18 +252,22 @@ watch(
     <!-- `--capacity-rail` reserves the out-of-flow rail width without widening the transcript. -->
     <!-- The strip paints no surface of its own: it is one composer floating over a page, and the box draws its own edge.
          Nor does it clip, so the `@` and `/` lists can stand above a composer that has no room over it. -->
+    <!-- Wide, the tab row is the roster on the left and nothing along the top gives way to the desktop window's buttons:
+         `--window-band` is how much of the top the panes and the side rail keep clear when this panel holds the corner
+         (shell/window/controlsReserve.ts). -->
     <div
         ref="root"
         class="chat-panel relative flex min-h-0"
         :class="[chatWide ? 'flex-row' : 'flex-col', ground]"
         :style="{ '--capacity-rail': showsRail ? uiLength(CAPACITY_RAIL_PX) : `0px` }"
+        data-window-band
     >
         <template v-if="tabs && !bar">
             <ChatTabsMobile v-if="mobile" @select="setActive" @close="closeTabs" @open="openConversation" />
             <ChatTabs v-else @select="setActive" @close="closeTabs" @open="openConversation" />
         </template>
 
-        <div class="flex min-h-0 min-w-0 flex-1 flex-col">
+        <div class="flex min-h-0 min-w-0 flex-1 flex-col pt-(--window-band)">
             <!-- The run bar: drawn wherever a run drives the panes (barRun), not only where its diagram can show. -->
             <div v-if="barRun && !bar" class="flex shrink-0 items-center gap-2 border-b border-line px-2 py-1">
                 <Button

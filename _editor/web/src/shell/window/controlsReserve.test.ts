@@ -1,5 +1,5 @@
 import "@intentic/testing/dom";
-import { barsChanged, cornerBar } from "./controlsReserve";
+import { barsChanged, cornerBar, cornerHolder } from "./controlsReserve";
 
 /* The bar that gives up its right end to the window's own buttons, and what that bar is re-measured on. */
 
@@ -54,6 +54,31 @@ describe(`cornerBar`, () => {
     });
 });
 
+/* A SURFACE WITH NO BAR ALONG ITS TOP: the wide chat panel, its tab row stood on the left as a roster, so the
+   transcript, its pinned prompt and the checklist beside it all start on the top edge, under the buttons. */
+describe(`cornerHolder`, () => {
+    const CORNER = { left: 1320, bottom: 36 };
+    const edgesOf = (box: { top: number; bottom: number; right: number }): { top: number; bottom: number; right: number } => box;
+    const chat = { name: `chat panel`, top: 0, bottom: 900, right: 1440 };
+
+    it(`hands the band to a surface that meets the corner when no bar does`, () => {
+        expect(cornerHolder([], [chat], edgesOf, CORNER)).toEqual({ box: chat, gives: `band` });
+    });
+
+    /* Narrow, the same panel has its tab row back along its top: that row is the surface's top, and it gives up width. */
+    it(`prefers the bar, which is the surface's own top row where it has one`, () => {
+        const tabs = { name: `chat tabs`, top: 0, bottom: 36, right: 1440 };
+
+        expect(cornerHolder([tabs], [chat], edgesOf, CORNER)).toEqual({ box: tabs, gives: `width` });
+    });
+
+    /* Docked under the shell's own bar, or beside a side panel that holds the corner, the panel is nowhere near it. */
+    it(`leaves a surface that starts under the band or stops short of the corner`, () => {
+        expect(cornerHolder([], [{ ...chat, top: 36 }], edgesOf, CORNER)).toBeUndefined();
+        expect(cornerHolder([], [{ ...chat, right: 1100 }], edgesOf, CORNER)).toBeUndefined();
+    });
+});
+
 /* WHAT THE CORNER IS RE-MEASURED ON. Every view arrives through a dynamic import, so its bars land after the click and
    the route change that asked for them; a bar that paints before it is measured paints its own right-end controls
    under the window's buttons. */
@@ -83,6 +108,14 @@ describe(`barsChanged`, () => {
         const records = recordsOf((view) => {
             view.innerHTML = `<div class="ws"><div class="view-header">file tabs</div></div>`;
             view.replaceChildren();
+        });
+
+        expect(barsChanged(records)).toBe(true);
+    });
+
+    it(`sees a surface that clears the band itself arrive`, () => {
+        const records = recordsOf((view) => {
+            view.innerHTML = `<div class="chat-panel" data-window-band><div class="pane"></div></div>`;
         });
 
         expect(barsChanged(records)).toBe(true);

@@ -14,9 +14,10 @@ const t = useT();
 </script>
 
 <template>
-    <!-- No surface of its own: whitespace marks it as a region, not a panel with a border or fill. -->
+    <!-- No surface of its own: whitespace marks it as a region, not a panel with a border or fill. Starts under the
+         desktop window's buttons when the panel holds the corner (`--window-band`, ChatPanel.vue). -->
     <aside
-        class="absolute inset-y-0 z-10 flex min-h-0 flex-col"
+        class="absolute top-(--window-band) bottom-0 z-10 flex min-h-0 flex-col"
         :style="{ width: uiLength(CAPACITY_RAIL_PX), right: `var(--chat-scrollbar)` }"
         :aria-label="t(`chat.chatSideRail.chatWhatRun`)"
     >
