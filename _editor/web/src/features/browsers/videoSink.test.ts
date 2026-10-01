@@ -2,7 +2,7 @@
 // pane hands the sink `null` every time a browser stops or the picture path changes. Production caught this as
 // "Cannot read properties of null (reading 'style')" from both `attach` and `close`.
 import "@intentic/testing/dom";
-import { videoSink } from "./videoSink";
+import { stillScale, videoSink } from "./videoSink";
 
 const canvas = (): HTMLCanvasElement => document.createElement(`canvas`);
 
@@ -28,4 +28,19 @@ it("paints nothing once its canvases are null", () => {
     sink.attach(null, null);
     expect(() => sink.still(new Uint8Array([1, 2, 3]) as Uint8Array<ArrayBuffer>)).not.toThrow();
     expect(() => sink.push(new Uint8Array([1, 2, 3]), true, false)).not.toThrow();
+});
+
+// The still canvas is backed at the picture's shape times this; a wrong answer puts a sharp page in the top-left quarter
+// of the picture, or a half-size one over it.
+it("reads a still's scale off the still, for a daemon of either age", () => {
+    const picture = { width: 1110 };
+    // Today's daemon: the display's own pixels, scrollbar included.
+    expect(stillScale({ width: 1110 }, picture)).toBe(1);
+    // An unclipped still a pixel wider than the picture, which is always even.
+    expect(stillScale({ width: 1111 }, { width: 1110 })).toBe(1);
+    // An older daemon: twice the CSS pixels, clipped short of the scrollbar.
+    expect(stillScale({ width: 2 * (1110 - 15) }, picture)).toBe(2);
+    expect(stillScale({ width: 2220 }, picture)).toBe(2);
+    // Nothing painted yet: no picture to measure against.
+    expect(stillScale({ width: 2220 }, { width: 0 })).toBe(1);
 });

@@ -94,6 +94,52 @@ test("input during a capture makes the next loud frame a response, not an echo",
     expect(made.noteFrame(loud)).toBe("paint");
 });
 
+test("a click or keystroke withdraws the still: its small answer paints, and a fresh still follows the settle", async () => {
+    const shot = { value: "AAAA" };
+    const { made, capture, sent } = taker(shot);
+    made.reset();
+    // The first still, then the look after it, which finds the page unchanged and ends the looking.
+    await advanceTimersByTimeAsync(2 * STILL_DELAY_MS + 2);
+    expect(capture).toHaveBeenCalledTimes(2);
+    expect(made.noteFrame(quiet)).toBe("quiet");
+    // A typed character: a few hundred bytes of video, which size alone would keep under the still.
+    shot.value = "BBBB";
+    made.noteAction();
+    expect(made.noteFrame(quiet)).toBe("paint");
+    await advanceTimersByTimeAsync(STILL_DELAY_MS + 1);
+    expect(capture).toHaveBeenCalledTimes(3);
+    expect(sent).toEqual([Buffer.from("AAAA", "base64"), Buffer.from("BBBB", "base64")]);
+    expect(made.noteFrame(quiet)).toBe("quiet");
+});
+
+test("a still withdrawn by a click is sent again even when the page did not change, since the client dropped it", async () => {
+    const shot = { value: "AAAA" };
+    const { made, sent } = taker(shot);
+    made.reset();
+    await advanceTimersByTimeAsync(2 * STILL_DELAY_MS + 2);
+    expect(sent).toHaveLength(1);
+    made.noteAction();
+    await advanceTimersByTimeAsync(STILL_DELAY_MS + 1);
+    expect(sent).toEqual([Buffer.from("AAAA", "base64"), Buffer.from("AAAA", "base64")]);
+});
+
+test("a still that found something new is followed by another look, and an identical look ends it", async () => {
+    const shot = { value: "AAAA" };
+    const { made, capture, sent } = taker(shot);
+    made.reset();
+    await advanceTimersByTimeAsync(STILL_DELAY_MS + 1);
+    expect(capture).toHaveBeenCalledTimes(1);
+    // A caret blinking: a change no frame reads as motion, seen only because the page is looked at again.
+    shot.value = "BBBB";
+    await advanceTimersByTimeAsync(STILL_DELAY_MS + 1);
+    expect(capture).toHaveBeenCalledTimes(2);
+    await advanceTimersByTimeAsync(STILL_DELAY_MS + 1);
+    expect(capture).toHaveBeenCalledTimes(3);
+    await advanceTimersByTimeAsync(STILL_IDLE_MS + 1);
+    expect(capture).toHaveBeenCalledTimes(3);
+    expect(sent).toEqual([Buffer.from("AAAA", "base64"), Buffer.from("BBBB", "base64")]);
+});
+
 test("a capture that fails leaves the still untaken and the frames painting", async () => {
     const shot = { value: undefined };
     const { made, capture, sent } = taker(shot);

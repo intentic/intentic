@@ -6,7 +6,8 @@ import { chromiumWindowArgs, DISPLAY_HEIGHT, DISPLAY_WIDTH, ensureDisplay, relea
 import { startLiveView, type LiveReady, type LiveView } from "./live-view.js";
 import { readRegion } from "./region.js";
 import { FRAME_WEBP } from "./screencast.js";
-import { FRAME_H264_DELTA_QUIET, FRAME_H264_KEY, FRAME_H264_KEY_QUIET } from "./videocast.js";
+import { QUIET_BYTES } from "./stills.js";
+import { FRAME_H264_DELTA, FRAME_H264_DELTA_QUIET, FRAME_H264_KEY, FRAME_H264_KEY_QUIET } from "./videocast.js";
 
 // The video path end to end on a real display: Chromium headed on Xvfb, ffmpeg grabbing it, the daemon's own view
 // over a fake socket. Skips where the browser pack is not installed. What it pins is what no unit can: that the
@@ -19,6 +20,10 @@ const SCREEN = { width: DISPLAY_WIDTH, height: DISPLAY_HEIGHT };
 interface Wire {
     readonly json: object[];
     readonly tags: number[];
+    // Each picture's size on the wire, tag byte included, in step with `tags`.
+    readonly sizes: number[];
+    // Each still's WebP bytes, tag byte stripped.
+    readonly stills: Uint8Array[];
 }
 
 const launch = async (): Promise<{ context: BrowserContext; profile: string } | undefined> => {
@@ -91,6 +96,47 @@ const expectSharpened = async (wire: Wire): Promise<void> => {
     expect(wire.tags.slice(stillAt).some((tag) => tag === FRAME_H264_KEY_QUIET || tag === FRAME_H264_DELTA_QUIET)).toBe(true);
 };
 
+interface PixelSize {
+    readonly width: number;
+    readonly height: number;
+}
+
+// A WebP's canvas size off its header: the extended (VP8X), lossless (VP8L) and lossy (VP8) layouts.
+const webpSize = (bytes: Uint8Array): PixelSize => {
+    const view = Buffer.from(bytes);
+    const chunk = view.subarray(12, 16).toString("latin1");
+    if (chunk === "VP8X") {
+        return { width: 1 + view.readUIntLE(24, 3), height: 1 + view.readUIntLE(27, 3) };
+    }
+    if (chunk === "VP8L") {
+        const bits = view.readUInt32LE(21);
+        return { width: 1 + (bits & 0x3fff), height: 1 + ((bits >> 14) & 0x3fff) };
+    }
+    return { width: view.readUInt16LE(26) & 0x3fff, height: view.readUInt16LE(28) & 0x3fff };
+};
+
+// The still is the picture's own rectangle at the display's pixels, and taking it moves nothing on the display. A still
+// clipped at another scale made Chromium re-render the live window zoomed while it was taken, which the grab filmed as a
+// frame of motion: the page flashed at twice its size on every still.
+const expectStillUnfelt = (wire: Wire): void => {
+    const ready = readies(wire)[0];
+    const still = wire.stills[0];
+    if (ready === undefined || still === undefined) {
+        throw new Error("no picture, or no still, to compare");
+    }
+    const size = webpSize(still);
+    // The viewport's own height can be a pixel more than the picture's, which is kept even for the encoder.
+    expect([size.width, size.height - (size.height % 2)]).toEqual([ready.width, ready.height]);
+    // The page holds still, so for a second after the still every delta is too small to be motion. Only after: the still
+    // is taken once the page has settled, but a starved encoder can deliver the page's first paint late, close before
+    // it. A zoomed re-render shows after it too, as the window zooms back.
+    const stillAt = wire.tags.indexOf(FRAME_WEBP);
+    const after = wire.tags
+        .map((tag, index) => ({ tag, bytes: wire.sizes[index] ?? 0, index }))
+        .filter(({ index, tag }) => index > stillAt && index <= stillAt + 30 && (tag === FRAME_H264_DELTA || tag === FRAME_H264_DELTA_QUIET));
+    expect(after.filter(({ bytes }) => bytes > QUIET_BYTES)).toEqual([]);
+};
+
 // A resize from the client's box is a fresh stream at that size, and the page's viewport is that size.
 const expectResized = async (view: LiveView, wire: Wire, page: Page, scale: number): Promise<void> => {
     await view.input({ type: "resize", width: 900, height: 600 });
@@ -114,14 +160,14 @@ const expectSteered = async (view: LiveView, page: Page): Promise<void> => {
 afterAll(() => releaseDisplay(DISPLAY_KEY));
 
 test(
-    "the picture is the page's viewport, sharpened once it settles, resized and steered from the client",
+    "the picture is the page's viewport, sharpened once it settles without the display feeling it, resized and steered from the client",
     async () => {
         const launched = await launch();
         if (launched === undefined) {
             return; // no browser on this box
         }
         const { context, profile } = launched;
-        const wire: Wire = { json: [], tags: [] };
+        const wire: Wire = { json: [], tags: [], sizes: [], stills: [] };
         const errors: string[] = [];
         const sink = {
             send: (data: string | Uint8Array): void => {
@@ -129,16 +175,24 @@ test(
                     wire.json.push(JSON.parse(data) as object);
                 } else {
                     wire.tags.push(data[0] ?? -1);
+                    wire.sizes.push(data.byteLength);
+                    if (data[0] === FRAME_WEBP) {
+                        wire.stills.push(data.slice(1));
+                    }
                 }
             },
         };
         try {
             const page = context.pages()[0] ?? (await context.newPage());
-            await page.goto("data:text/html,<title>one</title><body style='margin:0;background:%23fff'><p>a page that holds still</p></body>");
+            // Enough text that a re-render at any other zoom is a frame of motion, not a few hundred bytes.
+            const words = Array.from({ length: 60 }, (_, index) => `<p>a page that holds still, line ${index}</p>`).join("");
+            await page.goto(`data:text/html,<title>one</title><body style='margin:0;background:%23fff'>${words}</body>`);
             const view = await startLiveView(context, DISPLAY_KEY, sink, (reason) => errors.push(reason));
             try {
                 const scale = await expectViewport(wire, page);
                 await expectSharpened(wire);
+                await settle(() => wire.tags.length > wire.tags.indexOf(FRAME_WEBP) + 30);
+                expectStillUnfelt(wire);
                 await expectResized(view, wire, page, scale);
                 await expectSteered(view, page);
                 expect(errors).toEqual([]);

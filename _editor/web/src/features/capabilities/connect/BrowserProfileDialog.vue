@@ -63,13 +63,14 @@ const sendMsg = (message: object): void => {
     }
 };
 
-// The surface's own box, so the viewport is exactly what the modal shows rather than scaled into it.
+// The box inside the surface's border, where the canvases are, so the viewport is exactly what the modal shows
+// rather than scaled into it: the border box is two pixels larger each way, which resampled every pixel of the picture.
 const askSize = (): void => {
-    const box = surface.value?.getBoundingClientRect();
-    if (box === undefined || box.width < 1 || box.height < 1) {
+    const box = surface.value;
+    if (box === undefined || box.clientWidth < 1 || box.clientHeight < 1) {
         return;
     }
-    sendMsg({ type: "resize", width: Math.round(box.width), height: Math.round(box.height) });
+    sendMsg({ type: "resize", width: box.clientWidth, height: box.clientHeight });
 };
 
 watch(surface, (element) => {

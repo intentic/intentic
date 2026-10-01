@@ -15,12 +15,15 @@ export const DISPLAY_HEIGHT = 1600;
 export const WINDOW_WIDTH = 1280;
 export const WINDOW_HEIGHT = 880;
 
-// The launch flags placing a window in the screen's bottom-right corner, the corner region.ts keeps it in: Chromium
-// flips a menu that would leave the screen, so a window whose right and bottom edges are the screen's keeps every
-// <select> and context menu inside the viewport that is grabbed.
+// The launch flags for a window someone watches on this display. Placed in the screen's bottom-right corner, the corner
+// region.ts keeps it in: Chromium flips a menu that would leave the screen, so a window whose right and bottom edges are
+// the screen's keeps every <select> and context menu inside the viewport that is grabbed. And without the "Restore
+// pages?" bubble a profile asks for after any unclean exit (a daemon restart is one): it is drawn over the page, so it
+// is in the video but never in a still, and came and went as the picture switched between them.
 export const chromiumWindowArgs = (display: Display): string[] => [
     `--window-position=${display.width - WINDOW_WIDTH},${display.height - WINDOW_HEIGHT}`,
     `--window-size=${WINDOW_WIDTH},${WINDOW_HEIGHT}`,
+    `--hide-crash-restore-bubble`,
 ];
 
 // Display numbers climb from FIRST (:99, unchanged from before); LAST only backstops a runaway.

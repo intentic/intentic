@@ -1,9 +1,14 @@
 import { CAPTURE_ECHO_FACTOR, CAPTURE_ECHO_MS, STILL_DELAY_MS, STILL_IDLE_MS } from "./screencast.js";
 
-// A sharp still of the page whenever it settles, over the video path: 4:2:0 video is right while something moves and
-// wrong while someone reads, so once the encoder has gone quiet a 2× capture replaces the picture, and the frames that
-// follow are marked quiet so the client keeps the still until something really moves. Same settle rules as the frames
-// path (screencast.ts), read off the encoder's output instead of the compositor's frames.
+// A sharp still of the page whenever it settles, over the video path: video is right while something moves and soft
+// while someone reads, so once the encoder has gone quiet a capture of the display's own pixels replaces the picture,
+// and the frames that follow are marked quiet so the client keeps the still until something really moves. Same settle
+// rules as the frames path (screencast.ts), read off the encoder's output instead of the compositor's frames.
+//
+// Size says motion, and it misses the small answers: a typed character, a ticked box. So a click or a keystroke
+// withdraws the still outright (noteAction), and a still that found something new is followed by another look, which
+// is how a page that keeps changing a little (a caret, a countdown) keeps showing it. That second look used to happen
+// by accident: the old 2× capture re-rendered the live window, the grab saw the echo as motion and asked again.
 
 // A delta frame of a still page costs x264 a few hundred bytes; anything moving costs kilobytes. Keyframes are never
 // motion: one arrives every second whatever the page does.
@@ -26,8 +31,11 @@ export interface StillTakerOptions {
 export interface StillTaker {
     // Tells the caller how to tag this frame: `quiet` while a still stands for the page, `paint` otherwise.
     readonly noteFrame: (frame: EncodedFrame) => "paint" | "quiet";
-    // The owner acted; the next frames are a response, not a capture's own echo.
+    // The owner moved the pointer; the next frames are a response, not a capture's own echo.
     readonly noteInput: () => void;
+    // A click or a keystroke: its answer may be too small to read as motion, so the still no longer stands for the
+    // page. Frames paint until the page settles and a fresh still is taken.
+    readonly noteAction: () => void;
     // A new page or a new region: the still shown says nothing about it, and a fresh one is owed once it settles.
     readonly reset: () => void;
     readonly setPaused: (paused: boolean) => void;
@@ -73,6 +81,9 @@ export const createStillTaker = (options: StillTakerOptions): StillTaker => {
         quiet = 0;
         shown = true;
         options.send(Buffer.from(data, "base64"));
+        // The page changed since the last look and may still be changing below what reads as motion; one more look
+        // says, and an identical one ends it.
+        arm();
     };
 
     const arm = (): void => {
@@ -102,6 +113,15 @@ export const createStillTaker = (options: StillTakerOptions): StillTaker => {
         },
         noteInput: () => {
             lastInputAt = now();
+        },
+        noteAction: () => {
+            lastInputAt = now();
+            shown = false;
+            lastStill = undefined;
+            quiet = 0;
+            if (!paused && !stopped) {
+                arm();
+            }
         },
         reset: () => {
             shown = false;

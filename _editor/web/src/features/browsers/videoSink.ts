@@ -3,14 +3,17 @@
 // picture. The daemon splits the stream and tags each message as keyframe or not; nothing here parses a bitstream.
 //
 // Two canvases, one picture: video paints into the lower one at the display's own pixels; a still of the settled
-// page (stills.ts, at twice the CSS pixels) paints into the upper one and shows until a frame the daemon did not
-// mark quiet arrives, so text is sharp exactly while someone is reading it and the moving picture costs no scaling.
+// page (stills.ts) paints into the upper one and shows until a frame the daemon did not mark quiet arrives, so text
+// is sharp exactly while someone is reading it and the moving picture costs no scaling.
 
 // Microseconds per frame at the daemon's fixed 30fps, since chunks require an increasing timestamp.
 const FRAME_US = Math.round(1_000_000 / 30);
-// Pixels the still canvas holds per picture pixel: the daemon's STILL_SCALE over the display's scale, i.e. 2 CSS
-// px per page px at scale 1.
-const STILL_SCALE = 2;
+
+// Still pixels per picture pixel, read off the still itself: 1 from a daemon that photographs the display's own
+// pixels, 2 from one older than that, which photographed at twice the CSS pixels (a scrollbar narrower than twice
+// the picture, hence rounded). Never below 1, so a still a pixel narrower than the picture is not read as half scale.
+export const stillScale = (still: { readonly width: number }, picture: { readonly width: number }): number =>
+    picture.width > 0 ? Math.max(1, Math.round(still.width / picture.width)) : 1;
 
 export interface VideoSink {
     // Builds the decoder for the codec the daemon reports; safe to call again, a second `ready` replaces rather than
@@ -149,11 +152,12 @@ export const videoSink = (onError: (message: string) => void): VideoSink => {
                         if (since !== motion || stillCanvas !== target) {
                             return;
                         }
-                        // Backed at the video's shape scaled up, not the still's own: a still is a scrollbar narrower
-                        // than the picture, and a differently shaped canvas would letterbox out of line with it. The
-                        // strip it leaves is transparent, showing the video beneath.
-                        const width = under.width * STILL_SCALE;
-                        const height = under.height * STILL_SCALE;
+                        // Backed at the video's shape at the still's scale, not the still's own shape: a still can be a
+                        // scrollbar narrower or a pixel taller than the picture, and a differently shaped canvas would
+                        // letterbox out of line with it. A strip it leaves is transparent, showing the video beneath.
+                        const scale = stillScale(bitmap, under);
+                        const width = under.width * scale;
+                        const height = under.height * scale;
                         if (target.width !== width || target.height !== height) {
                             target.width = width;
                             target.height = height;

@@ -11,7 +11,6 @@ import {
     readSelection,
     startScreencast,
     STILL_QUALITY,
-    STILL_SCALE,
     VIEW_HEIGHT,
     VIEW_WIDTH,
     type MouseMessage,
@@ -152,20 +151,16 @@ const startVideoView = (context: BrowserContext, display: Display, sink: Sink, o
     const reportCursor = cursorReporter((cursor) => sink.send(JSON.stringify({ type: "cursor", cursor })));
 
     const stills = createStillTaker({
-        // The viewport at 2 CSS px per pixel whatever the display's own scale, clipped in document coordinates as CDP
-        // wants them.
+        // The viewport as the display shows it, unclipped and at the display's own pixels: the same rectangle the video
+        // grabs, scrollbar included. A clip at any other scale makes Chromium re-render the live window at that zoom for
+        // the length of the capture, and the grab filmed it: the page flashed at twice its size whenever a still was
+        // taken (2026-10-01).
         capture: async () => {
             const at = session;
-            const from = region;
-            if (at === undefined || from === undefined) {
+            if (at === undefined || region === undefined) {
                 return undefined;
             }
-            const { cssVisualViewport: viewport } = await at.send("Page.getLayoutMetrics");
-            const shot = await at.send("Page.captureScreenshot", {
-                format: "webp",
-                quality: STILL_QUALITY,
-                clip: { x: viewport.pageX, y: viewport.pageY, width: viewport.clientWidth, height: viewport.clientHeight, scale: STILL_SCALE / from.scale },
-            });
+            const shot = await at.send("Page.captureScreenshot", { format: "webp", quality: STILL_QUALITY });
             return shot.data;
         },
         send: (bytes) => sink.send(encodeFrame({ bytes, format: "webp" })),
@@ -317,7 +312,13 @@ const startVideoView = (context: BrowserContext, display: Display, sink: Sink, o
         if (at === undefined) {
             return;
         }
-        stills.noteInput();
+        // A bare pointer move answers with hover at most; a click, a drag or a wheel can answer with a change too small
+        // to read as motion (a ticked box, a selection), so the still is withdrawn before the page sees it.
+        if (message.action === "move" && (message.buttons ?? 0) === 0) {
+            stills.noteInput();
+        } else {
+            stills.noteAction();
+        }
         pointer(input, message, at);
         if (message.action === "move" && session !== undefined) {
             // Fire-and-forget and throttled, so the cursor shape never blocks the next input; the page is asked in its
@@ -329,7 +330,8 @@ const startVideoView = (context: BrowserContext, display: Display, sink: Sink, o
     };
 
     const keys = async (message: Extract<ScreencastClientMessage, { type: "text" | "key" }>): Promise<void> => {
-        stills.noteInput();
+        // A typed character is a few hundred bytes of video, far below motion: without this it stays under the still.
+        stills.noteAction();
         // On the display when asked (Chromium's find bar) or when a native menu has the keyboard; on the page otherwise,
         // where a CDP key event lands whatever the browser itself has focused and arrives as exact text.
         if (message.raw === true || selectFocused) {

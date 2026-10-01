@@ -244,7 +244,7 @@
     "_sandbox/sandbox/src/bootstrap/boot-chain.ts": 2,
     "_sandbox/sandbox/src/browser/cast/browser-view.ts": 2,
     "_sandbox/sandbox/src/browser/cast/display.ts": 3,
-    "_sandbox/sandbox/src/browser/cast/live-view.ts": 10,
+    "_sandbox/sandbox/src/browser/cast/live-view.ts": 9,
     "_sandbox/sandbox/src/browser/cast/region.ts": 4,
     "_sandbox/sandbox/src/browser/cast/screencast.ts": 16,
     "_sandbox/sandbox/src/browser/cast/stills.ts": 1,
