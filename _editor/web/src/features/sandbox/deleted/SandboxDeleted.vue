@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { SANDBOX_RECOVERY_DAYS as RECOVERY_DAYS } from "@intentic/api-contract";
 import { Button, Notice, type NoticeModel, Row, RowGroup, SkeletonRows, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
@@ -45,21 +44,10 @@ const restore = async (trashId: string): Promise<void> => {
 
         <div v-else-if="trash.recoverable.value.length === 0" :class="ui.emptyState('flex flex-col items-center gap-3 py-8')">
             <Icon name="trash" class="text-xl text-subtle" />
-            <div class="flex flex-col gap-1">
-                <span class="text-sm font-medium text-content">{{ t(`sandbox.sandboxDeleted.nothingToRestore`) }}</span>
-                <span class="max-w-md text-xs text-muted">{{
-                    t(`sandbox.sandboxDeleted.keptForDays`, { count: RECOVERY_DAYS }, RECOVERY_DAYS)
-                }}</span>
-            </div>
+            <span class="text-sm font-medium text-content">{{ t(`sandbox.sandboxDeleted.nothingToRestore`) }}</span>
         </div>
 
-        <RowGroup
-            v-else
-            :label="t(`sandbox.words.recentlyDeleted`)"
-            :count="trash.recoverable.value.length"
-            :caption="t(`sandbox.sandboxDeleted.keptForDays`, { count: RECOVERY_DAYS }, RECOVERY_DAYS)"
-            equal-rows
-        >
+        <RowGroup v-else :label="t(`sandbox.words.recentlyDeleted`)" equal-rows>
             <Row
                 v-for="row in trash.recoverable.value"
                 :key="row.id"
