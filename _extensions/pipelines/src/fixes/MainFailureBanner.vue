@@ -13,22 +13,25 @@ import {
     Icon,
     useAgentRunPick,
 } from "@intentic/extension-ui";
-import { computed } from "vue";
+import { computed, onBeforeUnmount, onMounted, onUpdated, ref } from "vue";
 import { host } from "../host";
-import { handBackOf, jobsAtAGlance, type MainFailureState, type MainFailureView, offersFix } from "./mainFailures";
+import { handBackOf, jobsAtAGlance, type MainFailureStory, type MainFailureView, offersFix, storyOf } from "./mainFailures";
 import { t } from "../i18n.js";
 
-// A FAILING MAIN LINE, said once at the head of its repository's runs, and the ONE place its fix is pressed: the run rows
-// under it offer none (mainFailures.ts, leadsRows), since every press on main goes to the same agent anyway. Three lines:
-// what fails and who has it (the branch, since when, and on the right the agent's live stance or the one press), one
-// plain sentence on what auto-fix did and what happens next, which is what tells a reader this is not another run row,
-// and which jobs fail now. The daemon put one fix agent on it at the first failed job and sends it every later failure on
-// the branch until a run passes; while it works the banner names it by its live stance and asks nothing. Once the daemon
-// hands it back (its turns spent, it stopped, or repairs are off) the banner says so and offers the press that gives it
-// back. Never the daemon's sentence, never a turn's error: those live in the fix agent's conversation, one click away.
+// A FAILING MAIN LINE AS ONE INCIDENT: a header that says what broke and what happens next, and under it, joined to it by
+// a drawn lane, the very runs it speaks for (coveredRuns), so a reader sees which rows the fix is about instead of
+// inferring it from a strip above a list in time order. It is also the ONE place the fix is pressed: the rows inside
+// offer none (leadsRows), since every press on main goes to the same agent anyway.
+//
+// The header is two lines. The first: the branch, since when and which jobs, and on the right who has it (a pill that
+// opens the agent) and the one press. The second: one sentence (storyOf) on where the fix stands and the reader's move,
+// read off the agent's live stance, so "Fix landed" comes with "commit and push it" rather than an agent "on it". Never
+// the daemon's sentence, never a turn's error: those live in the fix agent's conversation, one click away.
 
 const props = defineProps<{
     view: MainFailureView;
+    // The runs drawn inside this block (coveredRuns), the view's rows in the default slot; read here for the sentence.
+    covered: readonly PipelineRun[];
     // The action the view has in flight, by run key; the press here shares the run rows' lock.
     busy: string | undefined;
     // The run whose fix press is out, by run key: the press then names its wait, as the run row's does.
@@ -41,8 +44,11 @@ const emit = defineEmits<{ fix: [run: PipelineRun, pick: AgentRunChoice | undefi
 const api = host();
 
 const failure = computed(() => props.view.failure);
-const look = computed(() => (props.view.stance === undefined ? undefined : fixStanceLook(props.view.stance.kind)));
 const jobs = computed(() => jobsAtAGlance(failure.value.jobs));
+const jobsLine = computed(() => {
+    const { shown, folded } = jobs.value;
+    return [shown.join(`, `), ...(folded.length > 0 ? [t(`mainFailure.moreJobs`, { count: folded.length })] : [])].join(` `);
+});
 
 // The fixer's newest attempt when the fleet has it, else the conversation the failure names, which the chat can still
 // open from the archive.
@@ -52,9 +58,9 @@ const fixerLink = computed(() => {
     return id === undefined ? undefined : appLink(api.href(`/agents/${id}`), () => api.chat.openAgent(id));
 });
 
-// Why it was handed back, in the banner's own two words. Undefined reads "Handed back": an older daemon recorded no
-// reason, only a sentence that could run to a paragraph.
-const HAND_BACK: Readonly<Record<MainFailureHandBack, () => string>> = {
+// Why it was handed back, in two words the sentence leads with. Undefined reads "Handed back": an older daemon recorded
+// no reason, only a sentence that could run to a paragraph.
+const HAND_BACK = {
     turns: () => t(`mainFailure.handBackTurns`),
     "no-change": () => t(`mainFailure.handBackNoChange`),
     stopped: () => t(`mainFailure.handBackStopped`),
@@ -62,23 +68,44 @@ const HAND_BACK: Readonly<Record<MainFailureHandBack, () => string>> = {
     "turn-failed": () => t(`mainFailure.handBackTurnFailed`),
     gone: () => t(`mainFailure.handBackGone`),
     refused: () => t(`mainFailure.handBackRefused`),
-};
+} as const satisfies Readonly<Record<MainFailureHandBack, () => string>>;
 const handBack = computed(() => {
     const reason = handBackOf(props.view);
     return reason === undefined ? t(`mainFailure.handedBack`) : HAND_BACK[reason]();
 });
 
-// What auto-fix did about it and what happens next, in one sentence a newcomer can read without a tooltip: the line that
-// says this strip speaks for the branch, not for one run.
+// Where the fix stands and the reader's move, as one sentence a newcomer reads without a tooltip.
 const STORY = {
-    fixing: () => t(`mainFailure.story.fixing`, { branch: failure.value.branch }),
-    waits: () => t(`mainFailure.story.waits`),
+    working: () => t(`mainFailure.story.working`, { branch: failure.value.branch }),
+    needsYou: () => t(`mainFailure.story.needsYou`),
+    ready: () => t(`mainFailure.story.ready`),
+    landed: () => t(`mainFailure.story.landed`, { branch: failure.value.branch }),
+    proving: () => t(`mainFailure.story.proving`, { branch: failure.value.branch }),
+    waiting: () => t(`mainFailure.story.waiting`),
+    ended: () => t(`mainFailure.story.ended`),
+    waits: () => t(`mainFailure.story.waits`, { reason: handBack.value }),
     reported: () => t(`mainFailure.story.reported`),
     unassigned: () => t(`mainFailure.story.unassigned`),
-} as const satisfies Readonly<Record<MainFailureState, () => string>>;
-const story = computed(() => STORY[props.view.state]());
+} as const satisfies Readonly<Record<MainFailureStory, () => string>>;
+const story = computed(() => STORY[storyOf(props.view, props.covered)]());
 
-// The one press the banner offers (offersFix), on the newest failed run it names. Nothing to press while the agent
+// Who has it, as one pill: the agent's live stance while it works (the run rows' own look), "Needs you" once it is
+// handed back, and the way into the agent whenever there is one. Undefined before anybody is on it.
+const pill = computed<(ReturnType<typeof fixStanceLook> & { label: string; link: boolean }) | undefined>(() => {
+    const view = props.view;
+    if (view.state === `fixing`) {
+        const look = fixStanceLook(view.stance?.kind ?? `working`);
+        return { label: view.stance?.label ?? t(`mainFailure.fixAgent`), ...look, link: fixerLink.value !== undefined };
+    }
+    if (view.state === `waits` || view.state === `reported`) {
+        const look = fixStanceLook(`ended`);
+        const label = view.state === `waits` ? t(`mainFailure.needsYou`) : t(`mainFailure.repairsOff`);
+        return { label, ...look, link: view.state === `waits` && fixerLink.value !== undefined };
+    }
+    return undefined;
+});
+
+// The one press the block offers (offersFix), on the newest failed run it names. Nothing to press while the agent
 // works, or when the board no longer lists that run. Continue when there is an agent to give its turns back to.
 const continues = computed(() => props.view.state === `waits` && fixerId.value !== undefined);
 const press = computed<{ label: string; primary: boolean } | undefined>(() => {
@@ -93,7 +120,7 @@ const press = computed<{ label: string; primary: boolean } | undefined>(() => {
 });
 
 // The agent the caret's panel is about when the press continues one, so its bar ends in Continue / Start over, as the
-// run row's did before the banner took the press over. Continuable: the daemon gives that agent its turns back.
+// run row's did before the block took the press over. Continuable: the daemon gives that agent its turns back.
 const attemptOnOffer = computed<AgentRunAttempt | undefined>(() => {
     const fixer = props.view.fixer;
     if (!continues.value || fixer === undefined) {
@@ -132,96 +159,138 @@ const clockOf = (at: number): string => new Intl.DateTimeFormat(activeLocale.val
 const since = computed(() =>
     formatDate(failure.value.since) === formatDate(Date.now()) ? clockOf(failure.value.since) : formatDayMonthTime(failure.value.since),
 );
+
+// THE LANE: a trunk down from the header's glyph and an elbow into each covered row's status glyph (`data-lane-node`,
+// PipelineRunRow), drawn from where they actually sit rather than from row heights this block cannot know: a row
+// opens into its job graph, a narrow pane wraps its title. Re-measured whenever the block changes size or re-renders,
+// once per frame.
+const ELBOW = 6;
+const GAP = 4;
+const root = ref<HTMLElement>();
+const lane = ref<{ width: number; height: number; d: string } | undefined>();
+
+const draw = (): void => {
+    const el = root.value;
+    const head = el?.querySelector(`[data-lane-head]`);
+    if (el === undefined || head === null || head === undefined) {
+        lane.value = undefined;
+        return;
+    }
+    const box = el.getBoundingClientRect();
+    const top = head.getBoundingClientRect();
+    const x = top.left + top.width / 2 - box.left;
+    const nodes = [...el.querySelectorAll(`[data-lane-node]`)].map((node) => {
+        const at = node.getBoundingClientRect();
+        return { y: at.top + at.height / 2 - box.top, end: at.left - box.left - GAP };
+    });
+    const last = nodes.at(-1);
+    if (last === undefined) {
+        lane.value = undefined;
+        return;
+    }
+    const trunk = `M ${x} ${top.bottom - box.top + GAP} V ${last.y - ELBOW}`;
+    const elbows = nodes.map(({ y, end }) => `M ${x} ${y - ELBOW} Q ${x} ${y} ${x + ELBOW} ${y} H ${end}`);
+    lane.value = { width: box.width, height: box.height, d: [trunk, ...elbows].join(` `) };
+};
+
+let frame = 0;
+const measure = (): void => {
+    cancelAnimationFrame(frame);
+    frame = requestAnimationFrame(draw);
+};
+let observer: ResizeObserver | undefined;
+onMounted(() => {
+    measure();
+    if (root.value !== undefined) {
+        observer = new ResizeObserver(measure);
+        observer.observe(root.value);
+    }
+});
+onUpdated(measure);
+onBeforeUnmount(() => {
+    cancelAnimationFrame(frame);
+    observer?.disconnect();
+});
 </script>
 
 <template>
-    <!-- The faint danger wash, no edge stripe, says this line speaks for all the runs under it; its glyph sits on the rows' own left edge. -->
+    <!-- One faint danger wash over the header and the runs inside: the block reads as one incident, not as one more row. -->
     <section
+        ref="root"
         :data-main-failure="`${failure.repo}:${failure.branch}`"
         :data-state="view.state"
         :aria-label="t(`mainFailure.title`, { branch: failure.branch })"
-        class="flex flex-col gap-1 bg-danger/5 py-2.5 pr-3 pl-4"
+        class="relative bg-danger/5"
     >
-        <div class="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
-            <!-- What fails, and since when. `flex-auto`, not `flex-1`: sized by its words, so a narrow pane wraps the press
-                 cluster onto its own line instead of squeezing the branch name to nothing under it. -->
-            <div class="flex min-w-0 flex-auto items-center gap-2">
-                <Icon name="exclamation-circle" class="shrink-0 text-sm text-danger" />
-                <span class="truncate text-sm font-semibold text-content">{{ t(`mainFailure.title`, { branch: failure.branch }) }}</span>
-                <span class="shrink-0 text-2xs text-subtle" v-tooltip.top="formatTimestamp(failure.since)">{{
-                    t(`mainFailure.since`, { when: since })
-                }}</span>
-            </div>
-
-            <!-- Who has it, and the one press, where the run rows below keep their Re-run. -->
-            <div class="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-x-2 gap-y-1">
-                <!-- Working: the agent's live stance as the run rows draw it; the chip is the way in. -->
-                <a
-                    v-if="view.state === `fixing` && fixerLink !== undefined"
-                    v-bind="fixerLink"
-                    data-fixer
-                    class="ui-chip shrink-0 rounded px-2 py-1 text-xs font-medium"
-                    :class="look === undefined ? [`text-info`, `border-info/30 hover:bg-info/10`] : [look.ink, look.chip]"
-                    v-tooltip.top="{ title: t(`mainFailure.openFixer`), rows: [{ label: t(`tip.model`), value: view.fixer?.model ?? `` }] }"
-                >
-                    <Icon :name="look?.icon ?? `robot`" :spin="look?.spin ?? false" class="text-2xs" />
-                    {{ view.stance?.label ?? t(`mainFailure.fixAgent`) }}
-                </a>
-                <span v-else-if="view.state === `fixing`" data-fixer class="text-xs text-subtle">{{ t(`mainFailure.fixAgent`) }}</span>
-
-                <!-- Handed back: two words on why, and the way into what it tried; the story line says what Continue does. -->
-                <template v-else-if="view.state === `waits`">
-                    <span data-waits class="inline-flex items-center gap-1.5 text-xs">
-                        <Icon name="exclamation-triangle" class="text-2xs text-warning" />
-                        <span class="font-medium text-warning">{{ t(`mainFailure.needsYou`) }}</span>
-                        <span class="text-muted">· {{ handBack }}</span>
+        <div class="flex flex-col gap-1 py-3 pr-3 pl-4">
+            <div class="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
+                <!-- What fails, since when, and which jobs. `flex-auto`, not `flex-1`: sized by its words, so a narrow pane wraps
+                     the pill and press onto their own line instead of squeezing the branch name to nothing under them. -->
+                <div class="flex min-w-0 flex-auto items-center gap-2">
+                    <Icon data-lane-head name="exclamation-circle" class="shrink-0 text-base text-danger" />
+                    <span class="shrink-0 text-base font-semibold text-content">{{ t(`mainFailure.title`, { branch: failure.branch }) }}</span>
+                    <span class="min-w-0 truncate text-xs text-subtle">
+                        <span v-tooltip.top="formatTimestamp(failure.since)">{{ t(`mainFailure.since`, { when: since }) }}</span>
+                        <template v-if="jobs.shown.length > 0">
+                            · <span :aria-label="t(`mainFailure.failingJobs`)" v-tooltip.top="failure.jobs.join(`, `)">{{ jobsLine }}</span>
+                        </template>
                     </span>
-                    <a v-if="fixerLink !== undefined" v-bind="fixerLink" class="touch-target text-xs font-medium text-link hover:underline">{{
-                        t(`mainFailure.openFixer`)
-                    }}</a>
-                </template>
+                </div>
 
-                <span v-else-if="view.state === `reported`" data-waits class="inline-flex items-center gap-1.5 text-xs">
-                    <Icon name="exclamation-triangle" class="text-2xs text-warning" />
-                    <span class="font-medium text-warning">{{ t(`mainFailure.needsYou`) }}</span>
-                    <span class="text-muted">· {{ t(`mainFailure.repairsOff`) }}</span>
-                </span>
+                <!-- Who has it, and the one press. -->
+                <div class="ml-auto flex shrink-0 items-center gap-2">
+                    <component
+                        :is="pill.link ? `a` : `span`"
+                        v-if="pill !== undefined"
+                        v-bind="pill.link ? fixerLink : {}"
+                        data-fixer
+                        class="ui-chip inline-flex shrink-0 items-center gap-1.5 rounded px-2 py-1 text-xs font-medium"
+                        :class="[pill.ink, pill.link ? pill.chip : `border-line`]"
+                        v-tooltip.top="
+                            pill.link
+                                ? { title: t(`mainFailure.openFixer`), rows: [{ label: t(`tip.model`), value: view.fixer?.model ?? `` }] }
+                                : undefined
+                        "
+                    >
+                        <Icon :name="pill.icon" :spin="pill.spin" class="text-2xs" />
+                        {{ pill.label }}
+                    </component>
 
-                <span v-else-if="view.state === `unassigned`" class="text-xs text-subtle">{{ t(`mainFailure.unassigned`) }}</span>
-
-                <!-- The run row's own split button, moved up with the press: the caret re-points the model, and over an
-                     agent that already tried, its panel ends in Continue / Start over. -->
-                <AgentRunButton
-                    v-if="press !== undefined"
-                    :label="starting !== undefined && starting === runKey ? t(`pipelineRunRow.readingLogs`) : press.label"
-                    :picker="picker"
-                    :severity="press.primary ? undefined : `secondary`"
-                    :text="!press.primary"
-                    :loading="busy !== undefined && busy === runKey"
-                    :disabled="busy !== undefined"
-                    @run="pressFix"
-                />
+                    <!-- The run rows' own split button, moved up with the press: the caret re-points the model, and over an
+                         agent that already tried, its panel ends in Continue / Start over. -->
+                    <AgentRunButton
+                        v-if="press !== undefined"
+                        :label="starting !== undefined && starting === runKey ? t(`pipelineRunRow.readingLogs`) : press.label"
+                        :picker="picker"
+                        :severity="press.primary ? undefined : `secondary`"
+                        :text="!press.primary"
+                        :loading="busy !== undefined && busy === runKey"
+                        :disabled="busy !== undefined"
+                        @run="pressFix"
+                    />
+                </div>
             </div>
+
+            <!-- Where the fix stands and the reader's move, aligned under the title. -->
+            <p data-story class="pl-6 text-sm text-muted">{{ story }}</p>
         </div>
 
-        <!-- What auto-fix did and what comes next, in words: why this strip exists, and why the rows under it have no Fix. -->
-        <p data-story class="pl-6 text-xs text-muted">{{ story }}</p>
-
-        <!-- Which jobs, a few by name: the run row below draws every one of them in its graph. -->
-        <div v-if="jobs.shown.length > 0" class="flex min-w-0 flex-wrap items-center gap-1 pl-6">
-            <span class="mr-1 text-2xs text-subtle">{{ t(`mainFailure.failingNow`) }}</span>
-            <ul class="flex min-w-0 flex-wrap items-center gap-1" :aria-label="t(`mainFailure.failingJobs`)">
-                <li
-                    v-for="job in jobs.shown"
-                    :key="job"
-                    class="inline-flex max-w-64 items-center rounded border border-line bg-canvas px-1.5 py-px font-mono text-2xs text-muted"
-                >
-                    <span class="truncate" v-tooltip.top.overflow="job">{{ job }}</span>
-                </li>
-                <li v-if="jobs.folded.length > 0" class="px-1 text-2xs text-subtle" v-tooltip.top="jobs.folded.join(`, `)">
-                    {{ t(`mainFailure.moreJobs`, { count: jobs.folded.length }) }}
-                </li>
-            </ul>
+        <!-- The runs this incident speaks for, indented off the lane; hairlines between them start where they do, so none
+             crosses the lane. -->
+        <div v-if="covered.length > 0" class="ml-8 divide-y divide-line-subtle">
+            <slot />
         </div>
+
+        <svg
+            v-if="lane !== undefined"
+            class="pointer-events-none absolute inset-0 text-danger/50"
+            :width="lane.width"
+            :height="lane.height"
+            :viewBox="`0 0 ${lane.width} ${lane.height}`"
+            fill="none"
+            aria-hidden="true"
+        >
+            <path :d="lane.d" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
     </section>
 </template>

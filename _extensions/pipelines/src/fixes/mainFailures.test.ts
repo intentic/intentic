@@ -1,5 +1,13 @@
-import { type CiMainFailure, ciFixConversationId, fixAttemptId, type MainFailureDecision } from "@intentic/sandbox-contract";
 import {
+    type AgentSummary,
+    type CiMainFailure,
+    ciFixConversationId,
+    fixAttemptId,
+    fixStance,
+    type MainFailureDecision,
+} from "@intentic/sandbox-contract";
+import {
+    coveredRuns,
     handBackOf,
     jobsAtAGlance,
     leadsRows,
@@ -7,6 +15,7 @@ import {
     type MainFailureState,
     mainFailureState,
     offersFix,
+    storyOf,
     waitsForYou,
 } from "./mainFailures";
 import { agentCard, pipelineRun } from "../testing";
@@ -153,5 +162,52 @@ describe(`leadsRows`, () => {
     it(`leaves the rows their own press only when the banner has none to give and nobody is on it`, () => {
         expect(leadsRows({ state: `waits`, run: undefined })).toBe(false);
         expect(leadsRows({ state: `unassigned`, run: undefined })).toBe(false);
+    });
+});
+
+describe(`coveredRuns`, () => {
+    it(`is the branch's failures nothing has passed since, and its runs still going, in the board's order`, () => {
+        const going = pipelineRun({ runId: 50, status: `running` });
+        const newest = pipelineRun({ runId: 49 });
+        const older = pipelineRun({ runId: 48 });
+        const history = pipelineRun({ runId: 40 });
+        const passed = pipelineRun({ runId: 45, status: `success` });
+        const canceled = pipelineRun({ runId: 47, status: `canceled` });
+        const feature = pipelineRun({ runId: 46, branch: `feat/x` });
+        const otherRepo = pipelineRun({ runId: 44, repo: `api` });
+        const runs = [going, newest, older, canceled, feature, passed, otherRepo, history];
+        expect(coveredRuns(failing(), runs, new Map([[history, passed]]))).toEqual([going, newest, older]);
+    });
+
+    it(`covers nothing when the board no longer lists the branch's runs`, () => {
+        expect(coveredRuns(failing(), [pipelineRun({ runId: 9, branch: `feat/x` })], new Map())).toEqual([]);
+    });
+});
+
+describe(`storyOf`, () => {
+    const fixing = (status: AgentSummary["status"], over: Partial<AgentSummary> = {}) => {
+        const fixer = agentCard(`ci-fix-web-41`, { status, updatedAt: NOW - 5 * MINUTE, ...over });
+        return { state: `fixing` as const, fixer, stance: fixStance(fixer) };
+    };
+
+    it(`follows the agent's live stance while it has the failure, not the fact that one was sent`, () => {
+        expect(storyOf(fixing(`running`), [])).toBe(`working`);
+        expect(storyOf(fixing(`ready`), [])).toBe(`ready`);
+        expect(storyOf(fixing(`landed`), [])).toBe(`landed`);
+        expect(storyOf(fixing(`awaiting`, { attention: { ...agentCard(`x`).attention, question: true } }), [])).toBe(`needsYou`);
+        expect(storyOf(fixing(`stopped`), [])).toBe(`ended`);
+        expect(storyOf({ state: `fixing`, fixer: undefined, stance: undefined }, [])).toBe(`working`);
+    });
+
+    it(`calls a landed fix measured once a run starts after it landed, and only then`, () => {
+        const before = pipelineRun({ runId: 51, status: `running`, createdAt: NOW - 6 * MINUTE });
+        const after = pipelineRun({ runId: 52, status: `running`, createdAt: NOW - 4 * MINUTE });
+        expect(storyOf(fixing(`landed`), [before])).toBe(`landed`);
+        expect(storyOf(fixing(`landed`), [after, before])).toBe(`proving`);
+    });
+
+    it(`is the failure's own state once nobody is working on it`, () => {
+        const states = [`waits`, `reported`, `unassigned`] as const;
+        expect(states.map((state) => storyOf({ state, fixer: undefined, stance: undefined }, []))).toEqual([`waits`, `reported`, `unassigned`]);
     });
 });

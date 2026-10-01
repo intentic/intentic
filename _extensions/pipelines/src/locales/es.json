@@ -3,7 +3,6 @@
         "autoFixAgent": "Agente de arreglo automático",
         "continueFix": "Continuar arreglo",
         "failingJobs": "Tareas que fallan",
-        "failingNow": "Fallan ahora",
         "filesOnBranch": "{count} archivo en su rama | {count} archivos en su rama",
         "fixAgent": "Agente de arreglo en ello",
         "fixWithAgent": "Arreglar con un agente",
@@ -21,13 +20,18 @@
         "repairsOff": "Arreglo automático desactivado",
         "since": "desde {when}",
         "story": {
-            "fixing": "El arreglo automático puso un agente en esto. Cada nuevo fallo en {branch} va a él hasta que pase una ejecución.",
-            "reported": "El arreglo automático está desactivado, así que no se envió ningún agente. Inicia uno aquí o arréglalo a mano.",
-            "unassigned": "El arreglo automático envía un agente cuando ha leído los logs de la tarea fallida. Inicia uno ahora para no esperar.",
-            "waits": "El agente de arreglo automático lo devolvió. Continuar le da más turnos; ábrelo para ver lo que intentó."
+            "ended": "El agente de arreglo automático se detuvo antes de arreglarlo. Ábrelo para ver por qué.",
+            "landed": "El arreglo está en tu espacio de trabajo. Haz commit y push: la próxima ejecución en {branch} mostrará si funcionó.",
+            "needsYou": "El agente de arreglo automático te está esperando. Ábrelo para responder.",
+            "proving": "El arreglo está dentro. Una nueva ejecución en {branch} lo está comprobando.",
+            "ready": "Hay un arreglo listo en la rama del agente. Ábrelo para revisarlo e integrarlo.",
+            "reported": "El arreglo automático está desactivado, así que no se envió ningún agente. Inicia uno o arréglalo a mano.",
+            "unassigned": "El arreglo automático está leyendo los logs de la tarea fallida antes de enviar un agente. Inicia uno ahora para no esperar.",
+            "waiting": "El agente de arreglo automático está en pausa hasta que vuelva su cuota.",
+            "waits": "{reason}: el agente de arreglo automático lo devolvió. Continuar le da más turnos.",
+            "working": "El agente de arreglo automático está en ello. Cada nuevo fallo en {branch} va al mismo agente hasta que pase una ejecución."
         },
-        "title": "{branch} está fallando",
-        "unassigned": "Aún sin agente de arreglo"
+        "title": "{branch} está fallando"
     },
     "pipelineDagGraph": {
         "expand": "Expandir",

@@ -23,7 +23,7 @@ import { arrivesOpen, openFailures, supersededBy } from "./ciStreaks";
 import { useCiFixes } from "./fixes/useCiFixes";
 import { useFailureHistory } from "./useFailureHistory";
 import MainFailureBanner from "./fixes/MainFailureBanner.vue";
-import { leadsRows, mainFailuresOf } from "./fixes/mainFailures";
+import { coveredRuns, leadsRows, mainFailuresOf, type MainFailureView } from "./fixes/mainFailures";
 import PipelineRunRow from "./PipelineRunRow.vue";
 import PipelinesSkeleton from "./PipelinesSkeleton.vue";
 import PipelinesTally from "./PipelinesTally.vue";
@@ -129,6 +129,41 @@ const branchFixFor = (run: PipelineRun): CiFix | undefined =>
 // Rows that default open: a branch's newest commit still running, or a failure it left open (`arrivesOpen`). Off every
 // run, not the scoped ones, for the same cross-repo reason as `open`.
 const autoOpen = computed(() => arrivesOpen(runs.value));
+
+// Each repository's runs as the board lays them out: every failing main line as one block holding the runs it speaks for
+// (coveredRuns), joined to its header by a drawn lane, then the rest in time order. A run sits in one place only.
+interface RepoBoard {
+    readonly incidents: readonly { readonly view: MainFailureView; readonly covered: readonly PipelineRun[] }[];
+    readonly rest: readonly PipelineRun[];
+}
+const boards = computed(
+    () =>
+        new Map(
+            sections.value.map((standing): [string, RepoBoard] => {
+                const incidents = mainFailuresOfRepo(standing.repo.repo).map((view) => ({
+                    view,
+                    covered: coveredRuns(view.failure, standing.runs, superseded.value),
+                }));
+                const inside = new Set(incidents.flatMap((incident) => incident.covered));
+                return [standing.repo.repo, { incidents, rest: standing.runs.filter((run) => !inside.has(run)) }];
+            }),
+        ),
+);
+const boardOf = (standing: RepoStanding): RepoBoard => boards.value.get(standing.repo.repo) ?? { incidents: [], rest: standing.runs };
+
+// One row's whole binding, so a row inside an incident and one below it can never be drawn from different facts.
+const rowProps = (run: PipelineRun) => ({
+    run,
+    busy: busy.value,
+    starting: starting.value,
+    recurring: recurringFor(run),
+    open: open.value.has(run),
+    superseded: superseded.value.get(run),
+    autoOpen: autoOpen.value.has(run),
+    fix: fixByRun.value.get(run),
+    branchFix: branchFixFor(run),
+    ledByBanner: bannerBranches.value.has(`${run.repo}\n${run.branch}`),
+});
 
 // One link per repo, pointed at its pipeline list, not the vendor's front door or the project page. Completes a ladder:
 // one run's URL, this repo's pipelines, the repo itself (the group's #info line).
@@ -320,15 +355,25 @@ const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined, resume
                                 </a>
                             </template>
 
-                            <!-- First in its group: the one line about the branch that saves reading every failed row under it. -->
+                            <!-- First in its group: each failing main line as one incident, holding the runs it is about. -->
                             <MainFailureBanner
-                                v-for="view in mainFailuresOfRepo(standing.repo.repo)"
-                                :key="`${view.failure.repo}:${view.failure.branch}`"
-                                :view="view"
+                                v-for="incident in boardOf(standing).incidents"
+                                :key="`${incident.view.failure.repo}:${incident.view.failure.branch}`"
+                                :view="incident.view"
+                                :covered="incident.covered"
                                 :busy="busy"
                                 :starting="starting"
                                 @fix="fixRun"
-                            />
+                            >
+                                <PipelineRunRow
+                                    v-for="run in incident.covered"
+                                    :key="actionKey(run)"
+                                    v-bind="rowProps(run)"
+                                    @rerun="act($event, rerun)"
+                                    @cancel="act($event, cancel)"
+                                    @fix="fixRun"
+                                />
+                            </MainFailureBanner>
 
                             <!-- Everyone sees warnings; only maintainers see the signing recipe. -->
                             <Notice v-if="standing.repo.hookWarning" tone="warning" class="px-4 py-2.5 break-words">
@@ -337,18 +382,9 @@ const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined, resume
                             </Notice>
 
                             <PipelineRunRow
-                                v-for="run in standing.runs"
+                                v-for="run in boardOf(standing).rest"
                                 :key="actionKey(run)"
-                                :run="run"
-                                :busy="busy"
-                                :starting="starting"
-                                :recurring="recurringFor(run)"
-                                :open="open.has(run)"
-                                :superseded="superseded.get(run)"
-                                :auto-open="autoOpen.has(run)"
-                                :fix="fixByRun.get(run)"
-                                :branch-fix="branchFixFor(run)"
-                                :led-by-banner="bannerBranches.has(`${run.repo}\n${run.branch}`)"
+                                v-bind="rowProps(run)"
                                 @rerun="act($event, rerun)"
                                 @cancel="act($event, cancel)"
                                 @fix="fixRun"

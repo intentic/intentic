@@ -3,7 +3,6 @@
         "autoFixAgent": "Auto-Reparatur-Agent",
         "continueFix": "Reparatur fortsetzen",
         "failingJobs": "Fehlschlagende Jobs",
-        "failingNow": "Schlägt fehl",
         "filesOnBranch": "{count} Datei auf seinem Branch | {count} Dateien auf seinem Branch",
         "fixAgent": "Reparatur-Agent dran",
         "fixWithAgent": "Mit Agent reparieren",
@@ -21,13 +20,18 @@
         "repairsOff": "Auto-Reparatur aus",
         "since": "seit {when}",
         "story": {
-            "fixing": "Die Auto-Reparatur hat einen Agenten darauf angesetzt. Jeder neue Fehler auf {branch} geht an ihn, bis ein Lauf grün ist.",
-            "reported": "Die Auto-Reparatur ist aus, daher wurde kein Agent geschickt. Starten Sie hier einen oder reparieren Sie es von Hand.",
-            "unassigned": "Die Auto-Reparatur schickt einen Agenten, sobald sie die Logs des fehlgeschlagenen Jobs gelesen hat. Starten Sie jetzt einen, um nicht zu warten.",
-            "waits": "Der Auto-Reparatur-Agent hat das zurückgegeben. Fortsetzen gibt ihm weitere Runden; öffnen Sie ihn, um zu sehen, was er versucht hat."
+            "ended": "Der Auto-Reparatur-Agent hat aufgehört, bevor er es behoben hat. Öffnen Sie ihn, um zu sehen, warum.",
+            "landed": "Die Lösung ist in Ihrem Arbeitsbereich. Committen und pushen Sie sie: Der nächste Lauf auf {branch} zeigt, ob sie wirkt.",
+            "needsYou": "Der Auto-Reparatur-Agent wartet auf Sie. Öffnen Sie ihn, um zu antworten.",
+            "proving": "Die Lösung ist drin. Ein neuer Lauf auf {branch} prüft sie gerade.",
+            "ready": "Eine Lösung liegt auf dem Branch des Agenten bereit. Öffnen Sie ihn, um sie zu prüfen und zu übernehmen.",
+            "reported": "Die Auto-Reparatur ist aus, daher wurde kein Agent geschickt. Starten Sie einen oder reparieren Sie es von Hand.",
+            "unassigned": "Die Auto-Reparatur liest die Logs des fehlgeschlagenen Jobs, bevor sie einen Agenten schickt. Starten Sie jetzt einen, um nicht zu warten.",
+            "waiting": "Der Auto-Reparatur-Agent pausiert, bis sein Kontingent zurück ist.",
+            "waits": "{reason}: Der Auto-Reparatur-Agent hat das zurückgegeben. Fortsetzen gibt ihm weitere Runden.",
+            "working": "Der Auto-Reparatur-Agent ist dran. Jeder neue Fehler auf {branch} geht an denselben Agenten, bis ein Lauf grün ist."
         },
-        "title": "{branch} schlägt fehl",
-        "unassigned": "Noch kein Reparatur-Agent"
+        "title": "{branch} schlägt fehl"
     },
     "pipelineDagGraph": {
         "expand": "Aufklappen",

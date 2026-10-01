@@ -16,7 +16,6 @@
         "autoFixAgent": "Auto-fix agent",
         "continueFix": "Continue fix",
         "failingJobs": "Failing jobs",
-        "failingNow": "Failing now",
         "filesOnBranch": "{count} file on its branch | {count} files on its branch",
         "fixAgent": "Fix agent on it",
         "fixWithAgent": "Fix with agent",
@@ -34,13 +33,18 @@
         "repairsOff": "Auto-fix off",
         "since": "since {when}",
         "story": {
-            "fixing": "Auto-fix put one agent on this. Every new failure on {branch} goes to it until a run passes.",
-            "reported": "Auto-fix is off, so no agent was sent. Start one here, or fix it by hand.",
-            "unassigned": "Auto-fix sends an agent once it has read the failed job's logs. Start one now to skip the wait.",
-            "waits": "The auto-fix agent handed this back. Continue gives it more turns, or open it to see what it tried."
+            "ended": "The auto-fix agent stopped before fixing it. Open it to see why.",
+            "landed": "The fix is in your workspace. Commit and push it: the next run on {branch} shows whether it worked.",
+            "needsYou": "The auto-fix agent is waiting on you. Open it to answer.",
+            "proving": "The fix is in. A new run on {branch} is checking it now.",
+            "ready": "A fix is ready on the agent's branch. Open it to review and land it.",
+            "reported": "Auto-fix is off, so no agent was sent. Start one, or fix it by hand.",
+            "unassigned": "Auto-fix is reading the failed job's logs before it sends an agent. Start one now to skip the wait.",
+            "waiting": "The auto-fix agent is paused until its allowance comes back.",
+            "waits": "{reason}: the auto-fix agent handed this back. Continue gives it more turns.",
+            "working": "The auto-fix agent is on it. Every new failure on {branch} goes to the same agent until a run passes."
         },
-        "title": "{branch} is failing",
-        "unassigned": "No fix agent yet"
+        "title": "{branch} is failing"
     },
     "pipelineDagGraph": {
         "expand": "Expand",

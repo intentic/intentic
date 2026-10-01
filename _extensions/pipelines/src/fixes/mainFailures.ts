@@ -3,14 +3,16 @@ import {
     type CiMainFailure,
     type FixStance,
     fixStance,
+    isPipelineInFlight,
     latestFixAttempt,
     type MainFailureHandBack,
     type PipelineRun,
 } from "@intentic/sandbox-contract";
 
-// A MAIN-LINE BRANCH WHOSE CI FAILS, AND ITS ONE FIX AGENT, as the board draws it above a repository's runs. The daemon
-// keeps the failure (`ci.runs` `failures`, ci/main-fixer.ts): since the first job failed, the jobs failing now, the one
-// conversation every later failure on the branch goes to, and the latest decision about it. The agent's live state is the
+// A MAIN-LINE BRANCH WHOSE CI FAILS, AND ITS ONE FIX AGENT, as the board draws it: one incident block at the head of its
+// repository's runs, holding the runs it is about (coveredRuns). The daemon keeps the failure (`ci.runs` `failures`,
+// ci/main-fixer.ts): since the first job failed, the jobs failing now, the one conversation every later failure on the
+// branch goes to, and the latest decision about it. The agent's live state is the
 // fleet's, read by the fixer's own id: it was started on the first failed run, so a later run's derived id
 // (ciFixConversationId) names somebody else, and joining by run would lose it the moment main failed again.
 
@@ -79,6 +81,49 @@ export const offersFix = (view: Pick<MainFailureView, "state" | "run">): boolean
 // worded as if it started somebody new. True while an agent works on it, or while the banner holds the press; only a
 // banner with neither (its run has left the board, and nobody is on it) leaves the rows theirs.
 export const leadsRows = (view: Pick<MainFailureView, "state" | "run">): boolean => view.state === `fixing` || offersFix(view);
+
+// The runs a failing main line speaks for, which the board draws inside its block, joined to its header by a drawn
+// lane: the branch's failures that nothing has passed since (a superseded one is history, and stays with the other
+// runs), and the runs on it still going, since a push after the fix is how it gets measured. In the board's own order.
+export const coveredRuns = (
+    failure: Pick<CiMainFailure, "repo" | "branch">,
+    runs: readonly PipelineRun[],
+    superseded: ReadonlyMap<PipelineRun, PipelineRun>,
+): PipelineRun[] =>
+    runs.filter(
+        (run) =>
+            run.repo === failure.repo &&
+            run.branch === failure.branch &&
+            ((run.status === `failed` && !superseded.has(run)) || isPipelineInFlight(run.status)),
+    );
+
+// What the block's one sentence says: the state the failure is in, in the reader's terms, and the move it asks for. While
+// the agent has it, its live stance decides, since "an agent is on it" is the wrong sentence once the fix is written or
+// landed. A landed fix is measured by the next push (main-fixer.ts: the owner commits and pushes it), so a run that
+// started after it landed is that measurement under way.
+export type MainFailureStory = `working` | `needsYou` | `ready` | `landed` | `proving` | `waiting` | `ended` | Exclude<MainFailureState, `fixing`>;
+
+export const storyOf = (view: Pick<MainFailureView, "state" | "stance" | "fixer">, covered: readonly PipelineRun[]): MainFailureStory => {
+    if (view.state !== `fixing`) {
+        return view.state;
+    }
+    switch (view.stance?.kind) {
+        case `needs-you`:
+            return `needsYou`;
+        case `ready`:
+            return `ready`;
+        case `landed`: {
+            const landedAt = view.fixer?.updatedAt ?? Number.POSITIVE_INFINITY;
+            return covered.some((run) => isPipelineInFlight(run.status) && run.createdAt > landedAt) ? `proving` : `landed`;
+        }
+        case `waiting`:
+            return `waiting`;
+        case `ended`:
+            return `ended`;
+        default:
+            return `working`;
+    }
+};
 
 // Why the fix agent handed it back, as the closed set the banner words itself. Undefined when it was not handed back, or
 // by a daemon from before the reason was recorded, which the banner says generically rather than by quoting its

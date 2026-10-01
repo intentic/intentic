@@ -3,7 +3,6 @@
         "autoFixAgent": "Agent de correction auto",
         "continueFix": "Continuer la correction",
         "failingJobs": "Tâches en échec",
-        "failingNow": "En échec",
         "filesOnBranch": "{count} fichier sur sa branche | {count} fichiers sur sa branche",
         "fixAgent": "Agent de correction dessus",
         "fixWithAgent": "Réparer avec un agent",
@@ -21,13 +20,18 @@
         "repairsOff": "Correction auto désactivée",
         "since": "depuis {when}",
         "story": {
-            "fixing": "La correction auto a mis un agent dessus. Chaque nouvel échec sur {branch} lui revient jusqu'à ce qu'une exécution réussisse.",
-            "reported": "La correction auto est désactivée, donc aucun agent n'a été envoyé. Lancez-en un ici ou corrigez à la main.",
-            "unassigned": "La correction auto envoie un agent dès qu'elle a lu les logs de la tâche en échec. Lancez-en un maintenant pour ne pas attendre.",
-            "waits": "L'agent de correction auto l'a rendu. Continuer lui redonne des tours ; ouvrez-le pour voir ce qu'il a tenté."
+            "ended": "L'agent de correction auto s'est arrêté avant de corriger. Ouvrez-le pour voir pourquoi.",
+            "landed": "La correction est dans votre espace de travail. Committez et poussez-la : la prochaine exécution sur {branch} dira si elle marche.",
+            "needsYou": "L'agent de correction auto vous attend. Ouvrez-le pour répondre.",
+            "proving": "La correction est intégrée. Une nouvelle exécution sur {branch} la vérifie en ce moment.",
+            "ready": "Une correction est prête sur la branche de l'agent. Ouvrez-le pour la relire et l'intégrer.",
+            "reported": "La correction auto est désactivée, donc aucun agent n'a été envoyé. Lancez-en un ou corrigez à la main.",
+            "unassigned": "La correction auto lit les logs de la tâche en échec avant d'envoyer un agent. Lancez-en un maintenant pour ne pas attendre.",
+            "waiting": "L'agent de correction auto est en pause jusqu'au retour de son quota.",
+            "waits": "{reason} : l'agent de correction auto l'a rendu. Continuer lui redonne des tours.",
+            "working": "L'agent de correction auto s'en occupe. Chaque nouvel échec sur {branch} va au même agent jusqu'à ce qu'une exécution réussisse."
         },
-        "title": "{branch} échoue",
-        "unassigned": "Pas encore d'agent de correction"
+        "title": "{branch} échoue"
     },
     "pipelineDagGraph": {
         "expand": "Déplier",

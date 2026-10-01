@@ -16,7 +16,6 @@
         "autoFixAgent": "Agent auto-naprawy",
         "continueFix": "Kontynuuj naprawę",
         "failingJobs": "Padające zadania",
-        "failingNow": "Padają teraz",
         "filesOnBranch": "{count} plik na jego gałęzi | {count} pliki na jego gałęzi | {count} plików na jego gałęzi",
         "fixAgent": "Agent naprawczy działa",
         "fixWithAgent": "Napraw agentem",
@@ -34,13 +33,18 @@
         "repairsOff": "Auto-naprawa wyłączona",
         "since": "od {when}",
         "story": {
-            "fixing": "Auto-naprawa wysłała do tego jednego agenta. Każdy nowy błąd na {branch} trafia do niego, aż przebieg przejdzie.",
-            "reported": "Auto-naprawa jest wyłączona, więc nie wysłano agenta. Uruchom go tutaj albo napraw ręcznie.",
-            "unassigned": "Auto-naprawa wyśle agenta, gdy przeczyta logi nieudanego zadania. Uruchom go teraz, żeby nie czekać.",
-            "waits": "Agent auto-naprawy oddał to Tobie. Kontynuuj da mu kolejne tury; otwórz go, żeby zobaczyć, co próbował."
+            "ended": "Agent auto-naprawy zatrzymał się przed naprawą. Otwórz go, żeby zobaczyć dlaczego.",
+            "landed": "Poprawka jest w Twojej przestrzeni roboczej. Zrób commit i push: następny przebieg na {branch} pokaże, czy działa.",
+            "needsYou": "Agent auto-naprawy czeka na Ciebie. Otwórz go, żeby odpowiedzieć.",
+            "proving": "Poprawka jest scalona. Nowy przebieg na {branch} właśnie ją sprawdza.",
+            "ready": "Poprawka czeka na gałęzi agenta. Otwórz go, żeby ją przejrzeć i scalić.",
+            "reported": "Auto-naprawa jest wyłączona, więc nie wysłano agenta. Uruchom go albo napraw ręcznie.",
+            "unassigned": "Auto-naprawa czyta logi nieudanego zadania, zanim wyśle agenta. Uruchom go teraz, żeby nie czekać.",
+            "waiting": "Agent auto-naprawy czeka, aż wróci jego limit.",
+            "waits": "{reason}: agent auto-naprawy oddał to Tobie. Kontynuuj da mu kolejne tury.",
+            "working": "Agent auto-naprawy się tym zajmuje. Każdy nowy błąd na {branch} trafia do tego samego agenta, aż przebieg przejdzie."
         },
-        "title": "{branch} nie przechodzi",
-        "unassigned": "Jeszcze bez agenta naprawczego"
+        "title": "{branch} nie przechodzi"
     },
     "pipelineDagGraph": {
         "expand": "Rozwiń",

@@ -123,8 +123,10 @@ const branchState = computed(() => {
     const stance = fixStance(other.agent);
     return { run: other.run, stance: { ...stance, ...fixStanceLook(stance.kind) }, link: agentLink(other.agent.id) };
 });
-// A landed fix hands the row's weight to Re-run: it's in the workspace, proving it is what's left.
-const proven = computed(() => fixState.value?.kind === `landed`);
+// A landed fix hands the row's weight to Re-run: it's in the workspace, proving it is what's left. Not under a failing-main
+// block, which says the move itself: the fix is uncommitted in the workspace, so re-running this commit cannot measure
+// it, and the next push on main does (MainFailureBanner, storyOf).
+const proven = computed(() => props.ledByBanner !== true && fixState.value?.kind === `landed`);
 
 // Which attempt at this run the row's agent is (conversation-ids.ts): 1 wears the bare id, later ones their number.
 const attemptNumber = computed(() =>
@@ -335,7 +337,8 @@ const openStartOver = (): void => {
     <!-- No status stripe down the left edge: the lead glyph and the badge beside the headline already carry the status. -->
     <DisclosureRow class="@container" hit="pair" body="drawer" wide-control v-model:open="expanded">
         <template #lead="{ iconClass }">
-            <Icon :name="tone.icon" :spin="tone.spin" class="shrink-0" :class="[iconClass, tone.text]" />
+            <!-- `data-lane-node`: inside a failing-main block, the lane drawn from its header ends on this glyph. -->
+            <Icon data-lane-node :name="tone.icon" :spin="tone.spin" class="shrink-0" :class="[iconClass, tone.text]" />
             <Avatar :size="24" :name="run.authorName" :src="run.authorAvatarUrl" />
         </template>
 
