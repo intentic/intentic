@@ -203,6 +203,14 @@
         box-shadow: 0 18px 48px rgba(0, 0, 0, 0.66);
     }
 
+    /* Menus take the softer rule, frame and arrow alike. */
+    [data-skin="sanctum"] .ui-anchored-menu {
+        --ui-anchored-line: var(--sanctum-rule);
+    }
+    [data-skin="sanctum"] .ui-anchored-menu .ui-anchored-surface {
+        border-color: var(--ui-anchored-line);
+    }
+
 /* THE DIALOG WORE THE TURNED CORNER AND IT IS GONE, ornament and token both. */
     [data-skin="sanctum"] .p-dialog {
         box-shadow: 0 24px 60px rgba(0, 0, 0, 0.75);

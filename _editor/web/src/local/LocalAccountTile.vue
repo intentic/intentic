@@ -116,7 +116,7 @@ const rowClass = `flex w-full items-center gap-2 rounded-md px-2 py-1 text-left 
         <Icon name="robot" class="icon-rail-glyph" />
     </button>
 
-    <AnchoredOverlay v-model="open" :anchor="trigger ?? undefined" side="right" cross="end">
+    <AnchoredOverlay v-model="open" :anchor="trigger ?? undefined" side="right" cross="end" menu>
         <!-- The sandbox shell's account menu: who, then where to go. Both open the workspace in this window's place. -->
         <div v-if="signedIn" class="flex w-60 flex-col p-1">
             <div v-if="account !== null" class="flex items-center gap-2 px-2 py-1.5">
@@ -126,7 +126,7 @@ const rowClass = `flex w-full items-center gap-2 rounded-md px-2 py-1 text-left 
                     <div v-if="account.name" class="truncate text-2xs text-muted">{{ account.name }}</div>
                 </div>
             </div>
-            <div v-if="account !== null" class="my-1 border-t border-line"></div>
+            <div v-if="account !== null" class="my-1 border-t border-line-subtle"></div>
             <button type="button" :class="rowClass" @click="toWorkspace">
                 <span class="flex h-5 w-5 shrink-0 items-center justify-center">
                     <Icon :name="busy === `workspace` ? `spinner` : `robot`" :spin="busy === `workspace`" class="text-base text-muted" />

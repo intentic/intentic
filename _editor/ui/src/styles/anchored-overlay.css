@@ -37,7 +37,7 @@
         margin-left: -6px;
     }
     .ui-anchored-top::before {
-        border-top-color: var(--color-line);
+        border-top-color: var(--ui-anchored-line, var(--color-line));
     }
     .ui-anchored-top::after {
         margin-top: -1px;
@@ -51,7 +51,7 @@
         margin-left: -6px;
     }
     .ui-anchored-bottom::before {
-        border-bottom-color: var(--color-line);
+        border-bottom-color: var(--ui-anchored-line, var(--color-line));
     }
     .ui-anchored-bottom::after {
         margin-bottom: -1px;
@@ -65,7 +65,7 @@
         margin-top: -6px;
     }
     .ui-anchored-left::before {
-        border-left-color: var(--color-line);
+        border-left-color: var(--ui-anchored-line, var(--color-line));
     }
     .ui-anchored-left::after {
         margin-left: -1px;
@@ -79,10 +79,18 @@
         margin-top: -6px;
     }
     .ui-anchored-right::before {
-        border-right-color: var(--color-line);
+        border-right-color: var(--ui-anchored-line, var(--color-line));
     }
     .ui-anchored-right::after {
         margin-right: -1px;
         border-right-color: var(--color-card);
+    }
+
+    /* Menus wear a softer frame than other panels; the arrow's outline follows. */
+    .ui-anchored-menu {
+        --ui-anchored-line: var(--color-line-subtle);
+    }
+    .ui-anchored-menu .ui-anchored-surface {
+        border-color: var(--ui-anchored-line);
     }
 }

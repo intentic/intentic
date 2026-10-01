@@ -419,7 +419,7 @@ const confirmRemove = async (): Promise<void> => {
     </span>
 
     <!-- Zeroed padding: PrimeVue's popover padding reads as a frame around rows with their own inset. -->
-    <AnchoredOverlay v-model="open" :anchor="trigger ?? undefined" side="right" cross="start">
+    <AnchoredOverlay v-model="open" :anchor="trigger ?? undefined" side="right" cross="start" menu>
         <div class="flex w-64 flex-col gap-0.5 p-1">
             <!-- The badge's detail: one row per pending item, routing to the hub tab that resolves it. -->
             <template v-if="attention.length > 0">
@@ -437,7 +437,7 @@ const confirmRemove = async (): Promise<void> => {
                     <span class="min-w-0 flex-1 text-content">{{ item.message }}</span>
                     <Icon name="chevron-right" class="shrink-0 text-2xs text-subtle" />
                 </RouterLink>
-                <div class="my-1 border-t border-line"></div>
+                <div class="my-1 border-t border-line-subtle"></div>
             </template>
 
             <!-- Things simply true (a contended port, a newer image): found on arrival, not advertised by the badge. -->
@@ -458,7 +458,7 @@ const confirmRemove = async (): Promise<void> => {
                     <span class="min-w-0 flex-1 text-muted">{{ item.message }}</span>
                     <Icon name="chevron-right" class="shrink-0 text-2xs text-subtle" />
                 </RouterLink>
-                <div class="my-1 border-t border-line"></div>
+                <div class="my-1 border-t border-line-subtle"></div>
             </template>
 
             <!-- The app's other face, a place of the same rank as the sandboxes and first, as the local window's switcher
@@ -484,7 +484,7 @@ const confirmRemove = async (): Promise<void> => {
                         >{{ commandShortcut(`sandbox.thisComputer`) }}</kbd
                     >
                 </button>
-                <div class="my-1 border-t border-line"></div>
+                <div class="my-1 border-t border-line-subtle"></div>
             </template>
 
             <div class="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-subtle">{{ t(`shared.sandboxes`) }}</div>
@@ -567,7 +567,7 @@ const confirmRemove = async (): Promise<void> => {
 
             <!-- Setups that were never finished, as their own section below Add sandbox, since they're errands, not places to go. -->
             <template v-if="unfinished.length > 0">
-                <div class="my-1 border-t border-line"></div>
+                <div class="my-1 border-t border-line-subtle"></div>
                 <div class="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-subtle">
                     {{ t(`shared.unfinishedSetup`) }}
                 </div>
@@ -593,7 +593,7 @@ const confirmRemove = async (): Promise<void> => {
                 </RouterLink>
             </template>
 
-            <div class="my-1 border-t border-line"></div>
+            <div class="my-1 border-t border-line-subtle"></div>
 
             <!-- The sandbox management hub has no rail tile; this chip is its home, and every attention row lands here too. -->
             <RouterLink

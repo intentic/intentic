@@ -10,6 +10,7 @@ const {
     gap = 8,
     edge = 8,
     restoreFocus = true,
+    menu = false,
 } = defineProps<{
     // The element the panel hangs off: also the window it opens in, and the click that never dismisses it.
     anchor: HTMLElement | undefined;
@@ -21,6 +22,8 @@ const {
     // preview), whose anchor never had focus to get back: focusing it would move the keyboard's place on a mouse's
     // say-so.
     restoreFocus?: boolean;
+    // A menu-like panel: no frame, the shadow alone sets it off.
+    menu?: boolean;
 }>();
 
 const open = defineModel<boolean>({ required: true });
@@ -151,7 +154,7 @@ onBeforeUnmount(disarm);
 
 <template>
     <Teleport v-if="open && anchor !== undefined" :to="anchor.ownerDocument.body">
-        <div ref="box" class="ui-anchored" :class="`ui-anchored-${placement?.side ?? side}`" :style="style" role="dialog" aria-modal="false">
+        <div ref="box" class="ui-anchored" :class="[`ui-anchored-${placement?.side ?? side}`, menu && `ui-anchored-menu`]" :style="style" role="dialog" aria-modal="false">
             <!-- This div is the surface that paints and clips; the frame around it must not, or it would cut off its own arrow. -->
             <div class="ui-anchored-surface">
                 <slot />

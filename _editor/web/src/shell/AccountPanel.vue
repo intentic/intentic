@@ -101,7 +101,7 @@ onUnmounted(() => {
     </div>
 
     <!-- Same inset as the sandbox switcher above; the popover's default padding is a content card's, not a menu's. -->
-    <AnchoredOverlay v-model="open" :anchor="trigger ?? undefined" side="right" cross="end">
+    <AnchoredOverlay v-model="open" :anchor="trigger ?? undefined" side="right" cross="end" menu>
         <div class="flex w-60 flex-col p-1">
             <!-- Chip sits beside the name (or email when there is no name), not on its own row below the identity block. -->
             <div class="flex items-center gap-2 px-2 py-1.5">
@@ -132,7 +132,7 @@ onUnmounted(() => {
                 </div>
             </div>
 
-            <div class="my-1 border-t border-line"></div>
+            <div class="my-1 border-t border-line-subtle"></div>
 
             <RouterLink
                 to="/settings"

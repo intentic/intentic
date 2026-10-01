@@ -77,10 +77,10 @@ const onRowClick = (event: MouseEvent, item: MenuItem): void => {
         :append-to="appendTo"
         @hide="emit(`hide`)"
         :pt="{
-            root: { class: `!text-xs`, style: { minWidth: `${minWidth}rem` } },
+            root: { class: `!text-xs !border-line-subtle`, style: { minWidth: `${minWidth}rem` } },
             rootList: { class: `!p-1 overflow-y-auto overscroll-contain`, style: { maxHeight } },
             itemLink: `!flex !items-center !gap-2 !rounded !px-2 !py-1 !text-xs`,
-            separator: `!my-1`,
+            separator: `!my-1 !border-line-subtle`,
         }"
     >
         <template #item="{ item, props }">

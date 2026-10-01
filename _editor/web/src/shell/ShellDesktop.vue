@@ -644,7 +644,7 @@ const wallpapered = useWallpaperedRoute();
             </button>
 
             <!-- Same overlay as the switcher and account avatar: AnchoredOverlay rows, not PrimeVue's ContextMenu. -->
-            <AnchoredOverlay v-model="moreOpen" :anchor="moreTrigger ?? undefined" side="right" cross="start">
+            <AnchoredOverlay v-model="moreOpen" :anchor="moreTrigger ?? undefined" side="right" cross="start" menu>
                 <div class="flex w-48 flex-col gap-0.5 p-1">
                     <!-- With every section pinned the menu is empty, and saying only that sent its reader back four times: it
                          says where the way back is too (the tile's own menu, onTileContextMenu). -->

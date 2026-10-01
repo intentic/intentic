@@ -211,7 +211,7 @@ const agentsFailure = computed(() => failedAt(`:agents`, `:add`));
         </span>
     </span>
 
-    <AnchoredOverlay v-model="open" :anchor="trigger ?? undefined" side="right" cross="start">
+    <AnchoredOverlay v-model="open" :anchor="trigger ?? undefined" side="right" cross="start" menu>
         <div class="flex w-72 flex-col gap-0.5 p-1">
             <!-- This computer's own heading, and its settings beside it (This device's screen, the app's view): the one
                  machine has one name here, and its settings sit with it as Sandbox settings sit with a sandbox. -->
@@ -319,7 +319,7 @@ const agentsFailure = computed(() => failedAt(`:agents`, `:add`));
                 <Notice tone="danger" class="text-2xs">{{ pickFailure }}</Notice>
             </div>
 
-            <div class="my-1 border-t border-line"></div>
+            <div class="my-1 border-t border-line-subtle"></div>
 
             <!-- The other kind of place: the account's sandboxes, where agents work, each opening the workspace on itself. -->
             <div class="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-subtle">{{ t(`shared.sandboxes`) }}</div>
