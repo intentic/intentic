@@ -57,8 +57,8 @@ const props = defineProps<{
     // Another run's agent working the same branch, for a row with none of its own; only set when `fix` isn't, so a failed
     // row can't offer a second agent for work already in flight.
     branchFix: CiFix | undefined;
-    // A failing-main banner above speaks for this row's branch and holds its one primary press, so this row's stays quiet:
-    // one loud button per breakage.
+    // A failing-main banner above speaks for this row's branch (mainFailures.ts, leadsRows): the fix is the banner's, so
+    // this row offers none of its own and shows only the run, Re-run and Cancel. One fix control per breakage.
     ledByBanner?: boolean;
 }>();
 const emit = defineEmits<{
@@ -178,8 +178,10 @@ const demoted = computed((): Tip | undefined => {
         ? { title: t(`pipelineRunRow.passedSince`), tone: `ok`, rows: [branch], note: t(`pipelineRunRow.failureIsHistory`) }
         : { title: t(`pipelineRunRow.newerFailure`), rows: [branch], note: t(`pipelineRunRow.fixThatRun`) };
 });
-// Loud only on the branch's open failure, while no agent is already on it and no banner above already offers the press.
-const loud = computed(() => props.open && props.branchFix === undefined && props.ledByBanner !== true);
+// Loud only on the branch's open failure, while no agent is already on it.
+const loud = computed(() => props.open && props.branchFix === undefined);
+// Whether this row draws any of the fix controls: none under a failing-main banner, which holds them for the branch.
+const ownsFix = computed(() => props.ledByBanner !== true);
 
 // Precision matches the amount: a sub-cent turn still shows something.
 const spend = computed<string | undefined>(() => {
@@ -414,67 +416,70 @@ const openStartOver = (): void => {
                         {{ timeAgo(run.createdAt) }}
                     </span>
                     <div class="flex items-center gap-1">
-                        <!-- A branch agent is shown when the run has no agent of its own. -->
-                        <a
-                            v-if="branchState"
-                            v-bind="branchState.link"
-                            class="touch-target inline-flex shrink-0 items-center gap-1 rounded border border-line px-2 py-1 text-xs font-medium text-subtle hover:bg-overlay hover:text-content"
-                            v-tooltip.top="demoted"
-                            :aria-label="t(`pipelineRunRow.agentAlreadyWorkingOn`, { branch: run.branch, runId: branchState.run.runId })"
-                        >
-                            <Icon :name="branchState.stance.icon" :spin="branchState.stance.spin" class="text-2xs" />
-                            {{ t(`pipelineRunRow.agentOnBranch`) }}
-                        </a>
-                        <!-- One slot for the agent, whichever half of its life applies (fixStance.ts owns the words). -->
-                        <a
-                            v-if="fixState !== undefined && !fixState.retry"
-                            v-bind="fixState.link"
-                            class="ui-chip shrink-0 rounded px-2 py-1 text-xs font-medium"
-                            :class="[fixState.ink, fixState.chip]"
-                            v-tooltip.top="fixDetail"
-                            :aria-label="fixAria"
-                        >
-                            <Icon :name="fixState.icon" :spin="fixState.spin" class="text-2xs" />
-                            {{ fixState.label }}
-                            <span v-if="showFixChipMeta && fixAge" class="text-2xs font-normal tabular-nums text-subtle">{{ fixAge }}</span>
-                            <span v-if="showFixChipMeta && spend" class="hidden text-2xs font-normal tabular-nums text-subtle @3xl:inline">{{
-                                spend
-                            }}</span>
-                            <DiffStat
-                                v-if="showFixChipMeta && fixDiff"
-                                class="hidden @3xl:inline"
-                                :additions="fixDiff.insertions"
-                                :deletions="fixDiff.deletions"
+                        <!-- Under a failing-main banner the banner is the fix's one home; the row keeps Re-run and Cancel. -->
+                        <template v-if="ownsFix">
+                            <!-- A branch agent is shown when the run has no agent of its own. -->
+                            <a
+                                v-if="branchState"
+                                v-bind="branchState.link"
+                                class="touch-target inline-flex shrink-0 items-center gap-1 rounded border border-line px-2 py-1 text-xs font-medium text-subtle hover:bg-overlay hover:text-content"
+                                v-tooltip.top="demoted"
+                                :aria-label="t(`pipelineRunRow.agentAlreadyWorkingOn`, { branch: run.branch, runId: branchState.run.runId })"
+                            >
+                                <Icon :name="branchState.stance.icon" :spin="branchState.stance.spin" class="text-2xs" />
+                                {{ t(`pipelineRunRow.agentOnBranch`) }}
+                            </a>
+                            <!-- One slot for the agent, whichever half of its life applies (fixStance.ts owns the words). -->
+                            <a
+                                v-if="fixState !== undefined && !fixState.retry"
+                                v-bind="fixState.link"
+                                class="ui-chip shrink-0 rounded px-2 py-1 text-xs font-medium"
+                                :class="[fixState.ink, fixState.chip]"
+                                v-tooltip.top="fixDetail"
+                                :aria-label="fixAria"
+                            >
+                                <Icon :name="fixState.icon" :spin="fixState.spin" class="text-2xs" />
+                                {{ fixState.label }}
+                                <span v-if="showFixChipMeta && fixAge" class="text-2xs font-normal tabular-nums text-subtle">{{ fixAge }}</span>
+                                <span v-if="showFixChipMeta && spend" class="hidden text-2xs font-normal tabular-nums text-subtle @3xl:inline">{{
+                                    spend
+                                }}</span>
+                                <DiffStat
+                                    v-if="showFixChipMeta && fixDiff"
+                                    class="hidden @3xl:inline"
+                                    :additions="fixDiff.insertions"
+                                    :deletions="fixDiff.deletions"
+                                />
+                            </a>
+                            <!-- Active attempts expose the remaining detail action beside their chip. -->
+                            <Button
+                                v-if="fixState !== undefined && fixState.ongoing && run.status === `failed`"
+                                ref="startOver"
+                                :label="t(`pipelineRunRow.startOver`)"
+                                size="small"
+                                severity="secondary"
+                                text
+                                icon-pos="right"
+                                :loading="busy === actionKey"
+                                :disabled="busy !== undefined"
+                                v-tooltip.top="{ title: t(`pipelineRunRow.freshAttempt`), note: t(`pipelineRunRow.opensPickerFirst`) }"
+                                @click="openStartOver"
+                            >
+                                <template #icon><Icon name="chevron-down" class="text-2xs" /></template>
+                            </Button>
+                            <!-- Only an unassigned branch failure gets the primary action. -->
+                            <AgentRunButton
+                                v-else-if="run.status === `failed`"
+                                :label="fixLabel"
+                                :picker="fixModel"
+                                :severity="loud ? undefined : `secondary`"
+                                :text="!loud"
+                                :loading="busy === actionKey"
+                                :disabled="busy !== undefined"
+                                :hint="startHint"
+                                @run="startFix"
                             />
-                        </a>
-                        <!-- Active attempts expose the remaining detail action beside their chip. -->
-                        <Button
-                            v-if="fixState !== undefined && fixState.ongoing && run.status === `failed`"
-                            ref="startOver"
-                            :label="t(`pipelineRunRow.startOver`)"
-                            size="small"
-                            severity="secondary"
-                            text
-                            icon-pos="right"
-                            :loading="busy === actionKey"
-                            :disabled="busy !== undefined"
-                            v-tooltip.top="{ title: t(`pipelineRunRow.freshAttempt`), note: t(`pipelineRunRow.opensPickerFirst`) }"
-                            @click="openStartOver"
-                        >
-                            <template #icon><Icon name="chevron-down" class="text-2xs" /></template>
-                        </Button>
-                        <!-- Only an unassigned branch failure gets the primary action. -->
-                        <AgentRunButton
-                            v-else-if="run.status === `failed`"
-                            :label="fixLabel"
-                            :picker="fixModel"
-                            :severity="loud ? undefined : `secondary`"
-                            :text="!loud"
-                            :loading="busy === actionKey"
-                            :disabled="busy !== undefined"
-                            :hint="startHint"
-                            @run="startFix"
-                        />
+                        </template>
                         <!-- Queued runs also expose cancellation while waiting for a runner. -->
                         <Button
                             v-if="inFlight"

@@ -1,8 +1,10 @@
 {
     "mainFailure": {
+        "autoFixAgent": "Agente de arreglo automático",
         "continueFix": "Continuar arreglo",
-        "continueGivesTurns": "Continuar devuelve turnos",
         "failingJobs": "Tareas que fallan",
+        "failingNow": "Fallan ahora",
+        "filesOnBranch": "{count} archivo en su rama | {count} archivos en su rama",
         "fixAgent": "Agente de arreglo en ello",
         "fixWithAgent": "Arreglar con un agente",
         "handBackGone": "Agente no disponible",
@@ -15,14 +17,17 @@
         "handedBack": "Devuelto",
         "moreJobs": "+{count} más",
         "needsYou": "Te necesita",
-        "noAgentSent": "Ningún agente enviado",
         "openFixer": "Abrir agente",
         "repairsOff": "Arreglo automático desactivado",
         "since": "desde {when}",
-        "takesEveryFailure": "Recibe cada fallo",
+        "story": {
+            "fixing": "El arreglo automático puso un agente en esto. Cada nuevo fallo en {branch} va a él hasta que pase una ejecución.",
+            "reported": "El arreglo automático está desactivado, así que no se envió ningún agente. Inicia uno aquí o arréglalo a mano.",
+            "unassigned": "El arreglo automático envía un agente cuando ha leído los logs de la tarea fallida. Inicia uno ahora para no esperar.",
+            "waits": "El agente de arreglo automático lo devolvió. Continuar le da más turnos; ábrelo para ver lo que intentó."
+        },
         "title": "{branch} está fallando",
-        "unassigned": "Aún sin agente de arreglo",
-        "untilARunPasses": "Hasta que pase una"
+        "unassigned": "Aún sin agente de arreglo"
     },
     "pipelineDagGraph": {
         "expand": "Expandir",

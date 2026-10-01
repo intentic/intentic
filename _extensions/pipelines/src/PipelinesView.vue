@@ -23,7 +23,7 @@ import { arrivesOpen, openFailures, supersededBy } from "./ciStreaks";
 import { useCiFixes } from "./fixes/useCiFixes";
 import { useFailureHistory } from "./useFailureHistory";
 import MainFailureBanner from "./fixes/MainFailureBanner.vue";
-import { mainFailuresOf, offersFix } from "./fixes/mainFailures";
+import { leadsRows, mainFailuresOf } from "./fixes/mainFailures";
 import PipelineRunRow from "./PipelineRunRow.vue";
 import PipelinesSkeleton from "./PipelinesSkeleton.vue";
 import PipelinesTally from "./PipelinesTally.vue";
@@ -115,10 +115,9 @@ const fixByRun = computed(() => fixesByRun(runs.value, agents.value));
 // Failing main lines with their one fix agent each, joined by the fixer's own id rather than a run's (mainFailures.ts).
 const mainFailures = computed(() => mainFailuresOf(failures.value, agents.value, runs.value));
 const mainFailuresOfRepo = (repo: string) => mainFailures.value.filter((view) => view.failure.repo === repo);
-// Branches whose banner offers the Fix press: it is their one primary, so their rows' own stay quiet.
-const bannerBranches = computed(
-    () => new Set(mainFailures.value.filter(offersFix).map((view) => `${view.failure.repo}\n${view.failure.branch}`)),
-);
+// Branches whose banner holds the fix (leadsRows): its press or its working agent is the breakage's one fix control, so
+// the rows under it offer none of their own.
+const bannerBranches = computed(() => new Set(mainFailures.value.filter(leadsRows).map((view) => `${view.failure.repo}\n${view.failure.branch}`)));
 // Branch's fix, for rows with none of their own; stops the newest failed row offering a second agent.
 const fixByBranch = computed(() => branchFixes(fixByRun.value));
 // A row with its own agent never also carries the branch pointer to itself, and only a failed row carries it at all: it
@@ -328,7 +327,7 @@ const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined, resume
                                 :view="view"
                                 :busy="busy"
                                 :starting="starting"
-                                @fix="(run) => fixRun(run, undefined, undefined)"
+                                @fix="fixRun"
                             />
 
                             <!-- Everyone sees warnings; only maintainers see the signing recipe. -->

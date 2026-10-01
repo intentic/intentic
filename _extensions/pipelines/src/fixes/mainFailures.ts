@@ -70,10 +70,15 @@ export const mainFailuresOf = (
 // Whether a failure waits for the reader, for the banner and the rail to say so the same way.
 export const waitsForYou = (view: Pick<MainFailureView, "state">): boolean => view.state === `waits` || view.state === `reported`;
 
-// Whether the banner offers a Fix press of its own: on the newest failed run it names, once nobody is working on it. A
-// press on any of main's failed runs goes to its one fix agent, with its turns back (ci.routes.ts), so while the banner
-// offers one, the rows under it keep theirs quiet.
+// Whether the banner offers a Fix press of its own: on the newest failed run it names, once nobody is working on it.
 export const offersFix = (view: Pick<MainFailureView, "state" | "run">): boolean => view.run !== undefined && view.state !== `fixing`;
+
+// Whether the banner speaks for its branch's fix, so the run rows under it offer none of their own: no Fix, no Continue,
+// no Start over, no pointer to the agent. A press on any of main's failed runs goes to the same one fix agent
+// (ci.routes.ts, streakFixerFor), so a second button on a row would only be the banner's press again, one line lower and
+// worded as if it started somebody new. True while an agent works on it, or while the banner holds the press; only a
+// banner with neither (its run has left the board, and nobody is on it) leaves the rows theirs.
+export const leadsRows = (view: Pick<MainFailureView, "state" | "run">): boolean => view.state === `fixing` || offersFix(view);
 
 // Why the fix agent handed it back, as the closed set the banner words itself. Undefined when it was not handed back, or
 // by a daemon from before the reason was recorded, which the banner says generically rather than by quoting its

@@ -13,9 +13,11 @@
         "webhookNotRegistered": "webhook niezarejestrowany"
     },
     "mainFailure": {
+        "autoFixAgent": "Agent auto-naprawy",
         "continueFix": "Kontynuuj naprawę",
-        "continueGivesTurns": "Kontynuuj oddaje tury",
         "failingJobs": "Padające zadania",
+        "failingNow": "Padają teraz",
+        "filesOnBranch": "{count} plik na jego gałęzi | {count} pliki na jego gałęzi | {count} plików na jego gałęzi",
         "fixAgent": "Agent naprawczy działa",
         "fixWithAgent": "Napraw agentem",
         "handBackGone": "Agenta nie ma",
@@ -28,14 +30,17 @@
         "handedBack": "Oddane",
         "moreJobs": "+{count} więcej",
         "needsYou": "Czeka na Ciebie",
-        "noAgentSent": "Nie wysłano agenta",
         "openFixer": "Otwórz agenta",
         "repairsOff": "Auto-naprawa wyłączona",
         "since": "od {when}",
-        "takesEveryFailure": "Dostaje każdy błąd",
+        "story": {
+            "fixing": "Auto-naprawa wysłała do tego jednego agenta. Każdy nowy błąd na {branch} trafia do niego, aż przebieg przejdzie.",
+            "reported": "Auto-naprawa jest wyłączona, więc nie wysłano agenta. Uruchom go tutaj albo napraw ręcznie.",
+            "unassigned": "Auto-naprawa wyśle agenta, gdy przeczyta logi nieudanego zadania. Uruchom go teraz, żeby nie czekać.",
+            "waits": "Agent auto-naprawy oddał to Tobie. Kontynuuj da mu kolejne tury; otwórz go, żeby zobaczyć, co próbował."
+        },
         "title": "{branch} nie przechodzi",
-        "unassigned": "Jeszcze bez agenta naprawczego",
-        "untilARunPasses": "Aż przebieg przejdzie"
+        "unassigned": "Jeszcze bez agenta naprawczego"
     },
     "pipelineDagGraph": {
         "expand": "Rozwiń",

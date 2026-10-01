@@ -1,8 +1,10 @@
 {
     "mainFailure": {
+        "autoFixAgent": "Agent de correction auto",
         "continueFix": "Continuer la correction",
-        "continueGivesTurns": "Continuer rend les tours",
         "failingJobs": "Tâches en échec",
+        "failingNow": "En échec",
+        "filesOnBranch": "{count} fichier sur sa branche | {count} fichiers sur sa branche",
         "fixAgent": "Agent de correction dessus",
         "fixWithAgent": "Réparer avec un agent",
         "handBackGone": "Agent disparu",
@@ -15,14 +17,17 @@
         "handedBack": "Rendu",
         "moreJobs": "+{count} de plus",
         "needsYou": "Vous attend",
-        "noAgentSent": "Aucun agent envoyé",
         "openFixer": "Ouvrir l'agent",
         "repairsOff": "Correction auto désactivée",
         "since": "depuis {when}",
-        "takesEveryFailure": "Reçoit chaque échec",
+        "story": {
+            "fixing": "La correction auto a mis un agent dessus. Chaque nouvel échec sur {branch} lui revient jusqu'à ce qu'une exécution réussisse.",
+            "reported": "La correction auto est désactivée, donc aucun agent n'a été envoyé. Lancez-en un ici ou corrigez à la main.",
+            "unassigned": "La correction auto envoie un agent dès qu'elle a lu les logs de la tâche en échec. Lancez-en un maintenant pour ne pas attendre.",
+            "waits": "L'agent de correction auto l'a rendu. Continuer lui redonne des tours ; ouvrez-le pour voir ce qu'il a tenté."
+        },
         "title": "{branch} échoue",
-        "unassigned": "Pas encore d'agent de correction",
-        "untilARunPasses": "Jusqu'à un succès"
+        "unassigned": "Pas encore d'agent de correction"
     },
     "pipelineDagGraph": {
         "expand": "Déplier",

@@ -1,8 +1,10 @@
 {
     "mainFailure": {
+        "autoFixAgent": "Auto-Reparatur-Agent",
         "continueFix": "Reparatur fortsetzen",
-        "continueGivesTurns": "Fortsetzen gibt Züge zurück",
         "failingJobs": "Fehlschlagende Jobs",
+        "failingNow": "Schlägt fehl",
+        "filesOnBranch": "{count} Datei auf seinem Branch | {count} Dateien auf seinem Branch",
         "fixAgent": "Reparatur-Agent dran",
         "fixWithAgent": "Mit Agent reparieren",
         "handBackGone": "Agent weg",
@@ -15,14 +17,17 @@
         "handedBack": "Zurückgegeben",
         "moreJobs": "+{count} weitere",
         "needsYou": "Braucht Sie",
-        "noAgentSent": "Kein Agent geschickt",
         "openFixer": "Agent öffnen",
         "repairsOff": "Auto-Reparatur aus",
         "since": "seit {when}",
-        "takesEveryFailure": "Übernimmt jeden Fehler",
+        "story": {
+            "fixing": "Die Auto-Reparatur hat einen Agenten darauf angesetzt. Jeder neue Fehler auf {branch} geht an ihn, bis ein Lauf grün ist.",
+            "reported": "Die Auto-Reparatur ist aus, daher wurde kein Agent geschickt. Starten Sie hier einen oder reparieren Sie es von Hand.",
+            "unassigned": "Die Auto-Reparatur schickt einen Agenten, sobald sie die Logs des fehlgeschlagenen Jobs gelesen hat. Starten Sie jetzt einen, um nicht zu warten.",
+            "waits": "Der Auto-Reparatur-Agent hat das zurückgegeben. Fortsetzen gibt ihm weitere Runden; öffnen Sie ihn, um zu sehen, was er versucht hat."
+        },
         "title": "{branch} schlägt fehl",
-        "unassigned": "Noch kein Reparatur-Agent",
-        "untilARunPasses": "Bis ein Lauf grün ist"
+        "unassigned": "Noch kein Reparatur-Agent"
     },
     "pipelineDagGraph": {
         "expand": "Aufklappen",

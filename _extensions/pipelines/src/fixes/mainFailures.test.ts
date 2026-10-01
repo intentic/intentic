@@ -1,5 +1,14 @@
 import { type CiMainFailure, ciFixConversationId, fixAttemptId, type MainFailureDecision } from "@intentic/sandbox-contract";
-import { handBackOf, jobsAtAGlance, mainFailuresOf, type MainFailureState, mainFailureState, offersFix, waitsForYou } from "./mainFailures";
+import {
+    handBackOf,
+    jobsAtAGlance,
+    leadsRows,
+    mainFailuresOf,
+    type MainFailureState,
+    mainFailureState,
+    offersFix,
+    waitsForYou,
+} from "./mainFailures";
 import { agentCard, pipelineRun } from "../testing";
 
 // A failing main line as the board says it above a repository's runs. The fixer is joined by the id the daemon names,
@@ -126,5 +135,23 @@ describe(`offersFix`, () => {
         expect([`waits`, `reported`, `unassigned`].map((state) => offersFix({ state: state as MainFailureState, run }))).toEqual([true, true, true]);
         expect(offersFix({ state: `fixing`, run })).toBe(false);
         expect(offersFix({ state: `waits`, run: undefined })).toBe(false);
+    });
+});
+
+describe(`leadsRows`, () => {
+    const run = pipelineRun({ runId: 43 });
+
+    it(`holds the branch's fix while an agent works on it or the banner offers the press, so no row offers a second`, () => {
+        // The case behind two "Fix with agent" buttons on one breakage: the banner showed its agent working while the row
+        // under it still offered to start one.
+        expect(leadsRows({ state: `fixing`, run })).toBe(true);
+        expect(leadsRows({ state: `fixing`, run: undefined })).toBe(true);
+        const asking: readonly MainFailureState[] = [`waits`, `reported`, `unassigned`];
+        expect(asking.map((state) => leadsRows({ state, run }))).toEqual([true, true, true]);
+    });
+
+    it(`leaves the rows their own press only when the banner has none to give and nobody is on it`, () => {
+        expect(leadsRows({ state: `waits`, run: undefined })).toBe(false);
+        expect(leadsRows({ state: `unassigned`, run: undefined })).toBe(false);
     });
 });

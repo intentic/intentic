@@ -13,9 +13,11 @@
         "webhookNotRegistered": "webhook not registered"
     },
     "mainFailure": {
+        "autoFixAgent": "Auto-fix agent",
         "continueFix": "Continue fix",
-        "continueGivesTurns": "Continue gives turns back",
         "failingJobs": "Failing jobs",
+        "failingNow": "Failing now",
+        "filesOnBranch": "{count} file on its branch | {count} files on its branch",
         "fixAgent": "Fix agent on it",
         "fixWithAgent": "Fix with agent",
         "handBackGone": "Agent gone",
@@ -28,14 +30,17 @@
         "handedBack": "Handed back",
         "moreJobs": "+{count} more",
         "needsYou": "Needs you",
-        "noAgentSent": "No agent sent",
         "openFixer": "Open agent",
         "repairsOff": "Auto-fix off",
         "since": "since {when}",
-        "takesEveryFailure": "Takes every failure",
+        "story": {
+            "fixing": "Auto-fix put one agent on this. Every new failure on {branch} goes to it until a run passes.",
+            "reported": "Auto-fix is off, so no agent was sent. Start one here, or fix it by hand.",
+            "unassigned": "Auto-fix sends an agent once it has read the failed job's logs. Start one now to skip the wait.",
+            "waits": "The auto-fix agent handed this back. Continue gives it more turns, or open it to see what it tried."
+        },
         "title": "{branch} is failing",
-        "unassigned": "No fix agent yet",
-        "untilARunPasses": "Until a run passes"
+        "unassigned": "No fix agent yet"
     },
     "pipelineDagGraph": {
         "expand": "Expand",
