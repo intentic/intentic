@@ -190,6 +190,14 @@ until_true 20 "Xvfb is up on ${DISPLAY}" xdpyinfo -display "$DISPLAY" || exit 1
 eval "$(dbus-launch --sh-syntax)"
 export DBUS_SESSION_BUS_ADDRESS DBUS_SESSION_BUS_PID
 
+# AN INSTALL LAST USED THROUGH THE WORKSPACE, which is where the banner lives. Since the main window took the
+# launcher's place (be3dcc2ada) a launch opens the face last chosen (lib.rs `opening`), and a fresh install's is the
+# main local window, which never loads this stub: the update downloaded and then nothing on screen could offer it.
+# The app's own record of that choice (state.rs `Face`, `last-face.json` under tauri.conf.json's identifier).
+CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/dev.intentic.desktop"
+mkdir -p "$CONFIG_DIR"
+printf '"workspace"\n' >"$CONFIG_DIR/last-face.json"
+
 # 1. it downloads without being asked
 setsid "$INSTALLED" >/tmp/intentic-app.log 2>&1 &
 until_true 60 "the app started" workspace_window || app_log
