@@ -18,6 +18,12 @@ export const run = async (command: string, args: readonly string[], install?: st
                 reject(new DesktopError(`This device has no "${command}".`, install));
                 return;
             }
+            // A kill at the timeout leaves stderr empty and error.message only echoing the command line, which read
+            // as an unexplained failure; say what happened.
+            if (error.killed === true) {
+                reject(new DesktopError(`"${command}" did not answer within ${TIMEOUT_MS / 1_000}s and was stopped.`, install));
+                return;
+            }
             const said = `${stderr}`.trim();
             reject(new DesktopError(said === "" ? `"${command}" failed: ${error.message}` : `"${command}" failed: ${said}`, install));
         });

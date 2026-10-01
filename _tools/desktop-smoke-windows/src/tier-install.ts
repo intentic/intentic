@@ -242,7 +242,9 @@ export const runInstallTier = async (harness: Harness, options: InstallTierOptio
             const own = visibleFaces(rejected);
             return own.length === 1 && own[0]!.title.includes(SETUP_TITLE);
         };
-        if (!(await harness.untilTrue(15, `the setup screen took the workspace's window rather than opening a second one`, oneWindowShowingSetup))) {
+        // 30s, not 15: one listing may run to run()'s 15s timeout on a loaded runner, and a deadline no longer than
+        // that gave the check a single try (run 36886462093 failed on exactly that, with no window ever listed).
+        if (!(await harness.untilTrue(30, `the setup screen took the workspace's window rather than opening a second one`, oneWindowShowingSetup))) {
             // Own windows listed first: two of the app's own and one that isn't the setup screen are different
             // failures.
             const own = visibleFaces(rejected);

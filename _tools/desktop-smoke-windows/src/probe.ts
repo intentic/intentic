@@ -189,7 +189,9 @@ export const answerConfirm = async (
     const closed = async (): Promise<boolean> => {
         const deadline = ops.now() + ANSWER_SETTLE_MS;
         for (;;) {
-            if ((await ops.showing()) === undefined) {
+            // A listing that failed (one past run()'s timeout on a loaded runner) is "not known yet", not "still up".
+            const still = await ops.showing().catch(() => ``);
+            if (still === undefined) {
                 return true;
             }
             if (ops.now() >= deadline) {
@@ -200,15 +202,19 @@ export const answerConfirm = async (
     };
 
     let refusal = `"${titleFragment}" was still up after ${ANSWER_ATTEMPTS} presses of Return, each one sent to a window this machine confirmed had the keyboard`;
+    let pressed = false;
     for (let attempt = 1; attempt <= ANSWER_ATTEMPTS; attempt += 1) {
-        const dialog = await ops.showing();
-        if (dialog === undefined) {
-            // Gone before the first press means it was never there; gone after one means the press worked.
-            return attempt === 1 ? `no window of ${app}'s is showing "${titleFragment}" any more` : undefined;
-        }
         try {
+            // Inside the try: a window listing that throws is a failed attempt to retry, not a crash of the whole
+            // smoke (run 36875866500 died here on a listing that ran past its 15s).
+            const dialog = await ops.showing();
+            if (dialog === undefined) {
+                // Gone before any press means it was never there; gone after one means the press worked.
+                return pressed ? undefined : `no window of ${app}'s is showing "${titleFragment}" any more`;
+            }
             await ops.focus(dialog);
             await ops.press();
+            pressed = true;
         } catch (error) {
             refusal = errorMessage(error);
             await ops.sleep(ANSWER_POLL_MS);

@@ -79,3 +79,21 @@ test("no dialog at all is a refusal, not a silent pass: nothing was answered", a
     expect(await answerConfirm(app, title, fake.ops)).toContain(app);
     expect(fake.presses).toHaveLength(0);
 });
+
+test("a window listing that fails mid-answer is retried, not thrown: a slow listing on a loaded runner is not a crash", async () => {
+    const fake = dialog(1);
+    let listings = 0;
+    const showing = fake.ops.showing;
+    const ops: ConfirmOps = {
+        ...fake.ops,
+        showing: async () => {
+            listings += 1;
+            if (listings === 1) {
+                throw new Error(`"powershell.exe" did not answer within 15s and was stopped.`);
+            }
+            return await showing();
+        },
+    };
+    expect(await answerConfirm(`intentic-desktop`, `Set up a sandbox`, ops)).toBeUndefined();
+    expect(fake.presses).toHaveLength(1);
+});
