@@ -3121,7 +3121,6 @@
             "couldntRead": "Gelöschte Sandboxes konnten nicht gelesen werden",
             "couldntRestore": "Diese Sandbox konnte nicht wiederhergestellt werden",
             "daysLeftToRestore": "noch {count} Tag | noch {count} Tage",
-            "keptForDays": "Eine gelöschte Sandbox lässt sich {count} Tag lang wiederherstellen, danach ist sie endgültig weg. | Eine gelöschte Sandbox lässt sich {count} Tage lang wiederherstellen, danach ist sie endgültig weg.",
             "nothingToRestore": "Nichts wiederherzustellen",
             "reading": "Gelöschte Sandboxes werden gelesen"
         },

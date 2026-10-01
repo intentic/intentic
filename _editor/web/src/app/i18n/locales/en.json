@@ -4085,7 +4085,6 @@
             "couldntRead": "Couldn't read deleted sandboxes",
             "couldntRestore": "Couldn't restore that sandbox",
             "daysLeftToRestore": "{count} day left | {count} days left",
-            "keptForDays": "A deleted sandbox can be restored for {count} day, then it is gone for good. | A deleted sandbox can be restored for {count} days, then it is gone for good.",
             "nothingToRestore": "Nothing to restore",
             "reading": "Reading deleted sandboxes"
         },

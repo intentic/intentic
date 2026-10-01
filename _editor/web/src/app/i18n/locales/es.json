@@ -3134,7 +3134,6 @@
             "couldntRead": "No se pudieron leer los sandboxes eliminados",
             "couldntRestore": "No se pudo restaurar ese sandbox",
             "daysLeftToRestore": "queda {count} día | quedan {count} días",
-            "keptForDays": "Un sandbox eliminado se puede restaurar durante {count} día; después desaparece para siempre. | Un sandbox eliminado se puede restaurar durante {count} días; después desaparece para siempre.",
             "nothingToRestore": "Nada que restaurar",
             "reading": "Leyendo los sandboxes eliminados"
         },

@@ -3866,7 +3866,6 @@
             "couldntRead": "Nie udało się odczytać usuniętych sandboxów",
             "couldntRestore": "Nie udało się przywrócić tego sandboxa",
             "daysLeftToRestore": "został {count} dzień | zostało {count} dni",
-            "keptForDays": "Usunięty sandbox można przywrócić przez {count} dzień, potem znika na dobre. | Usunięty sandbox można przywrócić przez {count} dni, potem znika na dobre.",
             "nothingToRestore": "Nic do przywrócenia",
             "reading": "Odczytywanie usuniętych sandboxów"
         },
