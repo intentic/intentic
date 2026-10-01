@@ -163,17 +163,8 @@ flowchart LR
   nothing can ask.
 - **A folder's own sandbox, copy-first.** "Work on this with an agent" in a folder's window
   (`src-tauri/src/project.rs`) refuses a disk, a home folder (a Fedora Atomic home under `/var/home` included), a
-  system folder and one inside or around a folder that already has a sandbox, and says what copy-first means.
-  - With this computer's Docker engine listening (`scripts::engine_listening`), the same question asks where the
-    sandbox runs: "Create sandbox here", the default, or "Use an intentic machine".
-  - It then parks the folder and opens the workspace's `/setup?project=<name>&machine=mine` or `&machine=hosted`.
-  - With no engine here the question only confirms, and the page decides as before (`/setup?project=<name>`).
-
-  (2026-10-01) This computer became the default when it can run the sandbox, since a folder on it syncs through
-  Docker there (the machine agent's README, "Through Docker"). A machine of ours as the default was rejected for
-  that case: it costs a tunnel on the data path and hosted allowance for a folder this computer can serve.
-
-  The folder is copied into the sandbox's
+  system folder and one inside or around a folder that already has a sandbox, says what copy-first means, then parks
+  the folder and opens the workspace's `/setup?project=<name>`. The folder is copied into the sandbox's
   `/work/<name>` and kept up to date from here; agents change the copy, and nothing in the folder changes until the
   window's "Bring back changes", which keeps a restore point first. The setup page answers with
   `intentic://setup?…&project=<name>` for a sandbox on this machine, run with `SYNC_DIR`, `SYNC_REMOTE_DIR=/work/<name>`

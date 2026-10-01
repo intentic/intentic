@@ -20,7 +20,6 @@ import {
     isProjectPairing,
     type Pairing,
     pairingRemoteDir,
-    projectDirection,
     readState,
     removePairing,
     setAutoHealOff,
@@ -495,21 +494,15 @@ const finishSetup = (ui: Ui, sandboxUrl: string, pairing: Pairing, pairings: rea
     ui.finished(
         syncing ? "Desktop sync is running." : "Enrolled for port mirroring.",
         syncing ? pairing.localDir : undefined,
-        syncing ? setupOutcome(pairing) : `Ports from ${sandboxUrl} now answer on this machine's localhost (mirror-only, no file sync).`,
+        syncing
+            ? `That folder and your sandbox's ${pairingRemoteDir(pairing)} are now the same files.`
+            : `Ports from ${sandboxUrl} now answer on this machine's localhost (mirror-only, no file sync).`,
         [
             ["check it", "intentic-machine status"],
             ["remove it", "intentic-machine sync uninstall"],
         ],
     );
 };
-
-// What a finished setup means for the folder, in the terms its direction gives it. A copy-first project is a copy: the
-// owner's edits flow in, and nothing an agent does there reaches the folder until it is brought back. Only a two-way
-// pairing makes the folder and the sandbox's side the same files.
-export const setupOutcome = (pairing: Pick<Pairing, "project" | "direction" | "remoteDir">): string =>
-    isProjectPairing(pairing) && projectDirection(pairing) === "to-sandbox"
-        ? `That folder is copied into your sandbox's ${pairingRemoteDir(pairing)}, and your edits keep flowing in. What agents change there reaches this folder only when you bring it back (\`intentic-machine sync bring-back\`), after a restore point.`
-        : `That folder and your sandbox's ${pairingRemoteDir(pairing)} are now the same files.`;
 
 // How long `setup` waits for the watcher it just started to bind this pairing's port. Bounded by process
 // startup, not by any work the watcher does.

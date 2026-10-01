@@ -139,13 +139,7 @@ describe(`a project setup`, () => {
     it(`installs on this computer however many sandboxes the account has, and from a browser starts no machine`, () => {
         expect(arrivalFor(arrival({ project: true, inApp: true, onlySandbox: false }))).toBe(`local`);
         expect(arrivalFor(arrival({ project: true }))).toBe(`local`);
-    });
-
-    // The app's "Use an intentic machine" is the reader's own pick: where no machine of ours can hold the folder, the
-    // picker says so rather than installing on this computer, which they chose against.
-    it(`opens the picker for a machine of ours asked for by name that none can be had for`, () => {
-        expect(arrivalFor(arrival({ project: true, requestedMachine: `hosted` }))).toBe(`choose`);
-        expect(arrivalFor(arrival({ project: true, inApp: true, requestedMachine: `hosted` }))).toBe(`choose`);
+        expect(arrivalFor(arrival({ project: true, requestedMachine: `hosted` }))).toBe(`local`);
     });
 
     it(`still needs a code to hand the app, and leaves an errand in progress alone`, () => {
@@ -241,14 +235,6 @@ describe(`a project where the platform's machines can hold one`, () => {
         });
     });
 
-    it.each<[string, Partial<ArrivalInput>]>([
-        [`an allowance already spent`, { hostedSpent: true }],
-        [`a full fleet`, { hostedFull: true }],
-        [`a platform that hosts nothing`, { hostedOffered: false }],
-    ])(`opens the picker, not this computer, when a machine of ours was asked for by name and %s stops it`, (_, over) => {
-        expect(arrivalFor(hostedProject({ requestedMachine: `hosted`, ...over }))).toBe(`choose`);
-    });
-
     it(`still leaves an errand in progress alone, and needs a code to hand the app`, () => {
         const answers = [{ touched: true }, { elsewhere: true }, { hostedSpent: true, commandOffered: false }].map((over) =>
             arrivalFor(hostedProject(over)),
@@ -258,11 +244,11 @@ describe(`a project where the platform's machines can hold one`, () => {
 });
 
 describe(`a project where the platform's machines cannot hold one`, () => {
-    it(`goes to this computer unless a machine of ours was asked for by name, and preselects none`, () => {
+    it(`goes to this computer however it arrived, and preselects no machine of ours`, () => {
         const olderPlatform = [{}, { requestedMachine: `hosted` as const }, { hostedIdle: true }, { fresh: false }].map((over) =>
             arrival({ project: true, inApp: true, ...over }),
         );
-        expect(olderPlatform.map(arrivalFor)).toEqual([`local`, `choose`, `local`, `local`]);
+        expect(olderPlatform.map(arrivalFor)).toEqual([`local`, `local`, `local`, `local`]);
         expect(olderPlatform.map(projectPrefersHosted)).toEqual([false, false, false, false]);
     });
 });

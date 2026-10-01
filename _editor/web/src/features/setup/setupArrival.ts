@@ -86,12 +86,6 @@ const projectArrival = (input: ArrivalInput): Arrival => {
     if (projectPrefersHosted(input)) {
         return input.fresh || input.requestedMachine === `hosted` ? `hosted` : `choose`;
     }
-    // A machine of ours asked for by name (the app's "Use an intentic machine") that none can be had for, whether the
-    // allowance is spent, the fleet is full or the platform's machines hold no project, is the reader's to decide again:
-    // never an install on this computer they did not pick.
-    if (input.requestedMachine === `hosted`) {
-        return `choose`;
-    }
     if (input.hostedProjects && input.hostedIdle && input.requestedMachine !== `mine`) {
         return `choose`;
     }

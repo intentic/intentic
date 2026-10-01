@@ -11,7 +11,7 @@ import {
 } from "@intentic/sandbox-contract";
 import { stubGlobal } from "@intentic/testing/bun";
 import { agentLine, buildSkewLine, conflictLines, linkLine, pairingLine, statusSummary } from "../../status.js";
-import { enrollKey, placementChange, placementOf, projectAskedWithoutFlag, selectPairings, setupOutcome, syncSwitchPlan, transportFor } from "../commands.js";
+import { enrollKey, placementChange, placementOf, projectAskedWithoutFlag, selectPairings, syncSwitchPlan, transportFor } from "../commands.js";
 import type { Pairing, SyncState } from "../config.js";
 import { syncSessionNames } from "../mutagen.js";
 
@@ -211,20 +211,6 @@ describe("transportFor", () => {
             `--transport docker needs this sandbox's container running on this machine's Docker engine, and none here serves ${url}.`,
         );
         await expect(transportFor("docker", {}, url, here)).rejects.toThrow("--transport docker is for a project folder (--project)");
-    });
-});
-
-// What setup says it did must be what the folder now is: a copy-first project is a copy, not the same files.
-describe("setupOutcome", () => {
-    it("tells a copy-first project that agents' changes come back only when brought back", () => {
-        expect(setupOutcome({ project: true, remoteDir: "/work/my-app" })).toBe(
-            "That folder is copied into your sandbox's /work/my-app, and your edits keep flowing in. What agents change there reaches this folder only when you bring it back (`intentic-machine sync bring-back`), after a restore point.",
-        );
-    });
-
-    it("keeps 'the same files' for a two-way pairing", () => {
-        expect(setupOutcome({})).toBe("That folder and your sandbox's /work are now the same files.");
-        expect(setupOutcome({ project: true, remoteDir: "/work/my-app", direction: "both" })).toBe("That folder and your sandbox's /work/my-app are now the same files.");
     });
 });
 

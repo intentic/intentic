@@ -15,12 +15,6 @@ The `/setup` page: it makes the sandbox row a visit sets up, decides by itself w
   `project`, `flow/useHostedLane.ts`). "My own computer" stays one pick away, and is where the folder goes when no
   machine can be started, as it always went on a platform that says nothing about projects: the app is handed the
   setup code with `project=` and runs the sandbox on this computer.
-- **The app may already have asked where a project runs.** When its computer can run sandboxes, the app's question
-  sends `?machine=mine`, which installs here at once and is its default, or `?machine=hosted`.
-  - A machine of ours asked for by name that none can be had for (a spent allowance, a full fleet, a platform whose
-    machines hold no project) opens the picker rather than installing on this computer, which the reader chose
-    against.
-  - With no engine on the computer the app sends neither, and the rules above decide.
 - **The folder reaches a machine of ours through the app.** Once the machine answers (`flow/useRegistryWatch.ts`),
   `hostedProject.ts` mints a sync pairing on it the way the Desktop sync card does and opens
   `intentic://sync?url&pair&name&project&sandbox` inside the app, which copies the folder it parked into
