@@ -107,7 +107,11 @@ until_true() {
 window_titled() { xdotool search --name "$1"; }
 # Mapped windows only — `hide()` unmaps, which is how the two screens take turns in one frame. Without
 # `--onlyvisible` xdotool finds the one that stepped aside and "there is only ever one window" never fails.
-mapped_windows() { xdotool search --onlyvisible --name "^Intentic"; }
+# The app's own windows END in its name: the main one is named after its folder ("<folder> · Intentic", local.rs),
+# a setup in it "Setting up <name> · Intentic" (src/device/title.ts), the workspace bare "Intentic". The
+# confirmation is not one of them, and does not.
+APP_WINDOW='Intentic$'
+mapped_windows() { xdotool search --onlyvisible --name "$APP_WINDOW"; }
 
 # The link every tier fires. A setup link, because it is the one a first-time user meets and the only one whose
 # arrival is VISIBLE without a test hook: it asks whether to run, then parks a pending setup and raises the
@@ -341,7 +345,7 @@ fi
 setsid "${LAUNCH[@]}" >"$LOG" 2>&1 &
 APP_PID=$!
 
-if until_true 60 "the workspace window opened" window_titled "^Intentic$"; then
+if until_true 60 "the workspace window opened" window_titled "$APP_WINDOW"; then
     :
 else
     echo "--- app output ---" >&2

@@ -23,6 +23,7 @@ import * as runs from "./runs";
 import * as sandboxes from "./sandboxes";
 import * as setup from "./setup";
 import * as sync from "./sync";
+import { titleTheSetup } from "./title";
 
 // THIS COMPUTER, AS THE APP ITSELF SEES IT: its sandboxes, its machine agent, its Docker engine, and the work the app runs
 // on it (a sandbox's setup handed over from the workspace, a sync enrollment, a sandbox recreated, resized or fixed).
@@ -144,6 +145,7 @@ const startOnce = async (options: DeviceOptions): Promise<void> => {
         () => undefined,
     );
     if (options.takesWork) {
+        titleTheSetup();
         await takeParkedWork();
     }
 };
