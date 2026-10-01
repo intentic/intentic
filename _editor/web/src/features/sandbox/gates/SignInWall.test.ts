@@ -97,7 +97,7 @@ it(`hands sign-in to the real browser inside the desktop app`, async () => {
     desktopVersion.mockReturnValue(`1.2.3`);
 
     await mount();
-    buttonSaying(`Continue with Google in your browser`)?.click();
+    buttonSaying(`Continue with Google`)?.click();
 
     expect(signInThroughBrowser).toHaveBeenCalledTimes(1);
 });
@@ -114,7 +114,7 @@ it(`keeps Google's own button in an ordinary browser`, async () => {
     await mount();
 
     expect(renderButton).toHaveBeenCalledTimes(1);
-    expect(buttonSaying(`Continue with Google in your browser`)).toBeUndefined();
+    expect(buttonSaying(`Continue with Google`)).toBeUndefined();
 });
 
 it(`offers a passkey beside Google's button only once the daemon says one is registered here, and its session settles the prompt`, async () => {
@@ -251,14 +251,26 @@ describe(`the way out of the wall`, () => {
 });
 
 // The desktop window used to stay exactly as it was while the sign-in ran in the browser.
-it(`says the sign-in is waiting in the browser once handed off, and can open it again`, async () => {
+it(`shows one browser instruction after handoff, with a quiet browser link and one way out`, async () => {
     desktopVersion.mockReturnValue(`1.2.3`);
-    await mount();
+    activeSandbox.value = { role: `owner`, lastSeenAt: `2026-09-28T08:44:00Z`, removedAt: null };
+    const outcome = raiseSignIn({ kind: `choose`, target: TARGET, passkey: true });
+    const el = await mount();
 
-    buttonSaying(`Continue with Google in your browser`)?.click();
+    buttonSaying(`Continue with Google`)?.click();
     await nextTick();
 
-    expect(document.body.textContent).toContain(`Finish signing in in your browser…`);
-    buttonSaying(`Open it again`)?.click();
+    expect([...el.querySelectorAll(`h2`)].map((heading) => heading.textContent?.trim())).toEqual([`Continue in your browser`]);
+    expect(el.querySelector(`[role="status"]`)?.textContent).toContain(`You’ll return here automatically.`);
+    expect(el.textContent).toContain(`owner@example.com`);
+    expect([...el.querySelectorAll(`button`)].map((button) => button.textContent?.trim())).toEqual([`Open browser`, `Not now`]);
+    buttonSaying(`Open browser`)?.click();
     expect(signInThroughBrowser).toHaveBeenCalledTimes(2);
+
+    buttonSaying(`Not now`)?.click();
+    await settle();
+
+    expect(cancelSignIn).toHaveBeenCalledTimes(1);
+    expect(push).not.toHaveBeenCalled();
+    await expect(outcome).resolves.toBeUndefined();
 });

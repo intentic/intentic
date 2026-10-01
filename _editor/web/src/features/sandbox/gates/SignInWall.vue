@@ -113,7 +113,7 @@ const recover = (): Promise<void> => {
 // mint awaited here, and the adopted credential answers the call that follows instead. Until then the wall says the
 // sign-in is waiting in the browser (browserHandoff.ts).
 const handoff = useBrowserHandoff();
-const handoffWaiting = handoff.waiting;
+const waitingInBrowser = computed(() => desktop.value && handoff.waiting.value);
 const signInOutside = (): void => handoff.start();
 
 // A sandbox that has answered before and was not removed: its reader is at work, not in a setup. "Back to setup" sent
@@ -132,6 +132,7 @@ const notNow = (): void => {
 
 // Settles the awaiting mint and returns to setup instead of signing in; nothing needs severing.
 const backToSetup = async (): Promise<void> => {
+    handoff.cancel();
     cancelSignIn();
     dismissSignIn();
     const active = sandbox.activeSandboxId.value;
@@ -144,7 +145,7 @@ const backToSetup = async (): Promise<void> => {
         <div class="w-full max-w-sm rounded-2xl border border-line bg-card p-6 shadow-xl">
             <div class="flex flex-col items-center gap-3 text-center">
                 <span class="flex h-11 w-11 items-center justify-center rounded-xl bg-overlay text-link">
-                    <Icon :name="stepUp ? `key` : `google`" class="text-lg" />
+                    <Icon :name="stepUp ? `key` : waitingInBrowser ? `external-link` : `google`" class="text-lg" />
                 </span>
 
                 <!-- STEP-UP: the proof was taken, the sandbox wants its passkey. -->
@@ -208,29 +209,24 @@ const backToSetup = async (): Promise<void> => {
 
                 <!-- CHOOSE: nothing in hand yet. -->
                 <template v-else>
-                    <h2 class="text-lg font-semibold text-content">{{ t(`sandbox.signInWall.signInToReach`) }}</h2>
-                    <p class="text-sm text-muted">
-                        <template v-if="desktop">{{ t(`sandbox.signInWall.intenticSignsInThrough`) }}</template>
-                        <template v-else>{{ t(`sandbox.signInWall.continueGoogleToSecurely`) }}</template>
-                        <template v-if="user?.email">
-                            {{ t(`sandbox.signInWall.useIntenticAccount`) }} <span class="font-medium text-content">{{ user.email }}</span
-                            >.
-                        </template>
+                    <div class="space-y-2" role="status">
+                        <h2 class="text-lg font-semibold text-content">
+                            {{ waitingInBrowser ? t(`sandbox.signInWall.continueInBrowser`) : t(`sandbox.signInWall.signInToReach`) }}
+                        </h2>
+                        <p class="text-sm text-muted">
+                            <template v-if="waitingInBrowser">{{ t(`sandbox.signInWall.browserReturnsAutomatically`) }}</template>
+                            <template v-else-if="desktop">{{ t(`sandbox.signInWall.intenticSignsInThrough`) }}</template>
+                            <template v-else>{{ t(`sandbox.signInWall.continueGoogleToSecurely`) }}</template>
+                        </p>
+                    </div>
+                    <p v-if="user?.email" class="text-xs text-muted">
+                        {{ t(`sandbox.signInWall.useIntenticAccount`) }} <span class="break-all font-medium text-content">{{ user.email }}</span>
                     </p>
                     <Notice v-if="notice" :of="notice" class="w-full text-left" />
-                    <!-- After the press: the sign-in is in the browser now, and the wall says so until it returns. -->
-                    <div v-if="desktop && handoffWaiting" class="mt-2 flex w-full flex-col items-center gap-2" role="status">
-                        <p class="text-sm font-medium text-content">{{ t(`auth.words.finishInBrowser`) }}</p>
-                        <p class="text-xs text-muted">{{ t(`auth.words.finishInBrowserDetail`) }}</p>
-                        <Button :label="t(`auth.words.openBrowserAgain`)" severity="secondary" class="w-full justify-center" @click="handoff.start">
-                            <template #icon><Icon name="google" /></template>
-                        </Button>
-                        <button type="button" :class="ui.textAction(`text-subtle`)" @click="handoff.cancel">{{ t(`ui.action.cancel`) }}</button>
-                    </div>
                     <!-- Google's own button does nothing when clicked here, so the desktop app hands off to the real browser instead. -->
                     <Button
-                        v-else-if="desktop"
-                        :label="t(`auth.words.continueGoogleInBrowser`)"
+                        v-if="desktop && !waitingInBrowser"
+                        :label="t(`auth.words.continueGoogle`)"
                         severity="secondary"
                         class="mt-2 w-full justify-center"
                         @click="signInOutside"
@@ -238,8 +234,8 @@ const backToSetup = async (): Promise<void> => {
                         <template #icon><Icon name="google" /></template>
                     </Button>
                     <!-- `color-scheme: light` matches Google's button iframe so the browser paints no opaque canvas behind it. -->
-                    <div v-else ref="btn" class="mt-2 flex justify-center" style="color-scheme: light"></div>
-                    <template v-if="passkeyOffered">
+                    <div v-else-if="!desktop" ref="btn" class="mt-2 flex justify-center" style="color-scheme: light"></div>
+                    <template v-if="passkeyOffered && !waitingInBrowser">
                         <span class="text-2xs uppercase tracking-wide text-subtle">{{ t(`sandbox.signInWall.or`) }}</span>
                         <Button
                             :label="t(`sandbox.signInWall.usePasskey2`)"
@@ -255,12 +251,18 @@ const backToSetup = async (): Promise<void> => {
 
                 <!-- A working sandbox's reader stays where they are; only a setup has a setup to go back to, and only the
                      owner's: /setup on a sandbox a member doesn't own starts a new one on their account instead. -->
-                <button v-if="working || !isOwner" type="button" :class="ui.textAction(`mt-1 text-subtle`)" @click="notNow">
-                    {{ t(`sandbox.signInWall.notNow`) }}
-                </button>
-                <button v-else type="button" :class="ui.textAction(`mt-1 text-subtle`)" v-action="backToSetup">
-                    {{ t(`sandbox.signInWall.backToSetup`) }}
-                </button>
+                <div class="mt-2 flex w-full items-center justify-center gap-6">
+                    <button v-if="waitingInBrowser && !stepUp" type="button" :class="ui.linkButton()" @click="handoff.start">
+                        {{ t(`sandbox.signInWall.openBrowser`) }}
+                        <Icon name="external-link" class="text-2xs" />
+                    </button>
+                    <button v-if="working || !isOwner" type="button" :class="ui.textAction(`text-subtle`)" @click="notNow">
+                        {{ t(`sandbox.signInWall.notNow`) }}
+                    </button>
+                    <button v-else type="button" :class="ui.textAction(`text-subtle`)" v-action="backToSetup">
+                        {{ t(`sandbox.signInWall.backToSetup`) }}
+                    </button>
+                </div>
             </div>
         </div>
     </div>
