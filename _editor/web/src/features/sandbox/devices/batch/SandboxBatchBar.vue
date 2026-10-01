@@ -2,8 +2,8 @@
 import { Button, Icon, type IconName, type Tip, VERB_LABEL } from "@intentic/ui";
 import Checkbox from "primevue/checkbox";
 import { computed } from "vue";
-import type { BatchAction, BatchVerb } from "./deviceRows";
-import type { DeviceOps } from "./runners/deviceOps";
+import type { BatchAction, BatchVerb } from "../deviceRows";
+import type { DeviceOps } from "../runners/deviceOps";
 import type { SandboxSelection } from "./sandboxSelection";
 import { useT } from "@intentic/ui/i18n";
 
@@ -16,7 +16,7 @@ const t = useT();
 const { selection, ops } = defineProps<{ selection: SandboxSelection; ops: DeviceOps }>();
 
 // The row menu's own glyphs (SandboxVerbs), so a verb looks the same in both places.
-const ICON: Record<BatchVerb, IconName> = { start: `play`, stop: `stop`, restart: `refresh`, update: `download`, remove: `trash` };
+const ICON = { start: `play`, stop: `stop`, restart: `refresh`, update: `download`, remove: `trash` } as const satisfies Record<BatchVerb, IconName>;
 
 // The count rides the label only when it differs from the selection: "Stop 2" over three ticked rows is the sentence
 // "two of these are running", and "Stop 3" over three would only repeat the number beside the box.
@@ -34,13 +34,13 @@ const hint = (action: BatchAction): Tip | undefined =>
         : undefined;
 
 // Where a run over the list has got: the row it is on, counted from one.
-const WORKING: Record<BatchVerb, (at: number, total: number) => string> = {
-    start: (at, total) => t(`sandbox.devicePage.batchStarting`, { at, total }),
-    stop: (at, total) => t(`sandbox.devicePage.batchStopping`, { at, total }),
-    restart: (at, total) => t(`sandbox.devicePage.batchRestarting`, { at, total }),
-    update: (at, total) => t(`sandbox.devicePage.batchUpdating`, { at, total }),
-    remove: (at, total) => t(`sandbox.devicePage.batchRemoving`, { at, total }),
-};
+const WORKING = {
+    start: (at: number, total: number) => t(`sandbox.devicePage.batchStarting`, { at, total }),
+    stop: (at: number, total: number) => t(`sandbox.devicePage.batchStopping`, { at, total }),
+    restart: (at: number, total: number) => t(`sandbox.devicePage.batchRestarting`, { at, total }),
+    update: (at: number, total: number) => t(`sandbox.devicePage.batchUpdating`, { at, total }),
+    remove: (at: number, total: number) => t(`sandbox.devicePage.batchRemoving`, { at, total }),
+} satisfies Record<BatchVerb, (at: number, total: number) => string>;
 const progress = computed(() => {
     const run = ops.batchProgress.value;
     return run === undefined ? undefined : WORKING[run.verb](Math.min(run.done + 1, run.total), run.total);

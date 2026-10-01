@@ -162,7 +162,14 @@ jest.mock("@intentic/ui/markdown", () => ({
     parseMarkdownParts: (source: string) => source,
     renderParsedMarkdown: (source: string) => [{ kind: `html`, html: `<p>${source}</p>` }],
 }));
-jest.mock("../../drafts/attachmentPreviews", () => ({ attachmentPreview: () => undefined }));
+// The whole surface, since the question card stages answer files through useChatAttachments, which imports the rest.
+jest.mock("../../drafts/attachmentPreviews", () => ({
+    attachmentPreview: () => undefined,
+    attachmentAudio: () => undefined,
+    attachmentKind: () => undefined,
+    rememberMedia: () => undefined,
+    forgetMedia: () => undefined,
+}));
 // formatElapsed stays real, since the loader's readout is exactly that format.
 jest.mock("../../../agents/fleet/agentStatus", () => ({
     agentStatusMeta,
@@ -223,6 +230,8 @@ jest.mock("../../panel/useChat-view", () => {
             // No card says anything about the last turn here: the rows under test say it themselves.
             lastFailure: computed(() => undefined),
         }),
+        // The question card injects the pane's view by this key; nothing provides it here, so it reads none.
+        PANE_VIEW: Symbol.for(`intentic.chat-pane-view`),
     };
 });
 

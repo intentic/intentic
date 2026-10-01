@@ -2,8 +2,8 @@
 import { Icon, Notice, type NoticeModel, PageAction, PageHeader, RowGroup, SearchBar, SkeletonRows, ui } from "@intentic/ui";
 import { computed, ref } from "vue";
 import DeviceBoardCard from "./DeviceBoardCard.vue";
-import { type MachineRow, rowMatches, showFilter } from "./deviceRows";
-import { desktopApp } from "../../../app/environments/desktop";
+import { type MachineRow, rowMatches, showFilter } from "../deviceRows";
+import { desktopApp } from "../../../../app/environments/desktop";
 import { useT } from "@intentic/ui/i18n";
 
 // The paired machines, one card per PC however many environments it has. The header is the Devices view's own, a rail

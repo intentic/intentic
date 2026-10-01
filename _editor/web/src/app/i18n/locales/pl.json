@@ -2798,7 +2798,6 @@
             "datasetsNote": "Agent uczy osłonę zbioru danych poleceniem {command} i od tej pory każda jego wartość jest maskowana, w jakiejkolwiek postaci zostanie zapisana. Widać tu tylko, skąd pochodzą wartości i ile ich jest, nigdy same wartości.",
             "dictionary": "Słownik",
             "dictionaryAsWritten": "tylko w zapisanej formie",
-            "dictionaryCouldntLoad": "Nie udało się odczytać słownika.",
             "dictionaryFound": "Napisane samodzielnie wielką literą, „{word}” jest maskowane jako imię lub nazwisko.",
             "dictionaryHandWritten": "spisane ręcznie",
             "dictionaryInflected": "w każdej formie odmiany",
@@ -4795,6 +4794,10 @@
                 "ports": {
                     "label": "Porty",
                     "where": "na czym nasłuchuje ten sandbox oraz podglądy"
+                },
+                "privacy": {
+                    "label": "Osłona prywatności",
+                    "where": "co jest ukrywane przed dostawcami modeli i co zamaskowano"
                 },
                 "providers": {
                     "label": "Konta AI",

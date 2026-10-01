@@ -1,8 +1,8 @@
 import type { DeviceSandboxGroup, Tip } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 import { computed, type ComputedRef, ref, type Ref } from "vue";
-import { type BatchAction, batchable, batchActions, type MachineRow } from "./deviceRows";
-import type { DeviceOps } from "./runners/deviceOps";
+import { type BatchAction, batchable, batchActions, type MachineRow } from "../deviceRows";
+import type { DeviceOps } from "../runners/deviceOps";
 
 // SELECTING IS HOW THE LIST IS MANAGED. A tick box on every row and one bar above them (<SandboxBatchBar>): tick what
 // you mean, and the bar offers only the verbs something ticked can take (deviceRows.ts `batchActions`), each saying how

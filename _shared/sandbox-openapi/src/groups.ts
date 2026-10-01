@@ -1,4 +1,4 @@
-// The 41 groups of the daemon's surface, hand-written since the contract can't state reading order or audience. Order
+// The 43 groups of the daemon's surface, hand-written since the contract can't state reading order or audience. Order
 // is editorial, not alphabetical; shelves are consecutive runs of it, enforced by spec.test.ts, which also fails a
 // contract group missing here or an entry with no routes.
 
@@ -218,6 +218,14 @@ export const SPEC_GROUPS: readonly SpecGroup[] = [
         summary: "The document deciding when an agent stops to ask, and the record of what it decided",
         description:
             "Settings next door are read by a parser; this one is read by a model. The policy is prose about which of the things an agent may already do are worth interrupting you about, and the two policy routes read and replace it whole. The third is the log every verdict lands in, including the ones nobody was interrupted for, and it is what makes the document writable: an owner can only author a rule for behaviour they can see.",
+    },
+    {
+        name: "privacy",
+        shelf: "kit",
+        label: "Privacy shield",
+        summary: "What personal data is kept from model providers, and the record of what was masked",
+        description:
+            "The shield replaces names, numbers and other personal data with tokens before a request reaches a provider you have not trusted, and puts the real values back on the way out. These routes read its state and replace its policy, which only the owner may do; read the log of what it masked; look a word up in the name dictionary; and list, teach and forget the datasets of known values it masks wherever they appear.",
     },
 
     // Connected systems

@@ -4,7 +4,7 @@ import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import AddDeviceDialog from "./AddDeviceDialog.vue";
 import ContainerHealthCard from "./health/ContainerHealthCard.vue";
-import DeviceBoard from "./DeviceBoard.vue";
+import DeviceBoard from "./board/DeviceBoard.vue";
 import DevicePage from "./DevicePage.vue";
 import { boardRoute, deviceRoute, selectedKey } from "./deviceLinks";
 import { machineRows } from "./deviceRows";

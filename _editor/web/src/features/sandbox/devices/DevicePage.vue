@@ -25,7 +25,7 @@ import DeviceConcern from "./health/DeviceConcern.vue";
 import DeviceEnvironment from "./DeviceEnvironment.vue";
 import DeviceOpFailure from "./runners/DeviceOpFailure.vue";
 import DeviceRunners from "./runners/DeviceRunners.vue";
-import SandboxBatchBar from "./SandboxBatchBar.vue";
+import SandboxBatchBar from "./batch/SandboxBatchBar.vue";
 import { boardRoute, cardRoute } from "./deviceLinks";
 import { canSetShape } from "./shapeFlow";
 import { rollbackChoices } from "./rollbackChoices";
@@ -50,7 +50,7 @@ import {
     selfGroup,
 } from "./deviceRows";
 import { useDeviceOps } from "./runners/deviceOps";
-import { useSandboxSelection } from "./sandboxSelection";
+import { useSandboxSelection } from "./batch/sandboxSelection";
 import { environmentTitle, wslDistroRows } from "./machineEnvironments";
 import { type ConflictAsk, conflictAsk } from "./sync/conflictAsk";
 import SandboxSyncToggles from "./sync/SandboxSyncToggles.vue";
@@ -198,7 +198,7 @@ const openIds = computed(() => {
 const applyReshape = (shape: ResourcesForm): void => ops.applyReshape(shape);
 const saveReshape = (shape: ResourcesForm | undefined): void => ops.saveReshape(shape);
 
-// The list is managed by ticking rows and choosing a verb for all of them (sandboxSelection.ts, <SandboxBatchBar>).
+// The list is managed by ticking rows and choosing a verb for all of them (batch/sandboxSelection.ts, <SandboxBatchBar>).
 const selection = useSandboxSelection(() => machine, () => ownSlug, ops);
 </script>
 

@@ -3036,7 +3036,6 @@
             "datasetsNote": "The agent teaches the shield a dataset with {command}, and from then on each of its values is masked however it is written. Only where the values came from and how many there are is shown here, never the values.",
             "dictionary": "Dictionary",
             "dictionaryAsWritten": "only as written",
-            "dictionaryCouldntLoad": "Couldn't read the dictionary.",
             "dictionaryFound": "Capitalized on its own, “{word}” is masked as a name.",
             "dictionaryHandWritten": "written by hand",
             "dictionaryInflected": "every inflected form",
@@ -5033,6 +5032,10 @@
                 "ports": {
                     "label": "Ports",
                     "where": "what this sandbox listens on, and previews"
+                },
+                "privacy": {
+                    "label": "Privacy shield",
+                    "where": "what is kept from model providers, and what it masked"
                 },
                 "providers": {
                     "label": "AI accounts",

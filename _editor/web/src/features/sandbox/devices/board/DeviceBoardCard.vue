@@ -2,10 +2,10 @@
 import { Icon, Row, RowGroup, RowNote, StatusBadge } from "@intentic/ui";
 import { computed, useId } from "vue";
 import { RouterLink } from "vue-router";
-import { boardBody, deviceState, deviceTone, type MachineRow, manySided } from "./deviceRows";
-import { deviceRoute } from "./deviceLinks";
-import { lastSeenNote, osLabel, osTitle } from "./deviceFacts";
-import { environmentWorking, machineWork, sandboxesWorking } from "./runners/deviceWork";
+import { boardBody, deviceState, deviceTone, type MachineRow, manySided } from "../deviceRows";
+import { deviceRoute } from "../deviceLinks";
+import { lastSeenNote, osLabel, osTitle } from "../deviceFacts";
+import { environmentWorking, machineWork, sandboxesWorking } from "../runners/deviceWork";
 import { useT } from "@intentic/ui/i18n";
 
 // One physical computer: a surface of its own, drawn in the rows every sandbox list uses, so a connected PC's lines
