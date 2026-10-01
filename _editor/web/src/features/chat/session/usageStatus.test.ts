@@ -128,8 +128,9 @@ describe(`bindingWindow`, () => {
 });
 
 describe(`usagePercent`, () => {
-    it(`rounds the binding pool's utilization`, () => {
-        expect(usagePercent(usage({ windows: [window({ utilization: 42.4 })] }))).toBe(42);
+    it(`preserves the binding pool's utilization, including its last fraction of a percent`, () => {
+        expect(usagePercent(usage({ windows: [window({ utilization: 42.4 })] }))).toBe(42.4);
+        expect(usagePercent(usage({ windows: [window({ utilization: 99.9999 })] }))).toBe(99.9999);
         expect(usagePercent(usage({ windows: [window({ utilization: 0 })] }))).toBe(0);
     });
 
@@ -169,6 +170,14 @@ describe(`isStale / formatRemaining`, () => {
     it(`never marks a spent pool as a ceiling, however old the reading is`, () => {
         expect(formatRemaining(100, true)).toBe(`0% left`);
         expect(formatRemaining(99, true)).toBe(`≤1% left`);
+    });
+
+    it(`distinguishes a positive remainder below one percent from an exhausted allowance`, () => {
+        expect(formatRemaining(99.1, false)).toBe(`<1% left`);
+        expect(formatRemaining(99.5, false)).toBe(`<1% left`);
+        expect(formatRemaining(99.9999, false)).toBe(`<1% left`);
+        expect(formatRemaining(99.9999, true)).toBe(`<1% left`);
+        expect(formatRemaining(42.4, false)).toBe(`58% left`);
     });
 
     it(`never reads past either end of the allowance`, () => {
@@ -344,6 +353,20 @@ describe(`planHeadroom`, () => {
         expect(mixed.binding).toEqual({ kind: `seven_day`, label: `Weekly · all models`, percent: 91, resetsAt: 1_700_000_000, gates: `all` });
         expect(mixed.pools.map((pool) => pool.label)).toEqual([`Weekly · all models`, `5-hour session`]);
     });
+
+    it.each([99.1, 99.5, 99.99, 99.9999])(`preserves %s%% utilization through the meters and nested allowances`, (utilization) => {
+        const projected = headroom({
+            windows: [window({ kind: `seven_day`, utilization }), window({ kind: `five_hour`, utilization: 20 })],
+        });
+        expect(projected.percent).toBe(utilization);
+        expect(projected.tone).toBe(`text-warning`);
+        expect(meterFill(projected.percent)).toBe(2);
+        expect(meterTrack(projected.percent)).toBe(`bg-content/10`);
+        expect(nestPools(projected.pools, (pool) => pool).map(({ item, capped }) => [item.kind, capped])).toEqual([
+            [`seven_day`, false],
+            [`five_hour`, false],
+        ]);
+    });
 });
 
 describe(`modelAllowance`, () => {
@@ -368,7 +391,7 @@ describe(`modelAllowance`, () => {
         });
         expect(modelAllowance(reading, { id: `claude-fable-5`, label: `Claude Fable 5` })).toEqual({
             name: `Fable`,
-            percent: 94,
+            percent: 94.4,
             resetsAt: 1_700_000,
         });
     });
@@ -590,7 +613,7 @@ describe(`planLimitRows`, () => {
             {},
             { ...noRouted, gemini: [{ name: `antigravity-1`, label: `someone@gmail.com`, usage: usage({ measuredAt: 500 }) }] },
         );
-        expect(rows.map((row) => [row.provider, row.label, row.percent])).toEqual([[`gemini`, `someone@gmail.com`, 42]]);
+        expect(rows.map((row) => [row.provider, row.label, row.percent])).toEqual([[`gemini`, `someone@gmail.com`, 42.4]]);
     });
 
     it(`lists an account with no reading and says which kind of nothing it is`, () => {
@@ -601,7 +624,7 @@ describe(`planLimitRows`, () => {
             { ...noRouted, grok: [{ name: `xai-1`, label: `SuperGrok` }], kimi: [{ name: `kimi-1`, label: `Kimi Code` }] },
         );
         expect(rows.map((row) => [row.label, row.percent, row.readable, row.pools.length])).toEqual([
-            [`Claude`, 42, true, 1],
+            [`Claude`, 42.4, true, 1],
             [`Kimi Code`, undefined, true, 0],
             [`SuperGrok`, undefined, false, 0],
         ]);

@@ -65,7 +65,7 @@ export const orderedWindows = (usage: AccountUsage): UsageWindow[] =>
 // account's tightest. Undefined when unmeasured or every window has reset.
 export const usagePercent = (usage: AccountUsage | undefined, model?: ModelRef): number | undefined => {
     const window = bindingWindow(usage, model);
-    return window === undefined ? undefined : Math.round(window.utilization);
+    return window?.utilization;
 };
 
 // Severity shared by every surface that draws a percentage, so it means the same thing everywhere. Danger is the
@@ -114,20 +114,20 @@ export const usageStatusFor = (provider: AgentProvider, account: string | undefi
 export interface PlanLimitPool {
     readonly kind: string;
     readonly label: string;
-    // Rounded once here, so a meter's width and its printed number can't disagree.
+    // Unrounded: any utilization below the spent line still has room.
     readonly percent: number;
     readonly resetsAt: number | undefined;
     // Which models this pool gates; a percentage alone can't say whether it blocks anything you run.
     readonly gates: WindowGates;
 }
 
-// One reading as its pools: named, worst-first, rounded once — the shared basis for every plan-limit display
+// One reading as its pools: named, worst-first, at the provider's precision — the shared basis for every plan-limit display
 // (meters, ring hover, screen reader).
 const usagePools = (usage: AccountUsage): readonly PlanLimitPool[] =>
     orderedWindows(usage).map((window) => ({
         kind: window.kind,
         label: usageWindowLabel(window),
-        percent: Math.round(window.utilization),
+        percent: window.utilization,
         resetsAt: window.resetsAt,
         gates: window.gates,
     }));
@@ -262,10 +262,10 @@ export const modelAllowance = (usage: AccountUsage | undefined, model: ModelRef)
         return undefined;
     }
     // Plan's own pool name when given, else the kind with its scope prefix stripped.
-    return { name: pool.label ?? pool.kind.replace(/^model:/u, ``), percent: Math.round(pool.utilization), resetsAt: pool.resetsAt };
+    return { name: pool.label ?? pool.kind.replace(/^model:/u, ``), percent: pool.utilization, resetsAt: pool.resetsAt };
 };
 
-// Binding pool, matched by kind among the already-rounded pools, so a headline number and its named pool
+// Binding pool, matched by kind among the projected pools, so a headline number and its named pool
 // never disagree.
 const bindingPool = (usage: AccountUsage, pools: readonly PlanLimitPool[], model: ModelRef | undefined): PlanLimitPool | undefined => {
     const window = bindingWindow(usage, model);
@@ -353,8 +353,14 @@ export const remainingPercent = (percent: number): number => Math.min(100, Math.
 // A stale reading's use is a floor (other devices spend the same pools unseen), so what it leaves is a ceiling: `≤`.
 // Never marks a spent pool, which has nowhere lower to fall. The bare figure is for a column whose header already says
 // "Left"; everywhere else the word rides with the number, since a bare percentage of an allowance reads either way.
-export const remainingFigure = (percent: number, stale: boolean): string =>
-    `${stale && percent < SPENT_UTILIZATION ? `≤` : ``}${remainingPercent(percent)}%`;
+export const remainingFigure = (percent: number, stale: boolean): string => {
+    const left = remainingPercent(percent);
+    // A positive remainder never rounds to zero; `<1%` is already a ceiling when the reading is stale.
+    if (left > 0 && left < 1) {
+        return `<1%`;
+    }
+    return `${stale && left > 0 ? `≤` : ``}${Math.round(left)}%`;
+};
 export const formatRemaining = (percent: number, stale: boolean): string => t(`chat.usageStatus.percentLeft`, { percent: remainingFigure(percent, stale) });
 
 // A meter's fill: what is left, with a sliver kept for a pool on its last percent so it still reads as "a little",

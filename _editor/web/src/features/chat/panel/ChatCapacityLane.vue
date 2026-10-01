@@ -65,8 +65,7 @@ watch(
 const tint = computed(() => (props.lane.capped ? {} : meterTint(shown.value)));
 const tone = computed(() => (props.lane.capped ? `text-subtle` : usageTone(shown.value)));
 const fill = computed(() => meterFill(shown.value));
-// Whole numbers while counting, so the figure ticks rather than flickers through decimals; the reading itself once settled.
-const figure = computed(() => remainingFigure(shown.value === props.lane.percent ? shown.value : Math.round(shown.value), props.row.stale));
+const figure = computed(() => remainingFigure(shown.value, props.row.stale));
 
 // How long until an allowance refills; undefined when unmeasured or already past. A spent lane keeps it: when it
 // comes back is the one thing left worth saying about it.

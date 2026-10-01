@@ -169,6 +169,27 @@ it(`draws an account that is nearly spent in the warning tone rather than droppi
     expect(el.querySelector(`[aria-hidden="true"] .tabular-nums`)?.className).toContain(`text-warning`);
 });
 
+it.each([99.1, 99.5, 99.99, 99.9999])(`keeps a visible allowance below one percent at %s%% usage`, (utilization) => {
+    const el = mount([
+        {
+            id: `edge`,
+            usage: {
+                measuredAt: MEASURED_AT,
+                windows: [
+                    { kind: `seven_day`, utilization, gates: `all` },
+                    { kind: `five_hour`, utilization: 20, gates: `all` },
+                ],
+            },
+        },
+    ]);
+
+    expect(barWidths(el)).toEqual([`2%`, `80%`]);
+    expect([...el.querySelectorAll(`[aria-hidden="true"] .tabular-nums`)].map((node) => node.textContent?.trim())).toEqual([`<1%`, `80%`]);
+    expect(spoken(el)).toEqual([`Weekly · all models <1% left · 5-hour session 80% left, within Weekly · all models`]);
+    expect(el.querySelector(`[aria-hidden="true"] .tabular-nums`)?.className).toContain(`text-warning`);
+    expect(el.textContent).not.toContain(`Unavailable`);
+});
+
 it(`spells out for a screen reader what the bar says by its width`, () => {
     const el = mount([
         {

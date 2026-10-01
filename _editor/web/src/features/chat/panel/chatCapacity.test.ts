@@ -64,6 +64,17 @@ describe(`what the rail offers`, () => {
         expect(chatCapacity([], NOW).providers).toEqual([]);
     });
 
+    it.each([99.1, 99.5, 99.99, 99.9999])(`keeps native and routed accounts with %s%% usage available with their exact remainder`, (percent) => {
+        providerAccounts.value = { claude: [claude({ id: `edge`, usage: usage(percent) })] };
+        translatorAccounts.value = { ...NO_ROUTED, gemini: [google(1, percent)] };
+        const capacity = chatCapacity([], NOW);
+        expect(capacity.providers.map((entry) => [entry.provider, entry.ready, entry.rows[0]?.percent])).toEqual([
+            [`claude`, 1, percent],
+            [`gemini`, 1, percent],
+        ]);
+        expect(capacity.out).toEqual([]);
+    });
+
     it(`keeps an account whose per-model slice is spent, and ranks it by what still gates every turn`, () => {
         providerAccounts.value = {
             claude: [
