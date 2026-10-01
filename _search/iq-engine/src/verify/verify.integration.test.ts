@@ -60,8 +60,8 @@ test("paths cited from another checkout or relative to a package still resolve",
 });
 
 test("the security floor holds: a file inside the index dir cannot ground a claim, even though it is on disk", async () => {
-    const report = await engine.verify("The decoy is `.intentic/local/cache/iq/decoy.txt`, beside `.env`.");
-    expect(report.issues.map((issue) => [issue.kind, issue.ref])).toEqual([["missing-file", ".intentic/local/cache/iq/decoy.txt"]]);
+    const report = await engine.verify(`The decoy is \`${IQ_DIR}/decoy.txt\`, beside \`.env\`.`);
+    expect(report.issues.map((issue) => [issue.kind, issue.ref])).toEqual([["missing-file", `${IQ_DIR}/decoy.txt`]]);
 });
 
 test("a file edited behind the index is read from disk: a name just written counts, a name just deleted does not", async () => {
