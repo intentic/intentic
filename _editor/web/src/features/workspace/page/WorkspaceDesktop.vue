@@ -44,7 +44,7 @@ import { useWorkspaceTabs } from "../tabs/useWorkspaceTabs";
 import { useWorkspaceTree } from "../explorer/useWorkspaceTree";
 import { opensAsFolder } from "../files/archiveEntries";
 import { HOME_DIR_ACTIONS, HOME_SEARCH, useHome } from "../home/useHome";
-import { filesOffered, watchDragSource } from "../explorer/transfer/dragSource";
+import { useRootDrop } from "../explorer/transfer/useRootDrop";
 import EntryDragGhost from "../explorer/transfer/EntryDragGhost.vue";
 import { filesToEntries } from "../explorer/transfer/dropEntries";
 import DirectoryChecks from "../directory-ui/DirectoryChecks.vue";
@@ -100,7 +100,7 @@ const scopedRootHidden = computed(() => hiddenIn(workspaceDir.value));
 const scopedBarren = computed(() =>
     workspaceDir.value === `` ? barren.value : barren.value.filter((path) => path.startsWith(`${workspaceDir.value}/`)),
 );
-const { enqueue, enqueueFromDataTransfer } = useUploadQueue();
+const { enqueue } = useUploadQueue();
 const { forget, dirtyPaths } = useEditBuffers();
 const changes = useChanges();
 
@@ -352,11 +352,13 @@ watch(openPath, (path) => reportOpenPath(path), { immediate: true });
 onBeforeUnmount(() => reportOpenPath(undefined));
 
 const fileInput = ref<HTMLInputElement>();
-// Root drop zone highlight for OS files; an enter/leave depth stops bubbling over child rows from flickering it off.
-const rootDragging = ref(false);
-let dragDepth = 0;
-// Whether a drag is an upload from this document; shared with tree rows so a row can't accept a rejected drop.
-let unwatchDragSource: (() => void) | undefined;
+// The whole body takes OS files a row or tile didn't: they land in the folder the explorer is rooted at, since with a
+// project open the workspace root isn't on screen and files dropped there would vanish from the view that took them. A
+// read-only member is told the tier at the drop rather than refused after the upload.
+const { rootDragging, onRootDragEnter, onRootDragOver, onRootDragLeave, onRootDrop } = useRootDrop({
+    targetDir: () => workspaceDir.value,
+    refuse: refuseWrite,
+});
 
 // Pointer coordinates here, while the stored width is app pixels; <ResizeSeam> reports a size, not a position.
 const sidebarSeamWidth = computed<number>({
@@ -763,42 +765,7 @@ const WORKSPACE_COMMANDS = computed((): readonly Omit<CommandRegistration, `owne
 ]);
 let workspaceCommandDisposables: readonly Disposable[] = [];
 
-// Root-level upload: OS files dropped on the explorer background or the browse button land at /work root; directories
-// recurse via collectDroppedFiles. Rows and tiles move by pointer (useEntryDrag), so no other drag is read here.
-const resetRootDrag = (): void => {
-    dragDepth = 0;
-    rootDragging.value = false;
-};
-const onRootDragEnter = (event: DragEvent): void => {
-    if (!filesOffered(event)) {
-        return;
-    }
-    dragDepth += 1;
-    rootDragging.value = true;
-};
-const onRootDragLeave = (): void => {
-    dragDepth -= 1;
-    if (dragDepth <= 0) {
-        resetRootDrag();
-    }
-};
-const onRootDrop = (event: DragEvent): void => {
-    const files = filesOffered(event);
-    resetRootDrag();
-    // A read-only member sees the tier immediately, not a refusal after the files are dropped.
-    if (event.dataTransfer === null || !files || refuseWrite()) {
-        return;
-    }
-    const dataTransfer = event.dataTransfer;
-    // Lands in the folder the explorer is rooted at, like the row move above: with a project open, the workspace root
-    // isn't on screen, so files dropped there would vanish from the view that took the drop.
-    // Runs the capture synchronously (webkitGetAsEntry needs the drop's items alive) and shows scanning instantly.
-    enqueueFromDataTransfer(workspaceDir.value, dataTransfer);
-};
-// A row's own drop stops propagation; the window resets in the capture phase, before that, so the drop hint
-// can never stick.
 onMounted(() => {
-    unwatchDragSource = watchDragSource();
     // The pane's own width decides split geometry; the window's width already went partly to the rail and chat.
     bodyObserver = new ResizeObserver((entries) => {
         bodyWidth.value = entries[0]?.contentRect.width ?? 0;
@@ -806,8 +773,6 @@ onMounted(() => {
     if (workspaceBody.value !== undefined) {
         bodyObserver.observe(workspaceBody.value);
     }
-    window.addEventListener(`drop`, resetRootDrag, true);
-    window.addEventListener(`dragend`, resetRootDrag, true);
     // Loads Monaco (+ Shiki bridge) while browsing the tree, so the first file open isn't cold.
     void useMonaco().ensureMonaco();
     // One family for the whole list, stated here rather than on every entry.
@@ -817,13 +782,9 @@ onMounted(() => {
     ];
 });
 onBeforeUnmount(() => {
-    unwatchDragSource?.();
-    unwatchDragSource = undefined;
     bodyObserver?.disconnect();
     bodyObserver = undefined;
     clearTimeout(pulseTimer);
-    window.removeEventListener(`drop`, resetRootDrag, true);
-    window.removeEventListener(`dragend`, resetRootDrag, true);
     for (const disposable of workspaceCommandDisposables) {
         disposable.dispose();
     }
@@ -882,9 +843,9 @@ const includeTip = computed(
             ref="workspaceBody"
             class="relative flex min-h-0 flex-1"
             @dragenter="onRootDragEnter"
-            @dragover.prevent
+            @dragover="onRootDragOver"
             @dragleave="onRootDragLeave"
-            @drop.prevent="onRootDrop"
+            @drop="onRootDrop"
         >
             <!-- A column when there's room for two, a drawer over the viewer otherwise; the drawer ignores the stored column width. -->
             <aside

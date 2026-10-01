@@ -61,7 +61,10 @@ flowchart LR
   `surface: "folder"` and lists only what it serves (`useDaemonRoutes.ts`). The file tree offers no verb whose route is
   missing (`VERB_ROUTES` in `entryMenu.ts`) and none whose seam the window leaves out (`fileVerbSeams.ts`: a terminal,
   extract, download, a ZIP), so a folder window renames, moves, copies and deletes (to the OS trash, with no in-app
-  undo) and offers "Ask an agent about this". A refused call says the feature is not there for a folder rather than
+  undo) and offers "Ask an agent about this". Files dropped from the system's file manager land in the folder row or
+  home tile they are dropped on, and anywhere else in the window in the folder itself (`useRootDrop.ts`, the
+  workspace's own floor), as writes alone: the upload queue skips the unchanged-file diff, the archive and the install,
+  which a folder does not serve. A document's own window takes no drop. A refused call says the feature is not there for a folder rather than
   asking for an update, and a recording plays from its bytes over `/workspace/raw` where no media ticket is minted.
   `local/` holds the window's own parts: its shell (`LocalShell.vue`, the sandbox shell's rail from
   `shell/rail/iconRail.css`, holding the place chip `LocalPlaceSwitcher.vue`, Files, the views the app adds, and the way

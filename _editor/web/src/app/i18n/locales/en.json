@@ -2525,7 +2525,8 @@
             "askAgent": "Ask an agent",
             "askAgentHint": "A conversation about this file",
             "closingDiscardsUnsaved": "Closing this window discards their unsaved edits. This can't be undone.",
-            "closingTabDiscardsUnsaved": "Closing this tab discards its unsaved edits. This can't be undone."
+            "closingTabDiscardsUnsaved": "Closing this tab discards its unsaved edits. This can't be undone.",
+            "dropFilesToAdd": "Drop files to add them to {name}"
         },
         "quickOpen": {
             "goToFile": "Go to a file",

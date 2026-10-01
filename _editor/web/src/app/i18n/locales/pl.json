@@ -6795,7 +6795,8 @@
             "closingTabDiscardsUnsaved": "Zamknięcie tej karty odrzuci jej niezapisane zmiany. Tego nie można cofnąć.",
             "startsIfStopped": "Uruchamia, gdy zatrzymany",
             "syncedSandbox": "Sandbox zsynchronizowany",
-            "toggleFolder": "Przełącz folder"
+            "toggleFolder": "Przełącz folder",
+            "dropFilesToAdd": "Upuść pliki, żeby dodać je do {name}"
         },
         "quickOpen": {
             "goToFile": "Przejdź do pliku",

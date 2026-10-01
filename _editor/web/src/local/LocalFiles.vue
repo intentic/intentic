@@ -6,7 +6,9 @@ import { askLocalApp, LOCAL_OPEN_EVENT, localFace } from "../app/environments/lo
 import { useExtensionHost } from "../extension-host/useExtensionHost";
 import WorkspaceTree from "../features/workspace/explorer/WorkspaceTree.vue";
 import { useWorkspaceTree } from "../features/workspace/explorer/useWorkspaceTree";
+import { useRootDrop } from "../features/workspace/explorer/transfer/useRootDrop";
 import EditorPane from "../features/workspace/files/EditorPane.vue";
+import { supportsRoute } from "../features/sandbox/overview/useDaemonRoutes";
 import { HOISTED_CONTEXT } from "../features/workspace/files/viewerChrome";
 import WorkspaceSearchResults from "../features/workspace/search/WorkspaceSearchResults.vue";
 import { matchToggles } from "../features/workspace/search/useSearchOptions";
@@ -54,6 +56,15 @@ provide(HOISTED_CONTEXT, true);
 
 const selected = ref<string | undefined>(undefined);
 const treeShown = ref(face?.file === undefined);
+
+// Files from the computer's own file manager, dropped anywhere a folder row or the folder's home didn't take them, land
+// in the folder itself, copied by the sidecar as the workspace's drop uploads to /work. Without this an empty folder,
+// the one the app opens on first, had nowhere to drop at all. A document's own window writes only that document, and a
+// read-only one nothing, so neither takes a drop.
+const { rootDragging, onRootDragEnter, onRootDragOver, onRootDragLeave, onRootDrop } = useRootDrop({
+    targetDir: () => ``,
+    accepts: () => face !== undefined && face.file === undefined && supportsRoute(`POST /workspace/upload`),
+});
 
 // The way from a file to an agent: a conversation about it, which the app starts (the tree's menu offers the same).
 const activePath = computed(() => (activeTab.value?.kind === `file` ? activeTab.value.path : undefined));
@@ -151,9 +162,16 @@ onUnmounted(() => {
 </script>
 
 <template>
-    <!-- The shell's page: the folder's explorer beside its documents, filling what the rail leaves (LocalShell.vue). -->
-    <div class="flex h-full w-full overflow-hidden">
-        <aside v-if="treeShown" class="flex w-72 shrink-0 flex-col border-r border-line bg-card">
+    <!-- The shell's page: the folder's explorer beside its documents, filling what the rail leaves (LocalShell.vue). The
+         whole page is the folder's drop target; a folder row or the home's tiles take their own drops first. -->
+    <div
+        class="flex h-full w-full overflow-hidden"
+        @dragenter="onRootDragEnter"
+        @dragover="onRootDragOver"
+        @dragleave="onRootDragLeave"
+        @drop="onRootDrop"
+    >
+        <aside v-if="treeShown" class="relative flex w-72 shrink-0 flex-col border-r border-line bg-card">
             <div class="flex h-9 shrink-0 items-center gap-1 border-b border-line pl-3 pr-1">
                 <Icon name="folder" class="shrink-0 text-sm text-muted" />
                 <span class="min-w-0 flex-1 truncate text-xs font-medium" v-tooltip.bottom="face?.path">{{ face?.name }}</span>
@@ -268,6 +286,11 @@ onUnmounted(() => {
                     @click="askLocalApp(`sandbox`)"
                 />
             </div>
+            <!-- The folder taking a drop, drawn over its tree as the workspace draws it; a folder row lights its own ring. -->
+            <div
+                v-if="rootDragging"
+                class="pointer-events-none absolute inset-1 z-10 rounded-sm border-2 border-dashed border-primary-500/60 bg-primary-500/6"
+            ></div>
         </aside>
         <div class="relative flex min-h-0 min-w-0 flex-1">
             <EditorPane pane="main" :empty="folderEmpty" @select="selectTab" @keep="keepTab" @close="closeTab">
@@ -300,6 +323,15 @@ onUnmounted(() => {
                     </Button>
                 </template>
             </EditorPane>
+            <!-- Where a drop lands, said over the documents while files are over the window. Opaque, since what it covers is
+                 centred too (the empty folder's own words) and would read through it. -->
+            <div
+                v-if="rootDragging"
+                class="pointer-events-none absolute inset-2 z-10 flex flex-col items-center justify-center gap-2 rounded-sm border-2 border-dashed border-primary-500/60 bg-canvas/95 text-primary-500"
+            >
+                <Icon name="upload" class="text-2xl" />
+                <span class="text-xs font-medium">{{ t(`local.localFiles.dropFilesToAdd`, { name: face?.name ?? `` }) }}</span>
+            </div>
         </div>
         <!-- Ctrl/Cmd+P: this folder's files alone, each opened here. -->
         <QuickOpen :open-file="openKept" />

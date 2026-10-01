@@ -10,6 +10,7 @@ import { packTar } from "../../explorer/transfer/tarStream";
 import { sandboxJson, sandboxUpload } from "../../../sandbox/client/sandboxClient";
 import { jsonBody } from "../../../sandbox/client/jsonBody";
 import { sandboxRpc } from "../../../sandbox/client/sandboxRpc";
+import { supportsRoute } from "../../../sandbox/overview/useDaemonRoutes";
 import { rpcPrefix } from "../../../../lib/queryKeys";
 import { workspaceAgent } from "../../health/workspaceScope";
 import { chunkItems, dedupeByPath } from "./uploadChunking";
@@ -30,6 +31,13 @@ export interface QueueFile {
 
 const TAR_THRESHOLD = 20;
 const POOL_SIZE = 5;
+
+// The three helpers around the one write every backend serves (`POST /workspace/upload`). A folder on this computer (the
+// desktop app's sidecar) serves none of them, and says so in its hello: its drops skip the diff and the archive and are
+// never offered an install, rather than paying a 404 for each, or reporting an install that never could have started.
+const DIFF_ROUTE = `POST /workspace/upload-diff`;
+const ARCHIVE_ROUTE = `POST /workspace/upload-archive`;
+const INSTALL_ROUTE = `workspace.install`;
 
 // Each chunk gets its own stall watchdog and retry, so one bad chunk can't freeze or fail the whole drop.
 const RETRY_ATTEMPTS = 4;
@@ -213,6 +221,9 @@ const recomputeBytesDone = (): void => {
 // Asks the daemon which dropped files are already identical (size + mtime) so a re-drop only sends what changed.
 // Any error returns everything unfiltered; dedup must never block or drop an upload.
 const filterUnchanged = async (targetDir: string, entries: readonly DroppedFile[]): Promise<readonly DroppedFile[]> => {
+    if (!supportsRoute(DIFF_ROUTE)) {
+        return entries;
+    }
     try {
         const stats = entries.map((entry) => ({ path: joinPath(targetDir, entry.path), size: entry.file.size, mtime: entry.file.lastModified }));
         const { skip } = await sandboxJson<{ skip: string[] }>(`/workspace/upload-diff`, jsonBody(`POST`, { files: stats }));
@@ -372,7 +383,7 @@ const uploadChunk = async (chunk: readonly QueueFile[], signal: AbortSignal): Pr
                 return;
             }
         }
-        if (archive && chunk.length > TAR_THRESHOLD && canStreamRequestBody) {
+        if (archive && chunk.length > TAR_THRESHOLD && canStreamRequestBody && supportsRoute(ARCHIVE_ROUTE)) {
             const result = await uploadViaTar(chunk, signal);
             if (result === `done` || signal.aborted) {
                 return;
@@ -475,7 +486,7 @@ export function useUploadQueue() {
         // Captured before either round trip, so a cancel or a switch (which aborts it) during one aborts the enqueue too.
         const { signal } = controller.value;
         // Detected before the unchanged-file filter prunes the usually-unchanged manifests; dedupe by dir across drops.
-        const detected = await detectSetup(targetDir, entries);
+        const detected = supportsRoute(INSTALL_ROUTE) ? await detectSetup(targetDir, entries) : [];
         const unchanged = await filterUnchanged(targetDir, entries);
         if (signal.aborted) {
             return;
