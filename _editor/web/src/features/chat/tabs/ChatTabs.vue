@@ -572,7 +572,7 @@ const openHistory = (event: Event): void => {
             </button>
         </div>
 
-        <!-- Foot of the rail: New agent (the fleet board's own wording) and Past chats, labelled and sized to match, no ellipsis (there's no chooser to promise). -->
+        <!-- Foot of the rail: New agent (the fleet board's own wording). Past chats stays on the docked header and the full /chat section; a popped-out window has no room for a second action beside it. -->
         <div v-else class="flex shrink-0 flex-wrap items-center justify-center gap-2 pb-2.5 pt-3">
             <!-- Both actions take the kit's compact secondary tier; the face names who a scoped chat speaks as. -->
             <Button
@@ -598,7 +598,7 @@ const openHistory = (event: Event): void => {
                     >
                 </span>
             </Button>
-            <Button size="small" severity="secondary" @click="openHistory">
+            <Button v-if="!floats" size="small" severity="secondary" @click="openHistory">
                 <Icon name="history" class="text-xs" />
                 <span>{{ t(`chat.chatTabs.pastChats`) }}</span>
             </Button>
