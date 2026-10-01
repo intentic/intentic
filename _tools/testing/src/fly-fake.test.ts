@@ -19,8 +19,35 @@ const call = async (method: string, path: string, body?: unknown): Promise<{ sta
     return { status: response.status, json: text === "" ? {} : (JSON.parse(text) as Record<string, unknown>) };
 };
 
+// The snapshot a POST …/snapshots scheduled: Fly answers the backup job, and its `graph_id` is the snapshot's listed id.
+// SAFETY: the fake answers that route with snapshotRoute's envelope or with a refusal, and a refusal carries no `Msg`.
+const scheduledId = (answer: Record<string, unknown>): string => String((answer["Msg"] as { backup?: { graph_id?: string } } | undefined)?.backup?.graph_id ?? "");
+
 afterEach(() => {
     unstubAllGlobals();
+});
+
+describe("what the fake answers", () => {
+    /* THE ANSWER FLY GIVES, which is not the snapshot: the client that read it as one passed every suite while this
+     * fake answered the listed shape, and failed every real migration (2026-10-01). */
+    it("answers a snapshot request with the backup job Fly scheduled, naming the snapshot it will list", async () => {
+        const fly = install();
+        const { volume } = fly.seedSandbox("app");
+        const taken = await call("POST", `/apps/app/volumes/${volume.id}/snapshots`);
+        expect(taken.status).toBe(200);
+        expect(Object.keys(taken.json)).toEqual(["Msg"]);
+        const snapshotId = scheduledId(taken.json);
+        const listed: unknown = await (await fetch(`${BASE}/apps/app/volumes/${volume.id}/snapshots`)).json();
+        expect(listed).toEqual([{ id: snapshotId, status: "created", created_at: fly.snapshots.get(snapshotId)?.createdAt, size: volume.usedBytes }]);
+    });
+
+    it("lists a snapshot it is still taking under Fly's zero time and no size", async () => {
+        const fly = install({ faults: { snapshotNeverFinishes: true } });
+        const { volume } = fly.seedSandbox("app");
+        const snapshotId = scheduledId((await call("POST", `/apps/app/volumes/${volume.id}/snapshots`)).json);
+        const listed: unknown = await (await fetch(`${BASE}/apps/app/volumes/${volume.id}/snapshots`)).json();
+        expect(listed).toEqual([{ id: snapshotId, status: "running", created_at: "0001-01-01T00:00:00Z", size: 0 }]);
+    });
 });
 
 describe("what the fake refuses", () => {
@@ -38,10 +65,31 @@ describe("what the fake refuses", () => {
         const fly = install({ faults: { snapshotNeverFinishes: true } });
         const { volume } = fly.seedSandbox("app");
         const taken = await call("POST", `/apps/app/volumes/${volume.id}/snapshots`);
-        expect(taken.json["status"]).toBe("running");
-        const restore = await call("POST", "/apps/app/volumes", { region: "arn", size_gb: 10, snapshot_id: taken.json["id"] });
+        const snapshotId = scheduledId(taken.json);
+        expect(fly.snapshots.get(snapshotId)?.status).toBe("running");
+        const restore = await call("POST", "/apps/app/volumes", { region: "arn", size_gb: 10, snapshot_id: snapshotId });
         expect(restore.status).toBe(422);
-        expect(restore.json["error"]).toContain("not ready to restore");
+        expect(restore.json["error"]).toBe(`snapshot ${snapshotId} is not ready to restore from`);
+    });
+
+    /* ONE SNAPSHOT OF A VOLUME AT A TIME, as Fly takes them: the next is refused, in Fly's words, until the one it is
+     * taking reads `created`. A run that asked for one and then failed leaves exactly this for the run after it. */
+    it("refuses a second snapshot of a volume while the first is unfinished, and takes one once it is", async () => {
+        const fly = install({ faults: { snapshotNeverFinishes: true } });
+        const { volume } = fly.seedSandbox("app");
+        const first = scheduledId((await call("POST", `/apps/app/volumes/${volume.id}/snapshots`)).json);
+        const refused = await call("POST", `/apps/app/volumes/${volume.id}/snapshots`);
+        expect(refused.status).toBe(412);
+        expect(refused.json["error"]).toBe(`failed_precondition: snapshot is already scheduled at ${fly.snapshots.get(first)?.createdAt ?? ""}`);
+
+        const held = fly.snapshots.get(first);
+        if (held === undefined) {
+            throw new Error(`the fake holds no snapshot ${first}`);
+        }
+        held.status = "created";
+        const next = await call("POST", `/apps/app/volumes/${volume.id}/snapshots`);
+        expect(next.status).toBe(200);
+        expect(scheduledId(next.json)).not.toBe(first);
     });
 
     // A fake that answers everything hides the call you got wrong, which is the whole reason this one does not.

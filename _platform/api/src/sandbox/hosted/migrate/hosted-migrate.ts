@@ -12,10 +12,12 @@ import {
     destroyMachine,
     destroyVolume,
     extendVolume,
+    FlyError,
     flySandboxRole,
     getMachine,
     getVolume,
     isFlyCapacity,
+    isFlySnapshotPending,
     listVolumeSnapshots,
     stopMachine,
     updateMachine,
@@ -152,6 +154,26 @@ const provisionArgsOf = async (config: Config, machine: MigratableMachine, tier:
 
 /** How a wait passes the time; the suites hand in one that does not, so a poll loop cannot outlive a test. */
 export type Sleep = (ms: number) => Promise<void>;
+
+/* ASKS FOR THE PRE-FLIGHT SNAPSHOT, after any snapshot of this disk Fly is still taking: Fly takes one at a time and
+ * refuses the next until it finishes (fly.ts isFlySnapshotPending), whether it is the daily one, an operator's, or the
+ * one an earlier run asked for before it failed. Waiting and then taking a new one, rather than adopting that one,
+ * keeps the snapshot what this run says it is: the disk as it was when the run began. Bounded like the waits below. */
+const takeSnapshot = async (config: Config, appName: string, volumeId: string, sleep: Sleep): Promise<string> => {
+    for (let attempt = 0; attempt < Math.ceil(SNAPSHOT_DEADLINE_MS / SNAPSHOT_POLL_MS); attempt += 1) {
+        try {
+            // oxlint-disable-next-line eslint/no-await-in-loop -- a retry loop is the shape of this wait
+            return (await createVolumeSnapshot(config.hosted.flyApiToken, appName, volumeId)).id;
+        } catch (error) {
+            if (!(error instanceof FlyError && isFlySnapshotPending(error))) {
+                throw error;
+            }
+        }
+        // oxlint-disable-next-line eslint/no-await-in-loop
+        await sleep(SNAPSHOT_POLL_MS);
+    }
+    throw new Error(`Fly was still taking an earlier snapshot of this disk after ${SNAPSHOT_DEADLINE_MS / MINUTE_MS} minutes, and takes one at a time`);
+};
 
 /* WAITS FOR THE SNAPSHOT TO EXIST, not merely to be scheduled: a restore from one still running restores nothing.
  * Bounded by a count of attempts rather than the clock, so a stubbed sleep cannot spin forever. */
@@ -399,9 +421,9 @@ export const migrateHosted = async (
             pinned = machine.image === null ? { ...machine, image: await runningImageOf(config, machine) } : machine;
             // Before anything: the disk as it is now, recoverable even after a rollback has put the machine back.
             await setState(prisma, row.id, `snapshotting`);
-            const snapshot = await createVolumeSnapshot(config.hosted.flyApiToken, machine.appName, machine.volumeId);
-            await awaitSnapshot(config, machine.appName, machine.volumeId, snapshot.id, sleep);
-            snapshotId = snapshot.id;
+            const taken = await takeSnapshot(config, machine.appName, machine.volumeId, sleep);
+            await awaitSnapshot(config, machine.appName, machine.volumeId, taken, sleep);
+            snapshotId = taken;
             await setState(prisma, row.id, `applying`, { snapshotId });
 
             if (plan.kind === `resize`) {

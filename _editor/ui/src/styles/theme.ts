@@ -58,6 +58,13 @@ const custom = {
                     iconOnlyWidth: `1.75rem`,
                 },
             },
+            colorScheme: {
+                // Aura inks a borderless secondary button surface.500, which on light paper sits LIGHTER than the
+                // `subtle` a disabled button wears (primeng.css): a row of them read as one grey, the ones that could
+                // not be pressed a shade darker than the one that could, and at 4.1:1 below AA. `muted` is the step
+                // above `subtle` that dark's own surface.400 already is, so dark is left as Aura has it.
+                light: { text: { secondary: { color: `var(--color-muted)` } } },
+            },
         },
         card: {
             root: {

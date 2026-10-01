@@ -333,6 +333,21 @@ describe.skipIf(!tier.runs)(tier.title, () => {
 
         // The wake refused a minute ago is still refused: a free machine spends the account's free hours, still spent.
         expect((await wake()).status).toBe(402);
+        /* A MOVE THAT FAILS SAYS WHY, and changes nothing: the provider's own words under a gateway code, never the bare
+         * 500 the Billing page could only print as "Internal server error" (2026-10-01), and the machine as it was. */
+        fly.fail({ status: 503 });
+        const failedMove = await rpc<Refusal>(app, `/hosted-plan/tier`, { as: alice, method: `POST`, body: { sandboxId, tier: ENTRY.id } });
+        fly.fail({});
+        expect(failedMove.status).toBe(502);
+        expect(failedMove.body.code).toBe(`BAD_GATEWAY`);
+        expect(failedMove.body.message).toMatch(/^Fly refused .+: fake fly: refusing every call with 503$/u);
+        expect(await prisma.hostedMachine.findUnique({ where: { sandboxId }, select: { tier: true, migratingId: true } })).toEqual({
+            tier: FREE_TIER.id,
+            migratingId: null,
+        });
+        expect(await prisma.hostedMigration.findMany({ where: { sandboxId }, select: { state: true, toTier: true } })).toEqual([
+            { state: `failed`, toTier: ENTRY.id },
+        ]);
         /* Moved onto the slot, it is a Standard machine with a month of its own at Standard's hours, and the wake goes
          * through: the forty hours it spent before the move were the account's free ones, and stay there. */
         const [moved] = await Promise.all([

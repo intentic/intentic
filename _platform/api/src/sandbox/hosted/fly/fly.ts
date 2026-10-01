@@ -48,6 +48,11 @@ const CAPACITY_WORDS = /maximum number of machines|machine limit|limit of machin
 export const isFlyCapacity = (error: unknown): boolean =>
     error instanceof FlyError && error.status !== undefined && error.status !== 404 && CAPACITY_WORDS.test(error.message);
 
+// Fly takes one on-demand snapshot of a volume at a time and refuses the next until that one reads `created`: 412,
+// "failed_precondition: snapshot is already scheduled at <when>". Minutes for a disk of a few GB (2026-10-01, live API).
+// Matched on the words as well as the status, since 412 is Fly's answer to other preconditions too.
+export const isFlySnapshotPending = (error: FlyError): boolean => error.status === 412 && /snapshot is already scheduled/iu.test(error.message);
+
 // Fly's error envelope on a non-2xx: { error: "…" }.
 const errorSchema = z.object({ error: z.string() });
 
@@ -259,9 +264,22 @@ const toSnapshot = (raw: z.infer<typeof snapshotSchema>): FlySnapshot => ({
     sizeBytes: raw.size,
 });
 
-/* ASKS FOR A SNAPSHOT NOW, rather than waiting for the daily one; answers as soon as Fly has scheduled it. */
-export const createVolumeSnapshot = async (token: string, app: string, volumeId: string): Promise<FlySnapshot> =>
-    toSnapshot(snapshotSchema.parse(await call(token, `POST`, `/apps/${encodeURIComponent(app)}/volumes/${encodeURIComponent(volumeId)}/snapshots`)));
+/* WHAT FLY ANSWERS AN ON-DEMAND SNAPSHOT WITH: the backup job it scheduled, never the snapshot. The job's `graph_id` is
+ * the id the snapshot is then listed under (`vs_…`); its own `id` is a job number nothing else names. Read off the live
+ * API on 2026-10-01, matching Fly's docs; reading this answer as a listed snapshot is what failed every migration. */
+const scheduledSnapshotSchema = z.object({ Msg: z.object({ backup: z.object({ graph_id: z.string().min(1) }) }) });
+
+/* ASKS FOR A SNAPSHOT NOW, rather than waiting for the daily one. Answers the id it will be listed under as soon as Fly
+ * has scheduled it; listVolumeSnapshots says when it has finished. */
+export const createVolumeSnapshot = async (token: string, app: string, volumeId: string): Promise<{ readonly id: string }> => {
+    const path = `/apps/${encodeURIComponent(app)}/volumes/${encodeURIComponent(volumeId)}/snapshots`;
+    const answer = scheduledSnapshotSchema.safeParse(await call(token, `POST`, path));
+    if (!answer.success) {
+        // Fly took the request all the same, so the next one meets this snapshot still being taken (isFlySnapshotPending).
+        throw new FlyError(`Fly scheduled a snapshot of ${volumeId} but did not say which one, so there is nothing to wait for`);
+    }
+    return { id: answer.data.Msg.backup.graph_id };
+};
 
 // Every snapshot Fly still holds for a volume, newest first; the daily automatic ones and any taken on demand.
 export const listVolumeSnapshots = async (token: string, app: string, volumeId: string): Promise<FlySnapshot[]> => {

@@ -11,6 +11,7 @@ import type { Config } from "../../config.js";
 import type { OrpcContext } from "../../context.js";
 import { requireUser } from "../../guards.js";
 import { hostedEnabled } from "./hosted.js";
+import { HostedAtCapacity } from "./hosted-capacity.js";
 import { applySubscription, entryTier, hostedPlanEnabled, hostedPrices, hostedSlotsOf, hostedSlotUse, isComped, isOnPlan } from "./hosted-plan.js";
 import { HostedMigrationRefused, type MigrationRefusal, migrateHosted } from "./migrate/hosted-migrate.js";
 import { StripeError, type StripeGateway, stripeGateway } from "./hosted-plan-stripe.js";
@@ -282,7 +283,13 @@ export const hostedPlanRoutes = (gateway?: StripeGateway) => {
                 if (error instanceof HostedMigrationRefused) {
                     throw new ORPCError(MIGRATION_REFUSALS[error.code], { message: error.message });
                 }
-                throw error;
+                // No host with room for the bigger machine: never this caller's fault (hosted-capacity.ts).
+                if (error instanceof HostedAtCapacity) {
+                    throw new ORPCError(`SERVICE_UNAVAILABLE`, { message: error.message });
+                }
+                // Anything else ended a run that had started, which hosted-migrate.ts has undone where it could and
+                // recorded: said in its own words, as every other route that changes a hosted machine does, never a bare 500.
+                throw new ORPCError(`BAD_GATEWAY`, { message: error instanceof Error ? error.message : `changing the machine failed` });
             }
         }),
     };

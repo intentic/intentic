@@ -15,6 +15,7 @@ import {
     getMachineDetail,
     isFlyCapacity,
     isFlyGone,
+    isFlySnapshotPending,
     listAppNames,
     startMachine,
     updateMachine,
@@ -264,19 +265,78 @@ describe(`the volume calls a migration needs`, () => {
         expect(calls[0]?.body).toEqual({ size_gb: 25 });
     });
 
-    it(`takes a snapshot on demand and reads its state back`, async () => {
+    /* WHAT FLY REALLY ANSWERS, copied from the live API on 2026-10-01: the backup job, whose `graph_id` is the snapshot's
+     * listed id. Its own `id` is a job number; reading the answer as a listed snapshot failed every real migration. */
+    it(`takes a snapshot on demand and answers the id Fly will list it under`, async () => {
         stubFetch([
             {
-                match: (method, url) => method === `POST` && url.endsWith(`/snapshots`),
-                respond: () => json({ id: `vs_9`, status: `waiting`, created_at: `2026-09-20T10:00:00Z` }),
+                match: (method, url) => method === `POST` && url.endsWith(`/volumes/vol_1/snapshots`),
+                respond: () =>
+                    json({
+                        Msg: {
+                            backup: {
+                                id: `486251`,
+                                app_id: `27466526`,
+                                volume_id: `172357905490645011`,
+                                state: `prepare`,
+                                type: `BACKUP_TYPE_ON_DEMAND`,
+                                message: ``,
+                                created_at: `2026-10-01T19:04:50.776612248Z`,
+                                updated_at: `2026-10-01T19:04:50.776612248Z`,
+                                finished_at: null,
+                                graph_id: `vs_LvpXgZDv2kAfgZRVO939b5R`,
+                                size_bytes: `0`,
+                                retention_days: `0`,
+                                digest: ``,
+                                volume_size_bytes: `0`,
+                            },
+                        },
+                    }),
             },
         ]);
-        expect(await createVolumeSnapshot(`tok`, `app`, `vol_1`)).toEqual({
-            id: `vs_9`,
-            status: `waiting`,
-            createdAt: new Date(`2026-09-20T10:00:00Z`),
-            sizeBytes: undefined,
-        });
+        expect(await createVolumeSnapshot(`tok`, `app`, `vol_1`)).toEqual({ id: `vs_LvpXgZDv2kAfgZRVO939b5R` });
+    });
+
+    // Scheduled all the same, so this is said in words rather than as a schema dump: the next ask meets it still running.
+    it(`says so in words when Fly's answer names no snapshot`, async () => {
+        stubFetch([{ match: (method, url) => method === `POST` && url.endsWith(`/snapshots`), respond: () => json({ id: `vs_9`, status: `waiting` }) }]);
+        await expect(createVolumeSnapshot(`tok`, `app`, `vol_1`)).rejects.toThrow(
+            new FlyError(`Fly scheduled a snapshot of vol_1 but did not say which one, so there is nothing to wait for`),
+        );
+    });
+
+    // Fly's own words for a second ask while one snapshot of the disk is still being taken (live API, 2026-10-01).
+    it(`reads a refusal to snapshot a disk already being snapshotted, and nothing else, as one pending`, async () => {
+        stubFetch([
+            {
+                match: (method, url) => method === `POST` && url.endsWith(`/volumes/vol_1/snapshots`),
+                respond: () => json({ error: `failed_precondition: snapshot is already scheduled at 2026-10-01T18:54:15Z` }, 412),
+            },
+            {
+                match: (method, url) => method === `POST` && url.endsWith(`/volumes/vol_2/snapshots`),
+                respond: () => json({ error: `failed_precondition: volume is not attached` }, 412),
+            },
+        ]);
+        const refusalOf = async (volumeId: string): Promise<FlyError> => {
+            try {
+                await createVolumeSnapshot(`tok`, `app`, volumeId);
+            } catch (error) {
+                if (error instanceof FlyError) {
+                    return error;
+                }
+                throw error;
+            }
+            throw new Error(`Fly took a snapshot of ${volumeId}`);
+        };
+        const pending = await refusalOf(`vol_1`);
+        expect(pending.message).toBe(
+            `Fly refused POST /apps/app/volumes/vol_1/snapshots: failed_precondition: snapshot is already scheduled at 2026-10-01T18:54:15Z`,
+        );
+        expect(pending.status).toBe(412);
+        expect(isFlySnapshotPending(pending)).toBe(true);
+        // Another precondition, or the same words without the status (a timeout carries none): neither is one to wait out.
+        expect(isFlySnapshotPending(await refusalOf(`vol_2`))).toBe(false);
+        expect(isFlySnapshotPending(new FlyError(`snapshot is already scheduled at 2026-10-01T18:54:15Z`))).toBe(false);
     });
 
     // Newest first, because the only question ever asked of this list is "when was the last backup".

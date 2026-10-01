@@ -268,6 +268,51 @@ describe(`resizing where the machine stands`, () => {
         // `failed`, not `rolledBack`: nothing was changed, so nothing was put back, and the machine never restarted.
         expect(migrations[0]?.state).toBe(`failed`);
     });
+
+    /* FLY TAKES ONE SNAPSHOT OF A DISK AT A TIME, and an earlier one still being taken (the daily one, an operator's, or
+     * the one a failed run asked for, which is how every press after the first failed on 2026-10-01) is waited out:
+     * the run then takes its own, so the disk it saved is the disk as it was when this run began. */
+    const pendingSnapshot = (fly: ReturnType<typeof stubFly>) => {
+        const earlier = { id: `vs_earlier`, volumeId: machine().volumeId, status: `running`, createdAt: BEFORE.toISOString(), sizeBytes: 0 };
+        fly.snapshots.set(earlier.id, earlier);
+        return earlier;
+    };
+
+    it(`waits out a snapshot Fly is still taking of the disk, then takes its own before touching anything`, async () => {
+        const fly = stubFly();
+        const earlier = pendingSnapshot(fly);
+        const { prisma, migrations } = fakePrisma();
+        // Time passing is where Fly finishes the earlier one.
+        const passes = async (): Promise<void> => {
+            earlier.status = `created`;
+        };
+        const result = await migrateHosted(prisma, config(), logger, machine(), { tier: `standard` }, `owner@example.test`, passes);
+
+        expect(result.state).toBe(`done`);
+        // Refused once while the earlier one ran, taken once it had finished; both before the disk is grown.
+        expect(fly.called(`POST`, `/snapshots`)).toHaveLength(2);
+        expect(fly.calls.findLastIndex((call) => call.method === `POST` && call.path.endsWith(`/snapshots`))).toBeLessThan(fly.indexOf(`PUT`, `/extend`));
+        const own = [...fly.snapshots.keys()].filter((id) => id !== earlier.id);
+        expect(own).toHaveLength(1);
+        expect(migrations[0]).toMatchObject({ state: `done`, snapshotId: own[0] });
+    });
+
+    it(`changes nothing, and says why, when Fly is still taking the earlier snapshot ten minutes on`, async () => {
+        const fly = stubFly();
+        pendingSnapshot(fly);
+        const { prisma, migrations } = fakePrisma();
+        let slept = 0;
+        const counted = async (ms: number): Promise<void> => {
+            slept += ms;
+        };
+        await expect(migrateHosted(prisma, config(), logger, machine(), { tier: `standard` }, `owner@example.test`, counted)).rejects.toThrow(
+            `Fly was still taking an earlier snapshot of this disk after 10 minutes, and takes one at a time`,
+        );
+        expect(slept).toBe(10 * 60_000);
+        expect(fly.called(`PUT`, `/extend`)).toEqual([]);
+        expect(fly.called(`POST`, `/machines/m1`)).toEqual([]);
+        expect(migrations[0]?.state).toBe(`failed`);
+    });
 });
 
 describe(`moving to another machine`, () => {

@@ -217,6 +217,13 @@
         border-color: transparent;
     }
 
+/* WITH NO CHROME TO LOSE, INK IS ALL A BORDERLESS BUTTON HAS to say it cannot be pressed, and on light paper `subtle`
+   (5.2:1) is one short step from the `muted` a pressable secondary one wears (6.8:1, theme.ts). Taken 15% toward the
+   card it reads 3.9:1, the gap dark keeps between the same two roles (6.5 and 3.9). Sanctum inks its own (sanctum.css). */
+    :root:not([data-mode="dark"]) .p-button:where(.p-button-text, .p-button-link):disabled:not(.p-button-loading) {
+        --ui-button-off-content: color-mix(in oklab, var(--color-subtle) 85%, var(--color-card));
+    }
+
 /* CHECKING A BOX SHOULD FEEL LIKE PRESSING SOMETHING. */
     .p-checkbox-box {
         transition-property: background, color, border-color, box-shadow, outline-color, transform;

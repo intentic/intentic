@@ -55,7 +55,7 @@ export interface FakeFlyCall {
 export interface FakeFlyFaults {
     /** Every `POST …/machines` and `POST …/volumes` is refused in Fly's own out-of-capacity words. */
     readonly atCapacity?: boolean;
-    /** Snapshots are taken but never leave `running`, so nothing may be restored from one. */
+    /** Snapshots are taken but never leave `running`, so nothing may be restored from one, and Fly takes no other. */
     readonly snapshotNeverFinishes?: boolean;
     /** A start is accepted and the machine stays where it was: the shape of a host that will not take it. */
     readonly machineWontStart?: boolean;
@@ -133,6 +133,40 @@ const nextId = (prefix: string): string => {
     return `${prefix}_${counter.toString(16).padStart(6, "0")}`;
 };
 
+/* POST /apps/{app}/volumes/{id}/snapshots, answered as Fly answers it: the backup job it scheduled, whose `graph_id` is
+ * the id the snapshot is listed under. Never the listed snapshot itself: answering that is how a client reading the
+ * wrong shape passed every suite and failed every real migration. One at a time per volume: while one is unfinished,
+ * Fly refuses the next with 412, which is what an earlier run's snapshot looks like to the next run. */
+const snapshotRoute = (
+    volumes: ReadonlyMap<string, FakeFlyVolume>,
+    snapshots: Map<string, FakeFlySnapshot>,
+    faults: () => FakeFlyFaults,
+): Route => ({
+    method: "POST",
+    pattern: /^\/v1\/apps\/[^/]+\/volumes\/([^/]+)\/snapshots$/u,
+    handle: (match) => {
+        // SAFETY: the pattern's one capture group always matches, so `match[1]` is the id.
+        const volume = volumes.get(match[1] as string);
+        if (volume === undefined) {
+            return refuse(404, `Volume '${match[1] ?? ""}' not found`);
+        }
+        const pending = [...snapshots.values()].find((held) => held.volumeId === volume.id && held.status !== "created");
+        if (pending !== undefined) {
+            return refuse(412, `failed_precondition: snapshot is already scheduled at ${pending.createdAt}`);
+        }
+        const snapshot: FakeFlySnapshot = {
+            id: nextId("vs"),
+            volumeId: volume.id,
+            status: faults().snapshotNeverFinishes === true ? "running" : "created",
+            createdAt: new Date().toISOString(),
+            sizeBytes: volume.usedBytes,
+        };
+        snapshots.set(snapshot.id, snapshot);
+        const backup = { id: nextId("backup"), state: "prepare", type: "BACKUP_TYPE_ON_DEMAND", created_at: snapshot.createdAt, finished_at: null };
+        return json({ Msg: { backup: { ...backup, graph_id: snapshot.id } } });
+    },
+});
+
 export interface FakeFly {
     /** Every call made, in order, so a teardown's ordering can be asserted and not just its fact. */
     readonly calls: FakeFlyCall[];
@@ -205,11 +239,12 @@ export const installFakeFly = (
         blocks_avail: Math.ceil((volume.sizeGb * 1024 ** 3 - volume.usedBytes) / 4096),
     });
 
+    // Fly lists a snapshot it is still taking under its zero time and no size; both arrive once it reads `created`.
     const wireSnapshot = (snapshot: FakeFlySnapshot) => ({
         id: snapshot.id,
         status: snapshot.status,
-        created_at: snapshot.createdAt,
-        size: snapshot.sizeBytes,
+        created_at: snapshot.status === "created" ? snapshot.createdAt : "0001-01-01T00:00:00Z",
+        size: snapshot.status === "created" ? snapshot.sizeBytes : 0,
     });
 
     /** Where a new volume's bytes come from: the volume it forks, or the one its snapshot was taken of. */
@@ -353,22 +388,7 @@ export const installFakeFly = (
             pattern: /^\/v1\/apps\/[^/]+\/volumes\/([^/]+)\/snapshots$/u,
             handle: (match) => json([...snapshots.values()].filter((snapshot) => snapshot.volumeId === match[1]).map(wireSnapshot)),
         },
-        {
-            method: "POST",
-            pattern: /^\/v1\/apps\/[^/]+\/volumes\/([^/]+)\/snapshots$/u,
-            handle: (match) =>
-                found(volumes, match[1] as string, "Volume", (volume) => {
-                    const snapshot: FakeFlySnapshot = {
-                        id: nextId("vs"),
-                        volumeId: volume.id,
-                        status: faults.snapshotNeverFinishes === true ? "running" : "created",
-                        createdAt: now(),
-                        sizeBytes: volume.usedBytes,
-                    };
-                    snapshots.set(snapshot.id, snapshot);
-                    return json(wireSnapshot(snapshot));
-                }),
-        },
+        snapshotRoute(volumes, snapshots, () => faults),
 
         {
             method: "GET",
