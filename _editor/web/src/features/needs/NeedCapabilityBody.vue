@@ -95,6 +95,11 @@ const change = async (): Promise<void> => {
     await run(async () => {
         const answers = seedValues(tile, connection.config, props.subject.changes ?? {});
         await add({ id: connection.id, kind: tile.kind, config: buildConfig(tile, answers, new Set(connection.secrets)) });
+        // Settled now, not on the daemon's next poll: the card closes with this press instead of offering it again.
+        // The poll may have closed it first, which is the same outcome.
+        if (needs.byId(props.need.id)?.status !== `met`) {
+            await needs.answer.mutateAsync({ id: props.need.id, answer: { kind: `apply` } });
+        }
     }, t(`needs.capability.couldNotApply`));
 };
 

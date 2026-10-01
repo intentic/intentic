@@ -222,6 +222,19 @@ describe("capability need", () => {
         });
     });
 
+    // A Windows device's switch was applied, yet the card kept its buttons until the poll caught up and the owner pressed again.
+    it("meets a change need on the person's word only when the setting holds, so the card can close with the press", async () => {
+        const off = world({ capabilities: [docker("off")] });
+        const need = needOf({ kind: "capability", entry: "docker", name: "Docker", mode: "change", instance: "docker", changes: { gpu: "on" } });
+        expect(await kind(off).answer(need, { kind: "apply" }, { email: "owner@acme.dev" })).toEqual({ refused: 'The change is not on Docker "docker" yet: apply it again.' });
+        off.capabilities = [docker("on")];
+        expect(await kind(off).answer(need, { kind: "apply" }, { email: "owner@acme.dev" })).toEqual({
+            status: "met",
+            result: 'Docker "docker" now has the change applied.',
+            use: [],
+        });
+    });
+
     it("meets a connect need once a connection for its site comes live, saying what works now and next turn", async () => {
         const later = world();
         const need = needOf({ kind: "capability", entry: "komodo", name: "Komodo", mode: "connect" });

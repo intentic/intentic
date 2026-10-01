@@ -281,6 +281,12 @@ export const capabilityNeed = (deps: CapabilityNeedDeps): NeedKindHandler => {
             if (answer.kind !== "apply") {
                 return { refused: "A capability need is answered by setting it up, or declined." };
             }
+            // A setting change is met by the stored setting alone, checked now rather than on the next poll: the card
+            // says so right after it saves, so its buttons go at once instead of inviting a second press.
+            if (subject.mode === "change") {
+                const met = await check(need);
+                return met === undefined ? { refused: `The change is not on ${subject.name} "${subject.instance ?? ""}" yet: apply it again.` } : { status: "met", ...met };
+            }
             // The person says it is done: a working connection meets it, a reconnect included.
             const entry = (await deps.entries()).find((candidate) => candidate.id === subject.entry);
             const instance = entry === undefined ? undefined : instancesOf(entry, await deps.capabilities()).find((capability) => subject.instance === undefined ? subject.target === undefined || servesTarget(capability, subject.target) : capability.id === subject.instance);

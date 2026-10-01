@@ -211,12 +211,12 @@
    (fork, edit). Nothing here costs a row height: the lane it replaced cost every run a blank band a line and a half tall. */
 .chat-turns {
 /* The left gutter, where the figures stand: a narrow column's 1rem gutter is short of a thought mark and two digits, so
-   it gets half a rem more than the right one; with room, the two are the same. */
-    --chat-spine-gutter: calc(var(--chat-gutter) + 0.5rem);
-/* Where a figure's right edge stands, from the column's left edge: they line up on it, as line numbers do, and it
-   is short of the 14px an answer's words are inset by. A narrow column spends 6px of that inset, which is what lets a
-   thought mark and two digits stand inside its gutter instead of losing their first pixels to the scroller's edge. */
-    --chat-spine-end: 0.375rem;
+   it gets more than the right one; with room, the two are the same. */
+    --chat-spine-gutter: calc(var(--chat-gutter) + 0.875rem);
+/* Where a figure's right edge stands, from the column's left edge: they line up on it, as line numbers do. Even a
+   narrow column keeps it a hair outside that edge: a card, a tool row and a job row start right at it, and a figure
+   standing 6px inside it sat on their border (a needs card's top-left corner wore the run's count). */
+    --chat-spine-end: -0.25rem;
 /* Where a figure centres, from the top of the row its run led to: on the seam above that row's words (their box's
    0.625rem inset below, the gap and the paragraph before's inset above), a hair toward the gap. */
     --chat-spine-top: -0.125rem;
