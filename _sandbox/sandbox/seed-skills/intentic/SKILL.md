@@ -145,7 +145,7 @@ applies from every conversation's next turn, with no restart.
                                      file as it is written ({file} is its path). "land" and "turn" are
                                      retired: a declaration naming one still parses and runs nothing.
                                      Tracked in the repository, so it travels with a clone; inert until the
-                                     owner switches it on (Sandbox ▸ Agent ▸ Finishing, or the repo's own row
+                                     owner switches it on (Sandbox ▸ Agent ▸ Tools ▸ Checks after edits, or the repo's own row
                                      in the tree), and held again if it changes afterwards. Propose one as an
                                      ordinary diff; never expect a check you just wrote to run this turn.
 /work/.intentic/records/             sessions/ (transcripts), artifacts/browser/ (screenshots). Shared live

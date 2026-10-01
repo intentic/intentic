@@ -21,6 +21,7 @@ jest.mock(`../agent-settings/skills/AgentSkills.vue`, () => stub(`Skills`));
 jest.mock(`../agent-settings/skills/AgentMemory.vue`, () => stub(`Memory`));
 jest.mock(`../agent-settings/skills/AgentMemoryImport.vue`, () => stub(`Memory import`));
 jest.mock(`../agent-settings/behaviour/AgentCodeSearch.vue`, () => stub(`Code search`));
+jest.mock(`../agent-settings/behaviour/AgentRepoChecks.vue`, () => stub(`Checks after edits`));
 jest.mock(`../agent-settings/behaviour/AgentCommandOutput.vue`, () => stub(`Command output`));
 jest.mock(`../agent-settings/behaviour/AgentSubagents.vue`, () => stub(`Subagents`));
 jest.mock(`../agent-settings/behaviour/AgentOffload.vue`, () => stub(`Where heavy work runs`));
@@ -45,6 +46,7 @@ const EVERY_GROUP = [
     `Memory`,
     `Memory import`,
     `Code search`,
+    `Checks after edits`,
     `Command output`,
     `Subagents`,
     `Where heavy work runs`,
@@ -130,7 +132,7 @@ it(`opens the safety category with the gate rules alone`, async () => {
 
 it(`holds delegation under tools, not under the gate rules`, async () => {
     const { el } = await mount({ section: `tools` });
-    expect(shown(el)).toEqual([`Code search`, `Command output`, `Subagents`, `Where heavy work runs`]);
+    expect(shown(el)).toEqual([`Code search`, `Checks after edits`, `Command output`, `Subagents`, `Where heavy work runs`]);
     app?.unmount();
     app = undefined;
     document.body.innerHTML = ``;

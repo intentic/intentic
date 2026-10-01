@@ -105,9 +105,10 @@ const settingsBlocked = computed<NoticeModel | undefined>(() => {
             <AgentMemoryImport />
         </template>
 
-        <!-- What it may reach for and how much comes back, ending with how much of the job it may delegate. -->
+        <!-- Finding code, feedback after edits, command output, then how much of the job it may delegate. -->
         <template v-else-if="section === `tools`">
             <AgentCodeSearch />
+            <AgentRepoChecks />
             <AgentCommandOutput />
             <AgentSubagents />
             <!-- Last: not what it may reach for but where the heaviest of it runs, which only matters once a machine has a runner. -->
@@ -125,11 +126,9 @@ const settingsBlocked = computed<NoticeModel | undefined>(() => {
             <AgentSafetyLog />
         </template>
 
-        <!-- What happens around a turn: nothing checks it inside the turn or after it lands, so first whether main's failing CI gets a fix agent, then what each repository runs on its own code, then delivery, and last the recovery path for a turn that broke instead. -->
+        <!-- Whether main's failing CI gets a fix agent, then delivery, and last the recovery path for a turn that broke instead. -->
         <template v-else>
             <AgentChecks />
-            <!-- Directly under the repair switch, since the two answer one question: what checks the work, and who is owed a failure. -->
-            <AgentRepoChecks />
             <AgentFinishedWork />
             <AgentChangelog />
             <AgentRecovery />

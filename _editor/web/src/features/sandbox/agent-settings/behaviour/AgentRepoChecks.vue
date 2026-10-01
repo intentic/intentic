@@ -19,7 +19,7 @@ const waiting = computed(() => (repos.value ?? []).filter((entry) => !entry.adop
 </script>
 
 <template>
-    <RowGroup :label="t(`sandbox.agentRepoChecks.repositoryChecks`)">
+    <RowGroup :label="t(`sandbox.agentRepoChecks.checksAfterEdits`)">
         <div v-if="repos === undefined" role="status" aria-busy="true">
             <template v-if="outline">
                 <span class="sr-only">{{ t(`sandbox.agentRepoChecks.readingWhatWorkspacesRepositories`) }}</span>

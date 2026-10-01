@@ -2070,7 +2070,7 @@
             "oneRepositoryWaitingOn": "Un dépôt vous attend. Tant que vous ne l'activez pas, ses propres vérifications ne tournent pas.",
             "readingWhatWorkspacesRepositories": "Lecture de ce que déclarent les dépôts de cet espace de travail…",
             "repositoriesWaitingOnUntil": "{waiting} dépôts vous attendent. Tant que vous ne les activez pas, leurs propres vérifications ne tournent pas.",
-            "repositoryChecks": "Vérifications du dépôt",
+            "checksAfterEdits": "Vérifications après modification",
             "repositoryDeclaresOwnChecks": "Un dépôt déclare dans .intentic/checks.json ce qui tourne sur son propre code après chaque modification. Rien de ce qu'il déclare ne bloque jamais une intégration, un commit ou un push."
         },
         "agentSafetyJudge": {

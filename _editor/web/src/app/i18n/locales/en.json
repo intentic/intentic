@@ -2992,7 +2992,7 @@
             "oneRepositoryWaitingOn": "One repository is waiting on you. Until you switch it on, its own checks do not run.",
             "readingWhatWorkspacesRepositories": "Reading what this workspace's repositories declare…",
             "repositoriesWaitingOnUntil": "{waiting} repositories are waiting on you. Until you switch them on, their own checks do not run.",
-            "repositoryChecks": "Repository checks",
+            "checksAfterEdits": "Checks after edits",
             "repositoryDeclaresOwnChecks": "A repository declares in .intentic/checks.json what runs on its own code after each edit. Nothing it declares ever blocks a land, a commit or a push."
         },
         "agentSafetyJudge": {

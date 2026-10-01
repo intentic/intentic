@@ -2754,7 +2754,7 @@
             "oneRepositoryWaitingOn": "Jedno repozytorium czeka na Ciebie. Dopóki go nie włączysz, jego własne sprawdzenia nie działają.",
             "readingWhatWorkspacesRepositories": "Odczytywanie, co deklarują repozytoria tej przestrzeni roboczej…",
             "repositoriesWaitingOnUntil": "{waiting} repozytoria czekają na Ciebie. Dopóki ich nie włączysz, ich własne sprawdzenia nie działają.",
-            "repositoryChecks": "Sprawdzenia repozytorium",
+            "checksAfterEdits": "Sprawdzenia po zmianach",
             "repositoryDeclaresOwnChecks": "Repozytorium deklaruje w .intentic/checks.json, co działa na jego własnym kodzie po każdej zmianie. Nic, co deklaruje, nigdy nie blokuje scalenia, commita ani pusha."
         },
         "agentSafetyJudge": {
