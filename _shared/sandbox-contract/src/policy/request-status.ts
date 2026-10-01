@@ -15,10 +15,12 @@ export const settledRequests = (cards: TranscriptRequests, reply: AgentReply | u
     }
     if (question !== undefined) {
         const answers = reply?.kind === "question" ? reply.answers : undefined;
+        const attachments = reply?.kind === "question" ? reply.attachments : undefined;
         out.question = {
             ...question,
             status: reply?.kind === "question" && reply.cancelled !== true ? "answered" : "cancelled",
             ...(answers === undefined ? {} : { answers }),
+            ...(attachments === undefined ? {} : { attachments }),
         };
     }
     if (permission !== undefined) {

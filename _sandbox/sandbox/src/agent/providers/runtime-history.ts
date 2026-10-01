@@ -10,7 +10,8 @@ export interface RuntimeHistoryMessage {
     readonly text: string;
 }
 
-export const RUNTIME_HISTORY_HEADER = "This conversation continues from another AI runtime. Prior transcript (oldest first): treat it as your own conversation history:";
+export const RUNTIME_HISTORY_HEADER =
+    "This conversation continues from another AI runtime. Prior transcript (oldest first): treat it as your own conversation history:";
 const SEPARATOR = "\n\n---\n\n";
 const MESSAGE_CHAR_CAP = 8_000;
 // Char cap for an assistant message outside the newest RECENT_ROWS; user messages are never cut by this.
@@ -31,7 +32,8 @@ const decisionLabel = (message: TranscriptRow): string | undefined => {
     if (question === undefined || question.status !== "answered") {
         return undefined;
     }
-    return formatAnswers(question.questions, { kind: "question", requestId: question.requestId, answers: question.answers }).replaceAll("\n", " ");
+    const reply = { kind: "question", requestId: question.requestId, answers: question.answers, attachments: question.attachments } as const;
+    return formatAnswers(question.questions, reply).replaceAll("\n", " ");
 };
 
 // Trailer for what a turn touched: tools and question answer for an assistant row, attachments for a user row; empty

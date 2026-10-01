@@ -71,7 +71,12 @@ export const createAgentRoutes = (services: Services) => {
             const { errand, continues, ...asked } = input;
             // A Continue carries no words, so it skips the queue, which holds words: it starts the turn or is refused.
             if (continues === true) {
-                const started = await carryOnTurn(services, { ...asked, conversationId, ...spokenBy(speaker), ...opt("areas", areasOf(context.identity)) });
+                const started = await carryOnTurn(services, {
+                    ...asked,
+                    conversationId,
+                    ...spokenBy(speaker),
+                    ...opt("areas", areasOf(context.identity)),
+                });
                 if (started === undefined) {
                     throw new ORPCError("CONFLICT", { message: "a turn is already running in that conversation" });
                 }
@@ -140,7 +145,9 @@ export const createAgentRoutes = (services: Services) => {
             const unregister =
                 context.identity === undefined
                     ? undefined
-                    : services.auth?.connections.register(context.identity, () => cut(new ORPCError("FORBIDDEN", { message: "authorization revoked" })));
+                    : services.auth?.connections.register(context.identity, () =>
+                          cut(new ORPCError("FORBIDDEN", { message: "authorization revoked" })),
+                      );
             try {
                 yield head;
                 for await (const entry of entries) {
@@ -156,6 +163,17 @@ export const createAgentRoutes = (services: Services) => {
         reply: i.reply.handler(async ({ input, context }) => {
             // The decision's own line, written before the reply ends the turn.
             own(context, conversationOfRequest(input.requestId));
+            // Files with an answer are refused as a message's are when they name a path outside the workspace, before
+            // the turn is un-parked, so the card stays up with the answer still in it.
+            const escaping =
+                input.kind === "question"
+                    ? Object.values(input.attachments ?? {})
+                          .flat()
+                          .find((rel) => resolveWithin(services.workspace.root, rel) === undefined)
+                    : undefined;
+            if (escaping !== undefined) {
+                throw new ORPCError("BAD_REQUEST", { message: `invalid attachment path: ${escaping}` });
+            }
             const held = services.cards.conversationOf(input.requestId);
             const run = held === undefined ? undefined : turnRunOf(services.conversations, held);
             if (input.kind === "question" && input.cancelled === true) {

@@ -6,8 +6,26 @@ import { SubagentKindSchema, SubagentStatusSchema, SubagentVerificationSchema } 
 import { NeedSchema } from "../schemas/needs.js";
 import { HeldEndingSchema, RetryLadderSchema } from "../schemas/turn-break.js";
 import { NoticeCodeSchema } from "./sandbox-notice.js";
-import type { ToolCallContent, ToolCallLocation, ToolCallStatus, ToolKind} from "./requests.js";
-import { browserHelpRequest, capabilityOfferRequest, CapabilityOutcomeSchema, credentialOfferRequest, CredentialReceiptSchema, paymentOfferRequest, PaymentReceiptSchema, PermissionAskSchema, permissionRequest, planRequest, questionRequest, terminalHelpRequest, TodoItemSchema, ToolCallContentSchema, ToolCallLocationSchema, ToolCallStatusSchema, ToolKindSchema } from "./requests.js";
+import type { ToolCallContent, ToolCallLocation, ToolCallStatus, ToolKind } from "./requests.js";
+import {
+    browserHelpRequest,
+    capabilityOfferRequest,
+    CapabilityOutcomeSchema,
+    credentialOfferRequest,
+    CredentialReceiptSchema,
+    paymentOfferRequest,
+    PaymentReceiptSchema,
+    PermissionAskSchema,
+    permissionRequest,
+    planRequest,
+    questionRequest,
+    terminalHelpRequest,
+    TodoItemSchema,
+    ToolCallContentSchema,
+    ToolCallLocationSchema,
+    ToolCallStatusSchema,
+    ToolKindSchema,
+} from "./requests.js";
 
 // A conversation as recorded and replayed: the rows, the cards they carry, and the patches that change them while a
 // turn runs. One shape for the live row and the recorded one, since they're the same row.
@@ -38,10 +56,17 @@ export const TranscriptQuestionSchema = z.object({
         .record(z.string(), z.array(z.string()))
         .optional()
         .describe("What was chosen, keyed by the question, with the chosen labels or the user's own words."),
+    attachments: z
+        .record(z.string(), z.array(z.string()))
+        .optional()
+        .describe("Files the user attached to their own-words answer, keyed by the question, as workspace-relative paths."),
 });
 export type TranscriptQuestion = z.infer<typeof TranscriptQuestionSchema>;
 // `explain`, the judge's sentence, arrives via PermissionAskSchema at raise time; nothing patches it in after.
-export const TranscriptPermissionSchema = PermissionAskSchema.extend({ ...permissionRequest, status: PermissionStatusSchema.describe("Where the decision stands.") });
+export const TranscriptPermissionSchema = PermissionAskSchema.extend({
+    ...permissionRequest,
+    status: PermissionStatusSchema.describe("Where the decision stands."),
+});
 export type TranscriptPermission = z.infer<typeof TranscriptPermissionSchema>;
 export const TranscriptBrowserHelpSchema = z.object({ ...browserHelpRequest, status: HelpStatusSchema.describe("How the hand-over ended.") });
 export type TranscriptBrowserHelp = z.infer<typeof TranscriptBrowserHelpSchema>;
@@ -297,10 +322,7 @@ export const TranscriptRowSchema = z.object({
         .optional()
         .describe("The wait this notice describes, by name, so a reader can say whether it is still on."),
     // Which one, for a wait whose kind can have several in flight at once; without it two armed watches settle together.
-    noticeWaitId: z
-        .string()
-        .optional()
-        .describe("Which instance of the wait this notice names, for a kind that can have several running at once."),
+    noticeWaitId: z.string().optional().describe("Which instance of the wait this notice names, for a kind that can have several running at once."),
     // The sandbox's own notice by name, beside its English `text` (sandbox-notice.ts); absent on every other row, and
     // on the notices written before rows carried it, which a reader draws from `text` as it always did.
     noticeCode: NoticeCodeSchema.optional().describe(
@@ -321,7 +343,9 @@ export const TranscriptRowSchema = z.object({
         "Something the agent asked a person for, as it was when raised. Its live state (answered, met) is read by its id, since it outlives the turn.",
     ),
     needWake: TranscriptNeedWakeSchema.optional().describe("The answered need that reached this conversation, and the prompt it came as."),
-    agentWords: TranscriptAgentWordsSchema.optional().describe("Another agent's words that reached this conversation, whose they are, and the prompt they came as."),
+    agentWords: TranscriptAgentWordsSchema.optional().describe(
+        "Another agent's words that reached this conversation, whose they are, and the prompt they came as.",
+    ),
     backgroundJob: TranscriptBackgroundJobSchema.optional().describe("The background job this row marks the start of."),
     credentialOffer: TranscriptCredentialOfferSchema.optional().describe(
         "The gated credential this row asked to use, who may release it, and who did.",
@@ -352,10 +376,25 @@ export const isAwaitingDecision = (row: TranscriptRequests): boolean => REQUEST_
 // everything else replaces its row; `drop` removes a row that opened and never wrote.
 export const TranscriptPatchSchema = z.discriminatedUnion("op", [
     z.object({ op: z.literal("append").describe("A new row at the end."), row: TranscriptRowSchema }),
-    z.object({ op: z.literal("replace").describe("This row, whole, in place of the one at that index."), index: z.number().int().nonnegative(), row: TranscriptRowSchema }),
-    z.object({ op: z.literal("drop").describe("The row at that index is gone: it was opened and never written into."), index: z.number().int().nonnegative() }),
-    z.object({ op: z.literal("text").describe("More of the agent's prose, onto that row's text."), index: z.number().int().nonnegative(), text: z.string() }),
-    z.object({ op: z.literal("thinking").describe("More of the agent's reasoning, onto that row's thinking."), index: z.number().int().nonnegative(), text: z.string() }),
+    z.object({
+        op: z.literal("replace").describe("This row, whole, in place of the one at that index."),
+        index: z.number().int().nonnegative(),
+        row: TranscriptRowSchema,
+    }),
+    z.object({
+        op: z.literal("drop").describe("The row at that index is gone: it was opened and never written into."),
+        index: z.number().int().nonnegative(),
+    }),
+    z.object({
+        op: z.literal("text").describe("More of the agent's prose, onto that row's text."),
+        index: z.number().int().nonnegative(),
+        text: z.string(),
+    }),
+    z.object({
+        op: z.literal("thinking").describe("More of the agent's reasoning, onto that row's thinking."),
+        index: z.number().int().nonnegative(),
+        text: z.string(),
+    }),
     z.object({
         op: z.literal("toolThinking").describe("More of a delegated subagent's reasoning, onto the thinking of the card that started it."),
         index: z.number().int().nonnegative(),
@@ -391,26 +430,41 @@ export const TurnEndingSchema = z.object({
     resetsAt: z
         .number()
         .optional()
-        .describe("When the spent allowance reopens, in epoch seconds. Absent for every ending that names no instant, and for a provider that publishes none."),
+        .describe(
+            "When the spent allowance reopens, in epoch seconds. Absent for every ending that names no instant, and for a provider that publishes none.",
+        ),
     held: z
         .object({
-            ran: z.boolean().describe("Whether the held turn got anywhere before it was refused, which is a different sentence from one refused at the door."),
+            ran: z
+                .boolean()
+                .describe("Whether the held turn got anywhere before it was refused, which is a different sentence from one refused at the door."),
             contextTokens: z
                 .number()
                 .optional()
-                .describe("How much context a press that keeps the session re-reads once, on this account at the reset or carried to another. Absent when no usage frame measured it."),
+                .describe(
+                    "How much context a press that keeps the session re-reads once, on this account at the reset or carried to another. Absent when no usage frame measured it.",
+                ),
             handoffTokens: z
                 .number()
                 .optional()
-                .describe("What a press that opens a fresh session pays instead: the capped record plus the sandbox's measured brief, counted at the failure."),
-            moving: z.string().optional().describe("The account the owner's policy is already moving this turn to, when it is; the surface then reports the move rather than offering a press."),
+                .describe(
+                    "What a press that opens a fresh session pays instead: the capped record plus the sandbox's measured brief, counted at the failure.",
+                ),
+            moving: z
+                .string()
+                .optional()
+                .describe(
+                    "The account the owner's policy is already moving this turn to, when it is; the surface then reports the move rather than offering a press.",
+                ),
         })
         .optional()
         .describe("Present when the daemon still holds the refused turn whole, so a press re-runs it rather than appending a message after it."),
     scheduled: z
         .boolean()
         .optional()
-        .describe("Whether something other than the user is already booked to send this turn again, so the surface reports the wait instead of offering a press."),
+        .describe(
+            "Whether something other than the user is already booked to send this turn again, so the surface reports the wait instead of offering a press.",
+        ),
     // `resetsAt` is the provider's fact about the allowance; this is the daemon's own appointment, and the two differ
     // whenever a ladder rung falls short of the reset, or an ending with no allowance at all is armed.
     nextAt: z
@@ -440,7 +494,11 @@ export const AgentTranscriptSchema = SessionTranscriptSchema.extend({
         "How the last turn ended, when it left work behind that one press finishes. Absent for a conversation whose last turn ended on its own, and for the failures that name something to repair first.",
     ),
     // `from` offsets every `rewindIndex` here, and is the `before` for the page above; `more` flags older messages.
-    from: z.number().int().nonnegative().describe("Where the first message sits in the whole record, and the `before` that asks for the page above this one."),
+    from: z
+        .number()
+        .int()
+        .nonnegative()
+        .describe("Where the first message sits in the whole record, and the `before` that asks for the page above this one."),
     more: z.boolean().describe("Whether older messages precede this page."),
 });
 

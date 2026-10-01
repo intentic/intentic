@@ -84,7 +84,12 @@ const openingTitle = async (dir: string, id: string, openings: SessionNaming["op
     }
     try {
         const opening = (await sdk().getSessionMessages(id, { dir, limit: 4 })).find((message) => message.type === "user");
-        const text = opening === undefined ? "" : blocksOf(opening).flatMap((block) => (block.type === "text" && block.text !== undefined ? [block.text] : [])).join("\n\n");
+        const text =
+            opening === undefined
+                ? ""
+                : blocksOf(opening)
+                      .flatMap((block) => (block.type === "text" && block.text !== undefined ? [block.text] : []))
+                      .join("\n\n");
         const title = text === "" ? undefined : storedPromptTitle(text);
         openings.set(id, title);
         return title;
@@ -278,7 +283,11 @@ export const restoredSessionMessages = (
         bubble = undefined;
         if (
             current === undefined ||
-            (current.text.length === 0 && current.thinking.length === 0 && current.tools.length === 0 && current.question === undefined && (current.todos === undefined || current.todos.length === 0))
+            (current.text.length === 0 &&
+                current.thinking.length === 0 &&
+                current.tools.length === 0 &&
+                current.question === undefined &&
+                (current.todos === undefined || current.todos.length === 0))
         ) {
             return;
         }
@@ -371,7 +380,12 @@ export const restoredSessionMessages = (
                 const question = asked.get(block.tool_use_id);
                 const reply = question === undefined ? undefined : parseAnswers(question.questions, block.tool_use_id, resultText(block.content));
                 if (question !== undefined && reply !== undefined) {
-                    Object.assign(question, settledRequests({ question }, reply).question);
+                    // The answer names its files absolute; the card shows them as the composer does, root-relative.
+                    const attachments =
+                        reply.kind === "question" && reply.attachments !== undefined
+                            ? Object.fromEntries(Object.entries(reply.attachments).map(([asked, paths]) => [asked, rootRelative(paths, dir)]))
+                            : undefined;
+                    Object.assign(question, settledRequests({ question }, attachments === undefined ? reply : { ...reply, attachments }).question);
                 }
             }
             // Tool-results-only and injected notes aren't user words; chips resolve against `dir`, always the root.

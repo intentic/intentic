@@ -1273,6 +1273,7 @@
             "turnRunsStreamsBack": "Le tour s'exécute là-bas et revient en flux dans cet onglet. Il utilise les fichiers et les comptes de ce sandbox : le fichier ouvert de cette zone, les mentions {'@'} et les personas restent donc ici."
         },
         "chatQuestionCard": {
+            "attachFiles": "Joindre des fichiers",
             "addAnswerInOwn": "Ajoutez une réponse dans vos propres mots.",
             "answerInOwnWords": "Répondez dans vos propres mots.",
             "chosen": "Choisi :",

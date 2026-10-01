@@ -69,7 +69,8 @@ import { promptInputOf, sdkSystemPrompt, terminalMounted } from "../prompt/syste
 import { storedPromptTitle } from "../prompt/turn-preamble.js";
 import { noteChildWork } from "../subagents/child-verification.js";
 import { closeSubagents, subagentInParentTree, subagentHooks, type SubagentTurn } from "../subagents/subagents.js";
-import { ASK_TOOL_NAMES, formatAnswers } from "../tools/question-answers.js";
+import { ASK_TOOL_NAMES, answerFiles, formatAnswers } from "../tools/question-answers.js";
+import { imageBlock, loadAttachments } from "../../runtimes/decorators/attachment-images.js";
 import type { ConversationActors } from "../../conversations/actor/conversation-actors.js";
 
 // The request the Claude Code loop runs: it spends a stored account's token, a routed endpoint, the trial, or the
@@ -276,7 +277,9 @@ const runtimeSpawn =
     (options: SpawnOptions): SpawnedProcess => {
         const config = mcpConfigOffArgv(options.args);
         const { command, args } =
-            anchor === undefined ? { command: options.command, args: config.args } : nsenterArgv(anchor.pid, anchor.cwd, options.command, config.args);
+            anchor === undefined
+                ? { command: options.command, args: config.args }
+                : nsenterArgv(anchor.pid, anchor.cwd, options.command, config.args);
         const child = spawnAs({ class: "agentRuntime", spawnDepth }, command, args, {
             ...(anchor === undefined ? opt("cwd", options.cwd) : {}),
             env: options.env,
@@ -502,6 +505,9 @@ const trackProse = (prose: TurnProse, event: AgentEvent): void => {
     }
 };
 
+// The API's own ceiling on one picture, base64; a bigger one stays a path for the Read tool, which downsizes.
+const MAX_ANSWER_IMAGE_BASE64 = 5 * 1024 * 1024;
+
 // A custom MCP tool, not the built-in, since the built-in's picker UI has nowhere to render headless; aliased onto the
 // built-in's name so the model's trained call site still works. alwaysLoad keeps it out of tool search.
 const askServer = (
@@ -552,7 +558,11 @@ const askServer = (
                     // Rebase happens before the model acts on the answer, announced to the transcript, not folded into
                     // what it reads.
                     await syncOnAnswer(conversations, request, push, shell, !reply.cancelled && reply.answers !== undefined);
-                    return { content: [{ type: "text", text: formatAnswers(questions, reply) }] };
+                    // Pictures attached to the answer ride the result natively, so the model sees them without a
+                    // Read; the text names every file either way, and an unreadable or oversized one only by path.
+                    const { images } = await loadAttachments({ attachments: answerFiles(questions, reply, request.spec.cwd) }, true);
+                    const seen = images.filter((image) => image.data.length <= MAX_ANSWER_IMAGE_BASE64).map(imageBlock);
+                    return { content: [{ type: "text", text: formatAnswers(questions, reply, request.spec.cwd) }, ...seen] };
                 },
                 // An answer rebases the conversation's tree (syncOnAnswer), so it must not run beside reads.
                 { annotations: toolAnnotations("write") },
@@ -593,7 +603,6 @@ const planDecision = (toolName: string, input: Record<string, unknown>): Permiss
 // Posture every approved plan executes in, since approval already covers everything it contains; also used by the
 // restart path for a restored card.
 export const POST_PLAN_MODE: PermissionMode = "bypassPermissions";
-
 
 // 'Always' grants the whole tool for the session, not the SDK's narrower prefix suggestions, since the container is
 // already the isolation boundary.

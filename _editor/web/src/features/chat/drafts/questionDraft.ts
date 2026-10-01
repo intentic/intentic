@@ -15,6 +15,14 @@ export interface QuestionDraft {
     readonly selections: Record<number, string[]>;
     // Typed text for the free-text row, per question index; not a pick until OTHER_LABEL is selected.
     readonly otherTexts: Record<number, string>;
+    // Files uploaded for the free-text row, per question index; like its text, part of the answer only once Other is picked.
+    readonly otherFiles?: Record<number, readonly DraftFile[]>;
+}
+
+// An uploaded file, as the composer's sent chips carry it: workspace-relative, so a reload draws it from disk.
+export interface DraftFile {
+    readonly name: string;
+    readonly path: string;
 }
 
 // As much of a live question as replaying a draft into it needs: which picks that card would still accept.
@@ -44,7 +52,9 @@ const normalize = (draft: QuestionDraft, questions: readonly DraftQuestionShape[
             selections[index] = picks;
         }
     });
-    return { selections, otherTexts: draft.otherTexts };
+    // Files ride only when there are some, so a draft without any reads as it always did.
+    const files = draft.otherFiles ?? {};
+    return { selections, otherTexts: draft.otherTexts, ...(Object.keys(files).length > 0 ? { otherFiles: files } : {}) };
 };
 
 export const readQuestionDraft = (requestId: string, questions: readonly DraftQuestionShape[]): QuestionDraft => {
@@ -54,7 +64,14 @@ export const readQuestionDraft = (requestId: string, questions: readonly DraftQu
             return EMPTY;
         }
         const stored = JSON.parse(raw) as StoredDraft;
-        return normalize({ selections: stored.selections ?? {}, otherTexts: stored.otherTexts ?? {} }, questions);
+        return normalize(
+            {
+                selections: stored.selections ?? {},
+                otherTexts: stored.otherTexts ?? {},
+                ...(stored.otherFiles === undefined ? {} : { otherFiles: stored.otherFiles }),
+            },
+            questions,
+        );
     } catch {
         // Storage unavailable or a draft this build can't read: the card starts empty.
         return EMPTY;
@@ -105,7 +122,9 @@ const sweep = (): void => {
 
 sweep();
 
-// Whether the reader has started answering: a pick, or words typed into a free-text row. Dismissing then would throw
+// Whether the reader has started answering: a pick, words typed into a free-text row, or a file attached to one. Dismissing then would throw
 // that answer away and stop the turn, so the card asks before it does (a picked answer was lost to a Dismiss beside Send).
 export const answerStarted = (draft: QuestionDraft): boolean =>
-    Object.values(draft.selections).some((picks) => picks.length > 0) || Object.values(draft.otherTexts).some((text) => text.trim().length > 0);
+    Object.values(draft.selections).some((picks) => picks.length > 0) ||
+    Object.values(draft.otherTexts).some((text) => text.trim().length > 0) ||
+    Object.values(draft.otherFiles ?? {}).some((files) => files.length > 0);

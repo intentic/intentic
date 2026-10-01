@@ -35,6 +35,14 @@ const stagedMedia = (file: File): { readonly kind: MediaKind; readonly url: stri
     return kind === undefined ? undefined : { kind, url: URL.createObjectURL(file) };
 };
 
+// Drops a surface inside the pane took for itself (a question card's own-words field): the pane, whose handler fires
+// after on the way up, only lowers its drop ring for them instead of staging the files into the composer too. Marked
+// rather than stopped, since a stopped drop never reaches the pane and its ring would stay up.
+const claimed = new WeakSet<Event>();
+export const claimDrop = (event: DragEvent): void => {
+    claimed.add(event);
+};
+
 export const useChatAttachments = (composer: {
     /** This pane's conversation's staged files. */
     readonly attachments: Ref<PendingAttachment[]>;
@@ -139,7 +147,7 @@ export const useChatAttachments = (composer: {
         },
         onDrop: (event: DragEvent): void => {
             dragDepth.value = 0;
-            if (!takesFiles() || event.dataTransfer === null) {
+            if (!takesFiles() || event.dataTransfer === null || claimed.has(event)) {
                 return;
             }
             // Must run synchronously in the drop handler; a dropped folder is walked but attached flat.

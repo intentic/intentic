@@ -1271,6 +1271,7 @@
             "turnRunsStreamsBack": "Der Zug läuft dort und streamt in diesen Tab zurück. Er benutzt die Dateien und Konten jener Sandbox, deshalb bleiben die offene Datei dieses Felds, die {'@'}-Erwähnungen und die Personas zurück."
         },
         "chatQuestionCard": {
+            "attachFiles": "Dateien anhängen",
             "addAnswerInOwn": "Fügen Sie eine Antwort in eigenen Worten hinzu.",
             "answerInOwnWords": "Antworten Sie in eigenen Worten.",
             "chosen": "Gewählt:",

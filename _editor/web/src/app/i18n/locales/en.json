@@ -1776,6 +1776,7 @@
             "turnRunsStreamsBack": "The turn runs there and streams back into this tab. It uses that sandbox's files and accounts, so this box's open file, {'@'}-mentions and personas stay behind."
         },
         "chatQuestionCard": {
+            "attachFiles": "Attach files",
             "addAnswerInOwn": "Add an answer in your own words.",
             "answerInOwnWords": "Answer in your own words.",
             "chosen": "Chosen:",

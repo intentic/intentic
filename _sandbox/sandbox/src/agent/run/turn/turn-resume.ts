@@ -587,7 +587,7 @@ const rehydrateParkedTurn = async (services: Services, entry: JournalledTurn): P
             return reply.approve ? resumed("The user approved the plan: proceed with it.", POST_PLAN_MODE) : resumed(planRevision(reply.feedback), "plan");
         }
         if (request.kind === "question" && reply.kind === "question") {
-            return reply.cancelled === true || reply.answers === undefined ? undefined : resumed(formatAnswers(request.questions, reply));
+            return reply.cancelled === true || reply.answers === undefined ? undefined : resumed(formatAnswers(request.questions, reply, services.workspace.root));
         }
         if (request.kind === "permission" && reply.kind === "permission") {
             if (reply.decision === "deny") {

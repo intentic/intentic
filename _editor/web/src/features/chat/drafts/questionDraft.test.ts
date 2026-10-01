@@ -70,3 +70,13 @@ it("counts a pick or typed words as an answer started, and nothing else", () => 
     expect(answerStarted({ selections: { 1: [`Yes`] }, otherTexts: {} })).toBe(true);
     expect(answerStarted({ selections: {}, otherTexts: { 0: `the MIT one` } })).toBe(true);
 });
+
+// A screenshot uploaded for an Other answer is on disk already, so a reload brings it back with the words beside it.
+it("keeps the files uploaded for a free-text row, and counts one as an answer started", () => {
+    const otherFiles = { 0: [{ name: `shot.png`, path: `.intentic/records/artifacts/attachments/a/shot.png` }] };
+    writeQuestionDraft(`req-a`, { selections: { 0: [OTHER_LABEL] }, otherTexts: {}, otherFiles });
+
+    expect(readQuestionDraft(`req-a`, CARD)).toEqual({ selections: { 0: [OTHER_LABEL] }, otherTexts: {}, otherFiles });
+    expect(answerStarted({ selections: {}, otherTexts: {}, otherFiles })).toBe(true);
+    expect(answerStarted({ selections: {}, otherTexts: {}, otherFiles: { 0: [] } })).toBe(false);
+});

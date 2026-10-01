@@ -75,7 +75,7 @@ const askTool = (request: AgentRequest, push: (event: AgentEvent) => void): SDKC
         const { reply, resolved } = await wait(request.signal);
         // Picks belong in the frame log too, not just the result: what a replayed transcript freezes the card with.
         push(resolved);
-        return formatAnswers(questions, reply);
+        return formatAnswers(questions, reply, request.spec.cwd);
     },
 });
 

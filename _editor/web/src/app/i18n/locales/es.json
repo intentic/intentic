@@ -1279,6 +1279,7 @@
             "turnRunsStreamsBack": "El turno se ejecuta allí y se transmite de vuelta a esta pestaña. Usa los archivos y las cuentas de ese sandbox, así que el archivo abierto de esta caja, las menciones con {'@'} y las personas se quedan aquí."
         },
         "chatQuestionCard": {
+            "attachFiles": "Adjuntar archivos",
             "addAnswerInOwn": "Añade una respuesta con tus propias palabras.",
             "answerInOwnWords": "Responde con tus propias palabras.",
             "chosen": "Elegido:",

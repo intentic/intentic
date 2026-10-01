@@ -32,7 +32,9 @@ export const UsageUnreadSchema = z.object({
     since: z.number().describe("When re-reading this account first failed, in milliseconds. It has failed on every attempt since."),
     reason: z
         .string()
-        .describe("Why, in the provider's own words where it gave some (\"Verify your account to continue.\"). Short enough to print; never a pasted response body."),
+        .describe(
+            'Why, in the provider\'s own words where it gave some ("Verify your account to continue."). Short enough to print; never a pasted response body.',
+        ),
 });
 export type UsageUnread = z.infer<typeof UsageUnreadSchema>;
 // Every window kept, not just the binding one, since which pool binds changes between turns. Utilization only climbs
@@ -202,6 +204,12 @@ export const AgentReplySchema = z.discriminatedUnion("kind", [
             .record(z.string(), z.array(z.string()))
             .optional()
             .describe("What you chose, keyed by the question, with the chosen labels or your own words."),
+        attachments: z
+            .record(z.string(), z.array(z.string()))
+            .optional()
+            .describe(
+                "Files that go with your own-words answer, keyed by the question, as workspace-relative paths of files already uploaded (a screenshot, a mock-up).",
+            ),
         cancelled: z
             .boolean()
             .optional()

@@ -1776,6 +1776,7 @@
             "turnRunsStreamsBack": "Tura wykonuje się tam i wraca strumieniem do tej karty. Używa plików i kont tamtego sandboxa, więc otwarty plik tego pola, wzmianki {'@'} i persony zostają tutaj."
         },
         "chatQuestionCard": {
+            "attachFiles": "Dołącz pliki",
             "addAnswerInOwn": "Dodaj odpowiedź własnymi słowami.",
             "answerInOwnWords": "Odpowiedz własnymi słowami.",
             "chosen": "Wybrano:",
