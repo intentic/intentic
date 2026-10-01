@@ -2173,9 +2173,10 @@
             "sandboxOfflineAccountsCant": "Votre sandbox est hors ligne : ses comptes ne peuvent être ni lus ni modifiés d'ici.",
             "showMoreAccounts": "Afficher {collapsedCount} comptes de plus",
             "signedOutReconnectTo": "Déconnecté, reconnectez-vous pour continuer à l'utiliser.",
-            "underClaudeCode": "Sous Claude Code",
+            "underClaudeCode": "Grok sous Claude Code",
             "verify": "Vérifier",
-            "verifyThisAccount": "Google demande à son titulaire de confirmer ce compte avant qu'il ne reprenne des tours : appuyez sur Vérifier, connectez-vous en tant que {label}, et il revient dans la rotation au prochain essai."
+            "verifyThisAccount": "Google demande à son titulaire de confirmer ce compte avant qu'il ne reprenne des tours : appuyez sur Vérifier, connectez-vous en tant que {label}, et il revient dans la rotation au prochain essai.",
+            "viaClaudeCode": "via Claude Code"
         },
         "arrivalPanel": {
             "alreadyHere": "déjà là",

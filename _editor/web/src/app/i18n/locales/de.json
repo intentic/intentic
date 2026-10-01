@@ -2174,9 +2174,10 @@
             "sandboxOfflineAccountsCant": "Ihre Sandbox ist offline: ihre Konten lassen sich von hier aus nicht lesen oder ändern.",
             "showMoreAccounts": "{collapsedCount} weitere Konten zeigen",
             "signedOutReconnectTo": "Abgemeldet, verbinden Sie neu, um es weiter zu nutzen.",
-            "underClaudeCode": "Unter Claude Code",
+            "underClaudeCode": "Grok unter Claude Code",
             "verify": "Bestätigen",
-            "verifyThisAccount": "Google verlangt, dass der Inhaber dieses Konto bestätigt, bevor es wieder Züge übernimmt: Drücken Sie „Bestätigen“, melden Sie sich als {label} an, und es kommt beim nächsten Versuch zurück in die Rotation."
+            "verifyThisAccount": "Google verlangt, dass der Inhaber dieses Konto bestätigt, bevor es wieder Züge übernimmt: Drücken Sie „Bestätigen“, melden Sie sich als {label} an, und es kommt beim nächsten Versuch zurück in die Rotation.",
+            "viaClaudeCode": "über Claude Code"
         },
         "arrivalPanel": {
             "alreadyHere": "schon hier",

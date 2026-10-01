@@ -2183,9 +2183,10 @@
             "sandboxOfflineAccountsCant": "Tu sandbox está desconectado: sus cuentas no se pueden leer ni cambiar desde aquí.",
             "showMoreAccounts": "Mostrar {collapsedCount} cuentas más",
             "signedOutReconnectTo": "Sesión cerrada; vuelve a conectarla para seguir usándola.",
-            "underClaudeCode": "En Claude Code",
+            "underClaudeCode": "Grok en Claude Code",
             "verify": "Verificar",
-            "verifyThisAccount": "Google quiere que su titular confirme esta cuenta antes de que vuelva a atender turnos: pulsa Verificar, inicia sesión como {label} y volverá a la rotación en el siguiente reintento."
+            "verifyThisAccount": "Google quiere que su titular confirme esta cuenta antes de que vuelva a atender turnos: pulsa Verificar, inicia sesión como {label} y volverá a la rotación en el siguiente reintento.",
+            "viaClaudeCode": "vía Claude Code"
         },
         "arrivalPanel": {
             "alreadyHere": "ya aquí",

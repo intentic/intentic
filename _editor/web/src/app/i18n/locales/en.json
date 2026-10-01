@@ -3097,9 +3097,10 @@
             "sandboxOfflineAccountsCant": "Your sandbox is offline: its accounts can't be read or changed from here.",
             "showMoreAccounts": "Show {collapsedCount} more accounts",
             "signedOutReconnectTo": "Signed out, reconnect to keep using it.",
-            "underClaudeCode": "Under Claude Code",
+            "underClaudeCode": "Grok under Claude Code",
             "verify": "Verify",
-            "verifyThisAccount": "Google wants its owner to confirm this account before it takes turns again: press Verify, sign in as {label}, and it rejoins the rotation on the next retry."
+            "verifyThisAccount": "Google wants its owner to confirm this account before it takes turns again: press Verify, sign in as {label}, and it rejoins the rotation on the next retry.",
+            "viaClaudeCode": "via Claude Code"
         },
         "arrivalPanel": {
             "alreadyHere": "already here",

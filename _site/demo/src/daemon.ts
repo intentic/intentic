@@ -1069,7 +1069,7 @@ const DEMO_CLAUDE_ACCOUNT_SECOND: OauthAccount = {
 };
 
 const DEMO_TRANSLATOR_ACCOUNTS: TranslatorAccounts = {
-    codex: [{ name: `chatgpt-ada`, label: `ChatGPT Pro · ada@acme.dev`, state: { kind: `unknown` } }],
+    codex: [{ name: `chatgpt-ada`, label: `ada@acme.dev`, state: { kind: `unknown` } }],
     grok: [],
     kimi: [],
     // One of every state a Google row can be in, so the Agent tab shows what each says: serving, waiting on its owner
