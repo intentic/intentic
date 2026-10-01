@@ -5489,6 +5489,7 @@
             "open": "{live} otwartych",
             "pin": "Przypnij",
             "ports": "Port | Porty",
+            "portsTaken": "{count} port zajęty przez inny sandbox na Twoim komputerze | {count} porty zajęte przez inny sandbox na Twoim komputerze | {count} portów zajętych przez inny sandbox na Twoim komputerze",
             "previousRailSection": "Poprzedni obszar paska",
             "publiclyReachable": "Publicznie dostępne",
             "rightClickKeep": "Prawy klik, by zostawić",

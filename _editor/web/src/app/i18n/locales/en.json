@@ -5730,6 +5730,7 @@
             "open": "{live} open",
             "pin": "Pin",
             "ports": "Port | Ports",
+            "portsTaken": "{count} port taken by another sandbox on your machine | {count} ports taken by another sandbox on your machine",
             "previousRailSection": "Previous section",
             "publiclyReachable": "Publicly reachable",
             "rightClickKeep": "Right-click to keep",

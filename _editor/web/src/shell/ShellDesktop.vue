@@ -26,6 +26,7 @@ import {
     onRail,
     railPolicy,
     onRailOnlyByVisit,
+    DEVICES_VIEW_ID,
 } from "../core-views/registry";
 import ViewBadgeChip from "../core-views/ViewBadgeChip.vue";
 import { useVocabulary } from "../core-views/vocabulary";
@@ -50,6 +51,9 @@ import { usePushFlow } from "../features/workspace/push/usePushFlow";
 import { usePorts } from "../features/sandbox/environment/usePorts";
 import { useSandbox } from "../features/sandbox/client/useSandbox";
 import { useLiveLinks } from "../features/sandbox/devices/useLiveLinks";
+import { useSyncHealth } from "../features/sandbox/devices/useDevices";
+import { devicesWorking } from "../features/sandbox/devices/runners/deviceWork";
+import { sandboxSectionPath } from "../features/sandbox/sandboxNav";
 import { extensionsLoaded } from "../extension-host/loader";
 import AccountPanel from "./AccountPanel.vue";
 import ChatQuickBar from "../features/chat/panel/ChatQuickBar.vue";
@@ -112,6 +116,9 @@ const { capabilities, settled: capabilitiesSettled } = useCapabilities();
 // Always-on, loosely polled, so the tile appears mid-turn; the view polls tighter once it's open.
 const { sessions: browsers } = useBrowsersQuery();
 const { reachable } = useSandbox();
+// Ship-tier only: a PTY is the whole sandbox, and the daemon refuses the socket below maintainer anyway. Devices, the
+// same: the hub withholds the section below maintainer, where the daemon refuses what it is for.
+const { canShip, isGuest } = useRole();
 // Uncommitted changes badge the Workspace tile, so the count is visible from any section.
 const changes = useChanges();
 // A push started and left behind also surfaces: the tile is its only presence outside the panel.
@@ -216,8 +223,27 @@ watch(
     { immediate: true },
 );
 
+// THE MACHINES THIS SANDBOX REACHES, tiled the way This computer is in a local window (the same glyph and the same
+// corners): a place to go, the count the hub's Devices row carries, and the turning mark while one of them is being
+// worked on. That mark is the reason it is a tile at all: an agent update outlives the page that pressed it by a minute
+// or more (devices/runners/deviceWork.ts), and the switcher chip turns only for a restart of this sandbox. The count is
+// the hub row's own (SandboxHub.vue): ports another of your sandboxes took, the one held port with a remedy there.
+const { heldPorts } = useSyncHealth();
+const devicesBadge = (held: number, running: string | undefined): ViewBadge | undefined => {
+    if (held === 0) {
+        return running === undefined ? undefined : { running };
+    }
+    const count: ViewBadge = { count: held, tone: `info`, tooltip: t(`shell.shellDesktop.portsTaken`, { count: held }, held) };
+    return running === undefined ? count : { ...count, running };
+};
+const devicesTile = computed<SectionTile>(() => {
+    const tile: SectionTile = { id: DEVICES_VIEW_ID, to: sandboxSectionPath(`devices`), label: t(`sandbox.words.devicesSection`), icon: `desktop` };
+    const badge = devicesBadge(heldPorts.value.length, devicesWorking());
+    return badge === undefined ? tile : { ...tile, badge };
+});
+
 // The always-present tiles plus evidence-driven Preview; extension tiles are added separately below,
-// one per activation. Sandbox management lives behind the switcher chip, not a rail tile.
+// one per activation. The rest of sandbox management lives behind the switcher chip, not a rail tile.
 const fixedTiles = computed<readonly SectionTile[]>(() => [
     // Below the Projects tile in the Work band; unbadged, since the Agents tile below carries the debt (see chatTileSeated).
     ...(chatTileSeated.value
@@ -248,6 +274,7 @@ const fixedTiles = computed<readonly SectionTile[]>(() => [
         ...(workspaceBadge.value === undefined ? {} : { badge: workspaceBadge.value }),
     },
     ...(previewTile.value === undefined ? [] : [previewTile.value]),
+    ...(canShip.value ? [devicesTile.value] : []),
 ]);
 /* The Browsers tile stays visible while the daemon lists an open browser. */
 const browserTile = computed<SectionTile | undefined>(() => {
@@ -529,8 +556,6 @@ watch(
     () => terminal.open.value,
     (open) => open && showSection(),
 );
-// Ship-tier only: a PTY is the whole sandbox, and the daemon refuses the socket below maintainer anyway.
-const { canShip, isGuest } = useRole();
 // The only affordance for the panel now; the Workspace view's own toggle is gone, since terminals are
 // sandbox-global. Doubles as an indicator: the badge counts live sessions, the tooltip names them.
 const terminalActivity = useTerminalActivity();

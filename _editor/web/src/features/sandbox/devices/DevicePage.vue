@@ -255,7 +255,7 @@ const selection = useSandboxSelection(() => machine, () => ownSlug, ops);
                     severity="secondary"
                     :label="shared.action.label"
                     :loading="ops.agentOp(shared.door) === `upgrade`"
-                    :disabled="ops.working.value"
+                    :disabled="ops.working.value || ops.agentOp(shared.door) !== undefined"
                     v-tooltip.top="shared.action.hint"
                     @click="updateMachine"
                 />

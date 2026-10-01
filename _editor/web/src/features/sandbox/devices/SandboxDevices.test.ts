@@ -188,6 +188,7 @@ jest.mock(`./runners/useRunners`, () => ({
 }));
 
 const { boardRoute, deviceRoute } = await import("./deviceLinks");
+const { devicesWorking, forgetDeviceWork, settleAgentRuns } = await import("./runners/deviceWork");
 const { default: SandboxDevices } = await import("./SandboxDevices.vue");
 
 let app: App | undefined;
@@ -264,6 +265,8 @@ afterEach(() => {
     app?.unmount();
     app = undefined;
     document.body.innerHTML = ``;
+    // Work in flight on a machine outlives the page by design, so it would outlive the test too.
+    forgetDeviceWork();
     // The app's clock is a module singleton; a test that faked time would hand the next one a frozen one.
     jest.useRealTimers();
 });
@@ -1882,6 +1885,48 @@ it(`updates the whole computer from one press, through its Windows side`, async 
     rowButton(el, `Show output`)?.click();
     await nextTick();
     expect((el.textContent ?? ``).match(/Downloading the current agent…/g)).toHaveLength(1);
+});
+
+// THE PAGE IS GONE LONG BEFORE THE UPDATE IS. The machine detaches the update and the call returns at once with nothing
+// said, while the agent is still a minute from coming back on its new build: the board has to keep turning for it, the
+// page has to come back to the run rather than to a fresh Update button, and only the machine read back ends it.
+const spinners = (root: ParentNode): number => root.querySelectorAll(`svg.ui-icon circle`).length;
+
+it(`keeps an agent update turning on the board after its page is left, and holds its button when the page is back`, async () => {
+    latest.value = `1.186.0`;
+    bothDoors();
+    agentAnswer = () => Promise.resolve({ message: undefined, settled: false });
+    const el = mount([distroSide(), windowsSide()]);
+    await nextTick();
+    const machine = route.query[`device`] ?? ``;
+    rowButton(el, `Update agent`)?.click();
+    await settle();
+    expect(agentCalls).toEqual([{ hostId: `rog`, op: `upgrade` }]);
+    expect(devicesWorking()).toBe(`Updating a machine's agents on rog`);
+
+    await showBoard();
+    const card = el.querySelector(`a[aria-labelledby]`);
+    expect(card?.textContent ?? ``).toContain(`Waiting for its agent to come back…`);
+    // The card's own line, and both sides' glyphs: an update moves every side, and each waits for its own agent.
+    expect(spinners(card ?? el)).toBe(3);
+
+    await select(machine);
+    // The run, not a fresh offer: the strip under each side, and the one Update held down while it installs.
+    expect((el.textContent ?? ``).match(/Waiting for its agent to come back…/g)).toHaveLength(2);
+    expect(rowButton(el, `Update agent`)?.disabled).toBe(true);
+
+    // Read back on the new agent, every side: the wait is over wherever the reader is.
+    const back = (device: Device): Device => ({
+        ...device,
+        report: { ...device.report!, agent: { running: true, build: `1.186.0`, installed: `1.186.0` }, capturedAt: Date.now() + 1_000 },
+    });
+    settleAgentRuns([back(distroSide()), back(windowsSide())].map(listedDevice), Date.now());
+    await nextTick();
+    expect(devicesWorking()).toBeUndefined();
+    expect(el.textContent ?? ``).toContain(`Update finished`);
+    expect(el.textContent ?? ``).not.toContain(`Waiting for its agent to come back…`);
+    await showBoard();
+    expect(spinners(el.querySelector(`a[aria-labelledby]`) ?? el)).toBe(0);
 });
 
 // A distro hands a machine-wide update to its Windows side itself, so a sleeping Windows door is no reason to refuse.

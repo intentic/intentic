@@ -5,11 +5,15 @@ import { RouterLink } from "vue-router";
 import { boardBody, deviceState, deviceTone, type MachineRow, manySided } from "./deviceRows";
 import { deviceRoute } from "./deviceLinks";
 import { lastSeenNote, osLabel, osTitle } from "./deviceFacts";
+import { environmentWorking, machineWork, sandboxesWorking } from "./runners/deviceWork";
 import { useT } from "@intentic/ui/i18n";
 
 // One physical computer: a surface of its own, drawn in the rows every sandbox list uses, so a connected PC's lines
 // never run into the next machine's. The machine leads, then one row per environment with its own state, then
 // what runs here. The whole surface is one link into the machine's page; nothing on it is a control.
+// Work in flight on the machine turns on it the way it does on the page (deviceWork.ts): the card names what is moving,
+// the environment it moves turns its glyph, and so does the line of every sandbox it acts on. The page that started it is
+// usually not on screen any more, which is the whole reason this card has to say so.
 
 const t = useT();
 const titleId = useId();
@@ -27,6 +31,8 @@ const body = computed(() => boardBody(machine, needle, ownSlug, readAt));
 // A lone environment is the machine itself, so its facts and state ride the machine's row.
 const lone = computed(() => (manySided(machine) ? undefined : machine.environments[0]?.device));
 const listed = computed(() => body.value.warnings.length > 0 || body.value.lines.length > 0 || body.value.more > 0);
+const doing = computed(() => machineWork(machine.key));
+const turning = computed(() => sandboxesWorking(machine.key));
 </script>
 
 <template>
@@ -51,9 +57,16 @@ const listed = computed(() => body.value.warnings.length > 0 || body.value.lines
                     </span>
                 </template>
                 <template v-if="body.doors.length > 0" #description>{{ body.doors.join(` · `) }}</template>
-                <template v-if="lone" #meta>
-                    <span v-if="lastSeenNote(lone)">{{ lastSeenNote(lone) }}</span>
-                    <StatusBadge :variant="deviceTone(lone, readAt)" size="xs" :dot="true" :label="deviceState(lone, readAt)" />
+                <template v-if="lone || doing" #meta>
+                    <!-- What is moving on this machine, ahead of its state: the one fact here that is about to change. -->
+                    <span v-if="doing" class="inline-flex min-w-0 items-center gap-1.5">
+                        <Icon name="spinner" spin class="shrink-0" aria-hidden="true" />
+                        <span class="min-w-0 truncate">{{ doing }}</span>
+                    </span>
+                    <template v-if="lone">
+                        <span v-if="lastSeenNote(lone)">{{ lastSeenNote(lone) }}</span>
+                        <StatusBadge :variant="deviceTone(lone, readAt)" size="xs" :dot="true" :label="deviceState(lone, readAt)" />
+                    </template>
                 </template>
             </Row>
 
@@ -61,8 +74,13 @@ const listed = computed(() => body.value.warnings.length > 0 || body.value.lines
                  have no single word between them. The glyph sits in the mark's column, so every title on the card aligns. -->
             <Row v-for="environment in body.environments" :key="environment.key">
                 <template #lead="{ mark, iconClass }">
+                    <!-- The side whose agent is in a run turns its own glyph, as a row that IS a wait does (Row's `spin`). -->
                     <span class="flex shrink-0 justify-center text-muted" :style="{ width: `${mark}px` }">
-                        <Icon name="desktop" :class="iconClass" />
+                        <Icon
+                            :name="environmentWorking(environment.key) ? `spinner` : `desktop`"
+                            :spin="environmentWorking(environment.key)"
+                            :class="iconClass"
+                        />
                     </span>
                 </template>
                 <template #title>{{ environment.label }}</template>
@@ -86,8 +104,10 @@ const listed = computed(() => body.value.warnings.length > 0 || body.value.lines
                     </li>
                     <li v-for="line in body.lines" :key="line.sandboxId" class="flex min-w-0 items-start gap-3">
                         <span class="flex h-4 shrink-0 items-center justify-center" :style="{ width: `${mark}px` }">
+                            <!-- The status glyph turns while something is done to this sandbox, as its row does on the page. -->
+                            <Icon v-if="turning.includes(line.sandboxId)" name="spinner" spin class="text-2xs text-muted" aria-hidden="true" />
                             <span
-                                v-if="line.running !== undefined"
+                                v-else-if="line.running !== undefined"
                                 class="h-1.5 w-1.5 rounded-full"
                                 :class="line.running ? `bg-success` : `bg-subtle`"
                                 role="img"

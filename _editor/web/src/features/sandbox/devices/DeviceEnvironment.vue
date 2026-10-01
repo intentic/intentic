@@ -122,7 +122,7 @@ const below = computed(() => stoppedSync.value !== undefined || concerns.length 
                 severity="secondary"
                 :label="action.label"
                 :loading="ops.agentOp(environment) === action.op"
-                :disabled="ops.working.value"
+                :disabled="ops.working.value || ops.agentOp(environment) !== undefined"
                 v-tooltip.top="action.hint"
                 @click="void ops.runAgent(environment, action.op)"
             />

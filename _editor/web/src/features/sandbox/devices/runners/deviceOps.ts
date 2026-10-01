@@ -3,9 +3,10 @@ import type { DeviceSandboxGroup, NoticeModel, ResourcesForm, RollbackChoice, Sa
 import { runningShape } from "@intentic/ui/sandbox-resources";
 import { rollbackToPrompt, sandboxVerbPrompt, VERB_LABEL } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
-import { computed, type ComputedRef, type Ref, ref, watch } from "vue";
+import { computed, type ComputedRef, type Ref, ref } from "vue";
 import { agentFallback, sandboxFallback, syncFallback } from "./deviceFallback";
 import { agentRefusal, type AgentRun, type LinksAsked } from "./agentRun";
+import { agentInFlight, agentRunOf, beginDeviceWork, dismissAgentRun, machineCalling, pressAgent, sandboxesWorking } from "./deviceWork";
 import { canSetShape, type ShapeIntent, shapeFlow, shapeSevers, tooOldToSave } from "../shapeFlow";
 import {
     type BatchAction,
@@ -20,7 +21,6 @@ import {
 } from "../deviceRows";
 import { type DeviceSandboxPayload, manageDeviceSandbox, revokeSyncDevice, runDeviceAgentFlow, runDeviceCommand } from "../useDevices";
 import { useSandbox } from "../../client/useSandbox";
-import { type HubWork, useHubWork } from "../../../../shell/hub/hubWork";
 import { t } from "@intentic/ui/i18n";
 
 // Everything one device page does TO its machine: the container verbs, the two sync switches, the agent's
@@ -28,6 +28,9 @@ import { t } from "@intentic/ui/i18n";
 // container verb on the same pairing would be two answers about the same ports. A machine with several
 // environments (Windows and the distros on it) is still one page and one lock: container verbs go through
 // whichever door is open, and the ops that belong to one environment's agent or enrollment name it.
+// Everything that runs is entered in the device-work ledger (deviceWork.ts) for as long as it runs, which is what the
+// board's cards, the hub's Devices row and the rail's tile turn for, and what holds the lock across a remount: the page
+// is gone the moment the reader goes back to the board, and the work is not.
 
 // Which machine op each verb sends; only `resources` differs from its verb name (the kit's word for the
 // form vs. the machine's word for what Apply does).
@@ -103,9 +106,8 @@ const AGENT_ASKED: Record<DeviceAgentOp, string> = {
     "forget-unreachable": `Dropping the links that stopped answering. The count here catches up when its loop comes back.`,
 };
 
-// What the Devices row says while one of these is out on a machine, as a continuation of the section's own name.
-// `logs` is absent: reading a tail is not work being done to anything, and a row that marks it would be marking
-// almost every visit.
+// What the Devices row and the machine's card say while one of these is out on a machine. `logs` is absent: reading a
+// tail is not work being done to anything, and a row that marks it would be marking almost every visit.
 const VERB_WORKING: Partial<Record<SandboxVerb, string>> = {
     start: `Starting`,
     stop: `Stopping`,
@@ -185,11 +187,19 @@ const actPayload = (
     return payload;
 };
 
-/** The row's mark for a verb that does something, and an inert end for one that only reads. */
-const markVerb = (hubWork: HubWork, group: DeviceSandboxGroup, verb: SandboxVerb): (() => void) => {
+/** The machine's mark for a verb that does something, and an inert end for one that only reads. */
+const markVerb = (machine: MachineRow, group: DeviceSandboxGroup, verb: SandboxVerb): (() => void) => {
     const says = VERB_WORKING[verb];
-    return says === undefined ? (): void => {} : hubWork.begin(`${says} ${group.title}`);
+    if (says === undefined) {
+        return (): void => {};
+    }
+    const doing = `${says} ${group.title}`;
+    return beginDeviceWork({ machine: machine.key, sandboxes: [group.sandboxId], doing, what: `${doing} on ${machine.label}` });
 };
+
+/** One mark over every row a run was asked for, said with and without the machine's name. */
+const markRun = (machine: MachineRow, groups: readonly DeviceSandboxGroup[], doing: string, where: string): (() => void) =>
+    beginDeviceWork({ machine: machine.key, sandboxes: groups.map((group) => group.sandboxId), doing, what: `${doing} ${where} ${machine.label}` });
 
 /** The question a removal asks, over one row or several. */
 export interface RemovalPrompt {
@@ -246,10 +256,9 @@ export interface DeviceOps {
     /** True while anything at all is running on this machine; every button reads it as `disabled`. */
     readonly working: ComputedRef<boolean>;
     readonly rowKey: (group: DeviceSandboxGroup) => string;
-    // Three keys per environment, not one: the switches, the agent and the enrollment each report where they
-    // were pressed, and a single key would print one op's answer under another's controls.
+    // Two keys per environment, not one: the switches and the enrollment each report where they were pressed, and a
+    // single key would print one op's answer under another's controls. The agent's answer is its run's (agentRun).
     readonly switchKey: (environment: DeviceRow) => string;
-    readonly agentKey: (environment: DeviceRow) => string;
     readonly accessKey: (environment: DeviceRow) => string;
     readonly failure: Ref<OpFailure | undefined>;
     readonly outcome: Ref<{ key: string; message: string } | undefined>;
@@ -304,10 +313,11 @@ export interface DeviceOps {
 
     // One agent op, sent through this environment's door. An update moves every side of the machine from there.
     readonly runAgent: (environment: DeviceRow, op: DeviceAgentOp) => Promise<void>;
-    /** Which of this environment's ops is in flight; a row has one thing to say. */
+    /** Which of this environment's ops is in flight, its agent's return included; a row has one thing to say. */
     readonly agentOp: (environment: DeviceRow) => DeviceAgentOp | undefined;
     // The last press on this environment's agent as one thing with a state (agentRun.ts), per environment rather than
-    // the page's one slot, so a Restart on one side and an Update through another keep theirs.
+    // the page's one slot, so a Restart on one side and an Update through another keep theirs. Held by the ledger, so
+    // a run pressed before the reader went back to the board is still here when they return.
     readonly agentRun: (environment: DeviceRow) => AgentRun | undefined;
     /** Puts a finished run away; a run still going stays, since it is the only thing saying so. */
     readonly dismissAgent: (environment: DeviceRow) => void;
@@ -324,12 +334,7 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
     const { daemonUrl } = useSandbox();
     const ownSlug = computed(() => (daemonUrl.value === undefined ? undefined : new URL(daemonUrl.value).hostname.split(`.`)[0]));
 
-    // Everything below runs on somebody else's machine and takes as long as it takes; the hub row keeps saying so
-    // after this page is gone, since a container update is exactly the moment to go and read something else.
-    const hubWork = useHubWork();
-
     const switchKey = (environment: DeviceRow): string => `${environment.device.key}:switches`;
-    const agentKey = (environment: DeviceRow): string => `${environment.device.key}:agent`;
     const accessKey = (environment: DeviceRow): string => `${environment.device.key}:access`;
     const rowKey = (group: DeviceSandboxGroup): string => `${machine().key}:${group.sandboxId}`;
     const selfGroup = (group: DeviceSandboxGroup): boolean => isSelfMachine(machine(), group, ownSlug.value);
@@ -343,22 +348,22 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
     // since three buttons on a row must not spin together. The port joins the key for the two per-port switches,
     // whose buttons all sit on one row under one key.
     const syncBusy = ref<{ key: string; command: SyncCommand; port: number | undefined } | undefined>();
-    // The agent op in flight and whose agent it is, so the log lands under that environment's row.
-    const agentOp = ref<{ key: string; op: DeviceAgentOp } | undefined>();
     const revoking = ref(false);
     const removing = ref(false);
     // A batch between its first row and its last; `busy` alone goes quiet between two rows.
     const batchProgress = ref<BatchProgress | undefined>();
     // The row a removal is on, which `busy` does not carry: a removal is two halves, only one of them a container verb.
     const removingRow = ref<string | undefined>();
+    // The ledger's word too, which is the only one that survives a remount: work started before the reader went back
+    // to the board is still running on the machine, and a second press through the same door would race it.
     const working = computed(
         () =>
             busy.value !== undefined ||
             syncBusy.value !== undefined ||
-            agentOp.value !== undefined ||
             revoking.value ||
             removing.value ||
-            batchProgress.value !== undefined,
+            batchProgress.value !== undefined ||
+            machineCalling(machine().key),
     );
 
     const failure = ref<OpFailure | undefined>();
@@ -440,7 +445,7 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
         runLines.value = { ...runLines.value, [key]: [] };
         // Opened before lines arrive, so an empty pane reads as "reading" rather than an ignored click.
         openLog.value = verb === `logs` ? key : undefined;
-        const endMark = markVerb(hubWork, group, verb);
+        const endMark = markVerb(machine(), group, verb);
         const payload = actPayload(
             flow,
             to,
@@ -632,7 +637,7 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
         removing.value = true;
         failure.value = undefined;
         outcome.value = undefined;
-        const endMark = hubWork.begin(`Removing ${counted(groups.length, `sandbox`, `sandboxes`)} from ${machine().label}`);
+        const endMark = markRun(machine(), groups, `Removing ${counted(groups.length, `sandbox`, `sandboxes`)}`, `from`);
         let containers = 0;
         let pairings = 0;
         const refused: string[] = [];
@@ -677,7 +682,7 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
         }
         failure.value = undefined;
         outcome.value = undefined;
-        const endMark = hubWork.begin(`${VERB_WORKING[verb] ?? verb} ${counted(groups.length, `sandbox`, `sandboxes`)} on ${machine().label}`);
+        const endMark = markRun(machine(), groups, `${VERB_WORKING[verb] ?? verb} ${counted(groups.length, `sandbox`, `sandboxes`)}`, `on`);
         let settled = 0;
         const refused: string[] = [];
         batchProgress.value = { verb, done: 0, total: groups.length };
@@ -762,13 +767,17 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
         }
     };
 
-    // The row a run is on right now: a container verb's row by its busy key, a removal's by the row it reached.
+    // The row a run is on right now: a container verb's row by its busy key, a removal's by the row it reached. With
+    // nothing running from this mount, the ledger's rows: a verb pressed before the page was last left is still out.
     const workingIds = computed<readonly string[]>(() => {
         if (removingRow.value !== undefined) {
             return [removingRow.value];
         }
         const held = busy.value;
-        const group = held === undefined ? undefined : machine().groups.find((candidate) => held.startsWith(`${rowKey(candidate)}:`));
+        if (held === undefined) {
+            return sandboxesWorking(machine().key);
+        }
+        const group = machine().groups.find((candidate) => held.startsWith(`${rowKey(candidate)}:`));
         return group === undefined || runningVerb(group) === `logs` ? [] : [group.sandboxId];
     });
 
@@ -790,7 +799,12 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
         syncBusy.value = { key, command, port: about?.port };
         failure.value = undefined;
         outcome.value = undefined;
-        const endMark = hubWork.begin(`${SYNC_WORKING[command]} on ${environment.device.label}`);
+        const endMark = beginDeviceWork({
+            machine: machine().key,
+            sandboxes: sandboxId === undefined ? [] : [sandboxId],
+            doing: SYNC_WORKING[command],
+            what: `${SYNC_WORKING[command]} on ${environment.device.label}`,
+        });
         try {
             const result = await runDeviceCommand(hostId, command, { sandboxId, ...about });
             // The machine's own sentence either way: a refusal names the switch to flip rather than throwing.
@@ -828,26 +842,9 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
         }
     };
 
-    // Whether an environment's agent is between "we asked" and "its version moved"; survives the call ending,
-    // since the call ending is not the answer. Keyed by agent, and a record rather than one slot: an update sent
-    // through one door moves every side of the machine, and each side waits for its own version.
-    const waiting = ref<Record<string, string>>({});
-    const agentLog = ref<Record<string, string[]>>({});
-    // Keyed by the door's environment: a Restart on one side must not wipe what an Update through another said.
-    const agentFailed = ref<Record<string, OpFailure>>({});
-    const agentSaid = ref<Record<string, string>>({});
-    // Which verb each environment's last run was, and for a drop the reading it was pressed against: what lets the
-    // strip say "Forgot 5 unreachable links" rather than only that something ran.
-    // `door` is false on a side an update only moved: it has no log or answer of its own, and is worth a strip only while
-    // it waits for its own version — the door's strip already says how the run went.
-    const agentRan = ref<Record<string, { op: DeviceAgentOp; door: boolean; links?: LinksAsked }>>({});
-
-    const without = <T>(held: Record<string, T>, keys: readonly string[]): Record<string, T> =>
-        Object.fromEntries(Object.entries(held).filter(([heldKey]) => !keys.includes(heldKey)));
-
     // An update moves every side of the machine from whichever door it went through; the other ops, that door's alone.
-    const movedBy = (environment: DeviceRow, op: DeviceAgentOp): readonly string[] =>
-        (op === `upgrade` ? machine().environments.filter((side) => side.device.hostId !== undefined) : [environment]).map(agentKey);
+    const movedBy = (environment: DeviceRow, op: DeviceAgentOp): readonly DeviceRow[] =>
+        op === `upgrade` ? machine().environments.filter((side) => side.device.hostId !== undefined) : [environment];
 
     // The count the concern offering the drop was showing, taken at the press: the machine applies the same rule to
     // the same stamps (device/config.ts `unreachableIn`), so it is the number it goes on to drop.
@@ -856,106 +853,40 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
         return op === `forget-unreachable` && links !== undefined ? { total: links.total, unreachable: links.unreachable } : undefined;
     };
 
-    // Clears only this row's own last answer: the page's shared slots belong to its other controls.
+    // The run lives in the ledger rather than here: the call ending is not the answer (the agent coming back is), and
+    // the page that pressed is usually gone by the time it arrives. Each side the press moved waits for its own agent;
+    // the shell's watcher (watchDeviceReturns) reads the machine back and answers each wait as it does.
     const runAgent = async (environment: DeviceRow, op: DeviceAgentOp): Promise<void> => {
         const hostId = environment.device.hostId;
-        if (hostId === undefined || working.value) {
+        const moved = movedBy(environment, op);
+        // A side still coming back from the last press is not asked again: a second update over one still installing races it.
+        if (hostId === undefined || working.value || moved.some((side) => agentInFlight(side.device.key) !== undefined)) {
             return;
         }
-        const key = agentKey(environment);
-        const moved = movedBy(environment, op);
-        const endMark = hubWork.begin(`${AGENT_WORKING[op]} on ${machine().label}`);
-        const links = linksAsked(environment, op);
-        agentOp.value = { key, op };
-        agentLog.value = { ...without(agentLog.value, moved), [key]: [] };
-        agentFailed.value = without(agentFailed.value, moved);
-        agentSaid.value = without(agentSaid.value, moved);
-        agentRan.value = {
-            ...agentRan.value,
-            ...Object.fromEntries(moved.map((side) => [side, { op, door: false }])),
-            [key]: { op, door: true, ...(links === undefined ? {} : { links }) },
-        };
-        waiting.value = { ...waiting.value, ...Object.fromEntries(moved.map((side) => [side, AGENT_ASKED[op]])) };
+        const press = pressAgent({
+            machine: machine().key,
+            what: `${AGENT_WORKING[op]} on ${machine().label}`,
+            op,
+            door: environment.device,
+            moved: moved.map((side) => side.device),
+            waiting: AGENT_ASKED[op],
+            links: linksAsked(environment, op),
+        });
         try {
-            const { message } = await runDeviceAgentFlow(hostId, op, {
-                onLine: (line) => (agentLog.value = { ...agentLog.value, [key]: [...(agentLog.value[key] ?? []), line] }),
-            });
-            // Only the device's own sentence, and only if it managed to send one; no fallback text. A sentence that
-            // did arrive answers the wait too — the note is for the usual ending, where the process carrying the reply
-            // is the one being replaced and nothing comes back but a version, later.
+            const { message } = await runDeviceAgentFlow(hostId, op, { onLine: press.line });
+            // Only the device's own sentence, and only if it managed to send one; no fallback text.
             if (message !== undefined) {
-                agentSaid.value = { ...agentSaid.value, [key]: message };
-                waiting.value = without(waiting.value, moved);
+                press.answered(message);
             }
         } catch (error) {
             // A refusal, not a lost connection: the client only throws for a frame the device actually sent.
-            // The waiting notes are dropped, since nothing is on its way back.
-            agentFailed.value = {
-                ...agentFailed.value,
-                [key]: { key, notice: noticeFrom(error, agentRefusal(op)), command: agentFallback(op) },
-            };
-            waiting.value = without(waiting.value, moved);
+            press.refused({ notice: noticeFrom(error, agentRefusal(op)), command: agentFallback(op) });
         } finally {
-            agentOp.value = undefined;
-            endMark();
+            press.ended();
             // The version is the answer, so ask for it; the tab's own poll picks it up as the loop comes back.
             refetch();
         }
     };
-
-    const agentRun = (environment: DeviceRow): AgentRun | undefined => {
-        const key = agentKey(environment);
-        const ran = agentRan.value[key];
-        if (ran === undefined || (!ran.door && waiting.value[key] === undefined)) {
-            return undefined;
-        }
-        const failed = agentFailed.value[key];
-        const state = agentOp.value?.key === key ? `running` : failed !== undefined ? `failed` : waiting.value[key] !== undefined ? `waiting` : `done`;
-        return {
-            op: ran.op,
-            state,
-            lines: agentLog.value[key] ?? [],
-            said: agentSaid.value[key],
-            waiting: waiting.value[key],
-            links: ran.links,
-            failure: failed === undefined ? undefined : { notice: failed.notice, command: failed.command },
-        };
-    };
-
-    const dismissAgent = (environment: DeviceRow): void => {
-        const key = agentKey(environment);
-        if (agentOp.value?.key === key) {
-            return;
-        }
-        agentRan.value = without(agentRan.value, [key]);
-        agentLog.value = without(agentLog.value, [key]);
-        agentFailed.value = without(agentFailed.value, [key]);
-        agentSaid.value = without(agentSaid.value, [key]);
-        waiting.value = without(waiting.value, [key]);
-    };
-
-    // Whether this environment's agent has arrived where the press was taking it: a live, unstalled loop serving the
-    // build on disk, with nothing newer published.
-    const arrived = (row: DeviceRow): boolean =>
-        row.agent?.running === true && row.agent.stalled === false && row.agent.staleBuild === undefined && row.chip?.available === undefined;
-
-    // Each note clears once the fact it was waiting for arrives; watched rather than computed so it survives a poll
-    // landing mid-restart.
-    watch(
-        () =>
-            machine()
-                .environments.map(
-                    (environment) => `${environment.agent?.build ?? ``}:${environment.chip?.installed ?? ``}:${environment.chip?.available ?? ``}`,
-                )
-                .join(`|`),
-        () => {
-            const done = new Set(machine().environments.filter(arrived).map(agentKey));
-            const left = Object.entries(waiting.value).filter(([key]) => !done.has(key));
-            if (left.length !== Object.keys(waiting.value).length) {
-                waiting.value = Object.fromEntries(left);
-            }
-        },
-    );
 
     // Drops the key from the sandbox rather than asking the device to clean up (Unpair does that): the only
     // path that works for a laptop that's lost, wiped, or someone else's.
@@ -991,7 +922,6 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
         working,
         rowKey,
         switchKey,
-        agentKey,
         accessKey,
         failure,
         outcome,
@@ -1023,9 +953,9 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
         confirmingUnpair,
         confirmUnpair,
         runAgent,
-        agentOp: (environment) => (agentOp.value?.key === agentKey(environment) ? agentOp.value.op : undefined),
-        agentRun,
-        dismissAgent,
+        agentOp: (environment) => agentInFlight(environment.device.key),
+        agentRun: (environment) => agentRunOf(environment.device.key),
+        dismissAgent: (environment) => dismissAgentRun(environment.device.key),
         confirmingRevoke,
         revoking,
         runRevoke,

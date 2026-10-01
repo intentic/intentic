@@ -12,6 +12,7 @@ import { useHostedBuild } from "./secrets/useHostedBuild";
 import { useRole } from "./secrets/useRole";
 import { useSandbox } from "./client/useSandbox";
 import { useSyncHealth } from "./devices/useDevices";
+import { devicesWorking } from "./devices/runners/deviceWork";
 import { type ActiveExtension, activationBadge, detectActivations } from "../../core-views/registry";
 import ExtensionView from "../../core-views/ExtensionView.vue";
 import HubLayout from "../../shell/hub/HubLayout.vue";
@@ -72,12 +73,14 @@ const { extensions: installedExtensions } = useExtensions();
 const updatable = computed(() => updateCount(listedExtensions.value.map((entry) => toListing(entry, installedExtensions.value))));
 
 // The environment build the platform runs for a hosted sandbox: minutes long, server-side, and followed here rather
-// than by the section, since the row has to keep saying so while the section is closed. Everything else a section
-// starts reports itself through the ledger as it runs (hubWork.ts).
+// than by the section, since the row has to keep saying so while the section is closed. Work on a machine has a ledger
+// of its own (devices/runners/deviceWork.ts), since an agent update outlives its call and its card on the board turns
+// for it too. Everything else a section starts reports itself through the hub's ledger as it runs (hubWork.ts).
 const hosted = computed(() => (sandbox.active.value?.hosted ? sandbox.active.value.id : undefined));
 const { build: hostedBuild } = useHostedBuild(() => hosted.value);
 const runningIn = (slug: string): string | undefined =>
     hubWorkRunning(hubWorkKey(HUB, slug), sandbox.activeSandboxId.value) ??
+    (slug === `devices` ? devicesWorking() : undefined) ??
     (slug === `environment` && hostedBuild.value?.state === `building` ? `Building your environment` : undefined);
 
 // A colliding activation key is dropped, not shadowed by the v-if chain; built-ins own their names.
