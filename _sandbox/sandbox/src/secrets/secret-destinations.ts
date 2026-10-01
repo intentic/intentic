@@ -30,10 +30,12 @@ const REFERENCE = /\{\{secret:[A-Za-z0-9_./-]+\}\}/g;
 const STAND_IN = "\u0001";
 
 // One shell word with its quoting taken off; `dynamic` when a `$` expansion inside double quotes fills part of it, whose
-// value exists only when the command runs.
+// value exists only when the command runs. `assignment` when the word as written opens with an unquoted `NAME=`, the
+// only spelling a shell takes as setting a variable (`"A=x"` is a program named `A=x`).
 interface Word {
     readonly text: string;
     readonly dynamic: boolean;
+    readonly assignment?: boolean;
 }
 
 // Characters that break a line into separate stages, outside quotes: a pipe, a background `&`, a `;`, a newline. Each
@@ -88,34 +90,110 @@ const UNCLOSED = "a quote in it never closes";
 const EXPANSION_START = /[A-Za-z_0-9{(@*#?$!'-]/;
 
 // The lexer's position, the word it is building, the stage's words so far, and every stage a separator has closed.
+// `bindings` are the shell variables an earlier stage of this line set to a plain value the reader saw, in force where
+// they are read; `before` is the separator run the stage being built follows ("" at the start of the line).
 interface LexState {
     readonly source: string;
     readonly segments: Word[][];
+    readonly bindings: Map<string, string>;
     words: Word[];
     index: number;
     text: string;
     dynamic: boolean;
     started: boolean;
+    wordStart: number;
+    before: string;
+    ifsChanged: boolean;
 }
+
+const ASSIGNMENT_PREFIX = /^[A-Za-z_][A-Za-z0-9_]*=/;
+
+const startWord = (state: LexState): void => {
+    if (!state.started) {
+        state.started = true;
+        state.wordStart = state.index;
+    }
+};
 
 const finishWord = (state: LexState): void => {
     if (state.started) {
-        state.words.push({ text: state.text, dynamic: state.dynamic });
+        const assignment = ASSIGNMENT_PREFIX.test(state.source.slice(state.wordStart));
+        state.words.push({ text: state.text, dynamic: state.dynamic, assignment });
     }
     state.text = "";
     state.dynamic = false;
     state.started = false;
 };
 
-// Closes the current stage at a separator or the end of the line; an empty run between separators (`&&`, a leading `;`)
-// adds no stage.
-const finishSegment = (state: LexState): void => {
-    finishWord(state);
-    if (state.words.length > 0) {
-        state.segments.push(state.words);
-        state.words = [];
+// How a separator run joins two stages. A stage after `&&` or `||` may never run; one after a single `|`, or before a
+// `|` or a background `&`, runs in a subshell whose variables die with it.
+const conditional = (run: string): boolean => run.includes("&&") || run.includes("||");
+const pipedInto = (run: string): boolean => run.replaceAll("||", "").includes("|");
+const leavesShell = (run: string | undefined): boolean => run !== undefined && /^[ \t]*(?:\|(?!\|)|&(?!&))/.test(run);
+
+// What a finished stage does to the variables later stages read. Only a stage of nothing but assignments sets them in
+// the shell itself (with a program after them they go to that program's environment alone), and only when it surely runs
+// there: a stage that runs in a subshell changes nothing, and one that may not run at all (after `&&` or `||`) leaves
+// its names unknown, as does a value filled in at run time or one with a `~` the shell would expand. `printf -v` is the
+// one inert program that sets a variable, so it forgets them all, and a changed IFS stops unquoted reads.
+const settleStage = (state: LexState, words: readonly Word[], after: string | undefined): void => {
+    if (words.find((word) => word.assignment !== true)?.text === "printf" && words.some((word) => word.text.startsWith("-v"))) {
+        state.bindings.clear();
+        return;
+    }
+    if (!words.every((word) => word.assignment === true) || pipedInto(state.before) || leavesShell(after)) {
+        return;
+    }
+    const surely = !conditional(state.before);
+    for (const word of words) {
+        const split = word.text.indexOf("=");
+        const name = word.text.slice(0, split);
+        const value = word.text.slice(split + 1);
+        state.ifsChanged ||= name === "IFS";
+        if (surely && !word.dynamic && !value.includes("~")) {
+            state.bindings.set(name, value);
+        } else {
+            state.bindings.delete(name);
+        }
     }
 };
+
+// Closes the current stage at a separator run (undefined at the end of the line); a run with no stage before it (a
+// leading `;`, `&&` then a newline) adds no stage and joins the run the next stage follows.
+const finishSegment = (state: LexState, after?: string): void => {
+    finishWord(state);
+    if (state.words.length > 0) {
+        settleStage(state, state.words, after);
+        state.segments.push(state.words);
+        state.words = [];
+        state.before = after ?? "";
+    } else {
+        state.before += after ?? "";
+    }
+};
+
+// A run of separators, and the blanks between them, taken whole so `&&` reads as one join rather than two `&`. A `&`
+// that opens `&>` is a redirect, not a separator.
+const SEPARATOR_RUN = /^(?:[|;\n \t]|&(?!>))+/;
+const readSeparators = (state: LexState): undefined => {
+    const run = SEPARATOR_RUN.exec(state.source.slice(state.index))?.[0] ?? state.source.charAt(state.index);
+    finishSegment(state, run);
+    state.index += run.length;
+    return undefined;
+};
+
+// `$NAME` or `${NAME}` naming a variable an earlier stage set to a plain value: that value, and how much text it spans.
+const VARIABLE = /^\$(?:([A-Za-z_][A-Za-z0-9_]*)|\{([A-Za-z_][A-Za-z0-9_]*)\})/;
+const boundValue = (state: LexState, at: number): { readonly value: string; readonly length: number } | undefined => {
+    const match = VARIABLE.exec(state.source.slice(at));
+    const name = match?.[1] ?? match?.[2];
+    const value = name === undefined ? undefined : state.bindings.get(name);
+    return match === null || value === undefined ? undefined : { value, length: match[0].length };
+};
+
+// Outside quotes the shell splits an expansion into words and globs it; a value that stays one word as written is read
+// in place, anything else is left to the run.
+const UNSPLIT = /^[^\s*?[\]\\]+$/;
 
 // A single-quoted run: no escapes, no expansions.
 const singleQuoted = (state: LexState): string | undefined => {
@@ -138,6 +216,11 @@ const quotedChar = (state: LexState, at: number): { readonly next: number } | Un
     }
     if (char === "`" || (char === "$" && following === "(")) {
         return { why: SUBSTITUTES };
+    }
+    const bound = char === "$" ? boundValue(state, at) : undefined;
+    if (bound !== undefined) {
+        state.text += bound.value;
+        return { next: at + bound.length };
     }
     state.dynamic ||= char === "$" && EXPANSION_START.test(following);
     state.text += char;
@@ -184,11 +267,21 @@ const READERS: ReadonlyMap<string, (state: LexState) => string | undefined> = ne
     ["\\", escaped],
 ]);
 
-const COMMENT = Symbol("comment");
+// A `$` outside quotes: a variable set earlier in the line to a value that stays one word, read in place; anything else
+// is filled in only when the command runs.
+const unquotedExpansion = (state: LexState): string | undefined => {
+    const bound = boundValue(state, state.index);
+    if (bound === undefined || state.ifsChanged || !UNSPLIT.test(bound.value)) {
+        return EXPANDS;
+    }
+    startWord(state);
+    state.text += bound.value;
+    state.index += bound.length;
+    return undefined;
+};
 
-// One step of reading: undefined to go on, COMMENT where the rest of the line is a comment, else why the command
-// cannot be read.
-const lexStep = (state: LexState): string | typeof COMMENT | undefined => {
+// One step of reading: undefined to go on, else why the command cannot be read.
+const lexStep = (state: LexState): string | undefined => {
     const char = state.source.charAt(state.index);
     if (char === " " || char === "\t") {
         finishWord(state);
@@ -196,36 +289,46 @@ const lexStep = (state: LexState): string | typeof COMMENT | undefined => {
         return undefined;
     }
     if (char === "#" && !state.started) {
-        return COMMENT;
+        // A comment runs to the end of its own line, not the command's: what follows the newline still runs.
+        const end = state.source.indexOf("\n", state.index);
+        state.index = end === -1 ? state.source.length : end;
+        return undefined;
     }
     if (char === "<" || char === ">" || (char === "&" && state.source.charAt(state.index + 1) === ">")) {
         return readRedirect(state);
     }
     if (SEPARATORS.has(char)) {
-        finishSegment(state);
-        state.index += 1;
-        return undefined;
+        return readSeparators(state);
     }
     const operator = OPERATORS.get(char);
     if (operator !== undefined) {
         return operator;
     }
     if (char === "$" && EXPANSION_START.test(state.source.charAt(state.index + 1))) {
-        return EXPANDS;
+        return unquotedExpansion(state);
     }
-    state.started = true;
+    startWord(state);
     return (READERS.get(char) ?? plainChar)(state);
 };
 
 // Splits one line into its stages, each a list of words the way a shell would, or says which shell feature makes that
 // impossible to trust. Deliberately narrower than a shell: anything this does not model is a reason, not a guess.
 const lex = (source: string): { readonly segments: readonly (readonly Word[])[] } | Unreadable => {
-    const state: LexState = { source, segments: [], words: [], index: 0, text: "", dynamic: false, started: false };
+    const state: LexState = {
+        source,
+        segments: [],
+        bindings: new Map(),
+        words: [],
+        index: 0,
+        text: "",
+        dynamic: false,
+        started: false,
+        wordStart: 0,
+        before: "",
+        ifsChanged: false,
+    };
     while (state.index < source.length) {
         const step = lexStep(state);
-        if (step === COMMENT) {
-            break;
-        }
         if (step !== undefined) {
             return { why: step };
         }
@@ -723,13 +826,48 @@ const PROGRAMS: ReadonlyMap<string, (args: readonly Word[]) => Reach> = new Map(
 // is deliberate: an interpreter (`python`, `node`, `perl`, `ruby`), a shell (`sh`, `bash`, `eval`, `source`), `awk` and
 // `sed` (each runs a command or opens a socket in some form), `xargs`, `find`, `env`, `tee`, `nc`, `ssh`, `docker` and
 // `gh` all stay unread, so a line that uses one still asks. A name not here is unknown, and leaves the line unreadable.
-const INERT_PROGRAMS: ReadonlySet<string> = new Set(['cd', 'pwd', 'echo', 'printf', 'true', 'false', ':', 'test', '[', 'sleep', 'date', 'mkdir', 'ls', 'dirname', 'basename', 'cat', 'head', 'tail', 'wc', 'cut', 'tr', 'sort', 'uniq', 'nl', 'rev', 'tac', 'fold', 'column', 'base64', 'grep', 'egrep', 'fgrep', 'rg', 'jq', 'comm']);
+const INERT_PROGRAMS: ReadonlySet<string> = new Set([
+    "cd",
+    "pwd",
+    "echo",
+    "printf",
+    "true",
+    "false",
+    ":",
+    "test",
+    "[",
+    "sleep",
+    "date",
+    "mkdir",
+    "ls",
+    "dirname",
+    "basename",
+    "cat",
+    "head",
+    "tail",
+    "wc",
+    "cut",
+    "tr",
+    "sort",
+    "uniq",
+    "nl",
+    "rev",
+    "tac",
+    "fold",
+    "column",
+    "base64",
+    "grep",
+    "egrep",
+    "fgrep",
+    "rg",
+    "jq",
+    "comm",
+]);
 
 // Every URL written anywhere in the text, a header or a body included: a list is a claim about every host the command
-// names, not only the one the program is pointed at.
-const URL_ANYWHERE = /[a-z][a-z0-9+.-]*:\/\/[^\s'"`)]*/gi;
-
-const ENV_ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
+// names, not only the one the program is pointed at. It ends where the shell would end a word (`;`, `|`, a redirect), so
+// `R=https://host;` reads as `host`.
+const URL_ANYWHERE = /[a-z][a-z0-9+.-]*:\/\/[^\s'"`);|<>]*/gi;
 
 // The program one stage runs and what its arguments reach, or why neither can be trusted.
 const programReach = (words: readonly Word[]): Reach => {
@@ -737,12 +875,12 @@ const programReach = (words: readonly Word[]): Reach => {
     if (program === undefined) {
         return { why: "it runs nothing" };
     }
-    if (ENV_ASSIGNMENT.test(program.text)) {
+    if (program.assignment === true) {
         // A stage that is only `NAME=value` literals sets shell variables and runs nothing, so it sends nothing and
         // steers nothing (an unexported name reaches no later program's environment). One with a program after the
         // assignments puts them in that program's environment, which can change where it connects; a value filled in at
         // run time (`A="$B"`) is not a literal the reader can stand behind.
-        return words.every((word) => ENV_ASSIGNMENT.test(word.text) && !word.dynamic)
+        return words.every((word) => word.assignment === true && !word.dynamic)
             ? { hosts: [] }
             : { why: "it sets environment variables for the program, which can change where it connects" };
     }

@@ -405,7 +405,8 @@ const ENTRIES: readonly GuidanceEntry[] = [
             "lists the hosts). Such a secret goes by itself only when every host the command names is on its list and the " +
             "reader can follow where it goes: a curl, wget or git command — piped into a reader like `jq` or `head`, or " +
             "joined to more of them by `&&` or `;` — is read, but a script, an interpreter (`python -c`, `node -e`), a " +
-            "subshell, `curl -L`, a host that is a shell variable, or a host off the list puts a card in front of a " +
+            "subshell, `curl -L`, a host from a variable filled in as it runs (one set to a plain value earlier in the " +
+            "line, `R=https://…; curl $R/x`, is read), or a host off the list puts a card in front of a " +
             "person first, whatever the safety judge says, so aim a guarded secret straight at its own hosts.",
         lean:
             "Stored secrets appear as `{{secret:name}}`. Use that token in commands, where it is substituted at execution, " +
@@ -413,8 +414,8 @@ const ENTRIES: readonly GuidanceEntry[] = [
             "types one into a focused web field. A gated secret or account raises an approval card: if it is refused, " +
             "carry on without it and say what you left undone (`secrets gates` lists what is gated). One whose host guard " +
             "is on goes unasked only when every host it names is on its list (`secrets hosts`) and the line is a curl, " +
-            "wget or git command: a pipe into a reader like `jq` is fine, a script, an interpreter or a host from a " +
-            "variable is not.",
+            "wget or git command: a pipe into a reader like `jq`, or a variable set to a plain value earlier in the line, " +
+            "is fine; a script, an interpreter or a host filled in as it runs is not.",
     },
     {
         id: "needs",

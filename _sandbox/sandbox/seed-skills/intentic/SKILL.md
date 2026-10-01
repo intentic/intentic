@@ -57,7 +57,7 @@ What the daemon does around you:
   connector. A secret may also have its **host guard** on (a connector's own credential starts with it on, set to
   its service's hosts): it goes unasked only when every host the command names is on its list and the reader can follow
   where it goes — a `curl`, `wget` or `git` command, piped into a reader like `jq` or `head`, or joined to more by `&&`
-  or `;` — while a script, an interpreter, a subshell, `curl -L` or a host from a shell variable waits for a person's
+  or `;` — while a script, an interpreter, a subshell, `curl -L` or a host from a variable filled in as it runs (not one set to a plain value earlier in the line) waits for a person's
   click, whatever the safety judge thinks. `secrets gates` shows both on one line per secret; `secrets hosts` shows and
   edits the guard.
 - **Needs** are what a conversation has asked people for: a connection, a secret, a grant, a release, a tool

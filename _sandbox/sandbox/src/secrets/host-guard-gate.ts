@@ -117,7 +117,7 @@ const programAskOf = (target: SecretTarget, guarded: readonly GuardedName[]): Pr
 
 // What the agent reads for each way a card can end, and for having nobody to ask.
 const TO_SEND_FREELY =
-    "To use it without a card, keep every host the command names on its list (`secrets hosts` shows it) and let the reader follow where it goes: a curl, wget or git command — piped into a reader like `jq` or `head`, or joined to more by `&&` or `;` — is read, but a script, an interpreter (`python -c`, `node -e`), a subshell, `curl -L`, or a host that is a shell variable is not.";
+    "To use it without a card, keep every host the command names on its list (`secrets hosts` shows it) and let the reader follow where it goes: a curl, wget or git command — piped into a reader like `jq` or `head`, or joined to more by `&&` or `;` — is read, but a script, an interpreter (`python -c`, `node -e`), a subshell, `curl -L`, or a host from a variable filled in as it runs is not (one set to a plain value earlier in the line, `R=https://…; curl $R/x`, is read).";
 const refusal = (sentence: string, ending: string): HostGuardVerdict => ({ allow: false, reason: `${sentence} ${ending}` });
 
 // The card's question, and what a no leaves standing: turning the guard off, or adding hosts to it.

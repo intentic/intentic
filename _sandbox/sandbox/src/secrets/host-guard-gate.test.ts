@@ -243,7 +243,7 @@ describe("nobody to ask", () => {
             reason:
                 `${LISTS}, and this command would send it to evil.example. ` +
                 "There is no live conversation to ask in: it was not used. Do not retry: carry on without it, and say what you left undone. " +
-                "To use it without a card, keep every host the command names on its list (`secrets hosts` shows it) and let the reader follow where it goes: a curl, wget or git command — piped into a reader like `jq` or `head`, or joined to more by `&&` or `;` — is read, but a script, an interpreter (`python -c`, `node -e`), a subshell, `curl -L`, or a host that is a shell variable is not.",
+                "To use it without a card, keep every host the command names on its list (`secrets hosts` shows it) and let the reader follow where it goes: a curl, wget or git command — piped into a reader like `jq` or `head`, or joined to more by `&&` or `;` — is read, but a script, an interpreter (`python -c`, `node -e`), a subshell, `curl -L`, or a host from a variable filled in as it runs is not (one set to a plain value earlier in the line, `R=https://…; curl $R/x`, is read).",
         });
         expect(frames).toEqual([]);
     });
@@ -335,7 +335,9 @@ describe("loosening a guard", () => {
 
     it("refuses a loosening without a card when there is no live conversation to ask in", async () => {
         const { deps, frames } = fake([], { liveRun: () => undefined });
-        expect(await createHostGuardGate(deps).widen(request())).toEqual({ refusal: expect.stringContaining("there is no live conversation to ask in") });
+        expect(await createHostGuardGate(deps).widen(request())).toEqual({
+            refusal: expect.stringContaining("there is no live conversation to ask in"),
+        });
         expect(frames).toEqual([]);
     });
 });
