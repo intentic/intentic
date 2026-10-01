@@ -219,6 +219,8 @@ pub fn fit_to_content(app: &AppHandle, window: &WebviewWindow, content_height: f
 /// swap reads as one window changing what it shows.
 fn swap_in(window: &WebviewWindow, other: Option<WebviewWindow>, keyboard: Keyboard) {
     let _ = window.show();
+    // Its frame was just set while it was hidden, which is the change its webview is the last to hear of.
+    crate::webview_sync::shown(window);
     if keyboard == Keyboard::Take {
         let _ = window.set_focus();
     }
@@ -464,6 +466,7 @@ pub fn show_workspace_at(app: &AppHandle, path: Option<&str>) {
         .visible(false);
     match builder.build() {
         Ok(window) => {
+            crate::webview_sync::watch(&window);
             // Hidden until `swap_in`, so the OS's own light still lands before this window is on screen.
             settle_background(&window, app.state::<AppState>().ui_mode());
             let handle = app.clone();
@@ -714,6 +717,7 @@ fn show_floating(
     };
     match builder.build() {
         Ok(window) => {
+            crate::webview_sync::watch(&window);
             let handle = app.clone();
             let own = label.clone();
             window.on_window_event(move |event| match event {
@@ -838,6 +842,7 @@ pub fn show_files_window(
     let window = builder
         .build()
         .map_err(|error| format!("the window for {title} did not open: {error}"))?;
+    crate::webview_sync::watch(&window);
     let handle = app.clone();
     let own = label.to_string();
     window.on_window_event(move |event| match event {
@@ -886,6 +891,7 @@ pub fn show_files_window(
             arm_frame_fallback(app, label);
             let _ = window.show();
             let _ = window.set_focus();
+            crate::webview_sync::shown(&window);
         }
         // In the workspace's frame and place, as the other face of the one window.
         FilesWindow::Home => {
@@ -914,6 +920,7 @@ pub fn wear_face(app: &AppHandle, window: &WebviewWindow, title: &str, script: &
     arm_frame_fallback(app, window.label());
     let _ = window.show();
     let _ = window.set_focus();
+    crate::webview_sync::shown(window);
 }
 
 /* A LOCAL WINDOW'S UNSAVED CHANGES — what its close and the app's Quit ask about first. */
@@ -1196,6 +1203,7 @@ fn raise(window: &WebviewWindow) {
     let _ = window.show();
     let _ = window.unminimize();
     let _ = window.set_focus();
+    crate::webview_sync::shown(window);
 }
 
 /* THE TITLE BAR THE PAGE DRAWS, AND THE FRAME THAT COMES BACK IF IT DOES NOT. */

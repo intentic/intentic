@@ -9,6 +9,7 @@ mod setup_link;
 mod sidecar;
 mod state;
 mod update;
+mod webview_sync;
 mod windows;
 
 use std::sync::atomic::{AtomicBool, Ordering};
