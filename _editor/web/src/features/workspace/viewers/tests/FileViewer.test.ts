@@ -6,14 +6,18 @@ import { type App, computed, createApp, defineComponent, h, nextTick, provide, r
 import { IconStub } from "@intentic/ui/testing";
 
 // The daemon's two reads, stood in for at the viewer's seams: a file's text window, and its bytes. Each text read says
-// whose copy it asked for, since a surface may read another than the Workspace's.
-let answer: (path: string) => WorkspaceFileResponse = (path) => ({ present: false, path });
+// whose copy it asked for, since a surface may read another than the Workspace's. An answer may take its time (a
+// promise), and a read the viewer cancels fails the way fetch fails it, with an AbortError.
+let answer: (path: string) => WorkspaceFileResponse | Promise<WorkspaceFileResponse> = (path) => ({ present: false, path });
 const reads: { path: string; agent: string | undefined }[] = [];
 jest.mock("../../files/fileWindow", () => ({
     FILE_WINDOW_BYTES: 4 * 1024 * 1024,
-    readFileWindow: (path: string, opts?: { scope?: { agent: string | undefined } }) => {
+    readFileWindow: (path: string, opts?: { signal?: AbortSignal; scope?: { agent: string | undefined } }) => {
         reads.push({ path, agent: opts?.scope?.agent });
-        return Promise.resolve(answer(path));
+        return new Promise<WorkspaceFileResponse>((resolve, reject) => {
+            opts?.signal?.addEventListener(`abort`, () => reject(new DOMException(`The read was cancelled.`, `AbortError`)), { once: true });
+            Promise.resolve(answer(path)).then(resolve, reject);
+        });
     },
 }));
 jest.mock("../../../sandbox/client/sandboxClient", () => ({
@@ -52,6 +56,7 @@ const { registerViewer } = await import("../../../../core-views/viewerRegistry")
 const { externalDirtyPaths } = await import("../../files/externalDirty");
 const { VIEW_SCOPE, workspaceAgent } = await import("../../health/workspaceScope");
 const { useEditBuffers } = await import("../../files/useEditBuffers");
+const { markWorkspaceChanged } = await import("../../changes/live/useWorkspaceLive");
 
 // Where a `path` viewer said its document's unsaved edits go, kept past the viewer the way ONLYOFFICE's kept editor
 // keeps it; and how many times a viewer was set up, which is how often the tab drew it anew.
@@ -174,6 +179,42 @@ describe(`a viewer that registers after the tab opened`, () => {
         await settle();
         expect(element.querySelector(`.fake-viewer`)?.textContent).toContain(`viewer of report.pdf`);
         expect(element.textContent).not.toContain(`Preview isn't available`);
+    });
+});
+
+// A new file's tab opens before the watcher has reported the write that made it, so that change is heard while the tab
+// is still on its first read: there is no text on screen yet to reconcile it against, and the read starts over.
+describe(`a change heard while the tab first reads its file`, () => {
+    afterEach(() => useEditBuffers().forget(`fresh.txt`));
+
+    it(`ends on the file's text, not on a spinner that never stops`, async () => {
+        let firstRead: (() => void) | undefined;
+        answer = (path) => new Promise((resolve) => (firstRead = () => resolve(text(path, ``))));
+        const element = mount(`fresh.txt`);
+        await settle();
+        expect(element.querySelector(`[data-icon="spinner"]`)).not.toBeNull();
+
+        answer = (path) => text(path, ``);
+        markWorkspaceChanged([`fresh.txt`]);
+        await settle();
+        firstRead?.();
+        await settle();
+        expect(element.querySelector(`[data-icon="spinner"]`)).toBeNull();
+        expect(element.querySelector(`.code-view`)?.getAttribute(`data-editable`)).toBe(`true`);
+        expect(reads.map((read) => read.path)).toEqual([`fresh.txt`, `fresh.txt`]);
+    });
+
+    it(`reads a file whose first read failed again, and drops the failure`, async () => {
+        answer = () => Promise.reject(new Error(`The sandbox didn't answer.`));
+        const element = mount(`fresh.txt`);
+        await settle();
+        expect(element.textContent).toContain(`The sandbox didn't answer.`);
+
+        answer = (path) => text(path, `hello`);
+        markWorkspaceChanged([`fresh.txt`]);
+        await settle();
+        expect(element.textContent).not.toContain(`The sandbox didn't answer.`);
+        expect(element.querySelector(`.code-view`)?.textContent).toBe(`hello`);
     });
 });
 

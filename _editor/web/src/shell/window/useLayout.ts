@@ -102,9 +102,6 @@ const HIDE_TESTS_KEY = `ui-workspace-hide-tests`;
 // either way records an override that outlives the answer changing.
 const HIDE_TECHNICAL_KEY = `ui-workspace-hide-technical`;
 
-// Global, not per file: on, every editable file opens directly in CodeMirror instead of the viewer.
-const EDIT_MODE_KEY = `ui-workspace-edit-mode`;
-
 // Off by default for every diff surface, so comment-only edits don't read as code changes.
 const SHOW_COMMENTS_KEY = `ui-diff-show-comments`;
 
@@ -222,7 +219,6 @@ const explorerFilters = computed<ExplorerFilters>(() => ({
     hideTests: hideTests.value,
     hideTechnical: hideTechnical.value,
 }));
-const editMode = boolPref(EDIT_MODE_KEY);
 const showComments = boolPref(SHOW_COMMENTS_KEY);
 const hideFileComments = boolPref(HIDE_FILE_COMMENTS_KEY);
 const diffLayout = enumPref(DIFF_LAYOUT_KEY, [`split`, `unified`] as const, `split`);
@@ -327,10 +323,6 @@ const toggleHideTechnical = (): void => {
     hideTechnicalChoice.value = hideTechnical.value ? `off` : `on`;
 };
 
-const setEditMode = (on: boolean): void => {
-    editMode.value = on;
-};
-
 const toggleShowComments = (): void => {
     showComments.value = !showComments.value;
 };
@@ -376,7 +368,6 @@ export function useLayout() {
         hideTests,
         hideTechnical,
         explorerFilters,
-        editMode,
         showComments,
         hideFileComments,
         diffLayout,
@@ -405,7 +396,6 @@ export function useLayout() {
         toggleShowIgnored,
         toggleHideTests,
         toggleHideTechnical,
-        setEditMode,
         toggleShowComments,
         toggleHideFileComments,
         setDiffLayout,

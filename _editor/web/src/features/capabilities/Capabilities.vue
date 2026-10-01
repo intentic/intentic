@@ -25,6 +25,7 @@ import { useRegistry } from "../extensions/useRegistry";
 import { useDevices } from "../sandbox/devices/useDevices";
 import { HOST_DOOR, usePeerConnect, WEBEXT_DOOR } from "../sandbox/devices/usePeerConnect";
 import { useLiveLinks } from "../sandbox/devices/useLiveLinks";
+import { useRole } from "../sandbox/secrets/useRole";
 import { useBackgroundProcesses, viewProcessLogs } from "../terminal/useBackgroundProcesses";
 import { useCapabilityCatalog } from "./capabilityCatalog";
 import { swallowFileDrag, useCapabilityForm } from "./capabilityForm";
@@ -160,6 +161,7 @@ const { submit, submitting } = useCapabilitySubmit({
     handOff,
     stopEditing,
     error,
+    ownsSandbox: useRole().isOwner,
 });
 
 const actions = useConnectionActions({ remove, rename, refetchFleet, error });

@@ -253,6 +253,23 @@ it(`offers a hosted sandbox its update as the platform's restart, in the same go
     expect(el.textContent).not.toContain(`Undo within 24 hours`);
 });
 
+// The platform restarts a machine it runs for the sandbox's owner alone; a maintainer's press came back "sandbox not
+// found". They read the offer and whose press it is, with no button to refuse them.
+it(`tells a maintainer of a hosted sandbox that its owner restarts it onto the update, with no button`, () => {
+    active.value = { id: `sb1`, role: `maintainer`, hosted: { region: `ams`, warm: true } };
+    const el = mount();
+    expect([...el.querySelectorAll(`button`)].map((node) => node.textContent?.trim())).not.toContain(`Restart and update`);
+    expect(el.textContent).toContain(`Only this sandbox's owner can restart it onto the new version: we run its machine on their account.`);
+    expect(recreates(el)).toEqual([]);
+});
+
+it(`offers a maintainer the update of a sandbox on somebody's own machine, which they reach through it`, () => {
+    active.value = { id: `sb1`, role: `maintainer` };
+    const el = mount();
+    expect(recreates(el)).toEqual([`Update`]);
+    expect(el.textContent).not.toContain(`Only this sandbox's owner`);
+});
+
 it(`offers the checkout's rebuild instead of the pull on a sandbox built from one`, () => {
     localImage.value = { base: `intentic-sandbox:dev`, root: `/home/ada/intentic` };
     const el = mount();
@@ -383,6 +400,14 @@ it(`offers a hosted sandbox the platform's way back once it kept an image, throu
     await press(el, `Roll back to the previous version`);
     expect(el.querySelector(`[data-hosted-rollback]`)?.getAttribute(`data-hosted-rollback`)).toBe(`sb1`);
     expect(recreates(el)).toEqual([]);
+});
+
+it(`keeps the platform's way back from a maintainer, whose rollback it would refuse`, () => {
+    active.value = { id: `sb1`, role: `maintainer`, hosted: { region: `ams`, warm: true, canRollBack: true } };
+    info.value = { version: LATEST, latest: LATEST, updateAvailable: false, channel: `stable` };
+    const el = mount();
+    expect([...el.querySelectorAll(`button`)].map((node) => node.textContent?.trim())).not.toContain(`Having trouble?`);
+    expect(el.querySelector(`[data-hosted-rollback]`)).toBeNull();
 });
 
 // The machine's own word that the version before is parked is a way back by itself, even from a daemon that never

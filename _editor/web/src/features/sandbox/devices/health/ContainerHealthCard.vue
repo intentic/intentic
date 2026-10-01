@@ -98,9 +98,10 @@ const repair = async (): Promise<void> => {
                     :label="busy ? t(`sandbox.containerHealthCard.reconnecting`) : t(`sandbox.containerHealthCard.reconnectSandbox`)"
                     @click="repair"
                 />
-                <!-- The same repair by hand, and the only one available to a member or with no machine connected. -->
+                <!-- The same repair by hand, for the owner with no machine connected. Never a member's: /setup on a sandbox
+                     they do not own starts a new one on their own account (setupArrival.ts `rowToOpen`). -->
                 <Button
-                    v-else
+                    v-else-if="isOwner"
                     :as="RouterLink"
                     :to="{ path: `/setup`, query: { sandbox: active?.id } }"
                     size="small"

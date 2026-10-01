@@ -36,7 +36,7 @@ const actionNotice = computed<NoticeModel | undefined>(() =>
         : notice.value,
 );
 
-const { canShip: canOperate } = useRole();
+const { canShip: canOperate, isOwner } = useRole();
 
 // The derived environment state (shared with the shell's rebuild banner via one vue-query fetch).
 const { state, query, isFetching, proposal, pending, applied, recurring, serverManaged, slug, localImage } = useEnvironment();
@@ -215,9 +215,10 @@ const step = computed(
                 <p v-else class="text-2xs text-subtle">{{ t(`sandbox.environmentCard.onlySandboxOwnerApprove`) }}</p>
             </template>
 
-            <!-- The platform builds it; owner-gated there, so a member sees the build with no button. -->
+            <!-- The platform builds it, for the sandbox's owner alone (sandbox.routes.ts `hostedRebuild`): a maintainer, who
+                 may approve the change above, still sees the build with no button rather than one answered "sandbox not found". -->
             <template v-if="pending && hosted">
-                <HostedRebuild v-if="canOperate" :sandbox-id="hosted" :hash="pending.hash" :content="pending.content" />
+                <HostedRebuild v-if="isOwner" :sandbox-id="hosted" :hash="pending.hash" :content="pending.content" />
                 <p v-else class="text-2xs text-subtle">{{ t(`sandbox.environmentCard.onlySandboxOwnerRebuild`) }}</p>
             </template>
             <p v-else-if="pending && serverManaged" class="text-2xs text-subtle">

@@ -4,8 +4,8 @@ import type { AppEnv } from "../../app-env.js";
 import { CONTROL_SCOPES, type ControlScope } from "./control-tokens.js";
 import { ownerDenied } from "../owner-gates.js";
 
-// Control tokens, owner-minted, durable and revocable; raw value returned exactly once. Plain routes before the oRPC
-// catch-all.
+// Control tokens, minted by the owner or a maintainer, durable and revocable; raw value returned exactly once. Plain
+// routes before the oRPC catch-all.
 // Scope is required, never defaulted: a narrow default 403s the caller's first call, a generous one over-grants.
 // Expiry is optional and absent means never, since the same shape serves both a laptop-bound editor token and a
 // self-expiring CI secret.

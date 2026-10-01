@@ -113,6 +113,21 @@ describe("createAuthorizer (owner TOFU + shared access)", () => {
         await expect(authz.authorize("tok-m", undefined)).resolves.not.toHaveProperty("areas");
     });
 
+    // The invariant reports such a row as claiming a fence that is not there; the authorizer has to agree with it, or
+    // the maintainer it names sees a sliver of the tree and none of the conversations outside it.
+    test("a maintainer row that carries areas anyway reaches the caller unfenced", async () => {
+        const authz = createAuthorizer({
+            verify: verifierFor({ "tok-m": "m@x.com", "tok-w": "w@x.com" }),
+            owner: memOwner("a@x.com"),
+            members: memMembers([
+                { email: "m@x.com", role: "maintainer", areas: ["support"] },
+                { email: "w@x.com", role: "writer", areas: ["support"] },
+            ]),
+        });
+        await expect(authz.authorize("tok-m", undefined)).resolves.toEqual({ email: "m@x.com", role: "maintainer", methods: ["google"] });
+        await expect(authz.authorize("tok-w", undefined)).resolves.toEqual({ email: "w@x.com", role: "writer", areas: ["support"], methods: ["google"] });
+    });
+
     test("a granted member is recognised whatever case the claim carries", async () => {
         const authz = createAuthorizer({
             verify: verifierFor({ "tok-m": "Alice@Corp.com" }),

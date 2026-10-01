@@ -19,7 +19,7 @@ import type { PeerStore } from "./peer-store.js";
 // Every peer door's routes:
 // - /system/<slug>/connect: WebSocket, authenticated by the first frame, never the URL
 // - /system/<slug>/enroll: redeems the one-time pairing for the durable token
-// - /system/<slug>/pair: owner mints a single-use pairing for one id
+// - /system/<slug>/pair: a maintainer or the owner mints a single-use pairing for one id
 // - /system/<slug>: roster; DELETE /system/<slug>/:id drops enrollment and the live socket
 // For an MCP-reachable door, `mcp` is the endpoint the daemon's one MCP door (agent/tools/turn-mounts.routes.ts) hands
 // a message to once the turn's lease holds this peer: never the peer's own enrollment token, and the conversation comes
@@ -283,7 +283,8 @@ export const createPeerRoutes = <
     return {
         connect,
         mcp,
-        // Owner-only; a capability door mints only for an existing card, a runner's pairing names what it becomes.
+        // Maintainer and up, the operating gate (`ownerDenied`); a capability door mints only for an existing card, a
+        // runner's pairing names what it becomes.
         pair: async (c: Context<AppEnv>): Promise<Response> => {
             const denied = await ownerDenied(services, c);
             if (denied !== undefined) {
@@ -311,7 +312,8 @@ export const createPeerRoutes = <
         },
         /** GET /system/<slug> */
         list: async (c: Context<AppEnv>): Promise<Response> => c.json({ [door.listKey]: await deps.summaries() }),
-        // Drops the enrollment and the live socket; the software itself stays until removed at the keyboard.
+        // Drops the enrollment and the live socket; the software itself stays until removed at the keyboard. Maintainer
+        // and up, the same gate as minting the pairing.
         revoke: async (c: Context<AppEnv>): Promise<Response> => {
             const denied = await ownerDenied(services, c);
             if (denied !== undefined) {

@@ -3,7 +3,7 @@ import { AppBrand, Button, Notice, type NoticeModel, ui } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import type { InvitePreview } from "@intentic/api-contract";
 import { computed, onMounted, ref } from "vue";
-import { RouterLink, useRoute, useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { apiClient } from "../../lib/useApi";
 import { useAuth } from "../auth/useAuth";
 import { useSandbox } from "../sandbox/client/useSandbox";
@@ -107,7 +107,9 @@ const accept = async (): Promise<void> => {
     }
 };
 
-// The workspace is a place, so opening it is a link, not a click handler.
+// Opening an invite already accepted goes through `accept` as well, which the platform answers again with the sandbox's
+// id ("idempotent once accepted"): a plain link to `/` opened whichever sandbox this browser had open last, so a member
+// with a sandbox of their own landed there rather than in the one the invite names.
 
 const switchAccount = async (): Promise<void> => {
     await signOut();
@@ -188,7 +190,7 @@ const switchAccount = async (): Promise<void> => {
                         ><span class="font-medium text-content">{{ sandboxName }}</span></template
                     >
                 </i18n-t>
-                <Button :as="RouterLink" to="/" :label="t(`setup.acceptInvite.openSandbox`)" class="mt-6 w-full justify-center">
+                <Button :label="t(`setup.acceptInvite.openSandbox`)" class="mt-6 w-full justify-center" :loading="busy" @click="accept">
                     <template #icon><Icon name="arrow-right" /></template>
                 </Button>
             </template>

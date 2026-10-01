@@ -5,7 +5,7 @@
 // flipped the switch, watched nothing happen, and concluded the feature had no way to name anybody.
 import "@intentic/testing/dom";
 import PrimeVue from "primevue/config";
-import { createApp, h, nextTick, ref } from "vue";
+import { computed, createApp, h, nextTick, ref } from "vue";
 import type { CredentialGate } from "@intentic/sandbox-contract";
 import type { SecretRow } from "../../sandbox/secrets/secretRows";
 import { IconStub } from "@intentic/ui/testing";
@@ -15,6 +15,8 @@ const removeGate = { mutateAsync: jest.fn(async () => undefined) };
 const approverChoices = ref<string[]>([]);
 const isOwner = ref(true);
 const stored = ref<CredentialGate | undefined>(undefined);
+// The reader's tier, which the daemon reads a value out to from maintainer up.
+const role = ref<`owner` | `maintainer` | `collaborator`>(`owner`);
 
 jest.mock(`vue-router`, () => ({ RouterLink: { template: `<a><slot /></a>` } }));
 jest.mock(`./useSecrets`, () => ({
@@ -29,6 +31,10 @@ jest.mock(`./useSecrets`, () => ({
         setGate,
         removeGate,
     }),
+}));
+
+jest.mock(`../../sandbox/secrets/useRole`, () => ({
+    useRole: () => ({ canShip: computed(() => role.value !== `collaborator`) }),
 }));
 
 const { default: SecretEntryRow } = await import("./SecretEntryRow.vue");
@@ -150,4 +156,25 @@ it("renders the read-only sentence for everybody but the owner", () => {
     expect(el.innerHTML).toContain(`owner can change this.`);
     done();
     isOwner.value = true;
+});
+
+// The daemon reveals a value from the maintainer tier up (secrets.routes.ts `reveal`). The button used to say "owner
+// only" to the maintainer it worked for, and stood pressable for a collaborator it refused.
+const revealButton = (el: HTMLElement): HTMLButtonElement | null => el.querySelector<HTMLButtonElement>(`button[aria-label^="Reveal value"]`);
+
+it("lets a maintainer reveal a value, and names who may", () => {
+    role.value = `maintainer`;
+    const { el, done } = mount();
+    expect(revealButton(el)?.disabled).toBe(false);
+    expect(revealButton(el)?.getAttribute(`aria-label`)).toBe(`Reveal value (owner and maintainers only)`);
+    done();
+    role.value = `owner`;
+});
+
+it("keeps Reveal shut for a collaborator, whom the daemon would refuse", () => {
+    role.value = `collaborator`;
+    const { el, done } = mount();
+    expect(revealButton(el)?.disabled).toBe(true);
+    done();
+    role.value = `owner`;
 });

@@ -25,6 +25,7 @@ import { usePersonas } from "../../sandbox/personas/usePersonas";
 import { isRecentlyChanged } from "../changes/live/useWorkspaceLive";
 import { lensRefuses } from "../directory-ui/personaReach";
 import { opensAsFolder } from "../files/archiveEntries";
+import { requestCaret } from "../files/caretRequest";
 import { type CoverMark, useCover } from "../home/useCover";
 import type { OpenMode } from "../tabs/workspaceTabs";
 import { ancestorDirs } from "./revealPath";
@@ -131,9 +132,10 @@ const { rules, selecting, inline, edits, deleting, transfer, menu: entryMenu } =
     emptyDirs,
     // Bound late: the row window that focuses the lead is built over this selection, below.
     focusLead: () => focusLead(),
+    // Kept, not previewed, and handed the caret: a file named a moment ago is one about to be typed into.
     openCreated: (path) => {
+        requestCaret(path);
         emit(`openFile`, path, `keep`);
-        layout.setEditMode(true);
     },
     rowActions: actionsFor,
     ask: onAsk,

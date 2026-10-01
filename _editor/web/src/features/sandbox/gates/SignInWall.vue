@@ -253,8 +253,9 @@ const backToSetup = async (): Promise<void> => {
                     </template>
                 </template>
 
-                <!-- A working sandbox's reader stays where they are; only a setup has a setup to go back to. -->
-                <button v-if="working" type="button" :class="ui.textAction(`mt-1 text-subtle`)" @click="notNow">
+                <!-- A working sandbox's reader stays where they are; only a setup has a setup to go back to, and only the
+                     owner's: /setup on a sandbox a member doesn't own starts a new one on their account instead. -->
+                <button v-if="working || !isOwner" type="button" :class="ui.textAction(`mt-1 text-subtle`)" @click="notNow">
                     {{ t(`sandbox.signInWall.notNow`) }}
                 </button>
                 <button v-else type="button" :class="ui.textAction(`mt-1 text-subtle`)" v-action="backToSetup">

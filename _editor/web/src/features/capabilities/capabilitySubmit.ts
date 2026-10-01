@@ -2,6 +2,7 @@ import type { CapabilitySummary } from "@intentic/api-contract";
 import type { AddCapabilityInput, CapabilityCatalogEntry } from "@intentic/capability-catalog";
 import type { NoticeModel } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
+import { t } from "@intentic/ui/i18n";
 import { type Ref, ref } from "vue";
 import { useTerminalPanel } from "../terminal/useTerminalPanel";
 import type { CapabilityForm } from "./capabilityForm";
@@ -38,9 +39,12 @@ export interface SubmitHost {
     readonly handOff: (entry: CapabilityCatalogEntry, added: CapabilitySummary) => void;
     readonly stopEditing: () => void;
     readonly error: Ref<NoticeModel | null>;
+    // Whether the reader owns this sandbox: the wallet's caps go to the platform as the signed-in account's, and the
+    // signer spends the OWNER's wallet, so a member's save would cap a wallet of their own that pays for nothing here.
+    readonly ownsSandbox: Readonly<Ref<boolean>>;
 }
 
-export const useCapabilitySubmit = ({ selected, editing, capabilities, form, add, walk, handOff, stopEditing, error }: SubmitHost) => {
+export const useCapabilitySubmit = ({ selected, editing, capabilities, form, add, walk, handOff, stopEditing, error, ownsSandbox }: SubmitHost) => {
     const submitting = ref(false);
 
     /* THE WALLET'S CAPS ARE THE PLATFORM'S TO ENFORCE, so its tile is two writes (model/walletPolicy.ts). */
@@ -68,6 +72,11 @@ export const useCapabilitySubmit = ({ selected, editing, capabilities, form, add
         form.touchAll();
         if (!form.canSubmit.value) {
             form.refuse(entry);
+            return;
+        }
+        // Refused before either write, so the tile never shows caps the signer does not enforce.
+        if (entry.kind === `wallet` && !ownsSandbox.value) {
+            error.value = { tone: `warning`, title: t(`capabilities.capabilitySubmit.walletOwnerOnly`) };
             return;
         }
         submitting.value = true;

@@ -5,6 +5,10 @@ import { computed, ref } from "vue";
 // useSandboxSession picks the bearer for a call: a valid stored session needs no Google or network, a refusal
 // fails loudly instead of degrading to a raw ID token, and renewal near expiry uses the session itself.
 
+// Widened through its return type, which a `const` would narrow away: a member's row carries null where the owner's
+// carries this token.
+const ownerConnectToken = (): string | null => `connect`;
+
 const state = {
     idToken: `id-token` as string | undefined,
     // The only proof a background reader may spend; undefined by default, since a reload finds no live Google cache.
@@ -24,6 +28,8 @@ const state = {
     select: (_id: string | undefined): void => {},
     // Whether the daemon says a passkey is registered for this origin, the one thing the sign-in moment asks it.
     passkeyOffered: false,
+    // The connect token the platform put on the active row: the owner's, or null on a member's.
+    connectToken: ownerConnectToken(),
 };
 
 // The passkey ceremonies are the gate's; here only the offer the sign-in moment asks for is answered.
@@ -68,7 +74,7 @@ jest.mock("../client/useSandbox", () => {
     };
     return {
         useSandbox: () => ({
-            active: computed(() => (activeSandboxId.value === undefined ? undefined : { id: activeSandboxId.value, token: `connect` })),
+            active: computed(() => (activeSandboxId.value === undefined ? undefined : { id: activeSandboxId.value, token: state.connectToken })),
             activeSandboxId,
             daemonUrl: { value: `https://daemon.test` },
         }),
@@ -118,6 +124,7 @@ beforeEach(() => {
     state.sandboxId = `sb-1`;
     state.mintParks = false;
     state.passkeyOffered = false;
+    state.connectToken = ownerConnectToken();
     // The active-sandbox ref lives in the mock factory (evaluated once per file) and survives load(); reset by hand.
     state.select(`sb-1`);
 });
@@ -276,6 +283,19 @@ it(`a background read spends a proof already in hand`, async () => {
 
 // The probe is the same identity-checked /health the transport already uses, paid only on this path.
 it(`will not raise a sign-in for a daemon that is not answering`, async () => {
+    state.daemonAnswers = false;
+    const fetchMock = jest.fn();
+    stubGlobal(`fetch`, fetchMock);
+    const { useSandboxSession } = await load();
+    expect(await useSandboxSession().getSessionToken()).toBeUndefined();
+    expect(state.minted).toBe(0);
+    expect(fetchMock).not.toHaveBeenCalled();
+});
+
+// A member's row carries no connect token, which used to wave the check through: Google's prompt went up for a sandbox
+// whose machine was off. Without an id to expect, the probe still asks whether anything answers there.
+it(`will not raise a member's sign-in for a daemon that is not answering either`, async () => {
+    state.connectToken = null;
     state.daemonAnswers = false;
     const fetchMock = jest.fn();
     stubGlobal(`fetch`, fetchMock);

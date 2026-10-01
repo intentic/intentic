@@ -298,3 +298,60 @@ describe(`a hosted machine whose hours are spent`, () => {
         expect(notice(asleep, { hostedMachine: false, hoursSpent: true, owner: true }).action).toBeUndefined();
     });
 });
+
+// THE SETUP DOOR IS THE OWNER'S. A maintainer who pressed "Set it up again" on the owner's sandbox landed on /setup,
+// which resumes only an owner's row and so started a sandbox of the maintainer's own, in a browser straight onto a
+// machine we run. Every arm that hands the owner that door tells a member whose it is instead, with nothing to press.
+describe(`a sandbox the reader is a member of`, () => {
+    const dead = classifyFailure({ message: `failed to fetch` });
+    const unaddressed = classifyFailure({ unaddressed: true, message: `no address` });
+    const detached = classifyFailure({ edge: `no-tunnel`, message: `not connected` });
+
+    it(`says the owner finishes a setup, rather than offering the member the setup screen`, () => {
+        const shown = notice(unaddressed, { owner: false });
+        expect(shown.action).toBeUndefined();
+        expect(shown.title).toBe(`Connect "laptop"`);
+        expect(shown.body).toBe(`This sandbox isn't connected yet. Its owner finishes setting it up, and the workspace opens here by itself once they have.`);
+    });
+
+    it(`says only the owner brings a removed sandbox back, still naming the machine and the days its files are kept`, () => {
+        const shown = notice(unaddressed, { owner: false, removed: true, removedBy: `radarsu-rog` });
+        expect(shown.title).toBe(`"laptop" was removed`);
+        expect(shown.action).toBeUndefined();
+        expect(shown.body).toBe(
+            `Its container was deleted on radarsu-rog. Unless it was deleted for good, its files stay on that computer for 7 days, ` +
+                `and only its owner can bring it back or set it up again.`,
+        );
+    });
+
+    it(`still says a sandbox is not dialled in, with no setup to check`, () => {
+        const shown = notice(detached, { owner: false, outageMs: DETACHED_AFTER_MS });
+        expect(shown.title).toBe(`"laptop" isn't connected`);
+        expect(shown.waiting).toBe(false);
+        expect(shown.action).toBeUndefined();
+    });
+
+    it(`puts a silent machine we run in the owner's hands`, () => {
+        const shown = notice(dead, { owner: false, hostedMachine: true, outageMs: HOSTED_STUCK_AFTER_MS });
+        expect(shown.title).toBe(`"laptop" isn't answering`);
+        expect(shown.action).toBeUndefined();
+        expect(shown.body).toBe(
+            `The machine we run this sandbox on hasn't come back. Nothing on your side causes this: its owner can see what the machine is doing and start it over from their setup screen.`,
+        );
+    });
+
+    it(`says a silent sandbox runs on its owner's computer, not the member's`, () => {
+        const shown = notice(dead, { owner: false, hostedMachine: false, outageMs: OWN_STUCK_AFTER_MS });
+        expect(shown.waiting).toBe(false);
+        expect(shown.action).toBeUndefined();
+        expect(shown.body).toBe(
+            `It has been silent for a while. This sandbox runs on its owner's computer, which may be asleep or have its container stopped. The workspace opens here by itself as soon as it answers.`,
+        );
+    });
+
+    it(`still hands the owner the setup door on each of those arms`, () => {
+        expect(notice(unaddressed, { owner: true }).action).toEqual({ kind: `setup`, label: `Finish setup` });
+        expect(notice(dead, { owner: true, hostedMachine: true, outageMs: HOSTED_STUCK_AFTER_MS }).action).toEqual({ kind: `setup`, label: `Check the machine` });
+        expect(notice(detached, { owner: true, outageMs: DETACHED_AFTER_MS }).action).toEqual({ kind: `setup`, label: `Check setup` });
+    });
+});

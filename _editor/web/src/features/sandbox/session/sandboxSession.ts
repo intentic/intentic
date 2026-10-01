@@ -164,10 +164,12 @@ const exchange = async (target: SandboxTarget, bearer: string): Promise<StoredSe
 };
 
 // Checks the daemon's unauthenticated /health before asking for a sign-in, paid only when the alternative is
-// prompting for a possibly offline machine. Answers yes when there's no connect token to check with.
+// prompting for a possibly offline machine. A member holds no connect token to say WHICH sandbox should answer, so
+// theirs asks only whether one answers at all: it used to answer yes unasked, and a member met Google's prompt for a
+// sandbox whose machine was off.
 const daemonAnswers = async (target: SandboxTarget): Promise<boolean> => {
     const token = target.connectToken;
-    return token === undefined || token === `` ? true : healthAnswers(target.base, await sandboxIdOf(token));
+    return healthAnswers(target.base, token === undefined || token === `` ? undefined : await sandboxIdOf(token));
 };
 
 // A hosted sandbox's owner can present a signed platform ticket instead of a Google proof; asked only when no

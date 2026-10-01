@@ -9,6 +9,7 @@ import { useDevice } from "@intentic/ui";
 import { onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 import { modelLineOf } from "@intentic/code-read";
 import { requestCodeAnalysis } from "../health/codeAnalysisClient";
+import { takeCaret } from "../files/caretRequest";
 import { normalizationEdits } from "../files/normalizeOnSave";
 import { useEditorSelection } from "../files/useEditorSelection";
 import { editorType, useMonaco, watchEditorType } from "../files/useMonaco";
@@ -207,6 +208,11 @@ onMounted(async () => {
         fixedOverflowWidgets: true,
     });
     editor.value = view;
+
+    // A file the reader has just created takes the caret: typing into it is the next thing they do (caretRequest.ts).
+    if (editable && path !== undefined && takeCaret(path)) {
+        view.focus();
+    }
 
     if (editable) {
         model.onDidChangeContent(() => emit(`change`, model?.getValue() ?? ``));

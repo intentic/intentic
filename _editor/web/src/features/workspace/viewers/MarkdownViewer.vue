@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Button, ui, Icon, MarkdownDocument, ResponsiveOverlay, useNarrow } from "@intentic/ui";
 import { type MarkdownDecorator, offsetOfLine } from "@intentic/ui/markdown";
-import { computed, inject, ref, watch } from "vue";
+import { computed, inject, onMounted, ref, watch } from "vue";
 import { fileLinkDecorator } from "../../../lib/markdown/renderMarkdown";
 import { useLayout } from "../../../shell/window/useLayout";
 import { openFileRefFromEvent } from "../files/refs/openFileRef";
@@ -13,13 +13,14 @@ import MarkdownOutline from "./MarkdownOutline.vue";
 import { toggleTaskCheckbox } from "./markdownTasks";
 import { useMarkdownOutline } from "./markdownOutline";
 import { CHROME_SCOPE, viewerActionsTarget } from "../files/viewerChrome";
+import { takeCaret } from "../files/caretRequest";
 import { useT } from "@intentic/ui/i18n";
 
-// Markdown surface: one document (kit's <MarkdownDocument>), rendered in both reading and editing states; the
-// app's ordinary Edit switch decides which. Source view is an escape hatch, not half a toggle: Monaco, since a
-// file can be huge, and where a search hit (a line fact) lands. Checkbox ticks are live while reading.
+// Markdown surface: one document (kit's <MarkdownDocument>), typeable wherever the host lets this reader write the file,
+// as every text file is. Source view is an escape hatch, not half a toggle: Monaco, since a file can be huge, and where a
+// search hit (a line fact) lands. Checkbox ticks are live while reading.
 
-// `line`: a content-search hit landing here; `editable` is the host's permission, not whether editing is on.
+// `line`: a content-search hit landing here; `editable` is the host's answer to whether this reader may write the file.
 const t = useT();
 
 const { source, path, line, editable } = defineProps<{ source: string; path: string; line?: LineJump; editable?: boolean }>();
@@ -39,8 +40,9 @@ const PROSE_MAX_CHARS = 256 * 1024;
 const heavy = source.length > PROSE_MAX_CHARS;
 const view = ref<`document` | `source`>(heavy ? `source` : `document`);
 
-// Editable only when the host allows it and the app's Edit switch is on, the same switch every file answers to.
-const editing = computed(() => editable === true && layout.editMode.value && view.value === `document`);
+// Typeable wherever the host allows it, with no switch of its own to turn on: the Edit switch every file once answered
+// to is gone (2026-09-16), and a preference it left behind would keep a reader whose browser never pressed it read-only.
+const editing = computed(() => editable === true && view.value === `document`);
 
 // Held as a computed so identity is stable and the component re-parses only when the decorator changes; a doc
 // cross-referencing others (README → ARCHITECTURE.md) navigates within the reader's own scope. A picture beside the
@@ -85,6 +87,14 @@ const save = (): void => {
 };
 defineExpose({ save });
 
+// A document the reader has just created takes the caret, as a new code file does (caretRequest.ts). The source view
+// asks on its own mount, so only the document's case is answered here.
+onMounted(() => {
+    if (editing.value && takeCaret(path)) {
+        surface.value?.focus();
+    }
+});
+
 // Clicks while reading: a file mention opens it, a checkbox ticks; while editing, the same characters are just
 // text under the caret.
 const onPreviewClick = (event: MouseEvent): void => {
@@ -109,7 +119,7 @@ watch(
         if (next === undefined) {
             return;
         }
-        if (editable === true && layout.editMode.value && !heavy) {
+        if (editable === true && !heavy) {
             view.value = `document`;
             landing.value = offsetOfLine(doc.value, next.line);
             return;
@@ -245,7 +255,7 @@ watch([() => current.value === undefined, () => path], () => (overlayOpen.value 
                 :code="doc"
                 :path="path"
                 lang="markdown"
-                :editable="editable === true && layout.editMode.value"
+                :editable="editable === true"
                 :scroll-to-line="line"
                 @change="onChange"
                 @save="(value) => emit(`save`, value)"

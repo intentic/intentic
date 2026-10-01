@@ -7,6 +7,7 @@ import { RouterLink } from "vue-router";
 import type { CredentialGateScope } from "@intentic/sandbox-contract";
 import type { SecretRow } from "../../sandbox/secrets/secretRows";
 import { reveal, useCredentialGates, useSecrets } from "./useSecrets";
+import { useRole } from "../../sandbox/secrets/useRole";
 import ToggleSwitch from "primevue/toggleswitch";
 import SecretField from "./SecretField.vue";
 import SecretHostsEditor from "./SecretHostsEditor.vue";
@@ -127,8 +128,10 @@ const confirming = ref(false);
 const error = ref<NoticeModel | undefined>(undefined);
 
 const entry = computed(() => row.entry);
+// The daemon reveals a value to the owner and maintainers (secrets.routes.ts `reveal`, ensureMaintainer).
+const { canShip } = useRole();
 // A value exists and this viewer is allowed to read it: gates both Reveal and Copy.
-const canReveal = computed(() => entry.value.status !== `missing` && entry.value.revealable);
+const canReveal = computed(() => entry.value.status !== `missing` && entry.value.revealable && canShip.value);
 // What the open panel shows: provenance only, the revealed value, or the editor (reveal ⊕ edit).
 const panelMode = computed<`info` | `reveal` | `edit`>(() => (editing.value ? `edit` : revealedValue.value !== undefined ? `reveal` : `info`));
 // Nominal is silent: a connection that is simply working says so by carrying nothing.
@@ -229,12 +232,12 @@ const ACTION = ui.iconButton(`text-subtle disabled:opacity-40 disabled:hover:bg-
                         v-tooltip.top="
                             revealedValue !== undefined
                                 ? t(`capabilities.secretEntryRow.hide`)
-                                : { title: t(`capabilities.secretEntryRow.reveal`), note: t(`capabilities.secretEntryRow.ownerOnly`) }
+                                : { title: t(`capabilities.secretEntryRow.reveal`), note: t(`capabilities.secretEntryRow.maintainersOnly`) }
                         "
                         type="button"
                         :class="ACTION"
                         :disabled="!canReveal"
-                        :aria-label="revealedValue !== undefined ? t(`capabilities.words.hideValue`) : t(`capabilities.secretEntryRow.revealValueOwnerOnly`)"
+                        :aria-label="revealedValue !== undefined ? t(`capabilities.words.hideValue`) : t(`capabilities.secretEntryRow.revealValueMaintainersOnly`)"
                         v-action="toggleReveal"
                     >
                         <Icon :name="revealedValue !== undefined ? `eye-slash` : `eye`" class="text-xs" />

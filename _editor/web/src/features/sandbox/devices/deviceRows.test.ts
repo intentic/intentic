@@ -539,8 +539,9 @@ test(`states the halves without offering the switches on a machine it cannot rea
 // Every per-device switch granted, so a case about the agent is not also a case about permissions.
 const GRANTED = { sandboxes: `on` };
 
-// `canPair` is the reader's own standing (owner, by default here): the daemon refuses a member's mint, so it
-// decides whether a machine that isn't answering is offered a fresh pairing at all.
+// `canPair` is the reader's own standing (maintainer and up, by default here): the daemon refuses a mint from anyone
+// below maintainer, so it decides whether a machine that isn't answering is offered a fresh pairing at all. Which tiers
+// hold it is the page's decision, pinned in SandboxDevices.test.ts.
 const concernsOf = (overrides: Partial<Device> = {}, held: Held = {}, latest?: string, scopes?: Record<string, string>, canPair = true) => {
     const entry = row(overrides, held, latest);
     return deviceAttention(entry, { block: manageBlock(entry.device, scopes), readAt: NOW, canPair });

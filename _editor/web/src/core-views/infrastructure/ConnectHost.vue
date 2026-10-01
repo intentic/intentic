@@ -35,6 +35,9 @@ const hostNameTaken = computed(
 const hostNameReady = computed(() => rawHostName.value === `` || canonicalHostName.value !== ``);
 // Derived from the daemon URL, only on the user's own domain; else the host resolves its own zone.
 const zone = computed(() => (active.value?.providedAddress === true ? undefined : zoneFromUrl(daemonUrl.value)));
+// The platform hands the connect token to the owner alone and null to a member, so a member's command would carry
+// CONNECT_TOKEN='null', which /enroll refuses: they are told whose step this is instead of given a command that fails.
+const ownerOnly = computed(() => active.value !== undefined && (active.value.token ?? null) === null);
 
 const commandReady = computed(() => {
     if (active.value === undefined) {
@@ -112,7 +115,11 @@ onUnmounted(() => inventoryWatch.dispose());
             </p>
         </div>
 
-        <form class="flex flex-col gap-3" @submit.prevent>
+        <div v-if="ownerOnly" class="flex items-center gap-2 rounded-lg border border-dashed border-line px-3 py-4 text-2xs text-subtle">
+            <Icon name="lock" />
+            <span>{{ t(`views.connectHost.ownerConnectsServers`) }}</span>
+        </div>
+        <form v-else class="flex flex-col gap-3" @submit.prevent>
             <div class="grid gap-3 @lg:grid-cols-2">
                 <label class="ui-field">
                     <span class="ui-field-label">{{ t(`views.connectHost.cloudflareApiToken`) }}</span>

@@ -147,6 +147,17 @@ it(`hands a pending overlay to the platform's builder on a hosted sandbox`, () =
     expect(el.querySelector(`[data-executor="host"]`)).toBeNull();
 });
 
+// The platform builds a hosted sandbox's image for its owner alone; a maintainer's press came back "sandbox not found".
+// They still approve or reject the change, which the daemon lets them do.
+it(`leaves a hosted sandbox's build to its owner, while a maintainer still decides the change`, () => {
+    pending.value = { content: OVERLAY, hash: `pending` };
+    active.value = { id: `sb1`, role: `maintainer`, hosted: { region: `iad`, warm: true } };
+    const el = mount();
+    expect(el.querySelector(`[data-executor="hosted"]`)).toBeNull();
+    expect(el.textContent).toContain(`Only the sandbox owner can rebuild it.`);
+    expect(el.textContent).not.toContain(`can approve or reject this change`);
+});
+
 // A checkout-built sandbox builds its recipe by rebuilding from source, and that button lives on the Sandbox tab
 // only: here the card points there, and nowhere else, since every other sandbox has no checkout to rebuild from.
 it(`points a checkout-built sandbox's waiting recipe to the Sandbox tab instead of offering the rebuild here`, () => {

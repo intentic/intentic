@@ -28,7 +28,9 @@ export const DEMO_SANDBOX: SandboxSummary = {
     // Null: nothing has ever removed this sandbox's container, so there is no removal to report.
     removedAt: null,
     removedBy: null,
-    token: `demo-connect-token`,
+    // The owner's alone, as the platform hands it out (sandbox.routes.ts `connectTokenFor`): null on a member's row, so
+    // a surface that would print it for a member shows here the way it does for them.
+    token: demoTier === `owner` ? `demo-connect-token` : null,
     role: demoTier,
     providedAddress: false,
     // Null: no real container or CA-signed cert to offer a loopback shortcut from.

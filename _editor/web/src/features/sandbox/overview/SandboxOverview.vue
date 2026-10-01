@@ -14,6 +14,7 @@ import { useSandboxAvailability } from "./useSandboxAvailability";
 import { useSandboxPlacement } from "./useSandboxPlacement";
 import { useWorkspaceTree } from "../../workspace/explorer/useWorkspaceTree";
 import { useSelfResources } from "../devices/useSelfResources";
+import { useRole } from "../secrets/useRole";
 import SandboxBackupCard from "./backup/SandboxBackupCard.vue";
 import SandboxBehindCard from "./version/SandboxBehindCard.vue";
 import SandboxManifestCard from "./manifest/SandboxManifestCard.vue";
@@ -58,6 +59,9 @@ const starterMachine = computed(() => {
 // about the sandbox itself. Self-hides when its machine is not a connected device — there is no door to send a
 // reshape through, and a row saying so would be a row about somebody else's problem.
 const selfResources = useSelfResources();
+// Changing that share is a device op, maintainer and up at the daemon (`manageDeviceSandbox`), so it reads `canShip`;
+// the name, the logo and the hosted card read `isOwner`, since those go to the platform's owner-only routes.
+const { canShip } = useRole();
 const shareLine = computed(() => (selfResources.row.value === undefined ? undefined : resourcesSummary(selfResources.row.value)));
 const resizing = ref(false);
 const resizeFailed = ref<string | undefined>();
@@ -319,14 +323,14 @@ const removeLogo = async (): Promise<void> => {
                         </a>
                     </dd>
                 </div>
-                <!-- Its share of the machine, and the one form that changes it. Owner only: acting on a device is
-                     maintainer-floored at the daemon, so a member gets the fact without a button that would refuse. -->
+                <!-- Its share of the machine, and the one form that changes it. Maintainer and up: acting on a device is
+                     maintainer-floored at the daemon, so a member below that gets the fact without a button that would refuse. -->
                 <div v-if="shareLine" class="flex items-center justify-between gap-3">
                     <dt class="text-subtle">{{ t(`sandbox.sandboxOverview.resources`) }}</dt>
                     <dd class="flex min-w-0 items-center gap-2">
                         <span class="truncate text-content">{{ shareLine }}</span>
                         <button
-                            v-if="isOwner"
+                            v-if="canShip"
                             type="button"
                             class="shrink-0 font-medium text-link hover:underline"
                             :disabled="selfResources.applying.value"
@@ -342,7 +346,7 @@ const removeLogo = async (): Promise<void> => {
 
         <!-- Recreates the container serving this page, so it warns before it is applied and the reconnect is the answer. -->
         <SandboxResourcesDialog
-            v-if="isOwner && selfResources.reshapable.value"
+            v-if="canShip && selfResources.reshapable.value"
             :open="resizing"
             :name="sandbox.active.value?.name ?? selfResources.slug.value ?? ``"
             :current="selfResources.current.value"

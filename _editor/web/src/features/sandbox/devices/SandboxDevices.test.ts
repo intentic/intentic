@@ -1,12 +1,12 @@
 // jsdom because the subject is what a row puts on screen, not the derivation behind it (see deviceFacts.test.ts).
 import "@intentic/testing/dom";
 import { listedDevice } from "../../../testing/listedDevice";
-import type { Device } from "@intentic/sandbox-contract";
+import { type Device, type MemberRole, roleAtLeast } from "@intentic/sandbox-contract";
 import type { RouteLocationRaw } from "vue-router";
 import PrimeVue from "primevue/config";
 import { groupNeedsAttention, groupSummary, menuVerbs, primaryVerb, sandboxGroups, tipText, type TooltipValue } from "@intentic/ui";
 import { waitFor, advanceTimersByTimeAsync } from "@intentic/testing/bun";
-import { type App, createApp, defineComponent, h, nextTick, reactive, ref } from "vue";
+import { type App, computed, createApp, defineComponent, h, nextTick, reactive, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import * as sandboxContractOriginal from "@intentic/sandbox-contract";
 import * as vueRouterOriginal from "vue-router";
@@ -115,9 +115,16 @@ jest.mock(`./usePeerConnect`, () => ({
         close: () => {},
     }),
 }));
-// Revoking another device's access is owner-only, matching the daemon's own floor.
-const owner = ref(true);
-jest.mock(`../secrets/useRole`, () => ({ useRole: () => ({ isOwner: owner }) }));
+// The reader's tier, and the two flags this page could read off it, derived as the real hook derives them. Pairing a
+// machine and revoking another device's access are maintainer and up at the daemon (its operating gate, `ownerDenied`),
+// so a maintainer who is not the owner is the reader that tells the two flags apart.
+const role = ref<MemberRole>(`owner`);
+jest.mock(`../secrets/useRole`, () => ({
+    useRole: () => ({
+        canShip: computed(() => roleAtLeast(role.value, `maintainer`)),
+        isOwner: computed(() => role.value === `owner`),
+    }),
+}));
 // sandboxKey is reached at module eval by the real useDevices, so it's mocked here too.
 // Which sandbox is serving the page, by the hostname of its daemon: what marks a row as "the one you're using".
 const daemon = ref<string | undefined>();
@@ -241,7 +248,7 @@ afterEach(() => {
     runnersList.value = [];
     devicesLoading.value = false;
     capabilities.value = [];
-    owner.value = true;
+    role.value = `owner`;
     daemon.value = undefined;
     mirrorCalls.length = 0;
     verbCalls.length = 0;
@@ -340,10 +347,22 @@ it(`hands an offline machine a fresh pairing command without leaving its page`, 
     expect(everything()).toContain(`Connect host-rog`);
 });
 
-// Minting is owner-only at the daemon, so a member is never handed a button whose answer is a 403.
-it(`offers a member the sentence without the pairing`, () => {
-    owner.value = false;
-    expect(labels(mount([asleep()]))).not.toContain(`Reconnect`);
+// Minting is maintainer and up at the daemon, so a maintainer is handed the same way back in as the owner.
+it(`hands a maintainer the same fresh pairing command`, async () => {
+    role.value = `maintainer`;
+    const el = mount([asleep()]);
+    [...el.querySelectorAll(`button`)].find((control) => (control.textContent ?? ``).includes(`Reconnect`))?.click();
+    await nextTick();
+    expect(pairingsAsked).toEqual([`host-rog`]);
+    expect(everything()).toContain(`Connect host-rog`);
+});
+
+// Writer is the tier just under that floor, so a member there is never handed a button whose answer is a 403.
+it(`offers a member below maintainer the sentence without the pairing`, () => {
+    role.value = `writer`;
+    const el = mount([asleep()]);
+    expect(el.textContent ?? ``).toContain(`A machine that wakes dials back in by itself.`);
+    expect(labels(el)).not.toContain(`Reconnect`);
 });
 
 // Desktop sync enrolls a folder, not a device: there is no host capability to re-pair, and the Add a device
@@ -1400,9 +1419,20 @@ it(`offers to revoke a device that has no connection to run commands on`, () => 
     expect(labels(el)).not.toContain(`Unpair`);
 });
 
-// Owner-only, matching the daemon's floor: a member only ever drops their own mirror enrollment.
-it(`does not offer the revoke to a member`, () => {
-    owner.value = false;
+// Maintainer and up, matching the daemon's floor: a maintainer cuts a device off exactly as the owner does.
+it(`lets a maintainer revoke one device's access too`, async () => {
+    role.value = `maintainer`;
+    const el = mount([mirrored(`on`)]);
+    [...el.querySelectorAll(`button`)].find((control) => (control.textContent ?? ``).includes(`Revoke access`))?.click();
+    await nextTick();
+    [...document.body.querySelectorAll(`button`)].findLast((control) => (control.textContent ?? ``).includes(`Revoke access`))?.click();
+    await nextTick();
+    expect(revokeCalls).toEqual([`laptop`]);
+});
+
+// Below that floor a member only ever drops their own mirror enrollment; writer is the tier just under it.
+it(`does not offer the revoke to a member below maintainer`, () => {
+    role.value = `writer`;
     expect(labels(mount([mirrored(`on`)]))).not.toContain(`Revoke access`);
 });
 

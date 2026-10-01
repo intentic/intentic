@@ -97,6 +97,12 @@ const waitingNotice = (kind: "timeout" | "closed" | "network" | "detached", name
     };
 };
 
+// THE SETUP SCREEN IS THE OWNER'S. Opened on a sandbox the reader does not own, /setup finds no row of theirs to resume
+// and starts a fresh sandbox on their own account (setupArrival.ts `rowToOpen`), in a browser straight onto a machine we
+// run: a member who pressed "Set it up again" on the owner's sandbox got a second sandbox of their own. So a member is
+// never handed the setup door; each sentence that offers it says instead whose it is to open.
+const member = (input: ConnectionNoticeInput): boolean => input.owner === false;
+
 // The container was deleted, and the machine that deleted it said so on its way out. Addressed to someone who may not
 // have done it themselves, so it says what is gone rather than assuming they know. The farewell carries only who
 // removed it, not whether its files went to that machine's trash (`ic sandbox remove` keeps them a week unless `--now`),
@@ -107,12 +113,20 @@ const removedNotice = (input: ConnectionNoticeInput, name: string): ConnectionNo
         return undefined;
     }
     const where = input.removedBy === undefined || input.removedBy === null || input.removedBy === `` ? `the computer it ran on` : input.removedBy;
-    return {
-        title: t(`sandbox.connectionNotice.removed`, { name }),
-        body: t(`sandbox.connectionNotice.containerDeletedFilesKept`, { where, count: SANDBOX_RECOVERY_DAYS }, SANDBOX_RECOVERY_DAYS),
-        action: { kind: `setup`, label: t(`sandbox.connectionNotice.setUpAgain`) },
-        waiting: false,
-    };
+    const count = SANDBOX_RECOVERY_DAYS;
+    return member(input)
+        ? {
+              title: t(`sandbox.connectionNotice.removed`, { name }),
+              body: t(`sandbox.connectionNotice.containerDeletedOwnerRestores`, { where, count }, count),
+              action: undefined,
+              waiting: false,
+          }
+        : {
+              title: t(`sandbox.connectionNotice.removed`, { name }),
+              body: t(`sandbox.connectionNotice.containerDeletedFilesKept`, { where, count }, count),
+              action: { kind: `setup`, label: t(`sandbox.connectionNotice.setUpAgain`) },
+              waiting: false,
+          };
 };
 
 // The platform has no such sandbox: the row is deleted, so no machine can ever serve this address again.
@@ -177,7 +191,7 @@ const detachedNotice = (input: ConnectionNoticeInput, name: string): ConnectionN
         ? {
               title: t(`sandbox.connectionNotice.isntConnected`, { name }),
               body: t(`sandbox.connectionNotice.intenticAnsweredAddressSandbox`),
-              action: { kind: `setup`, label: t(`sandbox.connectionNotice.checkSetup`) },
+              action: member(input) ? undefined : { kind: `setup`, label: t(`sandbox.connectionNotice.checkSetup`) },
               waiting: false,
           }
         : undefined;
@@ -207,6 +221,14 @@ const stuckNotice = (input: ConnectionNoticeInput, name: string): ConnectionNoti
     const stalled = stalledBody(input.stalledPath);
     if (stalled !== undefined) {
         return { title: t(`sandbox.connectionNotice.isntAnswering`, { name }), body: stalled, action: undefined, waiting: false };
+    }
+    if (member(input)) {
+        return {
+            title: t(`sandbox.connectionNotice.isntAnswering`, { name }),
+            body: input.hostedMachine ? t(`sandbox.connectionNotice.machineWeRunSandboxMember`) : t(`sandbox.connectionNotice.silentOnOwnersComputer`),
+            action: undefined,
+            waiting: false,
+        };
     }
     return input.hostedMachine
         ? {
@@ -246,14 +268,22 @@ const networkNotice = (input: ConnectionNoticeInput, kind: "timeout" | "closed" 
 // decisions that need one, and a new cause cannot be added without giving it words.
 type SettledKind = "gone" | "unaddressed" | "unauthenticated" | "forbidden";
 
-const SETTLED: Record<SettledKind, (name: string) => ConnectionNotice> = {
+const SETTLED: Record<SettledKind, (name: string, input: ConnectionNoticeInput) => ConnectionNotice> = {
     gone: goneNotice,
-    unaddressed: (name) => ({
-        title: t(`sandbox.connectionNotice.connect`, { name }),
-        body: t(`sandbox.connectionNotice.sandboxIsntConnectedYet`),
-        action: { kind: `setup`, label: t(`sandbox.connectionNotice.finishSetup`) },
-        waiting: false,
-    }),
+    unaddressed: (name, input) =>
+        member(input)
+            ? {
+                  title: t(`sandbox.connectionNotice.connect`, { name }),
+                  body: t(`sandbox.connectionNotice.sandboxIsntConnectedYetMember`),
+                  action: undefined,
+                  waiting: false,
+              }
+            : {
+                  title: t(`sandbox.connectionNotice.connect`, { name }),
+                  body: t(`sandbox.connectionNotice.sandboxIsntConnectedYet`),
+                  action: { kind: `setup`, label: t(`sandbox.connectionNotice.finishSetup`) },
+                  waiting: false,
+              },
     unauthenticated: (name) => ({
         title: t(`sandbox.connectionNotice.signInToReach`, { name }),
         body: t(`sandbox.connectionNotice.sandboxUpSessionBrowser`),
@@ -289,5 +319,5 @@ export const connectionNotice = (input: ConnectionNoticeInput): ConnectionNotice
     if (removed !== undefined) {
         return removed;
     }
-    return isSettled(failure.kind) ? SETTLED[failure.kind](name) : networkNotice(input, failure.kind, name);
+    return isSettled(failure.kind) ? SETTLED[failure.kind](name, input) : networkNotice(input, failure.kind, name);
 };

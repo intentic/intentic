@@ -7,6 +7,7 @@ import HostRecreate from "../../../capabilities/connect/hosts/HostRecreate.vue";
 import { turnInFlight } from "../../../agents/fleet/agentStatus";
 import { useAgents } from "../../../agents/fleet/useAgents";
 import { useSandbox } from "../../client/useSandbox";
+import { useRole } from "../../secrets/useRole";
 import { expectRestart, type RestartQuiet } from "../../live/sandboxRestart";
 import HostedRollbackDialog from "./HostedRollbackDialog.vue";
 import UpdateDownloadProgress from "./UpdateDownloadProgress.vue";
@@ -65,6 +66,10 @@ const { cmdOs } = useOsPreference();
 // keeping any environment overlay, and its rollback is the platform's too, offered once it kept an image to go back to.
 const { active } = useSandbox();
 const hosted = computed(() => (active.value?.hosted ? active.value.id : undefined));
+// Both are the platform's, and it restarts or rolls back a machine it runs for the sandbox's owner alone
+// (sandbox.routes.ts `ownedHostedMachine`): a maintainer pressing either was answered "sandbox not found". They are told
+// whose press it is instead. A sandbox on somebody's own machine updates through that machine, which a maintainer reaches.
+const { isOwner } = useRole();
 const { busy: restarting, notice: restartNotice, run: runRestart } = useAsyncAction();
 const hubWork = useHubWork();
 // What the sandbox going quiet means, for every surface that isn't this card.
@@ -121,7 +126,7 @@ const minute = computed(() => Math.floor(clock.value / 60_000));
 const canRollBack = computed(() =>
     hosted.value === undefined
         ? (rollbackTo.value !== undefined || parkedReady.value) && slug.value !== undefined && !serverManaged.value
-        : active.value?.hosted?.canRollBack === true,
+        : active.value?.hosted?.canRollBack === true && isOwner.value,
 );
 const plan = computed(() =>
     updateCardPlan({
@@ -338,11 +343,12 @@ const finePrint = computed(
                     </p>
                     <template v-else-if="hosted">
                         <!-- Own block so the column's stretch doesn't draw the button at full width. -->
-                        <div>
+                        <div v-if="isOwner">
                             <Button :label="t(`sandbox.sandboxUpdateCard.restartUpdate`)" class="ui-button-loud ui-button-gilded" :loading="restarting" @click="restartHosted">
                                 <template #icon><Icon name="arrow-circle-up" /></template>
                             </Button>
                         </div>
+                        <p v-else class="text-xs text-muted">{{ t(`sandbox.sandboxUpdateCard.ownerRestartsHosted`) }}</p>
                         <Notice v-if="restartNotice" :of="restartNotice" />
                     </template>
                     <!-- Downloading in the background: nothing to press until it is in, so its progress stands in the

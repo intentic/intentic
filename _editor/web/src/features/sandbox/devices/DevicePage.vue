@@ -103,20 +103,21 @@ const capabilityOf = (row: DeviceRow) => {
 };
 const scopesOf = (row: DeviceRow): DeviceScopes | undefined => capabilityOf(row)?.config;
 
-// Owner-only, per machine, no fleet-wide equivalent: the only path that works for a laptop that is lost,
-// wiped, or someone else's. Minting this machine a fresh pairing has the same floor (the daemon refuses a
-// member's), so the same answer decides whether Reconnect is offered at all.
-const { isOwner } = useRole();
+// Revoking is maintainer and up, per machine, no fleet-wide equivalent: the only path that works for a laptop that is
+// lost, wiped, or someone else's. Minting this machine a fresh pairing has the same floor (the daemon's operating gate,
+// `ownerDenied`, admits a maintainer and refuses anyone below), so the same answer decides whether Reconnect is offered
+// at all.
+const { canShip } = useRole();
 
 // The door the sandbox list's buttons go through, and what stands between it and them. On a lone device the
 // block is one of its own concerns; on a many-sided machine it is drawn beside the list it is about.
 const manager = computed(() => managerOf(machine) ?? environments.value[0]);
 const block = computed(() => (manager.value === undefined ? undefined : manageBlock(manager.value.device, scopesOf(manager.value))));
 const listBlock = computed(() =>
-    many.value && manager.value !== undefined ? blockAttention(manager.value, { block: block.value, canPair: isOwner.value }) : undefined,
+    many.value && manager.value !== undefined ? blockAttention(manager.value, { block: block.value, canPair: canShip.value }) : undefined,
 );
 
-const concernsOf = (row: DeviceRow) => deviceAttention(row, { block: many.value ? undefined : block.value, readAt, canPair: isOwner.value });
+const concernsOf = (row: DeviceRow) => deviceAttention(row, { block: many.value ? undefined : block.value, readAt, canPair: canShip.value });
 
 // The agent as its own object rather than a version printed under the name: what it serves, what it wants,
 // and the verbs that change either. Undefined only on a machine with no version and no command door.
@@ -142,7 +143,7 @@ const hardware = computed(() => machineHardware(machine));
 const distros = computed(() => wslDistroRows(machine));
 
 // Enrollments this reader may cut off. One list, so the page has one Danger zone however many doors the PC has.
-const revocable = computed(() => (isOwner.value ? environments.value.filter((environment) => environment.device.sync !== undefined) : []));
+const revocable = computed(() => (canShip.value ? environments.value.filter((environment) => environment.device.sync !== undefined) : []));
 
 // The machine's three lists as the detail kit takes them, merged across environments.
 const lists = computed(() => machineLists(environments.value));

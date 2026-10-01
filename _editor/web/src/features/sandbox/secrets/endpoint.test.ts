@@ -3,6 +3,7 @@ import {
     candidatesFor,
     certifiedLoopbackUrl,
     couldBeOnThisMachine,
+    healthAnswers,
     probeEndpoint,
     PROMOTION_INTERVAL_MS,
     sandboxIdOf,
@@ -144,6 +145,17 @@ it(`qualifies the tunnel too, now that something ranks below it`, async () => {
         throw new TypeError(`Failed to fetch`);
     });
     expect(await probeEndpoint(tunnel, id, offline)).toBe(false);
+});
+
+// A member holds no connect token, so no id to expect: whether a sandbox answers at the address at all is the question
+// they can still ask before a sign-in is raised for a machine that may be off.
+it(`asks only whether a sandbox answers, when there is no id to expect`, async () => {
+    expect(await healthAnswers(TUNNEL, undefined, 1000, jest.fn(async () => health(`whoever`)))).toBe(true);
+    expect(await healthAnswers(TUNNEL, undefined, 1000, jest.fn(async () => new Response(``, { status: 502 })))).toBe(false);
+    const offline = jest.fn(async () => {
+        throw new TypeError(`Failed to fetch`);
+    });
+    expect(await healthAnswers(TUNNEL, undefined, 1000, offline)).toBe(false);
 });
 
 it(`takes the tunnel on trust when nothing ranks below it`, async () => {

@@ -57,7 +57,7 @@ afterEach(() => {
 });
 
 // The submit over a real form, with the daemon's streamed apply as `add`: it lists the connection with `status`.
-const submitOn = (entry: CapabilityCatalogEntry, status: CapabilityStatus, editing?: CapabilitySummary) => {
+const submitOn = (entry: CapabilityCatalogEntry, status: CapabilityStatus, editing?: CapabilitySummary, ownsSandbox = true) => {
     const capabilities = ref<readonly CapabilitySummary[]>(editing === undefined ? [] : [editing]);
     const add = jest.fn(async (input: AddCapabilityInput, onLine?: (line: Record<string, unknown>) => void) => {
         onLine?.({ kind: `terminal`, session: `install-${input.id}` });
@@ -85,7 +85,7 @@ const submitOn = (entry: CapabilityCatalogEntry, status: CapabilityStatus, editi
     scopes.push(scope);
     return scope.run(() => {
         const form = useCapabilityForm(state);
-        const { submit, submitting } = useCapabilitySubmit({ ...state, form, add, ...hands });
+        const { submit, submitting } = useCapabilitySubmit({ ...state, form, add, ...hands, ownsSandbox: ref(ownsSandbox) });
         return { state, form, add, submit, submitting, ...hands };
     })!;
 };
@@ -210,5 +210,30 @@ describe(`the wallet`, () => {
             detail: `policy service unavailable`,
         });
         expect(walk.leaveTile.mock.calls).toEqual([]);
+    });
+
+    // The platform files the caps under whoever is signed in, and the signer spends the owner's wallet: a maintainer's
+    // save used to cap a wallet of their own, silently, while the tile showed caps nothing enforced.
+    it(`refuses a member's save before either write, and says the wallet is the owner's`, async () => {
+        const { submit, walk, state, add } = submitOn(WALLET, { state: `active` }, undefined, false);
+
+        await submit();
+
+        expect(add.mock.calls).toEqual([]);
+        expect(pushWalletPolicy.mock.calls).toEqual([]);
+        expect(state.error.value).toEqual({
+            tone: `warning`,
+            title: `Only this sandbox's owner can change its wallet's spending caps: the wallet that pays is theirs.`,
+        });
+        expect(walk.leaveTile.mock.calls).toEqual([]);
+    });
+
+    it(`leaves a member's save of any other tile alone`, async () => {
+        const { submit, add, form, state } = submitOn(SSH, { state: `active` }, undefined, false);
+        Object.assign(form.values, { host: `ops.acme.dev`, user: `ada`, auth: `key`, privateKey: `KEY` });
+
+        await submit();
+
+        expect([add.mock.calls.length, state.error.value]).toEqual([1, null]);
     });
 });

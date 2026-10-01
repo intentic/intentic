@@ -11,10 +11,10 @@ import { useSandboxQuery } from "../../sandbox/client/useSandboxQuery";
 import { useSandboxSession } from "../../sandbox/session/sandboxSession";
 
 // User-supplied env-var secrets, written straight to the daemon's /secrets routes, split by consumer so each
-// surface only observes the server state it reads (an observer mount refetches its query). `reveal` is owner-only
-// and deliberately not a query, so a value never enters the cache.
+// surface only observes the server state it reads (an observer mount refetches its query). `reveal` is the owner's and
+// the maintainers', and deliberately not a query, so a value never enters the cache.
 
-// Owner-only; a member gets the daemon's 403 message as a thrown Error. Plain async on purpose (no cache).
+// Owner and maintainers; anyone below gets the daemon's 403 message as a thrown Error. Plain async on purpose (no cache).
 export const reveal = async (key: string): Promise<string> => (await sandboxRpc.secrets.reveal({ key })).value;
 
 export function useSecretKeys() {

@@ -33,6 +33,13 @@ it(`counts a sandbox that has never checked in as an unfinished setup`, () => {
     expect(unfinishedSandboxes([draft])).toEqual([draft]);
 });
 
+// Finishing it would open /setup, which starts a sandbox of the member's own rather than resuming somebody else's.
+it(`leaves a shared sandbox its owner never finished off the member's errands`, () => {
+    const shared = row({ id: `shared`, role: `maintainer`, token: null });
+    expect(connectedSandboxes([shared])).toEqual([]);
+    expect(unfinishedSandboxes([shared])).toEqual([]);
+});
+
 /* BEING OFFLINE IS NOT BEING UNFINISHED, and this is the distinction the old "Setup" chip could not carry. */
 it(`keeps a sandbox that ran once switchable even with no daemon URL`, () => {
     const down = row({ id: `down`, daemonUrl: null, lastSeenAt: SEEN });

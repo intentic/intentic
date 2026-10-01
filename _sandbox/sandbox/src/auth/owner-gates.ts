@@ -5,7 +5,11 @@ import { authorizeMaintainer, bearerFrom, ForbiddenError } from "./auth.js";
 
 /* The two answers a privileged plain-Hono route asks for before it does anything, and the maintainer one again for an
  * oRPC handler. Each reads the bearer alone, so a request a machine credential admitted (panel, agent, extension or
- * control token) never passes. */
+ * control token) never passes.
+ *
+ * `ownerDenied` is the operating gate, whatever its name says: a maintainer is deliberately owner-equivalent here.
+ * Ownership itself is kept separate, in `ownershipDenied`, for the one thing a revokable grant cannot control:
+ * membership. */
 export const ownerDenied = async (services: Pick<Services, "auth">, c: Context): Promise<Response | undefined> => {
     if (services.auth === undefined) {
         return undefined;

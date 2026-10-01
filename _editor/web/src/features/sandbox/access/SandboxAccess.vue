@@ -29,6 +29,7 @@ import { SANDBOX_MEMBERS } from "../../../lib/queryKeys";
 import { queryClient } from "../../../lib/queryPersistence";
 import { useAuth } from "../../auth/useAuth";
 import { useSandbox } from "../client/useSandbox";
+import { useRole } from "../secrets/useRole";
 import { useSandboxSession } from "../session/sandboxSession";
 import { useSandboxOutline } from "../overview/useSandboxOutline";
 import { useAreas } from "../areas/useAreas";
@@ -55,6 +56,10 @@ const sandbox = useSandbox();
 const { sessionExpiresAt } = useSandboxSession();
 
 const isOwner = computed(() => sandbox.active.value?.role === `owner`);
+// Everything on this tab but the roster is operating authority, which a maintainer holds as the owner does: signing
+// every browser out is maintainer and up at the daemon (`ownerDenied`), and the door counts below read at viewer. Only
+// inviting and re-grading people stays the owner's (`isOwner`).
+const { canShip } = useRole();
 
 const members = ref<InviteRecord[]>([]);
 // A grant or revoke changes the roster for more than this page: the board's Everyone/Mine row reads the same list
@@ -611,7 +616,7 @@ const revoke = async (target: string): Promise<void> => {
         <ControlTokensSection />
 
         <!-- Credential revocation answers whether any access remains active. -->
-        <RowGroup v-if="isOwner" :label="t(`sandbox.sandboxAccess.signedInBrowsers`)">
+        <RowGroup v-if="canShip" :label="t(`sandbox.sandboxAccess.signedInBrowsers`)">
             <!-- The one signed-in browser the app can name, because it is running in it. -->
             <Row icon="desktop" :title="t(`sandbox.sandboxAccess.browser`)" :description="thisBrowser">
                 <template #meta><StatusBadge variant="success" :label="t(`sandbox.sandboxAccess.signedIn`)" size="xs" /></template>
@@ -669,7 +674,7 @@ const revoke = async (target: string): Promise<void> => {
         </RowGroup>
 
         <!-- Machine access other than sign-ins and tokens is listed separately. -->
-        <RowGroup v-if="isOwner" :label="t(`sandbox.sandboxAccess.otherWaysIn`)" equal-rows>
+        <RowGroup v-if="canShip" :label="t(`sandbox.sandboxAccess.otherWaysIn`)" equal-rows>
             <div v-if="inventoryLoading" role="status" aria-busy="true"><SkeletonRows :rows="3" /></div>
             <template v-else>
                 <Row icon="bolt" :title="t(`sandbox.sandboxAccess.webhooks`)" :description="webhooksLine" />

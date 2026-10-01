@@ -189,6 +189,8 @@ const reconcileOpenFile = (currentPath: string): void => {
             if (!isLatest()) {
                 return;
             }
+            // A read that came back clears what an earlier failed one said, or that failure would cover the editor for good.
+            error.value = null;
             // Equal to the last known disk baseline: a save echo or no-op touch, leave the view alone.
             if (content === edit.baselineOf(currentPath)) {
                 return;
@@ -236,7 +238,11 @@ const refreshLook = (currentPath: string): void => {
     const isLatest = latest();
     readText(currentPath).then(
         (window) => {
-            if (!isLatest() || window.content === text.value) {
+            if (!isLatest()) {
+                return;
+            }
+            error.value = null;
+            if (window.content === text.value) {
                 return;
             }
             lossy.value = decodedLossily(window);
@@ -274,6 +280,10 @@ const sameFileRefire = (previous: Trigger | undefined, currentPath: string): boo
 // A `path` viewer's backend either made the change (its own save) or reads it on the next open; remounting it would
 // reload an editor mid-session.
 const keepsOwnSurface = (current: OpenFile): boolean => current.kind === `viewer` && current.viewer.fetch === `path`;
+// Whether the tab already shows the file's text, which is all a same-file refire may reconcile against. A refire that
+// lands while the first read is still out (a new file's own creation, heard while its tab first reads it) starts that
+// read over instead: reconciling would cancel the read that ends the spinner and leave it turning over the text.
+const showsText = (): boolean => (open.value.kind === `code` || open.value.kind === `markdown`) && text.value !== null;
 
 watch(
     // changeEpochOf is the complete change signal; the tree's size isn't a trigger, or a post-save refetch would
@@ -282,12 +292,12 @@ watch(
     (): Trigger => [path, changeEpochOf(path), viewAgent.value, claimed.value] as const,
     ([currentPath], previous, onCleanup) => {
         // A look has no buffer to reconcile against: it re-reads and shows what disk holds now.
-        if (readOnly && sameFileRefire(previous, currentPath) && (open.value.kind === `code` || open.value.kind === `markdown`)) {
+        if (readOnly && sameFileRefire(previous, currentPath) && showsText()) {
             refreshLook(currentPath);
             return;
         }
         // Same-path re-fire in an editable view reconciles by content; anything else resets and re-fetches below.
-        if (sameFileRefire(previous, currentPath) && (open.value.kind === `code` || open.value.kind === `markdown`)) {
+        if (sameFileRefire(previous, currentPath) && showsText()) {
             reconcileOpenFile(currentPath);
             return;
         }

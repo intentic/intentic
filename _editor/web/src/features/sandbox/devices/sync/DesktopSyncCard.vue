@@ -10,7 +10,7 @@ import ScriptSourceSwitch from "../../../capabilities/connect/ScriptSourceSwitch
 import { useT } from "@intentic/ui/i18n";
 
 // Mints a device pairing: pick a folder, click Enable, run the one-liner on the target machine. Two modes:
-// full sync (file sync + ports, single holder, owner-only) and mirror (ports only, any device). Body only:
+// full sync (file sync + ports, single holder, maintainer and up) and mirror (ports only, any device). Body only:
 // <AddDeviceDialog> frames it, so this draws no heading of its own.
 
 const t = useT();
@@ -66,7 +66,8 @@ const installOn = async (device: Device): Promise<void> => {
     }
 };
 
-// Owner's opt-in to ports-only (skip file sync, or mirror while another holds sync); forced on for members.
+// An operator's opt-in to ports-only (skip file sync, or mirror while another holds sync); forced on below maintainer,
+// whose pairing the daemon caps at mirror anyway.
 const mirrorOnly = ref(false);
 const portsOnly = computed(() => !canOperate.value || mirrorOnly.value);
 

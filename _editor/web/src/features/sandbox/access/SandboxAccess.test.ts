@@ -1,6 +1,7 @@
 // Access tab's rendered text after an invite: which of its two writes (daemon grant, platform record/email) failed, and
 // refusal vs silence, must all read differently on screen.
 import "@intentic/testing/dom";
+import type { MemberRole } from "@intentic/sandbox-contract";
 import PrimeVue from "primevue/config";
 import { type App, computed, createApp, h, nextTick, ref } from "vue";
 import { waitFor } from "@intentic/testing/bun";
@@ -24,7 +25,7 @@ jest.mock(`../../../lib/useApi`, () => ({
 }));
 
 jest.mock(`../../auth/useAuth`, () => ({ useAuth: () => ({ user: ref({ email: `owner@example.com` }) }) }));
-const role = ref<`owner` | `viewer`>(`owner`);
+const role = ref<MemberRole>(`owner`);
 jest.mock(`../client/useSandbox`, () => ({
     useSandbox: () => ({
         active: computed(() => ({ name: `radarsu-mig`, role: role.value })),
@@ -363,10 +364,30 @@ it(`rewrites no grant while it cannot read which areas each member holds`, async
     expect(sandboxJson).not.toHaveBeenCalledWith(`/members`, expect.objectContaining({ method: `POST` }));
 });
 
-it(`keeps the token surfaces off a member's tab`, async () => {
-    role.value = `viewer`;
+// Writer is the tier just under the maintainer floor these surfaces share, so it is the one a looser gate would let in.
+it(`keeps the token surfaces off the tab of a member below maintainer`, async () => {
+    role.value = `writer`;
     mount();
     await nextTick();
     expect(shown()).not.toContain(`API tokens`);
+    expect(shown()).not.toContain(`Signed-in browsers`);
     expect(shown()).not.toContain(`Other ways in`);
+});
+
+// A maintainer holds the owner's operating authority, so the credential and door surfaces are theirs as well. The
+// roster is the one part of this tab that stays the owner's: never read for them, never offered, and said so.
+it(`gives a maintainer the token, sign-out and door surfaces, and keeps the roster the owner's`, async () => {
+    role.value = `maintainer`;
+    mount();
+    await settle();
+
+    expect(shown()).toContain(`API tokens`);
+    expect(buttonLabelled(`Mint token`)?.disabled).toBe(false);
+    expect(shown()).toContain(`Signed-in browsers`);
+    expect(buttonLabelled(`Sign out all browsers`)?.disabled).toBe(false);
+    expect(shown()).toContain(`Other ways in`);
+
+    expect(list).not.toHaveBeenCalled();
+    expect(document.body.querySelector(`input[type=email]`)).toBeNull();
+    expect(shown()).toContain(`Only the sandbox owner can invite people or change roles.`);
 });

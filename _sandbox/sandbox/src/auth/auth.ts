@@ -322,10 +322,15 @@ export const createAuthorizer = (deps: {
         if (member === undefined) {
             throw new ForbiddenError("not authorized for this sandbox");
         }
+        // A maintainer holds the owner's operating authority and reads every credential, so a fence over the tier would
+        // enforce nothing (areas/invariant.ts `no-maintainer-is-fenced`), and the grant route refuses one. A row that
+        // carries areas anyway, hand-edited or written before that refusal, used to hide most of the tree and every
+        // conversation outside them from that person all the same: it is read as the whole workspace instead.
+        const fenced = member.areas !== undefined && member.role !== "maintainer";
         return {
             ...proof,
             role: member.role,
-            ...(member.areas !== undefined ? { areas: member.areas } : {}),
+            ...(fenced ? { areas: member.areas } : {}),
         };
     };
     // The require-passkey policy, read per request like the roster. A recovery code counts: it exists to get an owner

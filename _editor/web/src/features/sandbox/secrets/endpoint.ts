@@ -83,15 +83,16 @@ export const settledEndpoint = (endpoint: Endpoint | undefined, resolvedAt: numb
 // Generous versus the loopback budget, so a slow-but-alive tunnel is not mistaken for a dead one.
 const TUNNEL_PROBE_TIMEOUT_MS = 5000;
 
-// Unauthenticated (`/health` bypasses the gate), so a candidate is identity-checked before any credential reaches
 // Only the call form this module makes; `typeof fetch` would also demand `preconnect`, which no caller here uses.
 type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
+// Unauthenticated (`/health` bypasses the gate), so a candidate is identity-checked before any credential reaches
 // it. Every failure mode returns `false`: they all mean the same thing, try the next candidate, none worth surfacing to
-// the user.
+// the user. With no id to expect, it asks only whether a sandbox answers there at all: the question a member can put,
+// holding no connect token to derive the id from.
 export const healthAnswers = async (
     base: string,
-    expectedSandboxId: string,
+    expectedSandboxId: string | undefined,
     budgetMs = TUNNEL_PROBE_TIMEOUT_MS,
     fetchImpl: FetchLike = fetch,
 ): Promise<boolean> => {
@@ -101,7 +102,7 @@ export const healthAnswers = async (
             return false;
         }
         const body = (await response.json()) as { sandboxId?: unknown };
-        return body.sandboxId === expectedSandboxId;
+        return expectedSandboxId === undefined || body.sandboxId === expectedSandboxId;
     } catch {
         return false;
     }

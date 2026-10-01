@@ -2,16 +2,36 @@
 // jsdom: mounts the component tree and reads rendered DOM.
 import "@intentic/testing/dom";
 import type { HostedPlanState, SandboxSummary } from "@intentic/api-contract";
+import type { DeviceSandboxRow } from "@intentic/ui";
 import { waitFor } from "@intentic/testing/bun";
-import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
+import PrimeVue from "primevue/config";
+import { type App, computed, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import { hostedLane, hostedMachine, hostedPlanState, spentHours } from "../../../testing/hostedPlan";
 
 // Stubs the sandbox's other surfaces (version, workspace tree, availability) so only the identity block mounts.
 const active = ref<SandboxSummary | undefined>(undefined);
 const update = jest.fn<(sandboxId: string, input: { name?: string; image?: string | null }) => Promise<void>>().mockResolvedValue(undefined);
+// Undefined by default, which leaves the facts block (image, version, URL) undrawn; a test about one of its lines sets it.
+const daemonUrl = ref<string | undefined>(undefined);
 jest.mock(`../client/useSandbox`, () => ({
-    useSandbox: () => ({ active, update, daemonUrl: ref(undefined), reachable: ref(true) }),
+    useSandbox: () => ({ active, update, daemonUrl, reachable: ref(true) }),
+}));
+// This container as its machine lists it. Undefined is a sandbox whose machine is not a connected device, which draws
+// no Resources line at all; stubbed so the subject is who is offered the form, not how the row was found.
+const selfRow = ref<DeviceSandboxRow | undefined>(undefined);
+jest.mock(`../devices/useSelfResources`, () => ({
+    useSelfResources: () => ({
+        row: selfRow,
+        slug: computed(() => selfRow.value?.slug),
+        current: computed(() => selfRow.value?.resources),
+        engine: computed(() => undefined),
+        reshapable: computed(() => selfRow.value?.resources !== undefined),
+        canSave: computed(() => false),
+        applying: ref(false),
+        apply: () => Promise.resolve(``),
+        save: () => Promise.resolve(``),
+    }),
 }));
 jest.mock(`./version/useSandboxVersion`, () => ({
     useSandboxVersion: () => ({ info: ref(undefined), installed: ref(undefined), latest: ref(undefined), updateAvailable: ref(false) }),
@@ -69,6 +89,8 @@ const mount = (sandbox: SandboxSummary): HTMLElement => {
         }),
     );
     app.directive(`tooltip`, {});
+    // The Resources form is a PrimeVue dialog and reads the plugin's config while rendering.
+    app.use(PrimeVue);
     app.mount(el);
     return el;
 };
@@ -96,6 +118,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+    daemonUrl.value = undefined;
+    selfRow.value = undefined;
     app?.unmount();
     app = undefined;
     document.body.innerHTML = ``;
@@ -237,4 +261,34 @@ it(`states this sandbox's own hours on the hosted card, with Billing where a pla
     await nextTick();
     expect(root.textContent).toContain(`Free hours · 12 h of 40 h left this month`);
     expect(root.textContent).not.toContain(`Billing`);
+});
+
+/* THIS SANDBOX'S SHARE OF ITS MACHINE: changing it is a device op, maintainer and up at the daemon, so the form is a
+ * maintainer's as much as the owner's. Writer, the tier just under that floor, gets the fact without a button the
+ * daemon would refuse. */
+const onConnectedMachine = (): void => {
+    daemonUrl.value = `https://sandbox-abc.example.test`;
+    selfRow.value = {
+        slug: `sandbox-abc`,
+        running: true,
+        image: `ghcr.io/intentic/sandbox:2.3.1`,
+        resources: { memoryBytes: 12 * 1024 ** 3, cpus: 4, privileged: false, gpu: false, hostRuntime: [], overlayRuntime: [] },
+    };
+};
+const changeButton = (el: HTMLElement): HTMLButtonElement | undefined =>
+    [...el.querySelectorAll<HTMLButtonElement>(`button`)].find((button) => button.textContent?.trim() === `Change…`);
+
+it(`hands a maintainer the Resources form, not the owner alone`, async () => {
+    onConnectedMachine();
+    const el = mount(sandboxRow({ role: `maintainer` }));
+    expect(el.textContent).toContain(`12 GiB · 4 CPUs`);
+    changeButton(el)?.click();
+    await waitFor(() => expect(document.body.textContent).toContain(`Resources for radarsu-intentic`));
+});
+
+it(`gives a member below maintainer the share without the button`, () => {
+    onConnectedMachine();
+    const el = mount(sandboxRow({ role: `writer` }));
+    expect(el.textContent).toContain(`12 GiB · 4 CPUs`);
+    expect(changeButton(el)).toBeUndefined();
 });

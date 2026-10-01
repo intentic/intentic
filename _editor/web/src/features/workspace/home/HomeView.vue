@@ -15,6 +15,7 @@ import { deadLink } from "../explorer/tree/treeRows";
 import { focusInput } from "@intentic/ui/inline-rename";
 import { useWorkspaceTree } from "../explorer/useWorkspaceTree";
 import { opensAsFolder } from "../files/archiveEntries";
+import { requestCaret } from "../files/caretRequest";
 import { withProvisionalEntries } from "../files/provisionalEntries";
 import { workspaceDir } from "../health/workspaceScope";
 import { useWorkspaceTabs } from "../tabs/useWorkspaceTabs";
@@ -191,10 +192,10 @@ const { selection, select, clear, rules, inline, endEdit, transfer, menu, menuIt
         host: home,
         // Closures, not the functions: both are declared below, and are only ever called later.
         open: (entry) => open(entry),
+        // A new file opens kept, not previewed, so a later look can't close it mid-type, and takes the caret.
         openCreated: (path) => {
-            // A new file opens straight into edit mode; kept, not previewed, so a later look can't close it mid-type.
+            requestCaret(path);
             openFile(path, `keep`);
-            layout.setEditMode(true);
         },
         // A closure, like `open`: declared with the cover's other verbs below.
         cover: (name) => showCover(name),

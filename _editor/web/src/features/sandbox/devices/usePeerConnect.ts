@@ -37,14 +37,15 @@ export function usePeerConnect<Summary extends { readonly id: string; readonly o
         }
     };
 
-    // Owner-only server-side; a member's click comes back 403 and says so rather than silently doing nothing.
+    // Maintainer and up server-side (the daemon's operating gate, `ownerDenied`); a click from below that comes back 403
+    // and says so rather than silently doing nothing.
     const connect = async (id: string): Promise<void> => {
         minting.value = true;
         error.value = undefined;
         try {
             const response = await sandboxRequest(`/system/${door.slug}/pair?id=${encodeURIComponent(id)}`, { method: `POST` });
             if (!response.ok) {
-                error.value = response.status === 403 ? `Only the sandbox's owner can connect a ${door.noun}.` : `Couldn't start the connection (${response.status}).`;
+                error.value = response.status === 403 ? `Only the sandbox's owner or a maintainer can connect a ${door.noun}.` : `Couldn't start the connection (${response.status}).`;
                 return;
             }
             pairToken.value = ((await response.json()) as { token: string }).token;

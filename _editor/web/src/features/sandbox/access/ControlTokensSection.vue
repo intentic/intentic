@@ -7,9 +7,10 @@ import { useMintedTokens } from "../../../lib/useMintedTokens";
 import { jsonBody } from "../client/jsonBody";
 import { sandboxJson } from "../client/sandboxClient";
 import { useSandbox } from "../client/useSandbox";
+import { useRole } from "../secrets/useRole";
 import { useT } from "@intentic/ui/i18n";
 
-// Program credential minted here by the owner: every scope, every token against this sandbox, and the
+// Program credential minted here by the owner or a maintainer: every scope, every token against this sandbox, and the
 // paste-ready snippets for a shell, CI and an editor. Shown once — the daemon keeps only the hash.
 
 const t = useT();
@@ -60,7 +61,9 @@ const { tokens, minted, minting, notice, mint, revoke } = useMintedTokens({
     owner: () => active.value?.id,
 });
 
-const isOwner = computed(() => active.value?.role === `owner`);
+// Maintainer and up, the floor of all three token routes (the daemon's operating gate, `ownerDenied`), which is not the
+// owner alone: a maintainer holds the owner's operating authority, and only the member roster stays the owner's.
+const { canShip } = useRole();
 
 const SCOPE_ICONS: Record<ControlScope, PickerOption[`icon`]> = { editor: `code`, read: `eye`, drive: `play`, land: `check-circle` };
 
@@ -188,7 +191,7 @@ const describe = (token: ControlToken): string =>
 </script>
 
 <template>
-    <RowGroup v-if="isOwner" :label="t(`shared.apiTokens`)" :count="tokens.length === 0 ? undefined : tokens.length">
+    <RowGroup v-if="canShip" :label="t(`shared.apiTokens`)" :count="tokens.length === 0 ? undefined : tokens.length">
         <Row v-for="token in tokens" :key="token.id" icon="key" :title="token.label" :description="describe(token)">
             <!-- Same pill the member roster uses for the same word, so "expired" doesn't get two spellings. -->
             <template v-if="expired(token)" #meta>

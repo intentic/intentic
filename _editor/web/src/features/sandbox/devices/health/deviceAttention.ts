@@ -249,14 +249,14 @@ export const deviceAttention = (
     }: {
         block: ManageBlock | undefined;
         readAt: number;
-        /** Whether this reader may mint this machine a pairing: the daemon's own floor for it is the owner. */
+        /** Whether this reader may mint this machine a pairing: the daemon's own floor for it is maintainer (`ownerDenied`). */
         canPair: boolean;
     },
 ): readonly DeviceConcern[] => {
     const concerns: DeviceConcern[] = [];
     const { device } = row;
     // Offered wherever the silence is explained, since minting is the one thing that works without the machine:
-    // a row with no device connection has nothing to re-pair, and a member may not mint at all.
+    // a row with no device connection has nothing to re-pair, and a reader below maintainer may not mint at all.
     const reconnectable = canPair && device.hostId !== undefined;
     // Whether the machine answers at all comes first: it decides what the rest of the page is worth. A socket
     // dropped seconds ago is exempt, since every agent restart drops one and the machine is dialling back as this

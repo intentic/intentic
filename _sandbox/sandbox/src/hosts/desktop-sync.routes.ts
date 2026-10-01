@@ -19,8 +19,8 @@ import {
 } from "./desktop-sync.js";
 
 // Desktop sync's enrollment surface: a browser-minted pairing token is redeemed at /system/authorized-key to land an SSH
-// key, once per machine key. The pairing carries the mode: owner gets sync, a member only ever mirror. Transport is
-// desktop-sync-ssh.ts.
+// key, once per machine key. The pairing carries the mode: a maintainer or the owner gets sync, anyone below only ever
+// mirror. Transport is desktop-sync-ssh.ts.
 
 // How long a redeemed pairing stays good for the key that redeemed it: the pairing's own lifetime (enrollment.ts).
 const REENROLL_WINDOW_MS = 10 * 60 * 1000;
@@ -67,7 +67,8 @@ export const createSyncRoutes = (services: Services, redeemed = reenrollments())
     },
     // Exempt from the bearer middleware: redeemed with a one-time pairing token the handler checks itself.
     enrollKey: async (c: Context<AppEnv>): Promise<Response> => {
-        // Authorized by a valid pairing token (the agent's path) or the owner's Google token (fallback).
+        // Authorized by a valid pairing token (the agent's path) or, as a fallback, the bearer of a maintainer or the
+        // owner (the operating gate, `ownerDenied`).
         const pair = c.req.header("x-intentic-pair") ?? undefined;
         // Read once, before the awaits below, so a token that expires mid-request can't enroll under a different mode.
         const live = pair === undefined ? undefined : services.syncPairings.peek(pair);
@@ -90,7 +91,7 @@ export const createSyncRoutes = (services: Services, redeemed = reenrollments())
             return c.json({ error: "invalid key" }, 400);
         }
         const { key, machineId, environment } = body;
-        // Mode comes from the pairing, never the agent: a member's pairing can only enroll mirror.
+        // Mode comes from the pairing, never the agent: a pairing minted below maintainer can only enroll mirror.
         const mode: SyncMode = paired ?? "sync";
         // Sync enroll is single-holder: a conflict returns 423 before consuming the token, so a retry can reuse it.
         const takeover = c.req.header("x-intentic-sync-takeover") === "1";
@@ -149,8 +150,9 @@ export const createSyncRoutes = (services: Services, redeemed = reenrollments())
         redeemed.forget();
         return c.json({ ok: true });
     },
-    // Owner's way out, one device at a time, matching DELETE /system/hosts/:id: no fleet-wide revoke, so cutting off
-    // one laptop can't drop anyone else's mirror. Owner-only; not exempt from the bearer middleware.
+    // The operator's way out, one device at a time, matching DELETE /system/hosts/:id: no fleet-wide revoke, so cutting
+    // off one laptop can't drop anyone else's mirror. Maintainer and up, the operating gate (`ownerDenied`); not exempt
+    // from the bearer middleware.
     revokeMachine: async (c: Context<AppEnv>): Promise<Response> => {
         const denied = await ownerDenied(services, c);
         if (denied !== undefined) {
