@@ -176,7 +176,7 @@ it(`fills the middle with what was opened beside the chat, and splits to bring t
     expect(aside()?.style.gridColumn).toBe(`workspace-start / side-end`);
     expect(tabs()?.classList.contains(`flex-1`)).toBe(true);
 
-    button(host, `Show the section beside`)?.click();
+    button(host, `Show beside`)?.click();
     await settle();
     expect(panel.split.value).toBe(true);
     expect(aside()?.style.gridArea).toBe(`side`);
@@ -193,6 +193,6 @@ it(`offers no split while the chat lives elsewhere, the tabs being the whole col
     openBeside(`stub`, { n: 1 });
     const host = await mount();
 
-    expect(button(host, `Show the section beside`)).toBeNull();
+    expect(button(host, `Show beside`)).toBeNull();
     expect(host.querySelector<HTMLElement>(`.side-panel`)?.style.gridArea).toBe(`side`);
 });
