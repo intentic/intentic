@@ -87,6 +87,9 @@ const voiceSpeakers = computed(() => {
         </FilterBar>
 
         <!-- Activity scrolls with the page so the sticky section index stays reachable. -->
-        <ActivityTimeline :episodes="visible" :source="selected" :window="window" :truncated="truncated" :is-loading="isLoading" />
+        <section>
+            <h2 :class="ui.sectionLabel('mb-2.5 px-1')">{{ t(`title`) }}</h2>
+            <ActivityTimeline :episodes="visible" :source="selected" :window="window" :truncated="truncated" :is-loading="isLoading" />
+        </section>
     </div>
 </template>
