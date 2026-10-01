@@ -56,10 +56,13 @@ const DOT_TONE: Record<string, string> = {
 </script>
 
 <template>
-    <Row :interactive="interactive" :class="tone === `warning` ? `bg-warning/10` : ``">
+    <Row
+        :interactive="interactive"
+        :class="[tone === `warning` ? `bg-warning/10` : ``, state === `add` ? `` : `flex min-h-[calc(3.5rem+1px)] flex-col justify-center`]"
+    >
         <template #title>
-            <!-- Wraps, not truncates: the connection kind stays first so a Grok subscription row can't read as native. -->
-            <span class="flex min-w-0 flex-wrap items-center gap-x-2.5" :class="[state === `add` ? `text-muted` : ``, exhausted ? `opacity-50` : ``]">
+            <!-- One headline height and text origin across providers, whether the name is editable or plain. -->
+            <span class="flex h-5 min-w-0 items-center gap-x-2.5" :class="[state === `add` ? `text-muted` : ``, exhausted ? `opacity-50` : ``]">
                 <span class="flex w-[1.125rem] shrink-0 justify-center">
                     <Icon v-if="state === `add`" name="plus" class="text-2xs" />
                     <!-- Meter replaces the dot when headroom is known, using the same green/yellow/red system. -->
@@ -77,18 +80,25 @@ const DOT_TONE: Record<string, string> = {
                     failure="Couldn't rename that account."
                     class="min-w-0"
                 />
-                <span v-else class="min-w-0 truncate" v-tooltip.overflow="title">{{ title }}</span>
-                <span v-if="note" class="flex items-center gap-1 text-2xs font-normal text-subtle">
-                    <Icon v-if="noteBusy" name="spinner" spin />{{ note }}
+                <!-- Matches the rename field's padding and transparent border. -->
+                <span v-else class="min-w-0 truncate border border-transparent px-1" v-tooltip.overflow="title">{{ title }}</span>
+                <span v-if="note" class="flex min-w-0 items-center gap-1 text-2xs font-normal text-subtle">
+                    <Icon v-if="noteBusy" name="spinner" spin /><span class="truncate" v-tooltip.overflow="note">{{ note }}</span>
                 </span>
             </span>
         </template>
-        <!-- Indented to the title's x, not the glyph's. -->
+        <!-- With no status line, the row centers the headline within the same account-row height. -->
         <template v-if="description || descriptionPending" #description>
-            <span v-if="descriptionPending" class="flex min-h-[1lh] items-center pl-7" aria-hidden="true">
+            <span v-if="descriptionPending" class="flex min-h-[1lh] items-center pl-[calc(2rem+1px)]" aria-hidden="true">
                 <span class="skeleton block h-2.5 w-56" />
             </span>
-            <span v-else class="block pl-7" :class="tone === `warning` ? `text-warning` : exhausted ? `text-subtle` : ``">{{ description }}</span>
+            <span
+                v-else
+                class="block min-h-[1lh] truncate pl-[calc(2rem+1px)]"
+                :class="tone === `warning` ? `text-warning` : exhausted ? `text-subtle` : ``"
+                v-tooltip.overflow="description"
+                >{{ description }}</span
+            >
         </template>
         <template v-if="$slots[`control`]" #control><slot name="control" /></template>
         <template v-if="$slots[`below`]" #below><slot name="below" /></template>

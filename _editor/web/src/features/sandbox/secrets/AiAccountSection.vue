@@ -136,9 +136,13 @@ const ambiguousLabels = computed(() => {
 });
 
 // Line beside the name: who the account signs in as, or (if unknown and the name is ambiguous) when it connected.
-// Drops any part equal to the name so an email isn't printed twice.
+// Drops repeated names and the provider's email-based personal organisation name.
 const identityNote = (account: OauthAccount): string | undefined => {
-    const identity = [account.email, account.organization].filter((part) => part !== undefined && part !== account.label);
+    const personalOrganization =
+        account.email !== undefined && account.organization?.trim().toLowerCase() === `${account.email.trim()}'s organization`.toLowerCase();
+    const identity = [account.email, personalOrganization ? undefined : account.organization].filter(
+        (part) => part !== undefined && part !== account.label,
+    );
     if (identity.length > 0) {
         return identity.join(` · `);
     }
