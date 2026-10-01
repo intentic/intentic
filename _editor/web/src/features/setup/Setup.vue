@@ -161,7 +161,7 @@ const {
 const wait = useCommandWait({ command, row, step, reader, desktopReport });
 const { emailed, handoff, reportFailures, buildStage, nudging, stalled, nudgeVariant, nudgeCopyable, slowBuild, onCopied, onEmailed, onDownload } =
     wait;
-const attach = useAttachLane({ sandbox, row, minted: () => setup.value?.hostname, getIdToken, probe: probeDaemon });
+const attach = useAttachLane({ sandbox, row, minted: () => setup.value?.hostname, getIdToken, probe: probeDaemon, reopen: (id) => reopenListed(id) });
 const { domain, attachToken, attaching, attachOutcome, originHelp, normalizedDomain, ownAddress, domainProblem, connectDomain } = attach;
 const { status } = useRegistryWatch({ sandbox, row, hosted, mintedFor: command.mintedFor });
 // The app's install under way: "Set it up now" waits for it to end rather than starting a second one (desktopSetup.ts).
@@ -306,6 +306,13 @@ const committed = computed(
         announced.value ||
         hostedRow.value !== null,
 );
+
+// The attach lane found the pasted address already on this account's list: that sandbox opens, and the draft goes the
+// way leaving would take it, judged before `connected` marks this visit finished and so commits it.
+const reopenListed = async (id: string): Promise<void> => {
+    row.discardDraft(committed.value);
+    await row.connected(id, { attached: true });
+};
 
 // Forgets the row on screen for a new one, and everything derived from it; the old row is discarded as leaving would.
 const startFresh = (): void => {

@@ -2,7 +2,7 @@
 // Defaults to a platform that hosts nothing, the world that leaves the command lane on screen.
 import "@intentic/testing/dom";
 import type { SandboxSummary } from "@intentic/api-contract";
-import { waitFor, advanceTimersByTimeAsync, realYield } from "@intentic/testing/bun";
+import { waitFor, advanceTimersByTimeAsync, realYield, stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import PrimeVue from "primevue/config";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
@@ -1083,6 +1083,39 @@ it(`still attaches a domain of the reader's own`, async () => {
 
     expect(el.textContent).not.toContain(`That address is ours`);
     expect(buttonLabelled(`Connect`)?.disabled).toBe(false);
+});
+
+// Another address under our zone is not this row's: it may be a sandbox the account already runs. Listed, it opens, and
+// the draft this visit made goes the way leaving would take it rather than becoming a second row naming one daemon.
+it(`opens the sandbox the account already lists at a live address of ours, and discards the draft`, async () => {
+    const listed = sandboxRow({ id: `listed`, daemonUrl: `https://sandbox-82789f4106b4.sbx.intentic.dev`, lastSeenAt: `2026-10-01T21:30:57.000Z` });
+    sandboxes.value = [listed];
+    list.mockResolvedValue([listed]);
+    setupCode.mockResolvedValue(MINTED);
+    const el = await mount();
+    await waitFor(() => expect(el.textContent).toContain(MINTED.hostname));
+    buttonLabelled(`Use a different address`)!.click();
+    await nextTick();
+    buttonLabelled(`a domain it already answers on`)!.click();
+    await nextTick();
+
+    const field = el.querySelector<HTMLInputElement>(`input`)!;
+    field.value = `sandbox-82789f4106b4.sbx.intentic.dev`;
+    field.dispatchEvent(new Event(`input`));
+    await nextTick();
+    expect(el.textContent).not.toContain(`That address is ours`);
+    expect(buttonLabelled(`Connect`)?.disabled).toBe(false);
+
+    // Both probes answer: /health, then /environment admitting this account.
+    stubGlobal(`fetch`, () => Promise.resolve(new Response(`{}`, { status: 200 })));
+    try {
+        buttonLabelled(`Connect`)!.click();
+        await waitFor(() => expect(push).toHaveBeenCalledWith(`/`));
+    } finally {
+        unstubAllGlobals();
+    }
+    expect(remove.mock.calls).toEqual([[`new`]]);
+    expect(attach).not.toHaveBeenCalled();
 });
 
 // A failed read isn't proof of "provisions nothing"; that verdict needs an actual answer, not silence.

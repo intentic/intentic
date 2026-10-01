@@ -1,26 +1,30 @@
 import "@intentic/testing/dom";
 import { unstubbed } from "@intentic/testing";
+import type { SandboxSummary } from "@intentic/api-contract";
 import { type EffectScope, effectScope, ref } from "vue";
 import type { AttachOutcome } from "../setupAttach";
 import { sandboxSummary } from "../../../testing/sandboxSummary";
 import { type AttachLaneHost, useAttachLane } from "./useAttachLane";
 import { type SetupRowHost, useSetupRow } from "./useSetupRow";
 
-// Pins the attach lane: nothing is probed for an address that is not one, for our own, or twice at once; the probe
-// presents the pasted token over the row's own; any answer but ok is kept for the card to explain; and only an
-// admitted daemon is recorded on the row, which is then the workspace that opens.
+// Pins the attach lane: nothing is probed for an address that is not one, for the one minted for this row, or twice at
+// once; the probe presents the pasted token over the row's own; any answer but ok is kept for the card to explain; an
+// admitted daemon the account already lists reopens that sandbox; and only an admitted daemon new to the account is
+// recorded on the row, which is then the workspace that opens.
 
 const scopes: EffectScope[] = [];
 
-const stage = (over: { minted?: string; idToken?: string | undefined; outcome?: AttachOutcome } = {}) => {
+const stage = (over: { minted?: string; idToken?: string | undefined; outcome?: AttachOutcome; listed?: SandboxSummary[] } = {}) => {
+    const sandboxes = ref<SandboxSummary[]>(over.listed ?? []);
     const rows = unstubbed<SetupRowHost[`sandbox`]>(`sandbox`, {
-        sandboxes: ref([]),
+        sandboxes,
         create: jest.fn(async (name: string) => sandboxSummary({ id: `new`, name, token: `new-token` })),
         select: jest.fn(),
         remove: jest.fn(async () => undefined),
     });
     const enter = jest.fn(async () => undefined);
     const attach = jest.fn(async (_id: string, _url: string) => undefined);
+    const reopen = jest.fn(async (_id: string) => undefined);
     const probe = jest.fn<AttachLaneHost[`probe`]>(async () => over.outcome ?? { kind: `ok` });
     const getIdToken = jest.fn(async () => (`idToken` in over ? over.idToken : `id-token`));
     const scope = effectScope();
@@ -28,15 +32,16 @@ const stage = (over: { minted?: string; idToken?: string | undefined; outcome?: 
     const { row, lane } = scope.run(() => {
         const setupRow = useSetupRow({ sandbox: rows, enter });
         const attachLane = useAttachLane({
-            sandbox: unstubbed<AttachLaneHost[`sandbox`]>(`sandbox`, { attach }),
+            sandbox: unstubbed<AttachLaneHost[`sandbox`]>(`sandbox`, { attach, sandboxes }),
             row: setupRow,
             minted: () => over.minted,
             getIdToken,
             probe,
+            reopen,
         });
         return { row: setupRow, lane: attachLane };
     })!;
-    return { rows, enter, attach, probe, getIdToken, row, lane };
+    return { rows, enter, attach, reopen, probe, getIdToken, row, lane };
 };
 
 afterEach(() => {
@@ -57,7 +62,7 @@ describe(`what may be probed`, () => {
         expect(probe).not.toHaveBeenCalled();
     });
 
-    it(`refuses an address of ours before the press, since nothing answers there until the command runs`, async () => {
+    it(`refuses the address minted for this row before the press, since nothing answers there until the command runs`, async () => {
         const { probe, lane } = stage({ minted: `sandbox-fa0b431303b8.sbx.intentic.dev` });
         lane.domain.value = `sandbox-fa0b431303b8.sbx.intentic.dev`;
         expect(lane.ownAddress.value).toBe(
@@ -65,6 +70,20 @@ describe(`what may be probed`, () => {
         );
         await lane.connectDomain();
         expect(probe).not.toHaveBeenCalled();
+    });
+
+    // The way back for an owner whose platform lost their rows: the fresh row's address is minted, and the one their
+    // sandbox still answers on is another under the same zone.
+    it(`probes another address under our zone, since it may be a sandbox this account already runs`, async () => {
+        const { probe, attach, row, lane } = stage({ minted: `sandbox-fa0b431303b8.sbx.intentic.dev` });
+        row.created.value = sandboxSummary({ id: `s1` });
+        lane.domain.value = `sandbox-82789f4106b4.sbx.intentic.dev`;
+        expect(lane.domainProblem.value).toBeUndefined();
+        await lane.connectDomain();
+        expect(probe.mock.calls).toEqual([
+            [{ daemonUrl: `https://sandbox-82789f4106b4.sbx.intentic.dev`, idToken: `id-token`, connectToken: `token-s1` }],
+        ]);
+        expect(attach.mock.calls).toEqual([[`s1`, `https://sandbox-82789f4106b4.sbx.intentic.dev`]]);
     });
 
     it(`drops a second press while the first is still probing`, async () => {
@@ -115,6 +134,27 @@ describe(`the probe's answer`, () => {
         expect(rows.select).toHaveBeenCalledWith(`s1`);
         expect(enter).toHaveBeenCalledTimes(1);
         expect(row.finished.value).toBe(true);
+    });
+
+    it(`reopens the sandbox the account already lists at that address instead of recording it twice`, async () => {
+        const listed = sandboxSummary({ id: `listed`, daemonUrl: `https://sandbox-82789f4106b4.sbx.intentic.dev/` });
+        const { attach, reopen, row, lane } = stage({ listed: [listed] });
+        row.created.value = sandboxSummary({ id: `s1` });
+        lane.domain.value = `https://sandbox-82789f4106b4.sbx.intentic.dev`;
+        await lane.connectDomain();
+        expect(reopen.mock.calls).toEqual([[`listed`]]);
+        expect(attach).not.toHaveBeenCalled();
+        expect(row.finished.value).toBe(false);
+    });
+
+    it(`does not count this row's own address as one already listed`, async () => {
+        const created = sandboxSummary({ id: `s1`, daemonUrl: `https://sandbox.example.com` });
+        const { attach, reopen, row, lane } = stage({ listed: [created] });
+        row.created.value = created;
+        lane.domain.value = `sandbox.example.com`;
+        await lane.connectDomain();
+        expect(reopen).not.toHaveBeenCalled();
+        expect(attach.mock.calls).toEqual([[`s1`, `https://sandbox.example.com`]]);
     });
 
     it(`creates the row first when the arrival's create never landed`, async () => {

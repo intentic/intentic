@@ -1,25 +1,28 @@
 import { noticeFrom, noticeOf } from "@intentic/ui/async";
 import { computed, ref } from "vue";
 import type { useSandbox } from "../../sandbox/client/useSandbox";
-import { addressZone, type AttachOutcome, daemonUrlProblem, normalizeDaemonUrl, ownAddressProblem, type probeDaemon } from "../setupAttach";
+import { type AttachOutcome, daemonUrlProblem, normalizeDaemonUrl, ownAddressProblem, type probeDaemon } from "../setupAttach";
 import type { SetupRow } from "./useSetupRow";
 
 // Connects a sandbox that is already reachable: probes the pasted address from this browser, and records it on the
 // platform only once the daemon has let this account in, so a typo cannot leave an orphan sandbox behind. A retry after
-// a failed attach reuses the row the arrival created; on success, straight to the workspace.
+// a failed attach reuses the row the arrival created; on success, straight to the workspace. An address this account
+// already lists opens that sandbox instead of being recorded a second time.
 
 type SandboxStore = ReturnType<typeof useSandbox>;
 
 export interface AttachLaneHost {
-    readonly sandbox: Pick<SandboxStore, `attach`>;
+    readonly sandbox: Pick<SandboxStore, `attach` | `sandboxes`>;
     readonly row: Pick<SetupRow, `created` | `error` | `autoCreate` | `connected`>;
-    // The intentic hostname minted for this row, if any: our own address pasted back probes as unreachable.
+    // The intentic hostname minted for this row, if any: pasted back, it probes as unreachable.
     readonly minted: () => string | undefined;
     readonly getIdToken: () => Promise<string | undefined>;
     readonly probe: typeof probeDaemon;
+    // Opens a sandbox this account already lists at the probed address; the page settles its own draft first.
+    readonly reopen: (id: string) => Promise<void>;
 }
 
-export const useAttachLane = ({ sandbox, row, minted, getIdToken, probe }: AttachLaneHost) => {
+export const useAttachLane = ({ sandbox, row, minted, getIdToken, probe, reopen }: AttachLaneHost) => {
     const { created, error } = row;
     const domain = ref(``);
     // Revealed after a `needs-token` probe; used once for the first bind, never persisted.
@@ -31,10 +34,16 @@ export const useAttachLane = ({ sandbox, row, minted, getIdToken, probe }: Attac
     const originHelp = ref(false);
 
     const normalizedDomain = computed(() => normalizeDaemonUrl(domain.value));
-    // Our own hostname probes as unreachable, indistinguishable from a wrong domain, so it is refused before the
-    // press: the reader's way forward is the command, not a second guess at DNS.
-    const ownAddress = computed(() => ownAddressProblem(domain.value, addressZone(minted())));
+    // This row's own minted hostname probes as unreachable, indistinguishable from a wrong domain, so it is refused
+    // before the press: the reader's way forward is the command, not a second guess at DNS.
+    const ownAddress = computed(() => ownAddressProblem(domain.value, minted()));
     const domainProblem = computed(() => ownAddress.value ?? daemonUrlProblem(domain.value));
+
+    // The sandbox this account already lists at the address, other than this row: the same daemon, not a second one.
+    const listedAt = (url: string) =>
+        sandbox.sandboxes.value.find(
+            (entry) => entry.id !== created.value?.id && entry.daemonUrl !== null && normalizeDaemonUrl(entry.daemonUrl) === url,
+        );
 
     // The token the daemon being attached gates its first bind on: the pasted one wins; otherwise the row's own, for a
     // daemon started from this account's own setup code.
@@ -76,6 +85,12 @@ export const useAttachLane = ({ sandbox, row, minted, getIdToken, probe }: Attac
             const outcome = await probe({ daemonUrl: url, idToken, ...(token === undefined ? {} : { connectToken: token }) });
             if (outcome.kind !== `ok`) {
                 attachOutcome.value = outcome;
+                return;
+            }
+            // Recording it on this row too would leave two rows naming one daemon.
+            const listed = listedAt(url);
+            if (listed !== undefined) {
+                await reopen(listed.id);
                 return;
             }
             const bound = await bind(url);

@@ -1,5 +1,5 @@
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
-import { addressZone, daemonUrlProblem, normalizeDaemonUrl, ownAddressProblem, probeDaemon } from "../setupAttach";
+import { daemonUrlProblem, normalizeDaemonUrl, ownAddressProblem, probeDaemon } from "../setupAttach";
 
 afterEach(() => {
     unstubAllGlobals();
@@ -32,32 +32,35 @@ test("http gets its own explanation instead of a generic invalid-address message
     expect(daemonUrlProblem(`sandbox.example.com`)).toBeUndefined();
 });
 
-test("the zone we hand addresses out on is read off a minted hostname, not configured a second time", () => {
-    expect(addressZone(`sandbox-ac1d5035e930.sbx.intentic.dev`)).toBe(`sbx.intentic.dev`);
-    // A bare label names no zone, and neither does a page that has not minted yet.
-    expect(addressZone(`localhost`)).toBeUndefined();
-    expect(addressZone(undefined)).toBeUndefined();
-});
-
-// Typing our own hostname here probes as `unreachable`, which is indistinguishable from a wrong domain and sends the
-// reader checking DNS and a WEB_ORIGIN they never set. It is a dead end until the install command runs.
-test("our own address is named as ours, and points back at the command rather than at DNS", () => {
-    const zone = `sbx.intentic.dev`;
-    const ours = ownAddressProblem(`sandbox-ac1d5035e930.sbx.intentic.dev`, zone);
-    expect(ours).toContain(`ours`);
-    expect(ours).toContain(`install command`);
+// Typing this row's own minted hostname here probes as `unreachable`, which is indistinguishable from a wrong domain and
+// sends the reader checking DNS and a WEB_ORIGIN they never set. It is a dead end until the install command runs.
+test("the address minted for this row is named as ours, and points back at the command rather than at DNS", () => {
+    const minted = `sandbox-ac1d5035e930.sbx.intentic.dev`;
+    const ours = ownAddressProblem(minted, minted);
+    expect(ours).toBe(
+        `That address is ours, and it answers only once your sandbox is running. Nothing to connect to yet: run the install command instead.`,
+    );
     // Full URL, not just the bare hostname the field pre-fills from: both are what a reader pastes.
-    expect(ownAddressProblem(`https://sandbox-226b69d04ad0.sbx.intentic.dev/`, zone)).toBe(ours);
+    expect(ownAddressProblem(`https://sandbox-ac1d5035e930.sbx.intentic.dev/`, minted)).toBe(ours);
+    expect(ownAddressProblem(`SANDBOX-AC1D5035E930.sbx.intentic.dev`, minted)).toBe(ours);
 });
 
-test("a domain of the reader's own is left alone, zone suffix and all", () => {
-    const zone = `sbx.intentic.dev`;
-    expect(ownAddressProblem(`sandbox.example.com`, zone)).toBeUndefined();
-    // Ends with the zone's letters but is not under it: `notsbx.intentic.dev` is somebody else's domain.
-    expect(ownAddressProblem(`box.notsbx.intentic.dev`, zone)).toBeUndefined();
-    // Nothing typed, and a page with no zone to compare against, both stay silent.
-    expect(ownAddressProblem(``, zone)).toBeUndefined();
-    expect(ownAddressProblem(`sandbox-ac1d5035e930.sbx.intentic.dev`, undefined)).toBeUndefined();
+// The recovery path: a platform that lost an account's rows mints a fresh address, and the owner pastes the one their
+// sandbox still answers on. Same zone, other sandbox; only the probe can say whether anything is there.
+test("another address under our zone goes to the probe, since it may be a sandbox this account already runs", () => {
+    const minted = `sandbox-ac1d5035e930.sbx.intentic.dev`;
+    expect(ownAddressProblem(`https://sandbox-226b69d04ad0.sbx.intentic.dev/`, minted)).toBeUndefined();
+    expect(ownAddressProblem(`sandbox-82789f4106b4.sbx.intentic.dev`, minted)).toBeUndefined();
+});
+
+test("a domain of the reader's own is left alone", () => {
+    const minted = `sandbox-ac1d5035e930.sbx.intentic.dev`;
+    expect(ownAddressProblem(`sandbox.example.com`, minted)).toBeUndefined();
+    // Holds the minted hostname as a prefix but is somebody else's domain.
+    expect(ownAddressProblem(`sandbox-ac1d5035e930.sbx.intentic.dev.example.com`, minted)).toBeUndefined();
+    // Nothing typed, and a page that has minted nothing to compare against, both stay silent.
+    expect(ownAddressProblem(``, minted)).toBeUndefined();
+    expect(ownAddressProblem(minted, undefined)).toBeUndefined();
 });
 
 const stubFetch = (routes: Record<string, { status: number; body?: unknown }>) => {

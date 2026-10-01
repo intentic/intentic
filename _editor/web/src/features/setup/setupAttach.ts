@@ -114,22 +114,18 @@ export const daemonUrlProblem = (raw: string): string | undefined => {
     return normalizeDaemonUrl(trimmed) === undefined ? `That doesn't look like a domain. For example sandbox.example.com.` : undefined;
 };
 
-// The zone we hand addresses out on, read off an address we minted (`<subdomain>.<zone>`) rather than configured
-// twice; undefined until a mint has answered, which is the only state where we cannot recognise our own.
-export const addressZone = (mintedHostname: string | undefined): string | undefined => {
-    const labels = mintedHostname?.split(`.`) ?? [];
-    return labels.length > 1 ? labels.slice(1).join(`.`) : undefined;
-};
-
-// This form attaches a sandbox the reader already serves, so OUR hostname in it is a dead end: nothing answers there
-// until the install command runs, and the probe's only honest verdict is `unreachable` — which sends the reader
-// checking DNS and a WEB_ORIGIN they never set. Recognised here so the box can say so before the first press.
-export const ownAddressProblem = (raw: string, zone: string | undefined): string | undefined => {
+// This form attaches a sandbox the reader already serves, so the address minted for THIS row is a dead end in it:
+// nothing answers there until the install command runs, and the probe's only honest verdict is `unreachable` — which
+// sends the reader checking DNS and a WEB_ORIGIN they never set. Recognised here so the box can say so before the
+// first press. Only that one address (2026-10-01): any other under our zone may be a sandbox this account already
+// runs, one the platform lost track of, and the zone-wide refusal this replaced turned a live sandbox's own address
+// away from an owner whose platform was reading an empty database. The probe tells those apart; a pre-check cannot.
+export const ownAddressProblem = (raw: string, minted: string | undefined): string | undefined => {
     const url = normalizeDaemonUrl(raw);
-    if (url === undefined || zone === undefined) {
+    if (url === undefined || minted === undefined) {
         return undefined;
     }
-    return new URL(url).hostname.endsWith(`.${zone}`)
+    return new URL(url).hostname === minted.toLowerCase()
         ? `That address is ours, and it answers only once your sandbox is running. Nothing to connect to yet: run the install command instead.`
         : undefined;
 };
