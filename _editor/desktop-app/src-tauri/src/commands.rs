@@ -848,8 +848,14 @@ pub async fn sandbox_logs(slug: String, tail: u32) -> CommandResult<String> {
 /// The path is what makes the workspace's own screens reachable from this computer's: This device and the workspace's
 /// Devices tab manage the same containers on the same machine through two different doors, and a finished setup
 /// hands back to the page that is waiting for it. `show_workspace_at` already navigates an open workspace window.
+///
+/// ASYNC, because on a launch into This computer there is no workspace window yet and this is what builds it. A
+/// synchronous command runs on the main thread inside WebView2's own callback, and on Windows a webview built there
+/// waits on that callback to return: the event loop stops for good, so neither the × nor the tray's Quit is ever
+/// handled (Tauri's `WebviewWindowBuilder` known issue). An async one runs off that thread, and the build is handed
+/// to the event loop like any other. The answer arrives once the workspace is up, which is what the press waits on.
 #[tauri::command]
-pub fn workspace_open(app: AppHandle, path: Option<String>) {
+pub async fn workspace_open(app: AppHandle, path: Option<String>) {
     crate::windows::show_workspace_at(&app, path.as_deref());
 }
 
@@ -1593,6 +1599,51 @@ mod tests {
         assert_eq!(
             scripts::sync_agent_candidates(Host::Unix, None),
             vec!["intentic-machine".to_string()]
+        );
+    }
+
+    /* A window built inside a synchronous command freezes the whole app on Windows (see `workspace_open`). */
+
+    /// The bodies of the synchronous commands in `source`: from each command's `pub fn` to its closing brace.
+    fn synchronous_commands(source: &str) -> Vec<(&str, &str)> {
+        source
+            .split("#[tauri::command]\n")
+            .skip(1)
+            .filter_map(|after| after.strip_prefix("pub fn "))
+            .map(|command| {
+                let name = &command[..command.find('(').unwrap_or(command.len())];
+                let body = &command[..command.find("\n}\n").unwrap_or(command.len())];
+                (name, body)
+            })
+            .collect()
+    }
+
+    #[test]
+    fn no_synchronous_command_opens_a_window_itself() {
+        let sources = [
+            ("commands.rs", include_str!("commands.rs")),
+            ("local.rs", include_str!("local.rs")),
+            ("fix.rs", include_str!("fix.rs")),
+        ];
+        let opener = concat!("crate::windows::", "show_");
+        for (file, source) in sources {
+            let commands = synchronous_commands(source);
+            assert!(
+                !commands.is_empty(),
+                "{file} has no synchronous commands to read"
+            );
+            for (name, body) in commands {
+                assert!(
+                    !body.contains(opener),
+                    "{file}: `{name}` opens a window from a synchronous command, which deadlocks on Windows; make it async"
+                );
+            }
+        }
+        assert!(
+            !synchronous_commands(include_str!("commands.rs"))
+                .iter()
+                .any(|(name, _)| *name == "workspace_open"),
+            "workspace_open builds the workspace window and has to stay async"
         );
     }
 }
