@@ -1,6 +1,6 @@
 import { shieldRequest } from "../index.js";
 import type { Json, JsonObject } from "../walk.js";
-import { at, deepFreeze, DOCUMENT_TEXT, fakeShield, IMAGE_TEXT, NOTE } from "./fake-shield.testing.js";
+import { at, deepFreeze, DOCUMENT_TEXT, fakeShield, IMAGE_TEXT, MASKED_IMAGE, NOTE } from "./fake-shield.testing.js";
 
 // The Messages API request as Claude Code sends it. Every place a person's data can sit in the conversation must come
 // out masked, and every byte the provider signs or the harness owns must come out untouched.
@@ -179,6 +179,21 @@ describe("shielding an Anthropic Messages request", () => {
         // A kept document still has its title and context masked: they are text the model reads.
         expect(at(result, 2, "source")).toEqual({ type: "base64", media_type: "application/pdf", data: PDF });
         expect(at(result, 2, "title")).toBe("⟦PERSON_1⟧ invoice");
+    });
+
+    test("an image the shield paints over goes as that picture, inline, its cache breakpoint kept", async () => {
+        const body = claudeCodeRequest();
+        const shielded = await shieldRequest("anthropic", body, fakeShield({ paint: true }));
+        expect(at(shielded, "messages", 0, "content", 1)).toEqual({
+            type: "image",
+            source: { type: "base64", media_type: MASKED_IMAGE.mediaType, data: MASKED_IMAGE.data },
+            cache_control: { type: "ephemeral" },
+        });
+        // One named by address goes inline too: what was checked is what is sent.
+        expect(at(shielded, "messages", 2, "content", 0, "content", 1)).toEqual({
+            type: "image",
+            source: { type: "base64", media_type: MASKED_IMAGE.mediaType, data: MASKED_IMAGE.data },
+        });
     });
 
     test("the note goes where each system shape allows", async () => {

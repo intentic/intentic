@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {
+    endpointProvider,
     PERSONAL_DATA_CLASSES,
     PRIVACY_ALLOW_MAX,
     type PersonalDataClass,
@@ -9,6 +10,7 @@ import {
     type PrivacyProvider,
     type PrivacyShieldMode,
     type PrivacyShieldPolicy,
+    TRIAL_ENDPOINT_ID,
 } from "@intentic/sandbox-contract";
 import {
     Button,
@@ -48,6 +50,7 @@ import {
     withClass,
     withTrusted,
 } from "./privacyShield";
+import PrivacyNameDictionary from "./PrivacyNameDictionary.vue";
 import { usePrivacyLog, usePrivacyShield, usePrivacySources } from "./usePrivacyShield";
 
 // The privacy shield: whether personal data is kept from model providers the owner does not trust, and what the
@@ -84,22 +87,22 @@ const modeNote = computed(
         })[mode.value],
 );
 
+// An image always goes as an image: masked, with what the local reader finds painted over, or as it is.
 const IMAGES = computed(() => [
-    { label: t(`sandbox.agentPrivacyShield.withhold`), value: `withhold` as const },
-    { label: t(`sandbox.agentPrivacyShield.read`), value: `read` as const },
+    { label: t(`sandbox.agentPrivacyShield.mask`), value: `mask` as const },
     { label: t(`sandbox.agentPrivacyShield.allow`), value: `allow` as const },
 ]);
-const images = computed<PrivacyImages>(() => policy.value?.images ?? `withhold`);
+const images = computed<PrivacyImages>(() => policy.value?.images ?? `mask`);
 const imagesNote = computed(
     () =>
         ({
-            withhold: t(`sandbox.agentPrivacyShield.withholdNote`),
-            read: t(`sandbox.agentPrivacyShield.readNote`),
+            mask: t(`sandbox.agentPrivacyShield.maskNote`),
             allow: t(`sandbox.agentPrivacyShield.allowNote`),
         })[images.value],
 );
-// Reading without a reader installed is withholding in practice; said, or "Read text" claims what the daemon cannot do.
-const ocrMissing = computed(() => images.value === `read` && status.value?.readers.ocr === false);
+// Masking without the reader installed holds every image back, since none can be checked; said, or "Mask" claims what
+// the daemon cannot do yet.
+const ocrMissing = computed(() => images.value === `mask` && status.value?.readers.ocr === false);
 
 const NAMES = computed(() => [
     { label: t(`sandbox.agentPrivacyShield.dictionary`), value: `dictionary` as const },
@@ -150,9 +153,15 @@ const forgetNotice = computed(() =>
 );
 
 const providers = computed<readonly PrivacyProvider[]>(() => status.value?.providers ?? []);
+// The free trial is reached through a tunnel on this machine, but every request goes on to Intentic's platform and the
+// vendor behind it: never trusted by itself, so its row says where the data would go before anyone switches it on.
+const TRIAL_PROVIDER = endpointProvider(TRIAL_ENDPOINT_ID);
 const providerNote = (provider: PrivacyProvider): string | undefined => {
     if (provider.local) {
         return t(`sandbox.agentPrivacyShield.localNote`);
+    }
+    if (provider.id === TRIAL_PROVIDER) {
+        return t(`sandbox.agentPrivacyShield.trialNote`);
     }
     return provider.shieldable ? undefined : t(`sandbox.agentPrivacyShield.unshieldableNote`);
 };
@@ -316,6 +325,9 @@ const LEARN_COMMAND = `privacy learn <file> --column …`;
                             </div>
                         </template>
                     </Row>
+
+                    <!-- The lists both ways of finding names read, the model's way included: what they hold, and a word checked. -->
+                    <PrivacyNameDictionary />
 
                     <Row
                         icon="check-circle"

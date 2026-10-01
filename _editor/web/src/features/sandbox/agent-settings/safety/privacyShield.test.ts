@@ -1,4 +1,10 @@
-import { DEFAULT_PRIVACY_SHIELD, PERSONAL_DATA_CLASSES, PRIVACY_ALLOW_MAX, type PrivacyShieldPolicy } from "@intentic/sandbox-contract";
+import {
+    DEFAULT_PRIVACY_SHIELD,
+    PERSONAL_DATA_CLASSES,
+    PRIVACY_ALLOW_MAX,
+    type PrivacyNameWord,
+    type PrivacyShieldPolicy,
+} from "@intentic/sandbox-contract";
 import {
     ALLOW_VALUE_MAX,
     allowListFrom,
@@ -6,8 +12,12 @@ import {
     allowListText,
     foundIn,
     ledgerTime,
+    nameVerdict,
     providerTrusted,
     sameList,
+    shownWord,
+    sourceHost,
+    traitsOf,
     withClass,
     withTrusted,
 } from "./privacyShield";
@@ -112,5 +122,68 @@ describe(`ledgerTime`, () => {
     it(`reads an ISO timestamp, and gives nothing for one it cannot read`, () => {
         expect(ledgerTime(`2026-10-01T12:00:00.000Z`)).toBe(Date.UTC(2026, 9, 1, 12));
         expect(ledgerTime(`yesterday-ish`)).toBeUndefined();
+    });
+});
+
+// A word as the lists know it: nothing set unless a case sets it.
+const word = (fields: Partial<PrivacyNameWord> = {}): PrivacyNameWord => ({
+    word: `Word`,
+    firstName: false,
+    surname: false,
+    surnameForm: false,
+    ambiguous: false,
+    never: false,
+    ...fields,
+});
+
+describe(`nameVerdict`, () => {
+    it(`says what a word or a name comes to: masked, never a name, a name beside evidence, or unknown`, () => {
+        expect(nameVerdict({ found: true, words: [word({ firstName: true })] })).toBe(`found`);
+        expect(nameVerdict({ found: false, words: [word({ never: true })] })).toBe(`never`);
+        expect(nameVerdict({ found: false, words: [word({ firstName: true, ambiguous: true })] })).toBe(`needsContext`);
+        expect(nameVerdict({ found: false, words: [word({ surnameForm: true })] })).toBe(`needsContext`);
+        expect(nameVerdict({ found: false, words: [word()] })).toBe(`notFound`);
+    });
+
+    // "Never" is about one word: a name with a title in it is judged by the rest of its words.
+    it(`reads a never word inside a longer name by the words around it`, () => {
+        expect(nameVerdict({ found: false, words: [word({ never: true }), word({ surname: true })] })).toBe(`needsContext`);
+        expect(nameVerdict({ found: false, words: [word({ never: true }), word()] })).toBe(`notFound`);
+    });
+});
+
+describe(`traitsOf`, () => {
+    it(`lists what is true of a word in the page's fixed order`, () => {
+        expect(traitsOf(word({ ambiguous: true, firstName: true }))).toEqual([`firstName`, `ambiguous`]);
+        expect(traitsOf(word())).toEqual([]);
+    });
+});
+
+describe(`shownWord`, () => {
+    const lists = [
+        { id: `surnames-pl`, kind: `surname` as const },
+        { id: `first-names-pl`, kind: `first-name` as const },
+        { id: `titles-pl`, kind: `title` as const },
+    ];
+
+    it(`capitalizes a word only name lists hold, each part of a hyphenated one`, () => {
+        expect(shownWord(`kowal`, [`surnames-pl`], lists)).toBe(`Kowal`);
+        expect(shownWord(`skłodowska-curie`, [`surnames-pl`], lists)).toBe(`Skłodowska-Curie`);
+        expect(shownWord(`łucja`, [`first-names-pl`], lists)).toBe(`Łucja`);
+    });
+
+    it(`keeps a title, or a word of a list it does not know, as the lists hold it`, () => {
+        expect(shownWord(`dr`, [`titles-pl`], lists)).toBe(`dr`);
+        expect(shownWord(`pan`, [`titles-pl`, `surnames-pl`], lists)).toBe(`pan`);
+        expect(shownWord(`xyz`, [`unknown-list`], lists)).toBe(`xyz`);
+    });
+});
+
+describe(`sourceHost`, () => {
+    it(`names a source's page by its host, and gives nothing for no address or a broken one`, () => {
+        expect(sourceHost(`https://dane.gov.pl/pl/dataset/1667`)).toBe(`dane.gov.pl`);
+        expect(sourceHost(`https://www.ssa.gov/oact/babynames/limits.html`)).toBe(`ssa.gov`);
+        expect(sourceHost(undefined)).toBeUndefined();
+        expect(sourceHost(`not a url`)).toBeUndefined();
     });
 });

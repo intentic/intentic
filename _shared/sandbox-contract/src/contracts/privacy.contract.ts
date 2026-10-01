@@ -2,6 +2,7 @@ import { z } from "zod";
 import { procedure } from "../protocol/route-meta.js";
 import {
     PRIVACY_KNOWN_BATCH_MAX,
+    PrivacyDictionarySchema,
     PrivacyKnownSourceSchema,
     PrivacyKnownValueSchema,
     PrivacyLedgerEntrySchema,
@@ -44,6 +45,17 @@ export const privacyContract = {
                 "Each model request the gateway handled: which provider, whether it was trusted, and how many of each kind of personal data it found. Never the values.",
         })
         .output(z.array(PrivacyLedgerEntrySchema)),
+    dictionary: procedure
+        .route({
+            method: "GET",
+            path: "/privacy/dictionary",
+            summary: "The name lists the shield finds names by",
+            description:
+                "Every list the dictionary holds (first names, surnames, words that are names only beside other evidence, titles), how many words each has and where they come from. With a query, what the dictionary makes of it as a name, and for one word the listed words starting with it.",
+        })
+        .meta({ agent: true })
+        .input(z.object({ query: z.string().max(100).optional().describe("A word, the start of one, or a full name.") }))
+        .output(PrivacyDictionarySchema),
     sources: procedure
         .route({
             method: "GET",

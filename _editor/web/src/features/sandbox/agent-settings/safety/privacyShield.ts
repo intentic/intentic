@@ -3,6 +3,9 @@ import {
     PRIVACY_ALLOW_MAX,
     type PersonalDataClass,
     type PrivacyLedgerEntry,
+    type PrivacyNameList,
+    type PrivacyNameLookup,
+    type PrivacyNameWord,
     type PrivacyProvider,
     type PrivacyShieldPolicy,
 } from "@intentic/sandbox-contract";
@@ -88,4 +91,48 @@ export const foundIn = (entry: Pick<PrivacyLedgerEntry, `counts`>): Found => {
 export const ledgerTime = (at: string): number | undefined => {
     const parsed = Date.parse(at);
     return Number.isNaN(parsed) ? undefined : parsed;
+};
+
+// What a looked-up word or name comes to: masked on its own, never part of a name, a name only beside other evidence
+// (a title, a surname, a name field), or nothing the lists know.
+export type NameVerdict = `found` | `never` | `needsContext` | `notFound`;
+
+export const nameVerdict = (lookup: Pick<PrivacyNameLookup, `found` | `words`>): NameVerdict => {
+    if (lookup.found) {
+        return `found`;
+    }
+    const [only, ...rest] = lookup.words;
+    if (only !== undefined && rest.length === 0 && only.never) {
+        return `never`;
+    }
+    return lookup.words.some((word) => word.firstName || word.surname || word.surnameForm || word.ambiguous) ? `needsContext` : `notFound`;
+};
+
+// What the lists say of one word, in the order the page lists them.
+export const NAME_TRAITS = [`firstName`, `surname`, `surnameForm`, `ambiguous`, `never`] as const;
+export type NameTrait = (typeof NAME_TRAITS)[number];
+
+export const traitsOf = (word: PrivacyNameWord): NameTrait[] => NAME_TRAITS.filter((trait) => word[trait]);
+
+// The lists hold their words lowercase; one only name lists hold is shown as a name is written, a title or a function
+// word as the lists keep it ("dr", "the").
+const NAME_KINDS: ReadonlySet<PrivacyNameList[`kind`]> = new Set([`first-name`, `surname`, `ambiguous`]);
+
+export const shownWord = (word: string, held: readonly string[], lists: readonly Pick<PrivacyNameList, `id` | `kind`>[]): string => {
+    const kinds = held.map((id) => lists.find((list) => list.id === id)?.kind);
+    const name = kinds.length > 0 && kinds.every((kind) => kind !== undefined && NAME_KINDS.has(kind));
+    return name ? word.replaceAll(/(^|-)(\p{L})/gu, (_, before: string, letter: string) => `${before}${letter.toLocaleUpperCase(`pl`)}`) : word;
+};
+
+// A source's page named by its host, which is what a reader recognises ("dane.gov.pl"); undefined for no address.
+export const sourceHost = (url: string | undefined): string | undefined => {
+    if (url === undefined) {
+        return undefined;
+    }
+    try {
+        return new URL(url).hostname.replace(/^www\./u, ``);
+    } catch {
+        // allow(silent-catch): an address that does not parse is shown as no link rather than a broken one.
+        return undefined;
+    }
 };

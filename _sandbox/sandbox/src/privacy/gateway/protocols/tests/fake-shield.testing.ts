@@ -29,6 +29,8 @@ export const NOTE = "Values written ⟦LIKE_1⟧ are placeholders: write them ba
 
 // What the shield says about an image or document: keep it, or the text that replaces it.
 export const IMAGE_TEXT = "[image withheld: a photo of ⟦PERSON_1⟧]";
+// The picture an image becomes when the shield paints over what it found in it.
+export const MASKED_IMAGE: ShieldBinary = { mediaType: "image/png", data: "bWFza2VkIHBpY3R1cmU=" };
 export const DOCUMENT_TEXT = "Invoice for ⟦PERSON_1⟧, account ⟦BANK_ACCOUNT_3⟧.";
 
 export interface FakeShield extends RequestShield {
@@ -39,12 +41,15 @@ export interface FakeShield extends RequestShield {
 export interface FakeShieldOptions {
     readonly note?: string | undefined;
     readonly keep?: boolean;
+    // Images come back as MASKED_IMAGE rather than as text.
+    readonly paint?: boolean;
 }
 
 // `note: undefined` means masking runs without a note, so it must not fall back to the default.
 export const fakeShield = (options: FakeShieldOptions = {}): FakeShield => {
     const note = "note" in options ? options.note : NOTE;
     const keep = options.keep ?? false;
+    const paint = options.paint ?? false;
     const images: ShieldBinary[] = [];
     const documents: ShieldBinary[] = [];
     return {
@@ -54,7 +59,10 @@ export const fakeShield = (options: FakeShieldOptions = {}): FakeShield => {
         mask: async (text) => mask(text),
         image: async (image) => {
             images.push(image);
-            return keep ? "keep" : { text: IMAGE_TEXT };
+            if (keep) {
+                return "keep";
+            }
+            return paint ? { image: MASKED_IMAGE } : { text: IMAGE_TEXT };
         },
         document: async (document) => {
             documents.push(document);

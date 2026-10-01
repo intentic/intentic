@@ -41,14 +41,15 @@ LABEL org.opencontainers.image.source=https://github.com/intentic/intentic
 #                           proves the rewrite with a real pgrep; the sandbox runtime installs the same package
 #   zstd                    transcripts are compressed logs, so the transcript/record suites verify with zstdcat
 #   docker-ce-cli + buildx  the images/release jobs drive the dind service and export a mode=max registry cache
-#   tesseract-ocr, poppler-utils, fonts-dejavu-core, python3-pil
-#                           fileq's OCR tier (tesseract over pdftoppm's page images), proved by derivers.integration
-#                           on a scan it draws with Pillow in DejaVu; ~106 MB and ~10s of build, measured on this base
+#   poppler-utils, fonts-dejavu-core, python3-pil
+#                           fileq's OCR tier (pdftoppm's page images, read by the `ocr` command), proved by
+#                           derivers.integration on a scan it draws with Pillow in DejaVu; and the privacy shield's
+#                           PDF reader (pdftotext, pdftoppm)
 # The docker apt repo is added the same way the sandbox's docker feature pack adds it
 # (_sandbox/sandbox/image-packs/docker.Dockerfile); resolved once, here, instead of in three jobs at runtime.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl git python3 make g++ ripgrep openssh-client tmux zip unzip procps zstd \
-        tesseract-ocr poppler-utils fonts-dejavu-core python3-pil \
+        poppler-utils fonts-dejavu-core python3-pil \
     && install -m 0755 -d /etc/apt/keyrings \
     && curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc \
     && chmod a+r /etc/apt/keyrings/docker.asc \
@@ -110,9 +111,30 @@ RUN curl -fsSL https://get.pnpm.io/install.sh | env PNPM_VERSION=12.6.0 SHELL=/b
     && rm -f /tmp/pnpm-env.sh \
     && pnpm --version
 
+# The privacy shield's text reader: PaddleOCR's PP-OCRv6 medium detector and recognizer, the ONNX files the privacy
+# image pack installs, at the same path, so src/ocr/ and the shield's image masking are proved against the real models
+# rather than a stand-in (~132 MB, a few seconds of build). onnxruntime-node itself comes with the workspace's install.
+# ponytail: keep the revisions and digests in lockstep with _sandbox/sandbox/image-packs/privacy.Dockerfile
+# (packs.integration.test.ts holds the two in step).
+RUN ocr=/opt/privacy-models/pp-ocrv6 \
+    && mkdir -p "$ocr/det" "$ocr/rec" \
+    && det="https://huggingface.co/PaddlePaddle/PP-OCRv6_medium_det_onnx/resolve/61323801669c338b7891481ec7bac61ce31b576a" \
+    && rec="https://huggingface.co/PaddlePaddle/PP-OCRv6_medium_rec_onnx/resolve/50c7eacafc52fa7bcf4194e8cd08e46f8558504b" \
+    && curl -fsSL --retry 3 -o "$ocr/det/inference.onnx" "$det/inference.onnx" \
+    && curl -fsSL --retry 3 -o "$ocr/det/inference.yml" "$det/inference.yml" \
+    && curl -fsSL --retry 3 -o "$ocr/rec/inference.onnx" "$rec/inference.onnx" \
+    && curl -fsSL --retry 3 -o "$ocr/rec/inference.yml" "$rec/inference.yml" \
+    && printf '%s  %s\n' \
+        eb13b44b25bb36f89528b68720af8a61d9cf381176107f465db1757b65d086e1 "$ocr/det/inference.onnx" \
+        7298d5ead546584af2504d03355f881ac7a7bc0eb1e282d3e159277c1d0af871 "$ocr/det/inference.yml" \
+        9c09abf0957f7968c7586464b7397b84ad2387a0497a351af40e9acc71b673ba "$ocr/rec/inference.onnx" \
+        991b700facf5b50a7de193468207d5f4255b538dde0d312ae3b7c7a9b6873129 "$ocr/rec/inference.yml" \
+        | sha256sum -c -
+
 # Fail the image build, not some pipeline three days later, if any of the baked tooling is missing.
 RUN node --version && pnpm --version && git --version && docker --version && docker buildx version \
     && bun --version && rg --version && tmux -V && python3 --version && make --version | head -1 && g++ --version | head -1 \
     && command -v ssh-keygen && command -v zip && command -v unzip && command -v tar && command -v gzip && command -v zstdcat \
-    && tesseract --version && pdftoppm -v && test -f /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf && python3 -c 'import PIL' \
+    && pdftoppm -v && test -f /opt/privacy-models/pp-ocrv6/rec/inference.onnx \
+    && test -f /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf && python3 -c 'import PIL' \
     && ruff --version && pyright --version

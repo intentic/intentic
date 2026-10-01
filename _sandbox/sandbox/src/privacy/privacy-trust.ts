@@ -8,6 +8,7 @@ import {
     type PrivacyShieldPolicy,
     PROVIDER_SPECS,
     providerLabel,
+    TRIAL_ENDPOINT_ID,
 } from "@intentic/sandbox-contract";
 
 // Who may read personal data as it is. The owner names trusted providers; a model running on this machine is trusted
@@ -26,9 +27,12 @@ const loopbackUrl = (url: string): boolean => {
 };
 
 // Whether a provider is a model this machine serves: a local-model card, or an endpoint the owner pointed at loopback.
+// Never the free trial, whatever its address: it reaches Intentic's platform through a tunnel that listens on loopback
+// (src/trial/trial-endpoint.ts), so its base URL reads as local while every request leaves for a vendor the owner never
+// chose. Only a platform run on this machine for development would keep it here, and even that one relays to the vendor.
 export const isLocalProvider = (provider: string, capabilities: readonly Capability[]): boolean => {
     const id = endpointIdOf(provider);
-    if (id === undefined) {
+    if (id === undefined || id === TRIAL_ENDPOINT_ID) {
         return false;
     }
     const capability = capabilities.find((entry) => entry.id === id);

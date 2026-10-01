@@ -133,8 +133,10 @@ flowchart LR
   whose signed session names the provider and the only upstream it forwards to (`privacy/gateway/`). For an untrusted
   provider it replaces what the detectors (`privacy/detect/`), the vault of known values and, with the `privacy` image
   pack, a local name model find with tokens like `⟦PERSON_3⟧`, and restores them in the answer as it streams back, so
-  the agent's tools run on real values while the provider reads tokens; images and PDFs go as masked text or are
-  withheld. The vault (`privacy/privacy-vault.ts`) keeps one token per value for the whole workspace, beside the
+  the agent's tools run on real values while the provider reads tokens. An image still goes as an image: its text is
+  read on this machine by PaddleOCR (`ocr/`, the pack's PP-OCRv6 models) and every stretch found to be personal data
+  is painted over with its token (`privacy/image-mask.ts`); one that cannot be read is held back. A PDF goes as its
+  masked text, or is withheld. The vault (`privacy/privacy-vault.ts`) keeps one token per value for the whole workspace, beside the
   credentials, so a resumed or handed-off transcript masks to the same bytes. A runtime the gateway cannot stand in
   front of (Cursor, ACP agents, Pi) is refused on an untrusted provider (`privacy-unshielded`), helper jobs step over
   such a rung, children stay off runners, and a native push or a public share carries the kind of data instead of the

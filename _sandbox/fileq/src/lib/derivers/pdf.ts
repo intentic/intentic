@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { execFile, spawnSync } from "node:child_process";
 import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -10,8 +10,9 @@ import { stripRunningFurniture } from "./pdf-furniture.js";
 
 // PDF text layer, per page, via unpdf's serverless pdf.js build (no worker, canvas or DOM shims needed for text
 // extraction).
-// A scan with no text layer is rasterised and OCR'd when tesseract is on the image, noted as recognised rather than
-// exact; otherwise the sidecar says so instead of an empty page.
+// A scan with no text layer is rasterised and OCR'd when an `ocr` command can read (the Intentic sandbox's own text
+// reader, PaddleOCR's PP-OCRv6 run on this machine, whose models its privacy image pack brings), noted as recognised
+// rather than exact; otherwise the sidecar says so instead of an empty page.
 // Either way, the deterministic tier never guesses at pixels.
 
 // Below this many chars per page, the text layer is furniture, not content: a scan with a vestigial layer.
@@ -20,11 +21,41 @@ const SCAN_THRESHOLD_CHARS_PER_PAGE = 24;
 // OCR costs seconds per page, so a long scan gets its first pages and a note.
 const MAX_OCR_PAGES = 20;
 const OCR_DPI = "200";
+// The reader loads its models once per run and then takes a second or few per page.
+const OCR_TIMEOUT_MS = 60_000 + MAX_OCR_PAGES * 15_000;
 
 const run = promisify(execFile);
 
-/** Whether this image can recognise a scan: both the rasteriser and the recogniser on PATH. */
-export const ocrAvailable = (): boolean => onPath("tesseract") && onPath("pdftoppm");
+// Asked once per PATH: the answer is a fact of the image, and a stamp is read on every derive.
+const checked = new Map<string, boolean>();
+
+/**
+ * Whether this machine can recognise a scan: the rasteriser on PATH, and an `ocr` that says it can read (`ocr --check`
+ * exits 0). The sandbox image carries the command on every box and its models only with the privacy pack, so being on
+ * PATH alone proves nothing.
+ */
+export const ocrAvailable = (): boolean => {
+    const path = process.env["PATH"] ?? "";
+    let available = checked.get(path);
+    if (available === undefined) {
+        available = onPath("pdftoppm") && onPath("ocr") && spawnSync("ocr", ["--check"], { stdio: "ignore", timeout: 10_000 }).status === 0;
+        checked.set(path, available);
+    }
+    return available;
+};
+
+// What `ocr` printed for its images, one page per image: it writes a form feed line between images, and an image it
+// could not read leaves its page empty (exit 1) rather than shifting the ones after it.
+const readPages = (images: readonly string[]): Promise<string> =>
+    new Promise((resolve, reject) => {
+        execFile("ocr", [...images], { timeout: OCR_TIMEOUT_MS, maxBuffer: 16 * 1024 * 1024 }, (error, stdout) => {
+            if (error === null || error.code === 1) {
+                resolve(stdout);
+            } else {
+                reject(error);
+            }
+        });
+    });
 
 const recognisePages = async (absPath: string, totalPages: number): Promise<string[]> => {
     const dir = await mkdtemp(join(tmpdir(), "fileq-ocr-"));
@@ -33,12 +64,12 @@ const recognisePages = async (absPath: string, totalPages: number): Promise<stri
             timeout: 120_000,
         });
         const images = (await readdir(dir)).filter((name) => name.endsWith(".png")).toSorted();
-        const pages: string[] = [];
-        for (const image of images) {
-            const { stdout } = await run("tesseract", [join(dir, image), "stdout", "-l", "eng"], { timeout: 120_000, maxBuffer: 16 * 1024 * 1024 });
-            pages.push(stdout.replaceAll(/[ \t]+/g, " ").trim());
+        if (images.length === 0) {
+            return [];
         }
-        return pages;
+        // One run for every page, so the models load once.
+        const pages = (await readPages(images.map((image) => join(dir, image)))).split("\f");
+        return images.map((_, index) => (pages[index] ?? "").replaceAll(/[ \t]+/g, " ").trim());
     } finally {
         await rm(dir, { recursive: true, force: true });
     }
@@ -63,11 +94,11 @@ const withoutFurniture = (pages: readonly string[]): { markdown: string; notes: 
 };
 
 export const pdfDeriver: Deriver = {
-    // The stamp names OCR capability, since a sidecar written before tesseract was available must read as stale now
-    // that it's here.
-    // A static name would leave a pre-OCR sidecar looking current forever.
+    // The stamp names OCR capability, since a sidecar written before the reader was available must read as stale now
+    // that it's here. A static name would leave a pre-OCR sidecar looking current forever. It names the reader too:
+    // `pdf+ocr` was tesseract's, whose pages PaddleOCR reads again.
     get name(): string {
-        return ocrAvailable() ? "pdf+ocr" : "pdf";
+        return ocrAvailable() ? "pdf+ppocr" : "pdf";
     },
     version: 2,
     derive: async (absPath): Promise<DerivedDoc> => {
@@ -89,10 +120,10 @@ export const pdfDeriver: Deriver = {
             }
             const recognised = await recognisePages(absPath, totalPages);
             const notes = [
-                `scanned: text recognised by OCR (tesseract) on ${recognised.length} of ${totalPages} page${plural} — recognised, not exact; check figures against the page image`,
+                `scanned: text recognised by OCR (PaddleOCR) on ${recognised.length} of ${totalPages} page${plural} — recognised, not exact; check figures against the page image`,
             ];
             if (totalPages > MAX_OCR_PAGES) {
-                notes.push(`OCR stops at ${MAX_OCR_PAGES} pages: run tesseract over the rest yourself if they matter`);
+                notes.push(`OCR stops at ${MAX_OCR_PAGES} pages: draw the rest with pdftoppm and read them with \`ocr <page.png>...\` if they matter`);
             }
             const { markdown, notes: stripped } = withoutFurniture(recognised);
             return { markdown, title, notes: [...notes, ...stripped] };

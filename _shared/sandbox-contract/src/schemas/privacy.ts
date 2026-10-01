@@ -27,9 +27,11 @@ export type PersonalDataClass = z.infer<typeof PersonalDataClassSchema>;
 export const PrivacyShieldModeSchema = z.enum(["off", "watch", "on"]);
 export type PrivacyShieldMode = z.infer<typeof PrivacyShieldModeSchema>;
 
-// What an image bound for an untrusted provider becomes. withhold: a note saying it was held back. read: its text, read
-// on this machine (OCR) and masked, in its place, or the note when no reader is installed. allow: sent as it is.
-export const PrivacyImagesSchema = z.enum(["withhold", "read", "allow"]);
+// What an image bound for an untrusted provider becomes. mask: it is sent, with every stretch of its text the shield
+// reads on this machine (OCR) and finds to be personal data painted over with that value's token; one that cannot be
+// read is held back with a note, never sent unchecked. allow: sent as it is. (Before 2026-10, `withhold` sent a note
+// in place of every image and `read` sent its masked text instead of the picture; both read as `mask` now.)
+export const PrivacyImagesSchema = z.enum(["mask", "allow"]);
 export type PrivacyImages = z.infer<typeof PrivacyImagesSchema>;
 
 // How names are found. dictionary: the first-name and surname lists, with titles and inflection. model: those plus a
@@ -53,7 +55,7 @@ export const PrivacyShieldPolicySchema = z.object({
         .array(PersonalDataClassSchema)
         .default([...PERSONAL_DATA_CLASSES])
         .describe("Which kinds of personal data are looked for."),
-    images: PrivacyImagesSchema.default("withhold").describe("What an image bound for an untrusted provider becomes."),
+    images: PrivacyImagesSchema.default("mask").describe("What an image bound for an untrusted provider becomes."),
     names: PrivacyNamesSchema.default("dictionary").describe("How names are found."),
     allow: z
         .array(z.string().min(1).max(200))
@@ -81,7 +83,7 @@ export const PrivacyShieldStatusSchema = z.object({
     known: z.number().int().describe("Values taught from your datasets, matched exactly wherever they appear."),
     tokens: z.number().int().describe("Values the shield has given a token so far."),
     readers: z.object({
-        ocr: z.boolean().describe("A local text reader for images is installed."),
+        ocr: z.boolean().describe("The local text reader (PaddleOCR) that finds personal data in images is installed."),
         model: z.boolean().describe("A local named-entity model for names is installed."),
     }),
     providers: z.array(PrivacyProviderSchema),
@@ -99,7 +101,7 @@ export const PrivacyLedgerEntrySchema = z.object({
     trusted: z.boolean(),
     action: PrivacyLedgerActionSchema,
     counts: z.partialRecord(PersonalDataClassSchema, z.number().int()).describe("How many of each kind were found in what this request added."),
-    images: z.number().int().describe("Images withheld or replaced by their read text."),
+    images: z.number().int().describe("Images the shield changed: personal data painted over, or held back when they could not be read."),
     documents: z.number().int().describe("Documents replaced by their masked text."),
     protocol: z.string().describe("Which wire format the request spoke."),
     detail: z.string().optional().describe("Why it was refused, when it was."),
@@ -121,3 +123,52 @@ export const PrivacyKnownSourceSchema = z.object({
     at: z.string().describe("When they were last taught."),
 });
 export type PrivacyKnownSource = z.infer<typeof PrivacyKnownSourceSchema>;
+
+// The name lists the shield finds names by when no model is asked for (and alongside one when it is): what each list
+// holds, how many, and where it came from.
+export const PrivacyNameListSchema = z.object({
+    id: z.string().describe("Stable id of the list."),
+    kind: z.enum(["first-name", "surname", "ambiguous", "title", "never"]).describe("What a word on it says about a name."),
+    languages: z.array(z.enum(["pl", "en"])).describe("The languages its words come from."),
+    count: z.number().int().describe("How many words it holds."),
+    matching: z
+        .enum(["inflected", "as-written"])
+        .describe("inflected: matched in every grammatical form of a listed word; as-written: matched only exactly as listed."),
+    source: z.string().describe("Where the words come from: the register or dataset, or that they were written by hand."),
+    url: z.string().optional().describe("The source's page, where it has one."),
+    license: z.string().optional(),
+});
+export type PrivacyNameList = z.infer<typeof PrivacyNameListSchema>;
+
+// What the lists say of one word.
+export const PrivacyNameWordSchema = z.object({
+    word: z.string(),
+    firstName: z.boolean().describe("A listed first name, in this form or as an inflection of one."),
+    surname: z.boolean().describe("A listed surname, in this form or as an inflection of one."),
+    surnameForm: z.boolean().describe("Shaped like a Polish surname (-ski, -cki, -wicz…), listed or not."),
+    ambiguous: z.boolean().describe("Also an ordinary word, so found only beside other evidence (a surname, a title)."),
+    never: z.boolean().describe("Never taken as part of a name (a title, an institution, a function word)."),
+});
+export type PrivacyNameWord = z.infer<typeof PrivacyNameWordSchema>;
+
+// What the dictionary makes of a word or a full name, for checking whether it would be found.
+export const PrivacyNameLookupSchema = z.object({
+    text: z.string().describe("The query as a name is written: each word capitalized."),
+    found: z.boolean().describe("Whether the dictionary alone masks it as a name, written so on its own."),
+    words: z.array(PrivacyNameWordSchema),
+});
+export type PrivacyNameLookup = z.infer<typeof PrivacyNameLookupSchema>;
+
+export const PRIVACY_DICTIONARY_SAMPLE_MAX = 200;
+
+export const PrivacyDictionarySchema = z.object({
+    lists: z.array(PrivacyNameListSchema),
+    totals: z
+        .object({ firstNames: z.number().int(), surnames: z.number().int() })
+        .describe("Distinct words across the first-name lists, and across the surname lists."),
+    // Words of the lists that start with a one-word query, for browsing; empty without one.
+    matches: z.array(z.object({ word: z.string(), lists: z.array(z.string()).describe("Ids of the lists holding it.") })),
+    // The query read as a name, when there is one.
+    lookup: PrivacyNameLookupSchema.optional(),
+});
+export type PrivacyDictionary = z.infer<typeof PrivacyDictionarySchema>;

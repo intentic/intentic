@@ -35,7 +35,7 @@
   ],
   "auth:privacy-shield.json": [
     {
-      "type": "{ allow?: string[]; classes?: (\"person-name\" | \"national-id\" | \"tax-id\" | \"identity-document\" | \"bank-account\" | \"payment-card\" | \"email\" | \"phone\" | \"address\")[]; images?: \"withhold\" | \"read\" | \"allow\"; mode?: \"off\" | \"watch\" | \"on\"; names?: \"dictionary\" | \"model\"; trusted?: string[] }",
+      "type": "{ allow?: string[]; classes?: (\"person-name\" | \"national-id\" | \"tax-id\" | \"identity-document\" | \"bank-account\" | \"payment-card\" | \"email\" | \"phone\" | \"address\")[]; images?: \"mask\" | \"allow\"; mode?: \"off\" | \"watch\" | \"on\"; names?: \"dictionary\" | \"model\"; trusted?: string[] }",
       "since": "unreleased"
     }
   ],

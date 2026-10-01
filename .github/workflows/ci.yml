@@ -654,7 +654,7 @@ jobs:
   # now one scope and each job NAMES the set it owns. This one is everything, minus what a job below owns.
   #
   # AFTER ci-base, WHICH IT ONLY WAITS FOR. The suites here spawn tools the image carries on purpose (ruff, pyright,
-  # tesseract, poppler: _tools/ci-base/Dockerfile) and fail on CI without them, so on the push that adds one this job
+  # poppler, the PP-OCRv6 models: _tools/ci-base/Dockerfile) and fail on CI without them, so on the push that adds one this job
   # must pull the image that push built, not the `latest` it replaces. `needs` orders it; the `if` runs it whatever
   # ci-base did (skipped on almost every push, and a failed build leaves the previous image, which the suites then
   # measure). The wait is `changes` plus a skip on an ordinary push, which runs beside preflight.

@@ -2777,7 +2777,7 @@
         "agentPrivacyShield": {
             "activity": "Działanie osłony",
             "activityNote": "Zapisywane są tylko liczby i rodzaje danych, nigdy same wartości.",
-            "allow": "Wysyłaj",
+            "allow": "Wysyłaj bez zmian",
             "allowNote": "Obrazy są wysyłane bez zmian, więc zawarte w nich dane osobowe trafiają do dostawcy.",
             "allowTooLong": "Wartość może mieć najwyżej {max} znaków, a „{value}” jest dłuższa.",
             "allowTooMany": "Lista może zawierać najwyżej {max} wartości, a ta ma {count}.",
@@ -2797,7 +2797,81 @@
             "datasets": "Wyuczone zbiory danych",
             "datasetsNote": "Agent uczy osłonę zbioru danych poleceniem {command} i od tej pory każda jego wartość jest maskowana, w jakiejkolwiek postaci zostanie zapisana. Widać tu tylko, skąd pochodzą wartości i ile ich jest, nigdy same wartości.",
             "dictionary": "Słownik",
+            "dictionaryAsWritten": "tylko w zapisanej formie",
+            "dictionaryCouldntLoad": "Nie udało się odczytać słownika.",
+            "dictionaryFound": "Napisane samodzielnie wielką literą, „{word}” jest maskowane jako imię lub nazwisko.",
+            "dictionaryHandWritten": "spisane ręcznie",
+            "dictionaryInflected": "w każdej formie odmiany",
+            "dictionaryIntro": "Imiona i nazwiska są rozpoznawane według tych list, na tym komputerze. Słowo z listy napisane wielką literą jest maskowane; takie, które jest też zwykłym słowem, tylko obok tytułu, nazwiska lub pola z imieniem.",
+            "dictionaryLists": {
+                "ambiguousEn": {
+                    "note": "Maskowane tylko obok innych przesłanek: tytułu, nazwiska, pola z imieniem.",
+                    "title": "Angielskie imiona będące też słowami"
+                },
+                "ambiguousPl": {
+                    "note": "Maskowane tylko obok innych przesłanek: tytułu, nazwiska, pola z imieniem.",
+                    "title": "Polskie imiona będące też słowami"
+                },
+                "diminutivesPl": {
+                    "note": "Formy, którymi ludzie się posługują, a których nie ma w rejestrze oficjalnych imion.",
+                    "title": "Polskie zdrobnienia"
+                },
+                "firstNamesEn": {
+                    "note": "Imiona nadawane w USA od 1950 r. (Social Security): 400 najczęstszych każdej płci.",
+                    "title": "Angielskie imiona"
+                },
+                "firstNamesPl": {
+                    "note": "Z rejestru PESEL: każde imię, które nosi co najmniej 2000 żyjących osób.",
+                    "title": "Polskie imiona"
+                },
+                "firstNamesPlRare": {
+                    "note": "Z rejestru PESEL: imiona noszone przez 300 do 1999 osób, głównie formy obce.",
+                    "title": "Rzadsze polskie imiona"
+                },
+                "neverNames": {
+                    "note": "Słowa funkcyjne oraz instytucje i miejsca, które w nagłówku następują po imieniu.",
+                    "title": "Nigdy część imienia ani nazwiska"
+                },
+                "nicknamesEn": {
+                    "note": "Krótkie formy, którymi ludzie się podpisują, a które rejestry urodzeń zapisują w pełnej postaci.",
+                    "title": "Angielskie skróty imion"
+                },
+                "surnamesEn": {
+                    "note": "Spis ludności USA z 2000 r.: 1000 najczęstszych.",
+                    "title": "Angielskie nazwiska"
+                },
+                "surnamesPl": {
+                    "note": "Z rejestru PESEL: 8000 najczęstszych form męskich i żeńskich.",
+                    "title": "Polskie nazwiska"
+                },
+                "titlesEn": {
+                    "note": "Po każdym z nich dowolne słowo pisane wielką literą jest osobą.",
+                    "title": "Angielskie tytuły"
+                },
+                "titlesPl": {
+                    "note": "Po każdym z nich dowolne słowo pisane wielką literą jest osobą.",
+                    "title": "Polskie tytuły"
+                }
+            },
+            "dictionaryMore": "Pokazano pierwsze {count}: wpisz więcej liter, aby zawęzić.",
+            "dictionaryNeedsContext": "Samodzielnie „{word}” nie jest maskowane: liczy się jako imię lub nazwisko tylko obok tytułu, nazwiska lub pola z imieniem.",
+            "dictionaryNever": "„{word}” nigdy nie jest brane za część imienia ani nazwiska.",
+            "dictionaryNoMatches": "Żadne słowo z list nie zaczyna się od „{query}”.",
+            "dictionaryNotFound": "Samodzielnie „{word}” nie jest maskowane jako imię lub nazwisko.",
             "dictionaryNote": "Listy imion i nazwisk, z tytułami i formami odmiany.",
+            "dictionarySearch": "Sprawdź słowo albo przeglądaj po pierwszych literach",
+            "dictionarySearchLabel": "Szukaj na listach imion i nazwisk",
+            "dictionaryStartsWith": "Słowa z list zaczynające się od „{query}”",
+            "dictionarySummary": "{firstNames} imion i {surnames} nazwisk, polskich i angielskich",
+            "dictionaryTitle": "Co zawiera słownik",
+            "dictionaryTraits": {
+                "ambiguous": "Także zwykłe słowo",
+                "firstName": "Imię",
+                "never": "Nigdy nie jest nazwą osoby",
+                "surname": "Nazwisko",
+                "surnameForm": "Ma kształt nazwiska"
+            },
+            "dictionaryWords": "{count} słowo | {count} słowa | {count} słów",
             "documentsCount": "{count} dokument | {count} dokumenty | {count} dokumentów",
             "forget": "Zapomnij",
             "found": "Znaleziono: {count}",
@@ -2808,6 +2882,8 @@
             "localNote": "Działa na tym komputerze, więc jest zawsze zaufany.",
             "lookFor": "Czego szuka",
             "lookForNote": "Wartość wyuczona ze zbioru danych należy do rodzaju, pod którym ją wyuczono, więc wyłączenie rodzaju przestaje maskować także takie wartości.",
+            "mask": "Maskuj",
+            "maskNote": "Każdy obraz jest odczytywany na tym komputerze, a każdy fragment jego tekstu zawierający dane osobowe jest zamalowywany tokenem przed wysłaniem. Model nadal widzi obraz.",
             "masked": "Zamaskowano",
             "model": "Model",
             "modelNote": "Listy oraz model rozpoznawania nazw własnych działający na tym komputerze.",
@@ -2818,7 +2894,7 @@
             "neverMaskedPlaceholder": "Jedna wartość w wierszu",
             "noActivity": "Żadne zapytanie do modelu nie przeszło jeszcze przez osłonę.",
             "noDatasets": "Nie wyuczono jeszcze żadnego zbioru danych.",
-            "noImageReader": "Nie zainstalowano jeszcze czytnika obrazów, więc obrazy są wstrzymywane, dopóki się nie pojawi. Pakiet privacy, który go dostarcza, czeka na karcie Środowisko: przebuduj tam sandbox, aby go zainstalować.",
+            "noImageReader": "Nie zainstalowano jeszcze czytnika obrazów, więc obrazy są wstrzymywane, dopóki się nie pojawi, bo żadnego nie da się sprawdzić. Pakiet privacy, który go dostarcza, czeka na karcie Środowisko: przebuduj tam sandbox, aby go zainstalować.",
             "noNameModel": "Nie zainstalowano jeszcze modelu nazwisk, więc używane są same listy. Pakiet privacy, który go dostarcza, czeka na karcie Środowisko: przebuduj tam sandbox, aby go zainstalować.",
             "noProviders": "Nie połączono jeszcze żadnego dostawcy modeli.",
             "notSavedYet": "Jeszcze nie zapisano",
@@ -2830,8 +2906,6 @@
             "ownerOnly": "Tylko właściciel sandboxa może zmienić osłonę prywatności.",
             "ownerOnlyForget": "Tylko właściciel sandboxa może zapomnieć zbiór danych.",
             "passed": "Przepuszczono",
-            "read": "Odczytuj tekst",
-            "readNote": "Tekst obrazu jest odczytywany na tym komputerze, maskowany i wysyłany zamiast obrazu.",
             "refused": "Odrzucono",
             "shieldPersonalData": "Osłona danych osobowych",
             "short": {
@@ -2847,6 +2921,7 @@
             },
             "title": "Osłona prywatności",
             "tokensGiven": "Wartości z tokenem",
+            "trialNote": "Łączy się przez ten komputer, ale każde zapytanie trafia dalej na platformę Intentic i do dostawcy modelu za nią, więc wysłane do niego dane osobowe opuszczają ten komputer.",
             "trustProvider": "Ufaj dostawcy {label}",
             "trusted": "zaufany",
             "trustedIntro": "Zaufany dostawca widzi dane osobowe bez zmian. Gdy osłona jest włączona, każdy inny dostawca dostaje tokeny.",
@@ -2857,9 +2932,7 @@
             "watch": "Obserwuj",
             "watchNote": "Każde zapytanie, które bramka może objąć, przechodzi przez nią: zapisuje, co by zamaskowała, i wysyła wszystko bez zmian.",
             "watched": "Obserwowano",
-            "whatItKeeps": "Imiona i nazwiska, numery dokumentów, rachunki i dane kontaktowe, chronione przed dostawcami modeli, którym nie ufasz.",
-            "withhold": "Wstrzymuj",
-            "withholdNote": "Dostawca dostaje informację, że obraz został wstrzymany, nigdy sam obraz."
+            "whatItKeeps": "Imiona i nazwiska, numery dokumentów, rachunki i dane kontaktowe, chronione przed dostawcami modeli, którym nie ufasz."
         },
         "agentProjectInstalls": {
             "ask": "Najpierw pytaj",

@@ -351,6 +351,9 @@ catalog:
   mediaplex: 1.0.0
   mermaid: 12.0.0
   monaco-editor-core: 0.57.0
+  # The privacy shield's text reader (src/ocr/) runs PP-OCRv6 with it directly. The same pin as
+  # @huggingface/transformers' own, so the daemon carries one runtime, not two.
+  onnxruntime-node: 1.30.0
   oxlint: 1.85.0
   # Cyclomatic AND cognitive complexity as one rule. Cognitive is the metric worth having: it charges nothing
   # for flat dispatch, compounds for nesting, and names the lines that cost the most, which is what makes the

@@ -1,6 +1,6 @@
 import { shieldRequest } from "../index.js";
 import type { JsonObject } from "../walk.js";
-import { at, deepFreeze, DOCUMENT_TEXT, fakeShield, IMAGE_TEXT, NOTE } from "./fake-shield.testing.js";
+import { at, deepFreeze, DOCUMENT_TEXT, fakeShield, IMAGE_TEXT, MASKED_IMAGE, NOTE } from "./fake-shield.testing.js";
 
 // Chat Completions as OpenCode sends it to an OpenAI-compatible provider: every role's content and the assistant's
 // call arguments must come out masked, the provider's reasoning and the tool definitions untouched.
@@ -93,6 +93,13 @@ describe("shielding a Chat Completions request", () => {
             type: "file",
             file: { file_data: `data:application/pdf;base64,${PDF}`, filename: "⟦PERSON_1⟧.pdf" },
         });
+    });
+
+    test("an image the shield paints over goes as that picture's data URL, its detail kept", async () => {
+        const shielded = await shieldRequest("chat", openCodeRequest(), fakeShield({ paint: true }));
+        const painted = `data:${MASKED_IMAGE.mediaType};base64,${MASKED_IMAGE.data}`;
+        expect(at(shielded, "messages", 1, "content", 1)).toEqual({ type: "image_url", image_url: { url: painted, detail: "auto" } });
+        expect(at(shielded, "messages", 1, "content", 2)).toEqual({ type: "image_url", image_url: { url: painted } });
     });
 
     test("the note joins a leading system or developer message, or becomes one", async () => {

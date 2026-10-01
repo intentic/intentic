@@ -1,4 +1,5 @@
 import { DEFAULT_PRIVACY_SHIELD, type PrivacyShieldPolicy, PrivacyShieldPolicySchema } from "@intentic/sandbox-contract";
+import { mapValue } from "../store/evolution/conversions.js";
 import { defineDocument } from "../store/evolution/documents.js";
 import { openDocument } from "../store/open-document.js";
 
@@ -10,6 +11,11 @@ export const privacyShieldDocument = defineDocument({
     root: "auth",
     path: "privacy-shield.json",
     schema: PrivacyShieldPolicySchema,
+    history: [
+        // 2026-10-01: images are always sent, their personal data painted over; holding every image back and sending its
+        // read text instead both became that.
+        mapValue("images", { withhold: "mask", read: "mask" }),
+    ],
 });
 
 export interface PrivacyPolicyStore {

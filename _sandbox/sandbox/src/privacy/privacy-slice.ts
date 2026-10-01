@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import type { Capability } from "@intentic/sandbox-contract";
+import { loadTextReader, type TextReader } from "../ocr/paddle-ocr.js";
 import type { EntityRecognizer } from "./masker.js";
 import { loadRecognizer, nerInstalled } from "./ner.js";
 import { filePrivacyLedger, privacyLedgerDocument } from "./privacy-ledger.js";
@@ -26,12 +27,14 @@ export interface PrivacyDeps {
 
 export const createPrivacySlice = ({ authRoot, workspaceRoot, capabilities, loopbackBase, warn }: PrivacyDeps): PrivacySlice => {
     let recognizer: Promise<EntityRecognizer | undefined> | undefined;
+    let textReader: Promise<TextReader | undefined> | undefined;
     return {
         privacyShield: createPrivacyShield({
             policyStore: filePrivacyPolicy(join(authRoot, privacyShieldDocument.path)),
             vault: filePrivacyVault(join(authRoot, privacyVaultDocument.path)),
             ledger: filePrivacyLedger(join(workspaceRoot, privacyLedgerDocument.path)),
-            readers: createLocalReaders(),
+            // The text reader loads on the first image it is asked to check, the name model on the first request for it.
+            readers: createLocalReaders({ textReader: () => (textReader ??= loadTextReader(undefined, warn)) }),
             tokens: sessionTokens(join(authRoot, "privacy-gateway.key")),
             capabilities,
             loopbackBase,

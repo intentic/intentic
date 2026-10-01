@@ -3,6 +3,7 @@ import { privacyContract } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { OrpcContext } from "../app-env.js";
 import type { Services } from "../composition.js";
+import { nameDictionary } from "./name-dictionary.js";
 
 // The privacy shield's page and the agent CLI's door: the status everybody may read, the policy only the owner may
 // change (the route's floor says so, and the agent's token never reaches it), the log, and the taught datasets.
@@ -32,6 +33,7 @@ export const createPrivacyRoutes = (services: Pick<Services, "privacyShield" | "
             return { ok: true } as const;
         }),
         log: i.log.handler(() => shield.ledger.recent()),
+        dictionary: i.dictionary.handler(({ input }) => nameDictionary(input.query)),
         sources: i.sources.handler(async () =>
             shield.sources().catch((error: unknown) => {
                 throw failing(error);

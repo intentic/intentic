@@ -1,6 +1,6 @@
-import type { PrivacyKnownSource, PrivacyLedgerEntry, PrivacyShieldPolicy, PrivacyShieldStatus } from "@intentic/sandbox-contract";
-import { useMutation } from "@tanstack/vue-query";
-import { computed } from "vue";
+import type { PrivacyDictionary, PrivacyKnownSource, PrivacyLedgerEntry, PrivacyShieldPolicy, PrivacyShieldStatus } from "@intentic/sandbox-contract";
+import { keepPreviousData, useMutation } from "@tanstack/vue-query";
+import { computed, onScopeDispose, type Ref, ref, watch } from "vue";
 import { rpcQuery } from "../../client/rpcQuery";
 import { sandboxRpc } from "../../client/sandboxRpc";
 import { useSandboxQuery } from "../../client/useSandboxQuery";
@@ -98,6 +98,37 @@ export function usePrivacySources() {
         },
         forgetError: computed<Error | null>(() => forget.error.value),
         isLoading: query.isLoading,
+        error,
+    };
+}
+
+// How long typing must pause before the dictionary is asked about what was typed.
+const DICTIONARY_DEBOUNCE_MS = 200;
+
+// The name lists the shield finds names by, and what they hold for a word or the start of one. The lists alone while
+// the query is empty; the previous answer stays on screen while the next one is fetched, so the words do not blink out
+// between keystrokes. Memory only: one entry per query typed is nothing worth keeping across reloads.
+export function usePrivacyDictionary(query: Ref<string>, debounceMs = DICTIONARY_DEBOUNCE_MS) {
+    const settled = ref(query.value.trim());
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    watch(query, (value) => {
+        clearTimeout(timer);
+        timer = setTimeout(() => {
+            settled.value = value.trim();
+        }, debounceMs);
+    });
+    onScopeDispose(() => clearTimeout(timer));
+
+    const { query: read, error } = useSandboxQuery({
+        ...rpcQuery(`privacy.dictionary`, () => (settled.value === `` ? {} : { query: settled.value }), { unpersisted: true }),
+        placeholderData: keepPreviousData,
+    });
+    return {
+        dictionary: computed<PrivacyDictionary | undefined>(() => read.data.value),
+        // The query the answer on screen was asked for, which trails what is typed by the debounce.
+        answered: settled,
+        isLoading: read.isLoading,
+        isFetching: read.isFetching,
         error,
     };
 }

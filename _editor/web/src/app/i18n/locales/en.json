@@ -3015,7 +3015,7 @@
         "agentPrivacyShield": {
             "activity": "Shield activity",
             "activityNote": "Only counts and kinds are kept, never the values themselves.",
-            "allow": "Send",
+            "allow": "Send as is",
             "allowNote": "Images are sent as they are, so any personal data in them reaches the provider.",
             "allowTooLong": "A value can be at most {max} characters, and “{value}” is longer.",
             "allowTooMany": "The list can hold at most {max} values; this one has {count}.",
@@ -3035,7 +3035,81 @@
             "datasets": "Learned datasets",
             "datasetsNote": "The agent teaches the shield a dataset with {command}, and from then on each of its values is masked however it is written. Only where the values came from and how many there are is shown here, never the values.",
             "dictionary": "Dictionary",
+            "dictionaryAsWritten": "only as written",
+            "dictionaryCouldntLoad": "Couldn't read the dictionary.",
+            "dictionaryFound": "Capitalized on its own, “{word}” is masked as a name.",
+            "dictionaryHandWritten": "written by hand",
+            "dictionaryInflected": "every inflected form",
+            "dictionaryIntro": "Names are found by these lists, on this machine. A capitalized word on a name list is masked; one that is also an ordinary word only beside a title, a surname or a name field.",
+            "dictionaryLists": {
+                "ambiguousEn": {
+                    "note": "Masked only beside other evidence: a title, a surname, a name field.",
+                    "title": "English names that are also words"
+                },
+                "ambiguousPl": {
+                    "note": "Masked only beside other evidence: a title, a surname, a name field.",
+                    "title": "Polish names that are also words"
+                },
+                "diminutivesPl": {
+                    "note": "The familiar forms people go by, which the register of official names lacks.",
+                    "title": "Polish diminutives"
+                },
+                "firstNamesEn": {
+                    "note": "US Social Security baby names since 1950: the 400 most frequent of each sex.",
+                    "title": "English first names"
+                },
+                "firstNamesPl": {
+                    "note": "From the PESEL register: every first name at least 2,000 living people bear.",
+                    "title": "Polish first names"
+                },
+                "firstNamesPlRare": {
+                    "note": "From the PESEL register: names borne by 300 to 1,999 people, mostly foreign forms.",
+                    "title": "Rarer Polish first names"
+                },
+                "neverNames": {
+                    "note": "Function words, and the institutions and places that follow a name in a heading.",
+                    "title": "Never part of a name"
+                },
+                "nicknamesEn": {
+                    "note": "Short forms people sign with, which the birth registers record in full.",
+                    "title": "English nicknames"
+                },
+                "surnamesEn": {
+                    "note": "The 2000 US Census: the 1,000 most frequent.",
+                    "title": "English surnames"
+                },
+                "surnamesPl": {
+                    "note": "From the PESEL register: the 8,000 most frequent male and female forms.",
+                    "title": "Polish surnames"
+                },
+                "titlesEn": {
+                    "note": "After one of these, any capitalized word is a person.",
+                    "title": "English titles"
+                },
+                "titlesPl": {
+                    "note": "After one of these, any capitalized word is a person.",
+                    "title": "Polish titles"
+                }
+            },
+            "dictionaryMore": "The first {count} are shown: type more letters to narrow them.",
+            "dictionaryNeedsContext": "On its own, “{word}” is not masked: it counts as a name only beside a title, a surname or a name field.",
+            "dictionaryNever": "“{word}” is never taken as part of a name.",
+            "dictionaryNoMatches": "No listed word starts with “{query}”.",
+            "dictionaryNotFound": "On its own, “{word}” is not masked as a name.",
             "dictionaryNote": "First-name and surname lists, with titles and inflected forms.",
+            "dictionarySearch": "Check a word, or browse by its first letters",
+            "dictionarySearchLabel": "Search the name lists",
+            "dictionaryStartsWith": "Listed words starting with “{query}”",
+            "dictionarySummary": "{firstNames} first names and {surnames} surnames, Polish and English",
+            "dictionaryTitle": "What the dictionary holds",
+            "dictionaryTraits": {
+                "ambiguous": "Also an ordinary word",
+                "firstName": "First name",
+                "never": "Never a name",
+                "surname": "Surname",
+                "surnameForm": "Shaped like a surname"
+            },
+            "dictionaryWords": "{count} word | {count} words",
             "documentsCount": "{count} document | {count} documents",
             "forget": "Forget",
             "found": "{count} found",
@@ -3046,6 +3120,8 @@
             "localNote": "Runs on this machine, so it is always trusted.",
             "lookFor": "What it looks for",
             "lookForNote": "A value taught from a dataset counts as the kind it was taught as, so switching a kind off stops masking those values too.",
+            "mask": "Mask",
+            "maskNote": "Each image is read on this machine, and every stretch of its text that holds personal data is painted over with its token before it is sent. The model still sees the picture.",
             "masked": "Masked",
             "model": "Model",
             "modelNote": "The lists plus a named-entity model that runs on this machine.",
@@ -3056,7 +3132,7 @@
             "neverMaskedPlaceholder": "One value per line",
             "noActivity": "No model request has gone through the shield yet.",
             "noDatasets": "No datasets have been taught yet.",
-            "noImageReader": "No image reader is installed yet, so images are withheld until it is. The privacy pack that brings it is waiting on the Environment card: rebuild the sandbox there to install it.",
+            "noImageReader": "No image reader is installed yet, so images are held back until it is, since none can be checked. The privacy pack that brings it is waiting on the Environment card: rebuild the sandbox there to install it.",
             "noNameModel": "No name model is installed yet, so the lists alone are used. The privacy pack that brings it is waiting on the Environment card: rebuild the sandbox there to install it.",
             "noProviders": "No model providers are connected yet.",
             "notSavedYet": "Not saved yet",
@@ -3068,8 +3144,6 @@
             "ownerOnly": "Only the sandbox's owner can change the privacy shield.",
             "ownerOnlyForget": "Only the sandbox's owner can forget a dataset.",
             "passed": "Passed",
-            "read": "Read text",
-            "readNote": "Its text is read on this machine, masked, and sent in place of the image.",
             "refused": "Refused",
             "shieldPersonalData": "Shield personal data",
             "short": {
@@ -3085,6 +3159,7 @@
             },
             "title": "Privacy shield",
             "tokensGiven": "Values given a token",
+            "trialNote": "Reached through this machine, but every request goes on to Intentic's platform and the model vendor behind it, so personal data sent to it leaves this machine.",
             "trustProvider": "Trust {label}",
             "trusted": "trusted",
             "trustedIntro": "A trusted provider reads personal data as it is. While the shield is on, every other provider gets tokens.",
@@ -3095,9 +3170,7 @@
             "watch": "Watch",
             "watchNote": "Every request the gateway can cover goes through it: it records what it would mask and sends everything unchanged.",
             "watched": "Watched",
-            "whatItKeeps": "Names, ID numbers, accounts and contacts, kept from model providers you don't trust.",
-            "withhold": "Withhold",
-            "withholdNote": "The provider gets a note that an image was held back, never the image."
+            "whatItKeeps": "Names, ID numbers, accounts and contacts, kept from model providers you don't trust."
         },
         "agentProjectInstalls": {
             "ask": "Ask first",

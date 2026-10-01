@@ -478,6 +478,12 @@ COPY _extensions/workflows/intentic-extension.json /opt/extensions/workflows/
 # realpath (/opt/sandbox/node_modules); tsc keeps the file's shebang, so chmod +x makes it directly runnable.
 RUN chmod +x /opt/sandbox/dist/logs/pane-log-clean.js \
     && ln -s /opt/sandbox/dist/logs/pane-log-clean.js /usr/local/bin/pane-log-clean
+# ocr on PATH: the text on an image, read on this machine by the privacy shield's own reader (PaddleOCR PP-OCRv6,
+# src/ocr/cli.ts), for an agent that must read a screenshot without sending it anywhere and for fileq's OCR tier. Its
+# models come with the privacy pack; without them it says so and exits 2. Symlinked like pane-log-clean above, so node
+# resolves onnxruntime-node and sharp from the daemon's own node_modules.
+RUN chmod +x /opt/sandbox/dist/ocr/cli.js \
+    && ln -s /opt/sandbox/dist/ocr/cli.js /usr/local/bin/ocr
 # The memory half of the same queue, symlinked the same way: it asks the daemon's resource budget over its local socket
 # (src/workload/room-socket.ts), and where no daemon answers applies the same formula itself
 # (@intentic/constants/memory-room), so queue-run holds a suite off a pinned box without a second policy. Fails open

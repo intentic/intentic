@@ -70,6 +70,7 @@
         "file-type": "catalog:",
         "hono": "catalog:",
         "jose": "catalog:",
+        "onnxruntime-node": "catalog:",
         "pino": "catalog:",
         "playwright": "catalog:",
         "sharp": "catalog:",

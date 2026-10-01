@@ -4,8 +4,8 @@ import { AUTHORING_RULES } from "./skill-authoring.js";
 // fileq's own teaching: the SKILL.md every agent that has fileq on its PATH is given. It lives with the CLI it describes
 // so a new flag and its sentence land together, and so the two hosts that ship it cannot drift: the sandbox writes it
 // into the workspace's skills (the daemon's settings/skills.ts), the Claude Code plugin ships it as its fileq skill.
-// Only what the host itself provides differs: the sandbox image carries tesseract through an extension and wires fileq
-// as git's textconv; a standalone install has neither until its owner adds them.
+// Only what the host itself provides differs: the sandbox image carries the `ocr` command (PaddleOCR, its models in the
+// privacy image pack) and wires fileq as git's textconv; a standalone install has neither until its owner adds them.
 
 export interface FileqSkillHost {
     // "sandbox": the Intentic sandbox image. "standalone": fileq on anyone's machine (the Claude Code plugin, npm).
@@ -13,17 +13,19 @@ export interface FileqSkillHost {
 }
 
 const OCR_FORMAT: Record<FileqSkillHost["host"], string> = {
-    sandbox: "a scan is OCR'd when the image carries tesseract",
-    standalone: "a scan is OCR'd when `tesseract` is on PATH",
+    sandbox: "a scan is OCR'd on this machine by PaddleOCR when the image carries its models",
+    standalone: "a scan is OCR'd when an `ocr` command is on PATH",
 };
 
 const OCR_REFUSAL: Record<FileqSkillHost["host"], string> = {
-    sandbox: `- A scanned PDF on an image without tesseract answers "no usable text layer … OCR is not part of this tier"
+    sandbox: `- A scanned PDF on an image without the OCR models answers "no usable text layer … OCR is not part of this
+  tier" rather than an empty page; images say "no visual description". Treat those notes as "not generated",
+  never as "nothing there". The privacy pack brings the models, and an image carrying it turns the first into
+  OCR; \`ocr <image>...\` reads a screenshot's text the same way, without sending it anywhere.`,
+    standalone: `- A scanned PDF with no \`ocr\` on PATH answers "no usable text layer … OCR is not part of this tier"
   rather than an empty page; images say "no visual description". Treat those notes as "not generated",
-  never as "nothing there". The privacy pack ships tesseract, and an image carrying it turns the first into OCR.`,
-    standalone: `- A scanned PDF with no \`tesseract\` on PATH answers "no usable text layer … OCR is not part of this tier"
-  rather than an empty page; images say "no visual description". Treat those notes as "not generated",
-  never as "nothing there". Installing tesseract turns the first into OCR.`,
+  never as "nothing there". An \`ocr\` command that prints each image's text, a form feed between images (the
+  Intentic sandbox's PaddleOCR reader), turns the first into OCR.`,
 };
 
 // `fileq render` shells out to LibreOffice and a PDF rasterizer. The sandbox image does not bake them (LibreOffice is

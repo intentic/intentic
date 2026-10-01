@@ -36,7 +36,8 @@ Notes: TypeScript/JavaScript only. Pass workspace paths.
 `;
 
 // fileq's teaching is fileq's own (@intentic/fileq/skill), the same text the Claude Code plugin ships; the sandbox host
-// adds what its image carries (tesseract through an extension, fileq wired as git's textconv).
+// adds what its image carries (the `ocr` command's PaddleOCR models through the privacy pack, fileq wired as git's
+// textconv).
 export const FILEQ_SKILL = fileqSkill({ host: "sandbox" });
 
 // skill name → SKILL.md body; the settings `skills` array selects which are written to disk.

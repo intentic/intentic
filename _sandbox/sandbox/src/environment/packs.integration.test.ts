@@ -91,6 +91,21 @@ test("pack pins are in lockstep with the daemon's own dependency versions", asyn
     expect(pin(cursor.content, /@cursor\/sdk@(\S+) /)).toBe(version("@cursor/sdk"));
 });
 
+// The CI image carries the privacy shield's OCR models so the reader is tested against the real ones: the same
+// revisions and the same bytes the pack installs, or CI would prove a model no sandbox runs.
+test("the CI image's PP-OCRv6 models are the privacy pack's, revision for revision and digest for digest", async () => {
+    const privacy = (await readPack("privacy"))!;
+    const ciBase = readFileSync(join(repoRoot, "_tools/ci-base/Dockerfile"), "utf8");
+    const pinsOf = (content: string): string[] =>
+        [...content.matchAll(/PP-OCRv6_medium_(?:det|rec)_onnx\/resolve\/(?:\$\{PRIVACY_OCR_(?:DET|REC)_REVISION\}|([0-9a-f]{40}))|\b([0-9a-f]{64}) "\$ocr\//gu)]
+            .map((match) => match[1] ?? match[2])
+            .filter((pin): pin is string => pin !== undefined);
+    const revisions = [...privacy.content.matchAll(/ARG PRIVACY_OCR_(?:DET|REC)_REVISION=([0-9a-f]{40})/gu)].map((match) => match[1] ?? "");
+    const packPins = [...revisions, ...pinsOf(privacy.content)];
+    expect(packPins).toHaveLength(6);
+    expect(pinsOf(ciBase)).toEqual(packPins);
+});
+
 // compose-image-dockerfile.mjs and this module implement one stamp-hash protocol; a mismatch reads baked images as
 // unbaked. Also pins placement: pre-trees packs splice above the daemon tree COPY, post-trees below it.
 test("compose-image-dockerfile.mjs stamps the hashes this module computes, in the right halves", async () => {

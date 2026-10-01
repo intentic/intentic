@@ -32,6 +32,7 @@ import { type DemoGrant, grantAccess, grants, revokeAccess } from "./fixture/acc
 import { automationApprovals, automationCatalog, automationsList, deleteAutomation, resolveApproval, saveAutomation } from "./fixture/automations";
 import { demoDevices, forgetDemoLinks, removeDemoSandbox, setDemoSandboxRunning, switchDemoPairings } from "./fixture/devices";
 import { demoMetrics } from "./fixture/metrics";
+import { demoNameDictionary } from "./fixture/nameDictionary";
 import { demoStorageClean, demoStorageReport, demoStorageScan } from "./fixture/storage";
 import { demoLoops } from "./fixture/loops";
 import { demoRuns, demoWorkflows } from "./fixture/workflows";
@@ -710,6 +711,7 @@ export const procedures = {
         }),
         setPolicy: () => refuse(`This is the demo workspace: the privacy shield guards a sandbox's own model traffic, and this one sends none.`),
         log: () => [],
+        dictionary: ({ query }) => demoNameDictionary(query),
         sources: () => [],
         forget: () => refuse(`This is the demo workspace: nothing has been taught to its privacy shield.`),
     },

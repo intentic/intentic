@@ -87,6 +87,24 @@ describe("whether a turn may run", () => {
         expect(await privacyShield.trusted(policy, "endpoint/qwen")).toBe(true);
         expect(await privacyShield.trusted(policy, "endpoint/free-trial")).toBe(false);
     });
+
+    // The trial's base URL goes through the platform tunnel, which listens on loopback: an address that reads as local
+    // for a provider whose every request leaves for Intentic's servers and a vendor beyond them.
+    test("the free trial reached through the loopback tunnel is still neither local nor trusted", async () => {
+        const capabilities = async () => [
+            { id: "free-trial", kind: "endpoint", config: { baseUrl: "http://127.0.0.1:41234/trial/v1", protocol: "openai" } } as never,
+            { id: "ollama", kind: "endpoint", config: { baseUrl: "http://127.0.0.1:11434/v1", protocol: "openai" } } as never,
+        ];
+        const { privacyShield } = privacySliceFake({ policy: { mode: "on" }, capabilities });
+        const policy = await privacyShield.policy();
+        expect(await privacyShield.trusted(policy, "endpoint/free-trial")).toBe(false);
+        expect(await privacyShield.trusted(policy, "endpoint/ollama")).toBe(true);
+        const providers = (await privacyShield.status()).providers.filter((provider) => provider.id.startsWith("endpoint/"));
+        expect(providers.map(({ id, local }) => ({ id, local }))).toEqual([
+            { id: "endpoint/free-trial", local: false },
+            { id: "endpoint/ollama", local: true },
+        ]);
+    });
 });
 
 test("a page leaving this machine whole carries the kind of data instead of the data, and only while the shield is on", async () => {

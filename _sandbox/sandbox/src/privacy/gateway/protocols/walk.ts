@@ -128,5 +128,8 @@ export const binaryOfUrl = (url: string): ShieldBinary => {
         : { mediaType: "url", data: url };
 };
 
+// The inverse of binaryOfUrl for an inline image or file.
+export const dataUrl = (binary: ShieldBinary): string => `data:${binary.mediaType};base64,${binary.data}`;
+
 // The note joins instructions as a paragraph of its own; instructions that are only whitespace become the note.
 export const withNote = (instructions: string, note: string): string => (instructions.trim() === "" ? note : `${instructions}\n\n${note}`);

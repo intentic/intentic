@@ -1,6 +1,6 @@
 import { shieldRequest } from "../index.js";
 import type { JsonObject } from "../walk.js";
-import { at, deepFreeze, DOCUMENT_TEXT, fakeShield, IMAGE_TEXT, NOTE } from "./fake-shield.testing.js";
+import { at, deepFreeze, DOCUMENT_TEXT, fakeShield, IMAGE_TEXT, MASKED_IMAGE, NOTE } from "./fake-shield.testing.js";
 
 // The Responses API request as Codex sends it. Every item that carries what the user, the model or a tool wrote must
 // come out masked; reasoning items hold the provider's encrypted state and must come out exactly as they went in.
@@ -206,6 +206,15 @@ describe("shielding a Responses request", () => {
         const before = JSON.stringify(body);
         expect(await shieldRequest("responses", body, fakeShield())).not.toBe(body);
         expect(JSON.stringify(body)).toBe(before);
+    });
+
+    test("an image the shield paints over goes as that picture's data URL, its detail kept", async () => {
+        const shielded = await shieldRequest("responses", codexRequest(), fakeShield({ paint: true }));
+        const painted = `data:${MASKED_IMAGE.mediaType};base64,${MASKED_IMAGE.data}`;
+        expect(at(shielded, "input", 2, "content", 1)).toEqual({ type: "input_image", image_url: painted, detail: "auto" });
+        expect(at(shielded, "input", 2, "content", 2)).toEqual({ type: "input_image", image_url: painted });
+        // Named only by a file id, an image is the provider's own copy and goes as it was.
+        expect(at(shielded, "input", 2, "content", 3)).toEqual({ type: "input_image", file_id: "file-AbC123" });
     });
 
     test("files the shield keeps go as they came, with their names masked", async () => {

@@ -1,17 +1,29 @@
-import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { ocrInstalled } from "../ocr/models.js";
+import { type OcrLine, pageText, type TextReader } from "../ocr/paddle-ocr.js";
+import { decodeImage } from "../ocr/raster.js";
 import { spawnAs } from "../workload/workload-class.js";
 
-// Reading an image or a PDF on this machine, so what an untrusted provider would have seen as pixels or pages reaches it
-// as masked text instead. Poppler's `pdftotext` ships in the image; `tesseract` with its Polish data comes with the
-// `privacy` image pack. Each reader reports itself missing rather than failing, and the gateway then withholds.
+// Reading an image or a PDF on this machine, so what an untrusted provider is sent can be checked for personal data
+// first. The text reader is PaddleOCR's PP-OCRv6 (src/ocr/), whose models come with the `privacy` image pack; poppler's
+// `pdftotext` ships in the image, its `pdftoppm` with the pack. A reader that is missing says so rather than failing,
+// and the gateway then holds the image or document back.
+
+// An image as the reader saw it, upright: its size, and every line of text on it with where it sits, in reading
+// order. No lines: nothing to read.
+export interface ImageReading {
+    readonly width: number;
+    readonly height: number;
+    readonly lines: readonly OcrLine[];
+}
 
 export interface LocalReaders {
-    // Whether an image can be read to text here.
+    // Whether an image can be read here.
     readonly ocr: () => Promise<boolean>;
-    // An image's text, or undefined when there is no reader or it read nothing.
-    readonly readImage: (data: Buffer) => Promise<string | undefined>;
+    // An image's lines, or undefined when there is no reader or the bytes are not an image it can decode.
+    readonly readImage: (data: Buffer) => Promise<ImageReading | undefined>;
     // A PDF's text layer, falling back to reading its pages as images; undefined when neither yields text.
     readonly readPdf: (data: Buffer) => Promise<string | undefined>;
 }
@@ -47,38 +59,32 @@ const run = (command: string, args: readonly string[], input?: Buffer): Promise<
         }
     });
 
-// The languages tesseract has data for here, Polish first when present; read once per process.
-const tesseractLanguages = async (): Promise<string | undefined> => {
-    const listed = await run("tesseract", ["--list-langs"]);
-    if (listed.code !== 0) {
-        return undefined;
-    }
-    const langs = new Set(listed.stdout.split("\n").map((line) => line.trim()));
-    const wanted = ["pol", "eng"].filter((lang) => langs.has(lang));
-    return wanted.length === 0 ? undefined : wanted.join("+");
-};
-
 const meaningful = (text: string): string | undefined => (text.trim() === "" ? undefined : text);
 
-export const createLocalReaders = (): LocalReaders => {
-    let languages: Promise<string | undefined> | undefined;
-    const ocrLanguages = (): Promise<string | undefined> => (languages ??= tesseractLanguages());
-    const readImage = async (data: Buffer): Promise<string | undefined> => {
-        const lang = await ocrLanguages();
-        if (lang === undefined) {
+export interface LocalReadersDeps {
+    // The loaded text reader, or undefined when its models are not installed or would not load. Called on first use.
+    readonly textReader: () => Promise<TextReader | undefined>;
+    // Whether the reader's models are installed, without loading them.
+    readonly installed?: () => boolean;
+}
+
+export const createLocalReaders = ({ textReader, installed = () => ocrInstalled() }: LocalReadersDeps): LocalReaders => {
+    const readImage = async (data: Buffer): Promise<ImageReading | undefined> => {
+        const reader = await textReader();
+        if (reader === undefined) {
             return undefined;
         }
-        const read = await run("tesseract", ["stdin", "stdout", "-l", lang, "--psm", "3"], data);
-        return read.code === 0 ? meaningful(read.stdout) : undefined;
+        const image = await decodeImage(data);
+        return image === undefined ? undefined : { width: image.rgba.width, height: image.rgba.height, lines: await reader.read(image.rgba) };
     };
     return {
-        ocr: async () => (await ocrLanguages()) !== undefined,
+        ocr: async () => installed(),
         readImage,
         readPdf: async (data) => {
             // Poppler writes UTF-8 unless told otherwise, which is what is read back here.
             const layer = await run("pdftotext", ["-layout", "-", "-"], data);
             const text = layer.code === 0 ? meaningful(layer.stdout) : undefined;
-            if (text !== undefined || (await ocrLanguages()) === undefined) {
+            if (text !== undefined || !installed()) {
                 return text;
             }
             // A scan: no text layer, so its pages are rendered and read like images.
@@ -92,9 +98,9 @@ export const createLocalReaders = (): LocalReaders => {
                 const pages = (await readdir(dir)).filter((name) => name.startsWith("page") && name.endsWith(".png")).toSorted();
                 const texts: string[] = [];
                 for (const page of pages) {
-                    const read = await run("tesseract", [join(dir, page), "stdout", "-l", (await ocrLanguages()) ?? "eng"]);
-                    if (read.code === 0) {
-                        texts.push(read.stdout);
+                    const reading = await readImage(await readFile(join(dir, page)));
+                    if (reading !== undefined) {
+                        texts.push(pageText(reading.lines));
                     }
                 }
                 return meaningful(texts.join("\n\f\n"));

@@ -48,10 +48,17 @@ const binaryOf = (source: Json | undefined, fallback: string): ShieldBinary | un
     return source["type"] === "url" && isText(url) ? { mediaType: "url", data: url } : undefined;
 };
 
+// An image the shield kept, replaced (the same picture, its personal data painted over: inline, whatever source the
+// original named) or turned into a note.
 const walkImage = async (block: JsonObject, shield: RequestShield): Promise<Json> => {
     const binary = binaryOf(block["source"], "application/octet-stream");
     const verdict = binary === undefined ? "keep" : await shield.image(binary);
-    return verdict === "keep" ? block : textBlock(block, verdict.text);
+    if (verdict === "keep") {
+        return block;
+    }
+    return "image" in verdict
+        ? { ...block, source: { type: "base64", media_type: verdict.image.mediaType, data: verdict.image.data } }
+        : textBlock(block, verdict.text);
 };
 
 // A PDF (inline or by URL) the shield replaced: the same document, now plain text, so its title, context, citations

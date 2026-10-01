@@ -43,7 +43,7 @@ test("fileq's skill is the standalone one: no textconv the install never wired",
     const skill = fileqSkillText();
     expect(skill).toContain("name: fileq");
     expect(skill).not.toContain("textconv");
-    expect(skill).toContain("a scan is OCR'd when `tesseract` is on PATH");
+    expect(skill).toContain("a scan is OCR'd when an `ocr` command is on PATH");
 });
 
 test("the output style adds the shared habits to Claude Code's own instructions", () => {

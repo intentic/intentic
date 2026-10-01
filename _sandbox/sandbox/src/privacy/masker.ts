@@ -23,8 +23,19 @@ export interface EntityRecognizer {
     readonly find: (text: string) => Promise<readonly PersonalDataSpan[]>;
 }
 
+// One value found in a string, where it sits, and the token it was given.
+export interface FoundSpan {
+    readonly start: number;
+    readonly end: number;
+    readonly class: PersonalDataClass;
+    readonly token: string;
+}
+
 export interface Masker {
     readonly mask: (text: string) => Promise<MaskResult>;
+    // Where the personal data in a string sits and the token each value was given, the string left as it is: for text
+    // that exists only as pixels (an image's words), where what changes is the picture. Counts as `mask` counts.
+    readonly find: (text: string) => Promise<{ readonly spans: readonly FoundSpan[]; readonly counts: ClassCounts }>;
     readonly restore: (text: string) => string;
 }
 
@@ -121,6 +132,12 @@ const segmentsAroundTokens = (text: string): { readonly text: string; readonly t
 
 const HAS_WORD = /[\p{L}\p{N}]/u;
 
+// Spans as `find` remembers them, written by itself; anything else reads as nothing found.
+const parseSpans = (text: string): FoundSpan[] => {
+    const parsed: unknown = JSON.parse(text);
+    return Array.isArray(parsed) ? parsed.filter((span): span is FoundSpan => typeof span === "object" && span !== null && "token" in span) : [];
+};
+
 export interface MaskerDeps {
     readonly vault: PrivacyVault;
     readonly policy: Pick<PrivacyShieldPolicy, "classes" | "allow" | "names">;
@@ -155,17 +172,20 @@ export const createMasker = ({ vault, policy, memo, recognizer }: MaskerDeps): M
         return out + text.slice(last);
     };
 
-    const maskSegment = async (text: string, counts: Record<string, number>): Promise<string> => {
+    // What every source finds in a stretch of text holding no token, overlaps settled.
+    const spansOf = async (text: string): Promise<Candidate[]> => {
         if (!HAS_WORD.test(text)) {
-            return text;
+            return [];
         }
         const detected: Candidate[] = detectPersonalData(text, { classes, allow }).map((span) => ({ ...span, rank: 1 }));
         const recognized: Candidate[] =
             recognizer === undefined
                 ? []
                 : (await recognizer.find(text)).filter((span) => admitted(span.class, span.value)).map((span) => ({ ...span, rank: 2 }));
-        return apply(text, chooseSpans([...knownCandidates(text), ...detected, ...recognized]), counts);
+        return chooseSpans([...knownCandidates(text), ...detected, ...recognized]);
     };
+
+    const maskSegment = async (text: string, counts: Record<string, number>): Promise<string> => apply(text, await spansOf(text), counts);
 
     // Only the vault's values can have changed since a remembered masking; looking for those alone is a fraction of the
     // full pass.
@@ -199,6 +219,41 @@ export const createMasker = ({ vault, policy, memo, recognizer }: MaskerDeps): M
             // The generation after this masking's own additions: they are in `masked` already.
             memo.set(key, { text: masked, generation: vault.generation() });
             return { text: masked, counts };
+        },
+        find: async (text) => {
+            const counts: Record<string, number> = {};
+            if (text.length < 2 || !HAS_WORD.test(text)) {
+                return { spans: [], counts };
+            }
+            await vault.load();
+            // Remembered as the masked strings are, under a key of its own: an image's words are re-sent with every
+            // request of a conversation, and only the vault's values can change what they hold.
+            const key = createHash("sha1").update("find\0").update(policyKey).update("\0").update(text).digest("base64url");
+            const remembered = memo.get(key);
+            if (remembered !== undefined && remembered.generation === vault.generation()) {
+                return { spans: parseSpans(remembered.text), counts: {} };
+            }
+            const spans: FoundSpan[] = [];
+            let offset = 0;
+            for (const part of segmentsAroundTokens(text)) {
+                if (!part.token) {
+                    for (const span of await spansOf(part.text)) {
+                        spans.push({
+                            start: offset + span.start,
+                            end: offset + span.end,
+                            class: span.class,
+                            token: span.token ?? vault.tokenFor(span.value, span.class),
+                        });
+                        // A string seen before counts nothing again, as with `mask`.
+                        if (remembered === undefined) {
+                            counts[span.class] = (counts[span.class] ?? 0) + 1;
+                        }
+                    }
+                }
+                offset += part.text.length;
+            }
+            memo.set(key, { text: JSON.stringify(spans), generation: vault.generation() });
+            return { spans, counts };
         },
         restore: (text) =>
             text.includes("⟦") || text.includes("[[")

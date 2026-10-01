@@ -1,6 +1,6 @@
 import type { RequestShield, ShieldBinary } from "../shield-types.js";
 import { maskJsonText } from "./json-text.js";
-import { binaryOfUrl, isList, isRecord, isText, type Json, type JsonObject, mapAll, maskField, maskText, patch, typeOf, withNote } from "./walk.js";
+import { binaryOfUrl, dataUrl, isList, isRecord, isText, type Json, type JsonObject, mapAll, maskField, maskText, patch, typeOf, withNote } from "./walk.js";
 
 // OpenAI Chat Completions as OpenCode sends it to an OpenAI-compatible provider (`/v1/chat/completions`). Only
 // `messages` carries conversation; reasoning a provider returned (`reasoning_content`, `reasoning`) is its own state
@@ -43,7 +43,15 @@ const walkPart = async (part: Json, shield: RequestShield): Promise<Json> => {
         case "image_url": {
             const url = imageUrl(part);
             const verdict = url === undefined ? "keep" : await shield.image(binaryOfUrl(url));
-            return verdict === "keep" ? part : { type: "text", text: verdict.text };
+            if (verdict === "keep") {
+                return part;
+            }
+            if (!("image" in verdict)) {
+                return { type: "text", text: verdict.text };
+            }
+            // The masked picture as a data URL, any `detail` the client asked for kept.
+            const image = part["image_url"];
+            return { ...part, image_url: { ...(isRecord(image) ? image : {}), url: dataUrl(verdict.image) } };
         }
         case "file":
             return walkFile(part, shield);

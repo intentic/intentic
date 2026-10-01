@@ -4,11 +4,11 @@ import type { Services } from "../composition.js";
 import { filePrivacyPolicy, privacyShieldDocument } from "../privacy/privacy-policy.js";
 import { packFragment } from "./packs.js";
 
-// The privacy pack (OCR and the name model) rides the overlay exactly when the shield's policy asks for one of its
-// readers: on or watching, with images read to text or names found by the model. The shield works without it, so a
-// sandbox that never turned those on never builds readers it would not run.
+// The privacy pack (the PaddleOCR text reader and the name model) rides the overlay exactly when the shield's policy
+// asks for one of its readers: on or watching, with images masked or names found by the model. The shield turned off,
+// or sending images as they are with the dictionary alone, never builds readers it would not run.
 export const privacyPackWanted = (policy: PrivacyShieldPolicy): boolean =>
-    policy.mode !== "off" && (policy.images === "read" || policy.names === "model");
+    policy.mode !== "off" && (policy.images === "mask" || policy.names === "model");
 
 // Read from the policy file, as the shield itself does. An unreadable policy composes without the pack rather than
 // failing the whole overlay, which would also hold back every capability's fragment over one bad file.

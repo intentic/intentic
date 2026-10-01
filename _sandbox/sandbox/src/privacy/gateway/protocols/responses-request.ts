@@ -2,6 +2,7 @@ import type { RequestShield, ShieldBinary } from "../shield-types.js";
 import { maskJsonText } from "./json-text.js";
 import {
     binaryOfUrl,
+    dataUrl,
     isList,
     isRecord,
     isText,
@@ -54,7 +55,11 @@ export const walkPart = async (part: Json, shield: RequestShield): Promise<Json>
             const url = imageUrl(part);
             // An image named only by a file id is the provider's own copy; there is nothing here to inspect.
             const verdict = url === undefined ? "keep" : await shield.image(binaryOfUrl(url));
-            return verdict === "keep" ? part : { type: "input_text", text: verdict.text };
+            if (verdict === "keep") {
+                return part;
+            }
+            // The masked picture as a data URL, in the string form this API documents; `detail` stays as asked.
+            return "image" in verdict ? { ...part, image_url: dataUrl(verdict.image) } : { type: "input_text", text: verdict.text };
         }
         case "input_file": {
             const binary = fileBinary(part);

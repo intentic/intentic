@@ -474,6 +474,9 @@ catalogs:
     music-metadata:
       specifier: 11.16.1
       version: 11.16.1
+    onnxruntime-node:
+      specifier: 1.30.0
+      version: 1.30.0
     oxlint:
       specifier: 1.85.0
       version: 1.85.0
@@ -2711,6 +2714,9 @@ importers:
       jose:
         specifier: 'catalog:'
         version: 6.2.12
+      onnxruntime-node:
+        specifier: 'catalog:'
+        version: 1.30.0
       pino:
         specifier: 'catalog:'
         version: 10.3.1

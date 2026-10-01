@@ -125,7 +125,9 @@ Nothing the sandbox runs checks a push, and nothing is kept about one. The app p
 - Off unless the owner turns it on (Sandbox ▸ Agent ▸ Safety). Its policy is a document under the credentials root
   ([`privacy-policy.ts`](../../_sandbox/sandbox/src/privacy/privacy-policy.ts)), off the agent-editable workspace, and only the
   owner's session changes it: `watch` records what it would mask, `on` masks for every provider not on the owner's
-  trusted list. A model this machine serves is trusted whatever the list says; the free trial never is.
+  trusted list. A model this machine serves is trusted whatever the list says; the free trial never is, though the
+  platform tunnel it is reached through listens on loopback
+  ([`privacy-trust.ts`](../../_sandbox/sandbox/src/privacy/privacy-trust.ts)): only the owner's switch trusts it.
 - It stands at the one place every route to a model shares, the request itself. A runtime whose model requests go to a
   base URL the daemon names is pointed at `ALL /privacy/gateway/<session>/*`
   ([`gateway-route.ts`](../../_sandbox/sandbox/src/privacy/gateway/gateway-route.ts)): the Claude Code loop for every
@@ -140,8 +142,12 @@ Nothing the sandbox runs checks a push, and nothing is kept about one. The app p
   ([`privacy-vault.ts`](../../_sandbox/sandbox/src/privacy/privacy-vault.ts)), written to disk before the request leaves, and
   the answer's tokens are turned back into values as it streams, so the agent's commands, edits and replies use the real
   data while the provider reads none of it. Every value in the vault is matched exactly from then on; `privacy learn`
-  teaches a dataset's values the same way. Images and PDFs go as their masked text where a local reader exists (the
-  `privacy` image pack), and are otherwise withheld with a note.
+  teaches a dataset's values the same way. An image still goes as an image: its text is read on this machine by
+  PaddleOCR's PP-OCRv6 ([`ocr/`](../../_sandbox/sandbox/src/ocr), the `privacy` image pack's models run by
+  onnxruntime-node) and every stretch the detectors find is painted over with its token
+  ([`image-mask.ts`](../../_sandbox/sandbox/src/privacy/image-mask.ts)), so the model still sees the picture and can name
+  what it cannot read. One that cannot be read (no pack yet, bytes that do not decode) is held back with a note, never
+  sent unchecked. A PDF goes as its masked text where it can be read, and is otherwise withheld.
 - A runtime it cannot stand in front of (Cursor's own wire, an ACP agent, Pi, Codex on the container's own key) is
   turned away on an untrusted provider before it starts (`privacy-unshielded`), a helper job steps over such a rung, a
   child agent stays off runners, and a conversation placed on a runner runs there only on a trusted provider, since a

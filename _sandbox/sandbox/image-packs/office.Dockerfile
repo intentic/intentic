@@ -3,7 +3,7 @@
 #   LibreOffice (headless, no GUI)  lays a docx, pptx, xlsx, odt, odp or ods out to PDF: impress, writer and calc,
 #                                    the three halves a deliverable comes in.
 #   poppler-utils                   pdftoppm draws those PDF pages, and any PDF, to PNG; it is also the rasterizer
-#                                    fileq's OCR tier runs tesseract over, where an image carries tesseract.
+#                                    fileq's OCR tier hands the `ocr` command, where an image carries its models.
 #   fonts-liberation, dejavu-core   Liberation is metric-compatible with Arial, Times New Roman and Courier New, so a
 #                                    deck set in them breaks its lines where PowerPoint does; DejaVu covers the rest.
 #                                    The browser pack carries Liberation too; installing it twice is a no-op.

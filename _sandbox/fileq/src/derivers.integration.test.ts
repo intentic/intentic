@@ -1,9 +1,10 @@
 /* Every deriver against a real file its real parser accepts, in a temp tree. */
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { requires } from "@intentic/testing/requires";
+import { onPath } from "./lib/tools.js";
 import { archiveDeriver } from "./lib/derivers/archive.js";
 import { docxDeriver } from "./lib/derivers/docx.js";
 import { epubDeriver } from "./lib/derivers/epub.js";
@@ -36,6 +37,9 @@ import {
     wavBytes,
     zipBytes,
 } from "./testing.js";
+
+// Whether python3 can draw a scan: the OCR fixtures are Pillow's pages.
+const pillow = (): boolean => spawnSync("python3", ["-c", "import PIL"], { stdio: "ignore" }).status === 0;
 
 let root: string;
 const fixture = (name: string, bytes: Uint8Array | string): string => {
@@ -100,7 +104,7 @@ describe("pdf", () => {
         expect(doc.notes).toEqual([]);
     });
 
-    test("a page with no usable text says scan, not silence (no tesseract on PATH)", async () => {
+    test("a page with no usable text says scan, not silence (no ocr on PATH)", async () => {
         const path = fixture("scan.pdf", pdfBytes("x"));
         const previousPath = process.env["PATH"];
         process.env["PATH"] = "/nonexistent";
@@ -114,10 +118,90 @@ describe("pdf", () => {
         }
     });
 
-    /* The OCR tier, exercised for real where the image carries tesseract + poppler (an extension's layer, and ci-base). */
+    // A stand-in `ocr` on PATH, speaking the real one's protocol (src/ocr/cli.ts in the sandbox): `--check` answers
+    // whether it can read, and a run prints each image's text with a form feed line between images, leaving an image
+    // it could not read empty and exiting 1.
+    const standIn = (check: number): string => {
+        const bin = mkdtempSync(join(tmpdir(), "fileq-ocr-bin-"));
+        writeFileSync(
+            join(bin, "ocr"),
+            [
+                "#!/bin/sh",
+                `if [ "$1" = "--check" ]; then exit ${check}; fi`,
+                "status=0",
+                "first=1",
+                'for image in "$@"; do',
+                "  [ $first = 1 ] || printf '\\f\\n'",
+                "  first=0",
+                '  case "$image" in',
+                "    *page-1.png) status=1 ;;",
+                '    *) printf \'TOTAL DUE ON %s\\n\' "$(basename "$image" .png)" ;;',
+                "  esac",
+                "done",
+                "exit $status",
+                "",
+            ].join("\n"),
+            { mode: 0o755 },
+        );
+        return bin;
+    };
+    const withPath = async <T>(bin: string, body: () => Promise<T>): Promise<T> => {
+        const previousPath = process.env["PATH"];
+        process.env["PATH"] = `${bin}:${previousPath ?? ""}`;
+        try {
+            return await body();
+        } finally {
+            process.env["PATH"] = previousPath;
+            rmSync(bin, { recursive: true, force: true });
+        }
+    };
+    // A two-page scan, drawn by Pillow: pages of pixels, no text layer.
+    const scan = (name: string): string => {
+        const path = join(root, name);
+        execFileSync("python3", [
+            "-c",
+            [
+                "import sys",
+                "from PIL import Image, ImageDraw",
+                "pages = [Image.new('RGB', (850, 1100), 'white') for _ in range(2)]",
+                "for page in pages: ImageDraw.Draw(page).rectangle((100, 100, 700, 160), fill='black')",
+                "pages[0].save(sys.argv[1], save_all=True, append_images=pages[1:], resolution=100.0)",
+            ].join("\n"),
+            path,
+        ]);
+        return path;
+    };
+
+    /* fileq's half of the OCR tier, wherever poppler and Pillow are (ci-base carries both): the pages drawn and handed
+       to `ocr` in one run, each page keeping its own text, an unreadable page left empty in its place. */
+    const poppler = requires(onPath("pdftoppm") && pillow(), "pdftoppm on PATH and python3 with Pillow");
+    test.skipIf(!poppler.runs)(poppler.title("a scan's pages go to ocr in one run, and each keeps its own text"), async () => {
+        const path = scan("two-pages.pdf");
+        await withPath(standIn(0), async () => {
+            expect(pdfDeriver.name).toBe("pdf+ppocr");
+            const doc = await pdfDeriver.derive(path);
+            expect(doc.markdown).toBe("## Page 1\n\n(no text on this page)\n\n## Page 2\n\nTOTAL DUE ON page-2");
+            expect(doc.notes.join(" ")).toContain("recognised by OCR (PaddleOCR) on 2 of 2 pages");
+        });
+    });
+
+    test.skipIf(!poppler.runs)(poppler.title("an ocr that cannot read (no models) leaves the scan unread, and says so"), async () => {
+        const path = scan("unread.pdf");
+        await withPath(standIn(2), async () => {
+            expect(pdfDeriver.name).toBe("pdf");
+            const doc = await pdfDeriver.derive(path);
+            expect(doc.markdown).toBe("");
+            expect(doc.notes.join(" ")).toContain("OCR is not part of this tier");
+        });
+    });
+
+    /* The OCR tier for real, where the image carries the reader: the sandbox's `ocr` with the privacy pack's models. */
     const DEJAVU = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf";
-    const ocr = requires(ocrAvailable() && existsSync(DEJAVU), `tesseract and pdftoppm on PATH, and the DejaVu font at ${DEJAVU}`);
-    test.skipIf(!ocr.runs)(ocr.title("a scan is recognised by tesseract when the image carries it, and says so"), async () => {
+    const ocr = requires(ocrAvailable() && existsSync(DEJAVU), `an ocr command that can read (the privacy pack's models), and the DejaVu font at ${DEJAVU}`, {
+        absentOnCi:
+            "ocr is the sandbox image's own command (_sandbox/sandbox/src/ocr/cli.ts); CI proves that reader against the same models in the sandbox's readers suite",
+    });
+    test.skipIf(!ocr.runs)(ocr.title("a scan is recognised by PaddleOCR when the image carries it, and says so"), async () => {
         const path = join(root, "receipt.pdf");
         execFileSync("python3", [
             "-c",
@@ -131,7 +215,7 @@ describe("pdf", () => {
             path,
             DEJAVU,
         ]);
-        expect(pdfDeriver.name).toBe("pdf+ocr");
+        expect(pdfDeriver.name).toBe("pdf+ppocr");
         const doc = await pdfDeriver.derive(path);
         expect(doc.markdown).toMatch(/TOTAL DUE 1845/);
         expect(doc.notes.join(" ")).toContain("recognised, not exact");

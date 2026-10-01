@@ -7,7 +7,7 @@ import type { PersonalDataClass } from "@intentic/sandbox-contract";
 export interface ShieldTally {
     // Kinds found in what this request carried, summed over every string the walker handed in.
     readonly counts: Partial<Record<PersonalDataClass, number>>;
-    // Images withheld or replaced by their read text.
+    // Images the shield changed: personal data painted over, or held back because they could not be read.
     images: number;
     // Documents replaced by their masked text.
     documents: number;
@@ -19,12 +19,15 @@ export interface ShieldBinary {
     readonly data: string;
 }
 
+export type ImageVerdict = "keep" | { readonly text: string } | { readonly image: ShieldBinary };
+
 export interface RequestShield {
     // One string bound for the provider, masked. The same input gives the same output for as long as the vault holds,
     // which is what keeps a provider's prompt cache and a signed transcript stable across requests.
     readonly mask: (text: string) => Promise<string>;
-    // An image bound for the provider: `keep` sends it as it is; otherwise the text that takes its place.
-    readonly image: (image: ShieldBinary) => Promise<"keep" | { readonly text: string }>;
+    // An image bound for the provider: `keep` sends it as it is, `image` sends that image in its place (the same picture
+    // with its personal data painted over), `text` sends a note instead of any picture.
+    readonly image: (image: ShieldBinary) => Promise<ImageVerdict>;
     // A document (a PDF) bound for the provider: `keep` sends it as it is; otherwise the masked text that takes its place.
     readonly document: (document: ShieldBinary) => Promise<"keep" | { readonly text: string }>;
     // Appended once to the request's instructions while masking is on, so the model knows what a token is and to write
