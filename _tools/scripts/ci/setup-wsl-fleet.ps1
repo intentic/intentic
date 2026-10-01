@@ -176,6 +176,8 @@ $UnreadySince = Join-Path $Root 'engine-unready-since.txt'
 $IntegrationRestartStamp = Join-Path $Root 'integration-restarted-at.txt'
 # The job-started hook, inside the distro. Every runner's .env points ACTIONS_RUNNER_HOOK_JOB_STARTED here.
 $HookPath = '/usr/local/lib/intentic-ci/wait-for-docker.sh'
+# The disk janitor, inside the distro, run by intentic-ci-janitor.timer. Installed from fleet-janitor.sh beside this file.
+$JanitorPath = '/usr/local/lib/intentic-ci/fleet-janitor.sh'
 $DockerSettings = Join-Path $env:APPDATA 'Docker\settings-store.json'
 $WslConfig = Join-Path $env:USERPROFILE '.wslconfig'
 
@@ -290,6 +292,52 @@ if ($Check) {
     }
     if ($hookChanged) { Step "added the job-started hook to $($hookChanged.Count) runner .env file(s); each is restarted below once it is idle, because a listener reads .env only when it starts." }
     else { Step 'every runner already carries the job-started hook.' }
+}
+
+# -- the janitor: an hourly cap on what jobs leave in the distro ---------------------------------------------------
+# fleet-janitor.sh, next to this script, says what it removes and why. A systemd timer inside the distro rather
+# than a step of the reconciler below: one pass measures a few hundred GB with du, which does not fit a pass that
+# runs every $WatchdogMinutes minutes, and it has to run as root because job containers write their files as root.
+$janitorSource = Join-Path $PSScriptRoot 'fleet-janitor.sh'
+$janitorUnit = @"
+[Unit]
+Description=Intentic CI fleet janitor: caps runner temp, /ci-cache and buildkit state ($JanitorPath)
+
+[Service]
+Type=oneshot
+ExecStart=$JanitorPath
+Nice=19
+IOSchedulingClass=idle
+TimeoutStartSec=3h
+"@
+$janitorTimer = @"
+[Unit]
+Description=Run the Intentic CI fleet janitor hourly
+
+[Timer]
+OnBootSec=20min
+OnUnitActiveSec=1h
+RandomizedDelaySec=5min
+
+[Install]
+WantedBy=timers.target
+"@
+if ($Check) {
+    $state = ((& wsl.exe -d $Distro -e systemctl is-active intentic-ci-janitor.timer 2>$null | ForEach-Object { ($_ -replace "`0", '').Trim() }) -join '')
+    if ($state -eq 'active') { Step "the fleet janitor timer is active (journalctl -u intentic-ci-janitor in $Distro has every pass)." }
+    else { Warn "the fleet janitor timer is '$state' in $Distro, so runner temp, /ci-cache and buildkit state grow without a cap. Re-run without -Check." }
+} elseif (-not (Test-Path -LiteralPath $janitorSource)) {
+    Warn "no $janitorSource next to this script -- the fleet janitor is not installed, so nothing caps what jobs leave in $Distro."
+} else {
+    $janitorDir = $JanitorPath.Substring(0, $JanitorPath.LastIndexOf('/'))
+    ((Get-Content -LiteralPath $janitorSource -Raw) -replace "`r", '') | & wsl.exe -d $Distro -u root -e /bin/sh -c "mkdir -p $janitorDir && tr -d '\r' > $JanitorPath && chmod 755 $JanitorPath"
+    $ok = $LASTEXITCODE -eq 0
+    ($janitorUnit -replace "`r", '') | & wsl.exe -d $Distro -u root -e /bin/sh -c "tr -d '\r' > /etc/systemd/system/intentic-ci-janitor.service"
+    $ok = $ok -and $LASTEXITCODE -eq 0
+    ($janitorTimer -replace "`r", '') | & wsl.exe -d $Distro -u root -e /bin/sh -c "tr -d '\r' > /etc/systemd/system/intentic-ci-janitor.timer && systemctl daemon-reload && systemctl enable --now intentic-ci-janitor.timer"
+    $ok = $ok -and $LASTEXITCODE -eq 0
+    if ($ok) { Step "the fleet janitor runs hourly in $Distro (intentic-ci-janitor.timer)." }
+    else { Warn "could not install the fleet janitor in $Distro -- runner temp, /ci-cache and buildkit state keep growing until it is." }
 }
 
 # -- the windowless launcher ----------------------------------------------------------------------------------
@@ -1108,6 +1156,7 @@ Step "the fleet's own docker answers in $Distro (server $server), so a container
 Step "it is reconciled at every sign-in and every $WatchdogMinutes minutes ($repetition, read back off the registered task) -- nothing to keep open, nothing to babysit."
 Step "every probe is bounded ($EngineProbeSeconds s for the engine), so a wedged docker can no longer park a pass and take the supervision down with it."
 Step "free space on this host is read and logged every pass, and rebuildable docker state is reclaimed under $LowDiskGb GB. Nothing tagged and no volume is ever pruned -- this daemon also runs your sandboxes."
+Step "inside $Distro, intentic-ci-janitor.timer caps each runner's _temp, /ci-cache and the intentic-cache buildkit state hourly ($JanitorPath)."
 Step "the pass logs to $LogPath."
 if (-not $LauncherPath) { Warn 'without the launcher stub this task maps a console window for a moment on every pass, on the machine whose desktop tiers read window titles. See -LauncherPath.' }
 Step 'after an unattended reboot this still waits for a sign-in. Windows signs itself back in after its own update restarts; for anything else, see -AutoLogon in setup-windows-runner.ps1.'

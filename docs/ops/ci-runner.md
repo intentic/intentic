@@ -38,12 +38,20 @@ Runners are not ephemeral. Fleet checkouts use `clean: false` to keep `node_modu
 
 | Store | What bounds it |
 | --- | --- |
-| `/ci-cache/turbo` | age sweep in the `pnpm-setup` action |
-| `/ci-cache/pnpm-store`, `/ci-cache/cargo` | grow only when a version is added |
-| `/ci-cache/xwin`, `/ci-cache/ms-playwright` | fixed-size downloads |
-| buildx builder `intentic-cache` | age sweep in `publish-images.sh` |
+| each runner's `_temp`, including the job's `$HOME` | the janitor, while that runner is idle |
+| `actions-work-N/.pnpm-store` | the janitor, above 6 GB |
+| `/ci-cache/turbo` | age sweep in the `pnpm-setup` action; the janitor above 10 GB |
+| `/ci-cache/*-target` | the janitor, above 20 GB or after 14 days without a build |
+| `/ci-cache/onboarding-docker` | the janitor, above 30 GB |
+| `/ci-cache/pnpm-store`, `/ci-cache/cargo` | the janitor, above 20 GB |
+| any other `/ci-cache` entry (`xwin`, `ms-playwright`, ...) | the janitor, above 15 GB |
+| buildx builder `intentic-cache` | age sweep in `publish-images.sh`; the janitor keeps 25 GB |
 | dangling images | `docker image prune` in `nightly.yml` |
 | host disk | the fleet task prunes build cache under `-LowDiskGb` |
+
+The janitor is [`fleet-janitor.sh`](../../_tools/scripts/ci/fleet-janitor.sh), which `setup-wsl-fleet.ps1` installs in the distro with the hourly `intentic-ci-janitor.timer`. It runs as root because job containers write as root, and the runner, which runs as the distro user, cannot empty `_temp` after them. It removes a runner's leftovers only while that runner has no job, and shared `/ci-cache` directories only while no runner has one. `journalctl -u intentic-ci-janitor` in the distro has every pass, and `JANITOR_DRY_RUN=1` reports without removing anything.
+
+Space freed inside the distro stays in its VHDX until a compaction. When one pass frees 40 GB or more, the janitor writes `/var/lib/intentic-ci/compact-requested`, and omen's maintenance task compacts on its next idle hourly pass if C: is below 250 GB free.
 
 ## Registering a runner
 
