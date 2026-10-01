@@ -290,6 +290,12 @@ const scheduledWays = useScheduledWays({
     accounts: paneView.accounts,
     submit,
 });
+
+// The row's density cutoffs assume the round send press. A time-labelled schedule press, or a named persona/run-through pill,
+// adds ~100px to the right group, so the model's name drops at a wider container or the row breaks in two first.
+const wideActions = computed(
+    () => (sendShown.value && scheduledLabel.value !== undefined && scheduledLabel.value !== ``) || inRow.value.persona || inRow.value.runThrough,
+);
 const { open: waysOpen, ways: hasWays, fallbackName, canReset, resetting, note: waysNote, sendOnFallback, resetAndSend } = scheduledWays;
 const waysAnchor = ref<HTMLElement>();
 
@@ -486,7 +492,7 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                                         :aria-label="
                                             modelReading.unset ? modelLabelText : t(`chat.chatPane.providerModel`, { providerName, modelLabelText })
                                         "
-                                        :label-class="modelReading.unset ? `` : `@max-md:hidden`"
+                                        :label-class="modelReading.unset ? `` : wideActions ? `@max-xl:hidden` : `@max-md:hidden`"
                                         @click="modelOpen = !modelOpen"
                                     />
 
