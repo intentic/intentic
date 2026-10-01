@@ -23,6 +23,7 @@ import {
 } from "../../agent/providers/provider-module.js";
 import type { Services } from "../../composition.js";
 import { type GrokAccountDeps, grokAccountDoor } from "./grok-accounts.js";
+import { sharedServerRefusal } from "../../privacy/harness-route.js";
 
 // Everything Grok contributes, listed in runtimes/runtime-table.ts; its loop and credential are OpenCode's (runtimes/opencode).
 
@@ -34,7 +35,7 @@ export interface GrokSlice {
 // ride along as Codex's do; Claude-only fields (plugins, the daemon's in-process servers, thinking) don't apply.
 // What a Grok turn is planned from, and all its adapter reads: OpenCode holds the credential, the catalog and sessions,
 // and the turn's mounts are leased from the daemon's MCP door.
-export type GrokAdapterDeps = TurnToolsDeps & Pick<Services, "grokAgent" | "openCode">;
+export type GrokAdapterDeps = TurnToolsDeps & Pick<Services, "grokAgent" | "openCode" | "privacyShield">;
 
 export const planGrokTurn = async (
     services: GrokAdapterDeps,
@@ -47,6 +48,12 @@ export const planGrokTurn = async (
             ok: false,
             message: "No Grok account connected, sign in with your xAI (SuperGrok/X Premium) account in Setup before chatting.",
         };
+    }
+    const refused = await sharedServerRefusal(services.privacyShield, services.openCode.shielded, "grok").catch((error: unknown) =>
+        error instanceof Error ? error.message : "the privacy shield's policy could not be read",
+    );
+    if (refused !== undefined) {
+        return { ok: false, message: refused };
     }
     // OpenCode's own default is a retired id xAI rejects, so this resolves from the daemon's catalog instead (never
     // empty): keeps the pinned model if valid, else the catalog default. A stale id self-heals mid-turn via xAI's "Did

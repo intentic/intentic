@@ -4,6 +4,7 @@ import { unstubbed } from "@intentic/testing";
 import type { Social } from "../../conversations/registry/agents-store.js";
 import { conversationAfter } from "../../testing.js";
 import { cleanSessionTitle, nameAgentTitle, splitTitleAction } from "./title-namer.js";
+import { privacySliceFake } from "../../privacy/privacy-slice.testing.js";
 
 const ask = jest.fn<() => Promise<{ value: string }>>();
 // Whether a model is set for session titles; false means this pass must ask before spending anything.
@@ -81,6 +82,7 @@ const STOLEN_TITLES = [
 // `turns` is how many turns the conversation finished before the one this pass runs at; 0 is its opening turn.
 const servicesWith = (title: Social["title"], setTitle: Mock<Services["agents"]["setTitle"]>, turns = 0): Services =>
     unstubbed<Services>("services", {
+        privacyShield: privacySliceFake().privacyShield,
         agents: unstubbed<Services["agents"]>("agents", { entry: () => conversationAfter(turns, { social: { title, reactions: [] } }), setTitle }),
     });
 

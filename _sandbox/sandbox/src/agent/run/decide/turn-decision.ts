@@ -200,6 +200,13 @@ export const decideTurn = (facts: TurnFacts, input: RoutedAgentTurn, context: Tu
         const warning = { fields: said, message: "model: helper jobs only, a turn on it was refused before sending" };
         return { ok: false, code: "model-helper-only", message: helperOnlyRefusal(facts.helperOnly.label, facts.helperOnly.reason), warnings: [warning], spawn: false };
     }
+    // The privacy shield turns away a turn whose runtime it can't stand in front of while its provider is untrusted:
+    // the words wait for a provider or a runtime the shield covers.
+    if (facts.privacyRefusal !== undefined) {
+        const said = { provider: runtime.provider, harness: runtime.harness };
+        const warning = { fields: said, message: "privacy: the shield can't cover this runtime and the provider is untrusted, refused before sending" };
+        return { ok: false, code: "privacy-unshielded", message: facts.privacyRefusal, warnings: [warning], spawn: false };
+    }
     const { capabilities } = runtime;
     const premise = premiseOf(facts, input, runtime);
     const { persona } = premise;

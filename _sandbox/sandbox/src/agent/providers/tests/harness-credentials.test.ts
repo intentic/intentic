@@ -122,6 +122,20 @@ test("a HELPER is told the opposite, so a rung that will not answer is stepped o
     expect(harnessEnv({ kind: "container" }, { helper: true })["IS_SANDBOX"]).toBe("1");
 });
 
+// Behind the privacy shield every credential kind sends to the gateway, which forwards where the credential would have
+// gone: the subscription token travels as it did, only the address changes.
+test("a shielded credential points every kind of harness at the gateway, keeping its own bearer", () => {
+    const gateway = "http://127.0.0.1:8787/privacy/gateway/session";
+    const oauth = harnessEnv({ kind: "claude-oauth", token: "sk-oauth", gateway });
+    expect(oauth["ANTHROPIC_BASE_URL"]).toBe(gateway);
+    expect(oauth["CLAUDE_CODE_OAUTH_TOKEN"]).toBe("sk-oauth");
+    const routed = harnessEnv({ kind: "routed", baseUrl: "http://127.0.0.1:8788", authToken: "local", gateway }, { model: "gpt-5.6-sol" });
+    expect(routed["ANTHROPIC_BASE_URL"]).toBe(gateway);
+    expect(routed["ANTHROPIC_AUTH_TOKEN"]).toBe("local");
+    expect(harnessEnv({ kind: "container", gateway })["ANTHROPIC_BASE_URL"]).toBe(gateway);
+    expect(harnessEnv({ kind: "claude-oauth", token: "sk-oauth" })["ANTHROPIC_BASE_URL"]).toBeUndefined();
+});
+
 test("a custom endpoint with no resolved model pins nothing rather than an empty id", () => {
     const env = harnessEnv({ kind: "routed", baseUrl: "https://router.example", authToken: "local" });
     expect(env["ANTHROPIC_BASE_URL"]).toBe("https://router.example");

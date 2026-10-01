@@ -1,0 +1,211 @@
+#!/usr/bin/env node
+// The in-sandbox privacy command: whether the privacy shield is on, and the one thing an agent may do to it, which is
+// teach it a dataset's values. A taught value is masked wherever it appears from then on, in every form it is written,
+// whether or not a detector would have found it: the way to be sure a customer table's names and PESELs never reach an
+// untrusted provider, even in a shape no pattern expects.
+//
+// The values are read HERE, from the file, and go straight to the daemon over loopback: they are never printed, so
+// teaching a dataset does not itself put it in front of the model. Teaching only masks more, so the agent's token may do
+// it; switching the shield, trusting a provider or forgetting a dataset is the owner's, in Sandbox ▸ Agent ▸ Safety.
+
+import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { basename } from "node:path";
+import { call, die, parseArgs, refusalOf } from "./needs-cli.mjs";
+
+const COMMAND = "privacy";
+
+const CLASSES = ["person-name", "national-id", "tax-id", "identity-document", "bank-account", "payment-card", "email", "phone", "address"];
+
+const USAGE = `privacy — the privacy shield that keeps personal data from untrusted model providers
+
+  privacy                       whether the shield is on, which providers are trusted, what it has learned
+  privacy sources               the datasets taught to it, and how many values each
+  privacy learn <file> --column <spec> [--column <spec>]... [--table <name> | --query "<sql>"] [--source "<label>"]
+                                teach it every value in those columns; from then on each is masked wherever it
+                                appears. <file> is CSV, TSV, JSON lines, or SQLite (.db, .sqlite, .sqlite3), which
+                                takes --table or --query. <spec> is column[:class], and column may join several with
+                                + ("first_name+last_name:person-name" teaches "Jan Kowalski"). Classes:
+                                ${CLASSES.join(", ")}; person-name when left out.
+
+The values are read here and sent to the daemon; none is printed. Values shorter than three characters are skipped.`;
+
+const BATCH = 5_000;
+
+const status = async () => {
+    const { status: code, text } = await call(COMMAND, "GET", "/privacy/shield");
+    if (code !== 200) {
+        return die(COMMAND, refusalOf(text));
+    }
+    const shield = JSON.parse(text);
+    const mode = { off: "off", watch: "watching (recording what it would mask, sending everything unchanged)", on: "on (masking for untrusted providers)" };
+    process.stdout.write(`Privacy shield: ${mode[shield.policy.mode] ?? shield.policy.mode}\n`);
+    const trusted = shield.providers.filter((provider) => provider.local || shield.policy.trusted.includes(provider.id));
+    process.stdout.write(`Trusted: ${trusted.length === 0 ? "none" : trusted.map((provider) => `${provider.label}${provider.local ? " (local)" : ""}`).join(", ")}\n`);
+    process.stdout.write(`Looks for: ${shield.policy.classes.join(", ")}\n`);
+    process.stdout.write(`Learned values: ${shield.known}; tokens given out: ${shield.tokens}\n`);
+    process.stdout.write(`Images to untrusted providers: ${shield.policy.images}${shield.readers.ocr ? "" : " (no local text reader installed)"}\n`);
+    if (shield.policy.mode === "on") {
+        process.stdout.write(
+            "Personal data reaches untrusted providers as tokens like ⟦PERSON_3⟧, resolved back on this machine: write a token exactly as given wherever its value belongs.\n",
+        );
+    }
+};
+
+const sources = async () => {
+    const { status: code, text } = await call(COMMAND, "GET", "/privacy/known");
+    if (code !== 200) {
+        return die(COMMAND, refusalOf(text));
+    }
+    const list = JSON.parse(text);
+    if (list.length === 0) {
+        process.stdout.write("Nothing has been taught to the privacy shield.\n");
+        return;
+    }
+    for (const entry of list) {
+        process.stdout.write(`${String(entry.count).padStart(8)}  ${entry.source}  (${entry.at})\n`);
+    }
+};
+
+// One CSV/TSV record per line, quotes doubled inside quoted fields; a record spanning lines is joined back.
+const parseDelimited = (text, delimiter) => {
+    const rows = [];
+    let row = [];
+    let field = "";
+    let quoted = false;
+    for (let index = 0; index < text.length; index += 1) {
+        const char = text[index];
+        if (quoted) {
+            if (char === '"' && text[index + 1] === '"') {
+                field += '"';
+                index += 1;
+            } else if (char === '"') {
+                quoted = false;
+            } else {
+                field += char;
+            }
+        } else if (char === '"' && field === "") {
+            quoted = true;
+        } else if (char === delimiter) {
+            row.push(field);
+            field = "";
+        } else if (char === "\n" || char === "\r") {
+            if (char === "\r" && text[index + 1] === "\n") {
+                index += 1;
+            }
+            row.push(field);
+            rows.push(row);
+            row = [];
+            field = "";
+        } else {
+            field += char;
+        }
+    }
+    if (field !== "" || row.length > 0) {
+        row.push(field);
+        rows.push(row);
+    }
+    const [header = [], ...records] = rows.filter((record) => record.some((cell) => cell !== ""));
+    return records.map((record) => Object.fromEntries(header.map((name, column) => [name.trim(), record[column] ?? ""])));
+};
+
+const readRecords = (file, flags) => {
+    const lower = file.toLowerCase();
+    if (/\.(db|sqlite3?)$/u.test(lower)) {
+        const sql = flags.query ?? (flags.table === undefined ? undefined : `SELECT * FROM "${flags.table.replaceAll('"', '""')}"`);
+        if (sql === undefined) {
+            return die(COMMAND, "a SQLite file needs --table <name> or --query \"<sql>\"");
+        }
+        // The whole result is JSON on stdout, read here and never echoed.
+        const out = execFileSync("sqlite3", ["-readonly", "-json", file, sql], { encoding: "utf8", maxBuffer: 1024 * 1024 * 1024 });
+        return out.trim() === "" ? [] : JSON.parse(out);
+    }
+    const text = readFileSync(file, "utf8");
+    if (lower.endsWith(".jsonl") || lower.endsWith(".ndjson")) {
+        return text
+            .split("\n")
+            .filter((line) => line.trim() !== "")
+            .map((line) => JSON.parse(line));
+    }
+    if (lower.endsWith(".json")) {
+        const parsed = JSON.parse(text);
+        return Array.isArray(parsed) ? parsed : die(COMMAND, "a .json file must hold an array of records");
+    }
+    return parseDelimited(text, lower.endsWith(".tsv") ? "\t" : text.split("\n", 1)[0].includes(";") && !text.split("\n", 1)[0].includes(",") ? ";" : ",");
+};
+
+const specOf = (raw) => {
+    const at = raw.lastIndexOf(":");
+    const columns = (at === -1 ? raw : raw.slice(0, at)).split("+").map((column) => column.trim()).filter((column) => column !== "");
+    const kind = at === -1 ? "person-name" : raw.slice(at + 1).trim();
+    if (columns.length === 0) {
+        return die(COMMAND, `--column ${raw} names no column`);
+    }
+    if (!CLASSES.includes(kind)) {
+        return die(COMMAND, `--column ${raw}: "${kind}" is not a class (${CLASSES.join(", ")})`);
+    }
+    return { columns, kind };
+};
+
+const learn = async (file, flags) => {
+    if (file === undefined || flags.column === undefined) {
+        return die(COMMAND, USAGE);
+    }
+    const specs = flags.column.map(specOf);
+    const records = readRecords(file, flags);
+    if (records.length > 0) {
+        const present = new Set(Object.keys(records[0]));
+        const missing = specs.flatMap((spec) => spec.columns).filter((column) => !present.has(column));
+        if (missing.length > 0) {
+            return die(COMMAND, `no column named ${missing.join(", ")}; the columns are ${[...present].join(", ")}`);
+        }
+    }
+    const values = new Map();
+    for (const record of records) {
+        for (const { columns, kind } of specs) {
+            const value = columns
+                .map((column) => record[column])
+                .filter((part) => part !== null && part !== undefined && String(part).trim() !== "")
+                .map((part) => String(part).trim())
+                .join(" ");
+            if (value.length >= 3 && value.length <= 500) {
+                values.set(`${kind}\u0000${value}`, { value, class: kind });
+            }
+        }
+    }
+    const source = flags.source ?? `${basename(file)}${flags.table === undefined ? "" : `:${flags.table}`} (${specs.map((spec) => spec.columns.join("+")).join(", ")})`;
+    const all = [...values.values()];
+    let added = 0;
+    let known = 0;
+    for (let start = 0; start < all.length; start += BATCH) {
+        const { status: code, text } = await call(COMMAND, "POST", "/privacy/known", JSON.stringify({ source, values: all.slice(start, start + BATCH) }));
+        if (code !== 200) {
+            return die(COMMAND, refusalOf(text));
+        }
+        const answer = JSON.parse(text);
+        added += answer.added;
+        known = answer.known;
+    }
+    process.stdout.write(`Taught ${all.length} distinct values from ${records.length} records (${added} new) as "${source}". The shield now knows ${known} values.\n`);
+};
+
+const main = async () => {
+    const [verb, ...args] = process.argv.slice(2);
+    if (verb === undefined || verb === "status") {
+        return status();
+    }
+    if (verb === "--help" || verb === "-h" || verb === "help") {
+        process.stdout.write(`${USAGE}\n`);
+        return undefined;
+    }
+    if (verb === "sources") {
+        return sources();
+    }
+    if (verb === "learn") {
+        const { flags, rest } = parseArgs(COMMAND, args, { values: ["table", "query", "source"], repeated: ["column"] });
+        return learn(rest[0], flags);
+    }
+    return die(COMMAND, USAGE);
+};
+
+await main().catch((error) => die(COMMAND, error instanceof Error ? error.message : String(error)));

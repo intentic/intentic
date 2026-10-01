@@ -162,6 +162,7 @@ test("every axis a record can lack has words for it", () => {
         skillDiscovery: "prompt",
         rulebook: "none",
         secrets: "none",
+        privacy: "none",
     };
 
     // Thirteen disclosable axes, thirteen sentences; `fastMode` is disclosed via fastAllowed, and `warm` (keep-warm, off by

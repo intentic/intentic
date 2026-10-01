@@ -59,7 +59,14 @@ export interface OpenCodeService {
     // Clears the auth store and persisted catalog directly (file-level); no provider-scoped SDK removal exists, and
     // this instance is Grok-only.
     readonly disconnect: (providerID: string) => Promise<void>;
+    // Whether the running server's providers are routed the way the privacy shield now wants. Provider config is fixed
+    // at spawn, so a server booted before the shield changed is restarted here once no turn is using it; false only
+    // while a server booted unshielded is still busy and the shield now wants it shielded.
+    readonly shielded: () => Promise<boolean>;
 }
+
+// Where OpenCode's xAI provider sends its requests unless told otherwise.
+const XAI_UPSTREAM = "https://api.x.ai/v1";
 
 // How long `opencode serve` gets to print its listening line; longer than the SDK's 5s default since a cold spawn on a
 // loaded host can miss it.
@@ -466,9 +473,13 @@ export const createOpenCodeService = (
         readonly spawnServer?: typeof createOpencodeServer;
         // Whether the served process still runs; the real process table unless a test stands in for it.
         readonly alive?: (pid: number) => boolean;
+        // The privacy shield's gateway base URL for a provider's requests, or undefined while the shield is off.
+        readonly route?: (provider: "grok" | "gemini", upstream: string) => Promise<string | undefined>;
     } = {},
 ): OpenCodeService => {
-    const { gemini, workspaceRoot } = options;
+    const { gemini, workspaceRoot, route } = options;
+    // Whether the server now running was booted behind the gateway; undefined before any boot.
+    let bootedShielded: boolean | undefined;
     const fetchImpl = options.fetchImpl ?? fetch;
     const spawnServer = options.spawnServer ?? createOpencodeServer;
     const alive = options.alive ?? processAlive;
@@ -495,7 +506,11 @@ export const createOpenCodeService = (
         // Gemini rows read once here, since OpenCode fixes provider config at spawn.
         // allow(silent-catch): a failed catalog read costs Google its provider rather than Grok its runtime
         const geminiModels = gemini === undefined ? [] : await gemini.models().catch(() => []);
-        const geminiProvider = geminiProviderConfig(gemini, geminiModels);
+        // Behind the privacy shield, both providers send to its gateway, which forwards where they would have gone.
+        const xaiGateway = await route?.("grok", XAI_UPSTREAM);
+        const geminiGateway = gemini === undefined ? undefined : await route?.("gemini", gemini.baseUrl);
+        bootedShielded = xaiGateway !== undefined || geminiGateway !== undefined;
+        const geminiProvider = geminiProviderConfig(gemini === undefined || geminiGateway === undefined ? gemini : { ...gemini, baseUrl: geminiGateway }, geminiModels);
         // The last await: the environment is read after it, so a PATH another caller changed meanwhile is the one kept.
         const stored = await engineBinary("opencode");
         // The SDK spawns `opencode serve` with no hook and no pid, inside its first synchronous step: stamped across that
@@ -523,7 +538,10 @@ export const createOpenCodeService = (
                         share: "disabled",
                         permission: ALLOW_EVERY_PERMISSION,
                         provider: {
-                            xai: { models: Object.fromEntries(storeOptOut.map((id) => [id, { options: { store: false } }])) },
+                            xai: {
+                                ...(xaiGateway === undefined ? {} : { options: { baseURL: xaiGateway } }),
+                                models: Object.fromEntries(storeOptOut.map((id) => [id, { options: { store: false } }])),
+                            },
                             ...geminiProvider,
                         },
                     },
@@ -662,6 +680,22 @@ export const createOpenCodeService = (
             models.forget();
             await rm(modelsPath, { force: true });
             await rm(authPath, { force: true });
+        },
+        shielded: async () => {
+            const wanted = (await route?.("grok", XAI_UPSTREAM)) !== undefined;
+            if (booting === undefined || bootedShielded === undefined || bootedShielded === wanted) {
+                return true;
+            }
+            // Idle: stopped, so the next turn boots a server routed the way the shield now wants.
+            if (sessionJudges.size === 0) {
+                serverHandle?.close();
+                serverHandle = undefined;
+                bootedShielded = undefined;
+                forget();
+                return true;
+            }
+            // Busy and still routed through the gateway the shield no longer needs: a plain relay, harmless.
+            return !wanted;
         },
     };
 };

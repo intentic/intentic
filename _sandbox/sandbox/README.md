@@ -127,6 +127,19 @@ flowchart LR
   (`createConversationsSlice`, `createGitSlice`, …); `composition.ts` calls the builders in dependency order, so a new
   service in a slice is written in that slice's file. Members that would close an import cycle there are built in
   composition, named by the builder's `Omit`.
+- The privacy shield (`privacy/`, off unless the owner turns it on) keeps personal data from model providers the
+  owner does not trust. Every runtime whose model requests go to a base URL the daemon names (the Claude Code loop for
+  every provider, Codex, OpenCode's Grok and Gemini) is pointed at one gateway route, `ALL /privacy/gateway/<session>/*`,
+  whose signed session names the provider and the only upstream it forwards to (`privacy/gateway/`). For an untrusted
+  provider it replaces what the detectors (`privacy/detect/`), the vault of known values and, with the `privacy` image
+  pack, a local name model find with tokens like `⟦PERSON_3⟧`, and restores them in the answer as it streams back, so
+  the agent's tools run on real values while the provider reads tokens; images and PDFs go as masked text or are
+  withheld. The vault (`privacy/privacy-vault.ts`) keeps one token per value for the whole workspace, beside the
+  credentials, so a resumed or handed-off transcript masks to the same bytes. A runtime the gateway cannot stand in
+  front of (Cursor, ACP agents, Pi) is refused on an untrusted provider (`privacy-unshielded`), helper jobs step over
+  such a rung, children stay off runners, and a native push or a public share carries the kind of data instead of the
+  data. The policy lives off the workspace and only the owner changes it; the agent's `privacy` CLI can only teach
+  it a dataset's values.
 
 More: [subsystems](docs/subsystems.md) (how the parts connect), [environment](docs/env-contract.md) (what the daemon
 reads at start), [debugging](docs/debugging.md) (logs, diagnostics, state on disk).
@@ -148,7 +161,7 @@ Main groups under `src/`:
 | --- | --- |
 | Turns and agents | `agent/` `conversations/` `runtimes/` `sessions/` `personas/` `loops/` `workflows/` `guard/` `rules/` |
 | Workspace | `workspace/` `git/` `history/` `derived/` `terminal/` `processes/` `ports/` `panels/` |
-| Owner controls | `auth/` `secrets/` `needs/` `areas/` `approvals/` `safety/` `usage/` `wallet/` `settings/` |
+| Owner controls | `auth/` `secrets/` `needs/` `areas/` `approvals/` `safety/` `privacy/` `usage/` `wallet/` `settings/` |
 | Outside world | `capabilities/` `extensions/` `browser/` `hosts/` `peers/` `webext/` `runners/` `sandboxes/` `ci/` `automations/` |
 | Network | `front/` `tunnel/` `vpn/` `exit/` `netdisk/` `public/` `share/` `webchat/` |
 | Plumbing | `bootstrap/` `store/` `seams/` `system/` `http/` `logs/` `invariants/` `workload/` |

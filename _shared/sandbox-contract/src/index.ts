@@ -31,6 +31,7 @@ import { publicContract } from "./contracts/public.contract.js";
 import { netdiskContract } from "./contracts/netdisk.contract.js";
 import { providersContract } from "./contracts/providers.contract.js";
 import { pushContract } from "./contracts/push.contract.js";
+import { privacyContract } from "./contracts/privacy.contract.js";
 import { safetyContract } from "./contracts/safety.contract.js";
 import { needsContract } from "./contracts/needs.contract.js";
 import { secretsContract } from "./contracts/secrets.contract.js";
@@ -95,6 +96,7 @@ export { portsContract } from "./contracts/ports.contract.js";
 export { publicContract } from "./contracts/public.contract.js";
 export { providersContract, type RunnableProviders, RunnableProvidersSchema } from "./contracts/providers.contract.js";
 export { pushContract } from "./contracts/push.contract.js";
+export { privacyContract } from "./contracts/privacy.contract.js";
 export { safetyContract } from "./contracts/safety.contract.js";
 export { needsContract } from "./contracts/needs.contract.js";
 export { secretsContract } from "./contracts/secrets.contract.js";
@@ -216,6 +218,7 @@ export * from "./schemas/marketplace.js";
 export * from "./schemas/metrics.js";
 export * from "./schemas/panels.js";
 export * from "./schemas/personas.js";
+export * from "./schemas/privacy.js";
 export * from "./schemas/providers/plan-limits.js";
 export * from "./schemas/ports.js";
 export * from "./schemas/providers/provider-oauth.js";
@@ -277,6 +280,7 @@ export const sandboxContract = {
     endpoints: endpointsContract,
     extensions: extensionsContract,
     personas: personasContract,
+    privacy: privacyContract,
     safety: safetyContract,
     sessions: sessionsContract,
     settings: settingsContract,

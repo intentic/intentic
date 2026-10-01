@@ -25,6 +25,7 @@ import type { Services } from "../../composition.js";
 import type { Config } from "../../env.config.js";
 import { createGeminiCatalog, type GeminiCatalog } from "./gemini-catalog.js";
 import { geminiOneShot } from "./gemini-one-shot.js";
+import { sharedServerRefusal } from "../../privacy/harness-route.js";
 
 // Everything Gemini contributes, listed in runtimes/runtime-table.ts: the OpenCode loop Grok runs on, on its own backend.
 
@@ -50,7 +51,7 @@ export const createGeminiSlice = (input: {
 // credential, CLIProxyAPI does, the same as a routed turn. Exists because the Claude Code loop's baked-in identity line
 // gets every Google account refused as a false quota error.
 // What a Gemini turn is planned from: the translator's accounts, the Google catalog it serves, and the turn's MCP mounts.
-export type GeminiPlanDeps = TurnToolsDeps & Pick<Services, "cliProxy" | "config" | "geminiAgent" | "geminiModels">;
+export type GeminiPlanDeps = TurnToolsDeps & Pick<Services, "cliProxy" | "config" | "geminiAgent" | "geminiModels" | "openCode" | "privacyShield">;
 
 export const planGeminiTurn = async (
     services: GeminiPlanDeps,
@@ -75,6 +76,12 @@ export const planGeminiTurn = async (
             message:
                 "Google is connected, but the model translator isn't serving any Google model to this sandbox, so nothing can run on it. Send again in a minute; if it keeps happening, reconnect Google in Sandbox ▸ Agent.",
         };
+    }
+    const refused = await sharedServerRefusal(services.privacyShield, services.openCode.shielded, "gemini").catch((error: unknown) =>
+        error instanceof Error ? error.message : "the privacy shield's policy could not be read",
+    );
+    if (refused !== undefined) {
+        return { ok: false, message: refused };
     }
     const catalog = await services.geminiModels.models();
     // Absent and empty both mean the catalog default: the wire allows `model: ""`, and nothing was pinned.

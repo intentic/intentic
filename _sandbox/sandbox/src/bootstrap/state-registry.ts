@@ -43,6 +43,9 @@ import { conversationGrantsDocument } from "../personas/conversation-grants.js";
 import { personasDocument } from "../personas/personas-store.js";
 import { bundleManifestDocument } from "../portability/bundle-arrival.js";
 import { definitionDocument } from "../portability/definition.js";
+import { privacyLedgerDocument } from "../privacy/privacy-ledger.js";
+import { privacyShieldDocument } from "../privacy/privacy-policy.js";
+import { privacyVaultDocument } from "../privacy/privacy-vault.js";
 import { pushDocument } from "../push/push-store.js";
 import { ruleFiringsDocument } from "../rules/rule-firings.js";
 import { runnerIdentityDocument } from "../runners/runner-identity.js";
@@ -131,6 +134,9 @@ export const stateDocuments = (): readonly DocumentSpec[] => [
     personasDocument,
     bundleManifestDocument,
     definitionDocument,
+    privacyLedgerDocument,
+    privacyShieldDocument,
+    privacyVaultDocument,
     pushDocument,
     ruleFiringsDocument,
     runnerIdentityDocument,

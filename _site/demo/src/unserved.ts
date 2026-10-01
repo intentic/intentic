@@ -24,6 +24,7 @@ const UNSIMULATED_WRITE = `Not simulated yet: a control sends it and gets the de
 
 export const UNSERVED = {
     "agents.get": NOT_THE_EDITORS,
+    "privacy.learn": NOT_THE_EDITORS,
     "capabilities.connection": NOT_THE_EDITORS,
     "capabilities.otp": NOT_THE_EDITORS,
     "capabilities.status": NOT_THE_EDITORS,
@@ -102,6 +103,7 @@ export const UNSERVED = {
     "POST /system/runners/credentials": NOT_THE_EDITORS,
     "POST /system/runners/credentials/refresh": NOT_THE_EDITORS,
     "ALL /system/runners/translator/*": NOT_THE_EDITORS,
+    "ALL /privacy/gateway/{session}/*": NOT_THE_EDITORS,
     "POST /system/authorized-key": NOT_THE_EDITORS,
     "POST /system/sync/report": NOT_THE_EDITORS,
     "DELETE /system/authorized-key": NOT_THE_EDITORS,

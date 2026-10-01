@@ -8,6 +8,7 @@ import { createDomainEvents } from "../seams/domain-events.js";
 import { memoryFleet } from "../testing.js";
 import type { MemoryReading } from "@intentic/constants/memory-room";
 import { budgetOn, ROOMY_READING } from "../agent/run/turn/turn-plan.testing.js";
+import { privacySliceFake } from "../privacy/privacy-slice.testing.js";
 
 // The daemon as a child spawn sees it (agent/subagents/children.ts): the settings it budgets by, the transcript a child
 // turn appends to, the fleet it may be placed onto, and the actors its records, cards and runs are held by. Anything
@@ -31,6 +32,8 @@ export const spawnServices = (
     memory: () => MemoryReading = () => ROOMY_READING,
 ): Services =>
     unstubbed<Services>("services", {
+        // Off, as a fresh sandbox has it: a child is placed by the scheduler alone.
+        privacyShield: privacySliceFake().privacyShield,
         resources: budgetOn(memory, { waitDeadlineMs: 10_000 }),
         // No conversation here was placed on a runner before, so a follow-up runs where a first turn would.
         agents: unstubbed<Services["agents"]>("agents", { entry: () => undefined }),

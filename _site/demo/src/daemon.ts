@@ -8,9 +8,12 @@ import {
     type ConversationPrompt,
     type Persona,
     type Area,
+    capabilitiesOf,
+    DEFAULT_PRIVACY_SHIELD,
     type Model,
     type OauthAccount,
     type PresenceUser,
+    PROVIDER_SPECS,
     type RawRouteKey,
     REPO_CHECKS_FILE,
     type RepoChecksList,
@@ -689,6 +692,26 @@ export const procedures = {
     // in: without it the demo drew "Loading…" here forever and the section could not be looked at at all.
     safety: {
         policy: () => ({ text: DEMO_SAFETY_POLICY, custom: false }),
+    },
+    // A fresh sandbox's shield: off, nothing learned, no reader installed, and this catalog's providers to trust. Its
+    // writes refuse: it guards a sandbox's own model traffic, and a recording sends none.
+    privacy: {
+        status: () => ({
+            policy: DEFAULT_PRIVACY_SHIELD,
+            known: 0,
+            tokens: 0,
+            readers: { ocr: false, model: false },
+            providers: PROVIDER_SPECS.map((spec) => ({
+                id: spec.id,
+                label: spec.label,
+                shieldable: capabilitiesOf(spec.id, `native`).privacy === `gateway` || capabilitiesOf(spec.id, `claude-code`).privacy === `gateway`,
+                local: false,
+            })),
+        }),
+        setPolicy: () => refuse(`This is the demo workspace: the privacy shield guards a sandbox's own model traffic, and this one sends none.`),
+        log: () => [],
+        sources: () => [],
+        forget: () => refuse(`This is the demo workspace: nothing has been taught to its privacy shield.`),
     },
     vpn: {
         list: () => ({ links: [] }),

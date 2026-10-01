@@ -107,6 +107,14 @@ const STATE_FILES = [
         portability: "derived",
         note: "The target starts its own record of what it decided.",
     },
+    // What the privacy shield's gateway did with each model request: kinds and counts, never a value. `derived`: evidence
+    // about this machine, self-trimming, not carried.
+    {
+        path: ".intentic/local/privacy-log.json",
+        invalidates: ["privacy-log"],
+        portability: "derived",
+        note: "The target starts its own record of what its shield did.",
+    },
     // Apps the daemon starts on every boot (scaffold/autostart.ts). `carry`: an exported workspace should start the
     // same things. Invalidates nothing: the browser reads what's running off `/panels`, not this file.
     {

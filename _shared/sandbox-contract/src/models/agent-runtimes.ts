@@ -51,6 +51,11 @@ export interface AgentCapabilities {
     readonly rulebook: "hooks" | "approval" | "refuse-only" | "none";
     // Whether a credential is masked; "none" is structural, only the Claude Code loop can rewrite a model's read.
     readonly secrets: "masked" | "none";
+    // Whether the privacy shield can stand between this loop and its provider: `gateway` when the daemon names the base
+    // URL the loop sends its model requests to (so the gateway reads and masks every byte of them), `none` when the loop
+    // talks to its provider on a wire or a configuration the daemon does not own. A `none` loop on an untrusted provider
+    // is refused while the shield is on.
+    readonly privacy: "gateway" | "none";
 }
 
 // The Claude Code Agent SDK loop, the ceiling every other runtime is measured against: the only one that owns the whole
@@ -75,6 +80,8 @@ export const CLAUDE_CODE: AgentCapabilities = {
     // The only runtime with its own pre-execution hook, so the only one where a hold can park instead of refusing.
     rulebook: "hooks",
     secrets: "masked",
+    // Every request goes to ANTHROPIC_BASE_URL, which the daemon sets per turn.
+    privacy: "gateway",
 };
 
 // Codex app-server: item-level events, the turn's remote MCP servers over http, and four seams (steer, a question
@@ -100,6 +107,8 @@ export const CODEX: AgentCapabilities = {
     // Asked only when the owner has written command rules; an unconfigured workspace pays nothing for it.
     rulebook: "approval",
     secrets: "none",
+    // Its model provider's base_url is the daemon's, written into the per-thread config.
+    privacy: "gateway",
 };
 
 // OpenCode (the Grok runtime): its own agentic loop and tools, with the turn's remote MCP servers mounted on the shared
@@ -126,6 +135,8 @@ export const OPENCODE: AgentCapabilities = {
     // hold parked on a card while the turn's inactivity watchdog is held.
     rulebook: "approval",
     secrets: "none",
+    // The shared server's provider baseURLs are written by the daemon at spawn.
+    privacy: "gateway",
 };
 
 // The same OpenCode loop, serving Gemini instead of xAI, identical abilities. The Claude Code loop announces itself in
@@ -157,6 +168,8 @@ export const ACP: AgentCapabilities = {
     // In the protocol floor, so every agent has it; which calls it asks about is entirely its own choice.
     rulebook: "approval",
     secrets: "none",
+    // The agent picks its own provider and endpoint from its own login and environment.
+    privacy: "none",
 };
 
 // Pi driven over its RPC mode: above the ACP floor and below the Claude Code ceiling. Real mid-turn steering, an effort
@@ -181,6 +194,8 @@ export const PI: AgentCapabilities = {
     // The one runtime with no seam at all: bash runs in-process, and no rule the owner writes can apply.
     rulebook: "none",
     secrets: "none",
+    // Pi calls its provider from its own login; the daemon names no endpoint.
+    privacy: "none",
 };
 
 // Cursor's own runtime, driven through `@cursor/sdk` from this daemon's process; an embedding surface, so most seams
@@ -219,4 +234,6 @@ export const CURSOR: AgentCapabilities = {
     rulebook: "hooks",
     // none, structurally: its hooks only allow/deny or are discarded, nothing here to substitute a reference into.
     secrets: "none",
+    // Cursor's own RPC to its own servers, which then reach the model: redirectable, not readable.
+    privacy: "none",
 };

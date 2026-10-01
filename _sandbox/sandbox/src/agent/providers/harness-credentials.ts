@@ -71,16 +71,21 @@ const credentialEnv = (credential: HarnessCredential, model: string | undefined)
         case "routed":
         case "trial":
             return {
-                ANTHROPIC_BASE_URL: credential.baseUrl,
+                ANTHROPIC_BASE_URL: credential.gateway ?? credential.baseUrl,
                 ANTHROPIC_AUTH_TOKEN: credential.authToken,
                 ...(model !== undefined ? routedModelEnv(model) : {}),
             };
         case "claude-oauth":
-            return { CLAUDE_CODE_OAUTH_TOKEN: credential.token };
+            return { CLAUDE_CODE_OAUTH_TOKEN: credential.token, ...(credential.gateway !== undefined ? { ANTHROPIC_BASE_URL: credential.gateway } : {}) };
         case "container":
-            return {};
+            return credential.gateway !== undefined ? { ANTHROPIC_BASE_URL: credential.gateway } : {};
     }
 };
+
+// Behind the privacy shield the CLI's own reporting is switched off too (error reports and telemetry carry excerpts of
+// what it was doing, and go to the CLI vendor's own services, past the gateway).
+const shieldedEnv = (credential: HarnessCredential): Record<string, string> =>
+    credential.gateway !== undefined ? { CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1", DISABLE_ERROR_REPORTING: "1", DISABLE_TELEMETRY: "1" } : {};
 
 // Env for a Claude Code harness process. `helper` is a one-shot rather than a turn: a turn tolerates waiting
 // (resumable), a helper should fail fast.
@@ -92,6 +97,7 @@ export const harnessEnv = (
     // Turn-only: rides out provider blips via retries instead of dying and resuming; helpers and the trial fail fast.
     ...(options.helper === true || credential.kind === "trial" ? {} : { CLAUDE_CODE_RETRY_WATCHDOG: "1" }),
     ...credentialEnv(credential, options.model),
+    ...shieldedEnv(credential),
 });
 
 // The resolver's answer as the credential a harness request carries: a routed endpoint (the trial is its own kind), a
@@ -140,6 +146,7 @@ export type HarnessCredentialDeps = Pick<
     | "headroom"
     | "logger"
     | "minted"
+    | "privacyShield"
     | "providerCatalogs"
     | "providerRefusals"
     | "runnerParent"

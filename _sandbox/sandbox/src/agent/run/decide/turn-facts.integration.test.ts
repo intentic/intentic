@@ -58,6 +58,7 @@ test.each([
         [
             "turn.plan.settings",
             "turn.plan.window",
+            "turn.plan.privacy",
             "turn.plan.capabilities",
             "turn.plan.personas",
             "turn.plan.areas",
@@ -70,7 +71,7 @@ test.each([
         { agent: "claude" },
         routed,
         {},
-        ["turn.plan.window", "turn.plan.capabilities", "turn.plan.personas", "turn.plan.areas", "turn.plan.context", "turn.plan.repo-checks"],
+        ["turn.plan.window", "turn.plan.privacy", "turn.plan.capabilities", "turn.plan.personas", "turn.plan.areas", "turn.plan.context", "turn.plan.repo-checks"],
     ],
     [
         "native Codex, told of the tree's dependencies in prose",
@@ -80,6 +81,7 @@ test.each([
         [
             "turn.plan.settings",
             "turn.plan.window",
+            "turn.plan.privacy",
             "turn.plan.capabilities",
             "turn.plan.deps",
             "turn.plan.personas",
@@ -96,6 +98,7 @@ test.each([
         [
             "turn.plan.settings",
             "turn.plan.window",
+            "turn.plan.privacy",
             "turn.plan.capabilities",
             "turn.plan.personas",
             "turn.plan.areas",
@@ -111,6 +114,7 @@ test.each([
         [
             "turn.plan.settings",
             "turn.plan.window",
+            "turn.plan.privacy",
             "turn.plan.capabilities",
             "turn.plan.deps",
             "turn.plan.personas",
@@ -128,6 +132,7 @@ test.each([
         [
             "turn.plan.settings",
             "turn.plan.window",
+            "turn.plan.privacy",
             "turn.plan.capabilities",
             "turn.plan.deps",
             "turn.plan.personas",
@@ -144,6 +149,7 @@ test.each([
         [
             "turn.plan.settings",
             "turn.plan.window",
+            "turn.plan.privacy",
             "turn.plan.capabilities",
             "turn.plan.personas",
             "turn.plan.areas",
@@ -160,6 +166,7 @@ test.each([
         [
             "turn.plan.settings",
             "turn.plan.window",
+            "turn.plan.privacy",
             "turn.plan.capabilities",
             "turn.plan.personas",
             "turn.plan.areas",
@@ -175,6 +182,7 @@ test.each([
         [
             "turn.plan.settings",
             "turn.plan.window",
+            "turn.plan.privacy",
             "turn.plan.capabilities",
             "turn.plan.personas",
             "turn.plan.areas",

@@ -107,6 +107,7 @@ import { createRunnersSlice, type RunnersSlice } from "./runners/runners-slice.j
 import { type AgentToolsMember, createCapabilitiesSlice, type CapabilitiesSlice } from "./capabilities/capabilities-slice.js";
 import { connectorHostDefaults } from "./secrets/host-guards.js";
 import { createSecretsSlice, type SecretsSlice } from "./secrets/secrets-slice.js";
+import { createPrivacySlice, type PrivacySlice } from "./privacy/privacy-slice.js";
 import { createNeedsSlice, type NeedsSlice } from "./needs/needs-slice.js";
 import { type ConversationGrants, conversationGrantsDocument, fileConversationGrants } from "./personas/conversation-grants.js";
 import { createExtensionsSlice, type ExtensionsSlice } from "./extensions/extensions-slice.js";
@@ -141,6 +142,7 @@ export interface Services
         RunnersSlice,
         CapabilitiesSlice,
         SecretsSlice,
+        PrivacySlice,
         NeedsSlice,
         ExtensionsSlice,
         AutomationsSlice,
@@ -269,6 +271,8 @@ const createProviderAreas = (config: Config, logger: Logger, authRoot: string, w
     const openCode = createOpenCodeService(authRoot, {
         // Where a non-isolated conversation runs, the one directory whose permission watcher is worth opening at boot.
         workspaceRoot: config.workspaceRoot,
+        // Read at each server boot: the privacy shield's gateway for each provider, while the shield is not off.
+        route: (provider, upstream) => whole().privacyShield.baseUrlFor({ provider, upstream }),
         ...(config.translator.url === ""
             ? {}
             : {
@@ -555,6 +559,15 @@ export const createServices = (config: Config, logger: Logger): Services => {
         ...conversationsParts.slice,
         ...capabilitiesParts.slice,
         ...secretsSlice,
+        // Read by the turn's credential resolution and the gateway route alike, so a policy change holds from the next
+        // model request whichever runtime sends it.
+        ...createPrivacySlice({
+            authRoot,
+            workspaceRoot: workspace.root,
+            capabilities: () => capabilities.list(),
+            loopbackBase: () => `http://127.0.0.1:${config.sandbox.port}`,
+            warn: (message, error) => logger.warn({ err: error }, message),
+        }),
         ...createNeedsSlice({ workspaceRoot: workspace.root, logger, whole }),
         ...extensionsSlice,
         ...createAutomationsSlice({ workspaceRoot: workspace.root, archived: (conversationId) => agents.entry(conversationId)?.archivedAt !== undefined }),
@@ -600,7 +613,9 @@ export const createServices = (config: Config, logger: Logger): Services => {
         sandboxSettings,
         runtimeInstalls,
         push,
-        pushSender: createPushSender(push, logger),
+        // A native install's notification passes the privacy shield on its way to Apple; read through `whole` since the
+        // shield is composed in this same object.
+        pushSender: createPushSender(push, logger, (text) => whole().privacyShield.redactForDisplay(text)),
         events,
         reaper,
     };

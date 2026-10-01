@@ -916,6 +916,16 @@ const askAbout = (kid: ChildRecord, move: ChildMove, childId: string, message: s
     message: message.trim().slice(0, MESSAGE_SHOWN),
 });
 
+// Whether the privacy shield keeps children on this machine; an unreadable policy keeps them here too.
+const shieldHoldsHere = async (services: Pick<Services, "privacyShield">): Promise<boolean> => {
+    try {
+        return (await services.privacyShield.policy()).mode !== "off";
+    } catch {
+        // allow(silent-catch): an unreadable policy may be one that is on, and a child kept here costs only a slot.
+        return true;
+    }
+};
+
 // The runner a child goes to, undefined for here. No preference: the scheduler places it. A named machine gets it, or
 // here if that machine is unusable.
 const childPlacement = async (
@@ -924,7 +934,9 @@ const childPlacement = async (
     provider: AgentProvider,
     harness: AgentHarness,
 ): Promise<string | undefined> =>
-    spec.on === "here"
+    // A runner calls its provider from its own machine, past this sandbox's privacy shield, so while the shield is on
+    // or watching every child stays here, wherever it was asked to go.
+    spec.on === "here" || (await shieldHoldsHere(services))
         ? undefined
         : placeFanOut(
               await runnerSummaries(services),

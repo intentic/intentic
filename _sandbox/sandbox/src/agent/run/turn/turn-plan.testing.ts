@@ -11,6 +11,7 @@ import type { AgentRequest, TurnBase } from "../../providers/agent-request.js";
 import { composeWirePrompt } from "../../prompt/turn-preamble.js";
 import type { TurnContext } from "../../providers/adapter.js";
 import { parkedCards } from "../../../conversations/actor/parked-cards.js";
+import { privacySliceFake } from "../../../privacy/privacy-slice.testing.js";
 
 // Shared fixture both turn-plan suites build on, as a `*.testing.ts` module (not copied) so the integration-budget
 // checker can follow the import and judge each suite by what it uses. Mocks nothing here: `jest.mock` is global to
@@ -76,9 +77,15 @@ const noClaudeAccounts = (): Pick<Services, "claudeStore" | "claudeSeats" | "cla
     providerRefusals: unstubbed<Services["providerRefusals"]>("providerRefusals", { read: async () => ({}) }),
 });
 
+// OpenCode with no xAI sign-in, booted the way the privacy shield wants it (off here): nothing to delegate to, nothing
+// to restart.
+const idleOpenCode = (): Services["openCode"] => unstubbed<Services["openCode"]>("openCode", { connected: async () => false, shielded: async () => true });
+
 export const servicesWith = (overrides: Partial<Services> = {}): Services =>
     unstubbed<Services>("services", {
         tools: [],
+        // The privacy shield off, as a fresh sandbox has it: every turn plans as it would without one.
+        privacyShield: privacySliceFake().privacyShield,
         // The real table: which arm a (provider, harness) pair reaches is what these suites are about.
         adapters: RUNTIME_ADAPTERS,
         resources: budgetOn(),
@@ -130,7 +137,7 @@ export const servicesWith = (overrides: Partial<Services> = {}): Services =>
         ...noClaudeAccounts(),
         // Nothing to delegate to by default; Grok's own gate reads this same seam, so it belongs in the shared fixture
         // rather than duplicated.
-        openCode: unstubbed<Services["openCode"]>("openCode", { connected: async () => false }),
+        openCode: idleOpenCode(),
         async *codexAgent() {},
         async *grokAgent() {},
         async *agent() {},
@@ -153,7 +160,7 @@ export const wire = (plan: unknown): string => {
 export const harnessServices = (overrides: Partial<Services> = {}): Services =>
     servicesWith({
         sessions: unstubbed<Services["sessions"]>("sessions", { exists: async () => true }),
-        openCode: unstubbed<Services["openCode"]>("openCode", { connected: async () => false }),
+        openCode: unstubbed<Services["openCode"]>("openCode", { connected: async () => false, shielded: async () => true }),
         codexHome: "/root/.codex",
         authRoot: "/root/.local/share",
         ...overrides,

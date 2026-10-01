@@ -73,6 +73,7 @@ const idleOpenCode = () =>
         disconnect: async () => {},
         mount: async () => async () => {},
         judges: { register: () => {}, release: () => {} },
+        shielded: async () => true,
     }) satisfies ProvidersSlice["openCode"];
 
 export const providersSliceFake = (context: SliceFakeContext, { usage, cliProxy }: ProvidersFakeOverrides) =>

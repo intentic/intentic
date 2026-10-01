@@ -194,6 +194,20 @@ const placementOf = (
     );
 };
 
+// Why a turn may not run on a runner while the privacy shield is on, or nothing; an unreadable policy refuses, since the
+// shield may be on.
+const runnerShieldRefusal = async (services: Pick<Services, "privacyShield">, provider: string): Promise<string | undefined> => {
+    try {
+        const policy = await services.privacyShield.policy();
+        if (policy.mode !== "on" || (await services.privacyShield.trusted(policy, provider))) {
+            return undefined;
+        }
+    } catch (error) {
+        return error instanceof Error ? error.message : "the privacy shield's policy could not be read";
+    }
+    return `The privacy shield is on, and a runner would call ${provider} from its own machine, past the shield. Run this conversation here, or mark ${provider} as trusted in Sandbox ▸ Agent ▸ Safety.`;
+};
+
 // The fleet-registry lifecycle around every turn: `conversationId` acquires the mutex and publishes frames, and where
 // the conversation is placed decides what runs around the turn's own body.
 async function* runConversationTurn(
@@ -221,6 +235,14 @@ async function* runConversationTurn(
             kind: "error",
             message: `No runner named "${runner}" is paired with this sandbox — pair one first, or leave placement out to run here.`,
         };
+        yield { kind: "done" };
+        return;
+    }
+    // A runner calls its provider from its own machine, past this sandbox's privacy shield: while the shield masks, only
+    // a trusted provider may run there.
+    const unshieldedRunner = runner === undefined ? undefined : await runnerShieldRefusal(services, input.agent ?? "claude");
+    if (unshieldedRunner !== undefined) {
+        yield { kind: "error", code: "privacy-unshielded", message: unshieldedRunner };
         yield { kind: "done" };
         return;
     }

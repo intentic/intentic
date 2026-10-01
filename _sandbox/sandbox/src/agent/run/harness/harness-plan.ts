@@ -6,7 +6,7 @@ import { type TurnPersona, turnPersona } from "../../../personas/personas.js";
 import { standing } from "../../../rules/rules.js";
 import { offloadRunEnabled } from "../../../offload/offload-prefix.js";
 import { armPlan, type TurnArmPlan, type TurnContext } from "../../providers/adapter.js";
-import type { TurnPolicy, TurnSpec, TurnTools } from "../../providers/agent-request.js";
+import type { HarnessCredential, TurnPolicy, TurnSpec, TurnTools } from "../../providers/agent-request.js";
 import { isUnknownSlashCommand } from "../../providers/agent-commands.js";
 import {
     type HarnessCredentialDeps,
@@ -15,6 +15,7 @@ import {
     resolveHarnessCredentials,
 } from "../../providers/harness-credentials.js";
 import { withAttachmentNote } from "../../prompt/attachment-note.js";
+import { shieldHarnessCredential } from "../../../privacy/harness-route.js";
 import { LITERAL_SLASH_NOTE } from "../../prompt/turn-preamble.js";
 import { releasingMounts } from "../../tools/turn-mounts.js";
 import { turnToolsOf, type TurnToolsDeps } from "../../tools/turn-tools.js";
@@ -145,6 +146,17 @@ export const planHarnessTurn = async (
     if (!resolved.ok) {
         return { ok: false, ...opt("code", resolved.code), message: resolved.message, ...opt("account", resolved.account) };
     }
+    // Behind the privacy shield's gateway while it is on or watching; a policy that can't be read refuses the turn
+    // rather than letting it run unshielded.
+    let credential: HarnessCredential;
+    try {
+        credential = await shieldHarnessCredential(deps.privacyShield, harnessCredentialOf(resolved.credentials), {
+            provider: input.agent ?? "claude",
+            conversationId: input.conversationId,
+        });
+    } catch (error) {
+        return { ok: false, message: error instanceof Error ? error.message : "the privacy shield's policy could not be read" };
+    }
     // What this turn may reach out of the container, and the owner's own browsers: the cards peerToolsOf mounts, through
     // Services, since the hosts and webext subsystems reach back into this one.
     const hostDevices = await deps.hostReach(granted);
@@ -188,7 +200,7 @@ export const planHarnessTurn = async (
             ...context.base,
             ...gated,
             tools,
-            credential: harnessCredentialOf(resolved.credentials),
+            credential,
             hooks: {
                 ...harnessHooks(deps, context, standing(settings.rules, "file.edited")),
                 // A `run_in_background` job outlives this turn, so its completion is delivered to a conversation rather

@@ -124,3 +124,24 @@ test("nobody is looking with no tab open at all, and the settings page's test se
     await expect(sender(store).notify(waiting)).resolves.toEqual({ delivered: 2, failed: 0 });
     expect(reached.map(({ endpoint }) => endpoint)).toEqual(["https://push.example/unnamed", "https://push.example/ada"]);
 });
+
+// A native install's words reach Apple in plain text through the platform, so they pass the privacy shield's redaction on
+// the way; a browser's are encrypted to it end to end and go as written.
+test("the privacy shield's redaction reaches a native install's notification and leaves a browser's alone", async () => {
+    const reached = stubSends();
+    const relayed: string[] = [];
+    const relay = async (_url: URL | RequestInfo, init?: RequestInit): Promise<Response> => {
+        relayed.push(String(init?.body));
+        return new Response(null, { status: 200 });
+    };
+    jest.spyOn(globalThis, "fetch").mockImplementation(Object.assign(relay, { preconnect: globalThis.fetch.preconnect }));
+    const native: StoredChannel = { kind: "relay", url: "https://platform.example/push", deviceId: "phone", secret: "s" };
+    const redacting = createPushSender(storeOf(device("https://push.example/a"), native), pino({ level: "silent" }), async (text) =>
+        text.replace("Jan Kowalski", "‹person›"),
+    );
+
+    await redacting.notify({ title: "Jan Kowalski wrote", body: "about Jan Kowalski's invoice" });
+
+    expect(JSON.parse(relayed[0] ?? "{}").notification).toMatchObject({ title: "‹person› wrote", body: "about ‹person›'s invoice" });
+    expect(reached[0]?.payload).toContain("Jan Kowalski");
+});

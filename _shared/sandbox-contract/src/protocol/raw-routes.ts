@@ -153,6 +153,10 @@ export const RAW_ROUTES = {
     "POST /system/runners/credentials": { auth: "door", control: "never" },
     "POST /system/runners/credentials/refresh": { auth: "door", control: "never" },
     [`ALL ${runnerTranslatorPath}/*` as const]: { auth: "door", control: "never" },
+    // The privacy shield's gateway: every shielded runtime's model requests, on the signed session its base URL carries
+    // (privacy/gateway/session-token.ts), which names the provider and the only upstream it may forward to. Held open
+    // while a model streams its answer.
+    "ALL /privacy/gateway/{session}/*": { auth: "door", control: "never", stream: true },
     "POST /system/control/tokens": { control: "never" },
     "GET /system/control/tokens": { control: "never" },
     "DELETE /system/control/tokens/{id}": { control: "never" },

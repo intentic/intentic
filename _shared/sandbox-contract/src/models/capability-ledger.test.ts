@@ -34,6 +34,9 @@ const LEDGER: Record<keyof AgentCapabilities, Backing> = {
     rulebook: "enforced",
     // agent/run/turn/cache-keepwarm.ts files nothing to keep warm for a turn whose runtime lacks it.
     warm: "enforced",
+    // agent/run/decide/turn-decision.ts refuses a "none" runtime on an untrusted provider while the privacy shield is
+    // on; "gateway" runtimes get the daemon's gateway as their base URL (privacy/gateway).
+    privacy: "enforced",
 
     // Descriptive: true of the runtime but nothing consults these; wiring one up moves it to enforced.
     questions: "descriptive",

@@ -22,6 +22,7 @@ import { geminiSliceFake } from "../runtimes/gemini/gemini-provider.testing.js";
 import { grokSliceFake } from "../runtimes/grok/grok-provider.testing.js";
 import { kimiSliceFake } from "../runtimes/kimi/kimi-provider.testing.js";
 import { mintedSliceFake } from "../runtimes/minted/minted-provider.testing.js";
+import { privacySliceFake } from "../privacy/privacy-slice.testing.js";
 import { secretsSliceFake } from "../secrets/secrets-slice.testing.js";
 import { memoryConversationGrants } from "../personas/conversation-grants.js";
 import { createDomainEvents } from "../seams/domain-events.js";
@@ -116,6 +117,9 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         ...providersSliceFake(context, { usage, cliProxy }),
         ...resourcesSliceFake(),
         ...secretsSliceFake(),
+        // Off, as a fresh sandbox's is: every turn plans as it would with no shield, and a suite that wants it on
+        // passes its own.
+        privacyShield: privacySliceFake().privacyShield,
         ...sessionsSliceFake(context),
         ...webextSliceFake(),
         ...workspaceSliceFake({ iq }),

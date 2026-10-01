@@ -17,6 +17,7 @@ import { composeWirePrompt, preambleNotes, stripTurnPreamble } from "./turn-prea
 import { WORKSPACE_MAP_NOTE_HEADER } from "@intentic/agent-context/workspace-map";
 import { RUNTIME_ADAPTERS } from "../../runtimes/runtime-table.js";
 import { parkedCards } from "../../conversations/actor/parked-cards.js";
+import { privacySliceFake } from "../../privacy/privacy-slice.testing.js";
 
 // Where a turn here parks its cards: one fleet's actors.
 const cards = parkedCards(memoryFleet().conversations);
@@ -62,6 +63,8 @@ const contextIn = (root: string, localCwd = root, prompt = "do the thing"): Turn
 
 const servicesIn = (root: string, settings: Partial<Record<string, unknown>>, overrides: Partial<Services> = {}): Services =>
     unstubbed<Services>("services", {
+        // Off, as a fresh sandbox has it: every turn plans as it would without a shield.
+        privacyShield: privacySliceFake().privacyShield,
         tools: [],
         // The real table: which arm a (provider, harness) pair reaches is part of what a plan is.
         adapters: RUNTIME_ADAPTERS,
@@ -95,7 +98,7 @@ const servicesIn = (root: string, settings: Partial<Record<string, unknown>>, ov
         cliProxy: unstubbed<Services["cliProxy"]>("cliProxy", {
             accounts: async () => ({ codex: [{ name: "sub", label: "sub" }], grok: [], kimi: [], gemini: [] }),
         }),
-        openCode: unstubbed<Services["openCode"]>("openCode", { connected: async () => false }),
+        openCode: unstubbed<Services["openCode"]>("openCode", { shielded: async () => true, connected: async () => false }),
         // Read once per turn and carried for the judge: every planned turn reaches it, map or no map.
         safetyPolicy: unstubbed<Services["safetyPolicy"]>("safetyPolicy", { text: async () => DEFAULT_SAFETY_POLICY }),
         // No device connected in these arms, which is what the daemon answers with none granted; a turn asks on

@@ -10,6 +10,7 @@ import {
     resolveHarnessCredentials,
 } from "../../agent/providers/harness-credentials.js";
 import { ONE_SHOT_OWNER, workloadStamp } from "../../seams/workload-stamp.js";
+import { shieldHarnessCredential } from "../../privacy/harness-route.js";
 import { sdk } from "../../engines/claude-sdk.js";
 
 // Claude's one-shot helper (agent/adapter.ts oneShot): no tools, session, transcript or events, so its output doesn't
@@ -31,6 +32,9 @@ interface OneShotRun {
     readonly thinking?: boolean | undefined;
     readonly fast?: boolean | undefined;
     readonly credentials: HarnessCredentials;
+    // The privacy shield's gateway, when it is on: a helper's prompt (a title, a diff, a command for the judge) is a
+    // model request like any turn's.
+    readonly gateway?: string | undefined;
     readonly signal: AbortSignal;
 }
 
@@ -64,7 +68,10 @@ const oneShotOptions = (run: OneShotRun, abort: AbortController): Options => {
         env: {
             ...process.env,
             // A helper's retry policy: a rung that won't answer costs seconds and gets stepped over, not waited out.
-            ...harnessEnv(harnessCredentialOf(run.credentials), { helper: true, model: endpoint?.model }),
+            ...harnessEnv(
+                run.gateway === undefined ? harnessCredentialOf(run.credentials) : { ...harnessCredentialOf(run.credentials), gateway: run.gateway },
+                { helper: true, model: endpoint?.model },
+            ),
             // Stamp one-shot processes so abandoned children remain identifiable.
             ...workloadStamp(ONE_SHOT_OWNER),
         },
@@ -125,7 +132,9 @@ export const claudeOneShot = async (services: HarnessCredentialDeps, ask: OneSho
     if (!resolved.ok) {
         throw new Error(resolved.message);
     }
+    const shielded = await shieldHarnessCredential(services.privacyShield, harnessCredentialOf(resolved.credentials), { provider: ask.provider ?? "claude" });
     return runOnHarness({
+        gateway: shielded.gateway,
         prompt: ask.prompt,
         cwd: ask.cwd,
         model: ask.model,

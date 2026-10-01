@@ -269,6 +269,9 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
                 // The model can only write one-shot jobs (Model.helperOnly: its server says it cannot call tools, or
                 // it is the quick-jobs local model), refused before sending; the words wait for another model.
                 "model-helper-only",
+                // The privacy shield is on, the provider is untrusted, and the runtime is one its gateway cannot stand in
+                // front of (Cursor, an ACP agent, Pi), refused before sending; the words wait for a covered provider.
+                "privacy-unshielded",
                 // The session outgrew the model's context window mid-turn; resuming that session only overflows again,
                 // so the daemon re-runs the turn once in a fresh session carrying the hand-off.
                 "context-overflow",

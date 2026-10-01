@@ -120,6 +120,37 @@ Nothing the sandbox runs checks a push, and nothing is kept about one. The app p
 - `GET /system/metrics` serves the budget's snapshot: the gauge's used and limit are the gate's, and it turns amber exactly where a person's turn would be held (below the free memory that turn needs, or at the stall limit). A killed child is blamed on memory when the OOM count moved or the sampler saw the box short in the last five minutes.
 - Heavy commands and test fan-outs ask the budget on a Unix socket of their own, `/run/intentic/room.sock` ([`room-socket.ts`](../../_sandbox/sandbox/src/workload/room-socket.ts)), never the daemon's public socket: `bin/queue-run` runs `memory-room --class toolchain --wait N` before it takes a slot, and `test-workers.mjs` sizes itself to the free memory the budget reports. Where no daemon answers (CI, a plain checkout), both apply the same formula to the same files.
 
+## Privacy shield
+
+- Off unless the owner turns it on (Sandbox ▸ Agent ▸ Safety). Its policy is a document under the credentials root
+  ([`privacy-policy.ts`](../../_sandbox/sandbox/src/privacy/privacy-policy.ts)), off the agent-editable workspace, and only the
+  owner's session changes it: `watch` records what it would mask, `on` masks for every provider not on the owner's
+  trusted list. A model this machine serves is trusted whatever the list says; the free trial never is.
+- It stands at the one place every route to a model shares, the request itself. A runtime whose model requests go to a
+  base URL the daemon names is pointed at `ALL /privacy/gateway/<session>/*`
+  ([`gateway-route.ts`](../../_sandbox/sandbox/src/privacy/gateway/gateway-route.ts)): the Claude Code loop for every
+  provider and its helper jobs ([`harness-route.ts`](../../_sandbox/sandbox/src/privacy/harness-route.ts)), native Codex,
+  and OpenCode's shared server for Grok and Gemini, booted again once idle when the policy changes under it. The
+  session in the URL is signed and names the provider and the only upstream the gateway forwards to, so the runtime's
+  own credential travels where it always went and nothing else can be aimed elsewhere.
+- For an untrusted provider the gateway walks the wire format (Anthropic Messages, OpenAI Responses, Chat
+  Completions; [`protocols/`](../../_sandbox/sandbox/src/privacy/gateway/protocols)) and masks every string that carries
+  conversation: system prompt, messages, tool results and tool inputs, documents. Signed thinking and encrypted
+  reasoning pass untouched. What it finds becomes a typed token (`⟦PERSON_3⟧`) from one vault per workspace
+  ([`privacy-vault.ts`](../../_sandbox/sandbox/src/privacy/privacy-vault.ts)), written to disk before the request leaves, and
+  the answer's tokens are turned back into values as it streams, so the agent's commands, edits and replies use the real
+  data while the provider reads none of it. Every value in the vault is matched exactly from then on; `privacy learn`
+  teaches a dataset's values the same way. Images and PDFs go as their masked text where a local reader exists (the
+  `privacy` image pack), and are otherwise withheld with a note.
+- A runtime it cannot stand in front of (Cursor's own wire, an ACP agent, Pi, Codex on the container's own key) is
+  turned away on an untrusted provider before it starts (`privacy-unshielded`), a helper job steps over such a rung, a
+  child agent stays off runners, and a conversation placed on a runner runs there only on a trusted provider, since a
+  runner calls its provider from its own machine. A native app's push and a public share carry the kind of data instead of the data.
+- (2026-10-01) The gateway rejected masking at each source (a tool hook, a prompt composer, a channel's inbound
+  message), which is how stored secrets are masked: only the Claude Code loop can rewrite a tool's result before the model
+  reads it, and a source-side filter misses every door nobody listed (resume, compaction, a runtime handoff's replayed
+  transcript, files a CLI loads itself, helper prompts). At the request the doors no longer matter.
+
 ## State
 
 | Place | Holds |

@@ -1,6 +1,7 @@
 import { type OneShotAsk, oneShotDeadline } from "../../agent/providers/adapter.js";
 import type { Services } from "../../composition.js";
 import { OPENCODE_GEMINI_PROVIDER } from "./gemini-models.js";
+import { sharedServerRefusal } from "../../privacy/harness-route.js";
 
 // Runs on OpenCode instead of the Claude Code harness: Google's Antigravity channel refuses any request whose system
 // block carries the Claude Code CLI's identity line, as a false RESOURCE_EXHAUSTED. The translator holds the
@@ -26,7 +27,11 @@ const textOf = (parts: readonly { readonly type: string; readonly text?: string 
 // Given up front so OpenCode's auto-title pass (a second model call) never fires; the string is never read.
 const HELPER_SESSION_TITLE = `intentic helper (one-shot)`;
 
-export const geminiOneShot = async (services: Pick<Services, "openCode">, ask: OneShotAsk): Promise<string> => {
+export const geminiOneShot = async (services: Pick<Services, "openCode" | "privacyShield">, ask: OneShotAsk): Promise<string> => {
+    const refused = await sharedServerRefusal(services.privacyShield, services.openCode.shielded, "gemini");
+    if (refused !== undefined) {
+        throw new Error(refused);
+    }
     const client = await services.openCode.client();
     const created = await client.session.create({ query: { directory: ask.cwd }, body: { title: HELPER_SESSION_TITLE } });
     const id = created.data?.id;

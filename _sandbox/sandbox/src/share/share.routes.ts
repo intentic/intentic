@@ -8,13 +8,14 @@ import { publishShare, unpublishShare, viewerDist } from "./share-publish.js";
 import { shareTranscript } from "./share-payload.js";
 import type { StoredShare } from "./share-store.js";
 import { publicAddressOf } from "../env.config.js";
+import { redactStrings } from "../privacy/privacy-shield.js";
 
 // Turns a conversation into a page anyone with the link can read, and takes it back; every route is a deliberate act on
 // one named conversation, and nothing about the live conversation changes when it's shared. A share is frozen: `create`
 // and `update` snapshot under the same id and link, and nothing else moves a published page, so the next turn stays
 // private until asked.
 
-export type ShareRoutesDeps = Pick<Services, "agents" | "config" | "shares" | "transcripts" | "workspace">;
+export type ShareRoutesDeps = Pick<Services, "agents" | "config" | "privacyShield" | "shares" | "transcripts" | "workspace">;
 
 // 64 bits of the share address, the only thing between a stranger and the conversation (share-paths.ts).
 const RANDOM_BYTES = 8;
@@ -51,7 +52,15 @@ export const createShareRoutes = (services: ShareRoutesDeps) => {
         } catch {
             throw new ORPCError("INTERNAL_SERVER_ERROR", { message: "this sandbox image is missing the shared-conversation page" });
         }
-        await publishShare(services.workspace.root, viewer, id, { title, sharedAt, detail, messages }, pictures);
+        // A public page leaves this machine whole: while the privacy shield is on, its personal data is replaced by what
+        // kind it was, as a native push notification's is.
+        const redact = services.privacyShield.redactForDisplay;
+        const shown = {
+            title: await redact(title),
+            // SAFETY: redactStrings returns the same shape it was given, only its strings changed.
+            messages: (await redactStrings(messages, redact)) as typeof messages,
+        };
+        await publishShare(services.workspace.root, viewer, id, { title: shown.title, sharedAt, detail, messages: shown.messages }, pictures);
         const stored: StoredShare = { id, conversationId, title, detail, sharedAt, messages: messages.length };
         await services.shares.put(stored);
         return withUrl(stored);

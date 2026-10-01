@@ -58,6 +58,7 @@ import {
     createRunnerCredentialsRoute,
     createRunnerTranslatorProxyRoute,
 } from "./runners/runner-credentials.routes.js";
+import { createGatewayRoute } from "./privacy/gateway/gateway-route.js";
 import { createRunnerGitRefsRoute, createRunnerGitRpcRoute } from "./runners/runner-git.routes.js";
 import { createBrowserViewRoute } from "./browser/cast/browser-view.js";
 import { createWebchatRoutes } from "./webchat/webchat.routes.js";
@@ -493,6 +494,12 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     );
     serve("POST /system/runners/credentials/refresh", createRunnerCredentialRefreshRoute(services));
     serve("ALL /system/runners/translator/*", createRunnerTranslatorProxyRoute(services));
+    // The privacy shield's gateway, which masks personal data on its way to an untrusted provider and restores it on the
+    // way back; a runtime is pointed here only while the shield is on or watching.
+    serve(
+        "ALL /privacy/gateway/{session}/*",
+        createGatewayRoute({ shield: services.privacyShield, warn: (message, error) => services.logger.warn({ err: error }, message) }),
+    );
     // Control tokens: owner-minted, durable, revocable machine credentials.
     const controlTokens = createControlTokenRoutes(services);
     serve("POST /system/control/tokens", controlTokens.mint);

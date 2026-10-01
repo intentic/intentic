@@ -158,6 +158,12 @@ const askRung = async (services: Services, pin: ModelPin, prompt: string, signal
     if (adapter.oneShot === undefined) {
         throw new Error(`${adapter.runtime} runs no helper, so there is nothing to ask it one line with.`);
     }
+    // A helper's prompt is a model request like a turn's (a title from the first message, a diff, a command): the same
+    // privacy shield rule, stepped over to the next rung like any refusal.
+    const shield = await services.privacyShield.admit(pin.provider, pin.harness ?? `claude-code`);
+    if (!shield.allowed) {
+        throw new Error(shield.reason);
+    }
     return adapter.oneShot(services, {
         provider: pin.provider,
         prompt,

@@ -52,7 +52,7 @@ export const createCodexSlice = (input: { readonly config: Config; readonly auth
 };
 
 // What a native Codex turn is planned from: the translator's accounts, the catalog, and the turn's MCP mounts.
-export type CodexPlanDeps = TurnToolsDeps & Pick<Services, "cliProxy" | "codexAgent" | "codexModels" | "config" | "workspace">;
+export type CodexPlanDeps = TurnToolsDeps & Pick<Services, "cliProxy" | "codexAgent" | "codexModels" | "config" | "privacyShield" | "workspace">;
 
 // Native Codex turns ride app-server behind the translator, with the turn's remote MCP servers (browsers, machines,
 // extension cards, mcp cards) as http servers in its per-thread config. Mid-turn steering rides a real queue
@@ -74,6 +74,24 @@ export const planCodexTurn = async (
                     ? "This sandbox has no model translator, so Codex can't run here. Run a sandbox built from the published image."
                     : "Connect your ChatGPT subscription in Sandbox ▸ Agent to run Codex.",
         };
+    }
+    // The privacy shield stands between Codex and the translator; the API-key fallback talks to OpenAI directly, which
+    // nothing here can stand in front of, so while the shield is on it runs only if Codex is trusted.
+    let gateway: string | undefined;
+    try {
+        gateway = subscribed
+            ? await services.privacyShield.baseUrlFor({ provider: "codex", upstream: services.config.translator.url, conversationId: input.conversationId })
+            : undefined;
+        const policy = await services.privacyShield.policy();
+        if (!subscribed && policy.mode === "on" && !(await services.privacyShield.trusted(policy, "codex"))) {
+            return {
+                ok: false,
+                message:
+                    "The privacy shield is on, and Codex here would call OpenAI with the container's own key, past the shield. Connect your ChatGPT subscription so it runs through the translator, or mark Codex as trusted in Sandbox ▸ Agent ▸ Safety.",
+            };
+        }
+    } catch (error) {
+        return { ok: false, message: error instanceof Error ? error.message : "the privacy shield's policy could not be read" };
     }
     // Empty model resolves the catalog default (discovery, never empty); an explicit one rides through as-is.
     const persona = context.persona ?? turnPersona({ personas: [], actsAs: undefined, unattended: false });
@@ -98,7 +116,7 @@ export const planCodexTurn = async (
         },
         // Subscription turns use the translator endpoint with a fixed bearer; the dev path falls to Codex's own key.
         credential: subscribed
-            ? { kind: "codex-endpoint", baseUrl: services.config.translator.url, authToken: services.config.translator.token }
+            ? { kind: "codex-endpoint", baseUrl: gateway ?? services.config.translator.url, authToken: services.config.translator.token }
             : { kind: "container" },
     };
     // Attribution key: the shared subscription serving every Codex turn, else undefined for the api-key fallback.

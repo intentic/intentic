@@ -930,6 +930,7 @@ test("agent.run sends a Grok turn an explicit live-valid model, replacing an inv
                         disconnect: async () => {},
                         mount: async () => async () => {},
                         judges: { register: () => {}, release: () => {} },
+                        shielded: async () => true,
                     },
                     async *grokAgent(request) {
                         seen.push(request.spec.model);

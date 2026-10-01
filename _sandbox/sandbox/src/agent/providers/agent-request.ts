@@ -167,20 +167,27 @@ export interface TurnTools {
     readonly browserAccounts?: Record<string, string>;
 }
 
+// Where the privacy shield's gateway stands in for the credential's own base URL: the harness sends every model request
+// there, and the gateway forwards it, masked where the provider is untrusted, to where it would have gone. Absent: the
+// shield is off and the harness talks to its provider directly.
+export interface ShieldedRoute {
+    readonly gateway?: string;
+}
+
 // What authenticates the turn, one variant per kind. `container` carries nothing: the runtime authenticates from what the
 // container already holds (its env, or a credential the runtime stores itself).
 export type TurnCredential =
-    | { readonly kind: "container" }
+    | ({ readonly kind: "container" } & ShieldedRoute)
     // A stored Claude account's subscription token; `refresh` re-mints it mid-turn on refusal, absent for a runner's.
-    | {
+    | ({
           readonly kind: "claude-oauth";
           readonly token: string;
           readonly refresh?: (context: { readonly signal: AbortSignal }) => Promise<string | undefined>;
-      }
+      } & ShieldedRoute)
     // A custom Anthropic endpoint and bearer, for a translator-served, minted or endpoint turn; whose allowance it spends.
-    | { readonly kind: "routed"; readonly baseUrl: string; readonly authToken: string; readonly allowance?: TurnAllowance }
+    | ({ readonly kind: "routed"; readonly baseUrl: string; readonly authToken: string; readonly allowance?: TurnAllowance } & ShieldedRoute)
     // The platform's free trial: the translator's endpoint, with bounded retries and the trial's own failure frames.
-    | { readonly kind: "trial"; readonly baseUrl: string; readonly authToken: string }
+    | ({ readonly kind: "trial"; readonly baseUrl: string; readonly authToken: string } & ShieldedRoute)
     // A native Codex turn on the subscription, via the translator; absent, Codex falls back to the container's key.
     | { readonly kind: "codex-endpoint"; readonly baseUrl: string; readonly authToken: string }
     // The selected Cursor account's key, passed per request since Cursor runs in-process with no child env to set.

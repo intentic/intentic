@@ -554,6 +554,10 @@ COPY --chmod=755 _sandbox/sandbox/bin/wallet /usr/local/bin/wallet
 # it relays through the daemon, which owns the policy, the card and the identity check. It reads NAMES and
 # approver addresses only; no route it can reach returns a credential.
 COPY --chmod=755 _sandbox/sandbox/bin/secrets /usr/local/bin/secrets
+# The privacy command: whether the privacy shield is on, and the one change an agent may make to it, teaching a
+# dataset's values so each is masked wherever it appears (src/privacy/). Same shape as secrets: it relays through the
+# daemon, which owns the policy; the values it reads from a file go to the daemon and are never printed.
+COPY --chmod=755 _sandbox/sandbox/bin/privacy /usr/local/bin/privacy
 # The child-agent command the spawn note teaches (src/agent/subagents/spawn-note.ts): start a full agent on any
 # connected provider from any runtime's shell, wait on it, list this conversation's children. Same shape as
 # services — it relays through the daemon, which owns the engine, the budgets and the persona gate; the CLI

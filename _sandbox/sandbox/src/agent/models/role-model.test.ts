@@ -13,6 +13,7 @@ import { PROVIDER_MODULES } from "../../runtimes/runtime-table.js";
 import { askRoleModel, REFUSED_FOR_MS } from "./role-model.js";
 import { RoleModelUnsetError } from "../../seams/role-model-unset.js";
 import { sentenceAnswer } from "./role-answer.js";
+import { privacySliceFake } from "../../privacy/privacy-slice.testing.js";
 
 // Only the readiness sweep is faked; a provider it leaves unnamed is one that cannot run.
 const ready = jest.fn<() => Promise<Partial<Record<NativeProvider, boolean>>>>();
@@ -68,6 +69,7 @@ const asPins = (keys: readonly string[]): ModelPin[] =>
 
 const fakeServices = (pinned: readonly string[], spent: readonly string[] = []): Services =>
     unstubbed<Services>(`services`, {
+        privacyShield: privacySliceFake().privacyShield,
         providerReadiness: readiness,
         adapters: { for: adapterFor, all: [] },
         sandboxSettings: unstubbed<Services[`sandboxSettings`]>(`sandboxSettings`, {

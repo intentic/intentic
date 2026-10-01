@@ -1,7 +1,9 @@
+import { unstubbed } from "@intentic/testing";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { Services } from "../../composition.js";
 import * as harnessCredentialsOriginal from "../../agent/providers/harness-credentials.js";
 import * as claudeAgentSdkOriginal from "@anthropic-ai/claude-agent-sdk";
+import { privacySliceFake } from "../../privacy/privacy-slice.testing.js";
 
 // Only query is faked; the rest of the SDK is real, since failure-sentences.ts's own logic is what's under test. The
 // fake yields a generator (not a plain iterable), since the finally block closes it via .return().
@@ -25,7 +27,7 @@ const answering = (result: { readonly result: string; readonly is_error?: boolea
 };
 
 const ask = (): Promise<string> =>
-    claudeOneShot({} as Services, {
+    claudeOneShot(unstubbed<Services>("services", { privacyShield: privacySliceFake().privacyShield }), {
         provider: "claude",
         prompt: "Name this session",
         cwd: WORKSPACE_ROOT,

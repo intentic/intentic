@@ -47,6 +47,9 @@ export interface AdmittedTurnFacts {
     // Set where the endpoint's catalog marks the model as able to run one-shot jobs only, never a turn; absent for
     // every native provider and every model nothing has said that of.
     readonly helperOnly?: { readonly label: string; readonly reason: HelperOnly };
+    // Why the privacy shield refuses this turn: it is on, the provider is untrusted, and the runtime is one the gateway
+    // cannot stand in front of. Absent: it may run.
+    readonly privacyRefusal?: string;
     // Everything the owner installed, before any persona or gate narrows it.
     readonly installed: readonly Capability[];
     // Dependency readiness of the main checkout; empty where the probe was skipped.
@@ -205,9 +208,23 @@ export type TurnFactsDeps = ServiceabilityDeps &
     | "resources"
     | "perf"
     | "personas"
+    | "privacyShield"
     | "sandboxSettings"
     | "workspace"
 >;
+
+// Asked of every turn, since a policy can change between two of them. A policy that cannot be read refuses: the shield
+// may be on, and a turn that runs past it cannot be taken back.
+const privacyRefusalOf = async (services: Pick<Services, "privacyShield" | "perf">, runtime: TurnRuntime): Promise<string | undefined> => {
+    try {
+        const verdict = await services.perf.track("turn.plan.privacy", { provider: runtime.provider }, () =>
+            services.privacyShield.admit(runtime.provider, runtime.harness),
+        );
+        return verdict.allowed ? undefined : verdict.reason;
+    } catch (error) {
+        return error instanceof Error ? error.message : "the privacy shield's policy could not be read";
+    }
+};
 
 export const gatherTurnFacts = async (services: TurnFactsDeps, input: RoutedTurn, context: TurnContext): Promise<TurnFacts> => {
     // First, so a held turn costs no settings read, capability list, dependency probe or persona load.
@@ -226,9 +243,10 @@ export const gatherTurnFacts = async (services: TurnFactsDeps, input: RoutedTurn
     const runtime = turnRuntime(input, entry);
     // One read of the served model answers what the turn may compose, whether what it composed fits, and whether the
     // model may run a turn at all.
-    const [settings, served] = await Promise.all([
+    const [settings, served, privacyRefusal] = await Promise.all([
         context.settings ?? services.perf.track("turn.plan.settings", {}, () => services.sandboxSettings.get()),
         services.perf.track("turn.plan.window", { provider: runtime.provider }, () => servedEndpointModel(services, runtime.provider, input.model)),
+        privacyRefusalOf(services, runtime),
     ]);
     const declared = windowOf(served);
     const helperOnly = served?.row.helperOnly;
@@ -259,6 +277,7 @@ export const gatherTurnFacts = async (services: TurnFactsDeps, input: RoutedTurn
         repoChecks,
         declared,
         ...opt("helperOnly", helperOnly === undefined || served === undefined ? undefined : { label: served.row.label, reason: helperOnly }),
+        ...opt("privacyRefusal", privacyRefusal),
         installed,
         setup,
         personas,

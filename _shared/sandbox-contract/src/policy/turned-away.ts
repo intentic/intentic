@@ -11,6 +11,8 @@ const TURNED_AWAY: ReadonlySet<string> = new Set([
     "unknown-command",
     "context-window-too-small",
     "model-helper-only",
+    // The privacy shield refused an untrusted provider on a runtime it cannot stand in front of.
+    "privacy-unshielded",
     "sandbox-memory-low",
     "trial-unavailable",
     "trial-model-unavailable",

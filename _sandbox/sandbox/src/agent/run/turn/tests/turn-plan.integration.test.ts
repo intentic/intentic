@@ -17,6 +17,7 @@ import { planTurn } from "../turn-plan.js";
 import { base, budgetOn, codexServices, context, harnessServices, servicesWith, turn, wire } from "../turn-plan.testing.js";
 import { RUNTIME_ADAPTERS } from "../../../../runtimes/runtime-table.js";
 import { parkedCards } from "../../../../conversations/actor/parked-cards.js";
+import { privacySliceFake } from "../../../../privacy/privacy-slice.testing.js";
 
 // Where a turn here parks its cards: one fleet's actors.
 const cards = parkedCards(memoryFleet().conversations);
@@ -61,6 +62,8 @@ const contextIn = (root: string, localCwd = root): TurnContext => ({
 // A translator holding the ChatGPT subscription, which both native arms below authenticate against.
 const servicesIn = (root: string, overrides: Partial<Services> = {}): Services =>
     unstubbed<Services>("services", {
+        // Off, as a fresh sandbox has it: every turn plans as it would without a shield.
+        privacyShield: privacySliceFake().privacyShield,
         tools: [],
         // The real table: which arm a (provider, harness) pair reaches is part of what a plan is.
         adapters: RUNTIME_ADAPTERS,
@@ -123,7 +126,7 @@ test("a Claude turn gets the readiness tools instead of the paragraph, however f
     const services = servicesIn(root, {
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
         // The delegation note asks which other coding agents this sandbox can hand off to; none, here.
-        openCode: unstubbed<Services["openCode"]>("openCode", { connected: async () => false }),
+        openCode: unstubbed<Services["openCode"]>("openCode", { shielded: async () => true, connected: async () => false }),
         async *codexAgent() {},
         async *agent() {},
     });
@@ -146,7 +149,7 @@ test("a persona with no file reads does not get the diagnostic tools", async () 
     const root = await workspaceWithMissingDeps();
     const services = servicesIn(root, {
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
-        openCode: unstubbed<Services["openCode"]>("openCode", { connected: async () => false }),
+        openCode: unstubbed<Services["openCode"]>("openCode", { shielded: async () => true, connected: async () => false }),
         async *codexAgent() {},
         async *agent() {},
         personas: unstubbed<Services["personas"]>("personas", {
@@ -167,7 +170,7 @@ test("a persona starting in a nested folder is told the workspace's rules and th
     await writeFile(join(root, "AGENTS.md"), "No legacy support.");
     await writeFile(join(root, "shop/AGENTS.md"), "Prices are integers, in cents.");
     const services = servicesIn(root, {
-        openCode: unstubbed<Services["openCode"]>("openCode", { connected: async () => false }),
+        openCode: unstubbed<Services["openCode"]>("openCode", { shielded: async () => true, connected: async () => false }),
         async *agent() {},
         personas: unstubbed<Services["personas"]>("personas", {
             list: async () => [{ id: "shopkeeper", label: "Shopkeeper", capabilities: [], workspace: { startIn: "shop" } }] as never,
@@ -228,6 +231,7 @@ test("a native Grok turn hears it too: the note belongs to the tree, not to the 
     const root = await workspaceWithMissingDeps();
     const services = servicesIn(root, {
         openCode: unstubbed<Services["openCode"]>("openCode", {
+            shielded: async () => true,
             connected: async () => true,
             xaiModels: async () => ({ default: "grok-4", models: [{ id: "grok-4", label: "Grok 4" }] }),
         }),
@@ -290,6 +294,7 @@ test("a runtime without a skill loader receives the catalogue once; native loade
     };
     const workspace = unstubbed<Services["workspace"]>("workspace", { root });
     const openCode = unstubbed<Services["openCode"]>("openCode", {
+        shielded: async () => true,
         connected: async () => true,
         xaiModels: async () => ({ default: "grok-4", models: [{ id: "grok-4", label: "Grok 4" }] }),
     });

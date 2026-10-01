@@ -115,7 +115,7 @@ test("Codex with neither a translator subscription nor an api key names which of
 });
 
 test("Grok with no xAI sign-in is refused before a turn spawns", async () => {
-    const services = servicesWith({ openCode: unstubbed<Services["openCode"]>("openCode", { connected: async () => false }) });
+    const services = servicesWith({ openCode: unstubbed<Services["openCode"]>("openCode", { shielded: async () => true, connected: async () => false }) });
 
     const plan = await planTurn(services, turn({ agent: "grok" }), context);
 
@@ -383,6 +383,7 @@ test("Grok receives the connected browser granted to its persona, and no other a
         personas: unstubbed<Services["personas"]>("personas", { list: async () => [writer] }),
         agents: unstubbed<Services["agents"]>("agents", { entry: () => undefined }),
         openCode: unstubbed<Services["openCode"]>("openCode", {
+            shielded: async () => true,
             connected: async () => true,
             xaiModels: async () => ({ default: "grok-4", models: [{ id: "grok-4", label: "Grok 4" }] }),
         }),
@@ -405,6 +406,7 @@ test("Grok receives the connected browser granted to its persona, and no other a
 test("Grok replaces a model its live catalog no longer offers, and keeps one it does", async () => {
     const services = servicesWith({
         openCode: unstubbed<Services["openCode"]>("openCode", {
+            shielded: async () => true,
             connected: async () => true,
             xaiModels: async () => ({
                 default: "grok-4",
@@ -449,6 +451,7 @@ test("iq search teaching reaches native Codex and OpenCode as the shipped nudge,
             sandboxSettings: settings,
             agents,
             openCode: unstubbed<Services["openCode"]>("openCode", {
+                shielded: async () => true,
                 connected: async () => true,
                 xaiModels: async () => ({ default: "grok-4", models: [{ id: "grok-4", label: "Grok 4" }] }),
             }),
@@ -729,6 +732,7 @@ test("effort reaches the runtimes that forward it and no others", async () => {
 
     const grokServices = servicesWith({
         openCode: unstubbed<Services["openCode"]>("openCode", {
+            shielded: async () => true,
             connected: async () => true,
             xaiModels: async () => ({ default: "grok-4", models: [{ id: "grok-4", label: "Grok 4" }] }),
         }),
@@ -788,6 +792,7 @@ test("a cwd-isolated runtime gets one worktree explanation, then compact reminde
     // app-server is a child process nsenter can place in the namespace.
     const grokServices = servicesWith({
         openCode: unstubbed<Services["openCode"]>("openCode", {
+            shielded: async () => true,
             connected: async () => true,
             xaiModels: async () => ({ default: "grok-4", models: [{ id: "grok-4", label: "Grok 4" }] }),
         }),
@@ -876,6 +881,7 @@ test("a runtime that replaces is handed the owner's prompt; one that only adds i
     // what the settings page promises rather than a replacement it can't perform.
     const grokServices = servicesWith({
         openCode: unstubbed<Services["openCode"]>("openCode", {
+            shielded: async () => true,
             connected: async () => true,
             xaiModels: async () => ({ default: "grok-4", models: [{ id: "grok-4", label: "Grok 4" }] }),
         }),

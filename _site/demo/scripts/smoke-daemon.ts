@@ -261,6 +261,13 @@ const samplesOf = ({ fleet, automations, ci, workflows, loops, devices, approval
         safety: {
             policy: undefined,
         },
+        privacy: {
+            status: undefined,
+            setPolicy: { mode: `on`, trusted: [], classes: [`person-name`], images: `withhold`, names: `dictionary`, allow: [] },
+            log: undefined,
+            sources: undefined,
+            forget: { source: `clients.csv (name)` },
+        },
         vpn: {
             list: undefined,
         },

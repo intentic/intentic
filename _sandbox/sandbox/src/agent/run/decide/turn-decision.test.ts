@@ -343,6 +343,19 @@ test("a window that cannot hold the loop refuses, and the log says how short it 
     ]);
 });
 
+// The privacy shield's refusal is a fact gathered before the decision; deciding on it sends nothing and holds the words.
+test("a turn the privacy shield cannot cover is turned away at the door, before any context is composed", () => {
+    const decision = decideTurn({ ...FACTS, privacyRefusal: "The privacy shield is on, and cursor runs on a loop the shield can't stand in front of." }, turn({ agent: "cursor" }), context);
+
+    expect(decision).toMatchObject({ ok: false, code: "privacy-unshielded", message: expect.stringContaining("privacy shield"), spawn: false });
+    expect(decision.warnings).toEqual([
+        {
+            fields: { provider: "cursor", harness: "native" },
+            message: "privacy: the shield can't cover this runtime and the provider is untrusted, refused before sending",
+        },
+    ]);
+});
+
 // Decided before the window is measured, which is why the planner still arms the door on this refusal.
 test("the spawn door is decided even for a turn the window then refuses", () => {
     expect(decideTurn({ ...FACTS, declared: SMALL_WINDOW }, turn({ agent: "endpoint/tiny", conversationId: "c-small" }), withChildren)).toMatchObject(

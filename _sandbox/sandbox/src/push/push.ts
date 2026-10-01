@@ -35,7 +35,24 @@ const awayNow = (): ((channel: StoredChannel) => boolean) => {
     return (channel) => (channel.member === undefined ? nobodyWatching : !present.has(channel.member.toLowerCase()));
 };
 
-export const createPushSender = (store: PushStore, logger: Logger): PushSender => {
+// What a native install's notification may say: the relay hands its title and body to Apple in plain text, through the
+// platform, so while the privacy shield is on the personal data in them is replaced by what kind it was. Web push is
+// encrypted to the browser end to end and goes as written.
+export type PushRedaction = (text: string) => Promise<string>;
+
+export const createPushSender = (store: PushStore, logger: Logger, redact?: PushRedaction): PushSender => {
+    const forRelay = async (notification: PushNotification): Promise<PushNotification> => {
+        if (redact === undefined) {
+            return notification;
+        }
+        try {
+            return { ...notification, title: (await redact(notification.title)) || notification.title, body: await redact(notification.body) };
+        } catch (error) {
+            // Unreadable shield policy: the words that could not be checked are left out rather than sent as they are.
+            logger.warn({ err: error }, "push: the privacy shield could not check a notification, sending it without its words");
+            return { ...notification, title: "Intentic", body: "" };
+        }
+    };
     // Sends to every registered device `wanted` keeps.
     const send = async (notification: PushNotification, wanted: (channel: StoredChannel) => boolean): Promise<PushDelivery> => {
         const [keys, registered] = await Promise.all([store.keys(), store.list()]);
@@ -44,11 +61,12 @@ export const createPushSender = (store: PushStore, logger: Logger): PushSender =
             return NOTHING_SENT;
         }
         const webPush = sendWebPush(keys);
+        const relayed = channels.some((channel) => channel.kind !== "webpush") ? await forRelay(notification) : notification;
         // Fans out independently: one channel that hangs or errors must not block sends to the others.
         const outcomes = await Promise.all(
             channels.map(async (channel) => {
                 const outcome: SendOutcome =
-                    channel.kind === "webpush" ? await webPush(channel, notification) : await sendRelay(channel, notification);
+                    channel.kind === "webpush" ? await webPush(channel, notification) : await sendRelay(channel, relayed);
                 const id = channelId(channel);
                 // A dead channel is dropped rather than retried, so the toggle stops claiming a device that can't be
                 // reached.

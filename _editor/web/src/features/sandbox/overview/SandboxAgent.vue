@@ -17,6 +17,7 @@ import AgentMemoryImport from "../agent-settings/skills/AgentMemoryImport.vue";
 import AgentModels from "../agent-settings/models/AgentModels.vue";
 import AgentRecovery from "../agent-settings/behaviour/AgentRecovery.vue";
 import AgentRepoChecks from "../agent-settings/behaviour/AgentRepoChecks.vue";
+import AgentPrivacyShield from "../agent-settings/safety/AgentPrivacyShield.vue";
 import AgentProjectInstalls from "../agent-settings/safety/AgentProjectInstalls.vue";
 import AgentSafetyJudge from "../agent-settings/safety/AgentSafetyJudge.vue";
 import AgentSafetyLog from "../agent-settings/safety/AgentSafetyLog.vue";
@@ -123,6 +124,8 @@ const settingsBlocked = computed<NoticeModel | undefined>(() => {
             <!-- Between the switch and the policy: what the judge is scoped to precedes the document it judges against. -->
             <AgentSafetyRules />
             <AgentSafetyPolicy />
+            <!-- After the command gate, before its log: the other thing kept from leaving, personal data bound for a model provider, and the log still sits last. -->
+            <AgentPrivacyShield />
             <AgentSafetyLog />
         </template>
 

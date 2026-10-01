@@ -29,6 +29,7 @@ jest.mock(`../agent-settings/behaviour/AgentRecovery.vue`, () => stub(`When a tu
 jest.mock(`../agent-settings/safety/AgentSafetyJudge.vue`, () => stub(`Safety judge`));
 jest.mock(`../agent-settings/safety/AgentProjectInstalls.vue`, () => stub(`Project installs`));
 jest.mock(`../agent-settings/safety/AgentSafetyPolicy.vue`, () => stub(`Safety policy`));
+jest.mock(`../agent-settings/safety/AgentPrivacyShield.vue`, () => stub(`Privacy shield`));
 jest.mock(`../agent-settings/safety/AgentSafetyLog.vue`, () => stub(`Recent decisions`));
 jest.mock(`../agent-settings/behaviour/AgentChecks.vue`, () => stub(`After work lands`));
 jest.mock(`../agent-settings/behaviour/AgentFinishedWork.vue`, () => stub(`Finished work`));
@@ -54,6 +55,7 @@ const EVERY_GROUP = [
     `Safety judge`,
     `Project installs`,
     `Safety policy`,
+    `Privacy shield`,
     `Recent decisions`,
     `After work lands`,
     `Finished work`,
@@ -127,7 +129,7 @@ it(`falls back to models when the address names a category that does not exist`,
 
 it(`opens the safety category with the gate rules alone`, async () => {
     const { el } = await mount({ section: `safety` });
-    expect(shown(el)).toEqual([`Safety judge`, `Project installs`, `Safety policy`, `Recent decisions`]);
+    expect(shown(el)).toEqual([`Safety judge`, `Project installs`, `Safety policy`, `Privacy shield`, `Recent decisions`]);
 });
 
 it(`holds delegation under tools, not under the gate rules`, async () => {
@@ -138,7 +140,7 @@ it(`holds delegation under tools, not under the gate rules`, async () => {
     document.body.innerHTML = ``;
 
     const { el: safety } = await mount({ section: `safety` });
-    expect(shown(safety)).toEqual([`Safety judge`, `Project installs`, `Safety policy`, `Recent decisions`]);
+    expect(shown(safety)).toEqual([`Safety judge`, `Project installs`, `Safety policy`, `Privacy shield`, `Recent decisions`]);
 });
 
 it(`shows accounts for a sign-in link even while another category is named`, async () => {

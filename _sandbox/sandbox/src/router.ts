@@ -37,6 +37,7 @@ import { createNeedsRoutes } from "./needs/needs.routes.js";
 import { provenanceOf, visibleTo } from "./auth/fleet-scope.js";
 import { providerSecretEntries } from "./agent/providers/provider-registry.js";
 import { createSessionsRoutes } from "./sessions/sessions.routes.js";
+import { createPrivacyRoutes } from "./privacy/privacy.routes.js";
 import { createSafetyRoutes } from "./safety/safety.routes.js";
 import { createSettingsRoutes } from "./settings/settings.routes.js";
 import { createShareRoutes } from "./share/share.routes.js";
@@ -70,6 +71,7 @@ export const createRouter = (services: Services): SandboxRouter => ({
     approvals: createApprovalsRoutes(services),
     extensions: createExtensionsRoutes(services),
     personas: createPersonasRoutes(services),
+    privacy: createPrivacyRoutes(services),
     safety: createSafetyRoutes(services),
     sessions: createSessionsRoutes(services),
     settings: createSettingsRoutes(services),

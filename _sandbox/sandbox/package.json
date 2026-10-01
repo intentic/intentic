@@ -30,6 +30,7 @@
         "@cursor/sdk": "catalog:",
         "@hono/node-server": "catalog:",
         "@huggingface/hub": "catalog:",
+        "@huggingface/transformers": "catalog:",
         "@intentic/capability-catalog": "workspace:*",
         "@intentic/agent-context": "workspace:*",
         "@intentic/base": "workspace:*",
