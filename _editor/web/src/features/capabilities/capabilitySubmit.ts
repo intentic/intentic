@@ -56,10 +56,7 @@ export const useCapabilitySubmit = ({ selected, editing, capabilities, form, add
             await pushWalletPolicy(config);
             return true;
         } catch (caught) {
-            error.value = noticeFrom(
-                caught,
-                `The tile was saved, but the platform did not take its spending caps, so the signer still enforces the previous ones. Save the tile again to retry.`,
-            );
+            error.value = noticeFrom(caught, t(`capabilities.capabilitySubmit.walletCapsNotSaved`));
             return false;
         }
     };

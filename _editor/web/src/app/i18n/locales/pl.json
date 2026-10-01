@@ -837,6 +837,7 @@
             "renamedTo": "Zmieniono nazwę na"
         },
         "capabilitySubmit": {
+            "walletCapsNotSaved": "Kafelek został zapisany, ale platforma nie przyjęła jego limitów wydatków, więc usługa podpisująca nadal stosuje poprzednie limity. Zapisz kafelek ponownie, aby spróbować jeszcze raz.",
             "walletOwnerOnly": "Tylko właściciel tego sandboxa może zmienić limity wydatków jego portfela: płaci jego portfel."
         },
         "cloudflareTokenField": {

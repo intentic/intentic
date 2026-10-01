@@ -713,6 +713,7 @@
             "renamedTo": "Umbenannt in"
         },
         "capabilitySubmit": {
+            "walletCapsNotSaved": "Die Kachel wurde gespeichert, aber die Plattform hat ihre Ausgabenlimits nicht übernommen. Der Signierdienst wendet daher weiterhin die bisherigen Limits an. Speichern Sie die Kachel erneut, um es noch einmal zu versuchen.",
             "walletOwnerOnly": "Nur der Eigentümer dieser Sandbox kann die Ausgabenlimits ihrer Wallet ändern: Die Wallet, die bezahlt, gehört ihm."
         },
         "cloudflareTokenField": {

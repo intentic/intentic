@@ -716,6 +716,7 @@
             "renamedTo": "Renommée en"
         },
         "capabilitySubmit": {
+            "walletCapsNotSaved": "La tuile a été enregistrée, mais la plateforme n'a pas accepté ses plafonds de dépense. Le service de signature continue donc d'appliquer les précédents. Enregistrez à nouveau la tuile pour réessayer.",
             "walletOwnerOnly": "Seul le propriétaire de ce sandbox peut modifier les plafonds de dépense de son portefeuille : le portefeuille qui paie est le sien."
         },
         "cloudflareTokenField": {

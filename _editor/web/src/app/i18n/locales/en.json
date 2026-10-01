@@ -837,6 +837,7 @@
             "renamedTo": "Renamed to"
         },
         "capabilitySubmit": {
+            "walletCapsNotSaved": "The tile was saved, but the platform did not take its spending caps, so the signer still enforces the previous ones. Save the tile again to retry.",
             "walletOwnerOnly": "Only this sandbox's owner can change its wallet's spending caps: the wallet that pays is theirs."
         },
         "tiles": {

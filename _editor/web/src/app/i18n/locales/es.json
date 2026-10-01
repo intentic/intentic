@@ -720,6 +720,7 @@
             "renamedTo": "Renombrado a"
         },
         "capabilitySubmit": {
+            "walletCapsNotSaved": "La tarjeta se guardó, pero la plataforma no aceptó sus límites de gasto, por lo que el servicio de firma sigue aplicando los anteriores. Guarda la tarjeta de nuevo para reintentarlo.",
             "walletOwnerOnly": "Solo el propietario de este sandbox puede cambiar los límites de gasto de su monedero: el monedero que paga es el suyo."
         },
         "cloudflareTokenField": {
