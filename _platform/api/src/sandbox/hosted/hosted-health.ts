@@ -36,6 +36,9 @@ export interface EdgeReading {
     readonly build: string | undefined;
     // Whether the answer carried a `build` key AT ALL. False is an edge older than the stamp itself.
     readonly stamped: boolean;
+    // Whether /health answered at all with a 200. False is the one fault a deploy produces on its own: the edge
+    // relaunches in seconds, and a probe landing in that gap must be confirmed by the next tick before it mails.
+    readonly reached: boolean;
     // In the operator's words, already a diagnosis rather than a reading; undefined when the edge is fine.
     readonly fault: string | undefined;
 }
@@ -63,18 +66,19 @@ const edgeReading = async (config: Config): Promise<EdgeReading | undefined> => 
     try {
         const response = await fetch(`${config.ingress.url}/health`, { signal: AbortSignal.timeout(EDGE_TIMEOUT_MS) });
         if (!response.ok) {
-            return { build: undefined, stamped: false, fault: `${where} answered ${response.status} on its own /health.` };
+            return { build: undefined, stamped: false, reached: false, fault: `${where} answered ${response.status} on its own /health.` };
         }
         body = (await response.json()) as { build?: unknown };
     } catch {
         return {
             build: undefined,
             stamped: false,
+            reached: false,
             fault: `${where} could not be reached at all, so no sandbox is reachable on any lane — tunnel or hosted.`,
         };
     }
     const { stamped, build } = buildStamp(body?.build);
-    return { build, stamped, fault: edgeFault(where, stamped) };
+    return { build, stamped, reached: true, fault: edgeFault(where, stamped) };
 };
 
 /* Lane health reads reachability reported by sandboxes, not platform configuration alone. */
@@ -297,6 +301,13 @@ const adminsOf = (config: Config): string[] =>
 
 let lastAlertAt = 0;
 
+/* A DEPLOY IS NOT AN OUTAGE. The edge is rolled by the same push that restarts this API, and its machine relaunches in
+ * seconds; the boot tick below runs at once, so it kept landing in that gap and mailing "no sandbox is reachable" on
+ * every deploy (2026-10-01: edge relaunched 06:06:18–06:06:22, this probe failed at 06:06:20, every tick after read
+ * it healthy). An edge it cannot reach therefore mails only when the PREVIOUS tick could not reach it either: a real
+ * outage is mailed one tick later, a roll never. Process memory, so a restart starts unconfirmed, which is the point. */
+let edgeMissed = false;
+
 // What the log line leads with, in the same order the mail does: the edge first, because while it stands
 // every other reading here is beside the point.
 const faultLine = (health: HostedHealth): string => {
@@ -326,8 +337,9 @@ const edgeLine = (edge: EdgeReading | undefined): string => edge?.build ?? (edge
 
 // Short stock is ordinary weather and isn't mailed; a full fleet is, since no tick fixes it. An edge that
 // cannot serve the lane always is: no tick fixes that either, and while it stands nobody reaches anything.
-const worthMailing = (health: HostedHealth): boolean =>
-    health.edge?.fault !== undefined ||
+// `edgeConfirmed` is false for an unreached edge the previous tick did not also miss (see `edgeMissed`).
+const worthMailing = (health: HostedHealth, edgeConfirmed: boolean): boolean =>
+    (health.edge?.fault !== undefined && edgeConfirmed) ||
     health.lane.fault !== undefined ||
     health.capacity.full ||
     health.missing.length > 0 ||
@@ -346,6 +358,9 @@ export const sweepHostedHealth = async (
         return undefined;
     }
     const health = await hostedHealth(prisma, config, now);
+    const unreached = health.edge !== undefined && !health.edge.reached;
+    const edgeConfirmed = !unreached || edgeMissed;
+    edgeMissed = unreached;
     // Litter rides on both branches: it doesn't affect health, and would otherwise be invisible on a healthy day.
     if (health.healthy) {
         logger.info(
@@ -374,7 +389,7 @@ export const sweepHostedHealth = async (
         faultLine(health),
     );
     const admins = adminsOf(config);
-    if (admins.length === 0 || !worthMailing(health) || now() - lastAlertAt < ALERT_EVERY_MS) {
+    if (admins.length === 0 || !worthMailing(health, edgeConfirmed) || now() - lastAlertAt < ALERT_EVERY_MS) {
         return health;
     }
     lastAlertAt = now();
@@ -387,6 +402,7 @@ export const sweepHostedHealth = async (
 // Tests reset this latch; nothing else should touch it.
 export const forgetHostedHealthAlert = (): void => {
     lastAlertAt = 0;
+    edgeMissed = false;
 };
 
 // Boot wiring (main.ts): every `healthMinutes`, one replica at a time. Read-only; the lock is about not repeating Fly

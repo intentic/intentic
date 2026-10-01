@@ -242,7 +242,7 @@ describe(`hosted health`, () => {
         stubFly([`intentic-sbx-pool-1`], {}, { ...EDGE_OK, replay: false });
         const prisma = prismaWith([], [warm(`intentic-sbx-pool-1`)]);
         const health = await sweepHostedHealth(prisma, config({ poolSize: 1, regionEu: `` }), logger);
-        expect(health?.edge).toEqual({ build: `turbo-abc`, stamped: true, fault: undefined });
+        expect(health?.edge).toEqual({ build: `turbo-abc`, stamped: true, reached: true, fault: undefined });
         expect(health?.healthy).toBe(true);
     });
 
@@ -256,6 +256,45 @@ describe(`hosted health`, () => {
         const health = await sweepHostedHealth(prismaWith([], []), config({ poolSize: 0, regionEu: `` }), logger);
         expect(health?.edge?.fault).toContain(`could not be reached at all`);
         expect(health?.healthy).toBe(false);
+    });
+
+    /* A DEPLOY RELAUNCHES THE EDGE FOR SECONDS. One tick landing in that gap is reported but not mailed; the next tick
+     * missing it too is an outage, and mails. */
+    it(`mails an unreachable edge only once a second tick in a row cannot reach it either`, async () => {
+        // The regional-refusal test above latches arn; left standing it would mail this fleet as full.
+        forgetProviderCapacity();
+        const sent: string[] = [];
+        let edgeUp = false;
+        stubGlobal(`fetch`, (url: URL | string, init?: RequestInit) => {
+            const target = String(url);
+            if (target.startsWith(`https://api.resend.com`)) {
+                sent.push(String(init?.body ?? ``));
+                return Promise.resolve(new Response(JSON.stringify({ id: `sent` })));
+            }
+            if (target === EDGE_URL) {
+                return edgeUp ? Promise.resolve(new Response(JSON.stringify(EDGE_OK))) : Promise.reject(new Error(`ECONNREFUSED`));
+            }
+            return Promise.resolve(new Response(JSON.stringify({ apps: [] })));
+        });
+        const mailed = { ...config({ poolSize: 0, regionEu: `` }), admin: { emails: `ops@test` }, email: { apiKey: `k`, from: `i@test` } } as unknown as Config;
+        const prisma = prismaWith([], []);
+
+        const blip = await sweepHostedHealth(prisma, mailed, logger);
+        expect(blip?.edge?.fault).toContain(`could not be reached at all`);
+        expect(blip?.healthy).toBe(false);
+        expect(sent).toHaveLength(0);
+
+        // The edge came back: the miss is forgotten, so the next lone miss is a blip again.
+        edgeUp = true;
+        expect((await sweepHostedHealth(prisma, mailed, logger))?.healthy).toBe(true);
+        edgeUp = false;
+        await sweepHostedHealth(prisma, mailed, logger);
+        expect(sent).toHaveLength(0);
+
+        // Still down a tick later: that is an outage.
+        await sweepHostedHealth(prisma, mailed, logger);
+        expect(sent).toHaveLength(1);
+        expect(sent[0]).toContain(`could not be reached at all`);
     });
 
     /* THE OUTAGE EVERY OTHER READING HERE CALLS HEALTHY. */
