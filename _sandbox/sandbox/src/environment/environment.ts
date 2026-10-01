@@ -15,6 +15,7 @@ import { AUTO_MARKER, autoDraftedTools, draftContent, draftFileName, named, step
 import { containerBornAtMs, installLive } from "./drift.js";
 import { type OverlayBlock, renderBlocks, splitBlocks, uniqueBlocks, withoutRepeats } from "./overlay-blocks.js";
 import { capabilityFragments, workspaceExtensionFragments } from "./fragment-sources.js";
+import { privacyPackFragments } from "./privacy-pack.js";
 import { providerPackFragments } from "./provider-packs.js";
 import { statePath } from "../state-paths.js";
 
@@ -63,8 +64,8 @@ const writeComposed = async (services: Services, path: string, content: string):
 };
 
 // Regenerates the approved overlay from the capability manifest and custom file; returns the composed hash, or
-// undefined when none should exist. Runs on capability add/remove, approve, and boot, catching drift when a daemon
-// update changes a fragment.
+// undefined when none should exist. Runs on capability add/remove, approve, a privacy policy change, and boot,
+// catching drift when a daemon update changes a fragment.
 // On a hosted VM, already root over the whole machine, `# intentic:runtime` lines (privileges for a docker-run
 // executor) are meaningless; stripped here along with any fragment left with no real instruction after they're gone.
 export const withoutRuntimeDirectives = (fragments: readonly string[]): string[] =>
@@ -86,6 +87,8 @@ export const composeEnvironment = async (services: Services): Promise<string | u
             ...(await workspaceExtensionFragments(services)),
             // Helper binaries a connected provider needs, for a base image that doesn't already bake them.
             ...(await providerPackFragments(services)),
+            // The privacy shield's readers, while its policy asks for one.
+            ...(await privacyPackFragments(services)),
         ]),
     ].toSorted();
     const fragments = services.config.sandbox.vm ? withoutRuntimeDirectives(contributed) : contributed;

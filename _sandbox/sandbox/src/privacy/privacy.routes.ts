@@ -12,7 +12,7 @@ import type { Services } from "../composition.js";
 const failing = (error: unknown): ORPCError<"INTERNAL_SERVER_ERROR", unknown> =>
     new ORPCError("INTERNAL_SERVER_ERROR", { message: errorMessage(error), cause: error });
 
-export const createPrivacyRoutes = (services: Pick<Services, "privacyShield">) => {
+export const createPrivacyRoutes = (services: Pick<Services, "privacyShield" | "composeEnvironment" | "logger">) => {
     const i = implement(privacyContract).$context<OrpcContext>();
     const shield = services.privacyShield;
     return {
@@ -23,6 +23,12 @@ export const createPrivacyRoutes = (services: Pick<Services, "privacyShield">) =
         ),
         setPolicy: i.setPolicy.handler(async ({ input }) => {
             await shield.setPolicy(input);
+            // The policy decides whether the privacy pack rides the overlay (environment/privacy-pack.ts), so the
+            // Environment card offers the rebuild that installs its readers, or drops them, the moment it changes. Saved
+            // either way: a compose that failed is the overlay's problem, not a reason to refuse the owner's policy.
+            await services.composeEnvironment().catch((error: unknown) => {
+                services.logger.warn({ err: error }, "privacy policy saved, but recomposing the environment failed");
+            });
             return { ok: true } as const;
         }),
         log: i.log.handler(() => shield.ledger.recent()),

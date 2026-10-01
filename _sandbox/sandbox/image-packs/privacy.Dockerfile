@@ -13,9 +13,11 @@
 #                               same name would change what is masked without anybody deciding to.
 #
 # A PACK, AND IN NO PROFILE. The shield is off unless the owner turns it on, and works without this pack (the
-# dictionary finds names, an image is withheld rather than read); a sandbox that wants the readers asks for it with
-# `environment propose privacy --pack`, and the owner approves the rebuild. Fetched over plain HTTPS from the Hugging
-# Face resolve endpoint, the way the base image fetches its other pinned artifacts, never at run time.
+# dictionary finds names, an image is withheld rather than read). The daemon composes it into the overlay by itself
+# while the shield's policy asks for a reader (on or watching, with images read or names found by the model:
+# src/environment/privacy-pack.ts), and the owner approves the rebuild on the Environment card. Fetched over plain
+# HTTPS from the Hugging Face resolve endpoint, the way the base image fetches its other pinned artifacts, never at
+# run time.
 ARG PRIVACY_NER_REVISION=26cc98018d73ae0c815b8274612f42b6002191e7
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \

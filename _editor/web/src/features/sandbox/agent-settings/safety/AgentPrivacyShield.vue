@@ -100,8 +100,6 @@ const imagesNote = computed(
 );
 // Reading without a reader installed is withholding in practice; said, or "Read text" claims what the daemon cannot do.
 const ocrMissing = computed(() => images.value === `read` && status.value?.readers.ocr === false);
-// The agent's own command for the image pack, shown as written rather than translated.
-const PACK_COMMAND = `environment propose privacy --pack`;
 
 const NAMES = computed(() => [
     { label: t(`sandbox.agentPrivacyShield.dictionary`), value: `dictionary` as const },
@@ -297,17 +295,7 @@ const LEARN_COMMAND = `privacy learn <file> --column …`;
                         <template #below>
                             <div class="flex flex-col gap-1.5 text-2xs">
                                 <p :class="images === `allow` ? `text-warning` : `text-muted`">{{ imagesNote }}</p>
-                                <i18n-t
-                                    v-if="ocrMissing"
-                                    keypath="sandbox.agentPrivacyShield.noImageReader"
-                                    tag="p"
-                                    class="text-warning"
-                                    scope="global"
-                                >
-                                    <template #command
-                                        ><code class="ui-code whitespace-nowrap">{{ PACK_COMMAND }}</code></template
-                                    >
-                                </i18n-t>
+                                <p v-if="ocrMissing" class="text-warning">{{ t(`sandbox.agentPrivacyShield.noImageReader`) }}</p>
                             </div>
                         </template>
                     </Row>

@@ -20,7 +20,7 @@ const OCR_FORMAT: Record<FileqSkillHost["host"], string> = {
 const OCR_REFUSAL: Record<FileqSkillHost["host"], string> = {
     sandbox: `- A scanned PDF on an image without tesseract answers "no usable text layer … OCR is not part of this tier"
   rather than an empty page; images say "no visual description". Treat those notes as "not generated",
-  never as "nothing there". An extension that ships tesseract (office) turns the first into OCR.`,
+  never as "nothing there". The privacy pack ships tesseract, and an image carrying it turns the first into OCR.`,
     standalone: `- A scanned PDF with no \`tesseract\` on PATH answers "no usable text layer … OCR is not part of this tier"
   rather than an empty page; images say "no visual description". Treat those notes as "not generated",
   never as "nothing there". Installing tesseract turns the first into OCR.`,

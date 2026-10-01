@@ -5,6 +5,7 @@ import { customPath, proposalPath } from "./environment.js";
 import { capabilityFragments, workspaceExtensionFragments } from "./fragment-sources.js";
 import { blockCommands, blockProse, blockTools, detailOf, type OverlayBlock, purposeOf, splitBlocks, uniqueBlocks } from "./overlay-blocks.js";
 import { listPacks } from "./packs.js";
+import { privacyPackFragments } from "./privacy-pack.js";
 import { providerPackFragments } from "./provider-packs.js";
 import { probeAll, probeModules, probePackages } from "./version-probe.js";
 
@@ -64,6 +65,9 @@ const capabilityCandidates = async (services: Services): Promise<Candidate[]> =>
     }
     for (const fragment of await providerPackFragments(services)) {
         candidates.push({ block: named(fragment, "provider"), origin: "capability", originLabel: "a connected AI account" });
+    }
+    for (const fragment of await privacyPackFragments(services)) {
+        candidates.push({ block: named(fragment, "privacy"), origin: "capability", originLabel: "the privacy shield" });
     }
     return candidates;
 };
