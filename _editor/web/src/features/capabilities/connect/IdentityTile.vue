@@ -14,7 +14,7 @@ const category = computed(() => sessionCategory(props.title, props.action));
     <!-- ROUND, because this mark is worn inside a ring. -->
     <span
         class="flex shrink-0 items-center justify-center rounded-full"
-        :class="category === undefined ? `border border-line bg-content/5 text-muted` : `category-tile`"
+        :class="category === undefined ? `bg-content/5 text-muted` : `category-tile`"
         :style="category === undefined ? undefined : { '--tile-hue': category.hue }"
     >
         <Icon v-if="category !== undefined" :name="category.icon" aria-hidden="true" />

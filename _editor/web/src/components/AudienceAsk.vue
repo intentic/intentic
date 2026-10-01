@@ -32,7 +32,7 @@ const answer = (value: Audience): void => {
 </script>
 
 <template>
-    <div class="flex w-full max-w-md flex-col gap-3 rounded-xl border border-line bg-card p-4 text-left">
+    <div class="flex w-full max-w-md flex-col gap-3 rounded-xl bg-card shadow-sm p-4 text-left">
         <div class="flex flex-col gap-1">
             <p class="text-sm font-semibold text-content">{{ t(`common.audienceAsk.howWorkHere`) }}</p>
             <p class="text-xs text-muted">

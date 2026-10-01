@@ -87,7 +87,7 @@ const assurances = computed(() => [
                 </p>
             </div>
 
-            <div class="shrink-0 rounded-lg border border-line bg-card p-4 @2xl:w-64">
+            <div class="shrink-0 rounded-lg bg-card shadow-sm p-4 @2xl:w-64">
                 <div class="flex items-baseline gap-1.5">
                     <span class="text-4xl font-semibold leading-none tracking-tight text-content">${{ priceUsd }}</span>
                     <span class="text-sm text-muted">/month</span>

@@ -50,7 +50,7 @@ provideRowDensity(computed(() => density));
         <div
             :class="[
                 undivided === true ? `` : `divide-y divide-line-subtle`,
-                flat === true ? `` : `overflow-hidden rounded-xl border border-line-subtle bg-card`,
+                flat === true ? `` : `overflow-hidden rounded-xl bg-card shadow-sm`,
                 equalRows ? `grid md:auto-rows-fr *:flex *:flex-col *:justify-center` : ``,
             ]"
         >

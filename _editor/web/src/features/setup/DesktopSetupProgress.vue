@@ -21,7 +21,7 @@ const showSetup = (): void => openDesktopLink(DESKTOP_LAUNCHER_LINK);
 
 <template>
     <!-- `done` draws nothing: the app opens the workspace itself the moment the run ends well. -->
-    <div v-if="report.state !== `done`" class="flex flex-col gap-2 rounded-lg border border-line bg-card p-3">
+    <div v-if="report.state !== `done`" class="flex flex-col gap-2 rounded-lg bg-card shadow-sm p-3">
         <template v-if="report.state === `running` || report.state === `waiting`">
             <div class="flex items-baseline gap-2 text-2xs">
                 <span class="flex-1 font-medium text-content">

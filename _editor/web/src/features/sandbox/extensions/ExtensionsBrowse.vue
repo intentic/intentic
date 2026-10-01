@@ -256,7 +256,7 @@ const emptyNote = computed<string | undefined>(() => {
         <div v-if="isLoading && outline" class="@container" role="status" aria-busy="true">
             <span class="sr-only">{{ t(`sandbox.extensionsBrowse.readingRegistry`) }}</span>
             <div class="grid grid-cols-1 gap-2 @xl:grid-cols-2 @4xl:grid-cols-3" aria-hidden="true">
-                <div v-for="card in 6" :key="card" class="flex flex-col gap-2 rounded-lg border border-line bg-card px-3 py-2.5">
+                <div v-for="card in 6" :key="card" class="flex flex-col gap-2 rounded-lg bg-card shadow-sm px-3 py-2.5">
                     <div class="flex w-full items-start gap-2.5">
                         <span class="skeleton block h-7 w-7 shrink-0 rounded-md" />
                         <div class="flex min-w-0 flex-1 flex-col gap-1.5">

@@ -306,7 +306,7 @@ const waysRows = computed((): readonly { key: string; icon: IconName; title: str
 </script>
 
 <template>
-    <div v-if="visible" class="flex flex-col gap-1.5 rounded-xl border border-line-strong bg-card px-3 py-2 text-2xs text-muted">
+    <div v-if="visible" class="flex flex-col gap-1.5 rounded-xl bg-card shadow-sm px-3 py-2 text-2xs text-muted">
         <!-- What happened, and the press that skips whatever is booked below. -->
         <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
             <Icon :name="ready ? `pause` : `clock`" class="shrink-0" />

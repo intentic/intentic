@@ -57,7 +57,7 @@ onUnmounted(() => window.removeEventListener(`keydown`, onKey));
                 <button
                     ref="keep"
                     type="button"
-                    class="flex w-full cursor-pointer items-start gap-3 rounded-lg border border-line bg-card p-3 text-left transition-colors hover:border-line-strong hover:bg-overlay focus-visible:border-primary-500 focus-visible:outline-none"
+                    class="flex w-full cursor-pointer items-start gap-3 rounded-lg bg-card shadow-sm p-3 text-left transition-colors hover:bg-overlay focus-visible:border-primary-500 focus-visible:outline-none"
                     v-action="() => choose(`tray`)"
                 >
                     <Icon name="compress" class="mt-0.5 shrink-0 text-primary-400" />
@@ -72,7 +72,7 @@ onUnmounted(() => window.removeEventListener(`keydown`, onKey));
 
                 <button
                     type="button"
-                    class="flex w-full cursor-pointer items-start gap-3 rounded-lg border border-line bg-card p-3 text-left transition-colors hover:border-line-strong hover:bg-overlay focus-visible:border-primary-500 focus-visible:outline-none"
+                    class="flex w-full cursor-pointer items-start gap-3 rounded-lg bg-card shadow-sm p-3 text-left transition-colors hover:bg-overlay focus-visible:border-primary-500 focus-visible:outline-none"
                     v-action="() => choose(`quit`)"
                 >
                     <Icon name="sign-out" class="mt-0.5 shrink-0 text-muted" />

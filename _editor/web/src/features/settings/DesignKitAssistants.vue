@@ -56,7 +56,7 @@ const accessories = Object.entries(ASSISTANT_ACCESSORIES) as [AssistantAccessory
             </label>
         </div>
 
-        <div class="flex flex-wrap items-center gap-x-8 gap-y-5 rounded-xl border border-line bg-card px-6 py-5">
+        <div class="flex flex-wrap items-center gap-x-8 gap-y-5 rounded-xl bg-card shadow-sm px-6 py-5">
             <AssistantFace :seed="typed.id" :label="typed.label" :accessory="personaAccessory(typed)" :size="160" :animated />
             <div class="flex min-w-0 flex-col gap-2">
                 <label for="assistant-name" class="text-xs text-muted">Persona name</label>
@@ -72,7 +72,7 @@ const accessories = Object.entries(ASSISTANT_ACCESSORIES) as [AssistantAccessory
         </div>
 
         <div class="grid grid-cols-[repeat(auto-fit,minmax(7rem,1fr))] gap-2" role="list" aria-label="Names and what they hold">
-            <div v-for="persona in ROSTER" :key="persona.id" role="listitem" class="flex flex-col items-center gap-1.5 rounded-xl border border-line bg-card px-2 py-3">
+            <div v-for="persona in ROSTER" :key="persona.id" role="listitem" class="flex flex-col items-center gap-1.5 rounded-xl bg-card shadow-sm px-2 py-3">
                 <AssistantFace :seed="persona.id" :label="persona.label" :accessory="personaAccessory(persona)" :size="FACE_SIZES.card" :animated />
                 <span class="text-center text-xs font-medium text-content">{{ persona.label }}</span>
                 <span class="text-center text-2xs text-muted">{{ ASSISTANT_ACCESSORIES[personaAccessory(persona)].label }}</span>
@@ -84,7 +84,7 @@ const accessories = Object.entries(ASSISTANT_ACCESSORIES) as [AssistantAccessory
                 v-for="([key, accessory], index) in accessories"
                 :key
                 role="listitem"
-                class="flex flex-col items-center gap-1.5 rounded-xl border border-line bg-card px-2 py-3"
+                class="flex flex-col items-center gap-1.5 rounded-xl bg-card shadow-sm px-2 py-3"
             >
                 <AssistantFace
                     :seed="key"

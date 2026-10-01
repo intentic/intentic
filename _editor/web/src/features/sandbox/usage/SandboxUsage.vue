@@ -181,7 +181,7 @@ const hasSpend = computed(() => current.value.length > 0);
     <div class="@container flex flex-col gap-6">
         <Notice v-if="usageNotice" :of="usageNotice" />
 
-        <div class="flex items-center gap-3 rounded-xl border border-line-subtle bg-card px-4 py-3">
+        <div class="flex items-center gap-3 rounded-xl bg-card shadow-sm px-4 py-3">
             <span class="grid size-10 shrink-0 place-items-center rounded-xl bg-primary-600/10 text-link" aria-hidden="true">
                 <Icon name="usage" class="text-xl" />
             </span>

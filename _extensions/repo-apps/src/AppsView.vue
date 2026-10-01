@@ -238,7 +238,7 @@ onMounted(async () => {
                     <!-- Skeleton rows stand in while scanning; without them, an empty section reads the same as a repo with no apps. -->
                     <div
                         v-if="isLoading && outline"
-                        class="overflow-hidden rounded-lg border border-line-subtle bg-card"
+                        class="overflow-hidden rounded-lg bg-card shadow-sm"
                         role="status"
                         aria-busy="true"
                     >
@@ -258,7 +258,7 @@ onMounted(async () => {
                     <div v-else-if="appRows.length === 0 && !isLoading" :class="ui.emptyState()">
                         {{ t(`appsView.noAppsYetUse`) }}
                     </div>
-                    <div v-else class="overflow-hidden rounded-lg border border-line-subtle bg-card">
+                    <div v-else class="overflow-hidden rounded-lg bg-card shadow-sm">
                         <div class="flex flex-col divide-y divide-line-subtle">
                             <div v-for="app in appRows" :key="app.app" class="flex items-center gap-3 px-4 py-2.5">
                                 <Icon :name="app.badge.icon" class="shrink-0 text-lg" :class="app.badge.tint" />
@@ -334,7 +334,7 @@ onMounted(async () => {
                 <!-- _apps/<x> dirs with tests but not startable apps; muted and denser so this never competes with Apps. -->
                 <section v-if="monorepo && packageEntries.length > 0" class="mt-6">
                     <h3 :class="ui.sectionLabel('mb-2')">{{ t(`appsView.packages`) }}</h3>
-                    <div class="overflow-hidden rounded-lg border border-line/60 bg-card/40">
+                    <div class="overflow-hidden rounded-lg bg-card/40 shadow-sm">
                         <div class="flex flex-col divide-y divide-line/60">
                             <div v-for="[name, dirs] in packageEntries" :key="name" class="flex items-center gap-3 px-4 py-2">
                                 <Icon name="box" class="shrink-0 text-subtle" />
@@ -361,7 +361,7 @@ onMounted(async () => {
                             <template #icon><Icon name="play" /></template>
                         </Button>
                     </div>
-                    <div class="overflow-hidden rounded-lg border border-line/60 bg-card/40">
+                    <div class="overflow-hidden rounded-lg bg-card/40 shadow-sm">
                         <div class="flex flex-col divide-y divide-line/60">
                             <div v-for="dir in grouped.libraries" :key="dir" class="flex items-center gap-3 px-4 py-2">
                                 <Icon name="bolt" class="shrink-0 text-subtle" />
@@ -379,7 +379,7 @@ onMounted(async () => {
                     <div v-if="projects.length === 0 && !testsLoading" :class="ui.emptyState()">
                         {{ t(`appsView.noVitestProjectsFound`) }}
                     </div>
-                    <div v-else class="overflow-hidden rounded-lg border border-line-subtle bg-card">
+                    <div v-else class="overflow-hidden rounded-lg bg-card shadow-sm">
                         <div class="flex flex-col divide-y divide-line-subtle">
                             <div v-for="dir in projects" :key="dir" class="flex items-center gap-3 px-4 py-2">
                                 <Icon name="bolt" class="shrink-0 text-subtle" />

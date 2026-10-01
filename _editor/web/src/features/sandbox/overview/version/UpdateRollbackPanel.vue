@@ -23,7 +23,7 @@ const emit = defineEmits<{ hostedRollback: [] }>();
 </script>
 
 <template>
-    <div class="flex flex-col gap-2 rounded-lg border border-line bg-card p-3">
+    <div class="flex flex-col gap-2 rounded-lg bg-card shadow-sm p-3">
         <p v-if="lead" class="text-xs text-muted">{{ lead }}</p>
         <p v-if="midTurn > 0" class="text-2xs text-warning">
             {{ t(`sandbox.sandboxUpdateCard.midTurnRollback`, { count: midTurn }, midTurn) }}

@@ -127,7 +127,7 @@ const finish = (id: string): void => {
 </script>
 
 <template>
-    <section class="flex flex-col gap-3 rounded-lg border border-line bg-card p-4">
+    <section class="flex flex-col gap-3 rounded-lg bg-card shadow-sm p-4">
         <div class="flex items-center gap-2">
             <Icon name="plus" class="shrink-0 text-2xs text-subtle" />
             <!-- Sized like the rail labels inside the panel, not smaller: it's the heading for everything below it. -->

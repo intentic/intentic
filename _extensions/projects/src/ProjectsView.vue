@@ -81,7 +81,7 @@ const cancelNaming = (): void => {
         <div class="@container">
             <div class="grid grid-cols-1 gap-3 @xl:grid-cols-2 @3xl:grid-cols-3">
                 <template v-if="isLoading">
-                    <div v-for="row in 3" :key="row" class="flex min-h-28 flex-col gap-3 rounded-xl border border-line bg-card p-4">
+                    <div v-for="row in 3" :key="row" class="flex min-h-28 flex-col gap-3 rounded-xl bg-card shadow-sm p-4">
                         <div class="flex items-center gap-3">
                             <span class="skeleton size-9 shrink-0"></span>
                             <span class="skeleton h-3 w-1/2"></span>

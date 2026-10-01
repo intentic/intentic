@@ -110,7 +110,7 @@ const activeAccountReauth = computed(() => {
     <!-- What this conversation still waits on people for (docs/architecture/needs.md): answerable here, above the composer. -->
     <NeedsStrip :conversation-id="conversation.conversationId" />
     <!-- This conversation's agent is off the board. -->
-    <div v-if="activeArchived !== undefined" class="flex items-center gap-2 rounded-xl border border-line bg-card px-3 py-2 text-2xs text-muted">
+    <div v-if="activeArchived !== undefined" class="flex items-center gap-2 rounded-xl bg-card shadow-sm px-3 py-2 text-2xs text-muted">
         <Icon name="box" class="shrink-0" />
         <span class="min-w-0 flex-1">{{ t(`chat.chatPaneNotices.archivedOffBoardSending`) }}</span>
         <Button
@@ -138,7 +138,7 @@ const activeAccountReauth = computed(() => {
     <!-- The trial's standing disclosure: the picker says it once at the moment of choosing. -->
     <div
         v-if="trialNotice"
-        class="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-line bg-card px-3 py-2 text-left text-2xs text-muted"
+        class="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl bg-card shadow-sm px-3 py-2 text-left text-2xs text-muted"
     >
         <Icon name="sparkles" class="shrink-0 text-link" />
         <!-- A floor, not `min-w-0` (ChatContinueStrip's own lesson): every control beside this is `shrink-0`. -->

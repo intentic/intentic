@@ -58,7 +58,7 @@ const when = (at: number): string => {
         <Notice v-if="actionError" :of="noticeOf(actionError)" class="mb-2" />
         <Notice v-else-if="error" :of="noticeOf(error)" class="mb-2" />
 
-        <div v-if="shares.length > 0" class="rounded-lg border border-line bg-card">
+        <div v-if="shares.length > 0" class="rounded-lg bg-card shadow-sm">
             <div class="flex flex-col divide-y divide-line-subtle">
                 <div v-for="share in shares" :key="share.id" class="flex flex-col gap-1.5 px-4 py-2.5">
                     <div class="flex items-center gap-3">

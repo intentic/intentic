@@ -43,7 +43,7 @@ const providerName = computed(() => PROVIDER_VENDOR[provider.value as keyof type
     <RouterLink
         v-if="accessKnown && live"
         to="/connect"
-        class="flex flex-wrap items-center gap-x-2 gap-y-1.5 rounded-2xl border border-line bg-card px-4 py-3 text-2xs text-muted"
+        class="flex flex-wrap items-center gap-x-2 gap-y-1.5 rounded-2xl bg-card shadow-sm px-4 py-3 text-2xs text-muted"
     >
         <Icon name="spinner" spin class="shrink-0 text-link" />
         <span class="min-w-0 flex-1 text-left">{{
@@ -55,7 +55,7 @@ const providerName = computed(() => PROVIDER_VENDOR[provider.value as keyof type
     <!-- The model list leads (free to look at, holds every option, costs nothing to open); connecting one follows it. -->
     <div
         v-else-if="accessKnown && !connected && !trialSpent"
-        class="flex flex-wrap items-center gap-x-2 gap-y-1.5 rounded-2xl border border-line bg-card px-4 py-3 text-2xs text-muted"
+        class="flex flex-wrap items-center gap-x-2 gap-y-1.5 rounded-2xl bg-card shadow-sm px-4 py-3 text-2xs text-muted"
     >
         <Icon name="th-large" class="shrink-0 text-subtle" />
         <span class="min-w-0 flex-1 text-left">{{

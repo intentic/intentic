@@ -140,7 +140,7 @@ const toggleAccessReveal = async (key: string): Promise<void> => {
 
             <div class="flex flex-col gap-4">
                 <!-- TOP, desired state: the dependency graph, nodes colored by their last reconcile status. -->
-                <section class="rounded-lg border border-line bg-card p-4">
+                <section class="rounded-lg bg-card shadow-sm p-4">
                     <h3 :class="ui.sectionLabel('mb-3 flex items-center gap-2')">
                         {{ t(`views.words.planned`) }}
                         <InfoHint :label="t(`views.liveStatusView.graphLegend`)">
@@ -171,7 +171,7 @@ const toggleAccessReveal = async (key: string): Promise<void> => {
                 </section>
 
                 <!-- BOTTOM, actual state: live Komodo deployments plus an on-demand live `intentic deploy plan` read. -->
-                <section class="rounded-lg border border-line bg-card p-4">
+                <section class="rounded-lg bg-card shadow-sm p-4">
                     <h3 :class="ui.sectionLabel('mb-3 flex items-baseline gap-2')">{{ t(`views.words.runningNow`) }}</h3>
 
                     <Notice v-if="appsNotice" :of="appsNotice" class="mb-3" />
@@ -260,7 +260,7 @@ const toggleAccessReveal = async (key: string): Promise<void> => {
                 </section>
 
                 <!-- Access: URLs + admin logins for what's provisioned. -->
-                <section v-if="access.length > 0" class="rounded-lg border border-line bg-card p-4">
+                <section v-if="access.length > 0" class="rounded-lg bg-card shadow-sm p-4">
                     <h3 :class="ui.sectionLabel('mb-3')">{{ t(`views.words.access`) }}</h3>
                     <Notice v-if="accessError" :of="accessError" class="mb-2" />
                     <div class="flex flex-col gap-2">

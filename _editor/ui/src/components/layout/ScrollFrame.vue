@@ -24,7 +24,7 @@ const pinned = computed(() => sticky && !scroll);
 <template>
     <!-- A @container, because whether the header's title and actions fit on one line is a fact about the PANEL. -->
     <section
-        class="@container flex min-h-0 flex-col rounded-lg border border-line-subtle bg-card"
+        class="@container flex min-h-0 flex-col rounded-lg bg-card shadow-sm"
         :class="[grow ? `flex-1` : ``, scroll ? `overflow-hidden` : `overflow-clip`]"
     >
         <!-- THE HEAD AND THE STRIPS PIN AS ONE BLOCK when pinned, rather than as two stacked `sticky` elements at hand-computed offsets. -->

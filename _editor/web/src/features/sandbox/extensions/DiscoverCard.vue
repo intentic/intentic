@@ -44,7 +44,7 @@ const unavailableTip = computed(() =>
     <!-- The whole tile opens the listing, even when blocked: that's the row a reader most needs to read. -->
     <button
         type="button"
-        class="flex h-full w-full flex-col gap-2.5 rounded-xl border border-line bg-card p-3.5 text-left transition-colors hover:border-line-strong hover:bg-overlay sm:p-4"
+        class="flex h-full w-full flex-col gap-2.5 rounded-xl bg-card shadow-sm p-3.5 text-left transition-colors hover:bg-overlay sm:p-4"
         @click="emit(`open`)"
     >
         <div class="flex w-full items-start gap-2.5">

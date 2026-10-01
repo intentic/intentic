@@ -23,7 +23,7 @@ const press = (action: ViewAskAction): Promise<void> => run(() => action.run(), 
 <template>
     <div class="flex flex-col gap-4">
         <!-- The thing itself, as its words will go out: kept whole, clamped by height rather than cut. -->
-        <div v-if="ask.body" class="ui-softscroll max-h-80 overflow-y-auto rounded-lg border border-line-subtle bg-card px-4 py-3 text-sm leading-relaxed text-content">
+        <div v-if="ask.body" class="ui-softscroll max-h-80 overflow-y-auto rounded-lg bg-card shadow-sm px-4 py-3 text-sm leading-relaxed text-content">
             <Markdown v-if="ask.bodyFormat === `markdown`" :source="ask.body" />
             <p v-else class="whitespace-pre-wrap break-words">{{ ask.body }}</p>
         </div>

@@ -64,7 +64,7 @@ const askAgent = (): void => {
 
         <div class="flex w-full max-w-md flex-col gap-2 text-left">
             <!-- 1: repository, the common case. -->
-            <div class="rounded-xl border border-line bg-card p-3">
+            <div class="rounded-xl bg-card shadow-sm p-3">
                 <button v-if="!cloneOpen" type="button" class="flex w-full items-center gap-3 text-left" v-action="openClone">
                     <Icon name="code" class="shrink-0 text-lg text-link" />
                     <span class="min-w-0 flex-1">
@@ -102,7 +102,7 @@ const askAgent = (): void => {
             <!-- 2: local files; drag-and-drop still works over the whole pane, this is just its button. -->
             <button
                 type="button"
-                class="flex items-center gap-3 rounded-xl border border-line bg-card p-3 text-left transition-colors hover:border-line-strong hover:bg-overlay"
+                class="flex items-center gap-3 rounded-xl bg-card shadow-sm p-3 text-left transition-colors hover:bg-overlay"
                 @click="emit('pick')"
             >
                 <Icon name="upload" class="shrink-0 text-lg text-subtle" />
@@ -115,7 +115,7 @@ const askAgent = (): void => {
             <!-- 3: anything else; the agent has shell and credentials to fetch it. -->
             <button
                 type="button"
-                class="flex items-center gap-3 rounded-xl border border-line bg-card p-3 text-left transition-colors hover:border-line-strong hover:bg-overlay"
+                class="flex items-center gap-3 rounded-xl bg-card shadow-sm p-3 text-left transition-colors hover:bg-overlay"
                 @click="askAgent"
             >
                 <Icon name="robot" class="shrink-0 text-lg text-subtle" />

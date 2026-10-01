@@ -79,24 +79,24 @@ const ROW_CLASS = `grid grid-cols-[1.25rem_minmax(0,1fr)_8rem_3.5rem_4rem] items
                 </p>
 
                 <dl class="grid grid-cols-2 gap-2 @xl:grid-cols-4">
-                    <div class="min-w-0 rounded-md border border-line bg-card px-3 py-2">
+                    <div class="min-w-0 rounded-md bg-card shadow-sm px-3 py-2">
                         <dt class="text-2xs text-muted">{{ t(`shared.files`) }}</dt>
                         <dd class="mt-0.5 truncate text-lg font-semibold leading-none text-content">{{ formatCount(totals.files) }}</dd>
                         <p class="mt-1 text-2xs text-subtle">{{ t(`workspace.codebaseHealth.indexedIgnoringBuildOutput`) }}</p>
                     </div>
-                    <div class="min-w-0 rounded-md border border-line bg-card px-3 py-2">
+                    <div class="min-w-0 rounded-md bg-card shadow-sm px-3 py-2">
                         <dt class="text-2xs text-muted">{{ t(`workspace.codebaseHealth.symbols`) }}</dt>
                         <dd class="mt-0.5 truncate text-lg font-semibold leading-none text-content">{{ formatCount(totals.symbols) }}</dd>
                         <p class="mt-1 text-2xs text-subtle">{{ t(`workspace.codebaseHealth.functionsTypesClasses`) }}</p>
                     </div>
-                    <div class="min-w-0 rounded-md border border-line bg-card px-3 py-2">
+                    <div class="min-w-0 rounded-md bg-card shadow-sm px-3 py-2">
                         <dt class="text-2xs text-muted">{{ t(`workspace.codebaseHealth.branchPoints`) }}</dt>
                         <dd class="mt-0.5 truncate text-lg font-semibold leading-none text-content">{{ formatCount(totals.complexity) }}</dd>
                         <p class="mt-1 text-2xs text-subtle">
                             {{ t(`workspace.codebaseHealth.perFile`, { files: perFile(totals.complexity, totals.files) }) }}
                         </p>
                     </div>
-                    <div class="min-w-0 rounded-md border border-line bg-card px-3 py-2">
+                    <div class="min-w-0 rounded-md bg-card shadow-sm px-3 py-2">
                         <dt class="text-2xs text-muted">{{ t(`workspace.codebaseHealth.hotspots`) }}</dt>
                         <dd class="mt-0.5 truncate text-lg font-semibold leading-none text-content">{{ formatCount(totals.hotspots) }}</dd>
                         <p class="mt-1 text-2xs text-subtle">{{ t(`workspace.codebaseHealth.filesBothChurnBranching`) }}</p>

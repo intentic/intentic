@@ -203,7 +203,7 @@ onUnmounted(() => {
             />
 
             <!-- A SETUP HANDED OVER FROM THE WORKSPACE leads the page while it is here: the one thing on it with minutes of its own. -->
-            <section v-if="setupMode" class="flex flex-col gap-4 rounded-xl border border-line bg-card p-5">
+            <section v-if="setupMode" class="flex flex-col gap-4 rounded-xl bg-card shadow-sm p-5">
                 <header class="flex items-start gap-3">
                     <Icon name="box" class="mt-1 shrink-0 text-lg text-link" />
                     <div class="min-w-0 flex-1">
@@ -314,7 +314,7 @@ onUnmounted(() => {
             </section>
 
             <!-- A sync enrollment in flight: folder picked in the system dialog, same script as the card's one-liner, narrating here. -->
-            <section v-if="syncSetup" class="flex flex-col gap-3 rounded-xl border border-line bg-card p-4">
+            <section v-if="syncSetup" class="flex flex-col gap-3 rounded-xl bg-card shadow-sm p-4">
                 <div class="flex items-start gap-2.5">
                     <Icon name="sync" class="mt-0.5 text-link" />
                     <div class="min-w-0 flex-1">

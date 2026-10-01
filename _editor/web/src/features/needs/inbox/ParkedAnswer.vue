@@ -46,7 +46,7 @@ const chat = computed(() => ({ path: `/`, query: { conversation: props.agent.id 
     <div class="flex flex-col gap-4">
         <p class="text-sm text-content/85">{{ waitingFor }}</p>
         <!-- A permission's "allow once" and "skip" are the board card's own, answered without the chat. -->
-        <div v-if="card && permission" class="flex flex-col gap-2 rounded-lg border border-line-subtle bg-card p-3">
+        <div v-if="card && permission" class="flex flex-col gap-2 rounded-lg bg-card shadow-sm p-3">
             <CardPermissionAsk :agent="card" />
             <span class="text-2xs text-subtle">{{ t(`needs.inbox.permissionMore`) }}</span>
         </div>

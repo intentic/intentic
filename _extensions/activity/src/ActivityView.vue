@@ -70,7 +70,7 @@ const voiceSpeakers = computed(() => {
         <Notice v-if="error" :of="noticeOf(error)" />
 
         <!-- The feed heading stays above the scrolling activity rows. -->
-        <div v-if="status?.voice" class="rounded-lg border border-line bg-card px-3 py-2">
+        <div v-if="status?.voice" class="rounded-lg bg-card shadow-sm px-3 py-2">
             <Row icon="microphone" tone="info" density="compact" :flush="true" :title="`#${status.voice.channelName}`">
                 <template #description>{{ t(`activityView.voiceMinutes`, { minutes: voiceMinutes, speakers: voiceSpeakers }) }}</template>
                 <template #control><StatusBadge variant="info" :label="t(`activityView.transcribing`)" size="xs" dot /></template>

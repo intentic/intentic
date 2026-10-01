@@ -218,7 +218,7 @@ onBeforeUnmount(() => {
                         </button>
 
                         <!-- The walk's own strip: position in it, and a way past a tile. -->
-                        <div v-if="walking" class="mb-4 flex items-center gap-2 rounded-lg border border-line bg-card px-3 py-2">
+                        <div v-if="walking" class="mb-4 flex items-center gap-2 rounded-lg bg-card shadow-sm px-3 py-2">
                             <Icon name="sparkles" class="text-info" />
                             <span class="text-xs text-content">{{ t(`capabilities.capabilities.recommendedSetup`) }}</span>
                             <span class="text-2xs text-muted">{{ t(`capabilities.capabilities.left`, { count: walkQueue.length }) }}</span>
@@ -367,7 +367,7 @@ onBeforeUnmount(() => {
                             <RouterLink
                                 v-if="selected.kind === 'extension'"
                                 to="/sandbox/extensions?view=browse"
-                                class="flex items-center gap-3 rounded-lg border border-line bg-card px-3 py-2.5 transition-colors hover:border-line-strong hover:bg-overlay"
+                                class="flex items-center gap-3 rounded-lg bg-card shadow-sm px-3 py-2.5 transition-colors hover:bg-overlay"
                             >
                                 <Icon name="search" class="shrink-0 text-link" />
                                 <span class="min-w-0 flex-1">
@@ -527,7 +527,7 @@ onBeforeUnmount(() => {
                             </template>
                             <!-- Why the grid badged this one: the claim plus the evidence that produced it, which "Not needed" dismisses. -->
                             <!-- The sentence the answers add up to, computed live so it matches what submit actually agrees to. -->
-                            <p v-if="formSummary" class="flex items-start gap-2 rounded-lg border border-line bg-card px-3 py-2 text-xs text-content">
+                            <p v-if="formSummary" class="flex items-start gap-2 rounded-lg bg-card shadow-sm px-3 py-2 text-xs text-content">
                                 <Icon name="info-circle" class="mt-0.5 shrink-0 text-2xs text-subtle" />
                                 {{ formSummary }}
                             </p>
@@ -656,7 +656,7 @@ onBeforeUnmount(() => {
                                     v-for="tile in group.entries"
                                     :key="tile.entry.id"
                                     type="button"
-                                    class="flex h-full w-full items-stretch overflow-hidden rounded-lg border border-line-subtle bg-card text-left transition-colors hover:border-line-strong hover:bg-overlay"
+                                    class="flex h-full w-full items-stretch overflow-hidden rounded-lg bg-card shadow-sm text-left transition-colors hover:bg-overlay"
                                     @click="pick(tile.entry)"
                                 >
                                     <!-- Mark spans the tile's full height as a left-edge band, for scanning a grid of many by logo. -->

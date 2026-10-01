@@ -28,7 +28,7 @@ const outline = useSandboxOutline(reading);
     <div class="flex flex-col gap-6">
         <EnvironmentCard />
 
-        <div v-if="outline" role="status" aria-busy="true" class="flex flex-col gap-3 rounded-lg border border-line bg-card p-4">
+        <div v-if="outline" role="status" aria-busy="true" class="flex flex-col gap-3 rounded-lg bg-card shadow-sm p-4">
             <span class="sr-only">{{ t(`sandbox.sandboxEnvironment.readingSandboxsEnvironment`) }}</span>
             <span class="skeleton block h-3.5 w-44" aria-hidden="true" />
             <div class="flex flex-col gap-2" aria-hidden="true">

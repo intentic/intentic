@@ -45,7 +45,7 @@ const note = computed(() => {
     <template v-if="lane">
         <!-- On the owner's own computer: the question a limit anywhere else raises, answered where it is asked. Drawn
              like the charges banner above it, since it is the same kind of statement: what intentic never counts. -->
-        <div v-if="!onOurMachine" class="flex items-center gap-3 rounded-xl border border-line-subtle bg-card px-4 py-3">
+        <div v-if="!onOurMachine" class="flex items-center gap-3 rounded-xl bg-card shadow-sm px-4 py-3">
             <span class="grid size-10 shrink-0 place-items-center rounded-xl bg-content/5 text-muted" aria-hidden="true">
                 <Icon name="desktop" class="text-xl" />
             </span>
@@ -70,7 +70,7 @@ const note = computed(() => {
         </Card>
 
         <!-- Hosted, read by a guest: the hours are the owner's to spend and to buy, never the reader's. -->
-        <div v-else-if="!owner" class="flex items-center gap-3 rounded-xl border border-line-subtle bg-card px-4 py-3">
+        <div v-else-if="!owner" class="flex items-center gap-3 rounded-xl bg-card shadow-sm px-4 py-3">
             <span class="grid size-10 shrink-0 place-items-center rounded-xl bg-content/5 text-muted" aria-hidden="true">
                 <Icon name="server" class="text-xl" />
             </span>

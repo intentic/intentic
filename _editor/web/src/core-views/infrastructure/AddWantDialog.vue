@@ -286,7 +286,7 @@ const submit = async (): Promise<void> => {
                         v-for="candidate in workspaceApps"
                         :key="`${candidate.repo}--${candidate.app}`"
                         type="button"
-                        class="ui-off flex items-start gap-3 rounded-lg border border-line bg-card p-3 text-left transition-colors hover:border-line-strong hover:bg-overlay disabled:hover:border-line disabled:hover:bg-card"
+                        class="ui-off flex items-start gap-3 rounded-lg bg-card shadow-sm p-3 text-left transition-colors hover:bg-overlay disabled:hover:bg-card"
                         :disabled="declaredApps.has(candidate.app)"
                         v-action="() => pick({ kind: `app`, ...candidate })"
                     >
@@ -310,7 +310,7 @@ const submit = async (): Promise<void> => {
                     v-for="service in INVENTORY_SERVICES"
                     :key="service.service"
                     type="button"
-                    class="flex items-start gap-3 rounded-lg border border-line bg-card p-3 text-left transition-colors hover:border-line-strong hover:bg-overlay"
+                    class="flex items-start gap-3 rounded-lg bg-card shadow-sm p-3 text-left transition-colors hover:bg-overlay"
                     v-action="() => pick({ kind: `service`, service })"
                 >
                     <BrandMark :size="32" :name="service.label" :logo="service.logo" :icon="service.icon ?? `server`" />

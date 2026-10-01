@@ -62,17 +62,17 @@ const size = (bytes: number): string => {
             </div>
 
             <!-- Shown even with nothing published: makes the empty state actionable and gives something to copy. -->
-            <div v-if="url" class="mb-3 flex items-center gap-2 rounded-lg border border-line bg-card px-4 py-2">
+            <div v-if="url" class="mb-3 flex items-center gap-2 rounded-lg bg-card shadow-sm px-4 py-2">
                 <Icon name="globe" class="shrink-0 text-subtle" />
                 <span class="min-w-0 flex-1 truncate font-mono text-xs text-muted" v-tooltip.bottom.overflow="url">{{ url }}</span>
                 <CopyButton :text="url" :label="t(`publicView.copyAddress`)" />
             </div>
-            <div v-else class="mb-3 rounded-lg border border-line bg-card px-4 py-3 text-xs text-muted">
+            <div v-else class="mb-3 rounded-lg bg-card shadow-sm px-4 py-3 text-xs text-muted">
                 {{ t(`publicView.sandboxNoPublicAddress`) }}
             </div>
 
             <!-- Empty list reads as 'nothing published' too quietly; skeleton rows (icon, path, size) stand in while loading. -->
-            <div v-if="isLoading && outline" class="rounded-lg border border-line bg-card" role="status" aria-busy="true">
+            <div v-if="isLoading && outline" class="rounded-lg bg-card shadow-sm" role="status" aria-busy="true">
                 <span class="sr-only">{{ t(`publicView.readingPublishedFiles`) }}</span>
                 <div class="flex flex-col divide-y divide-line-subtle" aria-hidden="true">
                     <div v-for="row in 3" :key="row" class="flex items-center gap-3 px-4 py-2">
@@ -88,7 +88,7 @@ const size = (bytes: number): string => {
 
             <div
                 v-else-if="files.length === 0 && !isLoading"
-                class="flex flex-col items-center gap-2 rounded-lg border border-line bg-card py-10 text-center"
+                class="flex flex-col items-center gap-2 rounded-lg bg-card shadow-sm py-10 text-center"
             >
                 <Icon name="globe" class="text-2xl text-subtle" />
                 <p class="text-sm text-muted">{{ t(`publicView.nothingPublished`) }}</p>
@@ -98,7 +98,7 @@ const size = (bytes: number): string => {
                 </p>
             </div>
 
-            <div v-else-if="files.length > 0" class="rounded-lg border border-line bg-card">
+            <div v-else-if="files.length > 0" class="rounded-lg bg-card shadow-sm">
                 <div class="flex flex-col divide-y divide-line-subtle">
                     <div v-for="file in files" :key="file.path" class="flex items-center gap-3 px-4 py-2">
                         <Icon :name="file.blocked ? `times` : `file`" :class="file.blocked ? `shrink-0 text-danger` : `shrink-0 text-subtle`" />

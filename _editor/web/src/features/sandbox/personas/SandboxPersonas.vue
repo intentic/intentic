@@ -351,7 +351,7 @@ const confirmRemove = async (): Promise<void> => {
                 </div>
 
                 <div :id="detailsId" class="mt-4">
-                    <div v-if="selected && draft" :key="selected.id" class="rounded-xl border border-line-subtle bg-card p-4">
+                    <div v-if="selected && draft" :key="selected.id" class="rounded-xl bg-card shadow-sm p-4">
                         <PersonaForm :draft="draft" :accounts="accounts" :connected="connected" :grantables="grantables" :error="saveError" />
                     </div>
                 </div>

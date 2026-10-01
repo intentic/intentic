@@ -47,7 +47,7 @@ const press = computed((): HeldPress => {
     <div
         v-if="held"
         class="flex flex-col gap-2"
-        :class="compact ? `rounded-xl border border-line-strong bg-card px-3 py-2` : `items-end pt-1`"
+        :class="compact ? `rounded-xl bg-card shadow-sm px-3 py-2` : `items-end pt-1`"
     >
         <ChatHeldBubble v-for="message in queued" :key="message.id" :message="message" :compact="compact" />
         <ChatHeldStatus :reason="reason" :detail="detail" :until="until" :spread="compact">

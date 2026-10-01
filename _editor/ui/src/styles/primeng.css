@@ -445,13 +445,14 @@
     /* This selector is the single shared card surface. */
     .ui-card {
         border-radius: var(--ui-radius);
-        border: 1px solid var(--color-line);
         background: var(--color-card);
         padding: var(--ui-card-padding);
+        box-shadow: var(--shadow-sm);
     }
 
     .ui-card-dashed {
-        border-style: dashed;
+        border: 1px dashed var(--color-line);
+        box-shadow: none;
         background: transparent;
     }
 

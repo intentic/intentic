@@ -222,7 +222,7 @@ const stateTone = (entry: CapabilitySummary): string =>
                 }}
             </p>
 
-            <div v-for="rung in rungs" v-else :key="rung.key" class="flex flex-col gap-2 rounded-xl border border-line bg-card p-3">
+            <div v-for="rung in rungs" v-else :key="rung.key" class="flex flex-col gap-2 rounded-xl bg-card shadow-sm p-3">
                 <div class="flex flex-wrap items-center gap-2">
                     <Icon :name="rung.icon" class="shrink-0" :class="rung.iconClass" />
                     <span class="text-sm font-medium text-content">{{ optionOf(rung.model)?.label }}</span>
