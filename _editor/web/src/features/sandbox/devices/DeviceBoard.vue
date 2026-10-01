@@ -1,14 +1,16 @@
 <script setup lang="ts">
-import { Button, Icon, Notice, type NoticeModel, RowGroup, RowNote, SearchBar, SkeletonRows } from "@intentic/ui";
-import { computed, ref } from "vue";
+import { Button, Icon, Notice, type NoticeModel, SearchBar, SkeletonRows, ui } from "@intentic/ui";
+import { computed, ref, useId } from "vue";
 import DeviceBoardCard from "./DeviceBoardCard.vue";
 import { type MachineRow, rowMatches, showFilter } from "./deviceRows";
 import { desktopApp } from "../../../app/environments/desktop";
 import { useT } from "@intentic/ui/i18n";
 
-// Device cards list paired machines, one per PC however many doors it has; controls live on each machine's page.
+// One independent card per PC, however many environments it has. The toolbar belongs to the board;
+// connection states and sandbox previews belong to their computer, with controls on its own page.
 
 const t = useT();
+const headingId = useId();
 
 const { rows, isLoading, notice, outline, ownSlug, readAt } = defineProps<{
     rows: readonly MachineRow[];
@@ -35,43 +37,54 @@ const inDesktopApp = desktopApp() !== undefined;
 </script>
 
 <template>
-    <RowGroup :label="t(`sandbox.words.devicesSection`)">
-        <template #actions>
+    <section :aria-labelledby="headingId" class="@container flex min-w-0 flex-col gap-4">
+        <div class="flex flex-wrap items-center justify-between gap-3 px-1">
+            <h2 :id="headingId" :class="ui.sectionLabel()">{{ t(`sandbox.words.devicesSection`) }}</h2>
             <Button size="small" severity="secondary" :label="t(`sandbox.words.addDevice`)" @click="emit(`add`)">
                 <template #icon><Icon name="plus" /></template>
             </Button>
-        </template>
+        </div>
 
-        <RowNote v-if="inDesktopApp" icon="desktop">
-            {{ t(`sandbox.deviceBoard.devicesOwnSandboxesAlso`) }} <b>{{ t(`sandbox.deviceBoard.device`) }}</b
-            >{{ t(`sandbox.deviceBoard.intenticIconInTray`) }}
-        </RowNote>
+        <p v-if="inDesktopApp" class="flex items-start gap-2 px-1 text-xs text-muted">
+            <Icon name="desktop" class="mt-0.5 shrink-0" aria-hidden="true" />
+            <span>
+                {{ t(`sandbox.deviceBoard.devicesOwnSandboxesAlso`) }} <b>{{ t(`sandbox.deviceBoard.device`) }}</b
+                >{{ t(`sandbox.deviceBoard.intenticIconInTray`) }}
+            </span>
+        </p>
 
-        <!-- Shown only once there's something to search; ports are matched too. -->
-        <RowNote v-if="!isLoading && showFilter(rows)" variant="block">
-            <SearchBar
-                v-model="query"
-                variant="field"
-                :placeholder="t(`sandbox.deviceBoard.filterByDeviceSandbox`)"
-                :aria-label="t(`sandbox.deviceBoard.filterDevices`)"
-                :clearable="true"
-            />
-        </RowNote>
+        <!-- Search is a board control, not part of any computer's card; ports are matched too. -->
+        <SearchBar
+            v-if="!isLoading && showFilter(rows)"
+            v-model="query"
+            variant="field"
+            :placeholder="t(`sandbox.deviceBoard.filterByDeviceSandbox`)"
+            :aria-label="t(`sandbox.deviceBoard.filterDevices`)"
+            :clearable="true"
+        />
 
-        <Notice v-if="notice" :of="notice" class="m-4" />
+        <Notice v-if="notice" :of="notice" />
         <div v-else-if="isLoading" role="status" aria-busy="true">
             <template v-if="outline">
                 <span class="sr-only">{{ t(`sandbox.deviceBoard.readingDevices`) }}</span>
-                <SkeletonRows :rows="2" description />
+                <div class="grid grid-cols-1 gap-4 @3xl:grid-cols-2">
+                    <div v-for="index in 2" :key="index" class="overflow-hidden rounded-xl border border-line-subtle bg-card">
+                        <SkeletonRows :rows="2" description />
+                    </div>
+                </div>
             </template>
         </div>
-        <RowNote v-else-if="rows.length === 0" variant="empty">
+        <p v-else-if="rows.length === 0" :class="ui.emptyState()">
             {{ t(`sandbox.deviceBoard.noDevicePairedSandbox`) }}
-        </RowNote>
+        </p>
 
-        <DeviceBoardCard v-for="row in shown" :key="row.key" :machine="row" :needle="needle" :own-slug="ownSlug" :read-at="readAt" />
+        <!-- Columns follow this pane's width, not the window: a side panel must never squeeze two cards in. -->
+        <div v-if="shown.length > 0" class="grid grid-cols-1 items-start gap-4 @3xl:grid-cols-2">
+            <DeviceBoardCard v-for="row in shown" :key="row.key" :machine="row" :needle="needle" :own-slug="ownSlug" :read-at="readAt" />
+        </div>
 
-        <!-- A filter that matched nothing says so, rather than leaving a group that looks empty by accident. -->
-        <RowNote v-if="shown.length === 0 && rows.length > 0" variant="empty">{{ t(`sandbox.deviceBoard.noDeviceSandboxHere`, { query }) }}</RowNote>
-    </RowGroup>
+        <p v-if="shown.length === 0 && rows.length > 0" :class="ui.emptyState()" role="status">
+            {{ t(`sandbox.deviceBoard.noDeviceSandboxHere`, { query }) }}
+        </p>
+    </section>
 </template>

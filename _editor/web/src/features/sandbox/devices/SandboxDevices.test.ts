@@ -899,8 +899,25 @@ it(`names every sandbox a machine holds, and what each one came to, without bein
     // The third is stopped on purpose, which is a state rather than an errand.
     expect(text).toContain(`stopped`);
     expect(text).toContain(`1 port busy here`);
-    // No chevron on a machine: a card is one link, so nothing on the board discloses.
+    // No disclosure button on a machine: a card is one link, so nothing on the board expands.
     expect(disclosures(mount([busyMachine(), { ...syncOnly(), key: `other`, label: `other-pc` }]))).toEqual([]);
+});
+
+it(`gives every computer its own named card and keeps board controls outside the cards`, () => {
+    const el = mount([busyMachine(), { ...syncOnly(), key: `other`, label: `other-pc` }]);
+    const cards = [...el.querySelectorAll(`a.bg-card`)];
+    expect(cards).toHaveLength(2);
+    // A screen reader names the link by the computer, not by every fact and sandbox on its face.
+    expect(cards.map((card) => document.getElementById(card.getAttribute(`aria-labelledby`) ?? ``)?.textContent).toSorted()).toEqual([
+        `other-pc`,
+        `radarsu-rog`,
+    ]);
+    expect(cards.map((card) => card.classList.contains(`border`))).toEqual([true, true]);
+    // One target per card: search, pairing and any future toolbar controls must not become nested interactions.
+    expect(cards.flatMap((card) => [...card.querySelectorAll(`a, button, input`)])).toEqual([]);
+    expect(el.querySelector(`input`)?.closest(`a`)).toBeNull();
+    expect(el.querySelector(`button`)?.closest(`a`)).toBeNull();
+    expect(el.querySelector(`h2`)?.textContent).toBe(`Devices`);
 });
 
 // The board is an index of links, so a machine is deep-linkable, ⌘-clickable and survives a reload.
@@ -1777,10 +1794,10 @@ it(`draws a Windows PC and its distro as one card, with the container once and e
     expect(cards).toHaveLength(2);
     const pc = cards.find((card) => card.textContent?.includes(`Microsoft Windows 11 Home`));
     expect(pc?.textContent?.match(/work/g)).toHaveLength(1);
-    // A machine with no sub-items has no #below block, leaving no stray padding.
+    // A lone environment stays in its header; the PC separates its connections from its sandbox preview.
     const lone = cards.find((card) => card.textContent?.includes(`radarsu-omen`));
-    expect(lone?.querySelector(`.mt-3`)).toBeNull();
-    expect(pc?.querySelector(`.mt-3`)).not.toBeNull();
+    expect([...lone!.querySelectorAll(`section`)].map((section) => section.getAttribute(`aria-label`))).toEqual([]);
+    expect([...pc!.querySelectorAll(`section`)].map((section) => section.getAttribute(`aria-label`))).toEqual([`Environments`, `Sandboxes`]);
 });
 
 it(`opens the PC as one page: an environment row per side, the sandbox once, and the distros the Windows side lists`, async () => {

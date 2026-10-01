@@ -1,19 +1,17 @@
 <script setup lang="ts">
-import { Icon, Row, StatusBadge } from "@intentic/ui";
-import { computed } from "vue";
+import { Icon, StatusBadge } from "@intentic/ui";
+import { computed, useId } from "vue";
 import { RouterLink } from "vue-router";
 import { boardBody, deviceState, deviceTone, type MachineRow, manySided } from "./deviceRows";
 import { deviceRoute } from "./deviceLinks";
 import { lastSeenNote, osLabel, osTitle } from "./deviceFacts";
 import { useT } from "@intentic/ui/i18n";
 
-// One machine on the board: what it is, whether it wants anything, and a line per sandbox it holds. Nothing
-// here expands and nothing here is a control — the whole card is one link into that machine's own page —
-// so a reader answering "which machine has 8788" never has to press anything. A PC with several environments
-// (Windows and the distros on it) is one card whose environments are lines of their own, each with its own
-// state, and whose sandboxes are listed once.
+// One physical computer, one surface, one link. Its identity leads, each environment owns its state,
+// and the sandbox preview is set apart from the connections that reach it. No nested controls or disclosures.
 
 const t = useT();
+const titleId = useId();
 
 const { machine, needle, ownSlug, readAt } = defineProps<{
     machine: MachineRow;
@@ -25,110 +23,96 @@ const { machine, needle, ownSlug, readAt } = defineProps<{
 }>();
 
 const body = computed(() => boardBody(machine, needle, ownSlug, readAt));
-const hasBelow = computed(
-    () => body.value.environments.length > 0 || body.value.warnings.length > 0 || body.value.lines.length > 0 || body.value.more > 0,
-);
-// The one device of a one-environment machine, whose facts and state ride the card itself.
+// A lone environment is described in the header rather than restated in a section underneath it.
 const lone = computed(() => (manySided(machine) ? undefined : machine.environments[0]?.device));
 </script>
 
 <template>
-    <RouterLink :to="deviceRoute(machine.key)" class="block">
-        <!-- `indent` starts the sandbox lines under the machine's name, so a card reads as one machine's worth. -->
-        <Row :interactive="true" :chevron="true" :indent="hasBelow">
-            <template #lead="{ mark }">
-                <span
-                    class="flex shrink-0 items-center justify-center rounded-md bg-content/10 text-content"
-                    :style="{ width: `${mark}px`, height: `${mark}px` }"
-                >
-                    <Icon name="desktop" class="text-xs" />
+    <RouterLink
+        :to="deviceRoute(machine.key)"
+        :aria-labelledby="titleId"
+        class="group flex min-w-0 flex-col overflow-hidden rounded-xl border border-line-subtle bg-card transition-colors hover:border-line-strong focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary-500 motion-reduce:transition-none"
+    >
+        <div class="flex min-w-0 flex-col gap-4 p-4">
+            <div class="flex min-w-0 items-start gap-3">
+                <span class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-content/10 text-content" aria-hidden="true">
+                    <Icon name="desktop" class="text-sm" />
                 </span>
-            </template>
-
-            <template #title>
-                <span class="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1">
-                    <span class="min-w-0 truncate font-semibold">{{ machine.label }}</span>
-                    <!-- The OS beside the name: what tells two identically-labelled machines apart at a glance. -->
-                    <span v-if="lone && osLabel(lone)" class="shrink-0 truncate text-xs font-normal text-muted" v-tooltip.top="osTitle(lone)">
+                <div class="min-w-0 flex-1">
+                    <h3 :id="titleId" class="break-words text-sm font-semibold text-content">{{ machine.label }}</h3>
+                    <p v-if="lone && osLabel(lone)" class="mt-0.5 break-words text-xs text-muted" v-tooltip.top="osTitle(lone)">
                         {{ osLabel(lone) }}
-                    </span>
-                </span>
-            </template>
-
-            <!-- A lone device's doors and agent build; a many-sided machine says these per environment below. -->
-            <template v-if="body.doors.length > 0" #description>
-                <span class="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-2xs">
-                    <template v-for="(door, index) in body.doors" :key="door">
-                        <span v-if="index > 0" class="text-subtle" aria-hidden="true">·</span>
-                        <span>{{ door }}</span>
-                    </template>
-                </span>
-            </template>
-
-            <template v-if="lone" #meta>
-                <span v-if="lastSeenNote(lone)" class="shrink-0">{{ lastSeenNote(lone) }}</span>
-                <StatusBadge :variant="deviceTone(lone, readAt)" size="xs" :dot="true" :label="deviceState(lone, readAt)" class="shrink-0" />
-            </template>
-
-            <template v-if="hasBelow" #below>
-                <!-- Every line's lead sits in a fixed-width column so dots, icons and empty leads align. -->
-                <div class="flex min-w-0 flex-col gap-2">
-                    <!-- One line per environment: what it is, how it is reached, and its own state. -->
-                    <div v-for="environment in body.environments" :key="environment.key" class="flex min-w-0 items-center gap-x-2.5">
-                        <span class="flex w-3.5 shrink-0 items-center justify-center" aria-hidden="true">
-                            <Icon name="desktop" class="text-2xs text-subtle" />
-                        </span>
-                        <span class="min-w-0 truncate text-xs text-content">{{ environment.label }}</span>
-                        <span class="flex min-w-0 flex-wrap items-center gap-x-1.5 text-2xs text-subtle">
-                            <template v-for="(door, index) in environment.doors" :key="door">
-                                <span v-if="index > 0" aria-hidden="true">·</span>
-                                <span>{{ door }}</span>
-                            </template>
-                        </span>
-                        <span class="ml-auto flex shrink-0 items-center gap-x-2.5 pl-3">
-                            <span v-if="environment.lastSeen" class="text-2xs text-muted">{{ environment.lastSeen }}</span>
-                            <StatusBadge :variant="environment.tone" size="xs" :dot="true" :label="environment.state" />
-                        </span>
-                    </div>
-                    <!-- Machine status qualifies every sandbox connection. -->
-                    <p v-for="warning in body.warnings" :key="warning" class="flex min-w-0 items-center gap-x-2.5 text-2xs text-warning">
-                        <span class="flex w-3.5 shrink-0 items-center justify-center" aria-hidden="true">
-                            <Icon name="exclamation-circle" class="text-2xs" />
-                        </span>
-                        {{ warning }}
                     </p>
-                    <!-- One line per sandbox: the running dot, the name, and what its ports came to. -->
-                    <div v-for="line in body.lines" :key="line.sandboxId" class="flex min-w-0 items-center gap-x-2.5">
-                        <!-- Fixed-width lead column: dot or icon, centred to the same width as the environment icon above. -->
-                        <span class="flex w-3.5 shrink-0 items-center justify-center">
-                            <span
-                                v-if="line.running !== undefined"
-                                class="h-1.5 w-1.5 rounded-full"
-                                :class="line.running ? `bg-success` : `bg-subtle`"
-                                role="img"
-                                :aria-label="line.running ? `running` : `stopped`"
-                            ></span>
-                            <Icon v-else name="box" class="text-2xs text-subtle" />
-                        </span>
-                        <span class="min-w-0 truncate text-xs text-content">{{ line.title }}</span>
-                        <span v-if="line.running === false" class="shrink-0 text-2xs text-muted">{{ t(`sandbox.deviceBoardCard.stopped`) }}</span>
-                        <span v-else-if="line.running === undefined" class="shrink-0 text-2xs text-muted">{{
-                            t(`sandbox.deviceBoardCard.notRunningHere`)
-                        }}</span>
-                        <StatusBadge v-if="line.self" variant="info" size="xs" :label="t(`sandbox.words.oneYoureUsing`)" class="shrink-0" />
-                        <!-- Facts are counted and uncoloured; a warning keeps its ink and is the reason to open this machine. -->
-                        <span class="ml-auto flex min-w-0 shrink items-center gap-x-2.5 pl-3">
-                            <span v-for="fact in line.facts" :key="fact" class="shrink-0 text-2xs text-subtle">{{ fact }}</span>
-                            <span v-for="warning in line.warnings" :key="warning" class="truncate text-2xs text-warning">{{ warning }}</span>
-                        </span>
-                    </div>
-                    <!-- Counted against what the machine reported, so a capped list never reads as the whole of it. -->
-                    <p v-if="body.more > 0" class="flex min-w-0 items-center gap-x-2.5 text-2xs text-subtle">
-                        <span class="w-3.5 shrink-0" aria-hidden="true"></span>
-                        {{ t(`sandbox.deviceBoardCard.more`, { more: body.more }) }}
-                    </p>
+                    <p v-if="lone && lastSeenNote(lone)" class="mt-1 break-words text-2xs text-muted">{{ lastSeenNote(lone) }}</p>
                 </div>
-            </template>
-        </Row>
+                <StatusBadge v-if="lone" :variant="deviceTone(lone, readAt)" size="xs" :dot="true" :label="deviceState(lone, readAt)" class="shrink-0" />
+            </div>
+
+            <p v-if="body.doors.length > 0" class="break-words text-2xs text-muted">{{ body.doors.join(` · `) }}</p>
+
+            <!-- Status stays beside the environment it describes. Supporting facts get their own wrapping line. -->
+            <section v-if="body.environments.length > 0" :aria-label="t(`sandbox.devicePage.environments`)" class="flex min-w-0 flex-col gap-3">
+                <h4 class="text-xs font-medium text-muted">{{ t(`sandbox.devicePage.environments`) }}</h4>
+                <ul class="flex min-w-0 flex-col gap-3">
+                    <li v-for="environment in body.environments" :key="environment.key" class="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1">
+                        <span class="min-w-0 break-words text-xs font-medium text-content">{{ environment.label }}</span>
+                        <StatusBadge :variant="environment.tone" size="xs" :dot="true" :label="environment.state" class="self-start" />
+                        <p v-if="environment.doors.length > 0" class="col-span-2 break-words text-2xs text-muted">
+                            {{ environment.doors.join(` · `) }}
+                        </p>
+                        <p v-if="environment.lastSeen" class="col-span-2 break-words text-2xs text-muted">{{ environment.lastSeen }}</p>
+                    </li>
+                </ul>
+            </section>
+
+            <!-- A computer-level warning qualifies every sandbox underneath it. Never truncate the remedy. -->
+            <div v-if="body.warnings.length > 0" class="flex min-w-0 flex-col gap-1.5">
+                <p v-for="warning in body.warnings" :key="warning" class="flex min-w-0 items-start gap-2 text-2xs text-warning">
+                    <Icon name="exclamation-circle" class="mt-0.5 shrink-0" aria-hidden="true" />
+                    <span class="min-w-0 break-words">{{ warning }}</span>
+                </p>
+            </div>
+        </div>
+
+        <!-- What runs here is not another connection: the divider is that distinction, not another nested card. -->
+        <section
+            v-if="body.lines.length > 0 || body.more > 0"
+            :aria-label="t(`sandbox.devicePage.sandboxes`)"
+            class="flex min-w-0 flex-col gap-3 border-t border-line-subtle bg-overlay/30 p-4"
+        >
+            <h4 class="text-xs font-medium text-muted">{{ t(`sandbox.devicePage.sandboxes`) }}</h4>
+            <ul class="flex min-w-0 flex-col gap-3">
+                <li v-for="line in body.lines" :key="line.sandboxId" class="flex min-w-0 items-start gap-2.5">
+                    <span class="mt-1 flex w-3.5 shrink-0 items-center justify-center">
+                        <span
+                            v-if="line.running !== undefined"
+                            class="h-1.5 w-1.5 rounded-full"
+                            :class="line.running ? `bg-success` : `bg-subtle`"
+                            role="img"
+                            :aria-label="line.running ? `running` : `stopped`"
+                        ></span>
+                        <Icon v-else name="box" class="text-2xs text-subtle" aria-hidden="true" />
+                    </span>
+                    <div class="flex min-w-0 flex-1 flex-col gap-1">
+                        <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                            <span class="min-w-0 break-words text-xs font-medium text-content">{{ line.title }}</span>
+                            <StatusBadge v-if="line.self" variant="info" size="xs" :label="t(`sandbox.words.oneYoureUsing`)" />
+                            <span v-if="line.running === false" class="text-2xs text-muted">{{ t(`sandbox.deviceBoardCard.stopped`) }}</span>
+                            <span v-else-if="line.running === undefined" class="text-2xs text-muted">{{ t(`sandbox.deviceBoardCard.notRunningHere`) }}</span>
+                        </div>
+                        <div v-if="line.facts.length > 0" class="flex min-w-0 flex-wrap gap-x-2.5 gap-y-0.5 text-2xs text-subtle">
+                            <span v-for="fact in line.facts" :key="fact" class="break-words">{{ fact }}</span>
+                        </div>
+                        <p v-for="warning in line.warnings" :key="warning" class="break-words text-2xs text-warning">{{ warning }}</p>
+                    </div>
+                </li>
+            </ul>
+            <p v-if="body.more > 0" class="pl-6 text-2xs text-muted">{{ t(`sandbox.deviceBoardCard.more`, { more: body.more }) }}</p>
+        </section>
+
+        <!-- This is an affordance within the one link, not a second link or a nested button. -->
+        <span class="flex items-center justify-end gap-1.5 px-4 py-3 text-2xs text-link group-hover:underline">
+            {{ t(`ui.action.open`) }}<Icon name="chevron-right" class="text-2xs" aria-hidden="true" />
+        </span>
     </RouterLink>
 </template>
