@@ -245,8 +245,10 @@ export const sendable = (situation: ComposerSituation, intent: SendIntent, refus
     if (refusal !== undefined) {
         return false;
     }
-    // Place and edit both need words in the box; empty would silently rewind without asking anything.
-    if (intent === `place` || intent === `edit`) {
+    // Place and edit both need words in the box; empty would silently rewind without asking anything. A scheduled send
+    // does too: its button reads as a time, so a bare press meaning "Continue now" (or "flush the queue now") would do the
+    // opposite of what it says, and the strip's own Continue sits right above it for that.
+    if (intent === `place` || intent === `edit` || intent === `scheduled`) {
         return situation.staged;
     }
     return situation.staged || continueOffered(situation) || queueFlushable(situation);

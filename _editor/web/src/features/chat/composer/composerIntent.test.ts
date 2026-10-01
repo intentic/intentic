@@ -77,6 +77,17 @@ it(`schedules only a send that would start a turn on a spent account`, () => {
     expect(sendable(chat(spent), `scheduled`, undefined)).toBe(false);
 });
 
+// The scheduled button reads as a time: an empty press there meaning "Continue now" did the opposite of its label, and
+// on a spent account was refused before anything ran. Continue stays offered, to the strip's own button and to Enter.
+it(`keeps a scheduled send's button shut on an empty box, even with a turn to continue`, () => {
+    const held = chat({ spentUntil: 5_000, pickUp: { ready: true } });
+    expect(continueOffered(held)).toBe(true);
+    expect(sendable(held, `scheduled`, undefined)).toBe(false);
+    expect(sendable(chat({ spentUntil: 5_000, queued: 1 }), `scheduled`, undefined)).toBe(false);
+    // An account with room keeps the ordinary empty press as Continue.
+    expect(sendable(chat({ pickUp: { ready: true } }), `idle`, undefined)).toBe(true);
+});
+
 it(`says when a scheduled send goes, and that a turn already waiting goes ahead of it`, () => {
     const words = { ...WORDS, reopens: `Sun 08:20` };
     expect(placeholderFor(`scheduled`, words)).toContain(`Sun 08:20`);

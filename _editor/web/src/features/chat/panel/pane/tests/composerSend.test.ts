@@ -98,6 +98,22 @@ describe(`a scheduled send`, () => {
         expect(say).not.toHaveBeenCalled();
     });
 
+    it(`leaves its time-labelled button shut on an empty box; Enter continues as the strip's Continue does`, () => {
+        const { chat, host, say, send } = composerOf(inHalfAnHour());
+        const continued = jest.spyOn(chat.turn, `continueTurn`).mockResolvedValue(undefined);
+        chat.pickUp.value = { reason: `limit`, readyAt: Date.now() + 60_000, held: { ran: true } };
+
+        expect(send.intent.value).toBe(`scheduled`);
+        expect(send.continueOffer.value).toBe(true);
+        expect(send.canSend.value).toBe(false);
+        send.submit();
+
+        expect(continued).toHaveBeenCalledTimes(1);
+        // The strip's Wait for me / Send again is the reader's to set; a Continue never flips it.
+        expect(host.armLimitResend).not.toHaveBeenCalled();
+        expect(say).not.toHaveBeenCalled();
+    });
+
     it(`sends without arming anything when the caller has just made room itself`, () => {
         const { chat, host, say, send } = composerOf(inHalfAnHour());
         chat.draft.value = `ship it`;

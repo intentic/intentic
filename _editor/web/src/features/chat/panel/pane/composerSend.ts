@@ -287,22 +287,24 @@ export const useComposerSend = (host: SendHost) => {
             host.openModels();
             return;
         }
+        // Nothing typed and a turn left hanging means Continue, the strip's own press by keyboard ("Enter to continue"): it
+        // does exactly what that button does, so it leaves the strip's answer alone. Ahead of `canSend`, which a scheduled
+        // send's time-labelled button reads, and which stays shut on an empty box there.
+        if (continueOffer.value) {
+            continueTurn();
+            return;
+        }
         if (!canSend.value) {
             return;
         }
         // A scheduled send is booked, not tried: the words wait in the queue, drawn as scheduled, and the sandbox lets them
         // go when the window reopens; nothing reaches the provider before, so there is no refusal to show. The limit answer
         // is set to resend as well, for a reopen the provider named too early (that turn is refused, and goes again at the
-        // next one) and for a Continue pressed here. A failed write leaves the card's own control saying `wait`.
+        // next one). A failed write leaves the card's own control saying `wait`.
         const booking = intent.value === `scheduled` && options.now !== true ? spentUntil.value : undefined;
         if (booking !== undefined) {
             // allow(silent-catch): the write is optimistic and rolls back on failure, so the card's control saying `wait` is the report.
             void host.armLimitResend().catch(() => undefined);
-        }
-        // Nothing typed and a turn left hanging means Continue: every gate below reads a draft that isn't there.
-        if (continueOffer.value) {
-            continueTurn();
-            return;
         }
         sendDraft(booking);
     };
