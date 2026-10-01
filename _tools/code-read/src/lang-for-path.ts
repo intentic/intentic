@@ -49,6 +49,7 @@ const EXT_LANG: Record<string, ShikiLang> = {
     psm1: "powershell",
     sql: "sql",
     toml: "toml",
+    toon: "toon",
     xml: "xml",
     ini: "ini",
     cfg: "ini",

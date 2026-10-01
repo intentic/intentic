@@ -133,6 +133,7 @@ const BY_EXT: Readonly<Record<string, FileFormat>> = {
     yaml: { category: `config`, label: `YAML` },
     yml: { category: `config`, label: `YAML` },
     toml: { category: `config`, label: `TOML` },
+    toon: { category: `data`, label: `TOON` },
     xml: { category: `config`, label: `XML` },
     ini: { category: `config` },
     cfg: { category: `config` },

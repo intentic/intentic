@@ -30,6 +30,8 @@ export const LANGS = {
     dotenv: () => import(`@shikijs/langs/dotenv`),
     // Local grammar: @shikijs/langs has none for ignore files.
     gitignore: () => import(`./gitignore-grammar.js`),
+    // Local grammar: @shikijs/langs has none for TOON.
+    toon: () => import(`./toon-grammar.js`),
     make: () => import(`@shikijs/langs/make`),
     prisma: () => import(`@shikijs/langs/prisma`),
     graphql: () => import(`@shikijs/langs/graphql`),
@@ -53,7 +55,10 @@ export type ShikiLang = keyof typeof LANGS;
 const loaders: ReadonlyMap<string, () => Promise<unknown>> = new Map(Object.entries(LANGS));
 export const langLoader = (lang: string): (() => Promise<unknown>) | undefined => loaders.get(lang);
 
+// Ids whose grammar is a module of this package rather than an @shikijs/langs entry.
+const LOCAL_LANGS: ReadonlySet<string> = new Set([`gitignore`, `toon`]);
+
 // Grammar packages vite.config must pre-bundle (optimizeDeps.include), derived from LANGS so it can't drift.
 export const shikiLangDeps = Object.keys(LANGS)
-    .filter((id) => id !== `gitignore`)
+    .filter((id) => !LOCAL_LANGS.has(id))
     .map((id) => `@shikijs/langs/${id}`);
