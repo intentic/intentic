@@ -169,6 +169,12 @@ const choose = async (next: TurnBreakPolicy): Promise<void> => {
         // The outage is the one ending with a second party already retrying it: this window has to start (or stop)
         // watching for the run the daemon brings back, or a resumed turn streams into nothing.
         conversation.value.failures.watchOutage(next === `retry`);
+        // The daemon books a move only as a refusal lands, so choosing it afterwards would otherwise just leave the turn
+        // waiting for the reset under a pill that says "Move": the answer promises a move at once, so this one moves now,
+        // keeping the session by the daemon's own rule (sibling-account.ts bookLimitMove).
+        if (next === `move` && wall === `limit` && fallback.value !== undefined && pickUp.value?.held?.moving === undefined) {
+            void continueOnFallback(carriesOnMove.value);
+        }
     } catch (error) {
         // Left as it stands: a control that moved on a failed write would claim an automation nobody armed. The snap
         // back alone is easy to miss, so the card says why.
@@ -249,6 +255,11 @@ const continueOnFallback = async (carry: boolean): Promise<void> => {
     emit(`continue`, { carry });
 };
 const canCarry = computed(() => pickUp.value?.held?.ran === true);
+// What the `move` answer carries when chosen on a held turn: the same line the daemon draws when it books the move itself.
+const carriesOnMove = computed(() => {
+    const tokens = pickUp.value?.held?.contextTokens;
+    return canCarry.value && tokens !== undefined && tokens < (settings.value?.limitMoveCarryUnder ?? 100_000);
+});
 const carryLine = computed(() => {
     const tokens = pickUp.value?.held?.contextTokens;
     return tokens === undefined
