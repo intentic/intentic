@@ -3350,7 +3350,8 @@
             "thisSandbox": "ten sandbox",
             "unblockDeletions": "Odblokuj usunięcia",
             "unpairHeader": "Rozparować {sandbox}?",
-            "useItsMenu": "Użyj jego menu ⋯"
+            "useItsMenu": "Użyj jego menu ⋯",
+            "select": "Zaznacz"
         },
         "deviceRows": {
             "fileSyncing": "Synchronizacja plików",
@@ -3363,7 +3364,15 @@
             "portMirroring": "Odbijanie portów",
             "resumeAll": "Wznów wszystko",
             "turnAllOff": "Wyłącz wszystkie",
-            "turnAllOn": "Włącz wszystkie"
+            "turnAllOn": "Włącz wszystkie",
+            "files": "Pliki",
+            "ports": "Porty",
+            "syncingShort": "synchronizowane",
+            "pausedShort": "wstrzymane",
+            "pausedSomeShort": "wstrzymane: {off} z {total}",
+            "onShort": "włączone",
+            "offShort": "wyłączone",
+            "offSomeShort": "wyłączone: {off} z {total}"
         },
         "deviceRunners": {
             "addRunner": "Dodaj runnera",

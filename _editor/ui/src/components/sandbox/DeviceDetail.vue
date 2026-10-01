@@ -4,15 +4,20 @@
 import { Comment, computed, Fragment, isVNode, onBeforeUnmount, ref, Text, useId, type VNode, watch } from "vue";
 import CopyButton from "../primitives/CopyButton.vue";
 import Icon from "../primitives/Icon.vue";
+import SandboxLogo from "./SandboxLogo.vue";
 import {
     backupState,
     backupTone,
+    type CardPart,
+    type CardTone,
+    cardOrder,
+    cardStatus,
+    cardSubline,
+    filesLine,
     folderConflicts,
     folderState,
     folderTone,
-    groupChips,
     groupNeedsAttention,
-    groupStatus,
     type DeviceFolderRow,
     type DevicePortRow,
     type DeviceSandboxGroup,
@@ -20,10 +25,9 @@ import {
     mirroringOff,
     portHolder,
     portNote,
-    resourcesSummary,
+    portsLine,
     sandboxGroups,
     shortCommand,
-    versionLine,
 } from "./deviceDetail.js";
 import StatusBadge from "../feedback/StatusBadge.vue";
 import { useT } from "../../i18n/index.js";
@@ -36,9 +40,9 @@ const {
     ports = [],
     sandboxes = [],
     open = [],
-    undivided = false,
     busy = [],
     selected = [],
+    leading = [],
 } = defineProps<{
     pairings?: readonly DeviceFolderRow[];
     ports?: readonly DevicePortRow[];
@@ -48,19 +52,22 @@ const {
     // Sandbox ids the caller wants unfolded on arrival; the component unfolds anything needing attention on
     // its own, this is only for what it can't know.
     open?: readonly string[];
-    // Drops the hairlines between sandboxes, for a caller that already separates rows itself, so two tiers
-    // of hairline aren't drawn at the same weight.
+    // Kept for callers written against the row list, which drew hairlines between sandboxes: cards need none.
     undivided?: boolean;
     // Sandbox ids something is being done to right now: their status glyph turns into a spinner, so a batch working
     // down the list shows where it is without a log per row.
     busy?: readonly string[];
     /** Sandbox ids the caller has ticked, tinted so a selection reads as one block rather than a column of boxes. */
     selected?: readonly string[];
+    /** Sandbox ids drawn first, ahead of the running ones: the sandbox serving the page. */
+    leading?: readonly string[];
 }>();
 
 // Each slot returns what Vue's own `Slot` returns, the nodes it drew: `offersSync` reads them to tell an offer from
 // nothing.
 const slots = defineSlots<{
+    // The card's picture: the sandbox's own logo where the caller knows it. Absent, a monogram of its name.
+    lead?: (props: { group: DeviceSandboxGroup }) => VNode[];
     // A tick box for a caller that acts on several rows at once. Drawn outside the disclosure button, so choosing
     // a row never unfolds it, and first on the line, so a list mid-selection reads as a column of choices.
     select?: (props: { group: DeviceSandboxGroup }) => VNode[];
@@ -94,7 +101,7 @@ const slots = defineSlots<{
 
 const groups = computed(() => sandboxGroups(pairings, ports, sandboxes));
 
-// The open row's geometry, read in one place. A name column wide enough for its longest name ("Container"), each
+// The open card's geometry, read in one place. A name column wide enough for its longest name ("Container"), each
 // value's first line one small button tall (26px) so a value, its name and the verbs beside it share a centre, and
 // the verbs at the right edge of the line they act on. A value keeps a floor where it is drawn (a path its own width,
 // prose `min-w-48`), so a narrow card moves the verbs onto a line of their own rather than squeezing a path to a word
@@ -103,9 +110,15 @@ const SECTION = `flex min-w-0 items-start gap-3`;
 const LABEL = `flex h-6.5 w-16 shrink-0 items-center text-2xs text-subtle`;
 const LINE = `flex min-h-6.5 min-w-0 items-center`;
 const VERBS = `ml-auto flex min-h-6.5 shrink-0 flex-wrap items-center justify-end gap-1 empty:hidden`;
+// The closed card's two lines share the open card's name column, so opening one moves nothing sideways.
+const FACT = `flex min-w-0 items-baseline gap-3`;
+const FACT_LABEL = `w-16 shrink-0 text-2xs text-subtle`;
 
-// Everything under the header starts under the NAME: past the tick box when there is one, then the status glyph.
-const indent = (): string => (slots.select === undefined ? `pl-6` : `pl-13`);
+// Everything under the header starts under the NAME: past the tick box when there is one, then the picture.
+const indent = (): string => (slots.select === undefined ? `pl-10.5` : `pl-17.5`);
+
+const TONE = { content: `text-content`, muted: `text-muted`, subtle: `text-subtle`, warning: `text-warning` } as const satisfies Record<CardTone, string>;
+const partClass = (part: CardPart): string[] => [TONE[part.tone], part.mono === true ? `font-mono` : ``];
 
 // Whether a slot, rendered for this row, draws anything. A caller's `v-if` that came up false still renders, as a
 // comment, so "the caller passed #sync" is not "this row has an offer": every other row drew its name over nothing.
@@ -160,36 +173,30 @@ watch(
     () => (folded.value = new Set([...folded.value].filter((id) => !open.includes(id)))),
 );
 
-// The status glyph's words: its accessible name, and on hover a card where the word needs a line more. A stopped
-// sandbox an update left set aside says so, since its remedy (Start) is not what "stopped" suggests.
-const stoppedWord = (group: DeviceSandboxGroup): string =>
-    group.sandbox?.parked === true ? t(`ui.deviceDetail.interruptedUpdate`) : t(`ui.deviceDetail.stopped`);
-const statusWord = (group: DeviceSandboxGroup): string =>
-    busy.includes(group.sandboxId)
-        ? t(`ui.deviceDetail.working`)
-        : groupStatus(group) === `running`
-          ? t(`ui.deviceDetail.running`)
-          : groupStatus(group) === `stopped`
-            ? stoppedWord(group)
-            : t(`ui.deviceDetail.notRunningHere`);
-const statusHint = (group: DeviceSandboxGroup): TooltipValue => {
-    if (busy.includes(group.sandboxId)) {
-        return statusWord(group);
-    }
-    if (groupStatus(group) === `elsewhere`) {
-        return { title: t(`ui.deviceDetail.notRunningHereTitle`), note: t(`ui.deviceDetail.filesOrPortsOnly`) };
-    }
-    if (groupStatus(group) === `stopped` && group.sandbox?.parked === true) {
-        return { title: t(`ui.deviceDetail.interruptedTitle`), note: t(`ui.deviceDetail.startPutsItBack`) };
-    }
-    return statusWord(group);
-};
-
 // Read at render: a machine's report is re-read on the page's own poll, and a probation that ended drops off its next one.
-const versionOf = (sandbox: DeviceSandboxRow): string | undefined => versionLine(sandbox, Date.now());
+const sublineOf = (group: DeviceSandboxGroup): string[] => cardSubline(group, Date.now());
 
-// A port shows no fill or colour: with a chip on every port plus a green running dot, colour had stopped
-// signalling anything. Only a port that reached localhost is shown as `localhost:<port>`.
+// The list as it is read (see `cardOrder`): every sandbox that is doing something here, then, apart, the idle ones.
+const bands = computed(() => cardOrder(groups.value, leading));
+
+// The idle band folds away under a header that counts it, so leftovers stop being half of a busy machine's list. It
+// opens by itself on a machine with nothing else to show, and whenever one of its rows is named by the caller or
+// ticked, so a selection is never hidden.
+const idleChosen = ref<boolean>();
+const idleShown = computed(
+    () =>
+        idleChosen.value ??
+        (bands.value.active.length === 0 || bands.value.idle.some((group) => open.includes(group.sandboxId) || selected.includes(group.sandboxId))),
+);
+// One list to draw, the idle band's header in it as an item of its own, so a card is written once.
+type Item = { readonly kind: `card`; readonly group: DeviceSandboxGroup } | { readonly kind: `idle`; readonly count: number };
+const items = computed<Item[]>(() => [
+    ...bands.value.active.map((group): Item => ({ kind: `card`, group })),
+    ...(bands.value.idle.length === 0 ? [] : [{ kind: `idle`, count: bands.value.idle.length } satisfies Item]),
+    ...(idleShown.value ? bands.value.idle.map((group): Item => ({ kind: `card`, group })) : []),
+]);
+const itemKey = (item: Item): string => (item.kind === `card` ? item.group.sandboxId : `:idle`);
+
 
 // A healthy sync says nothing in colour: Mutagen's resting word stays, but only a state worth noticing keeps a badge.
 const restingSync = (folder: DeviceFolderRow): boolean => folderTone(folderState(folder)) === `success`;
@@ -222,280 +229,285 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
 </script>
 
 <template>
-    <div class="flex flex-col gap-3">
-        <div v-if="groups.length > 0" class="flex flex-col">
-            <div
-                v-for="group in groups"
-                :key="group.sandboxId"
-                :id="blockId(group)"
-                class="flex flex-col gap-2 transition-colors duration-500"
-                :class="[
-                    undivided ? `pb-2 last:pb-0` : `border-t border-line-subtle py-1 first:border-t-0 first:pt-0 last:pb-0`,
-                    flashing === blockId(group) ? `bg-warning/10` : ``,
-                ]"
-            >
-                <!-- ONE QUIET LINE: tick box, one status glyph, the name, and the facts as glyphs with a count. The name
-                     through the chevron is one button; the tick box and the verbs keep their own hit areas outside it. -->
-                <!-- The app's own row tints (`ui-row-select`): a hover wash, and the selected tint for a ticked row. -->
-                <div
-                    class="ui-row-select -mx-2 flex min-w-0 items-center gap-x-2 rounded-md px-2"
-                    :class="selected.includes(group.sandboxId) ? `ui-row-select-on` : undefined"
+    <div class="flex flex-col gap-2">
+        <template v-for="item in items" :key="itemKey(item)">
+            <!-- The idle band's own header: what these are, how many, and the way to see them. -->
+            <div v-if="item.kind === `idle`" class="mt-3 flex min-w-0 flex-col gap-0.5 px-1">
+                <button
+                    type="button"
+                    class="flex w-fit cursor-pointer items-center gap-1.5 text-xs font-medium text-muted transition-colors hover:text-content"
+                    :aria-expanded="idleShown"
+                    @click="idleChosen = !idleShown"
                 >
-                    <span v-if="$slots[`select`]" class="flex w-5 shrink-0 items-center justify-center"><slot name="select" :group="group" /></span>
+                    <Icon name="chevron-right" class="shrink-0 text-2xs transition" :class="idleShown ? `rotate-90` : ``" aria-hidden="true" />
+                    {{ t(`ui.deviceDetail.idle`) }}
+                    <span class="font-normal text-subtle">{{ item.count }}</span>
+                </button>
+                <p class="pl-4 text-2xs text-subtle">{{ t(`ui.deviceDetail.idleHint`) }}</p>
+            </div>
+
+            <!-- ONE CARD PER SANDBOX: a header that says who it is and where it stands, a line for its files and one
+                 for its ports, and on demand the evidence and the verbs for each. -->
+            <section
+                v-else
+                :id="blockId(item.group)"
+                class="ui-row-select flex min-w-0 flex-col gap-1.5 rounded-xl bg-card px-4 py-3 shadow-sm transition-colors duration-500"
+                :class="[
+                    selected.includes(item.group.sandboxId) ? `ui-row-select-on` : undefined,
+                    flashing === blockId(item.group) ? `bg-warning/10` : undefined,
+                ]"
+                :aria-label="item.group.title"
+            >
+                <!-- The header: tick box, then the disclosure (picture, name, standing), then the caller's verbs. The tick
+                     box and the verbs keep their own hit areas outside the disclosure. -->
+                <div class="flex min-w-0 items-center gap-x-2">
+                    <span v-if="$slots[`select`]" class="flex w-5 shrink-0 items-center justify-center"><slot name="select" :group="item.group" /></span>
                     <button
                         type="button"
-                        class="group/row flex min-w-0 flex-1 cursor-pointer items-center gap-2 py-1 text-left"
-                        :aria-expanded="isOpen(group)"
-                        :aria-controls="`${blockId(group)}-detail`"
-                        @click="toggle(group)"
+                        class="group/row flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 text-left"
+                        :aria-expanded="isOpen(item.group)"
+                        :aria-controls="`${blockId(item.group)}-detail`"
+                        @click="toggle(item.group)"
                     >
-                        <!-- Where it stands on this machine, in one glyph: a filled dot runs, a ring is stopped, a cloud
-                             lives somewhere else and only its files or ports are here. The words are its hover and its
-                             accessible name, never a second label on the line. -->
-                        <span class="flex w-4 shrink-0 items-center justify-center" v-tooltip.top="statusHint(group)">
-                            <Icon v-if="busy.includes(group.sandboxId)" name="spinner" spin class="text-2xs text-muted" aria-hidden="true" />
-                            <span v-else-if="groupStatus(group) === `running`" class="h-2 w-2 rounded-full bg-success" aria-hidden="true"></span>
-                            <span v-else-if="groupStatus(group) === `stopped`" class="h-2 w-2 rounded-full border border-subtle" aria-hidden="true"></span>
-                            <Icon v-else name="cloud" class="text-2xs text-subtle" aria-hidden="true" />
-                            <span class="sr-only">{{ statusWord(group) }}</span>
+                        <span class="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-md bg-content/5">
+                            <slot name="lead" :group="item.group"><SandboxLogo :name="item.group.title" :size="18" /></slot>
                         </span>
-                        <!-- The exact id is the hover, not a second name beside the first: it's what gets typed into a
-                             terminal, and the open row states it with a copy button. -->
+                        <!-- The exact id is the hover, not a second name beside the first; the line under it says it in full. -->
                         <span
-                            class="min-w-0 truncate text-xs font-medium"
-                            :class="groupStatus(group) === `elsewhere` ? `text-muted` : `text-content`"
-                            v-tooltip.top="group.subtitle"
-                            >{{ group.title }}</span
+                            class="min-w-0 truncate text-sm font-medium"
+                            :class="item.group.sandbox === undefined ? `text-muted` : `text-content`"
+                            v-tooltip.top="item.group.subtitle"
+                            >{{ item.group.title }}</span
                         >
-                        <slot name="badges" :group="group" />
-                        <!-- What the closed line still answers, as glyphs: facts are uncoloured, a warning keeps its ink and
-                             its words, since it's the reason the row unfolded itself. -->
-                        <span class="ml-auto flex min-w-0 shrink items-center gap-x-2.5 pl-3">
-                            <template v-if="!isOpen(group)">
-                                <span
-                                    v-for="chip in groupChips(group)"
-                                    :key="chip.key"
-                                    class="flex min-w-0 items-center gap-1 text-2xs"
-                                    :class="chip.tone === `warning` ? `text-warning` : `shrink-0 text-subtle`"
-                                    v-tooltip.top="chip.hint ?? chip.label"
-                                >
-                                    <Icon :name="chip.icon" class="shrink-0" aria-hidden="true" />
-                                    <span v-if="chip.text !== ``" class="truncate" aria-hidden="true">{{ chip.text }}</span>
-                                    <span class="sr-only">{{ chip.label }}</span>
-                                </span>
-                            </template>
-                            <!-- The disclosure's own mark, at the end and only on demand: shown on hover or focus, and
-                                 held while the row is open, so a resting list is names rather than a column of arrows. -->
-                            <Icon
-                                name="chevron-right"
-                                class="shrink-0 text-2xs text-subtle transition group-hover/row:opacity-100 group-focus-visible/row:opacity-100"
-                                :class="isOpen(group) ? `rotate-90` : `opacity-0`"
-                                aria-hidden="true"
-                            />
-                        </span>
-                    </button>
-                    <span v-if="$slots[`actions`]" class="flex shrink-0 items-center gap-0.5"><slot name="actions" :group="group" /></span>
-                </div>
-
-                <!--
-                    THE OPEN ROW, AS ONE TABLE: a column of names and a column of values, each value's first line as tall as
-                    a button, and the verbs for a line at that line's own right edge. The block this replaced gave every
-                    verb a line of its own under its value, pulled left by a margin meant for text buttons, so a folder's
-                    buttons, a ports switch and the side holding the folder each started at a different x; and it spent
-                    three lines on what the reader rarely wants (an id, an image tag, a share), one of them under a label
-                    nobody could decode.
-                -->
-                <dl v-if="isOpen(group)" :id="`${blockId(group)}-detail`" class="flex min-w-0 flex-col gap-1.5 pb-2" :class="indent()">
-                    <div v-if="group.folder" :class="SECTION">
-                        <dt :class="LABEL">{{ t(`ui.deviceDetail.folder`) }}</dt>
-                        <dd class="flex min-w-0 flex-1 flex-col gap-2">
-                            <div class="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
-                                <!-- Its own width, never less: a path that fits the line beside the verbs stays whole and
-                                     the verbs take the next line instead, so a path breaks only where it is longer than
-                                     the whole line. -->
-                                <div class="flex max-w-full shrink-0 grow flex-col gap-1">
-                                    <div :class="LINE" class="gap-1.5">
-                                        <!-- The answer this whole view exists for: which folder on this device is this sandbox's /work. -->
-                                        <!-- Wraps rather than truncates: the end of a path is what identifies it, which an ellipsis would eat first. -->
-                                        <span v-if="group.folder.localDir" class="break-all font-mono text-xs text-content">{{
-                                            group.folder.localDir
-                                        }}</span>
-                                        <span v-else-if="group.folder.mode === `mirror`" class="text-xs text-muted">
-                                            {{ t(`ui.deviceDetail.noFolderDeviceOnly`) }}
-                                        </span>
-                                        <span v-else class="text-xs text-muted">{{ t(`ui.deviceDetail.noFolderSynced`) }}</span>
-                                        <CopyButton
-                                            v-if="group.folder.localDir"
-                                            :text="group.folder.localDir"
-                                            v-tooltip.top="t(`ui.deviceDetail.copyPath`)"
-                                        />
-                                    </div>
-                                    <!-- Where the folder stands, only when that is news, and which side of the machine holds it. -->
-                                    <div class="flex min-w-0 flex-wrap items-center gap-1.5 empty:hidden">
-                                        <!-- Silent when healthy (`watching`): the agent group above this list already says the sync is alive. -->
-                                        <StatusBadge
-                                            v-if="folderState(group.folder) && !restingSync(group.folder)"
-                                            :variant="folderTone(folderState(group.folder))"
-                                            size="xs"
-                                            :label="folderState(group.folder) ?? ``"
-                                        />
-                                        <!-- Silent when healthy, spoken when not: a stopped backup costs nothing until the sandbox is gone, so it's named rather than left to be noticed. -->
-                                        <StatusBadge
-                                            v-if="backupState(group.folder) && !restingBackup(group.folder)"
-                                            :variant="backupTone(backupState(group.folder))"
-                                            size="xs"
-                                            :label="t(`ui.deviceDetail.backup`, { folder: backupState(group.folder) })"
-                                        />
-                                        <slot name="where" :group="group" />
-                                    </div>
-                                </div>
-                                <!-- What to do about this folder, at its own line's end rather than with the row's verbs, which act on the container. -->
-                                <div v-if="$slots[`folder`]" :class="VERBS"><slot name="folder" :group="group" /></div>
-                            </div>
-
-                            <!-- Two-way-safe flags conflicts rather than clobbering, and a bare count names no file, cause or
-                                 remedy: so it opens into a block of its own, set apart from the folder's facts by its ink,
-                                 with the verbs that settle it at its foot. -->
-                            <div
-                                v-if="conflicts.get(group.sandboxId)"
-                                class="flex min-w-0 flex-col gap-2 rounded-lg border border-warning/25 bg-warning/5 px-3 py-2.5"
+                        <span class="flex shrink-0 items-center" v-tooltip.top="cardStatus(item.group, busy.includes(item.group.sandboxId)).hint">
+                            <StatusBadge
+                                :variant="cardStatus(item.group, busy.includes(item.group.sandboxId)).variant"
+                                size="xs"
+                                :dot="!busy.includes(item.group.sandboxId)"
+                                :label="cardStatus(item.group, busy.includes(item.group.sandboxId)).label"
                             >
-                                <p class="flex items-center gap-1.5 text-xs font-medium text-warning">
-                                    <Icon name="exclamation-triangle" class="shrink-0" aria-hidden="true" />
-                                    {{ t(`ui.deviceDetail.conflicts`, { count: group.folder.conflicts ?? 0 }, group.folder.conflicts ?? 0) }}
-                                </p>
-                                <p class="text-xs text-muted">{{ conflicts.get(group.sandboxId)?.lead }}</p>
-                                <!-- Each entry is a path plus what happened to it; a tight gap on a narrow card would run one entry into the next. -->
-                                <ul class="flex min-w-0 flex-col gap-1">
-                                    <li
-                                        v-for="row in conflicts.get(group.sandboxId)?.rows ?? []"
-                                        :key="row.path"
-                                        class="flex min-w-0 flex-wrap items-baseline gap-x-2"
-                                    >
-                                        <span class="break-all font-mono text-2xs text-content">{{ row.path }}</span>
-                                        <span v-if="row.note !== ``" class="text-2xs text-subtle">{{ row.note }}</span>
-                                    </li>
-                                </ul>
-                                <!-- Counted against the machine's own total, shown only under a real list; a too-old agent gets a note instead. -->
-                                <p
-                                    v-if="(conflicts.get(group.sandboxId)?.rows.length ?? 0) > 0 && (conflicts.get(group.sandboxId)?.more ?? 0) > 0"
-                                    class="text-2xs text-subtle"
-                                >
-                                    {{ t(`ui.deviceDetail.more`, { more: conflicts.get(group.sandboxId)?.more }) }}
-                                </p>
-                                <p v-if="conflicts.get(group.sandboxId)?.note" class="text-2xs text-subtle">
-                                    {{ conflicts.get(group.sandboxId)?.note }}
-                                </p>
-                                <div v-if="$slots[`conflicts`]" class="flex flex-wrap items-center gap-1.5 empty:hidden">
-                                    <slot name="conflicts" :group="group" />
-                                </div>
-                            </div>
-                        </dd>
-                    </div>
-
-                    <!-- Nothing synced yet: the offer to start, under the same name the folder would have had. Only where the
-                         caller has an offer for this row: a label over nothing was every other row's second line. -->
-                    <div v-else-if="offersSync(group)" :class="SECTION">
-                        <dt :class="LABEL">{{ t(`ui.deviceDetail.folder`) }}</dt>
-                        <dd class="min-w-0 flex-1"><slot name="sync" :group="group" /></dd>
-                    </div>
-
-                    <!-- Survives having no ports: an empty list has two causes (nothing served, or mirroring off). -->
-                    <div v-if="group.ports.length > 0 || mirroringOff(group.folder)" :class="SECTION">
-                        <dt :class="LABEL">{{ t(`ui.deviceDetail.ports`) }}</dt>
-                        <dd class="flex min-w-0 flex-1 flex-wrap items-start justify-between gap-x-4 gap-y-1">
-                            <!-- Said as a state, not a fault: quiet ink, no badge, since somebody threw this switch on purpose. -->
-                            <!-- Suppressed while mirroring is off: a stale `localhost:` reading here would contradict it. -->
-                            <p v-if="mirroringOff(group.folder)" :class="LINE" class="min-w-48 flex-1 text-xs text-muted">
-                                {{ t(`ui.deviceDetail.offDeviceIsntPutting`) }}
-                            </p>
-                            <!-- An address column and a what's-there column; ink marks only a port that didn't reach localhost. -->
-                            <div v-else class="grid min-w-64 flex-1 grid-cols-[auto_minmax(0,1fr)] items-start gap-x-4">
-                                <template v-for="port in group.ports" :key="`${port.port}:${port.state}`">
-                                    <!-- Only a port that reached localhost is prefixed with it; one that didn't is a bare
-                                         number, with what the sandbox serves on it one hover away rather than read as its
-                                         holder in the sentence beside it. -->
-                                    <span
-                                        :class="[LINE, portInk(port)]"
-                                        class="font-mono text-xs"
-                                        v-tooltip.top="port.state === `mirrored` ? undefined : port.command"
-                                        >{{ port.state === `mirrored` ? t(`ui.deviceDetail.localhost`) : `` }}{{ port.port }}</span
-                                    >
-                                    <span :class="LINE" class="flex-wrap gap-x-2">
-                                        <!-- What's listening, named rather than quoted in full; the whole command line is one hover away. -->
-                                        <span
-                                            v-if="port.state === `mirrored`"
-                                            class="min-w-0 truncate font-mono text-xs text-subtle"
-                                            v-tooltip.top="port.command"
-                                            >{{ shortCommand(port.command) }}</span
-                                        >
-                                        <span v-else class="min-w-0 text-xs text-muted">
-                                            {{ portNote(port, portHolder(groups, port)) }}
-                                            <!-- Goes to the holder's own block, where its Stop button lives, rather than naming a winner with nowhere to go. -->
-                                            <button
-                                                v-if="portHolder(groups, port)"
-                                                type="button"
-                                                class="ml-1 rounded underline decoration-dotted underline-offset-2 transition-colors hover:text-content"
-                                                @click="showHolder(portHolder(groups, port)!)"
-                                            >
-                                                {{ t(`ui.deviceDetail.show`) }}
-                                            </button>
-                                        </span>
-                                        <!-- The caller's own verb for this one number; the component knows nothing about what it does. -->
-                                        <slot name="port" :group="group" :port="port" />
-                                    </span>
-                                </template>
-                            </div>
-                            <div v-if="$slots[`ports`]" :class="VERBS"><slot name="ports" :group="group" /></div>
-                        </dd>
-                    </div>
-
-                    <!-- What runs, and while the version before the last update is still parked and ready, until when; or
-                         that an update was interrupted and Start puts the old one back. -->
-                    <div v-if="group.sandbox && (versionOf(group.sandbox) || group.sandbox.parked)" :class="SECTION">
-                        <dt :class="LABEL">{{ t(`ui.deviceDetail.version`) }}</dt>
-                        <dd :class="LINE" class="flex-1 flex-wrap gap-x-2 gap-y-1">
-                            <span v-if="versionOf(group.sandbox)" class="text-xs text-muted">{{ versionOf(group.sandbox) }}</span>
-                            <span v-if="group.sandbox.parked" class="text-xs text-warning">{{ t(`ui.deviceDetail.interruptedUpdateHint`) }}</span>
-                        </dd>
-                    </div>
-
-                    <!-- The container on this machine in one line: the exact id somebody types into a terminal, with a copy
-                         button, and the share docker enforces. The image tag is a hover: it is the least-read fact here,
-                         and a local build's tag ran longer than everything else in the block. -->
-                    <div v-if="group.sandbox" :class="SECTION">
-                        <dt :class="LABEL">{{ t(`ui.deviceDetail.container`) }}</dt>
-                        <dd :class="LINE" class="flex-1 flex-wrap gap-x-2 gap-y-1">
-                            <span v-if="group.subtitle" class="flex min-w-0 items-center gap-1.5">
-                                <span class="truncate font-mono text-xs text-muted" v-tooltip.top="imageOf(group.sandbox)">{{ group.subtitle }}</span>
-                                <CopyButton :text="group.subtitle" v-tooltip.top="t(`ui.deviceDetail.copyId`)" />
-                            </span>
-                            <span v-if="group.subtitle && resourcesSummary(group.sandbox)" class="text-2xs text-subtle" aria-hidden="true">·</span>
-                            <span v-if="resourcesSummary(group.sandbox)" class="text-xs text-muted" v-tooltip.top="imageOf(group.sandbox)">{{
-                                resourcesSummary(group.sandbox)
-                            }}</span>
-                            <!-- With neither to say, the image is all there is, and it stands in rather than leave the line blank. -->
-                            <span v-if="!group.subtitle && !resourcesSummary(group.sandbox)" class="truncate font-mono text-xs text-subtle">{{
-                                group.sandbox.image
-                            }}</span>
-                        </dd>
-                    </div>
-                    <!-- No container here: the exact id the line only carries on hover, what gets typed into a terminal. -->
-                    <div v-else-if="group.subtitle" :class="SECTION">
-                        <dt :class="LABEL">{{ t(`ui.deviceDetail.id`) }}</dt>
-                        <dd :class="LINE" class="flex-1 gap-1.5">
-                            <span class="truncate font-mono text-xs text-muted">{{ group.subtitle }}</span>
-                            <CopyButton :text="group.subtitle" v-tooltip.top="t(`ui.deviceDetail.copyId`)" />
-                        </dd>
-                    </div>
-                </dl>
-
-                <!-- Outside the disclosure: a verb pressed on a folded row must still show what it's doing. -->
-                <div v-if="$slots[`footer`]" class="empty:hidden" :class="indent()">
-                    <slot name="footer" :group="group" />
+                                <Icon v-if="busy.includes(item.group.sandboxId)" name="spinner" spin class="text-2xs" aria-hidden="true" />
+                                {{ cardStatus(item.group, busy.includes(item.group.sandboxId)).label }}
+                            </StatusBadge>
+                        </span>
+                        <StatusBadge v-if="item.group.sandbox?.tunnelRunning === false" variant="warning" size="xs" :label="t(`ui.deviceDetail.tunnelOff`)" class="shrink-0" />
+                        <slot name="badges" :group="item.group" />
+                        <!-- The disclosure's own mark, held at the end of the header. -->
+                        <Icon
+                            name="chevron-right"
+                            class="ml-auto shrink-0 text-2xs text-subtle transition group-hover/row:text-content"
+                            :class="isOpen(item.group) ? `rotate-90` : ``"
+                            aria-hidden="true"
+                        />
+                    </button>
+                    <span v-if="$slots[`actions`]" class="flex shrink-0 items-center gap-0.5"><slot name="actions" :group="item.group" /></span>
                 </div>
-            </div>
-        </div>
+
+                <div class="flex min-w-0 flex-col gap-1" :class="indent()">
+                    <!-- Who it is to a terminal, what version runs, and its share of the machine: one quiet line. -->
+                    <p
+                        v-if="item.group.subtitle || sublineOf(item.group).length > 0"
+                        class="-mt-1 flex min-w-0 flex-wrap items-center gap-x-1.5 text-2xs text-subtle"
+                    >
+                        <span v-if="item.group.subtitle" class="inline-flex min-w-0 items-center gap-1">
+                            <span class="truncate font-mono">{{ item.group.subtitle }}</span>
+                            <CopyButton :text="item.group.subtitle" v-tooltip.top="t(`ui.deviceDetail.copyId`)" />
+                        </span>
+                        <template v-for="(part, index) in sublineOf(item.group)" :key="part">
+                            <span v-if="index > 0 || item.group.subtitle" aria-hidden="true">·</span>
+                            <span>{{ part }}</span>
+                        </template>
+                    </p>
+                    <p v-if="item.group.sandbox?.parked" class="text-xs text-warning">{{ t(`ui.deviceDetail.interruptedUpdateHint`) }}</p>
+
+                    <!-- CLOSED: the two facts a card is read for, in words. -->
+                    <template v-if="!isOpen(item.group)">
+                        <div :class="FACT">
+                            <span :class="FACT_LABEL">{{ t(`ui.deviceDetail.files`) }}</span>
+                            <span class="flex min-w-0 flex-1 items-baseline gap-x-2 text-xs">
+                                <span
+                                    v-for="part in filesLine(item.group)"
+                                    :key="part.key"
+                                    :class="[partClass(part), part.key === `path` ? `min-w-0 truncate` : `shrink-0`]"
+                                    v-tooltip.top="part.hint"
+                                    >{{ part.text }}</span
+                                >
+                            </span>
+                        </div>
+                        <div v-if="portsLine(item.group)" :class="FACT">
+                            <span :class="FACT_LABEL">{{ t(`ui.deviceDetail.ports`) }}</span>
+                            <span class="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-3 text-xs">
+                                <span v-for="part in portsLine(item.group)" :key="part.key" :class="partClass(part)" v-tooltip.top="part.hint">{{
+                                    part.text
+                                }}</span>
+                            </span>
+                        </div>
+                    </template>
+
+                    <!--
+                        OPEN: THE EVIDENCE, AS ONE TABLE in place of the two lines it expands: a column of names and a
+                        column of values, each value's first line as tall as a button, and the verbs for a line at that
+                        line's own right edge.
+                    -->
+                    <dl v-else :id="`${blockId(item.group)}-detail`" class="flex min-w-0 flex-col gap-1.5 pt-0.5">
+                        <div v-if="item.group.folder" :class="SECTION">
+                            <dt :class="LABEL">{{ t(`ui.deviceDetail.files`) }}</dt>
+                            <dd class="flex min-w-0 flex-1 flex-col gap-2">
+                                <div class="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
+                                    <!-- Its own width, never less: a path that fits the line beside the verbs stays whole and
+                                         the verbs take the next line instead. -->
+                                    <div class="flex max-w-full shrink-0 grow flex-col gap-1">
+                                        <div :class="LINE" class="gap-1.5">
+                                            <!-- Wraps rather than truncates: the end of a path is what identifies it. -->
+                                            <span v-if="item.group.folder.localDir" class="break-all font-mono text-xs text-content">{{
+                                                item.group.folder.localDir
+                                            }}</span>
+                                            <span v-else-if="item.group.folder.mode === `mirror`" class="text-xs text-muted">
+                                                {{ t(`ui.deviceDetail.noFolderDeviceOnly`) }}
+                                            </span>
+                                            <span v-else class="text-xs text-muted">{{ t(`ui.deviceDetail.noFolderSynced`) }}</span>
+                                            <CopyButton
+                                                v-if="item.group.folder.localDir"
+                                                :text="item.group.folder.localDir"
+                                                v-tooltip.top="t(`ui.deviceDetail.copyPath`)"
+                                            />
+                                        </div>
+                                        <!-- Where the folder stands, only when that is news, and which side of the machine holds it. -->
+                                        <div class="flex min-w-0 flex-wrap items-center gap-1.5 empty:hidden">
+                                            <StatusBadge
+                                                v-if="folderState(item.group.folder) && !restingSync(item.group.folder)"
+                                                :variant="folderTone(folderState(item.group.folder))"
+                                                size="xs"
+                                                :label="folderState(item.group.folder) ?? ``"
+                                            />
+                                            <!-- Silent when healthy, spoken when not: a stopped backup costs nothing until the sandbox is gone. -->
+                                            <StatusBadge
+                                                v-if="backupState(item.group.folder) && !restingBackup(item.group.folder)"
+                                                :variant="backupTone(backupState(item.group.folder))"
+                                                size="xs"
+                                                :label="t(`ui.deviceDetail.backup`, { folder: backupState(item.group.folder) })"
+                                            />
+                                            <slot name="where" :group="item.group" />
+                                        </div>
+                                    </div>
+                                    <!-- What to do about this folder, at its own line's end rather than with the card's verbs, which act on the container. -->
+                                    <div v-if="$slots[`folder`]" :class="VERBS"><slot name="folder" :group="item.group" /></div>
+                                </div>
+
+                                <!-- Two-way-safe flags conflicts rather than clobbering, and a bare count names no file, cause or
+                                     remedy: so it opens into a block of its own, with the verbs that settle it at its foot. -->
+                                <div
+                                    v-if="conflicts.get(item.group.sandboxId)"
+                                    class="flex min-w-0 flex-col gap-2 rounded-lg border border-warning/25 bg-warning/5 px-3 py-2.5"
+                                >
+                                    <p class="flex items-center gap-1.5 text-xs font-medium text-warning">
+                                        <Icon name="exclamation-triangle" class="shrink-0" aria-hidden="true" />
+                                        {{ t(`ui.deviceDetail.conflicts`, { count: item.group.folder.conflicts ?? 0 }, item.group.folder.conflicts ?? 0) }}
+                                    </p>
+                                    <p class="text-xs text-muted">{{ conflicts.get(item.group.sandboxId)?.lead }}</p>
+                                    <ul class="flex min-w-0 flex-col gap-1">
+                                        <li
+                                            v-for="row in conflicts.get(item.group.sandboxId)?.rows ?? []"
+                                            :key="row.path"
+                                            class="flex min-w-0 flex-wrap items-baseline gap-x-2"
+                                        >
+                                            <span class="break-all font-mono text-2xs text-content">{{ row.path }}</span>
+                                            <span v-if="row.note !== ``" class="text-2xs text-subtle">{{ row.note }}</span>
+                                        </li>
+                                    </ul>
+                                    <p
+                                        v-if="(conflicts.get(item.group.sandboxId)?.rows.length ?? 0) > 0 && (conflicts.get(item.group.sandboxId)?.more ?? 0) > 0"
+                                        class="text-2xs text-subtle"
+                                    >
+                                        {{ t(`ui.deviceDetail.more`, { more: conflicts.get(item.group.sandboxId)?.more }) }}
+                                    </p>
+                                    <p v-if="conflicts.get(item.group.sandboxId)?.note" class="text-2xs text-subtle">
+                                        {{ conflicts.get(item.group.sandboxId)?.note }}
+                                    </p>
+                                    <div v-if="$slots[`conflicts`]" class="flex flex-wrap items-center gap-1.5 empty:hidden">
+                                        <slot name="conflicts" :group="item.group" />
+                                    </div>
+                                </div>
+                            </dd>
+                        </div>
+
+                        <!-- Nothing synced yet: the offer to start, under the same name the folder would have had. -->
+                        <div v-else-if="offersSync(item.group)" :class="SECTION">
+                            <dt :class="LABEL">{{ t(`ui.deviceDetail.files`) }}</dt>
+                            <dd class="min-w-0 flex-1"><slot name="sync" :group="item.group" /></dd>
+                        </div>
+                        <div v-else :class="SECTION">
+                            <dt :class="LABEL">{{ t(`ui.deviceDetail.files`) }}</dt>
+                            <dd :class="LINE" class="flex-1 text-xs text-subtle">{{ t(`ui.deviceDetail.notSyncedHere`) }}</dd>
+                        </div>
+
+                        <!-- Survives having no ports: an empty list has two causes (nothing served, or mirroring off). -->
+                        <div v-if="item.group.ports.length > 0 || mirroringOff(item.group.folder)" :class="SECTION">
+                            <dt :class="LABEL">{{ t(`ui.deviceDetail.ports`) }}</dt>
+                            <dd class="flex min-w-0 flex-1 flex-wrap items-start justify-between gap-x-4 gap-y-1">
+                                <!-- Said as a state, not a fault: somebody threw this switch on purpose. -->
+                                <p v-if="mirroringOff(item.group.folder)" :class="LINE" class="min-w-48 flex-1 text-xs text-muted">
+                                    {{ t(`ui.deviceDetail.offDeviceIsntPutting`) }}
+                                </p>
+                                <!-- An address column and a what's-there column; ink marks only a port that didn't reach localhost. -->
+                                <div v-else class="grid min-w-64 flex-1 grid-cols-[auto_minmax(0,1fr)] items-start gap-x-4">
+                                    <template v-for="port in item.group.ports" :key="`${port.port}:${port.state}`">
+                                        <span
+                                            :class="[LINE, portInk(port)]"
+                                            class="font-mono text-xs"
+                                            v-tooltip.top="port.state === `mirrored` ? undefined : port.command"
+                                            >{{ port.state === `mirrored` ? t(`ui.deviceDetail.localhost`) : `` }}{{ port.port }}</span
+                                        >
+                                        <span :class="LINE" class="flex-wrap gap-x-2">
+                                            <span
+                                                v-if="port.state === `mirrored`"
+                                                class="min-w-0 truncate font-mono text-xs text-subtle"
+                                                v-tooltip.top="port.command"
+                                                >{{ shortCommand(port.command) }}</span
+                                            >
+                                            <span v-else class="min-w-0 text-xs text-muted">
+                                                {{ portNote(port, portHolder(groups, port)) }}
+                                                <!-- Goes to the holder's own card, where its Stop lives. -->
+                                                <button
+                                                    v-if="portHolder(groups, port)"
+                                                    type="button"
+                                                    class="ml-1 rounded underline decoration-dotted underline-offset-2 transition-colors hover:text-content"
+                                                    @click="showHolder(portHolder(groups, port)!)"
+                                                >
+                                                    {{ t(`ui.deviceDetail.show`) }}
+                                                </button>
+                                            </span>
+                                            <slot name="port" :group="item.group" :port="port" />
+                                        </span>
+                                    </template>
+                                </div>
+                                <div v-if="$slots[`ports`]" :class="VERBS"><slot name="ports" :group="item.group" /></div>
+                            </dd>
+                        </div>
+                        <div v-else-if="item.group.folder" :class="SECTION">
+                            <dt :class="LABEL">{{ t(`ui.deviceDetail.ports`) }}</dt>
+                            <dd class="flex min-w-0 flex-1 flex-wrap items-start justify-between gap-x-4 gap-y-1">
+                                <p :class="LINE" class="text-xs text-subtle">{{ t(`ui.deviceDetail.noPorts`) }}</p>
+                                <div v-if="$slots[`ports`]" :class="VERBS"><slot name="ports" :group="item.group" /></div>
+                            </dd>
+                        </div>
+
+                        <!-- The image is the least-read fact, so it is the evidence here rather than a line on the closed card. -->
+                        <div v-if="item.group.sandbox" :class="SECTION">
+                            <dt :class="LABEL">{{ t(`ui.deviceDetail.image`) }}</dt>
+                            <dd :class="LINE" class="flex-1">
+                                <span class="truncate font-mono text-xs text-subtle" v-tooltip.top="imageOf(item.group.sandbox)">{{ item.group.sandbox.image }}</span>
+                            </dd>
+                        </div>
+                    </dl>
+
+                    <!-- Outside the disclosure: a verb pressed on a folded card must still show what it's doing. -->
+                    <div v-if="$slots[`footer`]" class="empty:hidden">
+                        <slot name="footer" :group="item.group" />
+                    </div>
+                </div>
+            </section>
+        </template>
 
         <p v-if="groups.length === 0" class="text-xs text-muted">{{ t(`ui.deviceDetail.deviceIsntSyncingFolder`) }}</p>
     </div>

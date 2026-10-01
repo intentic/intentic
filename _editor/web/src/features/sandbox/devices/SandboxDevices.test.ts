@@ -128,8 +128,10 @@ jest.mock(`../secrets/useRole`, () => ({
 // sandboxKey is reached at module eval by the real useDevices, so it's mocked here too.
 // Which sandbox is serving the page, by the hostname of its daemon: what marks a row as "the one you're using".
 const daemon = ref<string | undefined>();
+// The account's sandbox list: what a container's row is named from, matched by the first label of each daemon URL.
+const account = ref<{ name: string; daemonUrl: string | null }[]>([]);
 jest.mock(`../client/useSandbox`, () => ({
-    useSandbox: () => ({ daemonUrl: daemon }),
+    useSandbox: () => ({ daemonUrl: daemon, sandboxes: account }),
     sandboxKey: (name: string) => [name],
 }));
 // The release this sandbox knows about; mocked like useDevices since the subject is what a row says, and
@@ -251,6 +253,7 @@ afterEach(() => {
     capabilities.value = [];
     role.value = `owner`;
     daemon.value = undefined;
+    account.value = [];
     mirrorCalls.length = 0;
     verbCalls.length = 0;
     holdVerb = false;
@@ -424,6 +427,43 @@ it(`names the image each sandbox on the machine is running, once the row is open
     expect(el.textContent ?? ``).toContain(`ghcr.io/intentic/sandbox:2.3.1`);
 });
 
+// Docker knows only the container, and a synced folder keeps the name it was given at setup: the account's own name for
+// the sandbox is the one somebody recognises, so it titles the row and the slug they would type stays beside it.
+it(`titles a sandbox by the name this account gave it, over its folder and its slug`, async () => {
+    account.value = [
+        { name: `intentic`, daemonUrl: `https://sandbox-1ea6.example.com` },
+        { name: `never ran`, daemonUrl: null },
+    ];
+    const el = mount([
+        {
+            key: `laptop`,
+            label: `laptop`,
+            sync: paired(),
+            platform: `linux`,
+            hostId: `host-1`,
+            online: true,
+            sandboxes: [
+                { slug: `sandbox-1ea6`, container: `intentic-sandbox-sandbox-1ea6`, running: true, image: `img:a` },
+                { slug: `sandbox-7f00`, container: `intentic-sandbox-sandbox-7f00`, running: true, image: `img:a` },
+            ],
+            report: {
+                hostname: `laptop`,
+                os: `linux`,
+                pairings: [{ sandboxId: `sandbox-1ea6`, mode: `sync`, localDir: `/home/ada/intentic/workspace-1ea6`, mutagenStatus: `watching` }],
+                ports: [],
+                agent: { running: true, installed: `0.1.0` },
+                capturedAt: Date.now(),
+            },
+        },
+    ]);
+    const names = [...el.querySelectorAll(`button[aria-expanded] .truncate`)].map((name) => (name.textContent ?? ``).trim());
+    // Not the folder's leaf, which kept the name the sandbox had at setup; a container this account cannot see keeps its slug.
+    expect(names).toEqual([`intentic`, `sandbox-7f00`]);
+    // The slug somebody types into a terminal is still on the open row, beside the name.
+    await openRow(el, `intentic`);
+    expect(el.textContent ?? ``).toContain(`sandbox-1ea6`);
+});
+
 // The container verb buttons are shared with the desktop app's own manager window (<SandboxVerbs>), so what's
 // asserted here holds for both.
 const managed = (running: boolean): Device => ({
@@ -566,12 +606,11 @@ const shared = (): Device => {
     };
 };
 
-it(`says what a sandbox gets of the machine, once the row is open`, async () => {
+// Its share of the machine is part of who a sandbox is here, so the card says it under the name without being opened.
+it(`says what a sandbox gets of the machine under its name`, () => {
     granted();
     const el = mount([shared()]);
-    expect(el.textContent ?? ``).not.toContain(`12 GiB`);
-    await openRow(el, `work`);
-    expect(el.textContent ?? ``).toContain(`12 GiB · 4 CPUs · privileged`);
+    expect(el.querySelector(`section[aria-label="work"]`)?.textContent ?? ``).toContain(`12 GiB · 4 CPUs · privileged`);
 });
 
 // Everything on screen, including the teleported dialog and menu (both mount past `el`).
@@ -770,27 +809,29 @@ it(`titles a sandbox by its folder rather than by a blob of hex`, async () => {
     expect(text).toContain(`radarsu-local-0738cd6b5027`);
     expect(text).not.toContain(`sandbox-bce57bb9fe3bradarsu`);
     expect(hovers(el)).toContain(`sandbox-bce57bb9fe3b`);
-    await openRow(el, `radarsu-web-platform-bce57bb9fe3b`);
-    expect(el.textContent ?? ``).toContain(`Containersandbox-bce57bb9fe3b`);
+    // The exact id is the line under the name, on the card it names.
+    expect(el.querySelector(`section[aria-label="radarsu-web-platform-bce57bb9fe3b"]`)?.textContent ?? ``).toContain(`sandbox-bce57bb9fe3bFiles`);
 });
 
-// Where a sandbox stands on the machine is one glyph, its word the glyph's accessible name and hover, never a label.
-it(`states each sandbox's state as a glyph with its word on hover`, () => {
+// Where a sandbox stands on the machine is a word on its card, not a glyph to decode.
+const cardOf = (el: HTMLElement, name: string): string => el.querySelector(`section[aria-label="${name}"]`)?.textContent ?? ``;
+
+it(`states each sandbox's standing in a word on its card`, () => {
     const el = mount([busyMachine()]);
-    const found = hovers(el);
-    expect(found).toContain(`¶ running ¶`);
-    expect(found).toContain(`¶ stopped ¶`);
-    // The facts ride as glyphs with a count, their sentence on hover.
-    expect(found).toContain(`On localhost, Ports 8788, 33177`);
-    expect(found).toContain(`Files sync, Folder /home/radarsu/intentic/radarsu-web-platform-bce57bb9fe3b`);
+    expect(cardOf(el, `radarsu-web-platform-bce57bb9fe3b`)).toContain(`radarsu-web-platform-bce57bb9fe3b running`);
+    expect(cardOf(el, `sandbox-4c64429cade7`)).toContain(`sandbox-4c64429cade7 stopped`);
 });
 
-it(`folds a sandbox to a line that still says what is under it`, () => {
+// A folded card still answers the two questions it is read for, in words: where its files are, and what reached
+// localhost. Only the evidence (the image, the per-port notes) waits for it to open.
+it(`folds a sandbox to a card that still says where its files and ports are`, () => {
     granted();
-    const text = mount([busyMachine()]).textContent ?? ``;
-    expect(text).toContain(`2 ports`);
-    expect(text).not.toContain(`/home/radarsu/intentic/radarsu-web-platform-bce57bb9fe3b`);
-    expect(text).not.toContain(`img:a`);
+    const el = mount([busyMachine()]);
+    const card = cardOf(el, `radarsu-web-platform-bce57bb9fe3b`);
+    expect(card).toContain(`Files/home/radarsu/intentic/radarsu-web-platform-bce57bb9fe3b`);
+    expect(card).toContain(`Portslocalhost:8788localhost:33177`);
+    expect(card).not.toContain(`img:a`);
+    expect(cardOf(el, `sandbox-4c64429cade7`)).toContain(`Filesnot synced to this computer`);
 });
 
 // THE CASE THIS RULE EXISTS FOR. A port the machine itself already uses for something else — a database on 5440 —
@@ -798,9 +839,10 @@ it(`folds a sandbox to a line that still says what is under it`, () => {
 // the closed line, and nothing more.
 it(`leaves a sandbox folded when the only port it missed is one this machine already uses`, () => {
     granted();
-    const text = mount([busyMachine()]).textContent ?? ``;
-    expect(text).toContain(`1 port busy here`);
-    expect(text).not.toContain(`/home/radarsu/intentic/radarsu-local-0738cd6b5027`);
+    const el = mount([busyMachine()]);
+    expect(cardOf(el, `radarsu-local-0738cd6b5027`)).toContain(`Ports1 busy here`);
+    // Still folded: the open card's sentence for that port is not on screen.
+    expect(el.textContent ?? ``).not.toContain(`not on localhost`);
 });
 
 // The one port outcome with a remedy on this very page — the sandbox holding the number has a Stop button — still
@@ -1489,40 +1531,55 @@ const twoPairings = (first: Partial<Record<string, unknown>> = {}, second: Parti
     },
 });
 
+// The two switches are buttons in the list's header, named for their half and where it stands; the verbs are in
+// their menus, each with the sentence for the side it acts on.
+const openSwitch = async (el: HTMLElement, half: string): Promise<void> => {
+    [...el.querySelectorAll<HTMLButtonElement>(`button[aria-haspopup="menu"]`)].find((control) => (control.textContent ?? ``).trim().startsWith(half))?.click();
+    await nextTick();
+};
+// A switch's menu row reads its verb, then the sentence for its side.
+const switchRow = (verb: string): HTMLAnchorElement | undefined =>
+    [...document.body.querySelectorAll<HTMLAnchorElement>(`.p-contextmenu a`)].findLast((row) => (row.textContent ?? ``).trim().startsWith(verb));
+
 it(`pauses file syncing for every sandbox on the device, with no sandbox named`, async () => {
     const el = mount([twoPairings()]);
-    [...el.querySelectorAll(`button`)].find((control) => (control.textContent ?? ``).trim() === `Pause all`)?.click();
+    expect(labels(el)).toContain(`Filessyncing`);
+    await openSwitch(el, `Files`);
+    switchRow(`Pause all`)?.click();
     await nextTick();
     expect(mirrorCalls).toEqual([{ hostId: `host-1`, command: `sync-pause`, sandboxId: undefined }]);
 });
 
 it(`stops port mirroring for every sandbox on the device`, async () => {
     const el = mount([twoPairings()]);
-    [...el.querySelectorAll(`button`)].find((control) => (control.textContent ?? ``).trim() === `Turn all off`)?.click();
+    await openSwitch(el, `Ports`);
+    switchRow(`Turn all off`)?.click();
     await nextTick();
     expect(mirrorCalls).toEqual([{ hostId: `host-1`, command: `mirror-off`, sandboxId: undefined }]);
 });
 
 // Per-pairing switches can leave a machine mixed; a single button would silently undo half of what was
 // deliberately set differently.
-it(`says which pairings disagree and offers both directions`, () => {
+it(`says which pairings disagree and offers both directions`, async () => {
     const el = mount([twoPairings({ mirroring: `off` }, { mirroring: `on` })]);
-    const text = el.textContent ?? ``;
-    expect(text).toContain(`Off for 1 of 2 sandboxes`);
-    expect(labels(el)).toContain(`Turn all on`);
-    expect(labels(el)).toContain(`Turn all off`);
+    expect(labels(el)).toContain(`Ports1 of 2 off`);
+    await openSwitch(el, `Ports`);
+    // One side: the button carries the count, so its rows are the two directions and nothing else.
+    expect(switchRow(`Turn all on`)?.textContent?.trim()).toBe(`Turn all on`);
+    expect(switchRow(`Turn all off`)?.textContent?.trim()).toBe(`Turn all off`);
 });
 
 // Over a single pairing these buttons would run the same command as that row's own, twenty pixels away, under
 // a wider and scarier label.
-it(`drops the device-scoped switches over a single pairing, and counts them above one`, () => {
+it(`drops the device-scoped switches over a single pairing, and counts them above one`, async () => {
     const one = labels(mount([{ ...mirrorOnly(), hostId: `host-1`, online: true }]));
-    expect(one).not.toContain(`Turn all off`);
+    expect(one.filter((label) => label.startsWith(`Ports`) || label.startsWith(`Files`))).toEqual([]);
     expect(one).toContain(`Revoke access`);
 
     const el = mount([twoPairings()]);
-    expect(labels(el)).toContain(`Turn all off`);
-    expect(el.textContent ?? ``).toContain(`On for all 2 sandboxes`);
+    expect(labels(el)).toContain(`Portson`);
+    await openSwitch(el, `Ports`);
+    expect(switchRow(`Turn all off`)?.textContent?.trim()).toBe(`Turn all off`);
 });
 
 // letting a machine go of a sandbox, one row or several
@@ -1536,6 +1593,12 @@ const holdings = (): Device => {
 
 const rowButton = (el: HTMLElement, label: string): HTMLButtonElement | undefined =>
     [...el.querySelectorAll(`button`)].find((control) => (control.textContent ?? ``).trim() === label);
+
+// Selecting is asked for: the header's Select puts a box on every row and the bar over them.
+const startSelecting = async (el: HTMLElement): Promise<void> => {
+    rowButton(el, `Select`)?.click();
+    await nextTick();
+};
 
 // A removal is a chain of awaits per row, and a tick only flushes what is already queued: this runs the queue out.
 const settle = async (): Promise<void> => {
@@ -1595,11 +1658,31 @@ it(`ends the pairing alone on a sandbox this machine does not run`, async () => 
     expect(mirrorCalls).toEqual([{ hostId: `host-1`, command: `sync-unpair`, sandboxId: `work-b` }]);
 });
 
+// The leftovers of sandboxes that run elsewhere, or no longer exist, with their syncing paused: on rog they were six of
+// eleven rows. They fold under one counted header, and each is still a card with its ⋯ once shown.
+it(`folds the sandboxes that do nothing on this computer under one header`, async () => {
+    granted();
+    const el = mount([holdings()].map((row) => ({ ...row, report: { ...row.report!, pairings: row.report!.pairings.map((pairing) => (pairing.sandboxId === `work-b` ? { ...pairing, paused: true } : pairing)) } })));
+    const header = disclosures(el).find((button) => (button.textContent ?? ``).includes(`Inactive on this computer`));
+    expect(header?.textContent?.replace(/\s+/g, ` `).trim()).toBe(`Inactive on this computer 1`);
+    expect(header?.getAttribute(`aria-expanded`)).toBe(`false`);
+    expect(el.querySelector(`section[aria-label="b"]`)).toBeNull();
+
+    header?.click();
+    await nextTick();
+    expect(cardOf(el, `b`)).toContain(`Files/home/ada/bpaused`);
+    await openRowMenu(el, `not running here`);
+    expect(menuRows()).toEqual([`Remove`]);
+});
+
 // Selecting is how the list is managed: a box on every row, one over the list that ticks them all, and a bar offering
 // only what the ticked rows can take.
 it(`removes several sandboxes on one press, from the bar over the ticked rows`, async () => {
     granted();
     const el = mount([holdings()]);
+    // No boxes until asked for: the list is read far more often than it is acted on in bulk.
+    expect(boxes(el)).toHaveLength(0);
+    await startSelecting(el);
     expect(boxes(el)).toHaveLength(3);
     expect(labels(el)).not.toContain(`Remove`);
 
@@ -1639,6 +1722,7 @@ it(`keeps the sandbox you are using out of a batch, and says why its box is dead
     };
     daemon.value = `https://work-a.example.com`;
     const el = mount([three]);
+    await startSelecting(el);
     // The box over the list first, then one per row: the row in use is dead, and says why.
     expect(boxes(el).map((box) => box.disabled)).toEqual([false, true, false, false]);
     expect(hovers(el)).toContain(`Can't batch, Use its ⋯ menu`);
@@ -1672,6 +1756,7 @@ it(`draws no batch bar over a single removable row`, () => {
     const row = holdings();
     const one = { ...row, report: { ...row.report!, pairings: [row.report!.pairings[0]!] } };
     const el = mount([one]);
+    expect(rowButton(el, `Select`)).toBeUndefined();
     expect(boxes(el)).toHaveLength(0);
     expect(el.textContent ?? ``).not.toContain(`Select all`);
     // The row itself still has its menu, which is where a single removal belongs.
@@ -1682,6 +1767,7 @@ it(`draws no batch bar over a single removable row`, () => {
 it(`stops every ticked running sandbox on one press, and says so once`, async () => {
     granted();
     const el = mount([busyMachine()]);
+    await startSelecting(el);
     boxes(el)[0]?.click();
     await nextTick();
     // Two of the three run: Stop names its count, Start the one it would start, Update all three.
@@ -1698,6 +1784,7 @@ it(`stops every ticked running sandbox on one press, and says so once`, async ()
 it(`shows translated progress while a batch stop is still running`, async () => {
     granted();
     const el = mount([busyMachine()]);
+    await startSelecting(el);
     boxes(el)[0]?.click();
     await nextTick();
     holdVerb = true;
@@ -1715,6 +1802,7 @@ it(`shows translated progress while a batch stop is still running`, async () => 
 it(`asks before updating several sandboxes, naming each`, async () => {
     granted();
     const el = mount([busyMachine()]);
+    await startSelecting(el);
     boxes(el)[0]?.click();
     await nextTick();
     rowButton(el, `Update`)?.click();
@@ -1863,6 +1951,31 @@ it(`sends a container verb through the Windows door and a folder verb through th
     [...el.querySelectorAll(`button`)].find((button) => button.textContent?.trim() === `Pause syncing`)?.click();
     await nextTick();
     expect(mirrorCalls).toEqual([{ hostId: `rog::wsl:Arch`, command: `sync-pause`, sandboxId: `work` }]);
+});
+
+// THE ROG CASE: both sides keep folders, so each half used to be two rows of its own, "Pause all" twice over. It is one
+// button per half, counted over the whole PC, and its menu names the side each verb acts on.
+it(`gives a PC whose sides both keep folders one button per half, its menu naming each side`, async () => {
+    bothDoors();
+    const windows = windowsSide();
+    const distro = distroSide();
+    const pairs = (prefix: string, paused: boolean) => [
+        { sandboxId: `${prefix}-a`, mode: `sync` as const, localDir: `/x/${prefix}-a`, mutagenStatus: `watching`, paused },
+        { sandboxId: `${prefix}-b`, mode: `sync` as const, localDir: `/x/${prefix}-b`, mutagenStatus: `watching` },
+    ];
+    const el = mount([
+        { ...distro, report: { ...distro.report!, pairings: pairs(`wsl`, false) } },
+        { ...windows, sync: paired(`sync`, `rog`), report: { ...windows.report!, pairings: pairs(`win`, true) } },
+    ]);
+    await nextTick();
+    expect(labels(el).filter((label) => label.startsWith(`Files`) || label.startsWith(`Ports`))).toEqual([`Files1 of 4 paused`, `Portson`]);
+    await openSwitch(el, `Files`);
+    const rows = [...document.body.querySelectorAll(`.p-contextmenu a`)].map((row) => (row.textContent ?? ``).trim());
+    expect(rows).toEqual([
+        `Resume allMicrosoft Windows 11 Home · Paused for 1 of 2 sandboxes`,
+        `Pause allMicrosoft Windows 11 Home · Paused for 1 of 2 sandboxes`,
+        `Pause allArch Linux on WSL · On for all 2 sandboxes`,
+    ]);
 });
 
 // One Update for the computer, through its Windows side, which brings its distros level first and itself last.

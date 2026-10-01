@@ -3580,7 +3580,8 @@
             "thisSandbox": "this sandbox",
             "unblockDeletions": "Unblock deletions",
             "unpairHeader": "Unpair {sandbox}?",
-            "useItsMenu": "Use its ⋯ menu"
+            "useItsMenu": "Use its ⋯ menu",
+            "select": "Select"
         },
         "deviceRows": {
             "fileSyncing": "File syncing",
@@ -3593,7 +3594,15 @@
             "portMirroring": "Port mirroring",
             "resumeAll": "Resume all",
             "turnAllOff": "Turn all off",
-            "turnAllOn": "Turn all on"
+            "turnAllOn": "Turn all on",
+            "files": "Files",
+            "ports": "Ports",
+            "syncingShort": "syncing",
+            "pausedShort": "paused",
+            "pausedSomeShort": "{off} of {total} paused",
+            "onShort": "on",
+            "offShort": "off",
+            "offSomeShort": "{off} of {total} off"
         },
         "deviceRunners": {
             "addRunner": "Add runner",

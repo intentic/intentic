@@ -9,7 +9,6 @@ import {
     PageAction,
     PageHeader,
     RowGroup,
-    RowNote,
     SandboxResourcesDialog,
     SandboxVerbs,
     type Tip,
@@ -375,8 +374,8 @@ onUnmounted(() => {
             </template>
 
             <!-- One row per sandbox with its folder, ports, image and verbs, in the workspace Devices tab's own group. -->
-            <RowGroup v-if="groups.length > 0" :label="t(`desktop.app.sandboxesOnDevice`)" :count="groups.length">
-                <RowNote variant="block">
+            <RowGroup v-if="groups.length > 0" :label="t(`desktop.app.sandboxesOnDevice`)" :count="groups.length" :flat="true" :undivided="true">
+                <div class="flex flex-col">
                     <DeviceDetail :pairings="status?.sync.pairings" :ports="status?.sync.ports" :sandboxes="sandboxRows">
                         <template #actions="{ group }">
                             <SandboxVerbs
@@ -402,7 +401,7 @@ onUnmounted(() => {
                             </Notice>
                         </template>
                     </DeviceDetail>
-                </RowNote>
+                </div>
             </RowGroup>
 
             <!-- NO SANDBOX HERE YET: what one is for, where it can run, and the one step to it. Never while a setup or a

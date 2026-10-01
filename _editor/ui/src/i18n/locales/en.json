@@ -143,7 +143,20 @@
         "version": "Version",
         "interruptedUpdate": "interrupted update — Start puts it back",
         "interruptedUpdateHint": "An update was interrupted and the previous version set aside: Start puts it back.",
-        "previousReadyUntil": "previous version ready until {when}"
+        "previousReadyUntil": "previous version ready until {when}",
+        "files": "Files",
+        "notSyncedHere": "not synced to this computer",
+        "paused": "paused",
+        "mirroringOff": "mirroring off",
+        "portsMore": "+{count} more",
+        "portsTaken": "{count} taken by another sandbox",
+        "portsBusy": "{count} busy here",
+        "portsAlone": "{count} left alone",
+        "noPorts": "nothing served yet",
+        "tunnelOff": "tunnel off",
+        "idle": "Inactive on this computer",
+        "idleHint": "Sandboxes that run on other computers, or no longer exist, whose files and ports don't reach this one now: their syncing is paused or stopped. Unpair or remove them from their ⋯ menu.",
+        "notSyncing": "not syncing"
     },
     "imageView": {
         "actualSize": "Actual size",

@@ -198,6 +198,40 @@ export const machineRow = (environments: readonly DeviceRow[], { key, label }: P
     return { key, label, environments, groups: sandboxGroups(lists.pairings, lists.ports, lists.sandboxes) };
 };
 
+// The slug docker knows a sandbox's container by: the first label of its daemon's hostname, the rule the setup
+// script names the container with and the launcher addresses it by. Undefined for a sandbox that has no address yet.
+export const slugOfDaemonUrl = (daemonUrl: string | null | undefined): string | undefined => {
+    if (daemonUrl === null || daemonUrl === undefined || !URL.canParse(daemonUrl)) {
+        return undefined;
+    }
+    return new URL(daemonUrl).hostname.split(`.`)[0] || undefined;
+};
+
+// The account's own name for every container a machine lists, matched by slug. Docker knows only the container, so
+// without this a row is titled by its synced folder (named once, at setup, and never again) or by its bare slug.
+// The account's name wins over one the machine recorded, since a rename lands there first; a container this account
+// cannot see keeps whatever it had. Devices with nothing to rename are returned as they came.
+export const withSandboxNames = (devices: readonly Device[], account: readonly { name: string; daemonUrl: string | null }[]): Device[] => {
+    const names = new Map<string, string>();
+    for (const sandbox of account) {
+        const slug = slugOfDaemonUrl(sandbox.daemonUrl);
+        if (slug !== undefined && sandbox.name !== ``) {
+            names.set(slug, sandbox.name);
+        }
+    }
+    return devices.map((device) =>
+        device.sandboxes?.some((sandbox) => names.has(sandbox.slug) && names.get(sandbox.slug) !== sandbox.name) === true
+            ? {
+                  ...device,
+                  sandboxes: device.sandboxes.map((sandbox) => {
+                      const name = names.get(sandbox.slug);
+                      return name === undefined ? sandbox : { ...sandbox, name };
+                  }),
+              }
+            : device,
+    );
+};
+
 export const machineRows = (devices: readonly Device[], latest: string | undefined, readAt: number): MachineRow[] =>
     sortMachines(
         machinesOf(devices).map((machine) =>
@@ -499,6 +533,9 @@ export interface DeviceSwitch {
     // as a label of its own, with the paused count tinted like a healthy one.
     readonly summary: string;
     readonly actions: readonly HalfAction[];
+    /** The counts the summary is made of, for a caller that adds several sides of one machine together. */
+    readonly off: number;
+    readonly total: number;
 }
 
 const pause = (): HalfAction => ({
@@ -557,6 +594,8 @@ export const deviceSwitches = (row: DeviceRow): DeviceSwitch[] => {
             state: sync.state,
             summary: syncSummary(sync),
             actions: actionsFor(sync.state, pause(), resume()),
+            off: sync.off,
+            total: sync.total,
         });
     }
     const mirror = mirrorHalf(row);
@@ -568,7 +607,63 @@ export const deviceSwitches = (row: DeviceRow): DeviceSwitch[] => {
             state: mirror.state,
             summary: mirrorSummary(mirror),
             actions: actionsFor(mirror.state, mirrorOff(), mirrorOn()),
+            off: mirror.off,
+            total: mirror.total,
         });
     }
     return switches;
+};
+
+// THE MACHINE-WIDE SWITCHES AS TWO BUTTONS IN THE SANDBOX LIST'S HEADER, one per half, whatever number of sides the PC
+// has. They used to be a row per half per side, each with its own "Pause all" / "Turn all off": four rows and seven
+// buttons with repeated labels over a two-sided PC's list before its first sandbox. Now the button says where the half
+// stands in a few words, added up over every side, and its menu holds the verbs, each naming its side where there is
+// more than one.
+export interface SwitchMenuEntry {
+    readonly environment: DeviceRow;
+    readonly half: DeviceSwitch;
+}
+
+export interface SwitchMenu {
+    readonly kind: DeviceSwitch[`kind`];
+    readonly icon: IconName;
+    readonly label: string;
+    /** Where the half stands across the machine, short enough for a button. */
+    readonly state: string;
+    /** Whether that is news: a half partly or wholly off reads in the warning's ink. */
+    readonly settled: boolean;
+    readonly entries: readonly SwitchMenuEntry[];
+}
+
+const shortState = (kind: DeviceSwitch[`kind`], off: number, total: number): string => {
+    if (off === 0) {
+        return kind === `sync` ? t(`sandbox.deviceRows.syncingShort`) : t(`sandbox.deviceRows.onShort`);
+    }
+    if (off === total) {
+        return kind === `sync` ? t(`sandbox.deviceRows.pausedShort`) : t(`sandbox.deviceRows.offShort`);
+    }
+    return kind === `sync` ? t(`sandbox.deviceRows.pausedSomeShort`, { off, total }) : t(`sandbox.deviceRows.offSomeShort`, { off, total });
+};
+
+export const switchMenus = (environments: readonly DeviceRow[]): SwitchMenu[] => {
+    const entries = environments.flatMap((environment) => deviceSwitches(environment).map((half): SwitchMenuEntry => ({ environment, half })));
+    return ([`sync`, `mirror`] as const).flatMap((kind): SwitchMenu[] => {
+        const mine = entries.filter((entry) => entry.half.kind === kind);
+        const first = mine[0];
+        if (first === undefined) {
+            return [];
+        }
+        const off = mine.reduce((sum, entry) => sum + entry.half.off, 0);
+        const total = mine.reduce((sum, entry) => sum + entry.half.total, 0);
+        return [
+            {
+                kind,
+                icon: first.half.icon,
+                label: kind === `sync` ? t(`sandbox.deviceRows.files`) : t(`sandbox.deviceRows.ports`),
+                state: shortState(kind, off, total),
+                settled: off === 0,
+                entries: mine,
+            },
+        ];
+    });
 };

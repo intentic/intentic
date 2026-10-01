@@ -14,6 +14,8 @@ import { useT } from "@intentic/ui/i18n";
 const t = useT();
 
 const { selection, ops } = defineProps<{ selection: SandboxSelection; ops: DeviceOps }>();
+// Leaving selection: the page drops the ticks and the tick boxes with it.
+const emit = defineEmits<{ cancel: [] }>();
 
 // The row menu's own glyphs (SandboxVerbs), so a verb looks the same in both places.
 const ICON = { start: `play`, stop: `stop`, restart: `refresh`, update: `download`, remove: `trash` } as const satisfies Record<BatchVerb, IconName>;
@@ -90,6 +92,14 @@ const progress = computed(() => {
                 >
                     <template #icon><Icon :name="ICON[action.verb]" /></template>
                 </Button>
+                <Button
+                    size="small"
+                    severity="secondary"
+                    :text="true"
+                    :label="t(`ui.action.cancel`)"
+                    :disabled="ops.working.value"
+                    @click="emit(`cancel`)"
+                />
             </template>
         </div>
     </div>

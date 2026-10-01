@@ -143,7 +143,20 @@
         "version": "Wersja",
         "interruptedUpdate": "przerwana aktualizacja — Start przywraca poprzednią wersję",
         "interruptedUpdateHint": "Aktualizacja została przerwana, a poprzednia wersja odłożona na bok: Start ją przywraca.",
-        "previousReadyUntil": "poprzednia wersja gotowa do {when}"
+        "previousReadyUntil": "poprzednia wersja gotowa do {when}",
+        "files": "Pliki",
+        "notSyncedHere": "nie synchronizowany z tym komputerem",
+        "paused": "wstrzymane",
+        "mirroringOff": "przekierowanie wyłączone",
+        "portsMore": "+{count} więcej",
+        "portsTaken": "zajęte przez inną piaskownicę: {count}",
+        "portsBusy": "zajęte tutaj: {count}",
+        "portsAlone": "pominięte: {count}",
+        "noPorts": "nic jeszcze nie nasłuchuje",
+        "tunnelOff": "tunel wyłączony",
+        "idle": "Nieaktywne na tym komputerze",
+        "idleHint": "Piaskownice działające na innych komputerach albo już nieistniejące, których pliki i porty teraz tu nie docierają: synchronizacja jest wstrzymana lub zatrzymana. Odłącz je lub usuń z ich menu ⋯.",
+        "notSyncing": "nie synchronizuje"
     },
     "imageView": {
         "actualSize": "Rozmiar rzeczywisty",

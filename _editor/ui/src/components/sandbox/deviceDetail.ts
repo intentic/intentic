@@ -2,6 +2,7 @@ import { WORKSPACE_ROOT } from "@intentic/constants";
 import { t } from "../../i18n/index.js";
 import { formatUntil } from "../../lib/timeWindow.js";
 import type { Tip, TooltipValue } from "../../lib/tooltip.js";
+import type { StatusVariant } from "../feedback/statusBadge.js";
 
 // Derivations behind DeviceDetail.vue: what one device is doing for a sandbox, arranged the way it's read.
 // The report arrives as two flat lists tagged by sandbox id; folded here into one block per sandbox so
@@ -557,6 +558,160 @@ export type GroupStatus = `running` | `stopped` | `elsewhere`;
 
 export const groupStatus = (group: DeviceSandboxGroup): GroupStatus =>
     group.sandbox === undefined ? `elsewhere` : group.sandbox.running ? `running` : `stopped`;
+
+// THE CARD, AS IT READS CLOSED. A sandbox is the most important thing on a device's page, and a closed row of glyphs
+// with counts ("⌗ off", "‖") read like a file listing. A card says where it stands in a word, then two lines in plain
+// words: where its files are on this computer, and which of its ports reached localhost. Every warning sits on the line
+// it is about, so nothing needs opening to be understood.
+export type CardTone = `content` | `muted` | `subtle` | `warning`;
+
+export interface CardPart {
+    readonly key: string;
+    readonly text: string;
+    readonly tone: CardTone;
+    /** A path or an address, set in the code face. */
+    readonly mono?: boolean;
+    readonly hint?: TooltipValue | undefined;
+}
+
+export interface CardStatus {
+    readonly variant: StatusVariant;
+    readonly label: string;
+    readonly hint: TooltipValue;
+}
+
+// Where the sandbox stands on this machine, as a word in a badge. Busy wins: a batch working down the list shows where
+// it is. An update that was interrupted is a warning rather than "stopped", since its remedy (Start) is not what
+// "stopped" suggests.
+export const cardStatus = (group: DeviceSandboxGroup, busy: boolean): CardStatus => {
+    if (busy) {
+        return { variant: `info`, label: t(`ui.deviceDetail.working`), hint: t(`ui.deviceDetail.working`) };
+    }
+    const status = groupStatus(group);
+    if (status === `elsewhere`) {
+        return {
+            variant: `neutral`,
+            label: t(`ui.deviceDetail.notRunningHere`),
+            hint: { title: t(`ui.deviceDetail.notRunningHereTitle`), note: t(`ui.deviceDetail.filesOrPortsOnly`) },
+        };
+    }
+    if (status === `running`) {
+        return { variant: `success`, label: t(`ui.deviceDetail.running`), hint: t(`ui.deviceDetail.running`) };
+    }
+    if (group.sandbox?.parked === true) {
+        return {
+            variant: `warning`,
+            label: t(`ui.deviceDetail.interruptedTitle`),
+            hint: { title: t(`ui.deviceDetail.interruptedTitle`), note: t(`ui.deviceDetail.startPutsItBack`) },
+        };
+    }
+    return { variant: `neutral`, label: t(`ui.deviceDetail.stopped`), hint: t(`ui.deviceDetail.stopped`) };
+};
+
+// The Files line: the folder this computer keeps for the sandbox, and only what is news about it beside the path.
+export const filesLine = (group: DeviceSandboxGroup): CardPart[] => {
+    const folder = group.folder;
+    if (folder === undefined) {
+        return [{ key: `none`, text: t(`ui.deviceDetail.notSyncedHere`), tone: `subtle` }];
+    }
+    if (folder.mode === `mirror`) {
+        return [{ key: `mirror`, text: t(`ui.deviceDetail.noFolderDeviceOnly`), tone: `subtle` }];
+    }
+    const parts: CardPart[] = [
+        folder.localDir === undefined || folder.localDir === ``
+            ? { key: `path`, text: t(`ui.deviceDetail.noFolderSynced`), tone: `muted` }
+            : { key: `path`, text: folder.localDir, tone: `content`, mono: true, hint: folder.localDir },
+    ];
+    if (folder.paused === true) {
+        parts.push({ key: `paused`, text: t(`ui.deviceDetail.paused`), tone: `muted`, hint: t(`ui.deviceDetail.syncPaused`) });
+    } else if (folder.mutagenStatus === undefined) {
+        // A pairing with no session moves nothing, and a bare path beside it would read as a folder in step.
+        parts.push({ key: `state`, text: t(`ui.deviceDetail.notSyncing`), tone: `muted` });
+    } else if (folderTone(folder.mutagenStatus) === `warning`) {
+        parts.push({ key: `state`, text: folder.mutagenStatus, tone: `warning` });
+    }
+    if ((folder.conflicts ?? 0) > 0) {
+        const count = folder.conflicts ?? 0;
+        parts.push({ key: `conflicts`, text: t(`ui.deviceDetail.conflicts`, { count }, count), tone: `warning` });
+    }
+    return parts;
+};
+
+// How many reached addresses the closed line names before it counts the rest.
+const PORTS_SHOWN = 3;
+
+// The Ports line, or undefined where this computer holds no pairing and no port for the sandbox: nothing reaches
+// localhost then, and the Files line already says it isn't connected here.
+export const portsLine = (group: DeviceSandboxGroup): CardPart[] | undefined => {
+    if (group.folder === undefined && group.ports.length === 0) {
+        return undefined;
+    }
+    if (mirroringOff(group.folder)) {
+        return [{ key: `off`, text: t(`ui.deviceDetail.mirroringOff`), tone: `muted`, hint: t(`ui.deviceDetail.offDeviceIsntPutting`) }];
+    }
+    // An IPv4 and an IPv6 bind of one server are one address to the reader.
+    const reached = [...new Map(group.ports.filter((port) => port.state === `mirrored`).map((port) => [port.port, port])).values()];
+    const parts: CardPart[] = reached.slice(0, PORTS_SHOWN).map((port) => ({
+        key: `port:${port.port}`,
+        text: `${t(`ui.deviceDetail.localhost`)}${port.port}`,
+        tone: `content`,
+        mono: true,
+        hint: port.command,
+    }));
+    if (reached.length > PORTS_SHOWN) {
+        const more = reached.length - PORTS_SHOWN;
+        parts.push({ key: `more`, text: t(`ui.deviceDetail.portsMore`, { count: more }), tone: `muted`, hint: portsTip(group, `mirrored`, t(`ui.deviceDetail.onLocalhost`)) });
+    }
+    const taken = countOf(group, `held-by-sandbox`);
+    if (taken > 0) {
+        parts.push({ key: `taken`, text: t(`ui.deviceDetail.portsTaken`, { count: taken }, taken), tone: `warning` });
+    }
+    const busy = countOf(group, `busy`);
+    if (busy > 0) {
+        parts.push({ key: `busy`, text: t(`ui.deviceDetail.portsBusy`, { count: busy }, busy), tone: `muted`, hint: portsTip(group, `busy`, t(`ui.deviceDetail.busyHere`)) });
+    }
+    const alone = countOf(group, `ignored`);
+    if (alone > 0) {
+        parts.push({ key: `alone`, text: t(`ui.deviceDetail.portsAlone`, { count: alone }, alone), tone: `subtle`, hint: portsTip(group, `ignored`, t(`ui.deviceDetail.leftAlone`)) });
+    }
+    return parts.length > 0 ? parts : [{ key: `none`, text: t(`ui.deviceDetail.noPorts`), tone: `subtle` }];
+};
+
+// The line under a card's name: the exact id somebody types into a terminal (only where the name is not it already),
+// what version runs, and the container's share of the machine.
+export const cardSubline = (group: DeviceSandboxGroup, now: number): string[] =>
+    [group.sandbox === undefined ? undefined : versionLine(group.sandbox, now), group.sandbox === undefined ? undefined : resourcesSummary(group.sandbox)].filter(
+        (part): part is string => part !== undefined && part !== ``,
+    );
+
+// Whether a sandbox this computer does not run still does anything here: a folder whose sync session is up, or a port
+// that reached localhost. One that does neither (its sync paused or gone, nothing mirrored) is a leftover of a sandbox
+// that runs elsewhere or no longer exists, and on a busy machine those were half the list.
+export const idleHere = (group: DeviceSandboxGroup): boolean => {
+    if (groupStatus(group) !== `elsewhere` || groupNeedsAttention(group)) {
+        return false;
+    }
+    const folder = group.folder;
+    const syncing = folder?.mode === `sync` && folder.paused !== true && folder.mutagenStatus !== undefined;
+    const mirrored = !mirroringOff(folder) && countOf(group, `mirrored`) > 0;
+    return !syncing && !mirrored;
+};
+
+// The list in the order it is read: what the caller names first (the sandbox serving the page), then what runs here,
+// what is stopped here, and what runs elsewhere but syncs or mirrors here; apart from them, the idle leftovers.
+// Stable inside each band, so a poll never reshuffles rows of the same standing.
+export interface CardBands {
+    readonly active: DeviceSandboxGroup[];
+    readonly idle: DeviceSandboxGroup[];
+}
+
+const STANDING = { running: 1, stopped: 2, elsewhere: 3 } as const satisfies Record<GroupStatus, number>;
+
+export const cardOrder = (groups: readonly DeviceSandboxGroup[], leading: readonly string[] = []): CardBands => {
+    const rank = (group: DeviceSandboxGroup): number => (leading.includes(group.sandboxId) ? 0 : STANDING[groupStatus(group)]);
+    const sorted = groups.toSorted((a, b) => rank(a) - rank(b));
+    return { active: sorted.filter((group) => !idleHere(group)), idle: sorted.filter(idleHere) };
+};
 
 // A sandbox reached over the user's own proxy has no sidecar at all, which differs from one that's
 // down; only the second is worth a word.

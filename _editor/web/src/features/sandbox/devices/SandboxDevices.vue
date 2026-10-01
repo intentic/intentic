@@ -7,7 +7,7 @@ import ContainerHealthCard from "./health/ContainerHealthCard.vue";
 import DeviceBoard from "./board/DeviceBoard.vue";
 import DevicePage from "./DevicePage.vue";
 import { boardRoute, deviceRoute, selectedKey } from "./deviceLinks";
-import { machineRows } from "./deviceRows";
+import { machineRows, slugOfDaemonUrl, withSandboxNames } from "./deviceRows";
 import { useDevices } from "./useDevices";
 import { useSandbox } from "../client/useSandbox";
 import { useSandboxOutline } from "../overview/useSandboxOutline";
@@ -45,12 +45,12 @@ const { latest } = useSandboxVersion();
 
 // The sandbox serving this page, by its container slug: the daemon's own hostname, same derivation the
 // switcher and setup CLI use.
-const { daemonUrl } = useSandbox();
-const ownSlug = computed(() => (daemonUrl.value === undefined ? undefined : new URL(daemonUrl.value).hostname.split(`.`)[0]));
+const { daemonUrl, sandboxes } = useSandbox();
+const ownSlug = computed(() => slugOfDaemonUrl(daemonUrl.value));
 
 // One row per PC: a Windows install and the WSL distros on it fold into one machine (machinesOf), so a two-door
-// PC is one card and one page rather than two of each.
-const rows = computed(() => machineRows(devices.value, latest.value, readAt.value));
+// PC is one card and one page rather than two of each. Each container wears the name this account gave it.
+const rows = computed(() => machineRows(withSandboxNames(devices.value, sandboxes.value), latest.value, readAt.value));
 
 // The machine on screen is whatever the URL names, and nothing else: no derived fallback, or pressing
 // "All devices" on a one-machine fleet would bounce straight back to it.

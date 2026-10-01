@@ -505,8 +505,8 @@ const pickedTier = ref(`collaborator`);
             <section class="flex flex-col gap-4">
                 <h2 :class="ui.sectionLabel()">A device's agent and its sandboxes</h2>
                 <DeviceAgentGroup :panel="KIT_AGENT" subject="this device" />
-                <RowGroup label="Sandboxes on this device" :count="KIT_SANDBOXES.length">
-                    <RowNote variant="block">
+                <RowGroup label="Sandboxes on this device" :count="KIT_SANDBOXES.length" :flat="true" :undivided="true">
+                    <div class="flex flex-col">
                         <DeviceDetail :pairings="KIT_PAIRINGS" :ports="KIT_PORTS" :sandboxes="KIT_SANDBOXES">
                             <template #actions="{ group }">
                                 <SandboxVerbs v-if="group.sandbox" :running="group.sandbox.running" />
@@ -533,7 +533,7 @@ const pickedTier = ref(`collaborator`);
                                 />
                             </template>
                         </DeviceDetail>
-                    </RowNote>
+                    </div>
                 </RowGroup>
                 <DeviceRunLog
                     :lines="[`intentic: pulling ghcr.io/intentic/sandbox:stable`, `intentic: recreating the container`, `ready`]"

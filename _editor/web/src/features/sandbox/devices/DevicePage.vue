@@ -13,6 +13,7 @@ import {
     Row,
     RowGroup,
     RowNote,
+    SandboxLogo,
     SandboxResourcesDialog,
     SandboxVerbs,
     StatusBadge,
@@ -26,6 +27,7 @@ import DeviceEnvironment from "./DeviceEnvironment.vue";
 import DeviceOpFailure from "./runners/DeviceOpFailure.vue";
 import DeviceRunners from "./runners/DeviceRunners.vue";
 import SandboxBatchBar from "./batch/SandboxBatchBar.vue";
+import SyncSwitchMenu from "./sync/SyncSwitchMenu.vue";
 import { boardRoute, cardRoute } from "./deviceLinks";
 import { canSetShape } from "./shapeFlow";
 import { rollbackChoices } from "./rollbackChoices";
@@ -34,7 +36,6 @@ import { blockAttention, deviceAttention } from "./health/deviceAttention";
 import {
     commandable,
     type DeviceRow,
-    deviceSwitches,
     clearable,
     fixable,
     folderOwner,
@@ -48,6 +49,8 @@ import {
     pausable,
     removableHere,
     selfGroup,
+    slugOfDaemonUrl,
+    switchMenus,
 } from "./deviceRows";
 import { useDeviceOps } from "./runners/deviceOps";
 import { useSandboxSelection } from "./batch/sandboxSelection";
@@ -61,6 +64,7 @@ import { useCapabilities } from "../../capabilities/connect/useCapabilities";
 import { isDefaultName } from "../../capabilities/model/tiles";
 import { machineGrants } from "../../capabilities/model/connections";
 import { useRole } from "../secrets/useRole";
+import { useSandbox } from "../client/useSandbox";
 import { useT } from "@intentic/ui/i18n";
 
 // One machine, as a page rather than an accordion body: who it is, what it wants from you, what this
@@ -148,18 +152,8 @@ const revocable = computed(() => (canShip.value ? environments.value.filter((env
 // The machine's three lists as the detail kit takes them, merged across environments.
 const lists = computed(() => machineLists(environments.value));
 
-// Each environment whose pairings the machine-wide switches act on, with its halves. Usually one: a PC syncs through
-// whichever side holds its folders.
-const switching = computed(() =>
-    environments.value.map((environment) => ({ environment, halves: deviceSwitches(environment) })).filter((entry) => entry.halves.length > 0),
-);
-
-// Whose pairings a switch counts, said beside its count and only where more than one side of the machine keeps
-// folders: then no switch covers every row under it, and "8 sandboxes" over a list of nine has to say which eight. It
-// wears the same mark as the side named under each folder, so the two read as one fact. Everywhere else the count
-// scopes it alone: the OS name used to float over the switches as a caption, in every case, for nothing.
-const holders = computed(() => environments.value.filter((environment) => (environment.device.report?.pairings ?? []).length > 0).length);
-const switchScope = (environment: DeviceRow): string | undefined => (holders.value > 1 ? environmentTitle(environment) : undefined);
+// The machine-wide switches, one button per half in the list's header, whatever number of sides keep folders.
+const menus = computed(() => switchMenus(environments.value));
 const described = computed(() =>
     environments.value.some((environment) => environment.device.report !== undefined || environment.device.sandboxes !== undefined),
 );
@@ -199,7 +193,19 @@ const applyReshape = (shape: ResourcesForm): void => ops.applyReshape(shape);
 const saveReshape = (shape: ResourcesForm | undefined): void => ops.saveReshape(shape);
 
 // The list is managed by ticking rows and choosing a verb for all of them (batch/sandboxSelection.ts, <SandboxBatchBar>).
+// Only once asked for: a tick box on every card and a "Select all" over them were furniture on a list that is read far
+// more often than it is acted on in bulk.
 const selection = useSandboxSelection(() => machine, () => ownSlug, ops);
+const selecting = ref(false);
+const stopSelecting = (): void => {
+    selection.pickAll(false);
+    selecting.value = false;
+};
+
+// Each card's picture: the logo this account gave the sandbox, matched by slug as its name is (withSandboxNames).
+const { sandboxes: account } = useSandbox();
+const logoOf = (group: DeviceSandboxGroup): string | null | undefined =>
+    group.sandbox === undefined ? undefined : account.value.find((sandbox) => slugOfDaemonUrl(sandbox.daemonUrl) === group.sandbox?.slug)?.image;
 </script>
 
 <template>
@@ -299,7 +305,33 @@ const selection = useSandboxSelection(() => machine, () => ownSlug, ops);
 
         <!-- One row per sandbox, the page's only disclosure: a row is a summary and its folder, ports, image and share are the evidence. -->
         <!-- Either answer draws rows: a card granting sandbox management alone lists containers and describes no folders. -->
-        <RowGroup v-if="described" :label="t(`sandbox.devicePage.sandboxes`)" :count="machine.groups.length > 0 ? machine.groups.length : undefined">
+        <!-- Flat: each sandbox is a card on its own surface, so the group draws none of its own around them. -->
+        <RowGroup
+            v-if="described"
+            :label="t(`sandbox.devicePage.sandboxes`)"
+            :count="machine.groups.length > 0 ? machine.groups.length : undefined"
+            :flat="true"
+            :undivided="true"
+        >
+            <!-- THE LIST'S HEADER: the machine's two switches, each one button whose menu holds its verbs, and the way into
+                 acting on several sandboxes at once. -->
+            <template v-if="menus.length > 0 || selection.selectable.value" #actions>
+                <div class="flex flex-wrap items-center justify-end gap-1">
+                    <SyncSwitchMenu v-for="menu in menus" :key="menu.kind" :menu="menu" :ops="ops" />
+                    <Button
+                        v-if="selection.selectable.value && !selecting"
+                        size="small"
+                        severity="secondary"
+                        :text="true"
+                        :label="t(`sandbox.devicePage.select`)"
+                        :disabled="ops.working.value"
+                        @click="selecting = true"
+                    >
+                        <template #icon><Icon name="check-square" /></template>
+                    </Button>
+                </div>
+            </template>
+
             <!-- On a many-sided machine the door's block is about this list, so it is said here rather than under a row. -->
             <RowNote v-if="listBlock" variant="block">
                 <DeviceConcern
@@ -309,52 +341,16 @@ const selection = useSandboxSelection(() => machine, () => ownSlug, ops);
                 />
             </RowNote>
 
-            <!-- The same two commands the pairing rows carry, run bare (every sandbox this environment pairs), as rows of
-                 this list: a mark, what the switch is, where it stands, and the way to move it. -->
-            <template v-for="{ environment, halves } in switching" :key="environment.device.key">
-                <Row
-                    v-for="half in halves"
-                    :key="half.kind"
-                    :icon="half.icon"
-                    :tone="half.state === `on` ? `success` : `default`"
-                    :title="half.label"
-                >
-                    <template #description>
-                        <span class="flex min-w-0 flex-wrap items-center gap-x-1.5">
-                            <template v-if="switchScope(environment)">
-                                <span class="inline-flex min-w-0 items-center gap-1">
-                                    <Icon name="desktop" class="shrink-0" aria-hidden="true" />{{ switchScope(environment) }}
-                                </span>
-                                <span class="text-subtle" aria-hidden="true">·</span>
-                            </template>
-                            <span>{{ half.summary }}</span>
-                        </span>
-                    </template>
-                    <template #control>
-                        <Button
-                            v-for="action in half.actions"
-                            :key="action.command"
-                            size="small"
-                            severity="secondary"
-                            :label="action.label"
-                            :loading="ops.syncRunning(ops.switchKey(environment), action.command)"
-                            :disabled="ops.working.value"
-                            v-tooltip.top="action.hint"
-                            @click="void ops.runSync(environment, ops.switchKey(environment), undefined, action.command)"
-                        >
-                            <template #icon><Icon :name="action.icon" /></template>
-                        </Button>
-                    </template>
-                </Row>
-                <!-- The machine's own answer to a machine-wide click, under the switch it was pressed on. -->
+            <!-- The machine's own answer to a press of one of the header's switches, under the header it was pressed in. -->
+            <template v-for="environment in environments" :key="`switch:${environment.device.key}`">
                 <RowNote v-if="ops.failure.value?.key === ops.switchKey(environment)" variant="block">
                     <DeviceOpFailure :of="ops.failure.value.notice" :command="ops.failure.value.command" :machine="environment.device.label" />
                 </RowNote>
                 <RowNote v-else-if="ops.outcome.value?.key === ops.switchKey(environment)">{{ ops.outcome.value.message }}</RowNote>
             </template>
 
-            <RowNote variant="block">
-                <SandboxBatchBar v-if="selection.selectable.value" :selection="selection" :ops="ops" />
+            <div class="flex flex-col gap-2">
+                <SandboxBatchBar v-if="selecting && selection.selectable.value" :selection="selection" :ops="ops" @cancel="stopSelecting" />
 
                 <!-- A run's one answer belongs to the list, not to a row: the rows it was about may be the ones that just
                      left. Drawn under the bar that started it, where the eye still is. -->
@@ -371,12 +367,16 @@ const selection = useSandboxSelection(() => machine, () => ownSlug, ops);
                     :ports="lists.ports"
                     :sandboxes="lists.sandboxes"
                     :open="openIds"
+                    :leading="openIds"
                     :busy="ops.workingIds.value"
                     :selected="selection.chosenIds.value"
                 >
+                    <template #lead="{ group }">
+                        <SandboxLogo :image="logoOf(group)" :name="group.title" :size="logoOf(group) ? 32 : 18" />
+                    </template>
                     <!-- Dead rather than absent on a row that can't go in a batch: a gap in the column says nothing, and
                          the reason is the one thing somebody who ticked it wants. -->
-                    <template v-if="selection.selectable.value" #select="{ group }">
+                    <template v-if="selecting && selection.selectable.value" #select="{ group }">
                         <Checkbox
                             :model-value="selection.picked.value.has(group.sandboxId)"
                             :binary="true"
@@ -583,7 +583,7 @@ const selection = useSandboxSelection(() => machine, () => ownSlug, ops);
                         <p v-else-if="ops.outcome.value?.key === ops.rowKey(group)" class="text-xs text-muted">{{ ops.outcome.value.message }}</p>
                     </template>
                 </DeviceDetail>
-            </RowNote>
+            </div>
 
         </RowGroup>
 
