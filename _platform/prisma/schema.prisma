@@ -391,6 +391,30 @@ model HostedCleanup {
     @@map("hosted_cleanup")
 }
 
+/* The deletion record of a tunnel id the registry let go of: a deleted row's, or the old one of a rotated token. The
+ * edge refuses a tunnel only for an id recorded here; an id with neither a row nor a record is one this database never
+ * knew or has forgotten (a restore, a wrong DATABASE_URL), and stays reachable. Written by a trigger on `sandbox`
+ * (migration 20261002120000_platform_memory), so no delete path, a cascade included, can skip it. Never deleted, and
+ * names no account: a tunnel id is a hash prefix of a token that no longer exists. */
+model SandboxTombstone {
+    tunnelId  String   @id
+    deletedAt DateTime @default(now())
+
+    @@map("sandbox_tombstone")
+}
+
+/* Which database this is: one random id minted by the migration that made this table, never rewritten. A platform
+ * reading some other database answers with some other id, which is how a daemon or a browser tells a registry that
+ * forgot it from one restored; the api refuses to boot on a database whose id is not the one it is pinned to
+ * (`DATABASE_EXPECTED_IDENTITY`). Exactly one row, id 1. */
+model PlatformIdentity {
+    id        Int      @id @default(1)
+    identity  String
+    createdAt DateTime @default(now())
+
+    @@map("platform_identity")
+}
+
 /* A deleted sandbox for as long as the delete can still be taken back: the identity is gone with the Sandbox row,
  * the disk is not. The machine is STOPPED rather than destroyed, so the app, its volume and the environment it was
  * built on are all still there to restore onto; the sweep hands `appName` to HostedCleanup once the window closes.
