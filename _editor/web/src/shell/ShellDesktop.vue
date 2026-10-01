@@ -223,11 +223,10 @@ watch(
     { immediate: true },
 );
 
-// THE MACHINES THIS SANDBOX REACHES, tiled the way This computer is in a local window (the same glyph and the same
-// corners): a place to go, the count the hub's Devices row carries, and the turning mark while one of them is being
-// worked on. That mark is the reason it is a tile at all: an agent update outlives the page that pressed it by a minute
-// or more (devices/runners/deviceWork.ts), and the switcher chip turns only for a restart of this sandbox. The count is
-// the hub row's own (SandboxHub.vue): ports another of your sandboxes took, the one held port with a remedy there.
+// THE MACHINES THIS SANDBOX REACHES, tiled like This computer in a local window (the same glyph and the same corners):
+// a place to go, the count of ports another of your sandboxes took, and the turning mark while one of them is being
+// worked on. A signal tile (registry.ts): kept by a pin, and on the rail by itself while it badges, since an agent
+// update outlives the page that pressed it by a minute or more (devices/runners/deviceWork.ts).
 const { heldPorts } = useSyncHealth();
 const devicesBadge = (held: number, running: string | undefined): ViewBadge | undefined => {
     if (held === 0) {

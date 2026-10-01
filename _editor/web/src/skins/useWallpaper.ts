@@ -40,8 +40,15 @@ export function useWallpaper() {
  */
 export const WALLPAPERED_EXTENSIONS: ReadonlySet<string> = new Set([`workflows`, `automations`, `projects`, `pipelines`, `approvals`]);
 
+/** The shell's own routes a wallpaper shows behind, for the same reason: Devices draws every machine as a card of its own. */
+export const WALLPAPERED_ROUTES: ReadonlySet<string> = new Set([`devices`]);
+
 /** Whether the shell's main column should wear the wallpaper for the route on screen. The board draws its own. */
 export function useWallpaperedRoute(): ComputedRef<boolean> {
     const route = useRoute();
-    return computed(() => wallpaper.value !== `none` && route.name === `extension` && WALLPAPERED_EXTENSIONS.has(String(route.params[`ext`])));
+    return computed(
+        () =>
+            wallpaper.value !== `none` &&
+            (WALLPAPERED_ROUTES.has(String(route.name)) || (route.name === `extension` && WALLPAPERED_EXTENSIONS.has(String(route.params[`ext`])))),
+    );
 }

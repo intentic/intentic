@@ -407,15 +407,17 @@ describe(`rail tiles`, () => {
         expect(onRailOnlyByVisit({ id: `pipelines`, badge: { running: `1 running` } }, { pinned: false, active: true })).toBe(false);
     });
 
-    it(`spends permanent tiles on the work loop and the machines it runs on, and nowhere else`, () => {
-        // The count is the point: six fits above the fold, room for what lights up. A seventh means editing this. The
-        // first is the project scope's tile, the only place the shell says which project it is looking at; the last is
-        // Devices, whose turning mark is the only sign outside the hub that an agent update is still running.
+    it(`spends permanent tiles on the work loop and nowhere else`, () => {
+        // The count is the point: five fits above the fold, room for what lights up. A sixth means editing this. The
+        // first is the project scope's tile, the only place the shell says which project it is looking at.
         const permanent = railGroups()
             .flatMap((group) => group.items)
             .filter((item) => item.policy === `always`)
             .map((item) => item.id);
-        expect(permanent).toEqual([`projects`, `chat`, `agents`, `workspace`, `preview`, `devices`]);
+        expect(permanent).toEqual([`projects`, `chat`, `agents`, `workspace`, `preview`]);
+        // Devices is pinned to keep, and tiles itself while a machine is being worked on.
+        expect(railPolicy(`devices`)).toBe(`signal`);
+        expect(onRail({ id: `devices`, badge: { running: `Updating a machine's agents on rog` } }, resting)).toBe(true);
     });
 });
 
@@ -501,12 +503,12 @@ describe(`the maker's rail`, () => {
         }
     });
 
-    it(`spends the same five permanent tiles in both tables`, () => {
+    it(`spends the same four permanent tiles in both tables`, () => {
         const permanent = railGroupsFor(`maker`)
             .flatMap((group) => group.items)
             .filter((item) => item.policy === `always`)
             .map((item) => item.id);
-        expect(permanent).toEqual([`projects`, `chat`, `agents`, `preview`, `devices`]);
+        expect(permanent).toEqual([`projects`, `chat`, `agents`, `preview`]);
     });
 
     // THE RAIL IS WHAT THIS BANDING DRAWS: a band that matches nothing renders an empty column, which is what the
