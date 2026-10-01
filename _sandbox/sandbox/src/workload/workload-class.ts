@@ -176,24 +176,40 @@ const ownChildren = (): number[] => {
     }
 };
 
+const carriesStamp = (pid: number, stamp: string): boolean => {
+    try {
+        return readFileSync(`/proc/${String(pid)}/environ`, "utf8").split("\0").includes(`${SPAWN_STAMP_ENV}=${stamp}`);
+    } catch {
+        // allow(silent-catch): a child that exited between the listing and the read is not the one just spawned
+        return false;
+    }
+};
+
+// How long a stamped child is looked for. A spawn can hand back before the child's exec (bun's does: run 36855669502),
+// and until then its environ is still this process's own, without the stamp; the exec lands within milliseconds.
+const STAMP_SEARCH_MS = 2_000;
+const STAMP_POLL_MS = 10;
+
 /**
  * Puts the child this process just spawned with `SPAWN_STAMP_ENV=stamp` in its environment in its class, found among
  * this process's own children by that stamp. Called right after the spawning call returns, like spawnAs, so what the
- * child forks later inherits the class. Returns the pid it classed, or undefined when none carried the stamp.
+ * child forks later inherits the class. Looks again until the child has exec'd, for STAMP_SEARCH_MS at most. Resolves
+ * to the pid it classed, or undefined when none carried the stamp; never rejects.
  */
-export const applyToStampedChild = (stamp: string, workload: Workload): number | undefined => {
+export const applyToStampedChild = async (stamp: string, workload: Workload): Promise<number | undefined> => {
     if (process.platform !== "linux") {
         return undefined;
     }
-    for (const pid of ownChildren()) {
-        try {
-            if (readFileSync(`/proc/${String(pid)}/environ`, "utf8").split("\0").includes(`${SPAWN_STAMP_ENV}=${stamp}`)) {
-                void applyWorkload(pid, workload);
-                return pid;
-            }
-        } catch {
-            // allow(silent-catch): a child that exited between the listing and the read is not the one just spawned
+    const deadline = Date.now() + STAMP_SEARCH_MS;
+    for (;;) {
+        const pid = ownChildren().find((child) => carriesStamp(child, stamp));
+        if (pid !== undefined) {
+            void applyWorkload(pid, workload);
+            return pid;
         }
+        if (Date.now() >= deadline) {
+            return undefined;
+        }
+        await new Promise((resolve) => setTimeout(resolve, STAMP_POLL_MS));
     }
-    return undefined;
 };

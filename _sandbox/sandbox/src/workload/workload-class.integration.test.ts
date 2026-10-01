@@ -86,9 +86,9 @@ describe.skipIf(!kernel.runs)(kernel.title("spawnAs puts a child in its class as
     test("a child a library spawned is found by the stamp set across the spawn, and classed", async () => {
         const plain = kept(spawn("sleep", ["34"], { stdio: "ignore" }));
         const stamped = kept(spawn("sleep", ["34"], { stdio: "ignore", env: { ...process.env, [SPAWN_STAMP_ENV]: "stamp-1" } }));
-        expect(applyToStampedChild("stamp-1", { class: "toolchain" })).toBe(stamped.pid);
+        expect(await applyToStampedChild("stamp-1", { class: "toolchain" })).toBe(stamped.pid);
         expect(await scoreOf(stamped.pid ?? 0)).toBe(OOM_SCORE.heavy);
         expect(await scoreOf(plain.pid ?? 0)).toBe(INHERITED);
-        expect(applyToStampedChild("no-such-stamp", { class: "toolchain" })).toBeUndefined();
+        expect(await applyToStampedChild("no-such-stamp", { class: "toolchain" })).toBeUndefined();
     });
 });

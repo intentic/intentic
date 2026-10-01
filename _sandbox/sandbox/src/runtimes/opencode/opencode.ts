@@ -529,8 +529,10 @@ export const createOpenCodeService = (
                     },
                 }),
         );
-        serverPid = applyToStampedChild(stamp, { class: "agentRuntime", spawnDepth: 0 });
+        // Started now, while the child is young, and read once the server is up; it never rejects.
+        const classed = applyToStampedChild(stamp, { class: "agentRuntime", spawnDepth: 0 });
         const server = await starting;
+        serverPid = await classed;
         serverHandle = server;
         const clients = { client: createOpencodeClient({ baseUrl: server.url }), replies: createOpencodeReplyClient({ baseUrl: server.url }), judgeOf };
         // The permission watcher rides this boot; the workspace root is the one scope worth opening unasked, since an
