@@ -598,7 +598,12 @@ const onHeldRepointed = (state: ConversationState, event: Extract<ConversationEv
         return unchanged(state, false);
     }
     const { reopensAt: _old, ...rest } = held;
-    const repointed: HeldRecord = { ...rest, ...opt("reopensAt", event.reopensAt), onto: { account: event.account, carry: event.carry }, move: undefined };
+    const repointed: HeldRecord = {
+        ...rest,
+        ...opt("reopensAt", event.reopensAt),
+        onto: { account: event.account, carry: event.carry },
+        move: undefined,
+    };
     return unchanged(withResume(state, { held: repointed }), true);
 };
 
@@ -658,7 +663,11 @@ const onKeepWarmRefreshed = (state: ConversationState, event: Extract<Conversati
     };
 };
 
-const onKeepWarmEnded = (state: ConversationState, event: Extract<ConversationEvent, { kind: "keep-warm-ended" }>, now: number): Decision<undefined> => {
+const onKeepWarmEnded = (
+    state: ConversationState,
+    event: Extract<ConversationEvent, { kind: "keep-warm-ended" }>,
+    now: number,
+): Decision<undefined> => {
     const kept = state.keepWarm;
     if (event.reason === undefined) {
         return kept === undefined ? unchanged(state, undefined) : { state: { ...state, keepWarm: undefined }, effects: BROADCAST, reply: undefined };
@@ -709,7 +718,12 @@ const HANDLERS: { readonly [K in ConversationEvent["kind"]]: Handler<K> } = {
     "turn-got-somewhere": (state) => unchanged(withResume(state, { stopTries: 0 }), undefined),
     "resume-superseded": (state) => unchanged(withResume(state, { held: undefined }), state.resume.held),
     "auth-firing": (state, event) => unchanged(withResume(state, { authFiring: event.firing }), undefined),
-    "resume-dropped": (state) => unchanged(withResume(state, { held: undefined }), undefined),
+    // Told to every window: the card's booking reads this hold (agents-registry limitHold), and nothing else moves when a
+    // cancel or a give-up drops it.
+    "resume-dropped": (state) =>
+        state.resume.held === undefined
+            ? unchanged(state, undefined)
+            : { state: withResume(state, { held: undefined }), effects: BROADCAST, reply: undefined },
     "held-fired": (state, event) => onHeldFired(state, event.ladder),
     "held-repointed": (state, event) => onHeldRepointed(state, event),
     "ladder-spent": (state) =>

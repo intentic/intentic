@@ -1505,11 +1505,22 @@ describe("agents registry", () => {
         await conversations.send("c1", { kind: "settle" }, 2_000).settled;
         await beginTurn(conversations, turn({ prompt: "Continue" }), 3_000);
         await conversations.send("c1", { kind: "settle" }, 4_000).settled;
-        expect(registry.get("c1")?.landFailure).toEqual({ reason: "This agent's copy of the workspace lost its link", code: "unlinked", at: expect.any(Number) });
+        expect(registry.get("c1")?.landFailure).toEqual({
+            reason: "This agent's copy of the workspace lost its link",
+            code: "unlinked",
+            at: expect.any(Number),
+        });
 
         // A measure that holds the work on its branch says nothing of whether a land would now go through.
         const repos = [{ repo: "root", base: "a".repeat(40) }];
-        await registry.recordLanded("c1", { landed: false, held: true, changed: true, repos, diff: { files: 1, insertions: 1, deletions: 0 }, adjudicated: false });
+        await registry.recordLanded("c1", {
+            landed: false,
+            held: true,
+            changed: true,
+            repos,
+            diff: { files: 1, insertions: 1, deletions: 0 },
+            adjudicated: false,
+        });
         expect(store.saved().find((entry) => entry.id === "c1")?.landing.failure?.code).toBe("unlinked");
 
         await registry.recordLanded("c1", {
@@ -1592,7 +1603,11 @@ describe("agents registry", () => {
         await registry.refreshStandings();
         // A main-tree conversation whose turn runs is who the probe may name; a worktree one never takes work out by hand.
         expect(probe.active()).toEqual([{ kind: "agent", id: "orch" }]);
-        expect(registry.get("c1")?.landedPresence).toEqual({ landed: 2, present: 0, removedBy: { kind: "agent", id: "orch", title: "Orchestrator" } });
+        expect(registry.get("c1")?.landedPresence).toEqual({
+            landed: 2,
+            present: 0,
+            removedBy: { kind: "agent", id: "orch", title: "Orchestrator" },
+        });
         expect(store.saved().find((entry) => entry.id === "c1")?.landing.removedBy).toEqual({ kind: "agent", id: "orch" });
 
         probe.set("c1", undefined);
@@ -2077,7 +2092,10 @@ describe("agents registry", () => {
         expect(sends.at(-1)).toEqual({ rev: registry.revision(), tool: "Edit" });
 
         // Progress waiting behind a window rides the next change anyone makes, at once, and is not sent twice.
-        conversations.send("c1", { kind: "frame", frame: { kind: "tool_call", id: "Bash", name: "Bash", category: "execute", status: "in_progress" } });
+        conversations.send("c1", {
+            kind: "frame",
+            frame: { kind: "tool_call", id: "Bash", name: "Bash", category: "execute", status: "in_progress" },
+        });
         await registry.markSeen("c1", 2_000);
         expect(sends.at(-1)).toEqual({ rev: registry.revision(), tool: "Bash" });
         const settled = sends.length;
@@ -2520,6 +2538,12 @@ describe("one write per fact", () => {
     });
 });
 
+// The hold a refused turn leaves its conversation's actor, sent ahead of the settle as a turn's exit sends it
+// (settle-turn.ts recordResumes): the card's booking reads it, not the stored ending alone.
+const holdLimit = (conversations: ReturnType<typeof createFleet>["conversations"], id: string): void => {
+    conversations.send(id, { kind: "turn-held", held: { input: { conversationId: id, prompt: "p" }, reason: "limit", ran: true, reopensAt: 9_000 } });
+};
+
 // An arrival lands rows under a running daemon: what it brought replaces what was here for those ids, and nothing else
 // is read again, so a hold this process made for another conversation survives it.
 it("an arrival takes in only the conversations it brought, replacing those whole", async () => {
@@ -2531,6 +2555,7 @@ it("an arrival takes in only the conversations it brought, replacing those whole
         kind: "frame",
         frame: { kind: "error", code: "rate_limit", message: "spent", autoResume: "scheduled", resetsAt: 9_000, held: { ran: true } },
     });
+    holdLimit(conversations, "c1");
     await conversations.send("c1", { kind: "settle" }, 2_000).settled;
     await beginTurn(conversations, turn({ conversationId: "c2" }), 1_000);
     await conversations.send("c2", { kind: "settle" }, 2_000).settled;
@@ -2559,6 +2584,7 @@ it("re-books a held spent allowance from the answer the resume pass will now rea
         kind: "frame",
         frame: { kind: "error", code: "rate_limit", message: "spent", autoResume: "available", resetsAt: 9_000, held: { ran: true } },
     });
+    holdLimit(conversations, "c1");
     await conversations.send("c1", { kind: "settle" }, 2_000).settled;
     expect(registry.get("c1")).toMatchObject({ limitHeld: true });
     expect(registry.get("c1")?.limitScheduled).toBeUndefined();
@@ -2579,8 +2605,16 @@ it("withdraws a booked move the answer no longer gives, and books nothing withou
     await beginTurn(conversations, turn(), 1_000);
     conversations.send("c1", {
         kind: "frame",
-        frame: { kind: "error", code: "rate_limit", message: "spent", autoResume: "scheduled", resetsAt: 9_000, held: { ran: true, moving: "acct-2" } },
+        frame: {
+            kind: "error",
+            code: "rate_limit",
+            message: "spent",
+            autoResume: "scheduled",
+            resetsAt: 9_000,
+            held: { ran: true, moving: "acct-2" },
+        },
     });
+    holdLimit(conversations, "c1");
     await conversations.send("c1", { kind: "settle" }, 2_000).settled;
     expect(registry.get("c1")).toMatchObject({ limitScheduled: true, limitMoving: "acct-2" });
     const resent = await registry.setBreakPolicy("c1", "limit", "resend", "resend");
@@ -2591,6 +2625,50 @@ it("withdraws a booked move the answer no longer gives, and books nothing withou
     conversations.send("c2", { kind: "frame", frame: { kind: "error", code: "rate_limit", message: "spent", held: { ran: true } } });
     await conversations.send("c2", { kind: "settle" }, 4_000).settled;
     expect((await registry.setBreakPolicy("c2", "limit", "resend", "resend"))?.limitScheduled).toBeUndefined();
+});
+
+// The booking is the actor's hold, which goes without any turn ending: a parent's cancel drops it, the resume pass gives
+// it up, its one dispatch fires. The card follows, rather than saying for good that a re-run is booked which nothing
+// will make (a cancelled orchestrator's children each read as Active, and lifted their family's card there).
+it("stops reading a spent allowance as booked once its hold is dropped or fired", async () => {
+    const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
+    await registry.init();
+    for (const id of ["dropped", "fired"]) {
+        await beginTurn(conversations, turn({ conversationId: id }), 1_000);
+        conversations.send(id, {
+            kind: "frame",
+            frame: {
+                kind: "error",
+                code: "rate_limit",
+                message: "spent",
+                autoResume: "scheduled",
+                resetsAt: 9_000,
+                held: { ran: true, moving: "acct-2" },
+            },
+        });
+        holdLimit(conversations, id);
+        await conversations.send(id, { kind: "settle" }, 2_000).settled;
+        expect(registry.get(id)).toMatchObject({ limitHeld: true, limitScheduled: true, limitMoving: "acct-2" });
+    }
+    const told: number[] = [];
+    registry.subscribe((_agents, revision) => told.push(revision));
+    told.length = 0;
+
+    await conversations.send("dropped", { kind: "resume-dropped" }).settled;
+    const dropped = registry.get("dropped");
+    expect([dropped?.status, dropped?.failureCode, dropped?.limitHeld, dropped?.limitScheduled, dropped?.limitMoving]).toEqual([
+        "error",
+        "rate_limit",
+        undefined,
+        undefined,
+        undefined,
+    ]);
+    // Every window hears it, since nothing else moves when a hold is dropped.
+    expect(told.length).toBeGreaterThan(0);
+
+    await conversations.send("fired", { kind: "held-fired", ladder: false }).settled;
+    expect(registry.get("fired")).toMatchObject({ limitHeld: true });
+    expect([registry.get("fired")?.limitScheduled, registry.get("fired")?.limitMoving]).toEqual([undefined, undefined]);
 });
 
 // A spent allowance's hold, booking and move are memory of the process that made them; the refusal itself persists.
@@ -2610,6 +2688,7 @@ it("a restarted fleet reads a spent allowance back without the hold, the booking
             held: { ran: true, moving: "acct-2" },
         },
     });
+    holdLimit(conversations, "c1");
     await conversations.send("c1", { kind: "settle" }, 2_000).settled;
     expect(registry.get("c1")).toMatchObject({
         failureCode: "rate_limit",

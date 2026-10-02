@@ -30,7 +30,7 @@ import { MAX_NOTE_LENGTH, MAX_SUBJECT_LENGTH } from "../../git/ops/commit-messag
 import type { ConversationUnits } from "../../store/conversation-units.js";
 import { type ConversationActors, type ConversationBooks, createConversationActors } from "../actor/conversation-actors.js";
 import type { BeginTurn, SettleFlush } from "../actor/conversation-decide.js";
-import { activityLive, awaitingWake, type ConversationState, NO_USAGE, type TurnUsage } from "../actor/conversation-state.js";
+import { activityLive, awaitingWake, type ConversationState, type HeldRecord, NO_USAGE, type TurnUsage } from "../actor/conversation-state.js";
 import { conversationStatus, parkedKinds, permissionAskOf } from "../actor/conversation-status.js";
 import {
     type AgentsStore,
@@ -157,7 +157,8 @@ const cardReadings = (state: ConversationState | undefined): Partial<Pick<Conver
 
 // The moment of measurement, not of the write: a settle that never observed the list learned nothing new, and stamping
 // `now` there would restart the age of an old abandonment.
-const leftAt = (entry: PersistedAgent, flush: SettleFlush, now: number): number => (flush.checklist === undefined ? (entry.unfinished?.at ?? now) : now);
+const leftAt = (entry: PersistedAgent, flush: SettleFlush, now: number): number =>
+    flush.checklist === undefined ? (entry.unfinished?.at ?? now) : now;
 
 /* THE STEPS A TURN LEAVES, and why a list it never saw is not always the old list. */
 const stepsLeft = (entry: PersistedAgent, flush: SettleFlush): UnfinishedWork["steps"] => {
@@ -180,11 +181,21 @@ const unfinishedOf = (entry: PersistedAgent, flush: SettleFlush, now: number): U
     return { at: leftAt(entry, flush, now), steps };
 };
 
+// The spent allowance's hold as the conversation's actor keeps it right now: the one the resume pass would fire. The
+// stored ending says what the refusal booked; this says whether it still stands. A hold goes without any turn ending:
+// a parent cancels its paused child (children.ts cancelChild), the resume pass gives it up, its one dispatch goes out
+// and the start is refused. Read only from the stored ending, each of those left the card saying a re-run was booked
+// that nothing would ever make, a card in Active for good, its family's card lifted there with it.
+const limitHold = (state: ConversationState | undefined): HeldRecord | undefined =>
+    state?.resume.held?.reason === "limit" ? state.resume.held : undefined;
+
 // The failure fields, only while the card still reads as `error`; once the standing has moved on, they would describe a
-// turn the board no longer shows as the last word. A spent allowance's are the rate limit's.
+// turn the board no longer shows as the last word. A spent allowance's are the rate limit's, its hold, booking and move
+// each only while the actor still holds the turn (limitHold), and the booking and move only until that hold fired.
 const reportedFailure = (
     ending: Ending,
     status: AgentStatus,
+    hold: HeldRecord | undefined,
 ): Partial<Pick<AgentSummary, "failure" | "failureCode" | "limitResetsAt" | "limitHeld" | "limitScheduled" | "limitMoving">> => {
     if (status !== "error") {
         return {};
@@ -192,15 +203,17 @@ const reportedFailure = (
     switch (ending.kind) {
         case "failed":
             return { ...opt("failure", ending.failure), ...opt("failureCode", ending.code) };
-        case "limited":
+        case "limited": {
+            const booked = hold !== undefined && !hold.fired;
             return {
                 ...opt("failure", ending.failure),
                 failureCode: "rate_limit",
                 ...opt("limitResetsAt", ending.resetsAt),
-                ...(ending.held ? { limitHeld: true } : {}),
-                ...(ending.scheduled ? { limitScheduled: true } : {}),
-                ...opt("limitMoving", ending.moving),
+                ...(ending.held && hold !== undefined ? { limitHeld: true } : {}),
+                ...(ending.scheduled && booked ? { limitScheduled: true } : {}),
+                ...opt("limitMoving", booked ? ending.moving : undefined),
             };
+        }
         default:
             return {};
     }
@@ -367,7 +380,12 @@ const settingsOf = (existing: StoredProfile, profile: TurnProfile): StoredProfil
 // restates (identity it may still fill in, settings, title and owner). Its ending is the resting state for a turn that
 // never reports back: only a daemon killed mid-turn ever sees it. Never archived: an archived conversation refuses the
 // turn before this (refusesArchived), and a person reopens one at the door that carries their words (clearArchived).
-const openedEntry = (existing: PersistedAgent | undefined, turn: BeginTurn, entryOf: (id: string) => PersistedAgent | undefined, now: number): PersistedAgent => {
+const openedEntry = (
+    existing: PersistedAgent | undefined,
+    turn: BeginTurn,
+    entryOf: (id: string) => PersistedAgent | undefined,
+    now: number,
+): PersistedAgent => {
     const held = existing ?? freshEntry(turn, now);
     return {
         ...held,
@@ -407,7 +425,16 @@ const settledEntry = (entry: PersistedAgent, flush: SettleFlush, now: number): P
 // A spent allowance's hold, booking and move are this process's memory, which a fresh daemon does not have.
 const restored = (entry: PersistedAgent): PersistedAgent =>
     entry.ending.kind === "limited"
-        ? { ...entry, ending: { kind: "limited", ...opt("failure", entry.ending.failure), ...opt("resetsAt", entry.ending.resetsAt), held: false, scheduled: false } }
+        ? {
+              ...entry,
+              ending: {
+                  kind: "limited",
+                  ...opt("failure", entry.ending.failure),
+                  ...opt("resetsAt", entry.ending.resetsAt),
+                  held: false,
+                  scheduled: false,
+              },
+          }
         : entry;
 
 // A held limit's booking, read again from the answer the resume pass will now give it. The pass asks that answer fresh
@@ -660,7 +687,10 @@ const renamedRemovers = (
     });
 
 // A reading as a card names it: an agent by its title too, read off the record, archived ones included.
-const presenceOnCard = (presence: LandedPresence | undefined, entryOf: (id: string) => PersistedAgent | undefined): AgentSummary["landedPresence"] => {
+const presenceOnCard = (
+    presence: LandedPresence | undefined,
+    entryOf: (id: string) => PersistedAgent | undefined,
+): AgentSummary["landedPresence"] => {
     if (presence === undefined) {
         return undefined;
     }
@@ -1017,11 +1047,7 @@ export const createFleet = (
         const state = conversations.state(entry.id);
         // A turn holding any unanswered card reads as `awaiting`, whatever else is in flight beside it.
         const parked = parkedKinds(state);
-        const status = conversationStatus(
-            state,
-            endingStatus(entry.ending),
-            entry.placement.kind === "main" ? "idle" : standings.of(entry.id),
-        );
+        const status = conversationStatus(state, endingStatus(entry.ending), entry.placement.kind === "main" ? "idle" : standings.of(entry.id));
         return {
             id: entry.id,
             status,
@@ -1044,7 +1070,7 @@ export const createFleet = (
             ...describedBy(entry),
             ...reportedUnfinished(entry, state),
             ...opt("proof", entry.proof),
-            ...reportedFailure(entry.ending, status),
+            ...reportedFailure(entry.ending, status, limitHold(state)),
             ...postures(entry.postures),
             ...spentBy(entry.totals, state?.turn.usage ?? NO_USAGE, subagentCountsOf(conversations, entry.id).running),
             ...liveReadings(entry, state),
@@ -1122,7 +1148,13 @@ export const createFleet = (
         },
         adopted: (ids) => {
             const arrived = new Set(ids);
-            entries = [...entries.filter((entry) => !arrived.has(entry.id)), ...store.agents.load().filter((entry) => arrived.has(entry.id)).map(restored)];
+            entries = [
+                ...entries.filter((entry) => !arrived.has(entry.id)),
+                ...store.agents
+                    .load()
+                    .filter((entry) => arrived.has(entry.id))
+                    .map(restored),
+            ];
             standings.forget(ids);
             presences.forget(ids);
             broadcast();
@@ -1206,7 +1238,9 @@ export const createFleet = (
             const allows = (draft.allows ?? []).flatMap((allow) => sanitizeNote(allow) ?? []);
             replace({
                 ...entry,
-                landing: { ...entry.landing, message: {
+                landing: {
+                    ...entry.landing,
+                    message: {
                         subject,
                         ...opt("note", note),
                         ...opt("breaking", breaking),
@@ -1299,7 +1333,8 @@ export const createFleet = (
         },
         requestLand: (id, by, at) =>
             amend(id, (entry) => ({ ...entry, social: { ...entry.social, landRequested: { email: by.email, ...opt("name", by.name), at } } })),
-        assign: (id, to, at) => amend(id, (entry) => ({ ...entry, social: { ...entry.social, owner: { email: to.email, ...opt("name", to.name), since: at } } })),
+        assign: (id, to, at) =>
+            amend(id, (entry) => ({ ...entry, social: { ...entry.social, owner: { email: to.email, ...opt("name", to.name), since: at } } })),
         react: async (id, emoji, by, on, at) => {
             const entry = entryOf(id);
             if (entry === undefined) {
@@ -1370,7 +1405,10 @@ export const createFleet = (
                 return;
             }
             // Copy-on-write: the array is shared with readers already holding it, so the row is replaced, not mutated.
-            replace({ ...entry, placement: { ...entry.placement, repos: repos.map((composed) => (composed === row ? { ...row, absorbed: size } : composed)) } });
+            replace({
+                ...entry,
+                placement: { ...entry.placement, repos: repos.map((composed) => (composed === row ? { ...row, absorbed: size } : composed)) },
+            });
             await persist();
         },
         setArchived: async (ids, now) => {

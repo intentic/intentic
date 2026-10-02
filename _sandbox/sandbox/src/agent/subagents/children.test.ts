@@ -72,12 +72,15 @@ async function* doneAtOnce(): AsyncGenerator<AgentEvent> {
 // The conversation's side of a child's turn as the daemon's own turn body takes it (stream-agent.ts), for the suites
 // that read what a child's conversation opened with: the turn opens it on the registry, every frame its runtime says
 // folds into the conversation's actor, and it settles.
-const conversationTurn =
-    (fleet: Fleet, runtime: (input: RoutedTurn) => AsyncIterable<AgentEvent> = doneAtOnce): TurnStarter["stream"] =>
+const conversationTurn = (fleet: Fleet, runtime: (input: RoutedTurn) => AsyncIterable<AgentEvent> = doneAtOnce): TurnStarter["stream"] =>
     async function* opened(input) {
         const conversationId = input.conversationId ?? "";
         await beginTurn(fleet.conversations, conversationIdentity(input, conversationId, { isolated: true, runner: undefined }), Date.now());
-        yield* placedTurn(fleet.conversations, conversationId, mainTreePlacement(() => runtime(withRuntimeDefaults(input))));
+        yield* placedTurn(
+            fleet.conversations,
+            conversationId,
+            mainTreePlacement(() => runtime(withRuntimeDefaults(input))),
+        );
     };
 
 // The daemon a spawn sees, over a real fleet: its children's conversations open on the fleet's registry, in its actors.
@@ -163,11 +166,14 @@ describe("what a child's conversation opens with", () => {
         ["resend", "nothing of its own", {}, undefined],
         ["move", "nothing of its own", {}, undefined],
     ];
-    it.each(answers)("under a sandbox answering a spent allowance with %s, it opens answering with %s", async (limitPolicy, _said, postures, shown) => {
-        const { entry, summary } = await opened({ limitPolicy }, go);
-        expect(entry?.postures).toEqual(postures);
-        expect(summary?.limitPolicy).toBe(shown);
-    });
+    it.each(answers)(
+        "under a sandbox answering a spent allowance with %s, it opens answering with %s",
+        async (limitPolicy, _said, postures, shown) => {
+            const { entry, summary } = await opened({ limitPolicy }, go);
+            expect(entry?.postures).toEqual(postures);
+            expect(summary?.limitPolicy).toBe(shown);
+        },
+    );
 
     // Six children of one parent once all read "testaudit picks": the naming pass had renamed the parent's own words.
     it("is titled by the parent's description as a name the naming pass keeps, else by its prompt's head for that pass to name", async () => {
@@ -434,7 +440,9 @@ describe("the escalation ladder", () => {
             const driven = drivenBy(spawnServices({}, [], actors), stream);
             return unstubbed<Services>("services", {
                 ...driven,
-                agents: unstubbed<Services["agents"]>("agents", { entry: (id: string) => (id === parent.conversationId ? conversationEntry({ id }) : undefined) }),
+                agents: unstubbed<Services["agents"]>("agents", {
+                    entry: (id: string) => (id === parent.conversationId ? conversationEntry({ id }) : undefined),
+                }),
                 turns: {
                     ...driven.turns,
                     say: async (said) => {
@@ -476,7 +484,9 @@ describe("the escalation ladder", () => {
             expect(told[0]).toContain("Which port should the server bind?");
             expect(told[0]).toContain(`answer(child: "${result.id}"`);
             // Reported by the wake, so a wait on "any" has nothing new to say about it.
-            await expect(waitForSubagent(actors, parent.conversationId, { until: ["blocked"], timeoutMs: 50 })).resolves.toMatchObject({ outcome: "timeout" });
+            await expect(waitForSubagent(actors, parent.conversationId, { until: ["blocked"], timeoutMs: 50 })).resolves.toMatchObject({
+                outcome: "timeout",
+            });
             gate.resolve();
             await settled(result.id);
         });
@@ -488,7 +498,11 @@ describe("the escalation ladder", () => {
             ];
             for (const card of consents) {
                 const gate = Promise.withResolvers<void>();
-                const result = await spawnChild(idleParent(parksOn(card, gate.promise)), parent, { prompt: "go", provider: "claude", model: "claude-sonnet-4-6" });
+                const result = await spawnChild(idleParent(parksOn(card, gate.promise)), parent, {
+                    prompt: "go",
+                    provider: "claude",
+                    model: "claude-sonnet-4-6",
+                });
                 if (!result.ok) {
                     throw new Error(result.message);
                 }
@@ -594,7 +608,10 @@ describe("the escalation ladder", () => {
             ok: false,
             message: expect.stringContaining("No such child"),
         });
-        await expect(mergeChild(services, stranger, result.id)).resolves.toEqual({ ok: false, message: "No such child of this conversation. `list` shows yours." });
+        await expect(mergeChild(services, stranger, result.id)).resolves.toEqual({
+            ok: false,
+            message: "No such child of this conversation. `list` shows yours.",
+        });
         // The stranger's send started no turn; the child is still parked, unanswered.
         expect(turns).toHaveLength(1);
         expect(pendingQuestionOf(actors, result.id)).toMatchObject({ kind: "question", requestId });
@@ -700,7 +717,12 @@ describe("a follow-up that meets a turn somebody else started", () => {
             yield { kind: "done" };
         };
         const services = drivenBy(spawnServices({}, [], actors), body);
-        const result = await spawnChild(services, parent, { prompt: "port it", description: "Port the parser", provider: "cursor", model: "composer-2.5" });
+        const result = await spawnChild(services, parent, {
+            prompt: "port it",
+            description: "Port the parser",
+            provider: "cursor",
+            model: "composer-2.5",
+        });
         if (!result.ok) {
             throw new Error(result.message);
         }
@@ -773,7 +795,12 @@ describe("a follow-up that meets a turn somebody else started", () => {
 
     it("keeps the row named by the child's task across a follow-up to a settled child", async () => {
         const services = drivenBy(spawnServices({}, [], actors), fakeTurn([]));
-        const result = await spawnChild(services, parent, { prompt: "port it", description: "Port the parser", provider: "cursor", model: "composer-2.5" });
+        const result = await spawnChild(services, parent, {
+            prompt: "port it",
+            description: "Port the parser",
+            provider: "cursor",
+            model: "composer-2.5",
+        });
         if (!result.ok) {
             throw new Error(result.message);
         }
@@ -1094,7 +1121,9 @@ describe("a held supervisor call asks the owner where there is one to ask", () =
         return unstubbed<Services>("services", {
             ...driven,
             conversations: { ...driven.conversations, running: (id: string) => id === parent.conversationId || driven.conversations.running(id) },
-            agents: unstubbed<Services["agents"]>("agents", { entry: (id: string) => (id === parent.conversationId ? conversationEntry({ id }) : undefined) }),
+            agents: unstubbed<Services["agents"]>("agents", {
+                entry: (id: string) => (id === parent.conversationId ? conversationEntry({ id }) : undefined),
+            }),
             turns: {
                 ...driven.turns,
                 say: async (said) => {
@@ -1117,7 +1146,11 @@ describe("a held supervisor call asks the owner where there is one to ask", () =
         const live = liveParent();
         try {
             const turns: AgentTurn[] = [];
-            const result = await spawnChild(heldServices(HOLD, fakeTurn(turns)), parent, { prompt: "go", provider: "claude", model: "claude-sonnet-4-6" });
+            const result = await spawnChild(heldServices(HOLD, fakeTurn(turns)), parent, {
+                prompt: "go",
+                provider: "claude",
+                model: "claude-sonnet-4-6",
+            });
             if (!result.ok) {
                 throw new Error(result.message);
             }
@@ -1160,7 +1193,11 @@ describe("a held supervisor call asks the owner where there is one to ask", () =
     it("a start nobody answers before the parent's turn ends says why it was held, and that it may be asked again", async () => {
         const live = liveParent();
         const turns: AgentTurn[] = [];
-        const result = await spawnChild(heldServices(HOLD, fakeTurn(turns)), parent, { prompt: "go", provider: "claude", model: "claude-sonnet-4-6" });
+        const result = await spawnChild(heldServices(HOLD, fakeTurn(turns)), parent, {
+            prompt: "go",
+            provider: "claude",
+            model: "claude-sonnet-4-6",
+        });
         if (!result.ok) {
             throw new Error(result.message);
         }
@@ -1216,7 +1253,10 @@ describe("a held supervisor call asks the owner where there is one to ask", () =
             expect(turns).toEqual([]);
             // Its wait took the ending, so nothing is said twice; and nothing can be sent under an id that never ran.
             expect(told).toEqual([]);
-            expect(await sendToChild(services, parent, result.id, "more")).toMatchObject({ ok: false, message: expect.stringContaining("No such child") });
+            expect(await sendToChild(services, parent, result.id, "more")).toMatchObject({
+                ok: false,
+                message: expect.stringContaining("No such child"),
+            });
         } finally {
             live.release();
         }
@@ -1225,7 +1265,11 @@ describe("a held supervisor call asks the owner where there is one to ask", () =
     it("a parent not waiting when the owner declines hears it in its turn, once", async () => {
         const live = liveParent();
         try {
-            const result = await spawnChild(heldServices(HOLD, fakeTurn([])), parent, { prompt: "go", provider: "claude", model: "claude-sonnet-4-6" });
+            const result = await spawnChild(heldServices(HOLD, fakeTurn([])), parent, {
+                prompt: "go",
+                provider: "claude",
+                model: "claude-sonnet-4-6",
+            });
             if (!result.ok) {
                 throw new Error(result.message);
             }
@@ -1235,7 +1279,9 @@ describe("a held supervisor call asks the owner where there is one to ask", () =
                 `Your subagent \`${result.id}\` did not start: The owner declined this. Do not retry: carry on with what you can do without it, and say plainly what you left undone.`,
             ]);
             // Said into its turn, so its next wait does not hand the same ending over again.
-            expect(await waitForSubagent(actors, parent.conversationId, { until: ["finished"], timeoutMs: 1_000 })).toMatchObject({ outcome: "unknown-target" });
+            expect(await waitForSubagent(actors, parent.conversationId, { until: ["finished"], timeoutMs: 1_000 })).toMatchObject({
+                outcome: "unknown-target",
+            });
         } finally {
             live.release();
         }
@@ -1310,7 +1356,11 @@ describe("a held supervisor call asks the owner where there is one to ask", () =
         const live = liveParent();
         try {
             const turns: AgentTurn[] = [];
-            const result = await spawnChild(heldServices(HOLD, fakeTurn(turns)), parent, { prompt: "go", provider: "claude", model: "claude-sonnet-4-6" });
+            const result = await spawnChild(heldServices(HOLD, fakeTurn(turns)), parent, {
+                prompt: "go",
+                provider: "claude",
+                model: "claude-sonnet-4-6",
+            });
             if (!result.ok) {
                 throw new Error(result.message);
             }
@@ -1377,7 +1427,11 @@ describe("a held supervisor call asks the owner where there is one to ask", () =
         await new Promise((resolve) => setTimeout(resolve, 20));
         const second = liveParent();
         try {
-            const next = await spawnChild(heldServices(HOLD, fakeTurn(turns)), parent, { prompt: "four", provider: "claude", model: "claude-sonnet-4-6" });
+            const next = await spawnChild(heldServices(HOLD, fakeTurn(turns)), parent, {
+                prompt: "four",
+                provider: "claude",
+                model: "claude-sonnet-4-6",
+            });
             expect(next).toMatchObject({ ok: true, held: true });
             cards.resolve({ kind: "permission", requestId: await cardOn(), decision: "deny" });
         } finally {
@@ -1433,7 +1487,11 @@ describe("a held supervisor call asks the owner where there is one to ask", () =
 
     it("a declined message is told to the parent, and the child hears nothing", async () => {
         const turns: AgentTurn[] = [];
-        const first = await spawnChild(drivenBy(spawnServices({}, [], actors), fakeTurn(turns)), parent, { prompt: "go", provider: "claude", model: "claude-sonnet-4-6" });
+        const first = await spawnChild(drivenBy(spawnServices({}, [], actors), fakeTurn(turns)), parent, {
+            prompt: "go",
+            provider: "claude",
+            model: "claude-sonnet-4-6",
+        });
         if (!first.ok) {
             throw new Error(first.message);
         }
@@ -1478,7 +1536,9 @@ describe("a turn the child did not get from its parent", () => {
         return unstubbed<Services>("services", {
             ...driven,
             conversations: { ...driven.conversations, running: (id: string) => id === parent.conversationId || driven.conversations.running(id) },
-            agents: unstubbed<Services["agents"]>("agents", { entry: (id: string) => (id === parent.conversationId ? conversationEntry({ id }) : undefined) }),
+            agents: unstubbed<Services["agents"]>("agents", {
+                entry: (id: string) => (id === parent.conversationId ? conversationEntry({ id }) : undefined),
+            }),
             turns: {
                 ...driven.turns,
                 say: async (said) => {
@@ -1500,7 +1560,12 @@ describe("a turn the child did not get from its parent", () => {
             yield { kind: "done" };
         };
         const services = parentHears(body);
-        const result = await spawnChild(services, parent, { prompt: "Port the parser", description: "Port the parser", provider: "cursor", model: "composer-2.5" });
+        const result = await spawnChild(services, parent, {
+            prompt: "Port the parser",
+            description: "Port the parser",
+            provider: "cursor",
+            model: "composer-2.5",
+        });
         if (!result.ok) {
             throw new Error(result.message);
         }
@@ -1509,12 +1574,18 @@ describe("a turn the child did not get from its parent", () => {
 
         adoptChildTurn(services, { conversationId: result.id, speaker: { kind: "sandbox" }, resume: "limit", errand: undefined });
 
-        expect(listSubagentSessions(actors).find((session) => session.id === result.id)).toMatchObject({ status: "running", description: "Port the parser" });
+        expect(listSubagentSessions(actors).find((session) => session.id === result.id)).toMatchObject({
+            status: "running",
+            description: "Port the parser",
+        });
         expect(told).toEqual([
             `Your subagent \`${result.id}\` ("Port the parser") is working: the sandbox sent its turn again by itself because its allowance reopened. Its report reaches you when it ends, like any turn of its: do not send it the task again or give the task to another agent meanwhile.`,
         ]);
         // It is the child's live turn now, as far as its parent can reach it: words steer into it, not a second turn.
-        expect(await sendToChild(services, parent, result.id, "also the lexer")).toMatchObject({ ok: false, message: expect.stringContaining("mid-turn") });
+        expect(await sendToChild(services, parent, result.id, "also the lexer")).toMatchObject({
+            ok: false,
+            message: expect.stringContaining("mid-turn"),
+        });
         gate.resolve();
         expect(await waitForSubagent(actors, parent.conversationId, { until: ["finished"], timeoutMs: 5_000 })).toMatchObject({
             outcome: "finished",
@@ -1538,7 +1609,12 @@ describe("a turn the child did not get from its parent", () => {
         await settled(result.id);
         services.turns.run({ conversationId: result.id, prompt: "Let me look at this myself" });
 
-        adoptChildTurn(services, { conversationId: result.id, speaker: { kind: "person", email: "owner@example.com" }, resume: undefined, errand: undefined });
+        adoptChildTurn(services, {
+            conversationId: result.id,
+            speaker: { kind: "person", email: "owner@example.com" },
+            resume: undefined,
+            errand: undefined,
+        });
 
         expect(listSubagentSessions(actors).find((session) => session.id === result.id)?.status).toBe("completed");
         expect(told).toEqual([]);
@@ -1550,7 +1626,11 @@ describe("a turn the child did not get from its parent", () => {
             yield { kind: "error", message: "You've hit your usage limit.", autoResume: "scheduled", nextAt: Date.UTC(2026, 8, 26, 15, 38) / 1000 };
             yield { kind: "done" };
         };
-        const result = await spawnChild(drivenBy(spawnServices({}, [], actors), body), parent, { prompt: "go", provider: "claude", model: "claude-sonnet-4-6" });
+        const result = await spawnChild(drivenBy(spawnServices({}, [], actors), body), parent, {
+            prompt: "go",
+            provider: "claude",
+            model: "claude-sonnet-4-6",
+        });
         if (!result.ok) {
             throw new Error(result.message);
         }
@@ -1580,7 +1660,12 @@ describe("a turn the child did not get from its parent", () => {
             yield { kind: "done" };
         };
         const services = parentHears(body);
-        const result = await spawnChild(services, parent, { prompt: "go", description: "Port the parser", provider: "claude", model: "claude-sonnet-4-6" });
+        const result = await spawnChild(services, parent, {
+            prompt: "go",
+            description: "Port the parser",
+            provider: "claude",
+            model: "claude-sonnet-4-6",
+        });
         if (!result.ok) {
             throw new Error(result.message);
         }
@@ -1590,7 +1675,10 @@ describe("a turn the child did not get from its parent", () => {
         });
         expect(services.turns.run({ conversationId: result.id, prompt: "go (sent again)" })).not.toBe("busy");
         adoptChildTurn(services, { conversationId: result.id, speaker: { kind: "sandbox" }, resume: "stopped", errand: undefined });
-        expect(listSubagentSessions(actors).find((session) => session.id === result.id)).toMatchObject({ status: "running", description: "Port the parser" });
+        expect(listSubagentSessions(actors).find((session) => session.id === result.id)).toMatchObject({
+            status: "running",
+            description: "Port the parser",
+        });
         gate.resolve();
         expect(await settled(result.id)).toMatchObject({ outcome: "finished", matched: { status: "completed", summary: "Done on the re-run." } });
     });
@@ -1605,7 +1693,12 @@ describe("a turn the child did not get from its parent", () => {
             yield { kind: "done" };
         };
         const services = drivenBy(spawnServices({}, [], actors), body);
-        const result = await spawnChild(services, parent, { prompt: "go", description: "Port the parser", provider: "claude", model: "claude-sonnet-4-6" });
+        const result = await spawnChild(services, parent, {
+            prompt: "go",
+            description: "Port the parser",
+            provider: "claude",
+            model: "claude-sonnet-4-6",
+        });
         if (!result.ok) {
             throw new Error(result.message);
         }
@@ -1626,10 +1719,9 @@ describe("a child whose allowance runs out", () => {
 
     // The provider's refusal with a known reset, classified as the daemon's turn classifies it (stream-agent.ts), asking
     // the conversation's own answer to the ending where the daemon asks it; the rest is a turn that ran and left nothing.
-    const refusedAsked =
-        (answers: Pick<Services, "agents" | "sandboxSettings">) =>
+    const refusedAsked = (answers: Pick<Services, "agents" | "sandboxSettings">, conversations: Fleet["conversations"]) =>
         async function* refused(input: RoutedTurn): AsyncGenerator<AgentEvent> {
-            const { frame } = await classifyFailure(
+            const { frame, held } = await classifyFailure(
                 { kind: "error", code: "rate_limit", message: "You've hit your usage limit.", resetsAt: RESETS_AT },
                 {
                     turn: input,
@@ -1656,6 +1748,11 @@ describe("a child whose allowance runs out", () => {
                     awaitingVerification: async () => [],
                 },
             );
+            // The hold a real turn's exit records ahead of its settle (settle-turn.ts recordResumes), which the resume
+            // pass fires and the card's booking reads.
+            if (held !== undefined) {
+                conversations.send(held.input.conversationId, { kind: "turn-held", held });
+            }
             yield frame;
             yield { kind: "done" };
         };
@@ -1667,7 +1764,7 @@ describe("a child whose allowance runs out", () => {
         const base = spawnServices({ limitPolicy: "wait" }, [], fleet.conversations);
         const services = drivenBy(
             unstubbed<Services>("services", { ...base, agents: fleet.agents }),
-            conversationTurn(fleet, refusedAsked({ agents: fleet.agents, sandboxSettings: base.sandboxSettings })),
+            conversationTurn(fleet, refusedAsked({ agents: fleet.agents, sandboxSettings: base.sandboxSettings }, fleet.conversations)),
         );
         return { fleet, services };
     };
@@ -1675,7 +1772,11 @@ describe("a child whose allowance runs out", () => {
     it("books its own re-run at the reset, and its parent hears it is coming from its report and its wait", async () => {
         const { fleet, services } = await refusingFleet();
         // The parent is a conversation on the same fleet, which its child's report is delivered to.
-        await beginTurn(fleet.conversations, { conversationId: parent.conversationId, isolated: false, prompt: "Audit the tests", profile: {} }, 1_000);
+        await beginTurn(
+            fleet.conversations,
+            { conversationId: parent.conversationId, isolated: false, prompt: "Audit the tests", profile: {} },
+            1_000,
+        );
         await fleet.conversations.send(parent.conversationId, { kind: "settle" }, 2_000).settled;
         const ended = new Promise<DomainEventMap["run.settled"]>((resolve) => services.events.subscribe("run.settled", resolve));
 
@@ -1726,8 +1827,15 @@ describe("a child whose allowance runs out", () => {
         const cancelWords = ` To have it not run again, cancel it (the cancel tool, or \`agents cancel ${result.id}\`), then decide yourself.`;
         // The re-run leads, ahead of the failure, so the parent reads it before it reads that the turn failed.
         expect(report).toContain(`Paused, not finished. ${BOOKED}${cancelWords}\n\nThe turn failed: You've hit your usage limit.`);
-        const moved = await waitForSubagent(fleet.conversations, parent.conversationId, { target: result.id, until: ["blocked", "finished"], timeoutMs: 5_000 });
-        expect(moved).toMatchObject({ outcome: "blocked", matched: { status: "paused", error: `You've hit your usage limit. ${BOOKED}${cancelWords}` } });
+        const moved = await waitForSubagent(fleet.conversations, parent.conversationId, {
+            target: result.id,
+            until: ["blocked", "finished"],
+            timeoutMs: 5_000,
+        });
+        expect(moved).toMatchObject({
+            outcome: "blocked",
+            matched: { status: "paused", error: `You've hit your usage limit. ${BOOKED}${cancelWords}` },
+        });
     });
 
     // The duplicate this prevents: a parent that gives the task to another agent cancels the original first, so the
@@ -1751,6 +1859,8 @@ describe("a child whose allowance runs out", () => {
             note: "Cancelled: the sandbox will not run it again by itself, and it ends as killed. Send it a message to carry on from where it stopped.",
         });
         expect(fleet.conversations.state(result.id)?.resume.held).toBeUndefined();
+        // Nor does its card go on saying a re-run is booked, which would hold it, and its parent's card, in Active.
+        expect(fleet.agents.get(result.id)?.limitScheduled).toBeUndefined();
         expect((await finishedIn(fleet, result.id)).matched).toMatchObject({
             status: "killed",
             error: "You've hit your usage limit. Stopped: its parent cancelled it.",
@@ -1778,13 +1888,15 @@ describe("a child whose allowance runs out", () => {
 describe("on a box short of memory", () => {
     const GIB = 1024 ** 3;
     // 15 of 16 GiB used: short of the two a background turn needs; `oomKills` is the kernel's running count.
-    const box = (freeGib: number, oomKills = 0) => (): MemoryReading => ({
-        limitBytes: 16 * GIB,
-        usedBytes: (16 - freeGib) * GIB,
-        swapBytes: 0,
-        stallPercent: 0,
-        oomKills,
-    });
+    const box =
+        (freeGib: number, oomKills = 0) =>
+        (): MemoryReading => ({
+            limitBytes: 16 * GIB,
+            usedBytes: (16 - freeGib) * GIB,
+            swapBytes: 0,
+            stallPercent: 0,
+            oomKills,
+        });
 
     // Polls the roster until the child reads `status`, so an assertion never races the detached start.
     const rosterReads = async (id: string, status: string): Promise<SubagentSession | undefined> => {
@@ -1908,7 +2020,11 @@ describe("a child's turn across a container recreate", () => {
             await gate.promise;
             yield { kind: "done" };
         };
-        const result = await spawnChild(drivenBy(spawnServices({}, [], actors), body), parent, { prompt: "go", provider: "claude", model: "claude-sonnet-4-6" });
+        const result = await spawnChild(drivenBy(spawnServices({}, [], actors), body), parent, {
+            prompt: "go",
+            provider: "claude",
+            model: "claude-sonnet-4-6",
+        });
         if (!result.ok) {
             throw new Error(result.message);
         }
@@ -1954,7 +2070,12 @@ describe("what a parent reads of a child's report", () => {
             yield { kind: "done" };
         };
         const services = drivenBy(spawnServices({}, [], actors), body);
-        const result = await spawnChild(services, parent, { prompt: "port it", description: "Port the parser", provider: "claude", model: "claude-sonnet-4-6" });
+        const result = await spawnChild(services, parent, {
+            prompt: "port it",
+            description: "Port the parser",
+            provider: "claude",
+            model: "claude-sonnet-4-6",
+        });
         if (!result.ok) {
             throw new Error(result.message);
         }
