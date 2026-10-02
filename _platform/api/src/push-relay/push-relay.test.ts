@@ -93,6 +93,18 @@ describe(`send`, () => {
         expect(apns.send).toHaveBeenCalledWith(`tok-1`, notification);
     });
 
+    // A withdrawn ask's replacement arrives silent; the relay must hand that on, or every iPhone buzzes for news that
+    // needs nothing of its owner.
+    it(`hands a silent replacement on to APNs as silent`, async () => {
+        const { secret, hash } = await minted();
+        const apns = forwarder(`delivered`);
+        const ctx = context({ user: null, prisma: fakePrisma({ pushDevice: { findUnique: jest.fn().mockResolvedValue(row(hash)) } }) });
+        const replacement = { ...notification, tag: `awaiting-q1`, requireInteraction: false, silent: true };
+
+        await call(pushRelayRoutes(() => apns).send, { deviceId: `d1`, secret, notification: replacement }, { context: ctx });
+        expect(apns.send).toHaveBeenCalledWith(`tok-1`, replacement);
+    });
+
     it(`answers 404 for an unknown device: the daemon prunes and never retries`, async () => {
         const ctx = context({ user: null, prisma: fakePrisma({ pushDevice: { findUnique: jest.fn().mockResolvedValue(null) } }) });
         await expect(

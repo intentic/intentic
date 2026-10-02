@@ -159,7 +159,7 @@ test("a withdrawn ask is replaced on exactly the devices it reached, once, and n
     const replacement = { title: "No longer waiting", body: "The agent is not waiting on you anymore.", tag: waiting.tag ?? "" };
     expect(await push.withdraw(replacement)).toEqual({ delivered: 1, failed: 0 });
     expect(reached.map(({ endpoint }) => endpoint)).toEqual(["https://push.example/bob"]);
-    expect(JSON.parse(reached[0]?.payload ?? "{}")).toMatchObject({ tag: waiting.tag, requireInteraction: false });
+    expect(JSON.parse(reached[0]?.payload ?? "{}")).toMatchObject({ tag: waiting.tag, requireInteraction: false, silent: true });
 
     expect(await push.withdraw(replacement)).toEqual({ delivered: 0, failed: 0 });
     expect(await push.withdraw({ ...replacement, tag: "awaiting-never-pushed" })).toEqual({ delivered: 0, failed: 0 });

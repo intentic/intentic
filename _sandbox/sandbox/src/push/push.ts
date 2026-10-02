@@ -107,8 +107,9 @@ export const createPushSender = (store: PushStore, logger: Logger, redact?: Push
                 return NOTHING_SENT;
             }
             shown.delete(replacement.tag);
-            // Never persistent itself, whatever the caller built: a withdrawal that stayed would be the stale ask again.
-            return send({ ...replacement, requireInteraction: false }, (channel) => reached.has(channelId(channel)));
+            // Never persistent and never a buzz, whatever the caller built: a withdrawal that stayed would be the stale
+            // ask again, and one that sounded would call someone back to a phone for news that needs nothing of them.
+            return send({ ...replacement, requireInteraction: false, silent: true }, (channel) => reached.has(channelId(channel)));
         },
     };
 };

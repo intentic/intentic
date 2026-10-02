@@ -52,6 +52,13 @@ export const PushNotificationSchema = z.object({
         .describe(
             "Keep it on screen until it is dismissed. Used when the agent is waiting for you, where one that fades away is a question that went unanswered in silence.",
         ),
+    // Optional so an older service worker or relay, which ignores it, still shows the replacement under the same tag.
+    silent: z
+        .boolean()
+        .optional()
+        .describe(
+            "Arrive without sound or vibration. Used for the replacement that says an ask stopped waiting: it takes the waiting one's place under the same tag, and is news nobody has to act on.",
+        ),
 });
 export type PushNotification = z.infer<typeof PushNotificationSchema>;
 export const PushConfigSchema = z.object({

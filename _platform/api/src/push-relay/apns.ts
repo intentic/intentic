@@ -113,7 +113,9 @@ export const createApnsForwarder = (config: Config): ApnsForwarder => {
         const body = JSON.stringify({
             aps: {
                 alert: { title: notification.title, body: notification.body },
-                sound: "default",
+                // A silent one replaces an ask that stopped waiting under its collapse id; nobody has to act on it, so
+                // it makes no sound (JSON drops the undefined key).
+                sound: notification.silent === true ? undefined : "default",
                 ...(notification.tag === undefined ? {} : { "thread-id": notification.tag }),
             },
             ...(notification.url === undefined ? {} : { url: notification.url }),

@@ -25,6 +25,8 @@ self.addEventListener("push", (event) => {
             // finished turn.
             tag: payload.tag,
             requireInteraction: payload.requireInteraction === true,
+            // The replacement for an ask that stopped waiting (push.ts `withdraw`) takes its place without a buzz.
+            silent: payload.silent === true,
             // Read back by the click handler; `data` is the only channel from here to there.
             data: { url: payload.url || "/" },
         }),
