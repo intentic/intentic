@@ -20,7 +20,7 @@ import { orRefusal, SandboxHttpError } from "../../sandbox/client/sandboxHttpErr
 import { type ProcedureInput, sandboxRpc } from "../../sandbox/client/sandboxRpc";
 import type { PendingAttachment } from "../drafts/useChatAttachments";
 import { accountIntent, type SessionRef, type TurnSettings, turnRequestBody } from "../run/turnRequest";
-import type { TurnBooking } from "../composer/sendLater";
+import type { TurnBooking } from "../composer/later/sendLater";
 import { supportsRoute } from "../../sandbox/overview/useDaemonRoutes";
 import { accountsOutdated } from "../accounts/accountsOutdated";
 import { repointedPickUp } from "../run/pickUp";

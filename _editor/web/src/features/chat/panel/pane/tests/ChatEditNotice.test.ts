@@ -3,7 +3,7 @@ import { STATE_DIR } from "@intentic/constants";
 import { resetSandboxScope } from "@intentic/extension-api";
 import { IconStub } from "@intentic/ui/testing";
 import { type Component, computed, createApp, h, nextTick } from "vue";
-import ChatQueue from "../../../composer/ChatQueue.vue";
+import ChatQueue from "../../../composer/later/ChatQueue.vue";
 import { rememberMedia } from "../../../drafts/attachmentPreviews";
 import type { PendingAttachment } from "../../../drafts/useChatAttachments";
 import { Conversation } from "../../../session/conversation";

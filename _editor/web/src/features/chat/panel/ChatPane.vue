@@ -36,7 +36,7 @@ import { useComposerKeys, useRecallRing } from "./pane/composerKeys";
 import ChatCommandPopover from "../composer/ChatCommandPopover.vue";
 import ChatContinueStrip from "./ChatContinueStrip.vue";
 import ChatLeftRunning from "./jobs/ChatLeftRunning.vue";
-import ChatQueue from "../composer/ChatQueue.vue";
+import ChatQueue from "../composer/later/ChatQueue.vue";
 import ChatWaitingBar from "./pane/ChatWaitingBar.vue";
 import ChatHeldMessages from "../transcript/held/ChatHeldMessages.vue";
 import ChatAttachmentStrip from "../composer/ChatAttachmentStrip.vue";
@@ -57,9 +57,9 @@ import ChatRunThroughMenu from "../models/run-settings/ChatRunThroughMenu.vue";
 import ComposerEffort from "../composer/ComposerEffort.vue";
 import ComposerModelPill from "../composer/ComposerModelPill.vue";
 import ComposerMoreMenu from "../composer/ComposerMoreMenu.vue";
-import ComposerSendLater from "../composer/ComposerSendLater.vue";
-import { waitTargets } from "../composer/waitTargets";
-import { laterLabel, type SendLater } from "../composer/sendLater";
+import ComposerSendLater from "../composer/later/ComposerSendLater.vue";
+import { waitTargets } from "../composer/later/waitTargets";
+import { laterLabel, type SendLater } from "../composer/later/sendLater";
 import { useNow } from "@intentic/ui/async";
 
 // One chat on screen: the transcript, its composer, and the pickers/banners for one conversation (ChatPanel owns

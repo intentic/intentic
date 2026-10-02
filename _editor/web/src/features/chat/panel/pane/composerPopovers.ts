@@ -4,7 +4,7 @@ import { otherBoxes } from "../../../sandbox/live/fleetAcross";
 import { modelLabelFor } from "../../accounts/providerCatalog";
 import type { QuickPick, QuickPickSources } from "../../composer/composerQuickPick";
 import { drillMention, fileMention, mentionQueryAt, replaceMention } from "../../composer/useMentions";
-import { type SendLater, timeChoices } from "../../composer/sendLater";
+import { type SendLater, timeChoices } from "../../composer/later/sendLater";
 import { chatPickable, pickerEntries } from "../../models/modelPickerState";
 import { effortsFor } from "../../models/run-settings/effortScale";
 import { ensureProviderCommands } from "../../models/useChat-catalog";

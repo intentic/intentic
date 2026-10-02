@@ -1,7 +1,7 @@
 import { type AgentProvider, type CatalogOption, type Persona, providerLabel } from "@intentic/sandbox-contract";
 import type { IconName } from "@intentic/ui";
 import { filterEntries, normalize, type PickerEntry } from "../models/modelPickerState";
-import { type SendLater, sendTimeLabel, type TimeChoice } from "./sendLater";
+import { type SendLater, sendTimeLabel, type TimeChoice } from "./later/sendLater";
 import { QUICK_KINDS, type QuickKind } from "./useMentions";
 import { t } from "@intentic/ui/i18n";
 

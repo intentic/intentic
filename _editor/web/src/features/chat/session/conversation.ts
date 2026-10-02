@@ -2,7 +2,7 @@ import { type AgentCommand, type ContextUsage, type ConversationQueue, newConver
 import { computed, effectScope, ref, shallowRef, watch } from "vue";
 import type { AgentStanding } from "../../agents/fleet/agentStatus";
 import type { PendingAttachment } from "../drafts/useChatAttachments";
-import type { SendLater } from "../composer/sendLater";
+import type { SendLater } from "../composer/later/sendLater";
 import type { PickUp } from "../run/pickUp";
 import { TurnFailures } from "../run/turnFailures";
 import type { ForkLink, SessionRef } from "../run/turnRequest";

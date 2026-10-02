@@ -1,6 +1,6 @@
 import type { AgentHarness, AgentProvider, EditorContext, PermissionMode, TurnErrand } from "@intentic/sandbox-contract";
 import type { ProcedureInput } from "../../sandbox/client/sandboxRpc";
-import type { TurnBooking } from "../composer/sendLater";
+import type { TurnBooking } from "../composer/later/sendLater";
 
 // The turn body the daemon receives: what a send carries and the shape that states it on the wire. Which session a turn
 // goes on in is the daemon's to decide (routing.ts); a session id rides only for a conversation it has no record of.

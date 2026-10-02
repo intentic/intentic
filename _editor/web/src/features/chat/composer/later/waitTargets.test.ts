@@ -1,4 +1,4 @@
-import type { FleetAgent } from "../../agents/fleet/useAgents-fleet";
+import type { FleetAgent } from "../../../agents/fleet/useAgents-fleet";
 import { landsOf, waitTargets } from "./waitTargets";
 
 // Which agents a message can wait for: this sandbox's live ones with something still to land, newest work first, never

@@ -20,7 +20,7 @@ import {
     viewerPlaceholder,
 } from "../../composer/composerIntent";
 import type { InputHistory } from "../../drafts/inputHistory";
-import { bookingOf, laterLabel, type SendLater, type TurnBooking } from "../../composer/sendLater";
+import { bookingOf, laterLabel, type SendLater, type TurnBooking } from "../../composer/later/sendLater";
 import type { RunThrough } from "../../models/run-settings/useRunThrough";
 import type { ChatRouting } from "../../routing/chatRoute";
 import { pickUpReady, pickUpShort } from "../../run/pickUp";

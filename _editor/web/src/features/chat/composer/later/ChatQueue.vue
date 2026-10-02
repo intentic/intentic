@@ -4,9 +4,9 @@ import { Button, Icon, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { basename } from "@intentic/ui/path";
 import { computed, ref } from "vue";
-import { attachmentPreview } from "../drafts/attachmentPreviews";
-import { usePaneView } from "../panel/useChat-view";
-import ChatImageThumb from "../transcript/attachments/ChatImageThumb.vue";
+import { attachmentPreview } from "../../drafts/attachmentPreviews";
+import { usePaneView } from "../../panel/useChat-view";
+import ChatImageThumb from "../../transcript/attachments/ChatImageThumb.vue";
 
 // What waits for this conversation's next turn and will go by itself: the daemon's queue, the same in every window, with
 // each message's own doors (reword, take back). A HELD queue is not drawn here: nothing goes by itself then, so its

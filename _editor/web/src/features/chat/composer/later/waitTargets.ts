@@ -1,6 +1,6 @@
-import { effectiveAutoLand, turnInFlight, unregistered } from "../../agents/fleet/agentStatus";
-import type { FleetAgent } from "../../agents/fleet/useAgents-fleet";
-import { parentOf } from "../../agents/board/ownership";
+import { effectiveAutoLand, turnInFlight, unregistered } from "../../../agents/fleet/agentStatus";
+import type { FleetAgent } from "../../../agents/fleet/useAgents-fleet";
+import { parentOf } from "../../../agents/board/ownership";
 
 // Which agents a message can be booked to wait for (sendLater.ts's `after`), and how each one's work reaches the
 // workspace. Pure over the fleet's cards, so the panel, the `@send:` list and their tests read one answer.

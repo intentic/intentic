@@ -3,12 +3,12 @@ import { Icon, ui } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
-import { agentDisplayTitle, agentStatusMeta } from "../../agents/fleet/agentStatus";
-import { useAgents } from "../../agents/fleet/useAgents";
-import { autoVersionRule, landsByDefault, NAMED_RULES } from "../../sandbox/environment/rules";
-import { useRules } from "../../sandbox/environment/useRules";
-import { useRole } from "../../sandbox/secrets/useRole";
-import type { Conversation } from "../session/conversation";
+import { agentDisplayTitle, agentStatusMeta } from "../../../agents/fleet/agentStatus";
+import { useAgents } from "../../../agents/fleet/useAgents";
+import { autoVersionRule, landsByDefault, NAMED_RULES } from "../../../sandbox/environment/rules";
+import { useRules } from "../../../sandbox/environment/useRules";
+import { useRole } from "../../../sandbox/secrets/useRole";
+import type { Conversation } from "../../session/conversation";
 import { type LandsHow, waitTargets } from "./waitTargets";
 import { bookable, instantOfInput, LATEST_SEND_MS, localInputOf, type SendLater, SOONEST_SEND_MS, sendTimeLabel, timeChoices } from "./sendLater";
 
