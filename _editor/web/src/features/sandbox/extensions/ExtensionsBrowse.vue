@@ -180,13 +180,15 @@ const report = (listing: DiscoverListing, verb: InstallOutcome["verb"]): void =>
     const name = listing.entry.name;
     const action = { label: t(`sandbox.discoverDetail.showInInstalled`), run: () => emit(`reveal`, done.id) };
     if (done.problem === undefined) {
-        const title = t(verb === `install` ? `sandbox.extensionsBrowse.installedName` : `sandbox.extensionsBrowse.updatedName`, { name });
+        const title =
+            verb === `install` ? t(`sandbox.extensionsBrowse.installedName`, { name }) : t(`sandbox.extensionsBrowse.updatedName`, { name });
         emit(`notice`, { tone: `info`, title, action });
         return;
     }
-    const title = t(verb === `install` ? `sandbox.extensionsBrowse.installedNotStartedName` : `sandbox.extensionsBrowse.updatedNotStartedName`, {
-        name,
-    });
+    const title =
+        verb === `install`
+            ? t(`sandbox.extensionsBrowse.installedNotStartedName`, { name })
+            : t(`sandbox.extensionsBrowse.updatedNotStartedName`, { name });
     emit(`notice`, { tone: `warning`, title, detail: done.problem, action });
 };
 
