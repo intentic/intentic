@@ -39,6 +39,7 @@ import DesktopSetupProgress from "./DesktopSetupProgress.vue";
 import { setupUnderWay, useDesktopSetup } from "./desktopSetup";
 import { useProjectHandoff } from "./hostedProject";
 import SetupCompose from "./SetupCompose.vue";
+import SetupAccount from "./SetupAccount.vue";
 import SetupHandoff from "./SetupHandoff.vue";
 import SetupNudge from "./SetupNudge.vue";
 import SetupRunDetails from "./SetupRunDetails.vue";
@@ -310,13 +311,13 @@ const committed = computed(
 // The attach lane found the pasted address already on this account's list: that sandbox opens, and the draft goes the
 // way leaving would take it, judged before `connected` marks this visit finished and so commits it.
 const reopenListed = async (id: string): Promise<void> => {
-    row.discardDraft(committed.value);
+    void row.discardDraft(committed.value);
     await row.connected(id, { attached: true });
 };
 
 // Forgets the row on screen for a new one, and everything derived from it; the old row is discarded as leaving would.
 const startFresh = (): void => {
-    row.discardDraft(committed.value);
+    void row.discardDraft(committed.value);
     row.forget();
     command.forget();
     forgetArrival();
@@ -373,7 +374,9 @@ watch(commandReady, (ready) => {
 
 onMounted(readArrival);
 // Leaving without committing discards the draft: the only exit hook, since beforeunload cannot hold a round trip.
-onUnmounted(() => row.discardDraft(committed.value));
+onUnmounted(() => void row.discardDraft(committed.value));
+// Signing out leaves by a full navigation, which unmounts nothing, so it discards first, while the session can.
+const discardBeforeSignOut = (): Promise<void> => row.discardDraft(committed.value);
 </script>
 
 <template>
@@ -405,6 +408,8 @@ onUnmounted(() => row.discardDraft(committed.value));
                     >
                         <template #icon><Icon name="arrow-left" /></template>
                     </Button>
+                    <!-- The other way off the page, and the only one a first visit has: this page is outside the shell's account menu. -->
+                    <SetupAccount :before-sign-out="discardBeforeSignOut" />
                 </div>
 
                 <!-- One sentence only; the door's headline gets two, but here the loudest thing on screen has to be a rung. -->
@@ -1239,14 +1244,18 @@ onUnmounted(() => row.discardDraft(committed.value));
 .masthead {
     padding-bottom: clamp(0.75rem, 2vw, 1.5rem);
 }
+/* The mark left, the exits right. Wraps where a phone cannot fit the mark and both exits on one line: the last exit
+   takes a line of its own, still right, and each line centers its own items, so the mark stays level with the first. */
 .mast-top {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
+    justify-content: flex-end;
+    gap: 0.25rem 1rem;
     margin-bottom: clamp(1.5rem, 5vw, 2.75rem);
 }
 .mast-brand {
+    margin-right: auto;
     font-size: 1.125rem;
 }
 /* Must not read as an action: the quiet tier already draws it right; this only aligns it with the mark opposite. */

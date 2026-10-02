@@ -5648,6 +5648,10 @@
             "wellNoticeMomentSandbox": "We'll notice the moment your sandbox starts.",
             "whereSandboxRuns": "Where the sandbox runs"
         },
+        "setupAccount": {
+            "signOutFailed": "Couldn't sign out. Try again.",
+            "signedInAs": "Signed in as"
+        },
         "setupCompose": {
             "card": "card.",
             "composeReadsRunOnce": "compose reads. Run it once; after that the sandbox is yours to manage with",

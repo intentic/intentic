@@ -99,7 +99,9 @@ const mintSyncPairing = jest.fn<() => Promise<{ token: string; mode: `sync` | `m
 jest.mock(`../../sandbox/devices/sync/useDesktopSync`, () => ({ mintSyncPairing }));
 jest.mock(`../../sandbox/session/sandboxIdFromToken`, () => ({ sandboxIdFromToken: jest.fn().mockResolvedValue(`0f310c3c4db4`) }));
 jest.mock(`../../../app/analytics`, () => ({ track: jest.fn() }));
-jest.mock(`../../auth/useAuth`, () => ({ useAuth: () => ({ user: ref({ email: `owner@example.com` }) }) }));
+// The masthead's sign-out; the page's own concern is only what it does before and after the session ends.
+const signOut = jest.fn<() => Promise<void>>();
+jest.mock(`../../auth/useAuth`, () => ({ useAuth: () => ({ user: ref({ email: `owner@example.com` }), signOut }) }));
 jest.mock(`../../auth/useGoogleIdentity`, () => ({
     useGoogleIdentity: () => ({ getIdToken: jest.fn().mockResolvedValue(`id-token`), warmIdToken: jest.fn() }),
 }));
@@ -246,6 +248,7 @@ beforeEach(() => {
         return row;
     });
     remove.mockReset().mockResolvedValue(undefined);
+    signOut.mockReset().mockResolvedValue(undefined);
     attach.mockReset().mockResolvedValue(undefined);
     push.mockReset();
     replace.mockReset();
@@ -294,6 +297,61 @@ it(`keeps the sandbox once a machine has been started for it`, async () => {
     await waitFor(() => expect(hostedProvision).toHaveBeenCalledWith(`new`, `tok`));
     leave();
     expect(remove).not.toHaveBeenCalled();
+});
+
+// Signing out leaves by a full navigation, which unmounts nothing, so the draft goes first: after the session has ended
+// there is no account left to delete it with. Where the browser lands is the environment's, as the shell's sign-out.
+describe(`signing out`, () => {
+    const landed = { href: `` };
+    let afterSignOut = ``;
+    beforeEach(() => {
+        landed.href = ``;
+        afterSignOut = window.env.afterSignOut;
+        window.env.afterSignOut = `/login`;
+        stubGlobal(`location`, landed);
+    });
+    afterEach(() => {
+        unstubAllGlobals();
+        window.env.afterSignOut = afterSignOut;
+    });
+
+    it(`is on the page, beside the account it signs out of`, async () => {
+        const el = await mount();
+        expect(el.querySelector(`header`)?.textContent).toContain(`owner@example.com`);
+        expect(buttonLabelled(`Sign out`)?.tagName).toBe(`BUTTON`);
+    });
+
+    it(`discards the draft before the session ends, then leaves`, async () => {
+        const order: string[] = [];
+        remove.mockImplementation(async () => {
+            order.push(`discard`);
+        });
+        signOut.mockImplementation(async () => {
+            order.push(`sign out`);
+        });
+        await mount();
+        buttonLabelled(`Sign out`)!.click();
+        await waitFor(() => expect(landed.href).toBe(`/login`));
+        expect(order).toEqual([`discard`, `sign out`]);
+        expect(remove).toHaveBeenCalledWith(`new`);
+    });
+
+    it(`keeps a sandbox a machine was started for`, async () => {
+        hostedOffer.mockResolvedValue({ enabled: true, remaining: 1 });
+        await mount();
+        await waitFor(() => expect(hostedProvision).toHaveBeenCalledWith(`new`, `tok`));
+        buttonLabelled(`Sign out`)!.click();
+        await waitFor(() => expect(landed.href).toBe(`/login`));
+        expect(remove).not.toHaveBeenCalled();
+    });
+
+    it(`stays on the page and says so when the platform refuses`, async () => {
+        signOut.mockRejectedValue(new Error(`offline`));
+        const el = await mount();
+        buttonLabelled(`Sign out`)!.click();
+        await waitFor(() => expect(el.querySelector(`[role="alert"]`)?.textContent).toContain(`Couldn't sign out`));
+        expect(landed.href).toBe(``);
+    });
 });
 
 it(`never discards a sandbox it merely resumed`, async () => {

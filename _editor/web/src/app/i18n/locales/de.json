@@ -4068,6 +4068,10 @@
             "wellNoticeMomentSandbox": "Wir merken es in dem Moment, in dem Ihre Sandbox startet.",
             "whereSandboxRuns": "Wo die Sandbox läuft"
         },
+        "setupAccount": {
+            "signOutFailed": "Abmelden fehlgeschlagen. Versuch es noch einmal.",
+            "signedInAs": "Angemeldet als"
+        },
         "setupCompose": {
             "card": "-Karte.",
             "composeReadsRunOnce": "compose liest. Führen Sie es einmal aus; danach gehört die Sandbox Ihnen, verwalten Sie sie mit",

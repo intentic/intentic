@@ -86,16 +86,17 @@ export const useSetupRow = ({ sandbox, enter, handOff, name }: SetupRowHost) => 
         await enter();
     };
 
-    // Deletes the draft this visit minted, and its tunnel, unless an act committed it; fire-and-forget, since every
-    // caller is already leaving. A row outliving a failed delete is what the switcher's unfinished section catches.
-    const discardDraft = (committed: boolean): void => {
+    // Deletes the draft this visit minted, and its tunnel, unless an act committed it. Never rejects; most callers are
+    // already leaving and let it run, and only signing out waits, since the delete needs the session it is ending. A row
+    // outliving a failed delete is what the switcher's unfinished section catches.
+    const discardDraft = async (committed: boolean): Promise<void> => {
         const draft = created.value;
         if (draft === null || !createdHere.value || committed) {
             return;
         }
         createdHere.value = false;
         created.value = null;
-        void sandbox.remove(draft.id).catch((failure: unknown) => console.warn(`setup: discarding draft sandbox ${draft.id} failed`, failure));
+        await sandbox.remove(draft.id).catch((failure: unknown) => console.warn(`setup: discarding draft sandbox ${draft.id} failed`, failure));
     };
 
     // A new machine is expected on the row: what the old one said about itself no longer describes it.

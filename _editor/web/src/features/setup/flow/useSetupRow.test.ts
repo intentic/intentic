@@ -86,7 +86,7 @@ describe(`a draft`, () => {
     it(`is discarded, with its platform row, when this visit minted it and nothing committed it`, async () => {
         const { sandbox, row } = stage();
         await row.autoCreate();
-        row.discardDraft(false);
+        void row.discardDraft(false);
         expect(sandbox.remove.mock.calls).toEqual([[`new`]]);
         expect({ created: row.created.value, createdHere: row.createdHere.value }).toEqual({ created: null, createdHere: false });
     });
@@ -95,8 +95,8 @@ describe(`a draft`, () => {
         const { sandbox, row } = stage();
         sandbox.remove.mockRejectedValueOnce(new Error(`offline`));
         await row.autoCreate();
-        row.discardDraft(false);
-        await nextTick();
+        // Signing out awaits it, and a delete that failed must not keep the reader signed in.
+        await expect(row.discardDraft(false)).resolves.toBeUndefined();
         expect(sandbox.remove).toHaveBeenCalledTimes(1);
     });
 });

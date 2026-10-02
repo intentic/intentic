@@ -4055,6 +4055,10 @@
             "wellNoticeMomentSandbox": "Nous le verrons dès l'instant où votre sandbox démarre.",
             "whereSandboxRuns": "Où tourne le sandbox"
         },
+        "setupAccount": {
+            "signOutFailed": "Impossible de se déconnecter. Réessayez.",
+            "signedInAs": "Connecté en tant que"
+        },
         "setupCompose": {
             "card": ".",
             "composeReadsRunOnce": "que compose lit. Lancez-la une fois ; ensuite le sandbox est à vous, gérez-le avec",

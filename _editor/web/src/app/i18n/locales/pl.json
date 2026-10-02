@@ -5408,6 +5408,10 @@
             "wellNoticeMomentSandbox": "Zauważymy to w chwili, gdy Twój sandbox wystartuje.",
             "whereSandboxRuns": "Gdzie działa sandbox"
         },
+        "setupAccount": {
+            "signOutFailed": "Nie udało się wylogować. Spróbuj ponownie.",
+            "signedInAs": "Zalogowano jako"
+        },
         "setupCompose": {
             "card": ".",
             "composeReadsRunOnce": "który czyta compose. Uruchom to raz; potem sandbox jest Twój i zarządzasz nim przez",

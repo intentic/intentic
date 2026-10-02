@@ -4086,6 +4086,10 @@
             "wellNoticeMomentSandbox": "Nos daremos cuenta en el momento en que tu sandbox arranque.",
             "whereSandboxRuns": "Dónde se ejecuta el sandbox"
         },
+        "setupAccount": {
+            "signOutFailed": "No se pudo cerrar la sesión. Inténtalo de nuevo.",
+            "signedInAs": "Sesión iniciada como"
+        },
         "setupCompose": {
             "card": ".",
             "composeReadsRunOnce": "que lee compose. Ejecútalo una vez; después el sandbox es tuyo y lo gestionas con",

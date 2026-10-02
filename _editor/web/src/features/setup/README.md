@@ -31,3 +31,5 @@ The `/setup` page: it makes the sandbox row a visit sets up, decides by itself w
 - [flow/useHostedLane.ts](flow/useHostedLane.ts) — the machine of ours on the row: provision, wait, restart, hand back.
 - [hostedProject.ts](hostedProject.ts) — the hand-over of a hosted project's folder to the desktop app.
 - [Setup.vue](Setup.vue) — the page that wires the flows together.
+- [SetupAccount.vue](SetupAccount.vue) — the masthead's account and its sign-out, the page being outside the shell's
+  account menu; the page discards its draft row first, while the session can still delete it.
