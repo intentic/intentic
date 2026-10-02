@@ -7,14 +7,13 @@ import {
     MarkdownDocument,
     Modal,
     Notice,
-    type NoticeModel,
     Row,
     RowGroup,
     RowNote,
     SegmentedControl,
     type Tip,
 } from "@intentic/ui";
-import { noticeFrom, useAsyncAction } from "@intentic/ui/async";
+import { useAsyncAction } from "@intentic/ui/async";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref } from "vue";
 import { sandboxRpc } from "../../client/sandboxRpc";
@@ -29,7 +28,9 @@ import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
 
-const { settings, patch, save } = useSandboxSettings();
+// A refused write has already been put back on screen (useSandboxSettings); without `refusal` beside the prompt, the old
+// value simply reappears and the press looks like it did nothing.
+const { settings, patch, save, refusal } = useSandboxSettings();
 
 const PROMPT_MODES = computed((): { label: string; value: SystemPromptMode }[] => [
     { label: `Intentic`, value: `intentic` },
@@ -43,11 +44,6 @@ const promptMode = computed<SystemPromptMode>(() => settings.value?.systemPrompt
 const { draft: prompt, stored } = useTrimmedDraft(() => settings.value?.systemPrompt);
 
 const savePrompt = (text: string): void => patch({ systemPrompt: text.trim() });
-// A refused write has already been put back on screen (useSandboxSettings); without its reason here, the old value
-// simply reappears and the press looks like it did nothing.
-const saveError = computed<NoticeModel | undefined>(() =>
-    save.error.value === null ? undefined : noticeFrom(save.error.value, t(`sandbox.agentInstructions.couldntSave`)),
-);
 const setPromptMode = (mode: string): void => patch({ systemPromptMode: mode as SystemPromptMode });
 
 const builtinPrompts = ref<Partial<Record<string, BuiltinPromptText>>>({});
@@ -210,7 +206,7 @@ const viewPromptTip = computed((): Tip => ({
             :placeholder="t(`sandbox.agentInstructions.writeAssistantsSystemPrompt`)"
             @save="savePrompt"
         />
-        <RowNote v-if="saveError !== undefined" variant="block"><Notice :of="saveError" /></RowNote>
+        <RowNote v-if="refusal !== undefined" variant="block"><Notice :of="refusal" /></RowNote>
     </RowGroup>
 
     <ConfirmDialog

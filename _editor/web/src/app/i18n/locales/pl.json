@@ -2719,7 +2719,6 @@
             "builtInSystemPrompts": "Wbudowane prompty systemowe",
             "claudeCodesOwnPrompt": "Własny prompt Claude Code, tak jak jest dostarczany w CLI Twojego sandboxa.",
             "claudeCodesOwnPrompt2": "Własny prompt Claude Code, odczytany z CLI w Twoim sandboxie",
-            "couldntSave": "Nie udało się zapisać zmiany",
             "custom": "Własny",
             "eitherWayAppsOwn": "Tak czy inaczej własne wskazówki tej aplikacji o jej pytaniach, panelu listy zadań i narzędziach przeglądarki są dokładane na wierzch; tylko własny prompt to pomija.",
             "intenticsOwnPromptDefault": "Własny prompt Intentic: domyślny i ten, który dostrajamy do tej aplikacji. Wybierz Intentic, a będzie dalej aktualizowany razem z aplikacją; rozgałęź go, a od tej chwili należy do Ciebie.",
@@ -2782,7 +2781,6 @@
             "advanced": "Zaawansowane",
             "autoReadsIt": "Auto je czyta",
             "clearModels": "Wyczyść modele",
-            "couldntSave": "Nie udało się zapisać zmiany",
             "guidance": "Wskazówki",
             "guidanceSet": "Wskazówki ustawione",
             "guided": "kierowany",
@@ -4967,6 +4965,9 @@
             "couldntRead": "Nie udało się odczytać pliku {file}.",
             "couldntSave": "Nie udało się zapisać pliku {file}.",
             "couldntSaveMemory": "Nie udało się zapisać pamięci."
+        },
+        "useSandboxSettings": {
+            "couldntSave": "Nie udało się zapisać zmiany"
         },
         "diagnosis": {
             "chainLabel": "Gdzie zrywa się połączenie",

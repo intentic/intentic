@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { ProjectInstallMode } from "@intentic/sandbox-contract";
-import { Row, RowGroup, SegmentedControl } from "@intentic/ui";
+import { Notice, Row, RowGroup, RowNote, SegmentedControl } from "@intentic/ui";
 import { computed } from "vue";
 import { useSandboxSettings } from "../../overview/useSandboxSettings";
 import { useT } from "@intentic/ui/i18n";
@@ -10,7 +10,7 @@ import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
 
-const { settings, patch } = useSandboxSettings();
+const { settings, patch, refusal } = useSandboxSettings();
 
 // Least to most restrictive, the order the judge's switch above reads in.
 const MODES = computed(() => [
@@ -47,5 +47,6 @@ const note = computed(() => {
                 <p class="text-2xs text-muted">{{ note }}</p>
             </template>
         </Row>
+        <RowNote v-if="refusal !== undefined" variant="block"><Notice :of="refusal" /></RowNote>
     </RowGroup>
 </template>

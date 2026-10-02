@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, Row, RowGroup, SegmentedControl } from "@intentic/ui";
+import { Button, Notice, Row, RowGroup, RowNote, SegmentedControl } from "@intentic/ui";
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
 import { modelChoiceLabel } from "../../../chat/models/modelPins";
@@ -12,7 +12,7 @@ import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
 
-const { settings, patch } = useSandboxSettings();
+const { settings, patch, refusal } = useSandboxSettings();
 const judge = useRoleModel(`safety-judge`);
 
 // Off, watch, on, in escalating order; watch records a verdict but never holds the command.
@@ -63,5 +63,6 @@ const judgeChain = computed<readonly string[]>(() => judge.chain.value.map(model
                 </div>
             </template>
         </Row>
+        <RowNote v-if="refusal !== undefined" variant="block"><Notice :of="refusal" /></RowNote>
     </RowGroup>
 </template>

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { AdmissionRule } from "@intentic/sandbox-contract";
-import { ui, Picker, Row, RowGroup } from "@intentic/ui";
+import { ui, Notice, Picker, Row, RowGroup, RowNote } from "@intentic/ui";
 import { computed } from "vue";
 import { useSandboxSettings } from "../../overview/useSandboxSettings";
 import { commitCount } from "../models/numberInputs";
@@ -14,7 +14,7 @@ import { useT } from "@intentic/ui/i18n";
 // SandboxSettingsSchema so the box never accepts a number the save would reject.
 const t = useT();
 
-const { settings, patch } = useSandboxSettings();
+const { settings, patch, refusal } = useSandboxSettings();
 
 const AT_ONCE = { min: 1, max: 200 };
 const PER_TURN = { min: 1, max: 2000 };
@@ -115,5 +115,6 @@ const spawnDenied = computed(() => posture.value === `deny`);
                 />
             </template>
         </Row>
+        <RowNote v-if="refusal !== undefined" variant="block"><Notice :of="refusal" /></RowNote>
     </RowGroup>
 </template>

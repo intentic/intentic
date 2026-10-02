@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { localZone, sameClock, UTC, asZone } from "@intentic/sandbox-contract/time";
-import { Row, RowGroup } from "@intentic/ui";
+import { Notice, Row, RowGroup, RowNote } from "@intentic/ui";
 import { computed } from "vue";
 import { useSandboxSettings } from "../../overview/useSandboxSettings";
 import { useT } from "@intentic/ui/i18n";
@@ -13,7 +13,7 @@ import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
 
-const { settings, patch } = useSandboxSettings();
+const { settings, patch, refusal } = useSandboxSettings();
 
 const ZONE_OPTIONS = Intl.supportedValuesOf(`timeZone`);
 
@@ -59,5 +59,6 @@ const setZone = (event: Event): void => {
                 </select>
             </template>
         </Row>
+        <RowNote v-if="refusal !== undefined" variant="block"><Notice :of="refusal" /></RowNote>
     </RowGroup>
 </template>

@@ -9,8 +9,7 @@ import {
     type ModelRoleSpec,
     modelPinKey,
 } from "@intentic/sandbox-contract";
-import { Button, MarkdownDocument, Modal, Notice, type NoticeModel, RowGroup, SegmentedControl } from "@intentic/ui";
-import { noticeFrom } from "@intentic/ui/async";
+import { Button, MarkdownDocument, Modal, Notice, RowGroup, SegmentedControl } from "@intentic/ui";
 import Checkbox from "primevue/checkbox";
 import { computed, nextTick, ref, shallowRef, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
@@ -29,7 +28,8 @@ import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
 
-const { settings, patch, save } = useSandboxSettings();
+// A refused write is put back on screen by useSandboxSettings; `refusal` says why here, or the press reads as nothing.
+const { settings, patch, save, refusal } = useSandboxSettings();
 const loaded = computed(() => settings.value !== undefined);
 
 // The one job on this page that is not answered by a model list alone: Auto also reads what it is told to weigh. It
@@ -41,10 +41,6 @@ const ROUTER = `model-router`;
 const { draft: guidance, stored: storedGuidance } = useTrimmedDraft(() => settings.value?.autoModelGuidance);
 const guidanceSet = computed(() => (storedGuidance.value ?? ``).trim() !== ``);
 const saveGuidance = (text: string): void => patch({ autoModelGuidance: text.trim() });
-// A refused write is put back on screen by useSandboxSettings; said here, or the press reads as having done nothing.
-const saveError = computed<NoticeModel | undefined>(() =>
-    save.error.value === null ? undefined : noticeFrom(save.error.value, t(`sandbox.agentModels.couldntSave`)),
-);
 // Written guidance is silent state: it steers every chat that opens on Auto and no model list on this page shows it.
 // The chip says the job's state, not the button's name — the two sit an inch apart and must not read as one word twice.
 const guidanceBadge = computed(() =>
@@ -503,7 +499,7 @@ const setPickerOpen = (open: boolean): void => {
             :placeholder="t(`sandbox.agentModels.whatYoudTellSomebody`)"
             @save="saveGuidance"
         />
-        <Notice v-if="saveError !== undefined" :of="saveError" class="mt-3" />
+        <Notice v-if="refusal !== undefined" :of="refusal" class="mt-3" />
     </Modal>
 
     <!-- Mount once so the picker can place itself on open. -->

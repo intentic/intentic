@@ -2959,7 +2959,6 @@
             "builtInSystemPrompts": "Built-in system prompts",
             "claudeCodesOwnPrompt": "Claude Code's own prompt, as shipped in your sandbox's CLI.",
             "claudeCodesOwnPrompt2": "Claude Code's own prompt, read out of the CLI in your sandbox",
-            "couldntSave": "Couldn't save your change",
             "custom": "Custom",
             "eitherWayAppsOwn": "Either way, this app's own guidance about its questions, checklist panel and browser tools is added on top; only a custom prompt drops that.",
             "intenticsOwnPromptDefault": "Intentic's own prompt: the default, and the one we tune for this app. Choose Intentic and it keeps updating with the app; fork it and you own it from here.",
@@ -3022,7 +3021,6 @@
             "advanced": "Advanced",
             "autoReadsIt": "Auto reads it",
             "clearModels": "Clear models",
-            "couldntSave": "Couldn't save your change",
             "guidance": "Guidance",
             "guidanceSet": "Guidance set",
             "guided": "guided",
@@ -5207,6 +5205,9 @@
             "couldntRead": "Couldn't read {file}.",
             "couldntSave": "Couldn't save {file}.",
             "couldntSaveMemory": "Couldn't save memory."
+        },
+        "useSandboxSettings": {
+            "couldntSave": "Couldn't save your change"
         },
         "diagnosis": {
             "chainLabel": "Where the connection breaks",

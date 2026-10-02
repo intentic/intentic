@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Picker, Row, RowGroup, RowNote } from "@intentic/ui";
+import { Notice, Picker, Row, RowGroup, RowNote } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
@@ -14,7 +14,7 @@ import { HERE, kindDetail, kindTitle, targetOptions, unavailableRunner, withComm
 // owner adds shows up here too. A runner is added from Devices, per machine.
 const t = useT();
 
-const { settings, patch } = useSandboxSettings();
+const { settings, patch, refusal } = useSandboxSettings();
 const { query: kindsQuery } = useSandboxQuery(rpcQuery(`offload.kinds`));
 const { runners } = useRunners();
 
@@ -59,5 +59,6 @@ const setKind = (kind: string, runner: string | undefined): void => {
                 <p class="text-2xs text-muted">{{ unavailableRunner(offload.commands[kind.id], runners) }}</p>
             </template>
         </Row>
+        <RowNote v-if="refusal !== undefined" variant="block"><Notice :of="refusal" /></RowNote>
     </RowGroup>
 </template>

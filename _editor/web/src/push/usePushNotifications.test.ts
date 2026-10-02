@@ -42,15 +42,24 @@ const manager = { getSubscription: jest.fn(), subscribe: jest.fn() };
 
 // Tests run in the node environment, so the browser surface the composable feature-detects has to be stood up by hand,
 // including `window`, which `supported()` probes for PushManager and Notification.
-const stubBrowser = (permission: NotificationPermission, brave: boolean): void => {
+const register = jest.fn(async () => ({ pushManager: manager }));
+const stubBrowser = (permission: NotificationPermission, brave: boolean, desktop = false): void => {
     const notification = { permission, requestPermission: async () => permission };
     stubGlobal(`navigator`, {
-        serviceWorker: { register: jest.fn(async () => ({ pushManager: manager })) },
+        serviceWorker: { register },
         ...(brave ? { brave: { isBrave: async () => true } } : {}),
     });
     stubGlobal(`Notification`, notification);
     // `supported()` only probes for the names, so a placeholder value is enough for PushManager.
-    stubGlobal(`window`, { PushManager: {}, Notification: notification });
+    const shell: Pick<Window, `__INTENTIC_DESKTOP__`> & { readonly PushManager: object; readonly Notification: typeof notification } = {
+        PushManager: {},
+        Notification: notification,
+    };
+    if (desktop) {
+        // The desktop app's window, marked the way Tauri injects it (desktop.ts).
+        shell.__INTENTIC_DESKTOP__ = { version: `1.322.0`, installId: `install`, update: null, notices: true };
+    }
+    stubGlobal(`window`, shell);
 };
 
 beforeEach(() => {
@@ -60,6 +69,21 @@ beforeEach(() => {
     config.mockResolvedValue({ publicKey: KEY_A, subscribed: false });
     subscribe.mockResolvedValue({ ok: true });
     unsubscribe.mockResolvedValue({ ok: true });
+});
+
+test(`the desktop app's window is not offered push, though its webview has every API for it`, async () => {
+    // WebView2 exposes the service worker, PushManager and Notification, has no push service behind them, and blocks the
+    // permission without a prompt: offered the switch, the reader got a "blocked" nobody chose.
+    stubBrowser(`denied`, false, true);
+    const push = usePushNotifications();
+    expect(push.state.value).toBe(`unsupported`);
+    expect(push.canToggle.value).toBe(false);
+
+    await push.refresh();
+    expect(push.state.value).toBe(`unsupported`);
+    // Nothing is set up in the window on the way to that answer: no worker registered, the daemon not asked.
+    expect(register).not.toHaveBeenCalled();
+    expect(config).not.toHaveBeenCalled();
 });
 
 test(`does not call notifications off before checking the registration`, async () => {

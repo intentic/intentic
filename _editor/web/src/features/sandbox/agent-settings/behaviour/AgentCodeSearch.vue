@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { FIELD_NOTES_FILE } from "@intentic/constants";
-import { Row, RowGroup } from "@intentic/ui";
+import { Notice, Row, RowGroup, RowNote } from "@intentic/ui";
 import { formatDayMonth } from "@intentic/ui/format";
 import { RouterLink } from "vue-router";
 import ToggleSwitch from "primevue/toggleswitch";
@@ -18,7 +18,7 @@ import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
 
-const { settings, patch } = useSandboxSettings();
+const { settings, patch, refusal } = useSandboxSettings();
 const { savings } = useSavings({});
 
 // Session state: the holdout flips whole conversations, never individual turns.
@@ -196,5 +196,6 @@ const notesSchedule = computed<string>(() => {
                 </div>
             </template>
         </Row>
+        <RowNote v-if="refusal !== undefined" variant="block"><Notice :of="refusal" /></RowNote>
     </RowGroup>
 </template>

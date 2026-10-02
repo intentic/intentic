@@ -1,5 +1,8 @@
 import { sandboxRef, sandboxScopeGuard } from "@intentic/extension-api";
 import type { SandboxSettings } from "@intentic/api-contract";
+import type { NoticeModel } from "@intentic/ui";
+import { noticeFrom } from "@intentic/ui/async";
+import { t } from "@intentic/ui/i18n";
 import { useMutation } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { rpcQuery } from "../client/rpcQuery";
@@ -77,6 +80,13 @@ export function useSandboxSettings() {
 
     const settings = computed<SandboxSettings | undefined>(() => query.data.value);
 
+    // This caller's last save as the daemon refused it, in the daemon's own words, for the group whose control made it.
+    // The write is already rolled back on screen (onError above), so without this a switch flicks back and the press
+    // reads as nothing at all. Gone once the next save starts, which is when the mutation lets go of its error.
+    const refusal = computed<NoticeModel | undefined>(() =>
+        save.error.value === null ? undefined : noticeFrom(save.error.value, t(`sandbox.useSandboxSettings.couldntSave`)),
+    );
+
     // The whole object, with just these fields changed, since the route replaces it entirely; settings not yet loaded
     // means nothing to spread, so the write is dropped instead of inventing a base.
     const patch = (fields: Partial<SandboxSettings>): void => {
@@ -93,6 +103,7 @@ export function useSandboxSettings() {
         error,
         // Set when the last successful save came back missing a field: the daemon is older than this app.
         dropped,
+        refusal,
         save,
     };
 }

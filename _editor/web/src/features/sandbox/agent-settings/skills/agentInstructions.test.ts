@@ -6,7 +6,9 @@ import type { BuiltinPromptText, SandboxSettings } from "@intentic/api-contract"
 import { SandboxSettingsSchema } from "@intentic/api-contract";
 import { SYSTEM_PROMPT_MAX } from "@intentic/sandbox-contract";
 import PrimeVue from "primevue/config";
-import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
+import { type App, computed, createApp, defineComponent, h, nextTick, ref } from "vue";
+import { noticeFrom } from "@intentic/ui/async";
+import { t } from "@intentic/ui/i18n";
 import { IconStub } from "@intentic/ui/testing";
 import * as uiOriginal from "@intentic/ui";
 import * as actualSandboxRpc from "../../client/sandboxRpc";
@@ -26,6 +28,8 @@ jest.mock(`../../overview/useSandboxSettings`, () => ({
         dropped: ref(undefined),
         error: ref(undefined),
         isLoading: ref(false),
+        // What the composable makes of a refused save, in its own words: this page only places it.
+        refusal: computed(() => (saveError.value === null ? undefined : noticeFrom(saveError.value, t(`sandbox.useSandboxSettings.couldntSave`)))),
         save: { mutate: patch, isPending: ref(false), error: saveError },
     }),
 }));

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { type KeepWarmSettings, KeepWarmSettingsSchema, type LimitPolicy, type RetryPolicy, type TurnBreak, type TurnBreakPolicy } from "@intentic/sandbox-contract";
-import { Row, RowGroup, SegmentedControl } from "@intentic/ui";
+import { Notice, Row, RowGroup, RowNote, SegmentedControl } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed } from "vue";
 import { breakAnswers, breakLabel } from "../../../chat/run/turnBreak";
@@ -14,7 +14,9 @@ import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
 
-const { settings, patch } = useSandboxSettings();
+const { settings, patch, refusal } = useSandboxSettings();
+// Keep-warm's rows save through a second instance, so a refused write is said under keep-warm, not the turn breaks.
+const { patch: patchWarm, refusal: keepWarmRefusal } = useSandboxSettings();
 
 // Built in a computed, not a table at import: `t` reads the active language when it is CALLED
 // (docs/architecture/languages.md).
@@ -51,7 +53,7 @@ const setLimitMoveCarryUnder = (event: Event): void => {
 
 // keep-warm's knobs travel as one object, so every row writes the whole of it back.
 const keepWarm = computed((): KeepWarmSettings => settings.value?.keepWarm ?? KeepWarmSettingsSchema.parse({}));
-const patchKeepWarm = (change: Partial<KeepWarmSettings>): void => patch({ keepWarm: { ...keepWarm.value, ...change } });
+const patchKeepWarm = (change: Partial<KeepWarmSettings>): void => patchWarm({ keepWarm: { ...keepWarm.value, ...change } });
 
 // One clamp for the three numeric keep-warm rows: an emptied field takes the bound, and the input shows what was kept.
 const setBounded = (key: `hours` | `minTokens` | `reserve`, min: number, max: number) => (event: Event): void => {
@@ -151,6 +153,7 @@ const setAutomationFailureLimit = (event: Event): void => {
                 />
             </template>
         </Row>
+        <RowNote v-if="refusal !== undefined" variant="block"><Notice :of="refusal" /></RowNote>
     </RowGroup>
     <!-- Off by default: each refresh spends the account's allowance on a chat nobody is using yet. -->
     <RowGroup :label="t(`sandbox.agentRecovery.keepWarmGroup`)" equal-rows>
@@ -205,5 +208,6 @@ const setAutomationFailureLimit = (event: Event): void => {
                 />
             </template>
         </Row>
+        <RowNote v-if="keepWarmRefusal !== undefined" variant="block"><Notice :of="keepWarmRefusal" /></RowNote>
     </RowGroup>
 </template>

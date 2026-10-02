@@ -6,7 +6,7 @@ import { useSandboxSettings } from "../overview/useSandboxSettings";
 // well-known id (rules.ts NAMED_RULES), riding useSandboxSettings' read and write.
 
 export function useRules() {
-    const { settings, patch } = useSandboxSettings();
+    const { settings, patch, refusal } = useSandboxSettings();
 
     const rules = computed<Rule[]>(() => settings.value?.rules ?? []);
 
@@ -27,5 +27,6 @@ export function useRules() {
         }
     };
 
-    return { settings, byId, upsert, remove, setEnabled };
+    // Rule writes ride their own save, so what a refused one said is this caller's to show (useSandboxSettings).
+    return { settings, byId, upsert, remove, setEnabled, refusal };
 }

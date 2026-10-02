@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { formatTokens, Row, RowGroup, Verdict } from "@intentic/ui";
+import { formatTokens, Notice, Row, RowGroup, RowNote, Verdict } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed } from "vue";
 import { relativeTime } from "../../../chat/models/catalog";
@@ -16,7 +16,7 @@ import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
 
-const { settings, patch } = useSandboxSettings();
+const { settings, patch, refusal } = useSandboxSettings();
 const { savings } = useSavings({});
 
 // `outputCleaners` is a spec string (`` = all, `off` = disabled); finer specs come from the checklist below.
@@ -199,5 +199,6 @@ const savedTokens = computed(() => savedByCleaner(savings.value?.input));
                 </div>
             </template>
         </Row>
+        <RowNote v-if="refusal !== undefined" variant="block"><Notice :of="refusal" /></RowNote>
     </RowGroup>
 </template>

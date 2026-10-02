@@ -100,6 +100,29 @@ test("a rejected save rolls back, so a switch never claims a setting the sandbox
     await waitFor(() => expect(settings.value).toEqual(DEFAULTS));
 });
 
+test("a refused save says why, in the daemon's words, until the next save is tried", async () => {
+    // What the daemon answers over a settings.json this build cannot read: the read served defaults, every write refused.
+    const unreadable = `settings.json could not be read by this build (the file does not match what this build expects); fix or remove the file before anything can be written to it`;
+    // Every read lands here, since the refusal is only reported once the reconciling read is back.
+    get.mockResolvedValue(DEFAULTS);
+    set.mockRejectedValue(new SandboxHttpError(409, unreadable));
+    const { patch, settings, refusal } = mounted(() => useSandboxSettings());
+    await waitFor(() => expect(settings.value).toEqual(DEFAULTS));
+    expect(refusal.value).toBeUndefined();
+
+    patch({ workspaceMap: true });
+
+    await waitFor(() => expect(refusal.value?.detail).toBe(unreadable));
+    expect(refusal.value?.title).toBe(`Couldn't save your change`);
+    expect(refusal.value?.tone).toBe(`danger`);
+    expect(settings.value?.workspaceMap).toBe(false);
+
+    // A second press is a new attempt: the old reason goes while it runs.
+    set.mockImplementation(() => NEVER);
+    patch({ workspaceMap: true });
+    await waitFor(() => expect(refusal.value).toBeUndefined());
+});
+
 test("patch sends the whole settings object with just the named fields changed", async () => {
     daemon(() => NEVER);
     const { patch, settings } = mounted(() => useSandboxSettings());

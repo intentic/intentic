@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Row, RowGroup } from "@intentic/ui";
+import { Notice, Row, RowGroup, RowNote } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed } from "vue";
 import { useSandboxSettings } from "../../overview/useSandboxSettings";
@@ -12,7 +12,7 @@ import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
 
-const { settings, patch } = useSandboxSettings();
+const { settings, patch, refusal } = useSandboxSettings();
 const { options: repos } = useRepos();
 
 const enabled = computed<readonly string[]>(() => settings.value?.changelogRepos ?? []);
@@ -39,5 +39,6 @@ const repoLabel = (repo: string): string => (repo === `root` ? `Workspace reposi
                 />
             </template>
         </Row>
+        <RowNote v-if="refusal !== undefined" variant="block"><Notice :of="refusal" /></RowNote>
     </RowGroup>
 </template>

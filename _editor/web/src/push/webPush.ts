@@ -1,4 +1,5 @@
 import type { PushChannel } from "@intentic/sandbox-contract";
+import { desktopApp } from "../app/environments/desktop";
 import type { Minted, PushDriver } from "./driver.js";
 
 // Web push, from the browser's side: the transport for every real browser, including the Android TWA (Chrome). The
@@ -80,8 +81,14 @@ const mint = async (publicKey: () => Promise<string>): Promise<Minted> => {
     return { outcome: `granted`, channel };
 };
 
+// Never inside the desktop app's own window, whatever it exposes. WebView2 (Windows) has every one of these APIs and no
+// push service behind them, and refuses the notification permission without asking anyone, so offering the switch
+// there ended on a "blocked" nobody chose, held on screen. WebKitGTK (Linux) has none of them. A build that puts up the
+// system's own notifications stands in for push there (desktopNotices.ts).
+const pushCapable = (): boolean => `serviceWorker` in navigator && `PushManager` in window && `Notification` in window;
+
 export const webPushDriver: PushDriver = {
-    supported: () => `serviceWorker` in navigator && `PushManager` in window && `Notification` in window,
+    supported: () => desktopApp() === undefined && pushCapable(),
     denied: async () => Notification.permission === `denied`,
     localId: async () => (await localSubscription())?.endpoint ?? null,
     bound: async (publicKey) => {

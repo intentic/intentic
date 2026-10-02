@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Button, Row, RowGroup } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
-import { computed, onMounted, watch } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { usePushNotifications } from "../../push/usePushNotifications";
 import { type Chime, playChime } from "../../shell/browser-tab/chimes";
 import { sendTestNotice } from "../../shell/browser-tab/desktopSignal";
@@ -21,6 +21,12 @@ const t = useT();
 const { state, busy, error, delivered, canToggle, enable, disable, sendTest } = usePushNotifications();
 
 const enabled = computed(() => state.value === `on`);
+// The switch shows where a press is taking it while the chain runs, then where it landed. PrimeVue's ToggleSwitch keeps
+// its own copy of a press and lets go of it only when its model changes, so a refusal that leaves `state` off (a
+// blocked permission, a dismissed prompt, a push service that would not register) held the switch on, and a block
+// disabled it there for good.
+const pressed = ref<boolean | undefined>(undefined);
+const shown = computed(() => pressed.value ?? enabled.value);
 
 // Proves only the daemon's half; a missing notification points to this device's own notification settings.
 const sent = computed(() => {
@@ -31,7 +37,15 @@ const sent = computed(() => {
     return `Sent to ${where}. If nothing appeared, the send worked and your system swallowed it. Check notification settings and Do Not Disturb for your browser.`;
 });
 
-const toggle = (next: boolean): void => void (next ? enable() : disable());
+const settle = async (next: boolean): Promise<void> => {
+    pressed.value = next;
+    try {
+        await (next ? enable() : disable());
+    } finally {
+        pressed.value = undefined;
+    }
+};
+const toggle = (next: boolean): void => void settle(next);
 
 // Inside a desktop app that puts up the system's notifications and marks its icon (desktopSignal.ts, desktopBadge.ts):
 // its window takes no push, has no tab and lives in the tray, so these are the app's own surfaces for the same news.
@@ -144,7 +158,7 @@ const status = computed(() => {
         <div class="flex flex-col gap-2">
             <RowGroup :label="t(`settings.settingsNotifications.pushNotifications`)" equal-rows>
                 <Row icon="bolt" :title="t(`settings.settingsNotifications.notifyDevice`)" :description="status">
-                    <template #control><ToggleSwitch :model-value="enabled" :disabled="!canToggle" @update:model-value="toggle" /></template>
+                    <template #control><ToggleSwitch :model-value="shown" :disabled="!canToggle" @update:model-value="toggle" /></template>
                 </Row>
                 <Row v-if="enabled" icon="send" :title="t(`settings.settingsNotifications.sendTest`)">
                     <template #control>

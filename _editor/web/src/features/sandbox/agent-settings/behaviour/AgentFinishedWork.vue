@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Row, RowGroup, SegmentedControl } from "@intentic/ui";
+import { Notice, Row, RowGroup, RowNote, SegmentedControl } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { useSandboxSettings } from "../../overview/useSandboxSettings";
 import { autoLandRule, autoVersionRule, NAMED_RULES } from "../../environment/rules";
@@ -12,8 +12,10 @@ import { computed } from "vue";
 
 const t = useT();
 
-const { settings, patch } = useSandboxSettings();
-const { byId, upsert, remove } = useRules();
+const { settings, patch, refusal } = useSandboxSettings();
+const { byId, upsert, remove, refusal: rulesRefusal } = useRules();
+// Two saves write this group, the settings' own and the rules'; either one refused is said once, under the group.
+const groupRefusal = computed(() => refusal.value ?? rulesRefusal.value);
 
 // A verdict rule (allow/hold, the same vocabulary as permission rules), not a bool: the landing pass always
 // runs, the rule decides which way. No rule means held, so switching off deletes the rule rather than writing `hold`.
@@ -93,5 +95,6 @@ const RETENTION_OPTIONS = computed(() => [
                 />
             </template>
         </Row>
+        <RowNote v-if="groupRefusal !== undefined" variant="block"><Notice :of="groupRefusal" /></RowNote>
     </RowGroup>
 </template>
