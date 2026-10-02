@@ -1,4 +1,5 @@
 import { noticeFrom, noticeOf } from "@intentic/ui/async";
+import { t } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
 import type { useSandbox } from "../../sandbox/client/useSandbox";
 import { normalizeDaemonUrl } from "../../../lib/daemonUrl";
@@ -79,7 +80,7 @@ export const useAttachLane = ({ sandbox, row, minted, getIdToken, probe, reopen 
         try {
             const idToken = await getIdToken();
             if (idToken === undefined) {
-                error.value = noticeOf(`Sign in with Google to reach your sandbox.`);
+                error.value = noticeOf(t(`setup.useAttachLane.signInFirst`));
                 return;
             }
             const token = connectToken();
@@ -100,7 +101,7 @@ export const useAttachLane = ({ sandbox, row, minted, getIdToken, probe, reopen 
                 await row.connected(bound, { attached: true });
             }
         } catch (err) {
-            error.value = noticeFrom(err, `Could not connect your sandbox.`);
+            error.value = noticeFrom(err, t(`setup.useAttachLane.connectFailed`));
         } finally {
             attaching.value = false;
         }

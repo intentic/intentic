@@ -7,12 +7,10 @@ export const normalizeDaemonUrl = (raw: string): string | undefined => {
     }
     // A bare hostname parses as a URL only with a scheme; assumes https so an unscheme pasted domain still works.
     const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
-    let url: URL;
-    try {
-        url = new URL(withScheme);
-    } catch {
+    if (!URL.canParse(withScheme)) {
         return undefined;
     }
+    const url = new URL(withScheme);
     // A hostname with no dot is a typo, not a domain (`localhost` included); http can't reach this HTTPS app.
     if (url.protocol !== `https:` || !url.hostname.includes(`.`)) {
         return undefined;

@@ -5721,6 +5721,10 @@
             "outOfMachines": "We're out of machines right now, so we can't build you another one this minute.",
             "restartFailed": "Couldn't start it over. Try again in a moment.",
             "removeFailed": "Couldn't remove the machine we started. Try again in a moment."
+        },
+        "useAttachLane": {
+            "signInFirst": "Sign in with Google to reach your sandbox.",
+            "connectFailed": "Could not connect your sandbox."
         }
     },
     "shared": {

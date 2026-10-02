@@ -5481,6 +5481,10 @@
             "outOfMachines": "Właśnie skończyły nam się maszyny, więc w tej chwili nie zbudujemy ci kolejnej.",
             "restartFailed": "Nie udało się uruchomić jej od nowa. Spróbuj ponownie za chwilę.",
             "removeFailed": "Nie udało się usunąć uruchomionej przez nas maszyny. Spróbuj ponownie za chwilę."
+        },
+        "useAttachLane": {
+            "signInFirst": "Zaloguj się przez Google, aby połączyć się z sandboxem.",
+            "connectFailed": "Nie udało się połączyć twojego sandboxa."
         }
     },
     "shared": {
