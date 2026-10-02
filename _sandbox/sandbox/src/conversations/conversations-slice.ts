@@ -18,7 +18,6 @@ import type { WorkspaceScopeDeps } from "../workspace/layout/workspace-scope.js"
 import type { WorkspacePaths } from "../workspace/workspace.js";
 import type { ConversationActors } from "./actor/conversation-actors.js";
 import { type ParkedCards, parkedCards } from "./actor/parked-cards.js";
-import { awaitingResolved } from "../push/notifications.js";
 import { createLandedPresences } from "./land/landed-presence.js";
 import { type AgentOrigins, createAgentOrigins } from "./land/origins.js";
 import { createLandStandings } from "./land/standing.js";
@@ -74,6 +73,9 @@ export interface ConversationsDeps {
     // Whether the previous run died without its exit hook (system/boot/boot-marker.ts), passed in by composition so the
     // fleet does not import the system subsystem.
     readonly previousRunDied: () => boolean;
+    // Replaces a settled card's "waiting on you" push wherever it showed (push.ts `withdraw`), passed in by composition so
+    // the conversations do not import the push subsystem.
+    readonly cardSettled: (requestId: string, conversationId: string) => void;
 }
 
 // What else composing reads of the conversations that no route does: the landing caches' sizes, for the resource series.
@@ -84,7 +86,7 @@ export interface ConversationsParts {
 
 // Builds the conversations slice: one database for the registry and everything keyed by a conversation, so a fact
 // spanning its tables is one write.
-export const createConversationsSlice = ({ historyRoot, workspace, logger, perf, whole, previousRunDied }: ConversationsDeps): ConversationsParts => {
+export const createConversationsSlice = ({ historyRoot, workspace, logger, perf, whole, previousRunDied, cardSettled }: ConversationsDeps): ConversationsParts => {
     // Opened so a missing or damaged file never keeps the daemon from coming up: set aside, salvaged or made again,
     // logged and reported (store/conversations-db-recovery.ts). Checked up front only after a run that died unannounced.
     const { db: conversationsDb, recovery } = openConversationsDbAtBoot({ historyRoot, check: previousRunDied(), logger });
@@ -137,7 +139,7 @@ export const createConversationsSlice = ({ historyRoot, workspace, logger, perf,
                 },
                 (requestId, conversationId) => {
                     if (conversationId !== undefined) {
-                        void whole().pushSender.withdraw(awaitingResolved(conversationId, `awaiting-${requestId}`));
+                        cardSettled(requestId, conversationId);
                     }
                 },
             ),

@@ -4,7 +4,7 @@ import { useT } from "@intentic/ui/i18n";
 import { computed, onMounted } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import { useAuth } from "../../auth/useAuth";
-import { normalizeDaemonUrl } from "../../setup/setupAttach";
+import { normalizeDaemonUrl } from "../../../lib/daemonUrl";
 import { useSandbox } from "../client/useSandbox";
 import { rememberedAccount } from "./deviceDirectory";
 import { liveRecoveryDeps } from "./recoveryDeps";

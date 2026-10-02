@@ -3,7 +3,7 @@ import { MemberRoleSchema } from "@intentic/sandbox-contract";
 import { ref } from "vue";
 import { z } from "zod";
 import { storedValue, storeValue } from "../../../lib/browserStorage";
-import { normalizeDaemonUrl } from "../../setup/setupAttach";
+import { normalizeDaemonUrl } from "../../../lib/daemonUrl";
 
 // THE SANDBOXES THIS DEVICE REMEMBERS, per account: where each answered when the platform last listed it, so a
 // platform that is down, or that answers from a database that forgot them, never leaves its owner with nothing to

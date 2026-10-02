@@ -466,7 +466,15 @@ export const createServices = (config: Config, logger: Logger): Services => {
     const authSlice = createAuthSlice(config, workspace.root, logger);
     // Hoisted: worktree ops and the Changes scan must file into the same tracker the summary line reads.
     const perf = createPerfTracker(logger, createPerfLogger(config));
-    const conversationsParts = createConversationsSlice({ historyRoot: config.historyRoot, workspace, logger, perf, whole, previousRunDied });
+    const conversationsParts = createConversationsSlice({
+        historyRoot: config.historyRoot,
+        workspace,
+        logger,
+        perf,
+        whole,
+        previousRunDied,
+        cardSettled: (requestId, conversationId) => void whole().pushSender.withdraw(awaitingResolved(conversationId, `awaiting-${requestId}`)),
+    });
     const { agents, conversations, cards } = conversationsParts.slice;
     const invariants = createInvariantRegistry(logger);
     const processesSlice = createProcessesSlice({ config, logger });

@@ -1,5 +1,6 @@
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
-import { daemonUrlProblem, normalizeDaemonUrl, ownAddressProblem, probeDaemon } from "../setupAttach";
+import { normalizeDaemonUrl } from "../../../lib/daemonUrl";
+import { daemonUrlProblem, ownAddressProblem, probeDaemon } from "../setupAttach";
 
 afterEach(() => {
     unstubAllGlobals();

@@ -25,7 +25,7 @@ import { useRole } from "../features/sandbox/secrets/useRole";
 import { retryOnEntry } from "./platformRetry";
 import { arriveOnSandbox, type SandboxArrivalRoute } from "./sandboxArrival";
 import { setupRedirect } from "./setupGate";
-import { normalizeDaemonUrl } from "../features/setup/setupAttach";
+import { normalizeDaemonUrl } from "../lib/daemonUrl";
 import { ownsMissingSandboxes } from "../features/sandbox/recovery/deviceDirectory";
 import { signInAt } from "./signIn";
 import { t } from "@intentic/ui/i18n";

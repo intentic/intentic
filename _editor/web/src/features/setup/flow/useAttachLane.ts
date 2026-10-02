@@ -1,7 +1,8 @@
 import { noticeFrom, noticeOf } from "@intentic/ui/async";
 import { computed, ref } from "vue";
 import type { useSandbox } from "../../sandbox/client/useSandbox";
-import { type AttachOutcome, daemonUrlProblem, normalizeDaemonUrl, ownAddressProblem, type probeDaemon } from "../setupAttach";
+import { normalizeDaemonUrl } from "../../../lib/daemonUrl";
+import { type AttachOutcome, daemonUrlProblem, ownAddressProblem, type probeDaemon } from "../setupAttach";
 import type { SetupRow } from "./useSetupRow";
 
 // Connects a sandbox that is already reachable: probes the pasted address from this browser, and records it on the

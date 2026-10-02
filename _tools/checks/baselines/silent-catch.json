@@ -124,7 +124,7 @@
     "_editor/web/src/features/sandbox/session/wsTicket.ts": 1,
     "_editor/web/src/features/setup/flow/useHostedLane.ts": 3,
     "_editor/web/src/features/setup/PlatformUnavailable.vue": 1,
-    "_editor/web/src/features/setup/setupAttach.ts": 2,
+    "_editor/web/src/features/setup/setupAttach.ts": 1,
     "_editor/web/src/features/terminal/panel/usePanelHeight.ts": 1,
     "_editor/web/src/features/terminal/panel/usePanelWait.ts": 1,
     "_editor/web/src/features/terminal/terminalMeta.ts": 2,

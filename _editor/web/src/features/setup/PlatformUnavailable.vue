@@ -5,7 +5,7 @@ import { useRoute, useRouter } from "vue-router";
 import { useT } from "@intentic/ui/i18n";
 import { platformRetry } from "../../router/platformRetry";
 import DirectSandboxes from "../sandbox/recovery/DirectSandboxes.vue";
-import { normalizeDaemonUrl } from "./setupAttach";
+import { normalizeDaemonUrl } from "../../lib/daemonUrl";
 
 const t = useT();
 

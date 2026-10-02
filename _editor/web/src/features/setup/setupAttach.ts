@@ -1,3 +1,5 @@
+import { normalizeDaemonUrl } from "../../lib/daemonUrl";
+
 // One-step alternative to provision+run+wait: nothing is provisioned, so the browser itself verifies the pasted
 // URL. Two probes name the failure: GET /health (unauthenticated: reachability) then GET /environment
 // (authorized: also performs the daemon's first-use owner bind).
@@ -76,29 +78,6 @@ export const probeDaemon = async (args: {
         return { kind: `denied`, message: await detailOf(authorized, `This sandbox is registered to another account.`) };
     }
     return { kind: `rejected`, message: await detailOf(authorized, `The sandbox answered ${authorized.status}.`) };
-};
-
-// Normalizes whatever the user pasted into the base URL for daemon calls, or undefined if it can't be one.
-// Forgiving about shape (hostname, full URL, trailing slash); strict about scheme.
-export const normalizeDaemonUrl = (raw: string): string | undefined => {
-    const trimmed = raw.trim();
-    if (trimmed === ``) {
-        return undefined;
-    }
-    // A bare hostname parses as a URL only with a scheme; assumes https so an unscheme pasted domain still works.
-    const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
-    let url: URL;
-    try {
-        url = new URL(withScheme);
-    } catch {
-        return undefined;
-    }
-    // A hostname with no dot is a typo, not a domain (`localhost` included); http can't reach this HTTPS app.
-    if (url.protocol !== `https:` || !url.hostname.includes(`.`)) {
-        return undefined;
-    }
-    // Keeps a path prefix (proxy-served sandbox), drops a trailing slash (avoids `//health`), drops query/hash.
-    return `${url.origin}${url.pathname.replace(/\/+$/, ``)}`;
 };
 
 // Why what the user typed isn't a sandbox address yet (undefined once it is): keeps two explainable mistakes
