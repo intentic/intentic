@@ -10,7 +10,11 @@ import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
 
-const { listing } = defineProps<{ listing: DiscoverListing }>();
+const { listing, installing = false } = defineProps<{
+    listing: DiscoverListing;
+    /** Its install or update is running: the tile says so, since the dialog it was started from may be closed. */
+    installing?: boolean;
+}>();
 
 const emit = defineEmits<{ open: [] }>();
 
@@ -95,8 +99,13 @@ const unavailableTip = computed(() =>
 
             <!-- Right-aligned and always last: the one thing a reader scanning unfamiliar names is looking for. -->
             <span class="ml-auto shrink-0">
+                <span v-if="installing" class="inline-flex items-center gap-1 text-2xs font-medium text-muted" role="status">
+                    <Icon name="spinner" spin />{{
+                        listing.state.kind === `update` ? t(`sandbox.discoverCard.updating`) : t(`sandbox.discoverCard.installing`)
+                    }}
+                </span>
                 <StatusBadge
-                    v-if="listing.state.kind === `installed`"
+                    v-else-if="listing.state.kind === `installed`"
                     size="xs"
                     variant="success"
                     :dot="true"

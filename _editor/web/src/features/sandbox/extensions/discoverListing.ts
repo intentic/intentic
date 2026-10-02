@@ -27,6 +27,19 @@ export interface ListingState {
     readonly unaudited?: true;
 }
 
+/** What an install or update from a listing came to, once the host has reconciled: the dialog's receipt. */
+export interface InstallOutcome {
+    readonly verb: `install` | `update`;
+    /** The id it is installed under here, when the refreshed list has it. */
+    readonly id: string | undefined;
+    /** Why it did not start in this browser, in the host's words; undefined when it did. */
+    readonly problem: string | undefined;
+    /** Its switch is off: an update keeps the owner's off. */
+    readonly off: boolean;
+    /** It declares settings, which its Installed row is where to fill in. */
+    readonly settings: boolean;
+}
+
 export interface DiscoverListing {
     readonly entry: RegistryEntry;
     readonly state: ListingState;

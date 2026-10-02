@@ -1,5 +1,7 @@
 <script setup lang="ts">
+import { extensionIdOf } from "@intentic/extension-manifest";
 import { OFFICIAL_REGISTRY_URL } from "@intentic/registry";
+import type { ExtensionSummary } from "@intentic/sandbox-contract";
 import { Button, ui, type NoticeModel } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { computed, ref, watch } from "vue";
@@ -12,11 +14,13 @@ import { useRole } from "../secrets/useRole";
 import { useSandboxOutline } from "../overview/useSandboxOutline";
 import { useTerminalPanel } from "../../terminal/useTerminalPanel";
 import { useHubWork } from "../../../shell/hub/hubWork";
+import { extensionStatuses } from "../../../extension-host/loader";
 import { reloadExtensions } from "../../../extension-host/useExtensionHost";
 import { auditBrief, updateBrief } from "./extensionBrief";
 import DiscoverCard from "./DiscoverCard.vue";
 import DiscoverDetail from "./DiscoverDetail.vue";
-import { type DiscoverListing, listingSections, toListing } from "./discoverListing";
+import { type DiscoverListing, type InstallOutcome, listingSections, toListing } from "./discoverListing";
+import { beginInstall, installsInFlight } from "./installsInFlight";
 import { useT } from "@intentic/ui/i18n";
 
 // Browse: what other people have published, the other half of the Extensions section; search, pills and registry line
@@ -38,6 +42,8 @@ const emit = defineEmits<{
     matched: [number];
     /** Their filter matched nothing and they pressed the way out. */
     clear: [];
+    /** Show this installed extension (by its id, when the list has it) on the Installed pill. */
+    reveal: [id: string | undefined];
 }>();
 
 const route = useRoute();
@@ -49,10 +55,15 @@ const { extensions, applyUpdate } = useExtensions();
 const { add } = useCapabilities();
 const hubWork = useHubWork();
 
-const installing = ref<string | undefined>(undefined);
 const failure = ref<NoticeModel | undefined>(undefined);
+// What the last install or update from the open dialog came to; the dialog turns into its receipt.
+const outcome = ref<(InstallOutcome & { readonly name: string }) | undefined>(undefined);
 
 const listings = computed<readonly DiscoverListing[]>(() => entries.value.map((entry) => toListing(entry, extensions.value)));
+// What a listing is installed as here, found by identity: a hand-installed copy may carry another id than the listing
+// would derive.
+const installedAs = (listing: DiscoverListing): ExtensionSummary | undefined =>
+    extensions.value.find((extension) => extensionIdOf(extension.manifest) === listing.entry.name);
 
 const matches = computed(() => {
     const needle = query.trim().toLowerCase();
@@ -99,6 +110,7 @@ const detailOpen = computed({
 });
 const openListing = (listing: DiscoverListing): void => {
     failure.value = undefined;
+    outcome.value = undefined;
     void router.replace({ query: { ...route.query, ext: listing.entry.name } });
 };
 
@@ -142,16 +154,55 @@ const addFromListing = async (listing: DiscoverListing, pointer: NonNullable<Dis
     );
 };
 
+// What an install came to once the host has reconciled, read off the refreshed list and this browser's load record: a
+// switch left off survives an update, and a bundle that threw in activate() is installed all the same.
+const NOT_STARTED = new Set([`error`, `incompatible`, `missing`]);
+const outcomeOf = (listing: DiscoverListing, verb: InstallOutcome["verb"]): InstallOutcome => {
+    const here = installedAs(listing);
+    const status = here === undefined ? undefined : extensionStatuses.value.find((loaded) => loaded.id === here.id);
+    return {
+        verb,
+        id: here?.id,
+        problem: status !== undefined && NOT_STARTED.has(status.state) ? (status.detail ?? status.state) : undefined,
+        off: here?.enabled === false,
+        settings: (here?.manifest.contributes?.settings ?? []).length > 0,
+    };
+};
+
+// Said where the reader is: the dialog they pressed Install in, or, when they closed it while the clone ran, the
+// section's notice region, since a receipt nobody can see is how a finished install reads as a stuck one.
+const report = (listing: DiscoverListing, verb: InstallOutcome["verb"]): void => {
+    const done = outcomeOf(listing, verb);
+    if (openName.value === listing.entry.name) {
+        outcome.value = { ...done, name: listing.entry.name };
+        return;
+    }
+    const name = listing.entry.name;
+    const action = { label: t(`sandbox.discoverDetail.showInInstalled`), run: () => emit(`reveal`, done.id) };
+    if (done.problem === undefined) {
+        const title = t(verb === `install` ? `sandbox.extensionsBrowse.installedName` : `sandbox.extensionsBrowse.updatedName`, { name });
+        emit(`notice`, { tone: `info`, title, action });
+        return;
+    }
+    const title = t(verb === `install` ? `sandbox.extensionsBrowse.installedNotStartedName` : `sandbox.extensionsBrowse.updatedNotStartedName`, {
+        name,
+    });
+    emit(`notice`, { tone: `warning`, title, detail: done.problem, action });
+};
+
 // An update is the Installed tab's update verb, on the id the extension is installed under: it keeps that install's
 // token and registry, sets the old checkout aside for revert, and clears the recorded offer. The pinned sha names the
 // code, so the install's own repo serves it.
 const install = async (listing: DiscoverListing): Promise<void> => {
     const pointer = listing.entry.install;
-    if (pointer === undefined || listing.state.action === undefined || installing.value !== undefined) {
+    // One at a time per listing: the daemon takes one add per id anyway, and a second press would only queue a clone
+    // of what is already arriving.
+    if (pointer === undefined || listing.state.action === undefined || installsInFlight.value.has(listing.entry.name)) {
         return;
     }
-    installing.value = listing.entry.name;
+    const endInstall = beginInstall(listing.entry.name);
     failure.value = undefined;
+    outcome.value = undefined;
     const { ref: pinned } = pointer;
     const updateOf = listing.state.kind === `update` && pinned !== undefined ? listing.state.installedId : undefined;
     const verb = updateOf === undefined ? `install` : `update`;
@@ -159,14 +210,20 @@ const install = async (listing: DiscoverListing): Promise<void> => {
     // somewhere else entirely, so the row it was started from carries it.
     const endMark = hubWork.begin(`${updateOf === undefined ? `Installing` : `Updating`} ${listing.entry.name}`);
     try {
+        // Both refresh the extension list on the way out, so the card and the Installed pill already say so.
         await (updateOf !== undefined && pinned !== undefined ? applyUpdate(updateOf, pinned) : addFromListing(listing, pointer));
         // Installed but not yet running until the host reconciles; done here so it works without a page reload.
         await reloadExtensions();
-        detailOpen.value = false;
+        report(listing, verb);
     } catch (err) {
-        failure.value = noticeFrom(err, `Could not ${verb} ${listing.entry.name}.`);
+        const said = noticeFrom(err, `Could not ${verb} ${listing.entry.name}.`);
+        if (openName.value === listing.entry.name) {
+            failure.value = said;
+        } else {
+            emit(`notice`, said);
+        }
     } finally {
-        installing.value = undefined;
+        endInstall();
         endMark();
     }
 };
@@ -289,7 +346,13 @@ const emptyNote = computed<string | undefined>(() => {
             <!-- Container query: how many cards fit depends on this pane's own width, not the viewport. -->
             <div class="@container">
                 <div class="grid grid-cols-1 gap-3 @xl:grid-cols-2 @xl:gap-4 @4xl:grid-cols-3">
-                    <DiscoverCard v-for="listing in section.listings" :key="listing.entry.name" :listing="listing" @open="openListing(listing)" />
+                    <DiscoverCard
+                        v-for="listing in section.listings"
+                        :key="listing.entry.name"
+                        :listing="listing"
+                        :installing="installsInFlight.has(listing.entry.name)"
+                        @open="openListing(listing)"
+                    />
                 </div>
             </div>
         </div>
@@ -326,10 +389,12 @@ const emptyNote = computed<string | undefined>(() => {
             v-model="detailOpen"
             :listing="opened"
             :can-install="canOperate"
-            :installing="installing === opened.entry.name"
+            :installing="installsInFlight.has(opened.entry.name)"
             :failure="failure"
+            :outcome="outcome?.name === opened.entry.name ? outcome : undefined"
             @install="install(opened)"
             @audit="audit(opened)"
+            @reveal="emit(`reveal`, installedAs(opened)?.id)"
         />
     </div>
 </template>

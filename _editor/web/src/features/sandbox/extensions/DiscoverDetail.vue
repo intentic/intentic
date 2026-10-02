@@ -2,26 +2,29 @@
 import { githubRepoOf, isCurrentSecurityReview } from "@intentic/registry";
 import { BrandMark, Button, ui, Modal, Notice, type NoticeModel } from "@intentic/ui";
 import { computed, ref, useId } from "vue";
-import { checksOk, checksProblem, type DiscoverListing, splitListingName } from "./discoverListing";
+import { checksOk, checksProblem, type DiscoverListing, type InstallOutcome, splitListingName } from "./discoverListing";
 import { useT } from "@intentic/ui/i18n";
 
 // One listing, read before it's run: where this product's trust argument gets made explicit rather than implied. Source
 // identity, scanner, agent gate and human review are separate guarantees shown as separate lines, not one badge. The
 // owner's own agent read is offered as primary where no human has reviewed the code, secondary otherwise. An unaudited
-// commit installs only after the owner ticks that they know nobody checked it.
+// commit installs only after the owner ticks that they know nobody checked it. Once an install from here finishes, the
+// panel becomes its receipt rather than closing on the reader: what came of it, and the way to where it now lives.
 
 const t = useT();
 
-const { listing, canInstall, installing } = defineProps<{
+const { listing, canInstall, installing, outcome } = defineProps<{
     listing: DiscoverListing;
     /** Installing is the owner's alone; everyone else browses. */
     canInstall: boolean;
     installing: boolean;
     failure?: NoticeModel | undefined;
+    /** What the install or update just made from this panel came to. */
+    outcome?: InstallOutcome | undefined;
 }>();
 
 const open = defineModel<boolean>({ required: true });
-const emit = defineEmits<{ install: []; audit: [] }>();
+const emit = defineEmits<{ install: []; audit: []; reveal: [] }>();
 
 // The brand row replaces the modal's own title, so the name it is announced by has to be pointed at this one.
 const titleId = useId();
@@ -52,6 +55,28 @@ const auditLeads = computed(() => auditable.value && !verified.value);
 const auditCurrent = computed(() => isCurrentSecurityReview(listing.entry.securityReview, listing.entry.install));
 const unaudited = computed(() => listing.state.unaudited === true);
 const acknowledged = ref(false);
+
+// The receipt's sentence: started, started switched off, or installed without starting in this browser.
+const receipt = computed<string | undefined>(() => {
+    if (outcome === undefined || outcome.problem !== undefined) {
+        return undefined;
+    }
+    if (outcome.verb === `install`) {
+        return t(`sandbox.discoverDetail.installedRunning`);
+    }
+    return outcome.off ? t(`sandbox.discoverDetail.updatedSwitchedOff`) : t(`sandbox.discoverDetail.updatedRunning`);
+});
+const notStarted = computed<NoticeModel | undefined>(() =>
+    outcome?.problem === undefined
+        ? undefined
+        : {
+              tone: `warning`,
+              title: outcome.verb === `install` ? t(`sandbox.discoverDetail.installedNotStarted`) : t(`sandbox.discoverDetail.updatedNotStarted`),
+              detail: outcome.problem,
+          },
+);
+// Where a listing that is here can be managed; the Installed pill is one click away, so it is offered as one.
+const revealable = computed(() => outcome !== undefined || listing.state.kind === `installed`);
 const actionLabel = computed(() => {
     if (!unaudited.value) {
         return listing.state.action;
@@ -94,8 +119,17 @@ const actionLabel = computed(() => {
                 </a>
             </div>
 
+            <!-- The receipt replaces the state line: right after an install, "already installed" would read as a refusal. -->
+            <div v-if="receipt" role="status" class="flex items-start gap-2 rounded-lg border border-success/40 bg-success/10 px-3 py-2 text-xs text-content">
+                <Icon name="check-circle" class="mt-0.5 shrink-0 text-success" />
+                <span>
+                    {{ receipt }}
+                    <template v-if="outcome?.settings && !outcome.off">{{ t(`sandbox.discoverDetail.hasSettings`) }}</template>
+                </span>
+            </div>
+            <Notice v-else-if="notStarted" :of="notStarted" />
             <!-- A non-default state is said before anything else, so a reader never has to reach the button to learn it. -->
-            <Notice v-if="listing.state.kind === `blocked`" tone="danger">
+            <Notice v-else-if="listing.state.kind === `blocked`" tone="danger">
                 <b>{{ t(`sandbox.discoverDetail.blocked`) }}</b> {{ listing.state.reason }} {{ t(`sandbox.discoverDetail.staysListedRatherThan`) }}
             </Notice>
             <Notice v-else-if="listing.state.kind === `unavailable`" tone="info">{{ listing.state.reason }}</Notice>
@@ -106,7 +140,7 @@ const actionLabel = computed(() => {
             <Notice v-else-if="listing.state.kind === `installed`" tone="info">
                 {{ t(`sandbox.discoverDetail.alreadyInstalledInSandbox`) }}
             </Notice>
-            <Notice v-if="listing.state.kind === `update`" tone="info">
+            <Notice v-if="outcome === undefined && listing.state.kind === `update`" tone="info">
                 {{ t(`sandbox.discoverDetail.installedAt`) }} <code class="ui-code">{{ listing.state.installedRef?.slice(0, 10) }}</code
                 >. The listing points at <code class="ui-code">{{ shortRef }}</code
                 >. Updating replaces the code wholesale and re-asks for broader declared host API access; code internals still need review.
@@ -230,9 +264,14 @@ const actionLabel = computed(() => {
         </div>
 
         <template #footer>
+            <!-- Done: the next place to go, and the way back to browsing. Nothing to install or audit is left to offer. -->
+            <template v-if="outcome">
+                <Button :label="t(`ui.action.done`)" severity="secondary" text size="small" @click="open = false" />
+                <Button :label="t(`sandbox.discoverDetail.showInInstalled`)" size="small" @click="emit(`reveal`)" />
+            </template>
             <!-- Order follows what's been earned: where the code's been read, Install leads; where it hasn't, the read leads instead. -->
             <Button
-                v-if="auditable"
+                v-else-if="auditable"
                 :label="auditLeads ? t(`sandbox.discoverDetail.myAgentReadCode`) : t(`sandbox.discoverDetail.readCodeFirst`)"
                 :severity="auditLeads ? undefined : `secondary`"
                 :text="!auditLeads"
@@ -241,8 +280,9 @@ const actionLabel = computed(() => {
             >
                 <template #icon><Icon name="sparkles" /></template>
             </Button>
+            <Button v-if="!outcome && revealable" :label="t(`sandbox.discoverDetail.showInInstalled`)" size="small" @click="emit(`reveal`)" />
             <Button
-                v-if="actionable"
+                v-if="!outcome && actionable"
                 :label="actionLabel"
                 size="small"
                 :loading="installing"

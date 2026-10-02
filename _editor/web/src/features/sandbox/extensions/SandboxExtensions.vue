@@ -14,6 +14,7 @@ import { toListing, updateCount } from "./discoverListing";
 import { extensionBrief } from "./extensionBrief";
 import ExtensionsBrowse from "./ExtensionsBrowse.vue";
 import ExtensionsInstalled from "./ExtensionsInstalled.vue";
+import { installsInFlight } from "./installsInFlight";
 import NewExtensionDialog from "./NewExtensionDialog.vue";
 import { useT } from "@intentic/ui/i18n";
 
@@ -47,7 +48,7 @@ const show = (next: View): void => {
     void router.replace({ query: { ...route.query, view: next, ext: undefined } });
 };
 
-const { entries, create, checkUpdates, updatesCheckedAt, updatedSinceLoaded } = useExtensionList();
+const { entries, create, checkUpdates, updatesCheckedAt, updatedSinceLoaded, installedSinceLoaded } = useExtensionList();
 const { extensions } = useExtensions();
 // Reads the registry only while Browse is shown; the update count then costs nothing on the installed view.
 const { entries: listed, isFetching, refetch } = useRegistry({ read: computed(() => view.value === `browse`) });
@@ -113,9 +114,10 @@ const reload = async (): Promise<void> => {
 };
 
 // An update landed elsewhere while this tab still runs the old bundle; the button here is the same host reload,
-// shown as a notice rather than auto-reloading since replacing the view mid-use is unwanted.
+// shown as a notice rather than auto-reloading since replacing the view mid-use is unwanted. Silent while an install
+// from this page is under way: the list hears of it before the host does, and that install reloads the host itself.
 const staleNotice = computed<NoticeModel | undefined>(() => {
-    if (updatedSinceLoaded.value.length === 0) {
+    if (updatedSinceLoaded.value.length === 0 || installsInFlight.value.size > 0) {
         return undefined;
     }
     const names = updatedSinceLoaded.value.map((extension) => extensionIdOf(extension.manifest)).join(`, `);
@@ -127,6 +129,23 @@ const staleNotice = computed<NoticeModel | undefined>(() => {
         action: { label: t(`sandbox.sandboxExtensions.reloadNow`), run: () => void reload() },
     };
 });
+
+// The same for an extension installed or approved elsewhere (an agent's `capabilities add`, another tab): listed now,
+// never loaded here. Offered rather than done, for the same reason as above: a reload re-runs every extension.
+const newNotice = computed<NoticeModel | undefined>(() => {
+    const added = installedSinceLoaded.value;
+    if (added.length === 0 || installsInFlight.value.size > 0) {
+        return undefined;
+    }
+    const names = added.map((extension) => extensionIdOf(extension.manifest)).join(`, `);
+    return {
+        tone: `info`,
+        title: t(`sandbox.sandboxExtensions.loadNewlyInstalled`, added.length),
+        detail: t(`sandbox.sandboxExtensions.installedSinceLoaded`, { names }, added.length),
+        action: { label: t(`sandbox.sandboxExtensions.loadNow`), run: () => void reload() },
+    };
+});
+
 
 // States when updates were last checked, re-rendered on every refetch so it stays as fresh as the check.
 const checking = ref(false);
@@ -145,6 +164,11 @@ const checkNow = async (): Promise<void> => {
 const creating = ref(false);
 // The row a newly created extension opens on, passed down to the installed half rather than reached into.
 const focused = ref<string | undefined>(undefined);
+// Browse's way to an extension it just installed: the Installed pill, opened on that row.
+const reveal = (id: string | undefined): void => {
+    focused.value = id;
+    show(`installed`);
+};
 // Reloads the extension host so the new extension actually runs, then opens on its row; a wish hands off to an
 // ordinary agent chat, not an isolated run, since a first draft benefits from the author's corrections.
 const created = async (extension: { id: string; dir: string; wish: string }): Promise<void> => {
@@ -162,7 +186,7 @@ const created = async (extension: { id: string; dir: string; wish: string }): Pr
 
 <template>
     <div class="flex flex-col gap-6">
-        <NoticeStack :of="[viewNotice, staleNotice]" />
+        <NoticeStack :of="[viewNotice, staleNotice, newNotice]" />
 
         <!-- The section's instrument, not either half's: pills lead, the search box takes the row's slack, and filters ride #controls. -->
         <div class="flex flex-wrap items-center gap-2">
@@ -248,7 +272,15 @@ const created = async (extension: { id: string; dir: string; wish: string }): Pr
             @browse="show(`browse`)"
             @clear="clearFilters"
         />
-        <ExtensionsBrowse v-else :query="query" :trust="trust" @notice="viewNotice = $event" @matched="matched = $event" @clear="clearFilters" />
+        <ExtensionsBrowse
+            v-else
+            :query="query"
+            :trust="trust"
+            @notice="viewNotice = $event"
+            @matched="matched = $event"
+            @clear="clearFilters"
+            @reveal="reveal"
+        />
 
         <!-- How many installed extensions have a newer commit and when that was checked; absent until first check runs. -->
         <p v-if="updatesCheckedAt !== undefined" class="text-right text-2xs text-subtle">

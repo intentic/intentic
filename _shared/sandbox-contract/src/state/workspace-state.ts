@@ -42,10 +42,12 @@ const STATE_FILES = [
     // Holds no credential: values are vaulted (capabilities-store.ts's withSecretVault) and read back rehydrated; the
     // vaulted keys are the complement of what `echo` exposes (capabilities/credentials/secret-fields.ts). `carry` because
     // composeEnvironment reads Dockerfile fragments from here; `versioned` because connecting a capability is a
-    // consequential change worth reviewing.
+    // consequential change worth reviewing. `extensions` because an installed extension is a capability entry: the
+    // daemon writes this file once the checkout is in place, so an install an agent or another tab made reaches an open
+    // Extensions view without a reload.
     {
         path: ".intentic/config/capabilities.json",
-        invalidates: ["capabilities", "environment", "panels", "manifests"],
+        invalidates: ["capabilities", "extensions", "environment", "panels", "manifests"],
         portability: "carry",
         versioned: true,
     },

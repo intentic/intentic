@@ -47,6 +47,17 @@ export const loadedCommits = shallowRef<ReadonlyMap<string, string>>(new Map());
 // allow(module-state): the extension host's load record, retired with the activations on a switch and on a relocale (retireExtensions)
 export const extensionsLoaded = shallowRef(false);
 
+// When the list the last pass loaded from was read (epoch ms). A list read before it says nothing about what came
+// since: the persisted cache paints one from a previous visit, and it may name what has been removed after.
+// allow(module-state): the extension host's load record, retired with the activations on a switch and on a relocale (retireExtensions)
+export const loadedListAt = shallowRef(0);
+
+// Whether a load pass is under way; a list that names an extension this record lacks is then the pass catching up,
+// not an install from elsewhere waiting for a reload. Counted, since a relocale can overlap a reconcile.
+// allow(module-state): the extension host's load record, like the ones above
+export const extensionsReconciling = shallowRef(false);
+let passes = 0;
+
 // Generation counter for the active sandbox, bumped on switch; a stale pass must not finalize anything.
 let scope = 0;
 
@@ -159,10 +170,11 @@ export const retireExtensions = (): void => {
     deactivateAllExtensions();
     extensionStatuses.value = [];
     loadedCommits.value = new Map();
+    loadedListAt.value = 0;
     extensionsLoaded.value = false;
 };
 
-export const loadExtensions = async (host: HostBindings): Promise<void> => {
+const loadPass = async (host: HostBindings): Promise<void> => {
     const startedIn = scope;
     // Only fetch caught rather than thrown: on failure, run what's compiled in rather than show nothing.
     let summaries: readonly ExtensionSummary[] = [];
@@ -172,6 +184,7 @@ export const loadExtensions = async (host: HostBindings): Promise<void> => {
     } catch (error) {
         listFailure = readFailure(error);
     }
+    const listedAt = Date.now();
     // Bail if the sandbox switched mid-fetch; activating this list would restore tiles the switch just cleared.
     if (startedIn !== scope) {
         return;
@@ -200,5 +213,18 @@ export const loadExtensions = async (host: HostBindings): Promise<void> => {
     }
     extensionStatuses.value = [...listedStatuses, ...unlistedStatuses];
     loadedCommits.value = new Map(summaries.map((summary) => [summary.id, summary.commit]));
+    loadedListAt.value = listedAt;
     extensionsLoaded.value = true;
+};
+
+// One pass over the daemon's list, flagged on extensionsReconciling for as long as it runs.
+export const loadExtensions = async (host: HostBindings): Promise<void> => {
+    passes += 1;
+    extensionsReconciling.value = true;
+    try {
+        await loadPass(host);
+    } finally {
+        passes -= 1;
+        extensionsReconciling.value = passes > 0;
+    }
 };

@@ -3,7 +3,7 @@ import { extensionIdOf } from "@intentic/extension-manifest";
 import type { ExtensionSummary, PendingWorkspaceExtension } from "@intentic/sandbox-contract";
 import { Button, ui, type NoticeModel, Row, RowGroup, SkeletonRows, StatusBadge } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
-import { computed, ref, watch } from "vue";
+import { computed, nextTick, ref, useTemplateRef, watch } from "vue";
 import { type ExtensionSection, sectionsOf } from "../../extensions/extensionCategories";
 import { useExtensionList } from "../../extensions/useExtensionList";
 import { useSandboxOutline } from "../overview/useSandboxOutline";
@@ -58,13 +58,31 @@ watch(
 const opened = ref<string | undefined>(undefined);
 const pending = ref<string | undefined>(undefined);
 
-// A row the section asked for: a freshly created extension, naming the directory its files are in.
+// A row the section asked for: a freshly created extension, naming the directory its files are in, or one just
+// installed from Browse.
 watch(
     () => focus,
     (id) => {
         if (id !== undefined) {
             opened.value = id;
         }
+    },
+    { immediate: true },
+);
+
+// Opened is not shown: in a long list the asked-for row sits below the fold, so it is scrolled to once it has drawn,
+// which may be after the list arrives rather than on mount. Once per ask, so a later refetch never yanks the page.
+const root = useTemplateRef<HTMLElement>(`root`);
+let shownFocus: string | undefined;
+watch(
+    () => [focus, entries.value.some((entry) => entry.extension.id === focus)] as const,
+    async ([id, listed]) => {
+        if (id === undefined || !listed || shownFocus === id) {
+            return;
+        }
+        shownFocus = id;
+        await nextTick();
+        root.value?.querySelector(`[data-extension="${CSS.escape(id)}"]`)?.scrollIntoView({ block: `nearest`, behavior: `smooth` });
     },
     { immediate: true },
 );
@@ -180,7 +198,7 @@ const confirmRemove = async (): Promise<void> => {
 </script>
 
 <template>
-    <div class="flex flex-col gap-6">
+    <div ref="root" class="flex flex-col gap-6">
         <!-- Written in this workspace and not approved in its current shape: nothing of it runs until the yes, so it leads. -->
         <RowGroup
             v-if="waiting.length > 0"
@@ -228,6 +246,7 @@ const confirmRemove = async (): Promise<void> => {
             <ExtensionRow
                 v-for="entry in section.entries"
                 :key="entry.extension.id"
+                :data-extension="entry.extension.id"
                 :entry="entry"
                 :expanded="opened === entry.extension.id"
                 :pending="pending === entry.extension.id"

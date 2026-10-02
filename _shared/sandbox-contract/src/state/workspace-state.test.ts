@@ -29,7 +29,7 @@ const AUTOMATIONS: readonly FileContribution[] = [
 
 describe(`staleQueryKeys`, () => {
     it(`maps a manifest write to the queries it makes stale`, () => {
-        expect(staleQueryKeys([`.intentic/config/capabilities.json`], [])).toEqual([`capabilities`, `environment`, `panels`, `manifests`]);
+        expect(staleQueryKeys([`.intentic/config/capabilities.json`], [])).toEqual([`capabilities`, `extensions`, `environment`, `panels`, `manifests`]);
     });
 
     it(`refreshes the unreadable-manifest notice for the four files a person hand-edits`, () => {
@@ -72,6 +72,7 @@ describe(`staleQueryKeys`, () => {
         // A capability add recomposes the overlay, so both paths claim environment; one entry, not two.
         expect(staleQueryKeys([`.intentic/config/capabilities.json`, `.intentic/config/environment.Dockerfile`], [])).toEqual([
             `capabilities`,
+            `extensions`,
             `environment`,
             `panels`,
             `manifests`,

@@ -78,11 +78,14 @@ export function useCapabilities() {
                 : false,
     });
     // Adding/removing a capability can recompose the environment overlay, so refresh the Environment tile too; a
-    // platform capability also scaffolds rail panels, so refresh those as well.
+    // platform capability also scaffolds rail panels, so refresh those as well. An extension is a capability too, and
+    // the extension list is those capabilities resolved to manifests: without its refresh an install from Browse left
+    // the card offering Install and the Installed list a row short until a page reload.
     const invalidate = async (): Promise<void> => {
-        // Three disjoint caches, no ordering, refetch them concurrently.
+        // Disjoint caches, no ordering, refetch them concurrently.
         await Promise.all([
             queryClient.invalidateQueries({ queryKey: capabilitiesKey }),
+            queryClient.invalidateQueries({ queryKey: rpcKey(`extensions.list`) }),
             queryClient.invalidateQueries({ queryKey: ENVIRONMENT.of() }),
             queryClient.invalidateQueries({ queryKey: rpcKey(`panels.list`) }),
         ]);

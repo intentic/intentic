@@ -90,7 +90,12 @@ export const extensionHandler: CapabilityHandler = {
                 }
             },
         });
-        yield { kind: "log", message: "Extension installed, reload the app to load its UI; agent contributions load next turn." };
+        // No page reload: the editor that installed it reconciles its extension host right after, and any other open
+        // editor's Extensions view hears of it through the capabilities.json push and offers the reload there.
+        yield {
+            kind: "log",
+            message: "Extension installed: its UI loads in the editor that installed it, and from Sandbox > Extensions in any other; agents pick it up on their next turn.",
+        };
     },
     status: async (ctx, id, config) => {
         const { path } = config as ExtensionConfig;

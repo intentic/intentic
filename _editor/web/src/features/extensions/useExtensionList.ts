@@ -4,7 +4,7 @@ import type { ExtensionSummary } from "@intentic/sandbox-contract";
 import { useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { ENVIRONMENT, rpcKey } from "../../lib/queryKeys";
-import { extensionStatuses, loadedCommits } from "../../extension-host/loader";
+import { extensionsLoaded, extensionsReconciling, extensionStatuses, loadedCommits, loadedListAt } from "../../extension-host/loader";
 import { type ExtensionFacet, facetsOf, searchTextOf } from "./extensionFacets";
 import { backendState, type ExtensionState, extensionState } from "./extensionState";
 import { useCapabilities } from "../capabilities/connect/useCapabilities";
@@ -60,7 +60,8 @@ const refusedStateOf = (problems: readonly string[], uiState: ExtensionState, ba
 
 export function useExtensionList() {
     const queryClient = useQueryClient();
-    const { extensions, invalid, pending, setEnabled, approve, create, remove, checkUpdates, updatesCheckedAt, isLoading, error } = useExtensions();
+    const { extensions, invalid, pending, setEnabled, approve, create, remove, checkUpdates, updatesCheckedAt, listedAt, isLoading, error } =
+        useExtensions();
     const { capabilities } = useCapabilities();
 
     // Removal empties three caches beyond the extension list: the capability grid loses the entries added from its
@@ -77,12 +78,25 @@ export function useExtensionList() {
         return removed;
     };
 
+    // Whether the list on screen can say what changed since the host loaded: read after the pass's own read (a hydrated
+    // one is from a previous visit, and may name commits or extensions since replaced), and no pass running, since
+    // then the list is merely ahead of the pass about to catch up with it.
+    const aheadOfHost = computed(() => extensionsLoaded.value && !extensionsReconciling.value && listedAt.value > loadedListAt.value);
+
     // Rows whose loaded bundle lags the daemon's already-updated checkout; a host reload here picks it up.
     const updatedSinceLoaded = computed(() =>
-        extensions.value.filter((extension) => {
-            const loaded = loadedCommits.value.get(extension.id);
-            return extension.source === `installed` && extension.enabled && loaded !== undefined && loaded !== extension.commit;
-        }),
+        aheadOfHost.value
+            ? extensions.value.filter((extension) => {
+                  const loaded = loadedCommits.value.get(extension.id);
+                  return extension.source === `installed` && extension.enabled && loaded !== undefined && loaded !== extension.commit;
+              })
+            : [],
+    );
+
+    // Rows the last load pass never saw: installed or approved from an agent or another tab since this page loaded its
+    // extensions.
+    const installedSinceLoaded = computed(() =>
+        aheadOfHost.value ? extensions.value.filter((extension) => extension.enabled && !loadedCommits.value.has(extension.id)) : [],
     );
 
     const entries = computed<ExtensionEntry[]>(() => {
@@ -136,6 +150,7 @@ export function useExtensionList() {
         checkUpdates,
         updatesCheckedAt,
         updatedSinceLoaded,
+        installedSinceLoaded,
         isLoading,
         error,
     };
