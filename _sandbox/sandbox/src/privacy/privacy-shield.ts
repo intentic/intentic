@@ -28,13 +28,15 @@ export interface PrivacyShield {
     readonly policy: () => Promise<PrivacyShieldPolicy>;
     readonly setPolicy: (policy: PrivacyShieldPolicy) => Promise<void>;
     readonly status: () => Promise<PrivacyShieldStatus>;
-    // Whether a turn on this provider and harness may run under the policy in force.
-    readonly admit: (provider: string, harness: AgentHarness) => Promise<ShieldAdmission>;
+    // Whether a turn on this provider and harness may run under the policy in force; in a conversation, a grant the owner
+    // made for that one counts.
+    readonly admit: (provider: string, harness: AgentHarness, conversationId?: string) => Promise<ShieldAdmission>;
     // The base URL a runtime should send its model requests to instead of `upstream`; undefined while the shield is off,
     // so a sandbox that never turned it on sends nothing through the daemon.
     readonly baseUrlFor: (session: GatewaySession) => Promise<string | undefined>;
-    // Whether the gateway should run for a session's provider under a policy: off, it is a plain relay.
-    readonly trusted: (policy: PrivacyShieldPolicy, provider: string) => Promise<boolean>;
+    // Whether a provider may read personal data as it is under a policy, everywhere or in this conversation: the gateway
+    // is a plain relay for it, and a runtime the gateway cannot cover may run.
+    readonly trusted: (policy: PrivacyShieldPolicy, provider: string, conversationId?: string) => Promise<boolean>;
     // A masker for the policy in force; cheap, since its memo and vault are shared.
     readonly masker: (policy: PrivacyShieldPolicy) => Promise<Masker>;
     // Text for a place that must not hold personal data and never comes back (a push notification): every finding
@@ -67,11 +69,23 @@ export interface PrivacyShieldDeps {
 
 export const GATEWAY_PATH = "/privacy/gateway";
 
+// Why a provider the shield cannot cover was turned away. Decided by the runtime alone, before a word of the turn is
+// read, so the sentence says that first: read as a finding (2026-10-02), it sent the owner looking for personal data in
+// a message that held none, when what the shield cannot see is everything such a turn goes on to read.
+export const unshieldedRefusal = (label: string, inConversation: boolean): string =>
+    [
+        `The privacy shield turned ${label} away before reading anything: nothing in what you sent was flagged.`,
+        `${label}'s agent sends what it reads (files, command output, session records) to its own servers on a wire the shield can't read, so it can't mask personal data on the way, and an untrusted ${label} does not run while the shield is on.`,
+        inConversation
+            ? `Let ${label} read this conversation as it is from the strip above the composer, trust it everywhere in Sandbox ▸ Agent ▸ Safety, or pick a provider the shield covers.`
+            : `Trust it in Sandbox ▸ Agent ▸ Safety, or pick a provider the shield covers.`,
+    ].join(" ");
+
 export const createPrivacyShield = (deps: PrivacyShieldDeps): PrivacyShield => {
     const memo = createMaskMemo();
     const readings = createReadingMemo();
-    const trusted = async (policy: PrivacyShieldPolicy, provider: string): Promise<boolean> =>
-        isTrustedProvider(policy, provider, await deps.capabilities());
+    const trusted = async (policy: PrivacyShieldPolicy, provider: string, conversationId?: string): Promise<boolean> =>
+        isTrustedProvider(policy, provider, await deps.capabilities(), conversationId);
     const masker = async (policy: PrivacyShieldPolicy): Promise<Masker> =>
         createMasker({
             vault: deps.vault,
@@ -92,15 +106,13 @@ export const createPrivacyShield = (deps: PrivacyShieldDeps): PrivacyShield => {
             ]);
             return { policy, known: counts.known, tokens: counts.tokens, readers: { ocr, model }, providers: privacyProviders(capabilities) };
         },
-        admit: async (provider, harness) => {
+        admit: async (provider, harness, conversationId) => {
             const policy = await deps.policyStore.get();
-            if (policy.mode !== "on" || shieldableRuntime(provider, harness) || (await trusted(policy, provider))) {
+            if (policy.mode !== "on" || shieldableRuntime(provider, harness) || (await trusted(policy, provider, conversationId))) {
                 return { allowed: true };
             }
-            return {
-                allowed: false,
-                reason: `The privacy shield is on, and ${provider} runs on a loop the shield can't stand in front of, so it would read personal data as it is. Pick a provider the shield covers, or mark ${provider} as trusted in Sandbox ▸ Agent ▸ Safety.`,
-            };
+            const label = privacyProviders(await deps.capabilities()).find((entry) => entry.id === provider)?.label ?? provider;
+            return { allowed: false, reason: unshieldedRefusal(label, conversationId !== undefined) };
         },
         baseUrlFor: async (session) => {
             const policy = await deps.policyStore.get();

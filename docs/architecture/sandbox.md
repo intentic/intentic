@@ -158,6 +158,17 @@ Nothing the sandbox runs checks a push, and nothing is kept about one. The app p
   turned away on an untrusted provider before it starts (`privacy-unshielded`), a helper job steps over such a rung, a
   child agent stays off runners, and a conversation placed on a runner runs there only on a trusted provider, since a
   runner calls its provider from its own machine. A native app's push and a public share carry the kind of data instead of the data.
+- (2026-10-02) That refusal is decided by the runtime alone, so it is said as one: the chat shows it above the composer
+  before the send ([`ChatPrivacyStrip.vue`](../../_editor/web/src/features/chat/panel/ChatPrivacyStrip.vue)), and the
+  daemon's sentence opens with "before reading anything". Said only after the send, as a shield finding, it read as a
+  false alarm over a message that held no personal data, while the turn it would have run (a Cursor turn asked about
+  sessions) went on to read `agents show` and the conversation store, which print the owner's name and email. The way
+  through is narrower than trusting the provider everywhere: the owner lets it read one conversation as it is, a grant
+  kept in the policy (`conversations`) and read by the turn's door, the runner gate and the gateway alike, since the
+  gateway session already names its conversation. Admitting such a runtime on a clean message and stopping it at the
+  first tool result carrying personal data (Cursor's `postToolUse` hook is awaited before a result goes back) was
+  considered and not built: unproven against Cursor's own wire, and a conversation about sessions would have tripped it
+  anyway.
 - (2026-10-01) The gateway rejected masking at each source (a tool hook, a prompt composer, a channel's inbound
   message), which is how stored secrets are masked: only the Claude Code loop can rewrite a tool's result before the model
   reads it, and a source-side filter misses every door nobody listed (resume, compaction, a runtime handoff's replayed

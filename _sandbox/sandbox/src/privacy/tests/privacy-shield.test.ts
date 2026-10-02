@@ -75,6 +75,35 @@ describe("whether a turn may run", () => {
         expect(await trusting.privacyShield.admit("cursor", "native")).toEqual({ allowed: true });
     });
 
+    // Decided by the runtime before a word is read, so the refusal must not read as a finding: it once sent the owner
+    // looking for personal data in a message that held none.
+    test("a refusal says nothing was read, why the runtime is the reason, and where the way on is", async () => {
+        const { privacyShield } = privacySliceFake({ policy: { mode: "on" } });
+        const refused = await privacyShield.admit("cursor", "native", "vivid-rowan-moks");
+        expect(refused.allowed).toBe(false);
+        const reason = refused.allowed ? "" : refused.reason;
+        expect(reason).toContain("before reading anything");
+        expect(reason).toContain("nothing in what you sent was flagged");
+        expect(reason).toContain("Cursor's agent sends what it reads");
+        expect(reason).toContain("Let Cursor read this conversation as it is");
+        // A helper job has no conversation to grant, so it is not offered one.
+        const helper = await privacyShield.admit("cursor", "native");
+        expect(helper.allowed ? "" : helper.reason).not.toContain("this conversation");
+    });
+
+    test("a grant for one conversation lets the provider run there and nowhere else", async () => {
+        const { privacyShield } = privacySliceFake({ policy: { mode: "on", conversations: [{ conversationId: "vivid-rowan-moks", provider: "cursor" }] } });
+        expect(await privacyShield.admit("cursor", "native", "vivid-rowan-moks")).toEqual({ allowed: true });
+        expect((await privacyShield.admit("cursor", "native", "smart-moth-pq04")).allowed).toBe(false);
+        expect((await privacyShield.admit("cursor", "native")).allowed).toBe(false);
+        // Granted to one provider, not to whatever the conversation switches to.
+        expect((await privacyShield.admit("pi", "native", "vivid-rowan-moks")).allowed).toBe(false);
+        // The gateway reads the same grant, so a shieldable provider granted there would be relayed unmasked in it alone.
+        const policy = await privacyShield.policy();
+        expect(await privacyShield.trusted(policy, "cursor", "vivid-rowan-moks")).toBe(true);
+        expect(await privacyShield.trusted(policy, "cursor", "smart-moth-pq04")).toBe(false);
+    });
+
     test("a model this machine serves is trusted whatever the list says, and the free trial never is", async () => {
         const { privacyShield } = privacySliceFake({
             policy: { mode: "on" },

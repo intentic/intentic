@@ -90,7 +90,7 @@ export const createGatewayRoute = ({ shield, warn, fetch: send = fetch, now = ()
         let trusted: boolean;
         try {
             policy = await shield.policy();
-            trusted = await shield.trusted(policy, session.provider);
+            trusted = await shield.trusted(policy, session.provider, session.conversationId);
         } catch (error) {
             warn("privacy shield: the policy could not be read, refusing the request", error);
             return refusal(

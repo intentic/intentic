@@ -215,10 +215,14 @@ export type TurnFactsDeps = ServiceabilityDeps &
 
 // Asked of every turn, since a policy can change between two of them. A policy that cannot be read refuses: the shield
 // may be on, and a turn that runs past it cannot be taken back.
-const privacyRefusalOf = async (services: Pick<Services, "privacyShield" | "perf">, runtime: TurnRuntime): Promise<string | undefined> => {
+const privacyRefusalOf = async (
+    services: Pick<Services, "privacyShield" | "perf">,
+    runtime: TurnRuntime,
+    conversationId: string | undefined,
+): Promise<string | undefined> => {
     try {
         const verdict = await services.perf.track("turn.plan.privacy", { provider: runtime.provider }, () =>
-            services.privacyShield.admit(runtime.provider, runtime.harness),
+            services.privacyShield.admit(runtime.provider, runtime.harness, conversationId),
         );
         return verdict.allowed ? undefined : verdict.reason;
     } catch (error) {
@@ -246,7 +250,7 @@ export const gatherTurnFacts = async (services: TurnFactsDeps, input: RoutedTurn
     const [settings, served, privacyRefusal] = await Promise.all([
         context.settings ?? services.perf.track("turn.plan.settings", {}, () => services.sandboxSettings.get()),
         services.perf.track("turn.plan.window", { provider: runtime.provider }, () => servedEndpointModel(services, runtime.provider, input.model)),
-        privacyRefusalOf(services, runtime),
+        privacyRefusalOf(services, runtime, input.conversationId),
     ]);
     const declared = windowOf(served);
     const helperOnly = served?.row.helperOnly;

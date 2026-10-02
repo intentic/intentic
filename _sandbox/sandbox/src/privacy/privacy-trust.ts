@@ -9,11 +9,12 @@ import {
     PROVIDER_SPECS,
     providerLabel,
     TRIAL_ENDPOINT_ID,
+    trustedInConversation,
 } from "@intentic/sandbox-contract";
 
-// Who may read personal data as it is. The owner names trusted providers; a model running on this machine is trusted
-// whatever the list says, since nothing it reads leaves. Everything else is untrusted while the shield is on, the free
-// trial included: it passes through Intentic's servers to a vendor the owner never chose.
+// Who may read personal data as it is. The owner names trusted providers, everywhere or in one conversation; a model
+// running on this machine is trusted whatever the list says, since nothing it reads leaves. Everything else is untrusted
+// while the shield is on, the free trial included: it passes through Intentic's servers to a vendor the owner never chose.
 
 const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "::1", "[::1]", "0.0.0.0"]);
 
@@ -42,8 +43,12 @@ export const isLocalProvider = (provider: string, capabilities: readonly Capabil
     return capability?.kind === "endpoint" && loopbackUrl(capability.config.baseUrl);
 };
 
-export const isTrustedProvider = (policy: Pick<PrivacyShieldPolicy, "trusted">, provider: string, capabilities: readonly Capability[]): boolean =>
-    isLocalProvider(provider, capabilities) || policy.trusted.includes(provider);
+export const isTrustedProvider = (
+    policy: Pick<PrivacyShieldPolicy, "trusted" | "conversations">,
+    provider: string,
+    capabilities: readonly Capability[],
+    conversationId?: string,
+): boolean => isLocalProvider(provider, capabilities) || policy.trusted.includes(provider) || trustedInConversation(policy, provider, conversationId);
 
 // Whether a turn on this provider and harness can be put behind the gateway at all.
 export const shieldableRuntime = (provider: string, harness: AgentHarness): boolean => capabilitiesOf(provider, harness).privacy === "gateway";

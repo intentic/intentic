@@ -162,6 +162,18 @@ describe("what passes untouched", () => {
         expect(fake.privacyLedger.entries[0]).toMatchObject({ action: "passed", trusted: true });
     });
 
+    // The session carries its conversation, so a grant made for one reads the same here as at the turn's door.
+    test("a provider trusted in this conversation alone reads it as it came, and is masked in any other", async () => {
+        const grant = { mode: "on" as const, conversations: [{ conversationId: "c-1", provider: "claude" }] };
+        const granted = await harness(grant, "claude");
+        await granted.send("/v1/messages", request(`${PERSON} ${PESEL}`));
+        expect(granted.provider.seen[0]?.body).toContain(PESEL);
+        expect(granted.fake.privacyLedger.entries[0]).toMatchObject({ action: "passed", trusted: true, conversationId: "c-1" });
+        const elsewhere = await harness({ mode: "on", conversations: [{ conversationId: "c-2", provider: "claude" }] }, "claude");
+        await elsewhere.send("/v1/messages", request(`${PERSON} ${PESEL}`));
+        expect(elsewhere.provider.seen[0]?.body).not.toContain(PESEL);
+    });
+
     test("watching sends the request as it came and records what it would have masked", async () => {
         const { provider, send, fake } = await harness({ mode: "watch" }, "claude");
         await send("/v1/messages", request(`${PERSON} ${PESEL}`));

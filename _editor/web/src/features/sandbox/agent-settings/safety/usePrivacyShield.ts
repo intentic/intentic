@@ -56,6 +56,14 @@ export function usePrivacyShield() {
                 save.mutate(change(current));
             }
         },
+        // The same write, for a press whose next step needs the daemon to hold the policy first (a grant, then the send it
+        // lets through); rejects with the daemon's refusal, and does nothing while nothing is loaded.
+        updatePolicy: async (change: (policy: PrivacyShieldPolicy) => PrivacyShieldPolicy): Promise<void> => {
+            const current = status.value?.policy;
+            if (current !== undefined) {
+                await save.mutateAsync(change(current));
+            }
+        },
         isSaving: computed<boolean>(() => save.isPending.value),
         saveError: computed<Error | null>(() => save.error.value),
         isLoading: query.isLoading,

@@ -83,7 +83,7 @@ export const planCodexTurn = async (
             ? await services.privacyShield.baseUrlFor({ provider: "codex", upstream: services.config.translator.url, conversationId: input.conversationId })
             : undefined;
         const policy = await services.privacyShield.policy();
-        if (!subscribed && policy.mode === "on" && !(await services.privacyShield.trusted(policy, "codex"))) {
+        if (!subscribed && policy.mode === "on" && !(await services.privacyShield.trusted(policy, "codex", input.conversationId))) {
             return {
                 ok: false,
                 message:

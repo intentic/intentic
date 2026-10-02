@@ -197,10 +197,10 @@ const placementOf = (
 
 // Why a turn may not run on a runner while the privacy shield is on, or nothing; an unreadable policy refuses, since the
 // shield may be on.
-const runnerShieldRefusal = async (services: Pick<Services, "privacyShield">, provider: string): Promise<string | undefined> => {
+const runnerShieldRefusal = async (services: Pick<Services, "privacyShield">, provider: string, conversationId: string): Promise<string | undefined> => {
     try {
         const policy = await services.privacyShield.policy();
-        if (policy.mode !== "on" || (await services.privacyShield.trusted(policy, provider))) {
+        if (policy.mode !== "on" || (await services.privacyShield.trusted(policy, provider, conversationId))) {
             return undefined;
         }
     } catch (error) {
@@ -241,7 +241,7 @@ async function* runConversationTurn(
     }
     // A runner calls its provider from its own machine, past this sandbox's privacy shield: while the shield masks, only
     // a trusted provider may run there.
-    const unshieldedRunner = runner === undefined ? undefined : await runnerShieldRefusal(services, input.agent ?? "claude");
+    const unshieldedRunner = runner === undefined ? undefined : await runnerShieldRefusal(services, input.agent ?? "claude", conversationId);
     if (unshieldedRunner !== undefined) {
         yield { kind: "error", code: "privacy-unshielded", message: unshieldedRunner };
         yield { kind: "done" };

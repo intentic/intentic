@@ -150,9 +150,11 @@ flowchart LR
   is painted over with its token (`privacy/image-mask.ts`); one that cannot be read is held back. A PDF goes as its
   masked text, or is withheld. The vault (`privacy/privacy-vault.ts`) keeps one token per value for the whole workspace, beside the
   credentials, so a resumed or handed-off transcript masks to the same bytes. A runtime the gateway cannot stand in
-  front of (Cursor, ACP agents, Pi) is refused on an untrusted provider (`privacy-unshielded`), helper jobs step over
-  such a rung, children stay off runners, and a native push or a public share carries the kind of data instead of the
-  data. The policy lives off the workspace and only the owner changes it; the agent's `privacy` CLI can only teach
+  front of (Cursor, ACP agents, Pi) is refused on an untrusted provider (`privacy-unshielded`) before a word is read,
+  which the refusal and the chat's strip above the composer both say; the owner can let a provider read one
+  conversation as it is (the policy's `conversations`, read by the turn's door and the gateway alike) instead of
+  trusting it everywhere. Helper jobs step over such a rung, children stay off runners, and a native push or a public
+  share carries the kind of data instead of the data. The policy lives off the workspace and only the owner changes it; the agent's `privacy` CLI can only teach
   it a dataset's values.
 
 More: [subsystems](docs/subsystems.md) (how the parts connect), [environment](docs/env-contract.md) (what the daemon

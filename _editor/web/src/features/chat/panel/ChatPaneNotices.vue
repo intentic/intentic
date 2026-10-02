@@ -12,6 +12,7 @@ import { useSandbox } from "../../sandbox/client/useSandbox";
 import { lowHoursNotice } from "../../settings/hosted-plan/hostedHours";
 import { useHostedPlan } from "../../settings/hosted-plan/useHostedPlan";
 import ChatAccountPanel from "../accounts/ChatAccountPanel.vue";
+import ChatPrivacyStrip from "./ChatPrivacyStrip.vue";
 import NeedsStrip from "../../needs/NeedsStrip.vue";
 import { useT } from "@intentic/ui/i18n";
 
@@ -124,6 +125,8 @@ const activeAccountReauth = computed(() => {
         </Button>
     </div>
     <ChatAccountPanel />
+    <!-- Whether the privacy shield lets this conversation's provider run, said before the send rather than after it. -->
+    <ChatPrivacyStrip />
     <!-- The free plan's last hours: the meter's own line, amber, with the door to Billing. -->
     <div
         v-if="hoursNotice"

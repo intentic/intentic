@@ -166,6 +166,10 @@ const providerNote = (provider: PrivacyProvider): string | undefined => {
     return provider.shieldable ? undefined : t(`sandbox.agentPrivacyShield.unshieldableNote`);
 };
 
+// Grants made one conversation at a time, from each conversation's own strip above its composer: counted here so how far
+// the shield has been opened is in view on the page that sets it, and taken back together in one press.
+const conversationGrants = computed(() => policy.value?.conversations.length ?? 0);
+
 // The allow list is edited as text and saved on an explicit press, since a write per keystroke would replace the
 // whole policy dozens of times for one word.
 const allowDraft = useDraft(() => (policy.value === undefined ? undefined : allowListText(policy.value.allow)));
@@ -384,6 +388,22 @@ const LEARN_COMMAND = `privacy learn <file> --column …`;
                     />
                 </template>
             </Row>
+
+            <RowNote v-if="conversationGrants > 0">
+                <span class="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <span class="min-w-0 flex-1">{{
+                        t(`sandbox.agentPrivacyShield.conversationGrants`, { count: conversationGrants }, conversationGrants)
+                    }}</span>
+                    <Button
+                        size="small"
+                        severity="secondary"
+                        :text="true"
+                        :disabled="!ready"
+                        @click="write(`trusted`, (current) => ({ ...current, conversations: [] }))"
+                        >{{ t(`sandbox.agentPrivacyShield.takeBackAll`) }}</Button
+                    >
+                </span>
+            </RowNote>
 
             <RowNote v-if="saveNotice !== undefined && writtenFrom === `trusted`" variant="block"><Notice :of="saveNotice" /></RowNote>
         </RowGroup>

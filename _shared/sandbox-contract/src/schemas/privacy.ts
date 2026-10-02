@@ -41,6 +41,16 @@ export type PrivacyNames = z.infer<typeof PrivacyNamesSchema>;
 
 export const PRIVACY_TRUSTED_MAX = 200;
 export const PRIVACY_ALLOW_MAX = 1000;
+export const PRIVACY_CONVERSATIONS_MAX = 200;
+
+// One conversation the owner let an untrusted provider read as it is, granted from that conversation's own composer:
+// narrower than the trusted list, and the way on for a provider whose runtime the gateway cannot sit in front of
+// (Cursor's own wire, an ACP agent, Pi), which the shield otherwise refuses outright.
+export const PrivacyConversationTrustSchema = z.object({
+    conversationId: z.string().min(1).max(200),
+    provider: z.string().min(1).max(200).describe("Provider id, as the trusted list names it."),
+});
+export type PrivacyConversationTrust = z.infer<typeof PrivacyConversationTrustSchema>;
 
 export const PrivacyShieldPolicySchema = z.object({
     mode: PrivacyShieldModeSchema.default("off").describe("Whether the shield is off, only watching, or masking."),
@@ -62,8 +72,28 @@ export const PrivacyShieldPolicySchema = z.object({
         .max(PRIVACY_ALLOW_MAX)
         .default([])
         .describe("Values never masked: your own company, a public figure, a word the detector keeps mistaking for a name."),
+    conversations: z
+        .array(PrivacyConversationTrustSchema)
+        .max(PRIVACY_CONVERSATIONS_MAX)
+        .default([])
+        .describe("Providers that may read one conversation's personal data as it is, each granted from that conversation; oldest first."),
 });
 export type PrivacyShieldPolicy = z.infer<typeof PrivacyShieldPolicySchema>;
+
+// Whether the owner let this provider read this conversation as it is. A turn outside any conversation (a helper job)
+// never is.
+export const trustedInConversation = (
+    policy: Pick<PrivacyShieldPolicy, "conversations">,
+    provider: string,
+    conversationId: string | undefined,
+): boolean => conversationId !== undefined && policy.conversations.some((entry) => entry.conversationId === conversationId && entry.provider === provider);
+
+// The policy with that grant made or taken back. A full list drops its oldest grant to make room, since the newest is
+// the one somebody is waiting on.
+export const withConversationTrust = (policy: PrivacyShieldPolicy, conversationId: string, provider: string, on: boolean): PrivacyShieldPolicy => {
+    const others = policy.conversations.filter((entry) => !(entry.conversationId === conversationId && entry.provider === provider));
+    return { ...policy, conversations: on ? [...others, { conversationId, provider }].slice(-PRIVACY_CONVERSATIONS_MAX) : others };
+};
 
 // The policy a sandbox that never wrote one runs on.
 export const DEFAULT_PRIVACY_SHIELD: PrivacyShieldPolicy = PrivacyShieldPolicySchema.parse({});
