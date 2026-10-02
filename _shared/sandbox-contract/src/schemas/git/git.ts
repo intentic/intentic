@@ -379,6 +379,7 @@ export type WorkspaceModules = z.infer<typeof WorkspaceModulesSchema>;
 // One file an agent touched that still differs from main, plus whether main's working tree already holds it:
 // in main's history: accepted, no longer a difference — no row (see `absorbed`).
 // in main's tree, uncommitted: `landed: true`.
+// taken by the last land and edited in main since (committed or not): `landed: true`, since no land has anything to apply.
 // neither (never landed, or landed then discarded): `landed: false` — what "Land now" applies to.
 // A landed row stays until committed; that is the only act that retires it.
 export const AgentChangeSchema = GitChangeSchema.extend({

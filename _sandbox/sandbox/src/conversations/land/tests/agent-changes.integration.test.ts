@@ -211,6 +211,76 @@ test("a rebase after the accept leaves the answer where it was: nothing outstand
     expect(state.rows).toEqual([]);
 });
 
+// The review as the route serves it, row by row: which paths it lists and which of them it calls landed.
+const served = async (worktrees: AgentWorktrees, entry: ReturnType<typeof isolatedAgent>): Promise<{ rows: string[]; landed: string[] }> => {
+    const deps = { agentWorktrees: worktrees, agents: unstubbed<Services["agents"]>("agents", {}), logger };
+    const changes = (await reviewOf(deps, entry)).repos.flatMap((row) => row.changes);
+    return {
+        rows: changes.map((change) => change.path).sort(),
+        landed: changes
+            .filter((change) => change.landed)
+            .map((change) => change.path)
+            .sort(),
+    };
+};
+
+// Several lines edited at once, so a later edit in main builds on the agent's edit rather than undoing it.
+const editedAlso = (...lines: number[]): string =>
+    `${LINES.map((text, index) => (lines.includes(index + 1) ? `${text} EDITED` : text)).join("\n")}\n`;
+
+test("a landed file main has committed further since is still landed: no Land now for a land that carries nothing", async () => {
+    const { work, worktrees, conversation } = await setup();
+    await writeFile(join(conversation.cwd, "app.ts"), edited(1));
+    await writeFile(join(conversation.cwd, "other.ts"), edited(2));
+    const landed = await landAgent(worktrees, isolatedAgent(conversation.repos));
+    await sh(work, "add", "-A");
+    await commit(work, "take it");
+    // Another agent's land, committed on top: app.ts in main is no longer the agent's copy, nor is it outstanding.
+    await writeFile(join(work, "app.ts"), editedAlso(1, 5));
+    await sh(work, "add", "-A");
+    await commit(work, "another agent's work");
+
+    const entry = isolatedAgent(landed.repos);
+    expect(await served(worktrees, entry)).toEqual({ rows: ["app.ts"], landed: ["app.ts"] });
+    // What the review says is what a land does: nothing to carry.
+    expect((await landAgent(worktrees, entry)).changed).toBe(false);
+});
+
+test("a landed file the owner edits further without committing is still landed", async () => {
+    const { work, worktrees, conversation } = await setup();
+    await writeFile(join(conversation.cwd, "app.ts"), edited(1));
+    const landed = await landAgent(worktrees, isolatedAgent(conversation.repos));
+    await writeFile(join(work, "app.ts"), editedAlso(1, 5));
+
+    expect(await served(worktrees, isolatedAgent(landed.repos))).toEqual({ rows: ["app.ts"], landed: ["app.ts"] });
+});
+
+test("landed work discarded from the tree stays outstanding in the served review, which keeps its Land again", async () => {
+    const { work, worktrees, conversation } = await setup();
+    await writeFile(join(conversation.cwd, "app.ts"), edited(1));
+    const landed = await landAgent(worktrees, isolatedAgent(conversation.repos));
+    await discardPaths(work, undefined);
+
+    expect(await served(worktrees, isolatedAgent(landed.repos))).toEqual({ rows: ["app.ts"], landed: [] });
+});
+
+test("main moving on does not hide what the agent wrote after its land", async () => {
+    const { work, worktrees, conversation } = await setup();
+    await writeFile(join(conversation.cwd, "app.ts"), edited(1));
+    const landed = await landAgent(worktrees, isolatedAgent(conversation.repos));
+    await sh(work, "add", "-A");
+    await commit(work, "take it");
+    await writeFile(join(work, "app.ts"), editedAlso(1, 5));
+    await sh(work, "add", "-A");
+    await commit(work, "another agent's work");
+    // Turn two edits the same file again and does not land it.
+    await writeFile(join(conversation.cwd, "app.ts"), editedAlso(1, 9));
+    await sh(conversation.cwd, "add", "-A");
+    await commit(conversation.cwd, "turn two");
+
+    expect(await served(worktrees, isolatedAgent(landed.repos))).toEqual({ rows: ["app.ts"], landed: [] });
+});
+
 // The review is where a dependency the work adds is approved, so what it names must be exactly what the project takes
 // on: names, not versions, per manifest, read from the copy's own files (uncommitted ones too), and nothing claimed from
 // a manifest that cannot be read.

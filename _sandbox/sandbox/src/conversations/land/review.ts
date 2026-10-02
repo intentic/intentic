@@ -7,13 +7,15 @@ import type {
     LandConflict,
     ScratchPath,
 } from "@intentic/sandbox-contract";
+import { defaultGit } from "@intentic/scaffold";
 import type { Services } from "../../composition.js";
 import { headSha } from "../../git/changes/changes.js";
+import { materializedPaths } from "../../git/changes/changes-porcelain.js";
 import type { IsolatedAgent, RepoRecord } from "../registry/agents-store.js";
 import { strayStandings } from "../worktrees/stray-work.js";
-import { agentRepoModules, agentRepoReview, anchorOf, presentInMain } from "./agent-changes.js";
+import { agentRepoChanges, agentRepoModules, agentRepoReview, anchorOf, presentInMain } from "./agent-changes.js";
 import { intoOf, landTargetOf } from "./land-target.js";
-import { outstandingConflicts } from "./land.js";
+import { dirtyPaths, outstandingConflicts } from "./land.js";
 import { commitsCarrying, historySpanStart } from "./landed-history.js";
 
 // What a conversation's review reads, against main as it stands: the rows still its own, what main absorbed, the scratch
@@ -25,6 +27,46 @@ export type ReviewDeps = Pick<Services, "agentWorktrees" | "agents" | "logger">;
 const scratchField = (scratch: NonNullable<AgentChanges["scratch"]>): Pick<AgentChanges, "scratch"> => {
     const some = scratch.filter((repo) => repo.paths.length > 0);
     return some.length > 0 ? { scratch: some } : {};
+};
+
+const NONE: ReadonlySet<string> = new Set();
+
+// Rows the last land already took that main has edited again since: main holds neither the agent's content nor anything
+// a land could still apply, so reading presence alone offered Land now for a land that carries nothing, while the board,
+// reading the land's own record, already called the agent landed. Taken means outside the outstanding span (what a land
+// applies: `landedTip` to the tip, uncommitted work included) and still in main the way landed-presence.ts reads it:
+// touched in history since the land's HEAD, or uncommitted in the tree. Work taken out of the tree after the land is
+// neither, so it stays outstanding and keeps its Land again. A child that landed into its parent's checkout has no land
+// in main to read, and a failed read answers nothing: the row keeps what presence said.
+const takenByLastLand = async (
+    deps: ReviewDeps,
+    entry: IsolatedAgent,
+    composed: RepoRecord,
+    paths: readonly string[],
+): Promise<ReadonlySet<string>> => {
+    const { landedTip, landedHead } = composed;
+    if (paths.length === 0 || landedTip === undefined || landedHead === undefined || entry.placement.landedInto !== undefined) {
+        return NONE;
+    }
+    try {
+        const main = deps.agentWorktrees.mainDir(composed.repo);
+        const head = await headSha(main);
+        if (head === undefined) {
+            return NONE;
+        }
+        const [outstanding, committed, dirty] = await Promise.all([
+            agentRepoChanges(deps.agentWorktrees, entry, composed, "outstanding"),
+            defaultGit(main, ["diff", "--name-only", "--no-renames", "-z", landedHead, head]).then(
+                ({ stdout }) => new Set(materializedPaths(stdout)),
+            ),
+            dirtyPaths(main, defaultGit),
+        ]);
+        const remaining = new Set(outstanding.flatMap((change) => (change.from === undefined ? [change.path] : [change.path, change.from])));
+        return new Set(paths.filter((path) => !remaining.has(path) && (committed.has(path) || dirty.has(path))));
+    } catch (error) {
+        deps.logger.debug({ err: error, repo: composed.repo, id: entry.id }, "agents diff: last land unreadable");
+        return NONE;
+    }
 };
 
 // One repo's part of a review: its rows, how many main has absorbed, and the scratch its live copy keeps.
@@ -47,10 +89,17 @@ const repoReviewOf = async (
             composed,
             changes.map((change) => change.path),
         );
+        const kept = changes.filter((change) => !present.absorbed.has(change.path));
+        const taken = await takenByLastLand(
+            deps,
+            entry,
+            composed,
+            kept.filter((change) => !present.inWorkspace.has(change.path)).map((change) => change.path),
+        );
         // Object.assign, not a spread: `changes` is this call's own array, so nothing needs copying.
-        const flagged = changes
-            .filter((change) => !present.absorbed.has(change.path))
-            .map((change): AgentChange => Object.assign(change, { landed: present.inWorkspace.has(change.path) }));
+        const flagged = kept.map((change): AgentChange =>
+            Object.assign(change, { landed: present.inWorkspace.has(change.path) || taken.has(change.path) }),
+        );
         if (flagged.length === 0) {
             return { absorbed: present.absorbed.size, scratch };
         }
