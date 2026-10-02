@@ -25,16 +25,20 @@ interface Item {
 
 type StandingConversation = StandingGrants["conversations"][number];
 
-// Each yes in words, in the order a person scans for the risky ones: accounts, folders, whole shelves, unasked installs,
-// released secrets.
+// Each yes in words, in the order a person scans for the risky ones: everything at once, accounts, folders, whole
+// shelves, unasked installs, secrets past their host guard, released secrets.
 const itemsOf = (conversation: StandingConversation): readonly Item[] => {
     const at = (kind: GrantRevoke["kind"], what: string): GrantRevoke => ({ conversationId: conversation.conversationId, kind, what });
     return [
+        // Any permission card's "Allow everything in this conversation": the widest yes there is, so it leads.
+        ...(conversation.everything ? [{ grant: at(`everything`, ``), label: t(`needs.grants.everything`) }] : []),
         ...conversation.capabilities.map((what) => ({ grant: at(`capability`, what), label: t(`needs.grants.capability`, { what }) })),
         ...conversation.folders.map((what) => ({ grant: at(`folder`, what), label: t(`needs.grants.folder`, { what }) })),
         ...conversation.shelves.map((what) => ({ grant: at(`shelf`, what), label: t(`needs.grants.shelf`, { what }) })),
         // An install card's "Allow installs for this conversation": the one yes that names no single thing.
         ...(conversation.installs ? [{ grant: at(`install`, ``), label: t(`needs.grants.installs`) }] : []),
+        // A host guard card's "Allow <secret> anywhere in this conversation".
+        ...conversation.secrets.map((what) => ({ grant: at(`secret`, what), label: t(`needs.grants.secret`, { what }) })),
         ...conversation.releases.map((release) => ({
             grant: at(`release`, release.subject),
             label: t(`needs.grants.release`, { what: release.subject }),

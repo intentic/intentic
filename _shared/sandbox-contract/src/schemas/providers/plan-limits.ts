@@ -215,13 +215,16 @@ export const AgentReplySchema = z.discriminatedUnion("kind", [
             .optional()
             .describe("Dismissing it instead, which tells the agent to carry on using sensible defaults rather than leaving it waiting."),
     }),
-    // "always" may be narrowed further by the SDK's own suggestions.
+    // "always" may be narrowed further by the SDK's own suggestions. "everything" is the conversation-wide yes the card's
+    // Allow menu offers: this call, and every later request in the conversation a person could have allowed once.
     z.object({
         kind: z.literal("permission").describe("Answering a request to use a tool."),
         requestId: z.string().min(1).describe("Which card you are answering."),
         decision: z
-            .enum(["once", "always", "deny"])
-            .describe("Once allows this call alone; always allows that whole tool for the rest of the conversation; no blocks it."),
+            .enum(["once", "always", "everything", "deny"])
+            .describe(
+                "Once allows this call alone; always allows what the request's always-label names (a tool, a rule, a secret) for the rest of the conversation; everything allows this call and every later request in this conversation that an allow-once could settle, until it is taken back on Grants; no blocks it. A request that always asks (alwaysAsks) reads everything as once.",
+            ),
         feedback: z.string().optional().describe("Why not, which goes back to the model as the reason."),
         // Whole, not a patch: effort or an account named for one model means nothing on another.
         child: ChildRunSchema.optional().describe(

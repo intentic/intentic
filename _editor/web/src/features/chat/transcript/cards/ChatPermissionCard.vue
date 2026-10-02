@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import type { ChildMove, ChildRun } from "@intentic/sandbox-contract";
-import { ui } from "@intentic/ui";
+import type { AgentReply, ChildMove, ChildRun } from "@intentic/sandbox-contract";
+import { ContextMenu, ui } from "@intentic/ui";
+import type { MenuItem } from "primevue/menuitem";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
 import { providerDisplayLabel } from "../../accounts/providerCatalog";
@@ -60,11 +61,37 @@ const allowLabel = computed(() => (child.value === undefined ? t(`chat.chatMessa
 // Command disclosure, closed by default, per-decision only: the card's title already states the safety judgment.
 const commandOpen = ref(false);
 
+type Allowing = Exclude<Extract<AgentReply, { kind: `permission` }>[`decision`], `deny`>;
+
 // Allowing a start carries the owner's pick with it, when there is one; the daemon starts the child on that instead.
-const allow = (): Promise<void> => {
+const allow = (decision: Allowing = `once`): Promise<void> => {
     const pick = livePick.value;
-    return props.reply(pick === undefined ? { kind: `permission`, decision: `once` } : { kind: `permission`, decision: `once`, child: pick });
+    return props.reply(pick === undefined ? { kind: `permission`, decision } : { kind: `permission`, decision, child: pick });
 };
+
+// THE ALLOW MENU. Allow once stays the one-press default; the wider yeses fold behind its caret, narrowest first: what
+// this card's own gate can remember (a rule, a tool, a secret, installs), then everything in this conversation. A card
+// that always asks (a hard rule, a restart other conversations feel, an owner-only change) offers no "everything",
+// since no standing yes would answer it. Each row answers at once: picking a scope is the decision, not a setting.
+const menu = ref<{ show: (event: Event) => void }>();
+const wider = computed<MenuItem[]>(() => [
+    ...(card.value.alwaysLabel === undefined ? [] : [{ label: card.value.alwaysLabel, icon: `lock`, command: () => void allow(`always`) }]),
+    ...(card.value.alwaysAsks === true
+        ? []
+        : [
+              {
+                  label: t(`chat.chatMessageView.allowEverything`),
+                  icon: `bolt`,
+                  hint: t(`chat.chatMessageView.allowEverythingHint`),
+                  command: () => void allow(`everything`),
+              },
+          ]),
+]);
+const allowItems = computed<MenuItem[]>(() => [
+    { label: allowLabel.value, icon: `check`, hint: t(`chat.chatMessageView.allowOnceHint`), command: () => void allow() },
+    { separator: true },
+    ...wider.value,
+]);
 </script>
 
 <template>
@@ -100,16 +127,29 @@ const allow = (): Promise<void> => {
         </div>
 
         <template v-if="pending" #actions>
-            <ChatDecisionButton tone="primary" icon="check" :disabled="settling" @click="allow">{{ allowLabel }}</ChatDecisionButton>
-            <!-- Secondary tone, since a second filled button beside Allow once would read as a coin flip. -->
-            <ChatDecisionButton
-                v-if="card.alwaysLabel"
-                tone="secondary"
-                icon="lock"
-                :disabled="settling"
-                @click="reply({ kind: 'permission', decision: 'always' })"
-                >{{ card.alwaysLabel }}</ChatDecisionButton
-            >
+            <!-- One split control: the press is Allow once, the caret opens every wider yes this card can take. -->
+            <span class="inline-flex items-stretch gap-px">
+                <ChatDecisionButton
+                    tone="primary"
+                    icon="check"
+                    :class="wider.length > 0 && `rounded-r-none`"
+                    :disabled="settling"
+                    @click="allow()"
+                    >{{ allowLabel }}</ChatDecisionButton
+                >
+                <ChatDecisionButton
+                    v-if="wider.length > 0"
+                    tone="primary"
+                    class="rounded-l-none !px-1.5"
+                    :disabled="settling"
+                    :aria-label="t(`chat.chatMessageView.allowMore`)"
+                    aria-haspopup="menu"
+                    @click="menu?.show($event)"
+                >
+                    <Icon name="chevron-down" class="text-2xs" />
+                </ChatDecisionButton>
+            </span>
+            <ContextMenu v-if="wider.length > 0" ref="menu" :model="allowItems" :min-width="16" />
             <!-- A refusal of this one call that lets the turn go on: the agent is told to carry on another way, or without it. Its
                  label says so, so it carries no hover of its own. -->
             <ChatDecisionButton tone="secondary" icon="forward" :disabled="settling" @click="reply(SKIP_CALL)">{{

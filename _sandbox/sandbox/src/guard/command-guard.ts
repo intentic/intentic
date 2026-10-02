@@ -339,12 +339,13 @@ export const createCommandGuard = (options: CommandGuardOptions): CommandGuard =
             record({ ...entry, outcome: "refused" }, at);
             return unaskable;
         }
-        const { id, wait } = options.cards.create("permission", {
-            kind: "permission",
-            requestId: "",
-            decision: "deny",
-            feedback: "The turn ended before you answered.",
-        });
+        // A hard rule asks every time: a standing "allow everything" never answers it, as no policy line waives it.
+        const { id, wait } = options.cards.create(
+            "permission",
+            { kind: "permission", requestId: "", decision: "deny", feedback: "The turn ended before you answered." },
+            undefined,
+            { alwaysAsks: hard !== undefined },
+        );
         record({ ...entry, outcome: "asked" }, at);
         // Title is the judge's own sentence; the hard rule instead titles its named consequence.
         yield {
@@ -354,7 +355,7 @@ export const createCommandGuard = (options: CommandGuardOptions): CommandGuard =
             title: hard === undefined ? verdict.sentence : `This ${subject.noun} would ${COMMAND_CLASS_LABELS[hard]}`,
             displayName: subject.displayName,
             program: programAsk(program, subject, matches, hard),
-            ...(hard === undefined ? {} : { explain: verdict.sentence }),
+            ...(hard === undefined ? {} : { explain: verdict.sentence, alwaysAsks: true as const }),
             // Label is the exact line to add, so nobody accepts a rule unread; shown only when there is one to
             // remember, and never under the hard rule, which no line can waive: pressing it would only write a
             // line that changes nothing, and the next such command would ask again.

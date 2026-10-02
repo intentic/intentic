@@ -9,7 +9,7 @@ import type { ChatMessage } from "../transcript";
 import ChatPermissionCard from "./ChatPermissionCard.vue";
 
 // A card waiting on the owner, as the daemon's own fold draws it from the frame that raised it.
-const pendingCard = (): ChatMessage => {
+const pendingCard = (over: Partial<Extract<AgentEvent, { kind: `permission` }>> = {}): ChatMessage => {
     const fold = new TranscriptFold([userRow(`go`, 1, [])]);
     const raised: AgentEvent = {
         kind: `permission`,
@@ -17,6 +17,7 @@ const pendingCard = (): ChatMessage => {
         toolName: `Bash`,
         title: `Run the migration against the shared database?`,
         alwaysLabel: `Don't ask again for Bash`,
+        ...over,
     };
     fold.apply(raised);
     const row = fold.rows.find((candidate) => candidate.permission !== undefined);
@@ -29,13 +30,13 @@ const pendingCard = (): ChatMessage => {
 let app: App | undefined;
 // Every answer a press sent, in order.
 const sent: CardAnswer[] = [];
-const mount = (): HTMLElement => {
+const mount = (over: Partial<Extract<AgentEvent, { kind: `permission` }>> = {}): HTMLElement => {
     const element = document.createElement(`div`);
     document.body.append(element);
     app = createApp({
         render: () =>
             h(ChatPermissionCard, {
-                message: pendingCard(),
+                message: pendingCard(over),
                 settling: false,
                 reply: async (answer: CardAnswer) => {
                     sent.push(answer);
@@ -71,13 +72,32 @@ const press = (element: HTMLElement, label: string): void => {
     button.click();
 };
 
+const row = (element: HTMLElement) =>
+    buttons(element).map((button) => ({ label: button.textContent?.trim() || button.getAttribute(`aria-label`), tip: button.dataset[`tip`] }));
+
 it(`offers declining this one call beside the No that stops the turn, which says so before the press`, () => {
-    expect(buttons(mount()).map((button) => ({ label: button.textContent?.trim(), tip: button.dataset[`tip`] }))).toEqual([
+    expect(row(mount())).toEqual([
         { label: `Allow once`, tip: undefined },
-        { label: `Don't ask again for Bash`, tip: undefined },
+        // The wider yeses (this tool, everything here) fold behind Allow once's caret rather than standing beside it.
+        { label: `More ways to allow`, tip: undefined },
         // Its label already says the turn goes on.
         { label: `Skip this, keep going`, tip: undefined },
         { label: `No`, tip: `Stops turn` },
+    ]);
+});
+
+it(`sends a plain allow-once from the press itself`, () => {
+    press(mount(), `Allow once`);
+
+    expect(sent).toEqual([{ kind: `permission`, decision: `once` }]);
+});
+
+// A hard rule's card has nothing wider to offer: no always, and no standing yes would answer it.
+it(`draws no caret on a card that always asks and can remember nothing`, () => {
+    expect(row(mount({ alwaysLabel: undefined, alwaysAsks: true })).map((button) => button.label)).toEqual([
+        `Allow once`,
+        `Skip this, keep going`,
+        `No`,
     ]);
 });
 

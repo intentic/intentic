@@ -63,6 +63,7 @@ import { conversationIdentity, mainTreePlacement, type Placement, placedTurn, re
 import { type WorktreeRun, worktreePlacement } from "./placement/worktree-placement.js";
 import { turnCloser } from "./placement/turn-close.js";
 import { runWorktreeFixers } from "../../conversations/land/worktree-fixers.js";
+import { standingOn } from "../../conversations/actor/parked-cards.js";
 
 // One turn from placement to settlement (streamAgent): placed, prepared, run on its provider, folded, settled.
 
@@ -448,7 +449,11 @@ const baseRequestOf = (
             ...opt("unattended", input.unattended === true ? true : undefined),
         },
         tools: Object.keys(turn.cliEnv).length > 0 ? { cliEnv: turn.cliEnv } : {},
-        hooks: { cards: services.cards, ...(input.conversationId === undefined ? {} : actorAsks(services.conversations, input.conversationId)) },
+        hooks: {
+            // A card this turn raises without naming its conversation is still one that conversation's standing yes answers.
+            cards: standingOn(services.cards, input.conversationId),
+            ...(input.conversationId === undefined ? {} : actorAsks(services.conversations, input.conversationId)),
+        },
         signal: turn.signal ?? new AbortController().signal,
     };
 };

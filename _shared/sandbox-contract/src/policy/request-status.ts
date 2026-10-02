@@ -1,4 +1,4 @@
-import { REQUEST_FIELDS, type RequestField, type TranscriptRequests, type TranscriptRow } from "../events/transcript.js";
+import { type PermissionStatus, REQUEST_FIELDS, type RequestField, type TranscriptRequests, type TranscriptRow } from "../events/transcript.js";
 import type { AgentReply } from "../schemas/providers/plan-limits.js";
 import { startedChildCard } from "../events/child-run.js";
 
@@ -6,6 +6,21 @@ import { startedChildCard } from "../events/child-run.js";
 // optimistically before the frame returns. No reply (turn stopped or died) reads as cancelled for every card; a reply
 // of the wrong kind cannot settle a card of another, since requestId is what matches them.
 type Cards = { -readonly [K in RequestField]?: TranscriptRow[K] };
+
+// A permission card's ending, from the reply that released it: each kind of yes keeps its own word.
+const permissionStatusOf = (reply: AgentReply | undefined): PermissionStatus => {
+    if (reply?.kind !== "permission") {
+        return "cancelled";
+    }
+    switch (reply.decision) {
+        case "deny":
+            return "denied";
+        case "once":
+            return "allowed";
+        default:
+            return reply.decision;
+    }
+};
 
 export const settledRequests = (cards: TranscriptRequests, reply: AgentReply | undefined): TranscriptRequests => {
     const out: Cards = {};
@@ -26,14 +41,7 @@ export const settledRequests = (cards: TranscriptRequests, reply: AgentReply | u
     if (permission !== undefined) {
         out.permission = {
             ...startedChildCard(permission, reply),
-            status:
-                reply?.kind !== "permission"
-                    ? "cancelled"
-                    : reply.decision === "deny"
-                      ? "denied"
-                      : reply.decision === "always"
-                        ? "always"
-                        : "allowed",
+            status: permissionStatusOf(reply),
         };
     }
     if (browserHelp !== undefined) {

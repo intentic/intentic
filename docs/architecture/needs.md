@@ -74,5 +74,5 @@ One inbox answers "what is waiting on me", whichever part of the app holds it ([
 | --- | --- |
 | `.intentic/records/needs.json` | every open need and the recent closed ones, with who answered and how the agent was told |
 | `sandbox-secrets.json` (auth root) | secrets a person pasted into a card or added on the Secrets view without DevOps, and ones `secrets generate` made |
-| `conversation-grants.json` (auth root) | what a person allowed one conversation beyond its persona, and "allow installs for this conversation" from an install card |
+| `conversation-grants.json` (auth root) | what a person allowed one conversation beyond its persona, "allow installs for this conversation" from an install card, "allow <secret> anywhere in this conversation" from a host guard card, and "allow everything in this conversation" from any permission card's Allow menu |
 | `credential-releases.json` (auth root, [`credential-grants.ts`](../../_sandbox/sandbox/src/secrets/credential-grants.ts)) | credentials a named approver released to a conversation, until a take-back; mirrored in memory, loaded at boot |

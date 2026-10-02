@@ -49,6 +49,9 @@ export const permissionStatus = (permission: TranscriptPermission): CardStatus |
         // An always-allow still counts as a yes; the grant lasts the rest of the turn without asking again.
         case "always":
             return { label: t(`chat.cardStatus.alwaysAllowed`), tone: "done" };
+        // Answered by the conversation-wide yes: the one given on this card, or one already standing when it was raised.
+        case "everything":
+            return { label: t(`chat.cardStatus.everythingAllowed`), tone: "done" };
         case "denied":
             return { label: t(`chat.cardStatus.denied`), tone: "gone" };
         case "cancelled":

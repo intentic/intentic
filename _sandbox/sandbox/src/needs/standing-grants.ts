@@ -29,6 +29,8 @@ export const standingGrants = async ({ conversationGrants, credentialGrants }: S
             folders: [...(grant?.folders ?? [])],
             shelves: [...(grant?.shelves ?? [])],
             installs: grant?.installs === true,
+            secrets: [...(grant?.secrets ?? [])],
+            everything: grant?.everything === true,
             ...(grant?.by === undefined ? {} : { by: grant.by }),
             ...(grant === undefined ? {} : { updatedAt: grant.updatedAt }),
             releases: releases
@@ -47,6 +49,9 @@ export const revokeGrant = async ({ conversationGrants, credentialGrants }: Stan
     }
     if (input.kind === "install") {
         return conversationGrants.revokeInstalls(input.conversationId);
+    }
+    if (input.kind === "everything") {
+        return conversationGrants.revokeEverything(input.conversationId);
     }
     return conversationGrants.revoke(input.conversationId, { subject: input.kind, what: input.what });
 };

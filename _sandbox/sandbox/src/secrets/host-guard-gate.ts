@@ -11,14 +11,24 @@ import { commandDestination, type Destination, pageDestination, SCRIPT_DESTINATI
 // has had its say and whatever it said. For a secret whose host guard is on, a use whose every named host is on the list
 // goes; one aimed off the list, or anywhere its text cannot show, raises a card in the live conversation and waits for a
 // person, and is refused when there is nobody to ask. A secret whose guard is off is never asked about here. No judge is
-// consulted, so none can let a guarded use through, and none being unreachable does either.
+// consulted, so none can let a guarded use through, and none being unreachable does either. The one standing yes is a
+// person's own: a card's "Allow <secret> anywhere in this conversation" lets that conversation send it past its guard
+// from then on, until it is taken back on the Grants page.
 
 export interface HostGuardGateDeps extends CardDeps {
     // The guards in force; a rejection (the owner's file exists but cannot be read) refuses rather than lets anything by.
     readonly guards: () => Promise<readonly SecretHostGuard[]>;
     // Who may answer a request to loosen a guard; undefined where no owner is recorded, which lets any signed-in person.
     readonly ownerEmail: () => Promise<string | undefined>;
+    // Secrets a conversation may send past their guard, answered on this gate's own card; absent keeps every use asking.
+    readonly grants?: SecretPasses;
     readonly deadlineMs?: number;
+}
+
+// "Allow <secret> anywhere in this conversation", kept per conversation by registry name.
+export interface SecretPasses {
+    readonly of: (conversationId: string) => Promise<readonly string[]>;
+    readonly add: (conversationId: string, names: readonly string[], by: string | undefined) => Promise<void>;
 }
 
 export interface HostGuardCheck {
@@ -181,6 +191,17 @@ const widen = async (deps: HostGuardGateDeps, request: WidenRequest): Promise<Wi
     };
 };
 
+// Whether a person already let this conversation send every one of these past its guard. An unreadable grant file reads
+// as no, which asks rather than sends.
+const passed = async (deps: HostGuardGateDeps, conversationId: string, names: readonly string[]): Promise<boolean> => {
+    if (deps.grants === undefined) {
+        return false;
+    }
+    // allow(silent-catch): an unreadable grant file reads as no grant, which asks a person rather than sends.
+    const granted = await deps.grants.of(conversationId).catch((): readonly string[] => []);
+    return names.every((name) => granted.includes(name));
+};
+
 export const createHostGuardGate = (deps: HostGuardGateDeps): HostGuardGate => ({
     widen: (request) => widen(deps, request),
     check: async (input) => {
@@ -205,6 +226,10 @@ export const createHostGuardGate = (deps: HostGuardGateDeps): HostGuardGate => (
             return { allow: true };
         }
         const sentence = sentenceOf(reading, input.target);
+        const names = reading.guarded.map((entry) => entry.name);
+        if (card !== undefined && (await passed(deps, card.conversationId, names))) {
+            return { allow: true };
+        }
         if (verdict.effect === "deny" || card === undefined) {
             return refusal(
                 sentence,
@@ -224,6 +249,7 @@ export const createHostGuardGate = (deps: HostGuardGateDeps): HostGuardGate => (
                 displayName: "Send secret",
                 ...opt("program", program),
                 explain: sentence,
+                ...opt("alwaysLabel", deps.grants === undefined ? undefined : `Allow ${both(names)} anywhere in this conversation`),
             }),
             approves: (reply) => reply.decision !== "deny",
             signal: input.signal,
@@ -241,6 +267,11 @@ export const createHostGuardGate = (deps: HostGuardGateDeps): HostGuardGate => (
                 raised.reply.feedback?.trim() ||
                     "The person declined: it was not used. Do not retry, and do not look for another way to send it there.",
             );
+        }
+        if (raised.reply.decision === "always") {
+            // Kept before the use goes, so the very next one reads it; a write that fails costs only a second card.
+            // allow(silent-catch): the person's yes for this use stands either way; a grant not kept only asks again next time.
+            await deps.grants?.add(card.conversationId, names, raised.caller?.email).catch(() => undefined);
         }
         return raised.caller === undefined ? { allow: true } : { allow: true, approvedBy: raised.caller.email };
     },

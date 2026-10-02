@@ -375,7 +375,7 @@ describe("widenPersona", () => {
     });
 
     it("opens a granted capability, shelf and folder, and only those", () => {
-        const wide = widenPersona(narrow, { capabilities: ["reddit-work"], folders: ["refs/sdk"], shelves: ["shell"], installs: false, updatedAt: 1 });
+        const wide = widenPersona(narrow, { capabilities: ["reddit-work"], folders: ["refs/sdk"], shelves: ["shell"], installs: false, secrets: [], everything: false, updatedAt: 1 });
         expect(narrow.allows(reddit)).toBe(false);
         expect(wide.allows(reddit)).toBe(true);
         expect(wide.allows(linear)).toBe(false);
@@ -386,6 +386,6 @@ describe("widenPersona", () => {
 
     it("keeps an unfenced turn unfenced: it already reaches the whole workspace", () => {
         const open = turnPersona({ personas: [], actsAs: undefined, unattended: false });
-        expect(widenPersona(open, { capabilities: [], folders: ["refs/sdk"], shelves: [], installs: false, updatedAt: 1 }).fence).toBeUndefined();
+        expect(widenPersona(open, { capabilities: [], folders: ["refs/sdk"], shelves: [], installs: false, secrets: [], everything: false, updatedAt: 1 }).fence).toBeUndefined();
     });
 });

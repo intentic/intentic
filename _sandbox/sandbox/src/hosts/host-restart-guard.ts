@@ -153,6 +153,8 @@ const askOwner = async (services: Services, run: LiveRun, ask: RestartAsk): Prom
                 description: stoppingSaid(ask),
             }),
             approves: (answer) => answer.decision !== "deny",
+            // Other conversations' turns stop with it, so this conversation's own standing yes is not enough.
+            alwaysAsks: true,
             signal: ended.signal,
             deadlineMs: DEADLINE_MS,
         },

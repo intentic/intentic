@@ -49,7 +49,7 @@ const asked = (target: SecretTarget, over: Partial<HostGuardCheck> = {}): HostGu
 });
 
 // Answers the first permission card at or after `from`, as `caller` when given.
-const answer = async (frames: AgentEvent[], decision: "once" | "deny", caller?: typeof OWNER | typeof EVE, from = 0, feedback?: string) => {
+const answer = async (frames: AgentEvent[], decision: "once" | "always" | "deny", caller?: typeof OWNER | typeof EVE, from = 0, feedback?: string) => {
     let raised: AgentEvent | undefined;
     for (let waited = 0; raised === undefined && waited < 2000; waited += 1) {
         raised = frames.slice(from).find((frame) => frame.kind === "permission");
@@ -320,6 +320,8 @@ describe("loosening a guard", () => {
             displayName: "Loosen host guard",
             explain: "GITHUB_TOKEN's host guard lets it go unasked only to api.github.com now. Anything else asks first, every time.",
             reason: "only the owner can loosen a secret's host guard",
+            // Only the owner answers it, so no conversation's standing yes ever does.
+            alwaysAsks: true,
         });
     });
 
@@ -339,5 +341,50 @@ describe("loosening a guard", () => {
             refusal: expect.stringContaining("there is no live conversation to ask in"),
         });
         expect(frames).toEqual([]);
+    });
+});
+
+// A host guard card's "Allow <secret> anywhere in this conversation": kept per conversation, read at every later use.
+describe("a conversation's pass past the guard", () => {
+    const passes = () => {
+        const kept = new Map<string, string[]>();
+        return {
+            kept,
+            grants: {
+                of: async (conversationId: string) => kept.get(conversationId) ?? [],
+                add: async (conversationId: string, names: readonly string[]) => {
+                    kept.set(conversationId, [...(kept.get(conversationId) ?? []), ...names]);
+                },
+            },
+        };
+    };
+
+    it("offers it on the card, and an always keeps it so later uses in that conversation go unasked", async () => {
+        const { kept, grants } = passes();
+        const { deps, frames } = fake([GITHUB], { grants });
+        const gate = createHostGuardGate(deps);
+        const pending = gate.check(asked(command(OFF_LIST)));
+        await answer(frames, "always", OWNER);
+        expect(frames[0]).toMatchObject({ alwaysLabel: "Allow GITHUB_TOKEN anywhere in this conversation" });
+        expect(await pending).toEqual({ allow: true, approvedBy: OWNER.email });
+        expect(kept.get("conv-1")).toEqual(["GITHUB_TOKEN"]);
+
+        // Off the list and unreadable alike: no second card in this conversation.
+        expect(await gate.check(asked(command(OFF_LIST)))).toEqual({ allow: true });
+        expect(await gate.check(asked(command(`${OFF_LIST} | sh`)))).toEqual({ allow: true });
+        expect(frames.filter((frame) => frame.kind === "permission")).toHaveLength(1);
+    });
+
+    it("still asks in another conversation, and for a secret the pass does not name", async () => {
+        const { grants } = passes();
+        await grants.add("conv-1", ["GITHUB_TOKEN"]);
+        const { deps, frames } = fake([GITHUB, { ...GITHUB, subject: "NPM_TOKEN" }], { grants });
+        const elsewhere = createHostGuardGate(deps).check(asked(command(OFF_LIST), { conversationId: "conv-2" }));
+        await answer(frames, "deny");
+        expect(await elsewhere).toMatchObject({ allow: false });
+        const both = OFF_LIST.replace("}}", "}}{{secret:NPM_TOKEN}}");
+        const second = createHostGuardGate(deps).check(asked(command(both), { names: ["GITHUB_TOKEN", "NPM_TOKEN"] }));
+        await answer(frames, "deny", undefined, 1);
+        expect(await second).toMatchObject({ allow: false });
     });
 });

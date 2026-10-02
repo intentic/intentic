@@ -168,6 +168,8 @@ interface DeviceAsk {
     readonly command: string;
     readonly sentence: string;
     readonly at: number;
+    // Asked because of the owner's hard rule, which asks every time whatever stands in the conversation.
+    readonly hard: boolean;
 }
 
 // Asks the owner on a card in the live turn and holds the call until it settles: undefined forwards the command, a
@@ -200,6 +202,7 @@ const askOwner = async (services: Services, run: LiveRun, ask: DeviceAsk): Promi
                 explain: ask.sentence,
             }),
             approves: (answer) => answer.decision !== "deny",
+            alwaysAsks: ask.hard,
             signal: ended.signal,
             deadlineMs: DEADLINE_MS,
         },
@@ -300,7 +303,14 @@ export const judgeHostCommand = async (
     }
     // Asked whoever started the turn: a card nobody has answered yet waits for the owner, it is not a refusal.
     record("asked");
-    const asking = askOwner(services, run, { conversationId, machine: input.machine, command: input.command, sentence: verdict.sentence, at });
+    const asking = askOwner(services, run, {
+        conversationId,
+        machine: input.machine,
+        command: input.command,
+        sentence: verdict.sentence,
+        at,
+        hard: hard !== undefined,
+    });
     const ownKey = askKey(conversationId, input.machine, input.command);
     openAsks.set(ownKey, asking);
     // An answer nobody came back for is dropped with its turn: a later turn's same command is asked about afresh.

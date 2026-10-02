@@ -2,6 +2,7 @@ import { join } from "node:path";
 import type { SecretHostGuard } from "@intentic/sandbox-contract";
 import type { SecretVault } from "../capabilities/credentials/secret-vault.js";
 import type { CardDeps } from "../conversations/actor/card-offers.js";
+import type { ConversationGrants } from "../personas/conversation-grants.js";
 import type { WorkspacePaths } from "../workspace/workspace.js";
 import { createCredentialGate, type CredentialGate } from "./credential-gate.js";
 import { type CredentialGatesStore, fileCredentialGates } from "./credential-gates.js";
@@ -40,6 +41,8 @@ export interface SecretsDeps {
     readonly secretVault: SecretVault;
     // How a gate parks a turn on a release card and says so.
     readonly cards: CardDeps;
+    // Where a host guard card's "anywhere in this conversation" is kept, and read at every later use.
+    readonly conversationGrants: Pick<ConversationGrants, "of" | "add">;
     // The hosts each connected capability's connector declares for its credential (host-guards.ts connectorHostDefaults).
     readonly connectorHosts: () => Promise<ReadonlyMap<string, readonly string[]>>;
     // Who may loosen a guard on a card the agent raised.
@@ -49,7 +52,16 @@ export interface SecretsDeps {
 }
 
 // Builds the secrets slice.
-export const createSecretsSlice = ({ workspace, authRoot, secretVault, cards, connectorHosts, ownerEmail, warn }: SecretsDeps): SecretsSlice => {
+export const createSecretsSlice = ({
+    workspace,
+    authRoot,
+    secretVault,
+    cards,
+    conversationGrants,
+    connectorHosts,
+    ownerEmail,
+    warn,
+}: SecretsDeps): SecretsSlice => {
     const credentialGates = fileCredentialGates(join(authRoot, "credential-gates.json"));
     const credentialGrants = fileCredentialGrants(join(authRoot, credentialReleasesDocument.path), (error) =>
         warn("credential releases: the stored releases could not be read or written", error),
@@ -64,7 +76,19 @@ export const createSecretsSlice = ({ workspace, authRoot, secretVault, cards, co
     return {
         secretHostGuards,
         hostGuards,
-        hostGuardGate: createHostGuardGate({ guards: hostGuards, ownerEmail, ...cards }),
+        hostGuardGate: createHostGuardGate({
+            guards: hostGuards,
+            ownerEmail,
+            grants: {
+                of: async (conversationId) => (await conversationGrants.of(conversationId))?.secrets ?? [],
+                add: async (conversationId, names, by) => {
+                    for (const name of names) {
+                        await conversationGrants.add(conversationId, { subject: "secret", what: name }, by);
+                    }
+                },
+            },
+            ...cards,
+        }),
         sandboxSecrets,
         secretRegistry: secretRegistryOf(secretVault, () => workspace.repos["desired-state"], sandboxSecrets),
         secretUses: fileSecretUses(join(workspace.root, secretUsesDocument.path)),

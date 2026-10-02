@@ -1,6 +1,7 @@
 import type { AgentEvent, AgentReply, ParkKind } from "@intentic/sandbox-contract";
 import type { Caller } from "../../auth/auth.js";
 import type { Services } from "../../composition.js";
+import { opt } from "../../opt.js";
 import { DAEMON_OWNER, ONE_SHOT_OWNER } from "../../seams/workload-stamp.js";
 import type { ConversationActors } from "./conversation-actors.js";
 import { soleLiveConversation, turnRunOf } from "./conversation-holdings.js";
@@ -73,6 +74,8 @@ export interface Card<K extends AgentReply["kind"]> {
     readonly approves: (reply: Extract<AgentReply, { kind: K }>) => boolean;
     // Who may click, when the card is addressed to a named list rather than to whoever is looking.
     readonly mayAnswer?: MayAnswer;
+    // Asks every time: a standing "allow everything" never answers it. A card addressed by mayAnswer always asks too.
+    readonly alwaysAsks?: boolean;
     // The caller's own lifetime; its abort settles the card cancelled instead of leaving it parked unattended.
     readonly signal?: AbortSignal;
     readonly deadlineMs: number;
@@ -100,13 +103,11 @@ export const raiseRequest = async <K extends AgentReply["kind"]>(
         run.push(event);
         deps.observe(run.conversationId, event);
     };
-    const { id, wait } = deps.cards.create(
-        card.kind,
-        card.onAbort,
-        run.conversationId,
-        card.mayAnswer === undefined ? {} : { mayAnswer: card.mayAnswer },
-    );
-    say(card.raised(id));
+    const alwaysAsks = card.alwaysAsks === true || card.mayAnswer !== undefined;
+    const { id, wait } = deps.cards.create(card.kind, card.onAbort, run.conversationId, { ...opt("mayAnswer", card.mayAnswer), alwaysAsks });
+    const raised = card.raised(id);
+    // The card says so itself, so its Allow menu never offers a yes that would not answer it.
+    say(alwaysAsks && raised.kind === "permission" ? { ...raised, alwaysAsks: true } : raised);
     deps.awaiting(run.conversationId, card.kind);
     const deadline = AbortSignal.timeout(card.deadlineMs);
     const { reply, resolved, caller } = await wait(card.signal === undefined ? deadline : AbortSignal.any([card.signal, deadline]));

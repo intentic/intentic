@@ -908,6 +908,7 @@
         "cardStatus": {
             "allowed": "Erlaubt",
             "alwaysAllowed": "Immer erlaubt",
+            "everythingAllowed": "Erlaubt: alles hier",
             "answered": "Beantwortet",
             "approved": "Genehmigt",
             "couldntHelp": "Konnte nicht helfen",
@@ -1115,6 +1116,10 @@
             "agentsCase": "Die Begründung des Agenten: {why}",
             "agentsTerminalNeeds": "Das Terminal des Agenten braucht Sie",
             "allowOnce": "Einmal erlauben",
+            "allowOnceHint": "Nur dieser Aufruf",
+            "allowMore": "Weitere Arten zu erlauben",
+            "allowEverything": "Alles in dieser Unterhaltung erlauben",
+            "allowEverythingHint": "Zurücknehmen unter Needs you → Erlaubt · harte Regeln fragen weiter",
             "approvers": "Genehmigende: {approvers}",
             "approversOnly": "Nur Freigebende",
             "as": "als „{id}“",

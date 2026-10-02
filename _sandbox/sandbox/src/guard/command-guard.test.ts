@@ -393,6 +393,8 @@ describe("command gate: the hard rule", () => {
             await settled();
             const card = cardOf(gate.events);
             expect(card.title, command).toContain("wipe a disk");
+            // Asks every time: the card offers no "allow everything", and no standing yes answers it.
+            expect(card.alwaysAsks, command).toBe(true);
             cards.resolve({ kind: "permission", requestId: card.requestId, decision: "once" });
             expect((await pending).hookSpecificOutput, command).toBeUndefined();
         }
@@ -419,6 +421,7 @@ describe("command gate: the hard rule", () => {
             const card = cardOf(gate.events);
             // No hard rule behind this card, so the judge's sentence is the title, not a sub-line.
             expect(card.title, command).toBe(`Deletes a named volume.`);
+            expect(card.alwaysAsks, command).toBeUndefined();
             cards.resolve({ kind: "permission", requestId: card.requestId, decision: "once" });
             expect((await pending).hookSpecificOutput, command).toBeUndefined();
         }

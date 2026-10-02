@@ -125,7 +125,12 @@ export const createConversationsSlice = ({ historyRoot, workspace, logger, perf,
                     : inLogContext({ conversationId: input.conversationId }, streamAgent(whole(), input, signal)),
             ),
             conversations,
-            cards: parkedCards(conversations),
+            // The conversation-wide yes answered on any permission card, read from the grant store as each card parks.
+            cards: parkedCards(conversations, {
+                allowed: (conversationId) => whole().conversationGrants.everythingAllowed(conversationId),
+                allow: (conversationId, by) => whole().conversationGrants.allowEverything(conversationId, by),
+                failed: (cause) => logger.warn({ err: cause }, "conversation grants: allow everything could not be read or kept"),
+            }),
             agentWorktrees,
             turnJournal: sqliteTurnJournal(conversationsDb),
             // Beside the turn journal, for the same reason: it must outlive a container recreate.

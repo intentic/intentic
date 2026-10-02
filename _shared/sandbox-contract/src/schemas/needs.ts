@@ -262,6 +262,17 @@ export const ConversationGrantSchema = z.object({
         .boolean()
         .default(false)
         .describe("Whether its own dependency installs run without asking, where the owner's setting would otherwise ask first."),
+    // Answered on a host guard's card, "Allow <secret> anywhere in this conversation", read live by the host guard.
+    secrets: z
+        .array(z.string())
+        .default([])
+        .describe("Secrets whose host guard it may send past without asking, by registry name."),
+    // Answered on any permission card's Allow menu, read live by the card registry: every later request a person could
+    // have allowed once settles as allowed. A request that always asks still asks.
+    everything: z
+        .boolean()
+        .default(false)
+        .describe("Whether every request an allow-once could settle is allowed without asking, until somebody takes it back."),
     updatedAt: z.number().describe("When it last changed, in milliseconds."),
     by: z.string().optional().describe("Who last allowed something here."),
 });
@@ -277,6 +288,8 @@ export const StandingGrantsSchema = z.object({
             folders: z.array(z.string()).describe("Workspace folders its file tools may touch beyond its fence."),
             shelves: z.array(GrantShelfSchema).describe("Shelves of tools opened for it."),
             installs: z.boolean().default(false).describe("Whether its own dependency installs run without asking."),
+            secrets: z.array(z.string()).default([]).describe("Secrets it may send past their host guard without asking."),
+            everything: z.boolean().default(false).describe("Whether every request an allow-once could settle is allowed without asking."),
             by: z.string().optional().describe("Who last allowed one of those."),
             updatedAt: z.number().optional().describe("When one of those last changed, in milliseconds."),
             releases: z
@@ -290,9 +303,11 @@ export type StandingGrants = z.infer<typeof StandingGrantsSchema>;
 export const GrantRevokeSchema = z.object({
     conversationId: z.string(),
     kind: z
-        .enum(["capability", "folder", "shelf", "release", "install"])
-        .describe("Which kind of yes: a grant past the persona or area, a credential's release, or letting its installs run unasked."),
-    what: z.string().describe("The capability id, folder, shelf or released credential it named; empty for installs."),
+        .enum(["capability", "folder", "shelf", "release", "install", "secret", "everything"])
+        .describe(
+            "Which kind of yes: a grant past the persona or area, a credential's release, letting its installs run unasked, a secret sent past its host guard, or allowing everything.",
+        ),
+    what: z.string().describe("The capability id, folder, shelf, released credential or secret it named; empty for installs and everything."),
 });
 export type GrantRevoke = z.infer<typeof GrantRevokeSchema>;
 

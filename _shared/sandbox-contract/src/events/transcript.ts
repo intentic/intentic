@@ -37,7 +37,8 @@ export const PlanStatusSchema = z.enum(["pending", "approved", "rejected", "canc
 export type PlanStatus = z.infer<typeof PlanStatusSchema>;
 export const QuestionStatusSchema = z.enum(["pending", "answered", "cancelled"]);
 export type QuestionStatus = z.infer<typeof QuestionStatusSchema>;
-export const PermissionStatusSchema = z.enum(["pending", "allowed", "always", "denied", "cancelled"]);
+// `everything`: allowed by a conversation-wide yes, the one given on this card or one already standing.
+export const PermissionStatusSchema = z.enum(["pending", "allowed", "always", "everything", "denied", "cancelled"]);
 export type PermissionStatus = z.infer<typeof PermissionStatusSchema>;
 export const HelpStatusSchema = z.enum(["pending", "helped", "declined", "cancelled"]);
 export type HelpStatus = z.infer<typeof HelpStatusSchema>;

@@ -917,6 +917,7 @@
         "cardStatus": {
             "allowed": "Permitido",
             "alwaysAllowed": "Siempre permitido",
+            "everythingAllowed": "Permitido: todo aquí",
             "answered": "Respondido",
             "approved": "Aprobado",
             "couldntHelp": "No pudo ayudar",
@@ -1123,6 +1124,10 @@
             "agentsCase": "El argumento del agente: {why}",
             "agentsTerminalNeeds": "El terminal del agente te necesita",
             "allowOnce": "Permitir una vez",
+            "allowOnceHint": "Solo esta llamada",
+            "allowMore": "Más formas de permitir",
+            "allowEverything": "Permitir todo en esta conversación",
+            "allowEverythingHint": "Se deshace en Needs you → Permitido · las reglas estrictas siguen preguntando",
             "approvers": "Quién aprueba: {approvers}",
             "approversOnly": "Solo aprobadores",
             "as": "como «{id}»",

@@ -1,10 +1,12 @@
 import { memoryFleet } from "../../testing.js";
-import { parkedCards } from "./parked-cards.js";
+import { parkedCards, standingOn } from "./parked-cards.js";
 
 // The registry decides what every client is told about a card's fate: a real answer versus the abort's stand-in is the
 // one distinction it draws.
 
 const onAbort = { kind: "question", requestId: "", cancelled: true } as const;
+
+const OWNER_CALLER = { email: "owner@corp.com", role: "owner" } as const;
 
 // The cards of one fleet's actors, which every test not about a dispose parks in.
 const cards = parkedCards(memoryFleet().conversations);
@@ -149,4 +151,90 @@ test("a card raised on no conversation names none, and outlives every conversati
 
     expect(held.resolve({ kind: "question", requestId: id, answers: { Which: ["A"] } })).toBe("settled");
     expect((await settled).reply).toEqual({ kind: "question", requestId: id, answers: { Which: ["A"] } });
+});
+
+// "Allow everything in this conversation": a standing yes kept per conversation, which answers every permission card a
+// person could have allowed once, and nothing else.
+describe("a conversation's standing yes", () => {
+    const denied = { kind: "permission", requestId: "", decision: "deny" } as const;
+    const standingCards = () => {
+        const allowed = new Set<string>();
+        const kept: { conversationId: string; by: string | undefined }[] = [];
+        const registry = parkedCards(memoryFleet().conversations, {
+            allowed: async (conversationId) => allowed.has(conversationId),
+            allow: async (conversationId, by) => {
+                allowed.add(conversationId);
+                kept.push({ conversationId, by });
+            },
+            failed: () => {},
+        });
+        return { registry, allowed, kept };
+    };
+    const live = () => new AbortController().signal;
+
+    test("answers a permission card at once, as everything, where the conversation holds it", async () => {
+        const { registry, allowed } = standingCards();
+        allowed.add("c-1");
+        const { id, wait } = registry.create("permission", denied, "c-1");
+        const { reply, resolved } = await wait(live());
+        expect(reply).toEqual({ kind: "permission", requestId: id, decision: "everything" });
+        // Frozen as answered, so the transcript records what ran under the standing yes.
+        expect(resolved).toEqual({ kind: "resolved", requestId: id, reply });
+    });
+
+    test("answers a card held conversationless when the turn's handle names the conversation", async () => {
+        const { registry, allowed } = standingCards();
+        allowed.add("c-1");
+        const { wait } = standingOn(registry, "c-1").create("permission", denied);
+        expect((await wait(live())).reply).toMatchObject({ decision: "everything" });
+    });
+
+    test("never answers a card that always asks, one addressed to a named person, or any other kind", async () => {
+        const { registry, allowed } = standingCards();
+        allowed.add("c-1");
+        const cardsInPlay = [
+            registry.create("permission", denied, "c-1", { alwaysAsks: true }),
+            registry.create("permission", denied, "c-1", { mayAnswer: () => undefined }),
+            registry.create("question", onAbort, "c-1"),
+            registry.create("permission", denied, "c-2"),
+        ];
+        const controller = new AbortController();
+        const waits = cardsInPlay.map((card) => card.wait(controller.signal));
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        controller.abort();
+        for (const settled of await Promise.all(waits)) {
+            expect(settled.resolved.reply).toBeUndefined();
+        }
+    });
+
+    test("an everything answer keeps the yes and settles the conversation's other waiting cards with it", async () => {
+        const { registry, kept } = standingCards();
+        const first = registry.create("permission", denied, "c-1");
+        const sibling = standingOn(registry, "c-1").create("permission", denied);
+        const hard = registry.create("permission", denied, "c-1", { alwaysAsks: true });
+        const elsewhere = registry.create("permission", denied, "c-2");
+        const controller = new AbortController();
+        const firstSettled = first.wait(controller.signal);
+        const siblingSettled = sibling.wait(controller.signal);
+        const hardSettled = hard.wait(controller.signal);
+        const elsewhereSettled = elsewhere.wait(controller.signal);
+
+        expect(registry.resolve({ kind: "permission", requestId: first.id, decision: "everything" }, OWNER_CALLER)).toBe("settled");
+
+        expect((await firstSettled).reply).toMatchObject({ decision: "everything" });
+        expect((await siblingSettled).reply).toMatchObject({ decision: "everything" });
+        expect(kept).toEqual([{ conversationId: "c-1", by: OWNER_CALLER.email }]);
+        controller.abort();
+        expect((await hardSettled).resolved.reply).toBeUndefined();
+        expect((await elsewhereSettled).resolved.reply).toBeUndefined();
+    });
+
+    test("on a card no standing yes may answer, everything is the allow-once it can be, and nothing is kept", async () => {
+        const { registry, kept } = standingCards();
+        const { id, wait } = registry.create("permission", denied, "c-1", { alwaysAsks: true });
+        const settled = wait(live());
+        registry.resolve({ kind: "permission", requestId: id, decision: "everything" });
+        expect((await settled).reply).toEqual({ kind: "permission", requestId: id, decision: "once" });
+        expect(kept).toEqual([]);
+    });
 });

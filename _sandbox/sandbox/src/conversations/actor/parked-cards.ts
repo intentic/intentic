@@ -28,7 +28,26 @@ const PARKED: Holding<Parked> = { name: "parked cards", dropped: (parked) => par
 
 export interface RequestOptions {
     readonly mayAnswer?: MayAnswer;
+    // The conversation whose standing yes may answer a permission card held conversationless (a runtime's own card, the
+    // command gate's), filled in by the turn's own handle on the registry (standingOn).
+    readonly standingFor?: string;
+    // A card that asks every time (an owner's hard rule, a restart other conversations feel): no standing yes answers it.
+    readonly alwaysAsks?: boolean;
 }
+
+// "Allow everything in this conversation", answered on any permission card and kept per conversation
+// (personas/conversation-grants.ts): while it stands, every permission card raised there that a person could have
+// allowed once settles at once as `everything`, the card still drawn and frozen in the transcript so what ran is on
+// record. It never answers a card addressed to a named person or one that always asks, and it never turns a refusal
+// into a yes, since a refused call raises no card.
+export interface StandingYes {
+    readonly allowed: (conversationId: string) => Promise<boolean>;
+    readonly allow: (conversationId: string, by: string | undefined) => Promise<void>;
+    // A grant that could not be read or kept: logged, and the card waits for a person as it would without one.
+    readonly failed: (cause: unknown) => void;
+}
+
+const everythingFor = (requestId: string): AgentReply => ({ kind: "permission", requestId, decision: "everything" });
 
 // Bundled together since only this module can tell a real answer from the abort stand-in; re-deriving that from a
 // caller's own abort signal would race the settle it describes.
@@ -75,8 +94,25 @@ export interface ParkedCards {
 export const cardsParkedOn = (conversations: Pick<ConversationActors, "holdings">, conversationId: string): number =>
     conversations.holdings(PARKED).of(conversationId).length;
 
+// The conversation a standing yes may answer this card for, or undefined where none may.
+const standingConversation = (kind: AgentReply["kind"], conversationId: string | undefined, options: RequestOptions | undefined): string | undefined =>
+    kind === "permission" && options?.mayAnswer === undefined && options?.alwaysAsks !== true ? (conversationId ?? options?.standingFor) : undefined;
+
+// The turn's own handle on the registry: a card it raises without naming a conversation may still be answered by this
+// conversation's standing yes, while it stays held where it always was.
+export const standingOn = (cards: ParkedCards, conversationId: string | undefined): ParkedCards =>
+    conversationId === undefined
+        ? cards
+        : {
+              ...cards,
+              create: (kind, onAbort, cardConversation, options) =>
+                  cards.create(kind, onAbort, cardConversation, cardConversation === undefined ? { ...options, standingFor: conversationId } : options),
+          };
+
 // The cards parked in these actors' conversations, and in their conversationless bucket.
-export const parkedCards = (conversations: Pick<ConversationActors, "holdings">): ParkedCards => {
+export const parkedCards = (conversations: Pick<ConversationActors, "holdings">, standing?: StandingYes): ParkedCards => {
+    // Every parked card a standing yes may answer, by id, with the conversation it may answer it for.
+    const answerable = new Map<string, string>();
     const restore = <K extends AgentReply["kind"]>(
         id: string,
         kind: K,
@@ -94,6 +130,7 @@ export const parkedCards = (conversations: Pick<ConversationActors, "holdings">)
                     }
                     done = true;
                     parked.drop(id);
+                    answerable.delete(id);
                     // A reply for the wrong card can only be a client bug: the waiter's kind is what its caller is
                     // typed against.
                     const answered = fromUser && reply.kind === kind;
@@ -114,6 +151,16 @@ export const parkedCards = (conversations: Pick<ConversationActors, "holdings">)
                     return;
                 }
                 signal.addEventListener("abort", abort, { once: true });
+                const standingId = standingConversation(kind, conversationId, options);
+                if (standingId === undefined || standing === undefined) {
+                    return;
+                }
+                answerable.set(id, standingId);
+                void standing.allowed(standingId).then((yes) => {
+                    if (yes) {
+                        settle(everythingFor(id), true, undefined);
+                    }
+                }, standing.failed);
             });
         return { id, wait };
     };
@@ -130,7 +177,24 @@ export const parkedCards = (conversations: Pick<ConversationActors, "holdings">)
             if (refused !== undefined) {
                 return { refused };
             }
+            if (reply.kind !== "permission" || reply.decision !== "everything") {
+                parked.settle(reply, true, caller);
+                return "settled";
+            }
+            const standingId = answerable.get(reply.requestId);
+            // On a card no standing yes may answer, "everything" is the allow-once it can be.
+            if (standingId === undefined || standing === undefined) {
+                parked.settle({ ...reply, decision: "once" }, true, caller);
+                return "settled";
+            }
             parked.settle(reply, true, caller);
+            void standing.allow(standingId, caller?.email).catch(standing.failed);
+            // The cards already waiting in the same conversation are answered by the same yes.
+            for (const [otherId, otherConversation] of answerable) {
+                if (otherConversation === standingId) {
+                    conversations.holdings(PARKED).get(otherId)?.settle(everythingFor(otherId), true, caller);
+                }
+            }
             return "settled";
         },
         conversationOf: (requestId) => conversations.holdings(PARKED).holder(requestId),

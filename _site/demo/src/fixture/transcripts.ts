@@ -445,8 +445,46 @@ const WEBHOOK_TESTS: AgentTranscript = {
     ],
 };
 
+// The helper parked on a permission (fleet.ts `sub-keen-moth-5r8t`): a host guard card it already got past with a
+// conversation-wide yes, frozen as such, and the one waiting now, whose Allow carries the wider yeses behind its caret.
+const EARLIER_SEND = `curl -s -u "{{secret:stripe/secret-key}}:" https://api.stripe.com/v1/api_keys | jq -r '.data[].id'`;
+const WAITING_SEND = `K="{{secret:stripe/secret-key}}"; for id in $(cat old-keys.txt); do curl -s -u "$K:" -X POST https://api.stripe.com/v1/api_keys/$id/expire; done`;
+const KEY_ROTATION: AgentTranscript = {
+    sessionId: `ses_sub-keen-moth-5r8t`,
+    messages: [
+        { role: `user`, text: `Rotate the Stripe test keys: list the live ones, expire the old pair, and put the new pair in .env.test.` },
+        {
+            role: `assistant`,
+            text: `Listing the keys first.`,
+            permission: {
+                requestId: `perm_keys_list`,
+                toolName: `Bash`,
+                title: `Send stripe/secret-key where its host guard can't check?`,
+                displayName: `Send secret`,
+                program: { text: EARLIER_SEND, language: `bash`, truncated: false, spans: [{ start: 12, end: 40 }] },
+                status: `everything`,
+            },
+        },
+        {
+            role: `assistant`,
+            text: `Three keys are older than the new pair. Expiring them in one loop.`,
+            permission: {
+                requestId: `perm_keys_expire`,
+                toolName: `Bash`,
+                title: `Send stripe/secret-key where its host guard can't check?`,
+                displayName: `Send secret`,
+                explain: `stripe/secret-key's host guard lets it go unasked only to api.stripe.com, and where this command sends it cannot be read from it: it runs \`for\`, and where that sends things is not in the command's text.`,
+                program: { text: WAITING_SEND, language: `bash`, truncated: false, spans: [{ start: 3, end: 31 }] },
+                alwaysLabel: `Allow stripe/secret-key anywhere in this conversation`,
+                status: `pending`,
+            },
+        },
+    ],
+};
+
 const TRANSCRIPTS: Record<string, AgentTranscript> = {
     [`sub-brisk-otter-4k2m`]: WEBHOOK_TESTS,
+    [`sub-keen-moth-5r8t`]: KEY_ROTATION,
     [REVIEW_AGENT_ID]: SOFT_DELETES,
     [WEB_MAIN_FIXER_ID]: WEB_MAIN_FIX,
     [API_MAIN_FIXER_ID]: API_MAIN_FIX,

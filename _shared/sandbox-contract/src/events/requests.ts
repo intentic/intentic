@@ -95,6 +95,12 @@ export const PermissionAskSchema = z.object({
         .describe(
             "The wording for an always-allow answer. Present only when there is something an always could actually remember; without it the only answers are once and no.",
         ),
+    alwaysAsks: z
+        .literal(true)
+        .optional()
+        .describe(
+            "This request asks every time: an owner's hard rule, a sandbox restart other conversations would feel, or a change only the owner may make. Allow everything in this conversation is not offered on it and never answers it.",
+        ),
     program: ProgramAskSchema.optional().describe(
         "The program this request is holding, when the request is about one. Present on a command gate's request and absent on every other permission ask.",
     ),

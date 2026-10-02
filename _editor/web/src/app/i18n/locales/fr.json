@@ -911,6 +911,7 @@
         "cardStatus": {
             "allowed": "Autorisé",
             "alwaysAllowed": "Toujours autorisé",
+            "everythingAllowed": "Autorisé : tout ici",
             "answered": "Répondu",
             "approved": "Approuvé",
             "couldntHelp": "N'a pas pu aider",
@@ -1117,6 +1118,10 @@
             "agentsCase": "L'argument de l'agent : {why}",
             "agentsTerminalNeeds": "Le terminal de l'agent a besoin de vous",
             "allowOnce": "Autoriser une fois",
+            "allowOnceHint": "Seulement cet appel",
+            "allowMore": "Autres façons d'autoriser",
+            "allowEverything": "Tout autoriser dans cette conversation",
+            "allowEverythingHint": "Annulable dans Needs you → Autorisé · les règles strictes demandent toujours",
             "approvers": "Approbateurs : {approvers}",
             "approversOnly": "Approbateurs seuls",
             "as": "sous « {id} »",

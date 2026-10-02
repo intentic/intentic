@@ -24,6 +24,11 @@ goes nowhere until somebody clicks, whatever the safety judge said and whether o
 into a web page is held to the page's host. With nobody to ask, in an unattended turn, it is refused, and the agent is
 told how to use the secret without a card. On with no hosts listed, every use asks.
 
+The card's Allow once has a caret beside it with the wider yeses. "Allow <secret> anywhere in this conversation" lets that
+one conversation send the secret past its guard from then on, and "Allow everything in this conversation" answers every
+card the conversation would raise next (hard rules excepted). Both are listed on Needs you → Allowed and taken back
+there; another conversation still asks.
+
 With the guard off, it never asks: a command using the secret is left to the safety judge, as before, which lets it
 through when it cannot be reached. That is the right setting for a key an unattended automation sends on a schedule.
 
@@ -49,6 +54,7 @@ agent's judgement decides; it is not a firewall.
 - [ ] With the guard on, a use aimed off the list, or whose destination cannot be read from its text, raises a card naming the secret, its hosts and the destination, whatever the safety judge said and whether or not it was reachable
 - [ ] With the guard on, a script that uses the secret always asks, a secret typed into a web page is checked against the page's host, and with no hosts listed every use asks
 - [ ] With the guard on, an unattended turn is refused rather than let through, and told how to use the secret without a card
+- [ ] The card's Allow menu offers "Allow <secret> anywhere in this conversation": after it, that conversation's later uses of the secret go without a card, other conversations still ask, and it is taken back on Needs you → Allowed
 - [ ] With the guard off, nothing about where the secret goes ever asks, and a command using it is left to the safety judge exactly as before
 - [ ] A connector that declares its hosts starts its credential's guard on with them; the owner can turn it off and back on, and the row says the hosts are the connector's until changed
 - [ ] `secrets gates` shows, on one line per secret, who must release it and whether its host guard is on and where it may go; `secrets hosts` shows and edits the guard (`on`, `off`, `add`, `remove`)
