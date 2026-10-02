@@ -5463,12 +5463,18 @@
             "unbound": "Unbound"
         },
         "settingsNotifications": {
+            "appIcon": "Taskbar and tray",
+            "appIconStatus": "Show agent status on the app's icon",
+            "appIconStatusHint": "The icon counts what needs you, marks a turn that finished while you were away, and shows when agents are working.",
             "browserTab": "Browser tab",
             "chimeAsks": "When something needs you",
             "chimeAsksHint": "A question, a permission or a plan to approve, a turn that failed.",
             "chimeFinished": "When a turn finishes",
             "chimeFinishedHint": "Turns a person started, not automations or subagents.",
             "chimesWhen": "Sounds play only while you are in another tab or app, from one tab at a time, on this browser. Switching one on plays it.",
+            "chimesWhenApp": "Sounds play only while you're in another app. With one on, the notification it rings for stays silent, so you hear it once.",
+            "desktopNotices": "Desktop notifications",
+            "desktopNoticesWhen": "Shown only while you're in another app, and cleared when you come back. They make your system's notification sound, which Do Not Disturb silences.",
             "notifyDevice": "Notify this device",
             "pushNotifications": "Push notifications",
             "sendTest": "Send a test",
@@ -5478,7 +5484,12 @@
             "tabStatusHint": "The title counts what needs you and marks a turn that finished while you were away. The icon also shows when agents are working.",
             "unsupportedBrowser": "This browser can't receive push notifications.",
             "unsupportedDesktopApp": "The desktop app's window can't receive push notifications. Turn them on in your browser or on your phone instead.",
-            "unsupportedHomeScreen": "This browser can't receive push notifications until the app is added to your Home Screen: Share ▸ Add to Home Screen, then open it from there."
+            "unsupportedDesktopAppNotices": "This window can't receive push notifications, so the app shows its own desktop notifications instead. Turn push on in your browser or on your phone to be reached there too.",
+            "unsupportedHomeScreen": "This browser can't receive push notifications until the app is added to your Home Screen: Share ▸ Add to Home Screen, then open it from there.",
+            "systemNoService": "No notification service answers on this desktop, so these can't be shown.",
+            "systemOffApp": "Windows has notifications from Intentic turned off, so none of these will show. Turn them on in Windows Settings ▸ System ▸ Notifications ▸ Intentic.",
+            "systemOffPolicy": "Your organisation has turned notifications off on this computer, so none of these will show.",
+            "systemOffUser": "Notifications are turned off on this computer, so none of these will show. Turn them on in Windows Settings ▸ System ▸ Notifications."
         },
         "settingsProfile": {
             "changeAvatar": "Change avatar",
@@ -5786,7 +5797,23 @@
             "signOut2": "Sign Out"
         },
         "browserTab": {
-            "offline": "Offline"
+            "asksTooltip": "{count} needs you | {count} need you",
+            "doneTooltip": "A turn finished while you were away",
+            "offline": "Offline",
+            "offlineTooltip": "Your sandbox isn't answering",
+            "workingTooltip": "Agents are working"
+        },
+        "desktopSignal": {
+            "elsewhere": "{line} · in {sandbox}",
+            "finished": "Turn finished",
+            "heldLine": "An automation is waiting for your approval.",
+            "heldTitle": "Automation needs approval",
+            "manyAsks": "{count} agent needs you | {count} agents need you",
+            "manyFinished": "{count} turn finished | {count} turns finished",
+            "needsYou": "Needs you",
+            "needsYouFor": "Needs you · {reason}",
+            "testLine": "This is how Intentic tells you something needs you while you're in another app.",
+            "testTitle": "Notifications are on"
         },
         "hubLayout": {
             "backTo": "Back to {title}",

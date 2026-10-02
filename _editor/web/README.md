@@ -122,6 +122,17 @@ flowchart LR
   window of the app has the focus, and from one tab at a time.
   _2026-09-29: work under way stays out of the title. A browser marks a background tab whose title changed (Chrome
   dots a pinned one), so a title that changed at every turn's start and end would flag the tab all day._
+
+  Inside the desktop app, whose window has no tab and spends most of its life in the tray, the same mark goes on the
+  app's icon (`desktopBadge.ts`: the tray, the Windows taskbar button, a Linux dock's count), drawn with the tab
+  icon's own drawing, and the same news, for the same reader, becomes the system's notifications
+  (`desktopSignal.ts`): one per agent that needs you and per turn someone started that finished, a burst of more than
+  three as one, the system's sound for the first only and none when a chime rings for it, an ask answered elsewhere
+  taken down, and all of them cleared the moment you are back. Both are on by default, with their switches in
+  Settings → Notifications, and both are links the app puts up (`app/environments/desktopNotices.ts`), only to an
+  app that says it takes them (`notices`). The app also says whether its window is on screen
+  (`shell/window/onScreen.ts`), which WebView2 does not for a window in the tray: without it the page reported its
+  reader present all day, and the sandbox held back every push to their phone.
 - **Extensions.** `src/extension-host/loader.ts` activates what the daemon lists. First-party extensions are compiled
   in (`builtins.ts`); the rest arrive from the daemon as single-file ESM bundles imported from a Blob URL.
   `hostModules.ts` and `public/ext-shims/` hand every bundle the app's own `vue`, vue-query and

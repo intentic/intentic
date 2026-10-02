@@ -75,32 +75,68 @@ export const iconKey = (mark: TabMark | undefined): string | undefined => {
     return mark.kind === `asks` ? `asks:${mark.count > 9 ? `many` : mark.count}` : mark.kind;
 };
 
+// The mark alone, for the desktop app's taskbar button (desktop-app badge.rs): Windows draws an app's overlay in the
+// corner of its button, over the app's own icon, so the disc fills the overlay's square and carries the same glyph the
+// tab's does. Work under way keeps its smaller, quieter dot, and offline, which greys the lotus on the tab, is a grey
+// one: the taskbar's icon is the app's and cannot be greyed.
+const OVERLAY_CHECK = `<path d="M9.2 16.5l4.6 4.7 9-9.4" fill="none" stroke="#fff" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round"/>`;
+
+const overlayDigit = (count: number): string =>
+    count > 9
+        ? ``
+        : `<text x="16" y="23.5" text-anchor="middle" font-family="system-ui,-apple-system,'Segoe UI',Roboto,Arial,Helvetica,sans-serif" font-size="21" font-weight="700" fill="#fff">${count}</text>`;
+
+export const overlaySvg = (mark: TabMark): string => {
+    let body: string;
+    switch (mark.kind) {
+        case `asks`:
+            body = `<circle cx="16" cy="16" r="15" fill="${ASKS}"/>${overlayDigit(mark.count)}`;
+            break;
+        case `done`:
+            body = `<circle cx="16" cy="16" r="15" fill="${DONE}"/>${OVERLAY_CHECK}`;
+            break;
+        case `working`:
+            body = `<circle cx="16" cy="16" r="11" fill="${WORKING}"/>`;
+            break;
+        case `offline`:
+            body = `<circle cx="16" cy="16" r="11" fill="${LOTUS_OFFLINE}"/>`;
+            break;
+    }
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">${body}</svg>`;
+};
+
 const svgUrl = (svg: string): string => `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 
-// A PNG, where the browser can draw one: Safari shows no SVG icon a page sets, and every browser shows a PNG.
-const rasterize = (svg: string): Promise<{ readonly href: string; readonly type: string }> =>
+/** The SVG drawn as a PNG `size` pixels square, as a data URL, or undefined where this page cannot draw one. */
+export const drawPng = (svg: string, size: number): Promise<string | undefined> =>
     new Promise((resolve) => {
-        const fallback = { href: svgUrl(svg), type: `image/svg+xml` };
-        const image = new Image(64, 64);
+        const image = new Image(size, size);
         image.addEventListener(`load`, () => {
             try {
                 const canvas = document.createElement(`canvas`);
-                canvas.width = 64;
-                canvas.height = 64;
+                canvas.width = size;
+                canvas.height = size;
                 const context = canvas.getContext(`2d`);
                 if (context === null) {
-                    resolve(fallback);
+                    resolve(undefined);
                     return;
                 }
-                context.drawImage(image, 0, 0, 64, 64);
-                resolve({ href: canvas.toDataURL(`image/png`), type: `image/png` });
+                context.drawImage(image, 0, 0, size, size);
+                resolve(canvas.toDataURL(`image/png`));
+                // allow(silent-catch): A canvas the page may not read back (or none at all) leaves the icon to the caller's fallback.
             } catch {
-                resolve(fallback);
+                resolve(undefined);
             }
         });
-        image.addEventListener(`error`, () => resolve(fallback));
+        image.addEventListener(`error`, () => resolve(undefined));
         image.src = svgUrl(svg);
     });
+
+// A PNG, where the browser can draw one: Safari shows no SVG icon a page sets, and every browser shows a PNG.
+const rasterize = async (svg: string): Promise<{ readonly href: string; readonly type: string }> => {
+    const png = await drawPng(svg, 64);
+    return png === undefined ? { href: svgUrl(svg), type: `image/svg+xml` } : { href: png, type: `image/png` };
+};
 
 // The page's own icon links, set aside while a mark shows and put back when it goes. Removed rather than repointed: a
 // browser choosing among several icons may keep the one it already chose, and a lone link inserted anew is read by all.

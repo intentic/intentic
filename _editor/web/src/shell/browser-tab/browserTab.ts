@@ -11,13 +11,17 @@ import { useSandboxAvailability } from "../../features/sandbox/overview/useSandb
 import { otherBoxes } from "../../features/sandbox/live/fleetAcross";
 import { floatingWindowPanel } from "../window/floating";
 import { type Chime, ringOnce } from "./chimes";
+import { showDesktopBadge } from "./desktopBadge";
+import { readerBack, settleDesktop, tellDesktop } from "./desktopSignal";
 import { readerHere } from "./readerHere";
 import { setTabMark } from "./tabTitle";
 import { chimeAsks, chimeFinished, tabStatus } from "./tabPreferences";
-import { newsBetween, type TabFrame, tabMark } from "./tabSignal";
+import { newsItemsBetween, type TabFrame, tabMark } from "./tabSignal";
 
 // The browser tab as a surface of the app (tabSignal.ts has the rules): what the fleet says the tab should show, and
-// when it should ring. The page's own name comes from the router, and tabTitle.ts writes both.
+// when it should ring. The page's own name comes from the router, and tabTitle.ts writes both. Inside the desktop app,
+// whose window has no tab, the same mark goes on the app's icon (desktopBadge.ts) and the same news, for the same
+// reader, becomes the system's notifications (desktopSignal.ts); each does nothing in a browser.
 
 // Past the half minute a reconnect is given in silence (availability.ts), and every ending that waiting will not mend.
 // Not `busy`: a sandbox the diagnosis saw alive is catching up, and a tab that said "Offline" over it was the loudest
@@ -93,31 +97,39 @@ export const startBrowserTab = (): void => {
     const availability = useSandboxAvailability();
     // A turn finished while the reader was elsewhere; over the moment they are back in any window of the app.
     const doneAway = ref(false);
-    watch(readerHere, (here) => {
-        if (here) {
-            doneAway.value = false;
-        }
-    });
+    watch(
+        readerHere,
+        (here) => {
+            if (here) {
+                doneAway.value = false;
+                readerBack();
+            }
+        },
+        { immediate: true },
+    );
 
     const frame = computed(frameOf);
     watch(frame, (after, before) => {
-        const news = newsBetween(before, after);
-        if (readerHere.value || (!news.asked && news.finished === 0)) {
+        // An ask answered from the phone takes its notification down wherever the reader is.
+        settleDesktop(after);
+        const news = newsItemsBetween(before, after);
+        if (readerHere.value || (news.asked.length === 0 && news.finished.length === 0)) {
             return;
         }
-        if (news.finished > 0) {
+        if (news.finished.length > 0) {
             doneAway.value = true;
         }
         // One sound for one reading: an ask outranks a finish that arrived with it.
         let chime: Chime | undefined;
-        if (news.asked && chimeAsks.value) {
+        if (news.asked.length > 0 && chimeAsks.value) {
             chime = `asks`;
-        } else if (news.finished > 0 && chimeFinished.value) {
+        } else if (news.finished.length > 0 && chimeFinished.value) {
             chime = `finished`;
         }
         if (chime !== undefined) {
             void ringOnce(chime);
         }
+        tellDesktop(news, chime !== undefined);
     });
 
     const shown = computed(() =>
@@ -130,6 +142,16 @@ export const startBrowserTab = (): void => {
               })
             : undefined,
     );
-    watch(shown, setTabMark, { immediate: true });
-    onScopeDispose(() => setTabMark(undefined));
+    watch(
+        shown,
+        (mark) => {
+            setTabMark(mark);
+            showDesktopBadge(mark);
+        },
+        { immediate: true },
+    );
+    onScopeDispose(() => {
+        setTabMark(undefined);
+        showDesktopBadge(undefined);
+    });
 };

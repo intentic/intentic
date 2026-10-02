@@ -1930,6 +1930,8 @@ dependencies = [
  "trash",
  "url",
  "uuid",
+ "windows 0.61.3",
+ "zbus",
 ]
 
 [[package]]

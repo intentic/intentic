@@ -1,10 +1,12 @@
-import { computed, type ComputedRef, ref } from "vue";
+import { computed, type ComputedRef, ref, watch } from "vue";
 import { uuid } from "../../lib/uuid";
+import { onScreen } from "../window/onScreen";
 
 // Is the reader in the app right now: this window focused, or one of its popped-out panels. Stricter than onScreen,
 // which a window visible on a second monitor answers yes to while the reader types elsewhere: a sound and a "finished
 // while you were away" mark are for exactly that reader. Every window of the app answers for itself over a channel,
-// so a chat popped out beside the main window does not read as the reader having left.
+// so a chat popped out beside the main window does not read as the reader having left. Visible is onScreen's word, which
+// in the desktop app includes the app's own on a window hidden in the tray.
 
 type ReaderNote = { readonly kind: `focus`; readonly id: string; readonly focused: boolean } | { readonly kind: `roll` };
 
@@ -25,7 +27,7 @@ const post = (note: ReaderNote): void => {
 };
 
 const sync = (): void => {
-    const focused = document.visibilityState === `visible` && document.hasFocus();
+    const focused = onScreen.value && document.hasFocus();
     if (focused) {
         // One window has the focus at a time, so whatever another window said last is over. Also what heals a claim a
         // crashed window never took back.
@@ -60,6 +62,7 @@ window.addEventListener(`focus`, sync);
 // and only then settles where hasFocus() can see it.
 window.addEventListener(`blur`, () => setTimeout(sync, 0));
 document.addEventListener(`visibilitychange`, sync);
+watch(onScreen, sync);
 window.addEventListener(`pagehide`, () => post({ kind: `focus`, id, focused: false }));
 channel?.addEventListener(`message`, (event: MessageEvent<ReaderNote>) => receiveReaderNote(event.data));
 sync();

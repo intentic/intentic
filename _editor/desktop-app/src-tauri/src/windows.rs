@@ -12,7 +12,7 @@ use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 use tauri_plugin_opener::OpenerExt;
 
 use crate::commands::SetupReport;
-use crate::setup_link::{parse_link, Link, SetupArgs, Source, WindowVerb};
+use crate::setup_link::{parse_link, Link, NoticeVerb, SetupArgs, Source, WindowVerb};
 use crate::state::{AppState, CloseAction, Face, Mode};
 
 /* ONE WINDOW OF THE APP ON SCREEN — these two labels are two FACES of it, not two windows: the hosted workspace, and
@@ -224,11 +224,13 @@ fn swap_in(window: &WebviewWindow, other: Option<WebviewWindow>, keyboard: Keybo
     if keyboard == Keyboard::Take {
         let _ = window.set_focus();
     }
+    crate::shown::tell(window, false);
     if let Some(other) = other {
         // Hidden whatever it answers about itself: `is_visible` is a round trip to the event loop, and an
         // answer that fails to arrive reads as "already hidden", which is both faces on screen at once.
         // Hiding a window that is already hidden is a no-op, so nothing is spent asking.
         let _ = other.hide();
+        crate::shown::tell(&other, false);
     }
 }
 
@@ -294,13 +296,17 @@ fn shown_face(app: &AppHandle) -> Option<WebviewWindow> {
 /// hosted sandbox holding one folder, setup_link.rs) is copied into that folder's project and nowhere else. The
 /// web setup hands a folder to a hosted machine only when the app says this, because an older build reads the
 /// same link as a whole-`/work` sync and would pour the sandbox's workspace into the user's folder.
+///
+/// `notices` is the seventh, and also about the build: it puts up the system's notifications and the tab's mark on
+/// its icon when the page asks (`intentic://notice`, `intentic://badge`; notice.rs, badge.rs), so the page offers
+/// them in its settings and sends them only to an app that says this.
 fn workspace_init_script(install_id: &str, update: Option<&str>) -> String {
     let update = match update {
         Some(version) => format!("\"{}\"", crate::update::escape_js(version)),
         None => "null".to_string(),
     };
     format!(
-        "(function () {{ if (!window.__INTENTIC_DESKTOP__) {{ window.__INTENTIC_DESKTOP__ = Object.freeze({{ version: \"{}\", installId: \"{install_id}\", update: {update}, loopbackUngated: true, frameless: true, projectSync: true }}); }} }})();",
+        "(function () {{ if (!window.__INTENTIC_DESKTOP__) {{ window.__INTENTIC_DESKTOP__ = Object.freeze({{ version: \"{}\", installId: \"{install_id}\", update: {update}, loopbackUngated: true, frameless: true, projectSync: true, notices: true }}); }} }})();",
         env!("CARGO_PKG_VERSION")
     )
 }
@@ -467,6 +473,7 @@ pub fn show_workspace_at(app: &AppHandle, path: Option<&str>) {
     match builder.build() {
         Ok(window) => {
             crate::webview_sync::watch(&window);
+            crate::shown::watch(&window);
             // Hidden until `swap_in`, so the OS's own light still lands before this window is on screen.
             settle_background(&window, app.state::<AppState>().ui_mode());
             let handle = app.clone();
@@ -718,6 +725,7 @@ fn show_floating(
     match builder.build() {
         Ok(window) => {
             crate::webview_sync::watch(&window);
+            crate::shown::watch(&window);
             let handle = app.clone();
             let own = label.clone();
             window.on_window_event(move |event| match event {
@@ -843,6 +851,10 @@ pub fn show_files_window(
         .build()
         .map_err(|error| format!("the window for {title} did not open: {error}"))?;
     crate::webview_sync::watch(&window);
+    // The main window carries the app's mark on its taskbar button, which comes back with each showing (badge.rs).
+    if how == FilesWindow::Home {
+        crate::shown::watch(&window);
+    }
     let handle = app.clone();
     let own = label.to_string();
     window.on_window_event(move |event| match event {
@@ -1204,6 +1216,7 @@ fn raise(window: &WebviewWindow) {
     let _ = window.unminimize();
     let _ = window.set_focus();
     crate::webview_sync::shown(window);
+    crate::shown::tell(window, false);
 }
 
 /* THE TITLE BAR THE PAGE DRAWS, AND THE FRAME THAT COMES BACK IF IT DOES NOT. */
@@ -1315,8 +1328,9 @@ fn chrome_is_up(window: &WebviewWindow) {
         .store(true, Ordering::Relaxed);
     let _ = window.set_decorations(false);
     // Unconditionally, because this is a page that has just loaded: it knows nothing yet about a window that
-    // may have been maximised before it got here.
+    // may have been maximised before it got here, or hidden.
     announce_frame(window, true);
+    crate::shown::tell(window, true);
 }
 
 /// Tell the page whether the window is maximised. `always` is for a page that has just announced itself and
@@ -1417,6 +1431,7 @@ fn apply_close(app: &AppHandle, action: CloseAction) {
             for label in [WORKSPACE, HOME] {
                 if let Some(window) = app.get_webview_window(label) {
                     let _ = window.hide();
+                    crate::shown::tell(&window, false);
                 }
             }
         }
@@ -1643,6 +1658,17 @@ pub fn handle_link(app: &AppHandle, link: &str, source: Source) {
         // The workspace's account and sandboxes, for the local windows to show (state.rs `remember_roster`). Nothing
         // is shown now: the page sends it whenever either changes, not because the reader asked for anything.
         Some(Link::Roster(roster)) => app.state::<AppState>().remember_roster(roster),
+        // The workspace tab's mark, for the app's icon (badge.rs); its notifications, for the system's (notice.rs).
+        Some(Link::Badge(args)) => crate::badge::show(app, args),
+        Some(Link::Notice(NoticeVerb::Show(args))) => crate::notice::show(app, args),
+        Some(Link::Notice(NoticeVerb::Withdraw(key))) => crate::notice::withdraw(app, &key),
+        Some(Link::Notice(NoticeVerb::Clear)) => crate::notice::clear(app),
+        Some(Link::Notice(NoticeVerb::Open(token))) => crate::notice::open(app, &token),
+        Some(Link::Notice(NoticeVerb::Status)) => {
+            if let Some(window) = source.window() {
+                crate::notice::status(app, window);
+            }
+        }
         // The page saying what light it is drawn in; about this app's faces, not the workspace window.
         Some(Link::Window(WindowVerb::Mode(mode))) => apply_mode(app, mode),
         // The page's own title bar, working the window it is drawn in (`work_the_window`). Nothing is parked
@@ -1755,6 +1781,14 @@ mod loopback_tests {
     fn the_page_is_told_this_build_copies_a_folder_into_its_project() {
         let script = workspace_init_script("install-1", None);
         assert!(script.contains("projectSync: true"), "{script}");
+    }
+
+    /// The page offers the app's notifications in its settings, and sends them, only on this word (desktop.ts
+    /// `desktopNotices`): a build that hears `notice` and `badge` says so.
+    #[test]
+    fn the_page_is_told_this_build_puts_up_notifications() {
+        let script = workspace_init_script("install-1", None);
+        assert!(script.contains("notices: true"), "{script}");
     }
 }
 

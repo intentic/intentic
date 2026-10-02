@@ -212,6 +212,173 @@ fn roster_of(list: &str, account: Option<&str>) -> Option<Roster> {
     Some(Roster { account, sandboxes })
 }
 
+/* WHAT THE WORKSPACE'S TAB SAYS ABOUT ITS AGENTS, for the app's own icon (badge.rs). */
+
+/// The mark the workspace's browser tab shows (the web's tabSignal.ts `TabMark`), or none at all.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BadgeMark {
+    None,
+    /// Something needs the reader, counted as the board's Attention lane counts it.
+    Asks,
+    /// A turn somebody started finished while the reader was away.
+    Done,
+    /// A turn is running.
+    Working,
+    /// The sandbox is not answering.
+    Offline,
+}
+
+impl BadgeMark {
+    fn parse(word: &str) -> Option<Self> {
+        Some(match word {
+            "none" => Self::None,
+            "asks" => Self::Asks,
+            "done" => Self::Done,
+            "working" => Self::Working,
+            "offline" => Self::Offline,
+            _ => return None,
+        })
+    }
+}
+
+/// `intentic://badge?mark=…[&count=…][&tooltip=…][&icon=…][&overlay=…]`: the workspace tab's mark, for the app's icon
+/// in the tray, on the Windows taskbar and on a Linux dock (badge.rs). The page draws both images with the drawing its
+/// tab icon is made of (the web's tabIcon.ts), so the tab, the tray and the taskbar cannot disagree, and the app only
+/// puts them up. App-window only: a link from anywhere else could paint the tray with what it chose.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BadgeArgs {
+    pub mark: BadgeMark,
+    /// How many things need the reader, for a dock that draws a count. Zero for every mark but `asks`.
+    pub count: u32,
+    /// The tray's tooltip, in the reader's language: what the mark means, beside the app's name.
+    pub tooltip: Option<String>,
+    /// The app's icon with the mark drawn on it, a PNG: the tray's icon while the mark stands.
+    pub icon: Option<Vec<u8>>,
+    /// The mark alone, a PNG: the overlay on the Windows taskbar's button.
+    pub overlay: Option<Vec<u8>>,
+}
+
+/// The most a badge image may weigh, decoded. A 64-pixel icon is a few kilobytes; this bounds what a link can make
+/// the app decode.
+const BADGE_IMAGE_MAX: usize = 64 * 1024;
+const PNG_SIGNATURE: &[u8] = b"\x89PNG\r\n\x1a\n";
+/// The tray's tooltip: Windows keeps 127 characters of it, and the app's name rides in front.
+const BADGE_TOOLTIP_MAX: usize = 100;
+/// More than any count a dock can draw.
+const BADGE_COUNT_MAX: u32 = 9_999;
+
+/// A badge image as the page sends it: URL-safe base64 of a PNG, unpadded. Absent is `Some(None)`, the image the app
+/// already has; present and not a PNG is `None`, which drops the whole link rather than drawing half of it.
+fn png_of(encoded: Option<String>) -> Option<Option<Vec<u8>>> {
+    use base64::Engine;
+    let Some(encoded) = encoded else {
+        return Some(None);
+    };
+    if encoded.len() > BADGE_IMAGE_MAX * 4 / 3 + 4 {
+        return None;
+    }
+    let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .decode(encoded.trim_end_matches('=').as_bytes())
+        .ok()?;
+    (bytes.len() <= BADGE_IMAGE_MAX && bytes.starts_with(PNG_SIGNATURE)).then_some(Some(bytes))
+}
+
+/// `badge`'s values held to their shape. The count is the reader's only for `asks`, and a count that is not a number
+/// is no badge at all.
+fn badge_of(
+    mark: &str,
+    count: Option<String>,
+    tooltip: Option<String>,
+    icon: Option<String>,
+    overlay: Option<String>,
+) -> Option<BadgeArgs> {
+    let mark = BadgeMark::parse(mark)?;
+    let count = match count {
+        Some(count) => count.parse::<u32>().ok()?.min(BADGE_COUNT_MAX),
+        None => 0,
+    };
+    let tooltip = match tooltip {
+        Some(text) if is_shown_text(&text, BADGE_TOOLTIP_MAX) => Some(text),
+        Some(_) => return None,
+        None => None,
+    };
+    Some(BadgeArgs {
+        mark,
+        count: if mark == BadgeMark::Asks { count } else { 0 },
+        tooltip,
+        icon: png_of(icon)?,
+        overlay: png_of(overlay)?,
+    })
+}
+
+/* A NOTIFICATION OF THE SYSTEM'S, for what the workspace would otherwise only say on its own tab (notice.rs). */
+
+/// What a notification is about, for the sound it is given where the system lets an app choose one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NoticeKind {
+    /// Something needs the reader: a question, a permission, a plan to approve, a turn that failed.
+    Asks,
+    /// A turn somebody started has finished.
+    Finished,
+}
+
+/// `intentic://notice?do=show&key=…&kind=…&title=…[&body=…][&path=…][&silent=1]`: one notification to put up.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NoticeArgs {
+    /// The page's own name for what it is about (an agent, a held wake), so the same key replaces the one before it
+    /// and withdraws it once it is settled.
+    pub key: String,
+    pub kind: NoticeKind,
+    pub title: String,
+    pub body: Option<String>,
+    /// The route of the workspace a press on it opens (`/?conversation=<id>`), or none for the workspace as it is.
+    pub path: Option<String>,
+    /// No sound of its own: the page rings its own chime for it, or a notification a moment ago already made one.
+    pub silent: bool,
+}
+
+/// `intentic://notice?do=…`: the workspace putting up, withdrawing and clearing the system notifications it asked
+/// for, and a press on one coming back.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum NoticeVerb {
+    Show(NoticeArgs),
+    /// The key's notification is no longer true (the ask was answered elsewhere): taken out of the system's list.
+    Withdraw(String),
+    /// The reader is back: every notification the app put up goes.
+    Clear,
+    /// Whether the system shows the app's notifications at all (notice.rs `Standing`), answered into the window that
+    /// asked: what the page's settings say beside their switches, since a system that has them off drops every one.
+    Status,
+    /// A press on one of the app's notifications, by the token the app gave it (notice.rs). Heard from anywhere, since
+    /// Windows hands a press on a toast to the app as this link through the OS (the toast's own `launch`): a token the
+    /// app did not issue in this run opens the workspace as it is, which any link to the app could have done anyway.
+    Open(String),
+}
+
+/// What a notification's title holds: one line, as the system shows it.
+const NOTICE_TITLE_MAX: usize = 200;
+/// Its second line: a lock screen's worth.
+const NOTICE_BODY_MAX: usize = 400;
+
+/// A key the page names a notification by: one bounded line.
+fn is_notice_key(key: &str) -> bool {
+    is_shown_text(key, 200)
+}
+
+/// A token the app put on one of its own notifications: letters and digits, as notice.rs mints them.
+pub fn is_notice_token(token: &str) -> bool {
+    (1..=64).contains(&token.len()) && token.bytes().all(|byte| byte.is_ascii_alphanumeric())
+}
+
+/// A route of the workspace page: rooted, never `//` (another host to a navigation), one line, bounded.
+fn is_page_route(path: &str) -> bool {
+    path.len() <= 2048
+        && path.starts_with('/')
+        && !path.starts_with("//")
+        && !path.contains('\\')
+        && !path.chars().any(char::is_control)
+}
+
 /// `intentic://setup?code=…` — run the sandbox this setup code was minted for on this device.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -370,6 +537,10 @@ pub enum Link {
     /// switcher lists, sent whenever either changes and emptied by a sign-out, kept so a local window can show them too
     /// (state.rs `remember_roster`). App-window only: a link from anywhere else could fill them with what it chose.
     Roster(Roster),
+    /// See [`BadgeArgs`]: what the workspace's tab says, for the app's icon.
+    Badge(BadgeArgs),
+    /// See [`NoticeVerb`]: the system's notifications, put up for the workspace while the reader is elsewhere.
+    Notice(NoticeVerb),
     /// See [`WindowVerb`]: the workspace SPA's own title bar, which is a link channel rather than IPC for the
     /// same reason everything else here is.
     Window(WindowVerb),
@@ -448,6 +619,46 @@ pub fn parse_link(url: &str, source: Source) -> Option<Link> {
             roster_of(&get("list")?, get("account").as_deref()).map(Link::Roster)
         }
         "roster" => None,
+        "badge" if source.is_app() => badge_of(
+            &get("mark")?,
+            get("count"),
+            get("tooltip"),
+            get("icon"),
+            get("overlay"),
+        )
+        .map(Link::Badge),
+        "badge" => None,
+        // A press on a notification is heard from anywhere, by a token only this run issued (see [`NoticeVerb`]);
+        // putting one up, withdrawing one and clearing them all only from the app's own windows.
+        "notice" => Some(Link::Notice(match get("do")?.as_str() {
+            "open" => NoticeVerb::Open(get("token").filter(|token| is_notice_token(token))?),
+            _ if !source.is_app() => return None,
+            "show" => NoticeVerb::Show(NoticeArgs {
+                key: get("key").filter(|key| is_notice_key(key))?,
+                kind: match get("kind")?.as_str() {
+                    "asks" => NoticeKind::Asks,
+                    "finished" => NoticeKind::Finished,
+                    _ => return None,
+                },
+                title: get("title").filter(|title| is_shown_text(title, NOTICE_TITLE_MAX))?,
+                // A value out of shape is no notification, rather than one missing the line it was meant to carry.
+                body: match get("body") {
+                    Some(body) if is_shown_text(&body, NOTICE_BODY_MAX) => Some(body),
+                    Some(_) => return None,
+                    None => None,
+                },
+                path: match get("path") {
+                    Some(path) if is_page_route(&path) => Some(path),
+                    Some(_) => return None,
+                    None => None,
+                },
+                silent: switch(get("silent"))?,
+            }),
+            "withdraw" => NoticeVerb::Withdraw(get("key").filter(|key| is_notice_key(key))?),
+            "clear" => NoticeVerb::Clear,
+            "status" => NoticeVerb::Status,
+            _ => return None,
+        })),
         // App-window only, like `update`, and for a sharper reason: see [`SyncArgs`]. There is nothing to
         // strip and keep — the url and the token ARE the request — so an external copy is refused whole.
         "sync" if source.is_app() => {
@@ -1348,6 +1559,187 @@ L"}"#,
         assert_eq!(parse_link("intentic://local?do=open-folder", APP), None);
         assert_eq!(
             parse_link("intentic://local?do=open-folder", Source::External),
+            None
+        );
+    }
+
+    /* THE WORKSPACE TAB'S MARK, FOR THE APP'S ICON. */
+
+    /// The smallest PNG there is to the signature check: the eight bytes every PNG starts with.
+    const PNG: &[u8] = b"\x89PNG\r\n\x1a\nrest";
+
+    fn png_param() -> String {
+        use base64::Engine;
+        base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(PNG)
+    }
+
+    fn badge_of_link(url: &str, source: Source) -> Option<BadgeArgs> {
+        match parse_link(url, source)? {
+            Link::Badge(args) => Some(args),
+            _ => None,
+        }
+    }
+
+    #[test]
+    fn the_workspace_hands_over_its_mark_with_both_images() {
+        let png = png_param();
+        let args = badge_of_link(
+            &format!("intentic://badge?mark=asks&count=3&tooltip=3%20need%20you&icon={png}&overlay={png}"),
+            APP,
+        )
+        .unwrap();
+        assert_eq!(
+            args,
+            BadgeArgs {
+                mark: BadgeMark::Asks,
+                count: 3,
+                tooltip: Some("3 need you".into()),
+                icon: Some(PNG.to_vec()),
+                overlay: Some(PNG.to_vec()),
+            }
+        );
+        // No mark: the app's own icon, no overlay, no count.
+        assert_eq!(
+            badge_of_link("intentic://badge?mark=none", APP),
+            Some(BadgeArgs {
+                mark: BadgeMark::None,
+                count: 0,
+                tooltip: None,
+                icon: None,
+                overlay: None,
+            })
+        );
+    }
+
+    /// A dock counts only what needs the reader, and no count is wider than a dock can draw.
+    #[test]
+    fn a_badge_counts_only_what_needs_the_reader() {
+        assert_eq!(
+            badge_of_link("intentic://badge?mark=working&count=4", APP).map(|args| args.count),
+            Some(0)
+        );
+        assert_eq!(
+            badge_of_link("intentic://badge?mark=asks&count=123456", APP).map(|args| args.count),
+            Some(9_999)
+        );
+    }
+
+    #[test]
+    fn a_badge_out_of_shape_is_dropped_whole_and_only_the_app_may_send_one() {
+        let png = png_param();
+        for link in [
+            "intentic://badge".to_string(),
+            "intentic://badge?mark=blinking".to_string(),
+            "intentic://badge?mark=asks&count=two".to_string(),
+            // Not base64, and base64 of something that is not a PNG.
+            "intentic://badge?mark=done&icon=%25%25%25".to_string(),
+            "intentic://badge?mark=done&icon=bm90IGEgcG5n".to_string(),
+            format!("intentic://badge?mark=done&tooltip={}", "x".repeat(101)),
+            "intentic://badge?mark=done&tooltip=two%0Alines".to_string(),
+        ] {
+            assert_eq!(parse_link(&link, APP), None, "{link}");
+        }
+        let fine = format!("intentic://badge?mark=done&icon={png}");
+        assert!(badge_of_link(&fine, APP).is_some());
+        assert_eq!(parse_link(&fine, Source::External), None);
+        assert_eq!(parse_link(&fine, FILES), None);
+    }
+
+    /* THE SYSTEM'S NOTIFICATIONS, FOR THE WORKSPACE. */
+
+    #[test]
+    fn the_workspace_puts_up_a_notification_and_takes_it_down() {
+        assert_eq!(
+            parse_link(
+                "intentic://notice?do=show&key=sbx%2Fa1&kind=asks&title=Fix%20the%20login&body=Needs%20you%20%C2%B7%20Permission&path=%2F%3Fconversation%3Da1&silent=1",
+                APP
+            ),
+            Some(Link::Notice(NoticeVerb::Show(NoticeArgs {
+                key: "sbx/a1".into(),
+                kind: NoticeKind::Asks,
+                title: "Fix the login".into(),
+                body: Some("Needs you · Permission".into()),
+                path: Some("/?conversation=a1".into()),
+                silent: true,
+            })))
+        );
+        assert_eq!(
+            parse_link(
+                "intentic://notice?do=show&key=k&kind=finished&title=Done",
+                APP
+            ),
+            Some(Link::Notice(NoticeVerb::Show(NoticeArgs {
+                key: "k".into(),
+                kind: NoticeKind::Finished,
+                title: "Done".into(),
+                body: None,
+                path: None,
+                silent: false,
+            })))
+        );
+        assert_eq!(
+            parse_link("intentic://notice?do=withdraw&key=sbx%2Fa1", APP),
+            Some(Link::Notice(NoticeVerb::Withdraw("sbx/a1".into())))
+        );
+        assert_eq!(
+            parse_link("intentic://notice?do=clear", APP),
+            Some(Link::Notice(NoticeVerb::Clear))
+        );
+        assert_eq!(
+            parse_link("intentic://notice?do=status", APP),
+            Some(Link::Notice(NoticeVerb::Status))
+        );
+    }
+
+    #[test]
+    fn a_notification_out_of_shape_is_no_notification() {
+        for link in [
+            "intentic://notice",
+            "intentic://notice?do=ring",
+            "intentic://notice?do=show&kind=asks&title=T",
+            "intentic://notice?do=show&key=k&title=T",
+            "intentic://notice?do=show&key=k&kind=loud&title=T",
+            "intentic://notice?do=show&key=k&kind=asks",
+            "intentic://notice?do=show&key=k&kind=asks&title=two%0Alines",
+            "intentic://notice?do=show&key=k&kind=asks&title=T&silent=yes",
+            // A path that is not one of the workspace's own: another host, a full address, a Windows separator.
+            "intentic://notice?do=show&key=k&kind=asks&title=T&path=%2F%2Fevil.example",
+            "intentic://notice?do=show&key=k&kind=asks&title=T&path=https%3A%2F%2Fevil.example",
+            "intentic://notice?do=show&key=k&kind=asks&title=T&path=%2F%5Cevil",
+            "intentic://notice?do=withdraw",
+        ] {
+            assert_eq!(parse_link(link, APP), None, "{link}");
+        }
+    }
+
+    /// Only the app's own windows put notifications up or take them down; a press on one comes back from anywhere, by
+    /// a token and nothing else.
+    #[test]
+    fn a_press_on_a_notification_is_heard_from_anywhere_and_nothing_else_is() {
+        for link in [
+            "intentic://notice?do=show&key=k&kind=asks&title=T",
+            "intentic://notice?do=withdraw&key=k",
+            "intentic://notice?do=clear",
+            "intentic://notice?do=status",
+        ] {
+            assert_eq!(parse_link(link, Source::External), None, "{link}");
+            assert_eq!(parse_link(link, FILES), None, "{link}");
+        }
+        assert_eq!(
+            parse_link("intentic://notice?do=open&token=a1b2c3", Source::External),
+            Some(Link::Notice(NoticeVerb::Open("a1b2c3".into())))
+        );
+        assert_eq!(
+            parse_link("intentic://notice?do=open&token=a1b2c3", APP),
+            Some(Link::Notice(NoticeVerb::Open("a1b2c3".into())))
+        );
+        // A token is letters and digits: never a path, a route or a flag.
+        for token in ["%2Fagents", "-x", "a%20b", ""] {
+            let link = format!("intentic://notice?do=open&token={token}");
+            assert_eq!(parse_link(&link, Source::External), None, "{link}");
+        }
+        assert_eq!(
+            parse_link("intentic://notice?do=open&token=a1b2c3", FILES),
             None
         );
     }

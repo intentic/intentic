@@ -25,9 +25,16 @@ flowchart LR
   `ic sandbox fix`, streamed the same way and stopped after ten minutes.
 - **Talking back to pages.** The workspace learns it is inside the app from `window.__INTENTIC_DESKTOP__`, set by
   an initialization script, and hears about updates and setups through `intentic-desktop-update` and
-  `intentic-desktop-setup` DOM events. A local window learns its folder from `window.__INTENTIC_LOCAL__` (local.rs)
+  `intentic-desktop-setup` DOM events, and whether its window is on screen through `intentic-desktop-shown`
+  (`shown.rs`), which WebView2's own `document.visibilityState` does not say for a window in the tray. A local window learns its folder from `window.__INTENTIC_LOCAL__` (local.rs)
   and hears `intentic:face`, `intentic:open`, `intentic:close-requested`, `intentic:project` and, in the main window,
   `intentic:navigate` (`../README.md` has what each carries).
+- **The app's icon and the system's notifications.** `badge.rs` puts the workspace tab's mark on the tray icon, the
+  Windows taskbar button's overlay (put back each time a face is shown, since Windows drops it with the button) and a
+  Linux dock's count; `notice.rs` puts up, withdraws and clears the notifications the page asks for (WinRT toasts with
+  protocol activation, or `org.freedesktop.Notifications` over `zbus`), on one thread of their own, and answers a
+  press with the workspace at the notification's route. Both take the page's word for what to show
+  (`intentic://badge`, `intentic://notice`) and decide nothing about it.
 - **State on disk.** `state.rs` keeps `settings.json` (`appUrl`, `platformUrl`), the install id, the close choice,
   the colour mode, a setup parked across a Windows restart, the face last in use (`last-face.json`), the folder the
   main window opens on (`home-folder.json`, `~/intentic/local` until it is pointed elsewhere), whether an account was

@@ -23,3 +23,18 @@ export const chimeFinished: Ref<boolean> = definePreference<boolean>({
     read: (raw) => raw === `on`,
     write: (value) => (value ? `on` : null),
 });
+
+// The desktop app's own notifications (desktopSignal.ts): on unless turned off, the other way round from the chimes. In
+// the app they are the only way news reaches a reader in another app, since no push reaches its window, and the system
+// already holds the say over when not to: its Do Not Disturb, and its own switch for this app's notifications.
+export const noticeAsks: Ref<boolean> = definePreference<boolean>({
+    key: `ui-notice-asks`,
+    read: (raw) => raw !== `off`,
+    write: (value) => (value ? null : `off`),
+});
+
+export const noticeFinished: Ref<boolean> = definePreference<boolean>({
+    key: `ui-notice-finished`,
+    read: (raw) => raw !== `off`,
+    write: (value) => (value ? null : `off`),
+});

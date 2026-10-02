@@ -79,18 +79,31 @@ export interface TabNews {
 
 export const NO_NEWS: TabNews = { asked: false, finished: 0 };
 
-export const newsBetween = (before: TabFrame | undefined, after: TabFrame): TabNews => {
+// The same news by name, for what tells it one item at a time (a desktop notification per ask, desktopSignal.ts).
+export interface NewsItems {
+    // Each new caller, with the source that reads it (a sandbox's roster, or `<sandbox>#held`).
+    readonly asked: readonly { readonly source: string; readonly key: string }[];
+    // Each turn that went from running to Finished, by its frame key (`<sandbox>/<agent>`).
+    readonly finished: readonly string[];
+}
+
+export const NO_ITEMS: NewsItems = { asked: [], finished: [] };
+
+export const newsItemsBetween = (before: TabFrame | undefined, after: TabFrame): NewsItems => {
     if (before === undefined) {
-        return NO_NEWS;
+        return NO_ITEMS;
     }
-    let asked = false;
+    const asked: { readonly source: string; readonly key: string }[] = [];
     for (const [source, keys] of after.asks) {
         const known = before.asks.get(source);
-        if (known !== undefined && [...keys].some((key) => !known.has(key))) {
-            asked = true;
-            break;
+        if (known !== undefined) {
+            asked.push(...[...keys].filter((key) => !known.has(key)).map((key) => ({ source, key })));
         }
     }
-    const finished = [...before.working].filter((key) => after.settled.has(key)).length;
-    return { asked, finished };
+    return { asked, finished: [...before.working].filter((key) => after.settled.has(key)) };
+};
+
+export const newsBetween = (before: TabFrame | undefined, after: TabFrame): TabNews => {
+    const items = newsItemsBetween(before, after);
+    return { asked: items.asked.length > 0, finished: items.finished.length };
 };

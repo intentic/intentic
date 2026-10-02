@@ -100,6 +100,39 @@ flowchart LR
   row and Quit. Updates download in the background and install on quit or from the editor's banner or This device;
   deb and rpm installs cannot replace themselves and link to the download page instead. A local window never draws the
   editor's update banner: This device says it instead.
+- **What needs the reader, with the window out of sight.** The workspace's page decides, the app only puts it up:
+  the tab's mark (the web's `shell/browser-tab/`: a count of what needs you, a check for a turn that finished while
+  you were away, a dot while agents work, grey while the sandbox is not answering) on the tray icon, with its meaning
+  in the tray's tooltip, as the overlay on the Windows taskbar button of whichever face is up, and as a count on a
+  Linux dock that draws one (the `com.canonical.Unity.LauncherEntry` signal, sent by the app itself since tao's
+  speaks only while Unity runs) (`src-tauri/src/badge.rs`, `intentic://badge`). The page draws both images with the
+  tab icon's own drawing. And the same news the chimes ring for, as the system's notifications (a toast on Windows,
+  the desktop's `org.freedesktop.Notifications` on Linux, `src-tauri/src/notice.rs`, `intentic://notice`): one when
+  an agent needs you and one when a turn somebody started finishes, only while no window of the app has the focus,
+  a burst of more than three as one that counts them, on by default with a switch each in Settings ▸ Notifications.
+  Each makes the system's own sound, so Do Not Disturb and Focus assist silence it like any other app's, the first of
+  a burst only and never twice within four seconds, and none when the page rings its chime for it. An ask answered
+  elsewhere takes its notification down, and all of them go the moment the reader is back in the app, and when it
+  quits. A press opens the workspace at the conversation: on Windows the toast's protocol activation hands the app
+  `intentic://notice?do=open&token=…` through the OS, which works from the notification centre and needs no COM
+  activator; on Linux it is the server's `ActionInvoked`. The token is minted per notification and means nothing
+  outside the run. The toasts go out under the app's id, which the installer puts on the Start menu shortcut
+  (tauri-bundler's `SetLnkAppUserModelId`), or PowerShell's for a copy run from the build tree.
+
+  A system with notifications switched off drops every one without a word, so Settings ▸ Notifications asks the app
+  (`notice?do=status`) and says where to switch them on: Windows answers per app (`ToastNotifier.Setting`), a Linux
+  desktop only whether a notification service answers.
+
+  The app also tells each page window whether it is on screen (`intentic-desktop-shown`, `src-tauri/src/shown.rs`):
+  WebView2 keeps `document.visibilityState` at `visible` for a window hidden in the tray or minimised (`webview_sync.rs`
+  says why the app does not change that), so the page reported its reader present all day, and the sandbox held back
+  every push to their phone while the app sat in the tray.
+
+  _(2026-10-02) Rejected as overkill: flashing the taskbar button or a dock's "urgent" state for an ask, which repeat
+  what the mark already shows and do it again each time; the taskbar's progress bar while agents work; a notification
+  while the reader is in the app, where the board and the mark already show it; and notify-rust, which would bring a
+  second `windows` and its own toast wrapper for the two calls the app makes itself on the `windows` and `zbus` crates
+  already in its graph._
 - **Sign-in runs in the default browser**, because Google refuses OAuth inside an embedded webview. The credential
   returns over `intentic://auth`, which also records that this install has an account (`account-seen.json`) and opens
   the workspace at `/desktop-auth/complete`, in the main window's place.
@@ -205,6 +238,9 @@ every link and drops what an outside sender may not ask for. The editor builds t
 | `fix?slug=…[&code=…]` | app windows | Runs `ic sandbox fix` for that sandbox here and shows it on This device; `code` is the recovery panel's fix code, which `ic` claims so the panel follows the run. A slug or code that is not a plain token drops the link. |
 | `update` | app windows | Installs the downloaded update and restarts. |
 | `launcher[?to=files]` | app windows | Brings the main window back in the workspace's place: at This device (a setup's way back to its run, a sandbox's restart), or at its folder with `to=files` (the sandbox switcher's "This computer"). |
+| `badge?mark=…[&count=…][&tooltip=…][&icon=…][&overlay=…]` | app windows | The workspace tab's mark (`none`, `asks`, `done`, `working`, `offline`) on the app's icon: `icon` for the tray and `overlay` for the Windows taskbar button, each a PNG as unpadded URL-safe base64 of at most 64 KiB and 256 pixels a side; `count` for a Linux dock, heard only with `asks`; `tooltip` after the app's name in the tray's, one line of at most 100 characters. A value out of shape drops the link. |
+| `notice?do=show&key=…&kind=asks\|finished&title=…[&body=…][&path=…][&silent=1]` | app windows | Puts up one of the system's notifications, replacing the one under the same `key`. `path` is a workspace route (`/?sandbox=<id>&conversation=<id>`) a press opens, `silent` asks for no sound. `do=withdraw&key=…` takes one down, `do=clear` all of them, and `do=status` asks whether the system shows them at all (answered as `intentic-desktop-notices`). A line that is empty, too long or holds a control character, or a path that is not rooted or starts `//`, drops the link. |
+| `notice?do=open&token=…` | anywhere | A press on one of the app's notifications, as Windows delivers it through the OS: the workspace at that notification's route. A token this run did not issue, letters and digits only, opens the workspace as it is. |
 | `roster?list=<JSON>[&account=<JSON>]` | app windows | The account's sandboxes as the workspace's switcher lists them (`id`, `name`, `place`, `shared`) and who is signed in (`email`, `name`, `image`), kept in `roster.json` for the place chip and the rail's foot; `[]` and no account after a sign-out. One value out of shape drops the link: an id that is not a plain token, a name empty, over 200 characters or holding a control character, a place that is not a lowercase word, an account without an address, an avatar that is not an `https` address. |
 | `window?do=…` | app and local windows | The editor's own title bar: `ready`, `minimize`, `maximize`, `close[&confirmed=1]`, `dirty&value=0\|1`, `drag`, `raise`, `fit`, `mode`. |
 | `local?do=…` | local windows only | `open-folder` and `open-file` in the system dialog, `reveal[&path=…]` an entry of the window's own folder, `sandbox`, `ask&path=…`, and the project's `changes`, `bring-back[&paths=<JSON array>]`, `restore&point=…`, `direction&value=to-sandbox\|both`. |
@@ -225,6 +261,8 @@ Nothing is returned over a link. The app answers with DOM events it dispatches i
 | Event | Window | Detail |
 | --- | --- | --- |
 | `intentic-desktop-window` | workspace, floating, local | `{ maximized }`, for the page's own maximise button. |
+| `intentic-desktop-shown` | workspace, floating, main window | `{ shown }`: whether the window is visible and not minimised, on each change and once its bar is up. |
+| `intentic-desktop-notices` | the window that sent `notice?do=status` | `{ setting }`: `on`, `off-user` (Windows has every app's notifications off), `off-app`, `off-policy`, `none` (no notification service answers on this Linux desktop) or `unknown`, for Settings ▸ Notifications to say beside its switches. |
 | `intentic-desktop-update` | workspace | `{ version }` of a downloaded update. |
 | `intentic-desktop-setup` | workspace | This device's setup progress (`SetupReport`). |
 | `intentic:face` | a worn spare | none: `window.__INTENTIC_LOCAL__` has just been set. |

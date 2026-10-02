@@ -1,11 +1,14 @@
 mod agent_status;
 mod auth;
+mod badge;
 mod commands;
 mod fix;
 mod local;
+mod notice;
 mod project;
 mod scripts;
 mod setup_link;
+mod shown;
 mod sidecar;
 mod state;
 mod update;
@@ -180,6 +183,8 @@ pub fn run() {
             app.manage(update::UpdateState::default());
             app.manage(local::LocalFiles::default());
             app.manage(sidecar::Sidecar::default());
+            app.manage(badge::Badge::default());
+            app.manage(notice::Notices::default());
             create_tray(app.handle())?;
             // After the tray exists: the refresh loop retitles the agent row this row-handle now points at.
             agent_status::start(app.handle());
@@ -283,6 +288,8 @@ pub fn run() {
             }
         }
         RunEvent::Exit => {
+            // Nothing the app put up can be answered once it has gone.
+            notice::clear_before_exit(app);
             sidecar::shutdown(app);
             update::install_on_exit(app);
         }
@@ -348,7 +355,7 @@ fn create_tray(app: &AppHandle) -> tauri::Result<()> {
         .separator()
         .item(&quit)
         .build()?;
-    let mut tray = TrayIconBuilder::with_id("main")
+    let mut tray = TrayIconBuilder::with_id(badge::TRAY)
         .menu(&menu)
         .show_menu_on_left_click(true)
         .tooltip("Intentic")

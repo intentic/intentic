@@ -1,4 +1,4 @@
-import { NO_NEWS, newsBetween, type TabFrame, tabMark, tabTitle } from "./tabSignal";
+import { NO_ITEMS, NO_NEWS, newsBetween, newsItemsBetween, type TabFrame, tabMark, tabTitle } from "./tabSignal";
 
 const facts = { asks: 0, offline: false, doneAway: false, working: false };
 
@@ -73,5 +73,37 @@ describe(`news between two readings`, () => {
     it(`finds no finish across a switch to another sandbox`, () => {
         const before = frame({ working: new Set([`one/a`]) });
         expect(newsBetween(before, frame({ settled: new Set([`two/a`]) }))).toEqual(NO_NEWS);
+    });
+});
+
+// The same news by name, for a notification per caller and per finished turn (desktopSignal.ts).
+describe(`news items between two readings`, () => {
+    it(`names each new caller with its source, and none of a source read for the first time`, () => {
+        const before = frame({ asks: new Map([[`box`, new Set([`a`])], [`box#held`, new Set()]]) });
+        const after = frame({
+            asks: new Map([
+                [`box`, new Set([`a`, `b`, `c`])],
+                [`box#held`, new Set([`w1`])],
+                [`other`, new Set([`x`])],
+            ]),
+        });
+        expect(newsItemsBetween(before, after)).toEqual({
+            asked: [
+                { source: `box`, key: `b` },
+                { source: `box`, key: `c` },
+                { source: `box#held`, key: `w1` },
+            ],
+            finished: [],
+        });
+    });
+
+    it(`names each turn that went from running to Finished`, () => {
+        const before = frame({ working: new Set([`box/a`, `box/b`]) });
+        const after = frame({ working: new Set([`box/b`]), settled: new Set([`box/a`]) });
+        expect(newsItemsBetween(before, after)).toEqual({ asked: [], finished: [`box/a`] });
+    });
+
+    it(`is nothing on the first reading`, () => {
+        expect(newsItemsBetween(undefined, frame({ asks: new Map([[`box`, new Set([`a`])]]) }))).toEqual(NO_ITEMS);
     });
 });

@@ -5238,7 +5238,18 @@
             "chimesWhen": "Dźwięki grają tylko wtedy, gdy jesteś w innej karcie albo aplikacji, z jednej karty naraz, w tej przeglądarce. Włączenie dźwięku od razu go odtwarza.",
             "sounds": "Dźwięki",
             "tabStatus": "Pokazuj stan agentów na karcie",
-            "tabStatusHint": "Tytuł liczy, co Cię potrzebuje, i oznacza turę, która skończyła się pod Twoją nieobecność. Ikona pokazuje też, kiedy agenci pracują."
+            "tabStatusHint": "Tytuł liczy, co Cię potrzebuje, i oznacza turę, która skończyła się pod Twoją nieobecność. Ikona pokazuje też, kiedy agenci pracują.",
+            "appIcon": "Pasek zadań i zasobnik",
+            "appIconStatus": "Pokazuj stan agentów na ikonie aplikacji",
+            "appIconStatusHint": "Ikona liczy, co Cię potrzebuje, oznacza turę, która skończyła się pod Twoją nieobecność, i pokazuje, kiedy agenci pracują.",
+            "chimesWhenApp": "Dźwięki grają tylko wtedy, gdy jesteś w innej aplikacji. Gdy dźwięk jest włączony, powiadomienie, przy którym gra, jest ciche, więc słyszysz go raz.",
+            "desktopNotices": "Powiadomienia na pulpicie",
+            "desktopNoticesWhen": "Pojawiają się tylko wtedy, gdy jesteś w innej aplikacji, i znikają, gdy wracasz. Grają systemowym dźwiękiem powiadomień, który wycisza tryb Nie przeszkadzać.",
+            "unsupportedDesktopAppNotices": "To okno nie odbiera powiadomień push, więc aplikacja pokazuje zamiast nich własne powiadomienia na pulpicie. Włącz push w przeglądarce albo na telefonie, żeby docierały też tam.",
+            "systemNoService": "Na tym pulpicie nie odpowiada żadna usługa powiadomień, więc nie da się ich pokazać.",
+            "systemOffApp": "Windows ma wyłączone powiadomienia od Intentic, więc żadne z nich się nie pojawi. Włącz je w Ustawieniach Windows ▸ System ▸ Powiadomienia ▸ Intentic.",
+            "systemOffPolicy": "Twoja organizacja wyłączyła powiadomienia na tym komputerze, więc żadne z nich się nie pojawi.",
+            "systemOffUser": "Powiadomienia są wyłączone na tym komputerze, więc żadne z nich się nie pojawi. Włącz je w Ustawieniach Windows ▸ System ▸ Powiadomienia."
         },
         "settingsProfile": {
             "changeAvatar": "Zmień awatar",
@@ -5545,6 +5556,18 @@
         "accountPanel": {
             "signOut2": "Wyloguj się"
         },
+        "desktopSignal": {
+            "elsewhere": "{line} · w {sandbox}",
+            "finished": "Tura się skończyła",
+            "heldLine": "Automatyzacja czeka na Twoje zatwierdzenie.",
+            "heldTitle": "Automatyzacja czeka na zatwierdzenie",
+            "manyAsks": "{count} agent Cię potrzebuje | {count} agenci Cię potrzebują | {count} agentów Cię potrzebuje",
+            "manyFinished": "{count} tura się skończyła | {count} tury się skończyły | {count} tur się skończyło",
+            "needsYou": "Potrzebuje Cię",
+            "needsYouFor": "Potrzebuje Cię · {reason}",
+            "testLine": "Tak Intentic daje znać, że coś Cię potrzebuje, gdy jesteś w innej aplikacji.",
+            "testTitle": "Powiadomienia są włączone"
+        },
         "hubLayout": {
             "backTo": "Wróć do {title}",
             "sections": "Sekcje"
@@ -5679,7 +5702,11 @@
             "new": "Nowy"
         },
         "browserTab": {
-            "offline": "Offline"
+            "asksTooltip": "{count} sprawa czeka na Ciebie | {count} sprawy czekają na Ciebie | {count} spraw czeka na Ciebie",
+            "doneTooltip": "Tura skończyła się pod Twoją nieobecność",
+            "offline": "Offline",
+            "offlineTooltip": "Twój sandbox nie odpowiada",
+            "workingTooltip": "Agenci pracują"
         }
     },
     "terminal": {

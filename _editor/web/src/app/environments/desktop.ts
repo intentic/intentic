@@ -17,6 +17,9 @@ interface DesktopWebview {
     /* THIS BUILD COPIES A FOLDER INTO ITS PROJECT on a sync link carrying `project=`. An older one reads that link as a
      * whole-`/work` sync, so setup hands a folder to a hosted machine only when this is said. */
     projectSync?: boolean;
+    /* THIS BUILD PUTS UP THE SYSTEM'S NOTIFICATIONS AND THE TAB'S MARK ON ITS ICON (`intentic://notice`, `badge`;
+     * desktopNotices.ts). An older one drops both links, so the page offers neither in its settings. */
+    notices?: boolean;
 }
 
 declare global {
@@ -356,6 +359,13 @@ export const DESKTOP_WINDOW_EVENT = `intentic-desktop-window`;
 
 export interface DesktopWindowEvent {
     maximized: boolean;
+}
+
+/* THE APP SAYING WHETHER THIS WINDOW IS ON SCREEN (desktop-app shown.rs): shown, and not minimised or in the tray. */
+export const DESKTOP_SHOWN_EVENT = `intentic-desktop-shown`;
+
+export interface DesktopShownEvent {
+    shown: boolean;
 }
 
 /// Whether this window is one the page has to draw a title bar for.

@@ -29,6 +29,12 @@ computer and opens the same app.intentic.dev in its window; from the tray it sta
 removes the sandbox and shows its logs. It is not needed to reach a sandbox from another computer: any browser
 signed in at app.intentic.dev reaches the same sandbox.
 
+Its window cannot receive push, so the app does that part itself: while the owner is in another app it shows the
+system's notification when an agent needs them or a turn they started finishes (pressing one opens that
+conversation), and its tray and taskbar icon carry the same count and marks the browser tab does. Both are on by
+default and switched in Settings ▸ Notifications; the system's own Do Not Disturb and per-app notification settings
+silence them like any other app's.
+
 ## Other people
 
 **Sandbox ▸ Access** (`/sandbox/access`): the owner invites by email and picks a role under **Invite as**:

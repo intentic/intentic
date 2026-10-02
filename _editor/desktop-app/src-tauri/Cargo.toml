@@ -55,6 +55,16 @@ trash = "5"
 tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 tauri-plugin-deep-link = "2"
 
+# The system's notifications and the dock's count (src/notice.rs, src/badge.rs), each through the platform's own API
+# rather than a notification crate: both crates are already in the graph at these versions (windows through tao and
+# wry, zbus through the opener and single-instance plugins), so naming them adds features to compile and nothing to
+# download, where notify-rust would bring a second `windows` and its own toast wrapper for the same two calls.
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "0.61", features = ["Data_Xml_Dom", "UI_Notifications", "Win32_System_Com"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+zbus = "5"
+
 # Tuned for BUILD time, because that is the only axis this crate can lose on. `lto = true` (fat) with
 # codegen-units = 1 is the slowest release profile rustc offers, and it buys runtime speed this app cannot use:
 # it is a launcher that shells into the scripts it bundles (see the dependencies note above), so there is no hot

@@ -3888,19 +3888,30 @@
             "unbound": "Nicht belegt"
         },
         "settingsNotifications": {
+            "appIcon": "Taskleiste und Infobereich",
+            "appIconStatus": "Agentenstatus am App-Symbol anzeigen",
+            "appIconStatusHint": "Das Symbol zählt, was dich braucht, markiert einen Durchlauf, der fertig wurde, während du weg warst, und zeigt, wenn Agenten arbeiten.",
             "browserTab": "Browser-Tab",
             "chimeAsks": "Wenn etwas dich braucht",
             "chimeAsksHint": "Eine Frage, eine Berechtigung oder ein Plan zur Freigabe, ein fehlgeschlagener Durchlauf.",
             "chimeFinished": "Wenn ein Durchlauf fertig ist",
             "chimeFinishedHint": "Durchläufe, die ein Mensch gestartet hat, keine Automationen oder Subagenten.",
             "chimesWhen": "Töne erklingen nur, während du in einem anderen Tab oder einer anderen App bist, aus nur einem Tab, in diesem Browser. Beim Einschalten wird der Ton einmal abgespielt.",
+            "chimesWhenApp": "Töne erklingen nur, während du in einer anderen App bist. Ist einer an, bleibt die Benachrichtigung dazu stumm, damit du ihn nur einmal hörst.",
+            "desktopNotices": "Desktop-Benachrichtigungen",
+            "desktopNoticesWhen": "Erscheinen nur, während du in einer anderen App bist, und verschwinden, wenn du zurückkommst. Sie nutzen den Benachrichtigungston deines Systems, den „Nicht stören“ stummschaltet.",
             "notifyDevice": "Dieses Gerät benachrichtigen",
             "pushNotifications": "Push-Benachrichtigungen",
             "sendTest": "Test senden",
             "sendTest2": "Test senden",
             "sounds": "Töne",
             "tabStatus": "Agentenstatus im Tab anzeigen",
-            "tabStatusHint": "Der Titel zählt, was dich braucht, und markiert einen Durchlauf, der fertig wurde, während du weg warst. Das Symbol zeigt außerdem, wenn Agenten arbeiten."
+            "tabStatusHint": "Der Titel zählt, was dich braucht, und markiert einen Durchlauf, der fertig wurde, während du weg warst. Das Symbol zeigt außerdem, wenn Agenten arbeiten.",
+            "unsupportedDesktopAppNotices": "Dieses Fenster empfängt keine Push-Benachrichtigungen, deshalb zeigt die App stattdessen eigene Desktop-Benachrichtigungen. Schalte Push im Browser oder auf dem Handy ein, um auch dort erreicht zu werden.",
+            "systemNoService": "Auf diesem Desktop antwortet kein Benachrichtigungsdienst, deshalb können sie nicht erscheinen.",
+            "systemOffApp": "Windows hat Benachrichtigungen von Intentic ausgeschaltet, deshalb erscheint keine davon. Schalte sie in den Windows-Einstellungen ▸ System ▸ Benachrichtigungen ▸ Intentic ein.",
+            "systemOffPolicy": "Deine Organisation hat Benachrichtigungen auf diesem Computer ausgeschaltet, deshalb erscheint keine davon.",
+            "systemOffUser": "Benachrichtigungen sind auf diesem Computer ausgeschaltet, deshalb erscheint keine davon. Schalte sie in den Windows-Einstellungen ▸ System ▸ Benachrichtigungen ein."
         },
         "settingsProfile": {
             "changeAvatar": "Avatar ändern",
@@ -4182,7 +4193,23 @@
             "signOut2": "Abmelden"
         },
         "browserTab": {
-            "offline": "Offline"
+            "asksTooltip": "{count} braucht dich | {count} brauchen dich",
+            "doneTooltip": "Ein Durchlauf wurde fertig, während du weg warst",
+            "offline": "Offline",
+            "offlineTooltip": "Deine Sandbox antwortet nicht",
+            "workingTooltip": "Agenten arbeiten"
+        },
+        "desktopSignal": {
+            "elsewhere": "{line} · in {sandbox}",
+            "finished": "Durchlauf fertig",
+            "heldLine": "Eine Automation wartet auf deine Freigabe.",
+            "heldTitle": "Automation braucht Freigabe",
+            "manyAsks": "{count} Agent braucht dich | {count} Agenten brauchen dich",
+            "manyFinished": "{count} Durchlauf fertig | {count} Durchläufe fertig",
+            "needsYou": "Braucht dich",
+            "needsYouFor": "Braucht dich · {reason}",
+            "testLine": "So sagt dir Intentic, dass dich etwas braucht, während du in einer anderen App bist.",
+            "testTitle": "Benachrichtigungen sind an"
         },
         "hubLayout": {
             "backTo": "Zurück zu {title}",

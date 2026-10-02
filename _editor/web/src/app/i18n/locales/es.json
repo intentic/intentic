@@ -3907,19 +3907,30 @@
             "unbound": "Sin asignar"
         },
         "settingsNotifications": {
+            "appIcon": "Barra de tareas y bandeja",
+            "appIconStatus": "Mostrar el estado de los agentes en el icono de la aplicación",
+            "appIconStatusHint": "El icono cuenta lo que te necesita, marca un turno que terminó mientras no estabas y muestra cuándo trabajan los agentes.",
             "browserTab": "Pestaña del navegador",
             "chimeAsks": "Cuando algo te necesita",
             "chimeAsksHint": "Una pregunta, un permiso o un plan que aprobar, un turno que falló.",
             "chimeFinished": "Cuando termina un turno",
             "chimeFinishedHint": "Turnos que inició una persona, no automatizaciones ni subagentes.",
             "chimesWhen": "Los sonidos solo suenan mientras estás en otra pestaña o aplicación, desde una sola pestaña, en este navegador. Al activar uno, suena una vez.",
+            "chimesWhenApp": "Los sonidos solo suenan mientras estás en otra aplicación. Con uno activado, la notificación que lo acompaña queda en silencio, para que lo oigas una sola vez.",
+            "desktopNotices": "Notificaciones de escritorio",
+            "desktopNoticesWhen": "Aparecen solo mientras estás en otra aplicación y desaparecen cuando vuelves. Usan el sonido de notificación del sistema, que No molestar silencia.",
             "notifyDevice": "Notificar a este dispositivo",
             "pushNotifications": "Notificaciones push",
             "sendTest": "Enviar una prueba",
             "sendTest2": "Enviar prueba",
             "sounds": "Sonidos",
             "tabStatus": "Mostrar el estado de los agentes en la pestaña",
-            "tabStatusHint": "El título cuenta lo que te necesita y marca un turno que terminó mientras no estabas. El icono también muestra cuándo trabajan los agentes."
+            "tabStatusHint": "El título cuenta lo que te necesita y marca un turno que terminó mientras no estabas. El icono también muestra cuándo trabajan los agentes.",
+            "unsupportedDesktopAppNotices": "Esta ventana no recibe notificaciones push, así que la aplicación muestra sus propias notificaciones de escritorio. Activa push en tu navegador o en tu teléfono para que te lleguen también allí.",
+            "systemNoService": "Ningún servicio de notificaciones responde en este escritorio, así que no se pueden mostrar.",
+            "systemOffApp": "Windows tiene desactivadas las notificaciones de Intentic, así que no aparecerá ninguna. Actívalas en Configuración de Windows ▸ Sistema ▸ Notificaciones ▸ Intentic.",
+            "systemOffPolicy": "Tu organización ha desactivado las notificaciones en este equipo, así que no aparecerá ninguna.",
+            "systemOffUser": "Las notificaciones están desactivadas en este equipo, así que no aparecerá ninguna. Actívalas en Configuración de Windows ▸ Sistema ▸ Notificaciones."
         },
         "settingsProfile": {
             "changeAvatar": "Cambiar el avatar",
@@ -4205,7 +4216,23 @@
             "signOut2": "Cerrar sesión"
         },
         "browserTab": {
-            "offline": "Sin conexión"
+            "asksTooltip": "{count} te necesita | {count} te necesitan",
+            "doneTooltip": "Un turno terminó mientras no estabas",
+            "offline": "Sin conexión",
+            "offlineTooltip": "Tu sandbox no responde",
+            "workingTooltip": "Los agentes están trabajando"
+        },
+        "desktopSignal": {
+            "elsewhere": "{line} · en {sandbox}",
+            "finished": "Turno terminado",
+            "heldLine": "Una automatización espera tu aprobación.",
+            "heldTitle": "Una automatización necesita aprobación",
+            "manyAsks": "{count} agente te necesita | {count} agentes te necesitan",
+            "manyFinished": "{count} turno terminado | {count} turnos terminados",
+            "needsYou": "Te necesita",
+            "needsYouFor": "Te necesita · {reason}",
+            "testLine": "Así te avisa Intentic de que algo te necesita mientras estás en otra aplicación.",
+            "testTitle": "Las notificaciones están activadas"
         },
         "hubLayout": {
             "backTo": "Volver a {title}",
