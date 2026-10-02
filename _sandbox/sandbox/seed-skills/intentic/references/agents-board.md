@@ -57,3 +57,10 @@ A finished agent is archived after `agentRetentionDays` (default 3; Sandbox ▸ 
 finished agents**: 1 day, 3 days, 1 week or Never), or by hand from its card. The **Finished** lane's **Open the
 archive (N)** lists them, with **Restore** on each. Archiving commits what the conversation still had in progress
 onto its own branch and releases its working copy.
+
+A subagent rides in the tray under the card of the agent that spawned it. When it stops (an error, a spent
+allowance, a Stop) the stop is reported to that parent, so it moves the parent's card to **Attention** only until
+the parent has moved past it. A parent that carried on and landed sits in **Finished**, with the stop kept in its
+tray. What only you can answer (a permission, a plan, a setup, a credential) and a question nobody answered still
+reach **Attention**. When a parent is archived, by hand, by **Clear** or by age, the subagents that stopped before
+it last moved go with it.

@@ -1,5 +1,6 @@
 import { errorMessage } from "@intentic/base/errors";
 import type { AgentSummary } from "@intentic/sandbox-contract";
+import { parentOfActor } from "../../auth/principal.js";
 import type { Logger } from "pino";
 import { cancelWatchersFor } from "../../agent/verification/watchers.js";
 import type { ResourceReaper } from "../../system/boot/reaper.js";
@@ -170,13 +171,60 @@ export const forgetConversations = async (deps: AgentArchiveDeps, removed: reado
     await deps.conversations.dispose([...gone]);
 };
 
-// The unattended pass: archives everything finished longer than the retention window; `updatedAt` is the clock, so
-// ongoing activity never ages out.
+// How a child agent can stand and still be news its parent has had. Every settled turn of a child reaches the parent
+// that started it (agent/subagents/child-report.ts), so a child that settled before its parent last moved was reported,
+// and the parent's own ending is the account of it. Not `ready` or `conflict` (work not landed), nor anything still
+// running or parked on an ask.
+const SETTLED_CHILD: ReadonlySet<AgentSummary["status"]> = new Set(["landed", "idle", "error", "interrupted", "stopped"]);
+
+// Whether a child goes when its parent is filed: settled before the parent last moved, and waiting on nothing (no
+// flag raised, no land that broke, no re-run booked, no watch armed, no message unsent). Left behind, it would stand
+// alone on the board once its parent is gone, an error card in Attention days after the work it belonged to landed.
+// The board reads the same line (agentStatus.heardByParent) to keep such a child from calling the reader.
+export const goesWithParent = (child: AgentSummary, parent: AgentSummary): boolean =>
+    child.archivedAt === undefined &&
+    SETTLED_CHILD.has(child.status) &&
+    child.updatedAt < parent.updatedAt &&
+    !Object.values(child.attention).some((flag) => flag === true) &&
+    child.landFailure === undefined &&
+    child.limitScheduled !== true &&
+    (child.watches ?? []).length === 0 &&
+    child.unsentAt === undefined;
+
+// What the unattended pass files: every agent aged out on its own, and with each the children that go with it, a
+// generation at a time, so a family leaves the board together as the board's own Archive takes it. A parent filed
+// before is not walked again: a child somebody restored from under it was put back on purpose.
+export const agedFamilies = (live: readonly AgentSummary[], now: number, retentionMs: number): string[] => {
+    if (retentionMs <= 0) {
+        return [];
+    }
+    const childrenOf = new Map<string, AgentSummary[]>();
+    for (const agent of live) {
+        const parent = parentOfActor(agent.startedBy);
+        if (parent !== undefined) {
+            childrenOf.set(parent, [...(childrenOf.get(parent) ?? []), agent]);
+        }
+    }
+    const filed = new Set<string>();
+    const file = (parent: AgentSummary): void => {
+        for (const child of childrenOf.get(parent.id) ?? []) {
+            if (!filed.has(child.id) && goesWithParent(child, parent)) {
+                filed.add(child.id);
+                file(child);
+            }
+        }
+    };
+    for (const agent of live.filter((entry) => archivableByAge(entry, now, retentionMs))) {
+        filed.add(agent.id);
+        file(agent);
+    }
+    return [...filed];
+};
+
+// The unattended pass: archives everything finished longer than the retention window, with the children that go with
+// it (agedFamilies); `updatedAt` is the clock, so ongoing activity never ages out.
 export const sweepAgedAgents = async (deps: AgentArchiveDeps, now: number, retentionMs: number): Promise<string[]> => {
-    const aged = deps.agents
-        .list()
-        .filter((agent) => archivableByAge(agent, now, retentionMs))
-        .map((agent) => agent.id);
+    const aged = agedFamilies(deps.agents.list(), now, retentionMs);
     if (aged.length === 0) {
         return [];
     }

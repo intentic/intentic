@@ -9,6 +9,7 @@ import {
     awaitingUser,
     blocked,
     callsOwner,
+    heardByParent,
     type ClientAgentStatus,
     conflictIsYours,
     drillTarget,
@@ -491,7 +492,9 @@ describe("a spent allowance", () => {
             wait: true,
         });
         // Seconds from the reset still read as a minute, never "0m".
-        expect(limitCountdown({ status: `error`, attention: none, failureCode: `rate_limit`, limitResetsAt: (NOW + 5_000) / 1000 }, NOW)?.text).toBe(`1m`);
+        expect(limitCountdown({ status: `error`, attention: none, failureCode: `rate_limit`, limitResetsAt: (NOW + 5_000) / 1000 }, NOW)?.text).toBe(
+            `1m`,
+        );
         // Four hours out: a clock time, not a count. The exact string is the locale's; this pins the shape.
         const far = limitCountdown({ status: `error`, attention: none, ...SHUT }, NOW);
         expect(far?.wait).toBe(false);
@@ -511,11 +514,17 @@ describe("a spent allowance", () => {
         const soon = { status: `error`, attention: none, failureCode: `rate_limit`, limitResetsAt: (NOW + 40 * 60 * 1000) / 1000 } as const;
         expect(limitCorner(soon, NOW)?.text).toBe(`back in 40m`);
         expect(limitCorner({ ...soon, limitScheduled: true }, NOW)?.text).toBe(`resends in 40m`);
-        expect(limitCorner({ status: `error`, attention: none, ...SHUT, limitScheduled: true }, NOW)?.text).toMatch(/^resends (?:\S.* )?\d{2}:\d{2}$/u);
+        expect(limitCorner({ status: `error`, attention: none, ...SHUT, limitScheduled: true }, NOW)?.text).toMatch(
+            /^resends (?:\S.* )?\d{2}:\d{2}$/u,
+        );
         // Past its instant a booked resend goes on the pass's next beat: said so, not dropped for a date that makes a
         // card resting in Active look stuck.
         expect(limitCorner({ status: `error`, attention: none, ...OPEN, limitScheduled: true }, NOW)?.text).toBe(`resends in a moment`);
-        expect(limitCorner({ ...soon, limitScheduled: true, limitMoving: `Work` }, NOW)).toEqual({ kind: `moving`, account: `Work`, text: `moving to Work` });
+        expect(limitCorner({ ...soon, limitScheduled: true, limitMoving: `Work` }, NOW)).toEqual({
+            kind: `moving`,
+            account: `Work`,
+            text: `moving to Work`,
+        });
     });
 
     // Nothing booked and the window open: the corner is the ordinary date's again. And a real failure never gets one.
@@ -633,22 +642,54 @@ describe("what a child agent asks of the reader", () => {
     });
 
     it("hands a stop to the reader only once its parent stops supervising", () => {
-        const spent = standing({ status: `error`, failureCode: `rate_limit` });
-        expect(callsOwner(spent, { child: `attention`, parent: `active` })).toBe(false);
-        expect(callsOwner(spent, { child: `attention`, parent: `finished` })).toBe(true);
-        expect(callsOwner(spent, { child: `attention`, parent: `attention` })).toBe(true);
+        const spent = { ...standing({ status: `error`, failureCode: `rate_limit` }), updatedAt: 2_000 };
+        expect(callsOwner(spent, { child: `attention`, parent: `active`, parentAt: 1_000 })).toBe(false);
+        expect(callsOwner(spent, { child: `attention`, parent: `finished`, parentAt: 1_000 })).toBe(true);
+        expect(callsOwner(spent, { child: `attention`, parent: `attention`, parentAt: 1_000 })).toBe(true);
+    });
+
+    // Every ending of a child's turn is reported to its parent, so a parent that ran or landed after the stop heard it,
+    // and its own ending is the account the reader gets: an orchestrator that landed is done, not stuck.
+    it("stops handing a turn's ending to the reader once the parent has moved past it", () => {
+        const at = (over: Partial<AgentStanding>) => ({ ...standing(over), updatedAt: 1_000 });
+        for (const ended of [
+            at({ status: `error`, failureCode: `rate_limit` }),
+            at({ status: `error` }),
+            at({ status: `stopped` }),
+            at({ status: `interrupted` }),
+        ]) {
+            expect(heardByParent(ended, 2_000)).toBe(true);
+            expect(callsOwner(ended, { child: `attention`, parent: `finished`, parentAt: 2_000 })).toBe(false);
+            // The same instant is no proof the parent was told.
+            expect(heardByParent(ended, 1_000)).toBe(false);
+        }
+    });
+
+    it("keeps calling for what no report settles, however far the parent has moved", () => {
+        const at = (over: Partial<AgentStanding>) => ({ ...standing(over), updatedAt: 1_000 });
+        const family = { child: `attention`, parent: `finished`, parentAt: 9_000 } as const;
+        // A question still parked waits for an answer, and a refused or broken land leaves work stuck on the branch.
+        expect(callsOwner(at({ status: `awaiting`, attention: { ...none, question: true } }), family)).toBe(true);
+        expect(callsOwner(at({ status: `conflict`, attention: { ...none, conflict: true }, conflictCauses: [`diverged`] }), family)).toBe(true);
+        expect(callsOwner(at({ status: `error`, landFailure: { reason: `fatal: refused`, at: 1_000 } }), family)).toBe(true);
+        // What only the owner can answer, whatever the parent did.
+        expect(callsOwner(at({ status: `awaiting`, attention: { ...none, permission: true } }), family)).toBe(true);
+        // Not yet an ending anyone was told, and a pause booked to run again is not over.
+        expect(heardByParent(at({ status: `stopping` }), 9_000)).toBe(false);
+        expect(heardByParent(at({ status: `error`, failureCode: `rate_limit`, limitScheduled: true }), 9_000)).toBe(false);
     });
 });
 
 // The rail badge names the Attention lane as the board draws it, children folded under their parents.
 describe("attentionCards", () => {
-    const agent = (id: string, over: Partial<AgentStanding> & { startedBy?: string; unsent?: boolean } = {}) => ({
+    const agent = (id: string, over: Partial<AgentStanding> & { startedBy?: string; unsent?: boolean; updatedAt?: number } = {}) => ({
         id,
         status: `landed` as AgentStatus,
         attention: none,
+        updatedAt: 0,
         ...over,
     });
-    const child = (id: string, parent: string, over: Partial<AgentStanding> & { unsent?: boolean } = {}) =>
+    const child = (id: string, parent: string, over: Partial<AgentStanding> & { unsent?: boolean; updatedAt?: number } = {}) =>
         agent(id, { startedBy: `agent:${parent}`, ...over });
     const spent = { status: `error`, failureCode: `rate_limit` } as const;
 
@@ -670,6 +711,15 @@ describe("attentionCards", () => {
     it("counts a stopped parent's stuck children as its one card, and not again for its own stop", () => {
         expect(attentionCards([agent(`p`, spent), child(`a`, `p`, spent), child(`b`, `p`, { status: `stopped` })])).toBe(1);
         expect(attentionCards([agent(`p`), child(`a`, `p`, spent)])).toBe(1);
+    });
+
+    it("counts nothing for a finished parent that moved past its children's stops: it heard them, and landed anyway", () => {
+        const landed = agent(`p`, { updatedAt: 9_000 });
+        expect(
+            attentionCards([landed, child(`a`, `p`, { ...spent, updatedAt: 1_000 }), child(`b`, `p`, { status: `error`, updatedAt: 1_000 })]),
+        ).toBe(0);
+        // A stop after the parent's last move is news nobody has had.
+        expect(attentionCards([landed, child(`late`, `p`, { ...spent, updatedAt: 9_500 })])).toBe(1);
     });
 
     it("counts a child as a card of its own when its parent is not here, or its composer holds words", () => {

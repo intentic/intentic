@@ -94,6 +94,34 @@ describe(`which children ride under their parent`, () => {
         expect(ids(fold.children.get(`p`))).toContain(`done`);
     });
 
+    // An orchestrator whose children spent their allowances, carried on, and landed: it heard every stop (each is
+    // reported to it), so the stops are its family's history in the tray, and the card is as finished as it says.
+    it(`files a parent in Finished once it moved past its children's stops, keeping them in its tray`, () => {
+        const fold = folded(
+            card(`p`, { updatedAt: 9_000 }),
+            limited(`a`, `p`, { updatedAt: 2_000 }),
+            child(`b`, `p`, { status: `error`, updatedAt: 2_000 }),
+            child(`done`, `p`, { updatedAt: 3_000 }),
+        );
+        expect(fold.lanes.attention).toEqual([]);
+        expect(fold.lanes.active).toEqual([]);
+        expect(ids(fold.lanes.finished)).toEqual([`p`]);
+        expect(fold.calls.get(`p`)).toBeUndefined();
+        expect(ids(fold.children.get(`p`)).toSorted()).toEqual([`a`, `b`, `done`]);
+    });
+
+    it(`still lifts a parent that moved past a stop for what no report settles, or for a pause booked to run again`, () => {
+        const asked = folded(
+            card(`p`, { updatedAt: 9_000 }),
+            child(`q`, `p`, { status: `awaiting`, attention: { ...NO_ATTENTION, question: true }, updatedAt: 2_000 }),
+        );
+        expect(ids(asked.lanes.attention)).toEqual([`p`]);
+        const later = folded(card(`p`, { updatedAt: 9_000 }), limited(`late`, `p`, { updatedAt: 9_500 }));
+        expect(ids(later.lanes.attention)).toEqual([`p`]);
+        const booked = folded(card(`p`, { updatedAt: 9_000 }), limited(`resumes`, `p`, { updatedAt: 2_000, limitScheduled: true }));
+        expect(ids(booked.lanes.active)).toEqual([`p`]);
+    });
+
     it(`keeps a card only for a child owing a press a row cannot carry, and lets one asking the reader ride`, () => {
         const question = { ...NO_ATTENTION, question: true };
         const fold = folded(

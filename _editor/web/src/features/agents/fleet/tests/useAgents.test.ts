@@ -62,7 +62,18 @@ import { useChat } from "../../../chat/run/useChat";
 import { useNotifications } from "../../../../shell/notifications/notifications";
 import { queryClient } from "../../../../lib/queryPersistence";
 import { desyncAgents, useAgents } from "../useAgents";
-import { canArchive, doneWith, FINISHED_WINDOW, type FleetAgent, TIDY_AFTER_MS, tidyDue, windowFinished, withKeptWords } from "../useAgents-fleet";
+import {
+    canArchive,
+    clearableOf,
+    doneWith,
+    FINISHED_WINDOW,
+    type FleetAgent,
+    laneGroups,
+    TIDY_AFTER_MS,
+    tidyDue,
+    windowFinished,
+    withKeptWords,
+} from "../useAgents-fleet";
 import { auditRoster, setAgents } from "../useAgents-registry";
 import { clockOffset, resetSandboxClock } from "../sandboxClock";
 import { runningTurn } from "../../../../testing/runningTurn";
@@ -238,6 +249,55 @@ describe("doneWith", () => {
     // No registry entry means no account of whether the work is over, only this browser's guess.
     it("keeps a card the daemon never filed", () => {
         expect(doneWith(settled({ status: `resumed` }))).toBe(false);
+    });
+});
+
+// Clear on the Finished lane takes a family whole: a child its parent heard stop is history in the parent's tray, and
+// filing the parent without it would leave it loose in Attention with nobody under it to have heard it.
+describe("clearableOf", () => {
+    const none = { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false };
+    const agent = (id: string, over: Partial<FleetAgent> = {}): FleetAgent => ({
+        id,
+        status: `landed`,
+        provider: `claude`,
+        harness: `native`,
+        updatedAt: 9_000,
+        attention: none,
+        open: false,
+        unread: false,
+        unsent: false,
+        ...over,
+    });
+    const child = (id: string, parent: string, over: Partial<FleetAgent> = {}): FleetAgent => agent(id, { startedBy: `agent:${parent}`, ...over });
+    const cleared = (...fleet: FleetAgent[]): string[] =>
+        clearableOf(laneGroups(fleet))
+            .map((entry) => entry.id)
+            .toSorted();
+
+    it("takes a landed parent with the children whose stops it moved past", () => {
+        expect(
+            cleared(
+                agent(`p`),
+                child(`spent`, `p`, { status: `error`, failureCode: `rate_limit`, updatedAt: 2_000 }),
+                child(`done`, `p`, { updatedAt: 3_000 }),
+            ),
+        ).toEqual([`done`, `p`, `spent`]);
+    });
+
+    it("leaves a family alone while a child's stop is news its parent never had", () => {
+        expect(cleared(agent(`p`), child(`late`, `p`, { status: `error`, updatedAt: 9_500 }), child(`done`, `p`, { updatedAt: 3_000 }))).toEqual([]);
+    });
+
+    it("leaves every generation under a card something live lifted out of Finished", () => {
+        expect(
+            cleared(
+                agent(`root`),
+                agent(`busy`, { startedBy: `agent:root`, status: `running` }),
+                child(`mid`, `root`, { updatedAt: 3_000 }),
+                child(`leaf`, `mid`, { updatedAt: 2_000 }),
+                agent(`solo`),
+            ),
+        ).toEqual([`solo`]);
     });
 });
 

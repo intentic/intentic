@@ -1,7 +1,18 @@
 import { sandboxValue } from "@intentic/extension-api";
 import type { AgentSummary } from "@intentic/sandbox-contract";
 import { computed, ref, watch } from "vue";
-import { attentionCards, awaitingUser, blocked, type ClientAgentStatus, type FleetLane, laneOf, NO_ATTENTION, turnInFlight, unregistered } from "./agentStatus";
+import {
+    attentionCards,
+    awaitingUser,
+    blocked,
+    type ClientAgentStatus,
+    type FleetLane,
+    heardByParent,
+    laneOf,
+    NO_ATTENTION,
+    turnInFlight,
+    unregistered,
+} from "./agentStatus";
 import { closedDrafts } from "../../chat/drafts/closedDrafts";
 import { type TabFacts, unasked } from "../../chat/tabs/tabFacts";
 import type { StoredTab } from "../../chat/tabs/tabSnapshot";
@@ -48,9 +59,7 @@ export const finishedNeedsReland = (agent: Pick<FleetAgent, "landedPresence">): 
 
 // Every finished card that still owes a press or has words at risk; such a card is never done with (doneWith), so
 // the rail keeps its row without a press.
-export const finishedNeedsAction = (
-    agent: Pick<FleetAgent, "unsent" | "unfinished" | "status" | "landedPresence">,
-): boolean =>
+export const finishedNeedsAction = (agent: Pick<FleetAgent, "unsent" | "unfinished" | "status" | "landedPresence">): boolean =>
     agent.unsent || agent.unfinished !== undefined || agent.status === `ready` || agent.status === `landing` || finishedNeedsReland(agent);
 
 // Nothing left for the reader to do with this chat: settled in Finished, owing no press, and already looked at.
@@ -333,7 +342,9 @@ watch(
     () => {
         const strip = chatStrip.value;
         const leftAt = new Map(strip.tabs.map((tab) => [tab.id, tab.leftAt] as const));
-        return fleet.value.filter((agent) => agent.id !== strip.active && tidyDue(agent, leftAt.get(agent.id), tidyClock.value)).map((agent) => agent.id);
+        return fleet.value
+            .filter((agent) => agent.id !== strip.active && tidyDue(agent, leftAt.get(agent.id), tidyClock.value))
+            .map((agent) => agent.id);
     },
     (ids) => useChat().releaseDone(new Set(ids)),
 );
@@ -350,23 +361,43 @@ export const canArchive = (agent: Pick<FleetAgent, "status" | "attention" | "arc
 // What Clear on the Finished lane files away: every card there the board may archive, less a child whose parent is still
 // at work. That child rides in its parent's tray as the parent's history (board/view/childFold.ts), and filing it alone
 // would strip the tray and leave the child loose in the archive; the family goes together once the parent is done.
+// A child whose stop its parent has moved past (agentStatus.heardByParent) is settled with its family as a Finished
+// child is, though its own standing reads Attention: it holds nothing live, and it goes when the family goes, or it
+// would be left loose in Attention with nobody under it to have heard it.
 export const clearableOf = (grouped: Record<FleetLane, readonly FleetAgent[]>): FleetAgent[] => {
-    const liveAgents = [...grouped.attention, ...grouped.active];
+    const everyone = [...grouped.attention, ...grouped.active, ...grouped.finished];
+    const byId = new Map(everyone.map((agent) => [agent.id, agent] as const));
+    const heard = (agent: FleetAgent): boolean => {
+        const parent = byId.get(parentOf(agent.startedBy) ?? ``);
+        return parent !== undefined && heardByParent(agent, parent.updatedAt);
+    };
+    const liveAgents = [...grouped.attention.filter((agent) => !heard(agent)), ...grouped.active];
     const live = new Set(liveAgents.map((agent) => agent.id));
     // Nor a finished parent with anything under it still live: the board draws its card in that live lane, not in
     // Finished (childFold lifts a family to the lane its children need), and filing it would leave them loose. Walked up
     // every generation, stopping at an id already met so a record naming its own descendant ends the walk.
-    const startedBy = new Map([...liveAgents, ...grouped.finished].map((agent) => [agent.id, agent.startedBy] as const));
+    const startedBy = new Map(everyone.map((agent) => [agent.id, agent.startedBy] as const));
     const liveFamilies = new Set<string>();
     for (const agent of liveAgents) {
         for (let id = parentOf(agent.startedBy); id !== undefined && !liveFamilies.has(id); id = parentOf(startedBy.get(id))) {
             liveFamilies.add(id);
         }
     }
-    return grouped.finished.filter((agent) => {
-        const parent = parentOf(agent.startedBy);
-        return canArchive(agent) && (parent === undefined || !live.has(parent)) && !liveFamilies.has(agent.id);
-    });
+    // Nor anything riding under a family something live lifted out of Finished: a child rides its eldest ancestor's
+    // card, so one live ancestor, or one with live work under it, puts the whole line in that card's tray.
+    const underLive = (agent: FleetAgent): boolean => {
+        const seen = new Set<string>();
+        for (let id = parentOf(agent.startedBy); id !== undefined && !seen.has(id); id = parentOf(startedBy.get(id))) {
+            if (live.has(id) || liveFamilies.has(id)) {
+                return true;
+            }
+            seen.add(id);
+        }
+        return false;
+    };
+    return [...grouped.finished, ...grouped.attention.filter(heard)].filter(
+        (agent) => canArchive(agent) && !underLive(agent) && !liveFamilies.has(agent.id),
+    );
 };
 
 // Final tiebreaker for every lane's sort: without one, cards with equal `updatedAt` (common after a batch resume)

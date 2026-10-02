@@ -1,5 +1,5 @@
 import type { SubagentSession } from "@intentic/sandbox-contract";
-import { callsOwner, type FleetLane, laneOf, limited, onlyOwnerCanAnswer, unregistered } from "../../fleet/agentStatus";
+import { callsOwner, type FleetLane, heardByParent, laneOf, limited, onlyOwnerCanAnswer, unregistered } from "../../fleet/agentStatus";
 import { subagentLive } from "../../fleet/subagentRoster";
 import { activeLaneOrder, attentionLaneOrder, type FleetAgent, finishedNeedsReland } from "../../fleet/useAgents-fleet";
 import { parentOf } from "../ownership";
@@ -33,7 +33,7 @@ export const standsAlone = (agent: FleetAgent): boolean =>
 // their parent's card, given the lanes both were dealt.
 export interface FoldRules {
     readonly alone: (agent: FleetAgent) => boolean;
-    readonly calls: (child: FleetAgent, lanes: { readonly child: FleetLane; readonly parent: FleetLane }) => boolean;
+    readonly calls: (child: FleetAgent, family: { readonly child: FleetLane; readonly parent: FleetLane; readonly parentAt: number }) => boolean;
 }
 
 export const BOARD_RULES: FoldRules = { alone: standsAlone, calls: callsOwner };
@@ -93,6 +93,19 @@ const ordered = (cards: FleetAgent[], order: (a: FleetAgent, b: FleetAgent) => n
         .sort((a, b) => order(a.probe, b.probe))
         .map((entry) => entry.card);
 
+// A family's lift once one more of its riding children is read into it. What the child asks of the family's lane: the
+// reader's when it calls them, Active while it is in flight or stopped under a parent still supervising it, nothing
+// more than the ledger once it has settled, or once its parent has moved past its stop (heardByParent), which leaves
+// the card where its own standing puts it.
+const liftWith = (lift: Lift, child: FleetAgent, read: { readonly lane: FleetLane; readonly calling: boolean; readonly heard: boolean }): Lift => {
+    const wants: FleetLane = read.calling ? `attention` : read.lane === `finished` || read.heard ? `finished` : `active`;
+    return {
+        lane: URGENCY[wants] < URGENCY[lift.lane] ? wants : lift.lane,
+        calledAt: read.calling ? Math.max(lift.calledAt, child.updatedAt) : lift.calledAt,
+        workingSince: read.lane === `active` ? Math.min(lift.workingSince, child.startedAt ?? child.updatedAt) : lift.workingSince,
+    };
+};
+
 export const foldChildren = (lanes: Lanes, rules: FoldRules = BOARD_RULES): ChildFold => {
     const where = new Map<string, { readonly agent: FleetAgent; readonly lane: FleetLane }>();
     for (const lane of LANES) {
@@ -136,19 +149,12 @@ export const foldChildren = (lanes: Lanes, rules: FoldRules = BOARD_RULES): Chil
             }
             push(children, host, agent);
             hosts.set(key, hostEntry.agent);
-            const calling = rules.calls(agent, { child: lane, parent: parent.lane });
+            const calling = rules.calls(agent, { child: lane, parent: parent.lane, parentAt: parent.agent.updatedAt });
             if (calling) {
                 push(calls, host, agent);
             }
-            // What this child asks of its family's lane: the reader's when it calls them, Active while it is in flight
-            // or stopped under a parent still supervising it, nothing more than the ledger once it has settled.
-            const wants: FleetLane = calling ? `attention` : lane === `finished` ? `finished` : `active`;
             const lift = lifts.get(host) ?? { lane: hostEntry.lane, calledAt: 0, workingSince: Number.POSITIVE_INFINITY };
-            lifts.set(host, {
-                lane: URGENCY[wants] < URGENCY[lift.lane] ? wants : lift.lane,
-                calledAt: calling ? Math.max(lift.calledAt, agent.updatedAt) : lift.calledAt,
-                workingSince: lane === `active` ? Math.min(lift.workingSince, agent.startedAt ?? agent.updatedAt) : lift.workingSince,
-            });
+            lifts.set(host, liftWith(lift, agent, { lane, calling, heard: heardByParent(agent, parent.agent.updatedAt) }));
         }
     }
     // Nothing rode anywhere, which is most boards: the lanes go on as they came, so nothing downstream recomputes.

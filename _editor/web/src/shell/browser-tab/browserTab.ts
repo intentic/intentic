@@ -1,5 +1,5 @@
 import { computed, onScopeDispose, ref, watch } from "vue";
-import { type AgentStanding, attentionCalls, laneOf, turnWorking } from "../../features/agents/fleet/agentStatus";
+import { type AgentStanding, attentionCalls, type CallerStanding, laneOf, turnWorking } from "../../features/agents/fleet/agentStatus";
 import { agentsAttention } from "../../features/agents/board/agentsTile";
 import { parentOf } from "../../features/agents/board/ownership";
 import { readingAcross } from "../../features/agents/fleet/fleetScope";
@@ -27,9 +27,7 @@ const OFFLINE: ReadonlySet<SandboxAvailability> = new Set([`unreachable`, `detac
 // A Stop the reader pressed files its card in Attention, which is no news to them.
 const endedByHand = (agent: AgentStanding): boolean => agent.status === `stopping` || agent.status === `stopped`;
 
-type Caller = AgentStanding & { readonly id: string; readonly startedBy?: string | undefined; readonly unsent?: boolean | undefined };
-
-const askKeys = (agents: readonly Caller[]): ReadonlySet<string> => {
+const askKeys = (agents: readonly CallerStanding[]): ReadonlySet<string> => {
     const byId = new Map(agents.map((agent) => [agent.id, agent] as const));
     return new Set(
         attentionCalls(agents)

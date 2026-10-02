@@ -321,14 +321,36 @@ export const onlyOwnerCanAnswer = (agent: AgentStanding): boolean =>
     (agent.status === `awaiting` && !agent.attention.question) ||
     ((agent.attention.conflict || agent.status === `conflict`) && conflictIsYours(agent));
 
+// Whether a child agent's stop is news its parent has already had. Every ending of a turn the parent started reaches
+// the parent (subagents/child-report.ts: a parked `wait` takes it, or it wakes the parent like any wake), so a parent
+// that moved after the child stopped (ran a turn, landed) heard it, and its own ending is the account the reader gets:
+// an orchestrator that worked around three spent allowances and landed is done, not stuck. Only a turn's ending
+// counts. A question is still parked and waits for an answer whoever has moved since, and a land refused or broken
+// leaves work stuck on the child's branch that no report settles. A turn a person ran in the child's own chat is never
+// reported to the parent, and it ends after the parent's last move, so it still reads as unheard here.
+// `updatedAt` is the clock on both sides: a rename keeps it (agents-registry), and reading does not move it.
+export const heardByParent = (child: AgentStanding & { readonly updatedAt: number }, parentAt: number): boolean =>
+    BLOCKING_ENDINGS.has(child.status) &&
+    // Still unwinding: its ending has not reached anyone yet.
+    child.status !== `stopping` &&
+    // Booked to run again by itself: not over, whatever its parent made of the pause.
+    !limitScheduled(child) &&
+    !child.attention.question &&
+    !child.attention.conflict &&
+    !landBroken(child) &&
+    child.updatedAt < parentAt;
+
 // Whether what a child agent stopped on is the reader's to answer rather than its parent's, given the lanes both stand
-// in. An ask only the owner can answer always is; anything else it stopped on (a spent allowance, a failure, a stop, a
-// question, a land conflict) is its parent's news while the parent supervises, and the reader's once it no longer
-// does: nothing running there to hear it and nothing armed to wake it, which is a parent out of Active. The sandbox
-// draws the same line for a child's land news (subagents/child-lands.ts): the parent's while it has a live turn, the
-// owner's after.
-export const callsOwner = (child: AgentStanding, lanes: { readonly child: FleetLane; readonly parent: FleetLane }): boolean =>
-    onlyOwnerCanAnswer(child) || (lanes.child === `attention` && lanes.parent !== `active`);
+// in and when the parent last moved. An ask only the owner can answer always is; anything else it stopped on (a spent
+// allowance, a failure, a stop, a question, a land conflict) is its parent's news while the parent supervises, and the
+// reader's once it no longer does: nothing running there to hear it and nothing armed to wake it, which is a parent out
+// of Active. That holds only until the parent moves past it (heardByParent). After that the stop is the family's
+// history, drawn in the tray, and no longer something the reader owes a press. The sandbox draws the same line for a
+// child's land news (subagents/child-lands.ts): the parent's while it has a live turn, the owner's after.
+export const callsOwner = (
+    child: AgentStanding & { readonly updatedAt: number },
+    family: { readonly child: FleetLane; readonly parent: FleetLane; readonly parentAt: number },
+): boolean => onlyOwnerCanAnswer(child) || (family.child === `attention` && family.parent !== `active` && !heardByParent(child, family.parentAt));
 
 // One table for the chip word and drill-in verb per attention flag, in display rank order, so the two can't drift
 // apart as they did before. `satisfies Record<keyof AgentAttention, …>` makes a new wire flag a build error until
@@ -539,16 +561,20 @@ export const laneOf = (agent: AgentStanding): FleetLane => {
 // (callsOwner). A family counts once however many of its children call, and not again when its own card is in
 // Attention already; a child with words left in its composer keeps a card of its own, as on the board. The rail
 // badge's count, for this sandbox's fleet and another's alike, so the badge cannot disagree with the lane it names.
-export const attentionCards = (
-    agents: readonly (AgentStanding & { readonly id: string; readonly startedBy?: string | undefined; readonly unsent?: boolean | undefined })[],
-): number => new Set(attentionCalls(agents).map((call) => call.card)).size;
+export const attentionCards = (agents: readonly CallerStanding[]): number => new Set(attentionCalls(agents).map((call) => call.card)).size;
+
+// Enough of a fleet's agent to say whether it calls the reader, and through which card.
+export type CallerStanding = AgentStanding & {
+    readonly id: string;
+    readonly updatedAt: number;
+    readonly startedBy?: string | undefined;
+    readonly unsent?: boolean | undefined;
+};
 
 // Every agent calling the reader, each with the card it is drawn on: its own, or its family's where it rides one. The
 // count above is the cards; the browser tab's chime wants the callers, so a second child calling under a family already
 // in Attention is news although the lane's count does not move.
-export const attentionCalls = (
-    agents: readonly (AgentStanding & { readonly id: string; readonly startedBy?: string | undefined; readonly unsent?: boolean | undefined })[],
-): readonly { readonly id: string; readonly card: string }[] => {
+export const attentionCalls = (agents: readonly CallerStanding[]): readonly { readonly id: string; readonly card: string }[] => {
     type Standing = (typeof agents)[number];
     const byId = new Map(agents.map((agent) => [agent.id, agent] as const));
     const parentIn = (agent: Standing): Standing | undefined => {
@@ -573,7 +599,7 @@ export const attentionCalls = (
             if (laneOf(agent) === `attention`) {
                 calls.push({ id: agent.id, card: agent.id });
             }
-        } else if (callsOwner(agent, { child: laneOf(agent), parent: laneOf(parent) })) {
+        } else if (callsOwner(agent, { child: laneOf(agent), parent: laneOf(parent), parentAt: parent.updatedAt })) {
             calls.push({ id: agent.id, card: familyOf(agent) });
         }
     }
@@ -615,7 +641,11 @@ export const landedAway = (
         return {
             text: by.line ?? t(`agents.agentStatus.removed`),
             hint: t(`agents.agentStatus.onBranch`),
-            tip: { title: t(`agents.agentStatus.removedAfterLanding`), rows: [inWorkspace], note: `${t(`agents.agentStatus.stillOnBranch`)}. ${by.note}` },
+            tip: {
+                title: t(`agents.agentStatus.removedAfterLanding`),
+                rows: [inWorkspace],
+                note: `${t(`agents.agentStatus.stillOnBranch`)}. ${by.note}`,
+            },
             icon: `link-broken`,
             offerReland,
         };
@@ -1029,7 +1059,9 @@ export const limitCorner = (agent: AgentStanding, now: number): LimitCorner | un
         return {
             kind: `resend`,
             clock,
-            text: clock.wait ? t(`agents.agentCard.resendsIn`, { limitBackAt: clock.text }) : t(`agents.agentCard.resends`, { limitBackAt: clock.text }),
+            text: clock.wait
+                ? t(`agents.agentCard.resendsIn`, { limitBackAt: clock.text })
+                : t(`agents.agentCard.resends`, { limitBackAt: clock.text }),
         };
     }
     return clock === undefined ? undefined : { kind: `back`, clock, text: limitBack(clock) };

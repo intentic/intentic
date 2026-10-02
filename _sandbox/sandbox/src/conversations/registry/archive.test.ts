@@ -5,7 +5,7 @@ import { beginTurn, fakeTurns, fleetStoreOver, noPresences } from "../../testing
 import type { BeginTurn } from "../actor/conversation-decide.js";
 import { createFleet, type FleetStore } from "./agents-registry.js";
 import { type PersistedAgent, worktreeOf } from "./agents-store.js";
-import { archivable, archivableByAge, archiveAgents, purgeArchived, sweepAgedAgents } from "./archive.js";
+import { agedFamilies, archivable, archivableByAge, archiveAgents, goesWithParent, purgeArchived, sweepAgedAgents } from "./archive.js";
 import { createLogger } from "../../logger.js";
 import type { AgentWorktrees } from "../worktrees/worktrees.js";
 import { memoryWatchJournal } from "../../agent/verification/watch-journal.js";
@@ -88,6 +88,45 @@ describe("archivable", () => {
         expect(archivableByAge(card({ updatedAt: 0, unsentAt: 1 }), now, 3 * DAY)).toBe(false);
         // The board's own Clear still may: a person pressing it has decided.
         expect(archivable(card({ updatedAt: 0, unsentAt: 1 }))).toBe(true);
+    });
+});
+
+// A family ages out together: every ending of a child reaches its parent, so a child that stopped before its parent
+// last moved is news the parent already had, and left behind it would stand alone in Attention once the parent is filed.
+describe("agedFamilies", () => {
+    const now = 10 * DAY;
+    const child = (id: string, parent: string, overrides: Partial<AgentSummary> = {}): AgentSummary =>
+        card({ id, startedBy: `agent:${parent}`, status: "error", updatedAt: 2 * DAY, ...overrides });
+    const parent = card({ id: "p", updatedAt: 5 * DAY });
+
+    it("files a landed parent with the children whose stops it moved past, every generation", () => {
+        const fleet = [
+            parent,
+            child("spent", "p", { failureCode: "rate_limit" }),
+            child("stopped", "p", { status: "stopped" }),
+            child("grand", "spent", { status: "interrupted", updatedAt: 1 * DAY }),
+            card({ id: "else", updatedAt: 9 * DAY }),
+        ];
+        expect(agedFamilies(fleet, now, 3 * DAY).toSorted()).toEqual(["grand", "p", "spent", "stopped"]);
+    });
+
+    it("leaves a child that still waits on something, or stopped after its parent last moved", () => {
+        const none = card().attention;
+        expect(goesWithParent(child("late", "p", { updatedAt: 6 * DAY }), parent)).toBe(false);
+        expect(goesWithParent(child("asks", "p", { status: "awaiting", attention: { ...none, question: true } }), parent)).toBe(false);
+        expect(goesWithParent(child("needs", "p", { status: "idle", attention: { ...none, need: true } }), parent)).toBe(false);
+        expect(goesWithParent(child("held", "p", { status: "ready" }), parent)).toBe(false);
+        expect(goesWithParent(child("refused", "p", { status: "conflict" }), parent)).toBe(false);
+        expect(goesWithParent(child("broke", "p", { landFailure: { reason: "fatal: refused", at: 1 } }), parent)).toBe(false);
+        expect(goesWithParent(child("booked", "p", { failureCode: "rate_limit", limitScheduled: true }), parent)).toBe(false);
+        expect(goesWithParent(child("words", "p", { unsentAt: 1 }), parent)).toBe(false);
+        expect(goesWithParent(child("done", "p", { status: "landed" }), parent)).toBe(true);
+    });
+
+    it("files no family whose parent has not aged out, and nothing with retention off", () => {
+        const fresh = card({ id: "p", updatedAt: 9 * DAY });
+        expect(agedFamilies([fresh, child("spent", "p")], now, 3 * DAY)).toEqual([]);
+        expect(agedFamilies([parent, child("spent", "p")], now, 0)).toEqual([]);
     });
 });
 
