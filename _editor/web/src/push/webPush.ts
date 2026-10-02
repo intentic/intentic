@@ -1,5 +1,4 @@
 import type { PushChannel } from "@intentic/sandbox-contract";
-import { desktopApp } from "../app/environments/desktop";
 import type { Minted, PushDriver } from "./driver.js";
 
 // Web push, from the browser's side: the transport for every real browser, including the Android TWA (Chrome). The
@@ -87,8 +86,12 @@ const mint = async (publicKey: () => Promise<string>): Promise<Minted> => {
 // system's own notifications stands in for push there (desktopNotices.ts).
 const pushCapable = (): boolean => `serviceWorker` in navigator && `PushManager` in window && `Notification` in window;
 
+// Reads the Tauri-injected marker directly rather than through app/environments/desktop.ts: push sits below app, and
+// importing it closed a cycle back through features/settings (_tools/checks/editor-boundaries.mjs).
+const inDesktopApp = (): boolean => window.__INTENTIC_DESKTOP__ !== undefined;
+
 export const webPushDriver: PushDriver = {
-    supported: () => desktopApp() === undefined && pushCapable(),
+    supported: () => !inDesktopApp() && pushCapable(),
     denied: async () => Notification.permission === `denied`,
     localId: async () => (await localSubscription())?.endpoint ?? null,
     bound: async (publicKey) => {
