@@ -77,7 +77,8 @@ const workspaceReading = () => ({
     tabs: useWorkspaceTabs().tabs.value.map((tab) => tab.id),
     home: useHome().homeDir.value,
     terminalOpen: useLayout().terminalOpen.value,
-    changed: changeEpochOf(`src/app.ts`),
+    // Whether the file reads as changed: epochs are one counter every change shares, so its value says nothing here.
+    changed: changeEpochOf(`src/app.ts`) > 0,
     preview: previewOpened.value,
 });
 
@@ -107,7 +108,7 @@ it(`starts every workspace store over when the workspace is replaced under the s
         tabs: [`src/app.ts`],
         home: `src`,
         terminalOpen: true,
-        changed: 1,
+        changed: true,
         preview: true,
     });
     expect(workspaceReading()).toEqual({
@@ -118,7 +119,7 @@ it(`starts every workspace store over when the workspace is replaced under the s
         tabs: [],
         home: ``,
         terminalOpen: false,
-        changed: 0,
+        changed: false,
         preview: false,
     });
 });

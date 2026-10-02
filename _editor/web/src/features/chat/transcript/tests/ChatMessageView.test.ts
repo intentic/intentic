@@ -146,6 +146,8 @@ jest.mock("@intentic/ui", async () => {
         // Named by the graph (the resources dialog, link and port helpers) but never reached by a card here; bun
         // links an ESM import against exactly what this factory returns.
         SandboxResourcesDialog: vue.defineComponent({ render: () => undefined }),
+        // The permission card's "allow wider" menu; which rows it offers is that card's own suite.
+        ContextMenu: vue.defineComponent({ render: () => undefined }),
         browserOwnsClick: () => false,
         clipboardOf: () => undefined,
         parseLoopbackLink: (uri: string) => {
@@ -731,8 +733,9 @@ describe(`ChatMessageView child-agent card`, () => {
         [...element.querySelectorAll<HTMLButtonElement>(`button`)].find((candidate) => candidate.textContent?.trim() === text);
     const chip = (element: HTMLElement): HTMLButtonElement | null => element.querySelector<HTMLButtonElement>(`button.ui-chip`);
     // The card's own answers, in order: what the actions row offers, and nothing from its body.
+    // The answers a press gives; the Allow caret opens the wider yeses rather than answering (ChatPermissionCard's suite).
     const answers = (element: HTMLElement): string[] =>
-        [...element.querySelectorAll<HTMLButtonElement>(`.chat-card-row button`)].map((candidate) => candidate.textContent?.trim() ?? ``);
+        [...element.querySelectorAll<HTMLButtonElement>(`.chat-card-row button:not([aria-haspopup])`)].map((candidate) => candidate.textContent?.trim() ?? ``);
 
     afterEach(() => {
         settleModelPick(undefined);

@@ -49,8 +49,9 @@ test.skipIf(!ocr.runs)(ocr.title("a masked image read again holds the token wher
         // No run of the number survives, not even four of its digits in a row.
         const runs = Array.from({ length: value.length - 3 }, (_, at) => value.slice(at, at + 4));
         expect(runs.filter((run) => text.includes(run))).toEqual([]);
-        // The token's lettering reads back as its label, and what was not personal stays as it was drawn.
-        expect(text).toMatch(/NATI[O0]NAL_ID/u);
+        // The token's lettering reads back as its label, and what was not personal stays as it was drawn. Case aside: the
+        // reader takes small capitals for lower case often enough (CI read "INATIonAL_ID_11", the bracket as an I).
+        expect(text).toMatch(/NATI[O0]NAL_ID/iu);
         expect(text).toContain("PESEL");
         expect(text).toContain("Faktura 12/2026");
     } finally {
