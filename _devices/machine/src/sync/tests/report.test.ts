@@ -2,6 +2,7 @@ import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { PortSummary } from "@intentic/sandbox-contract";
 import type { Pairing, SyncState } from "../config.js";
 import { skippedPortsOf } from "../mirror.js";
+import { sessionsByName } from "../mutagen.js";
 import { buildReport, scopedReport } from "../report.js";
 
 // The resting state: build and installed match, so nothing here quietly tests a device behind itself.
@@ -70,6 +71,27 @@ describe("buildReport", () => {
             { port: 8080, host: "::1", sandboxId: "work", state: "busy", heldBy: undefined, command: undefined },
             // Somebody's own choice, carried as its own state: a reader must never be shown this as a contest lost.
             { port: 5440, host: "127.0.0.1", sandboxId: "work", state: "ignored", heldBy: undefined, command: "postgres" },
+        ]);
+    });
+
+    // ONE LISTING SERVES EVERY PAIRING: the sessions are read once per report and looked up by name, the workspace's and
+    // its backup's alike. A pairing whose sessions the daemon does not hold reads as no status, never a guessed one.
+    it("reads each pairing's file sync and backup off one listing of every session", () => {
+        const listing = sessionsByName([
+            { name: "intentic-work", status: "watching", alpha: {}, beta: {}, ignore: {} },
+            { name: "intentic-work-state", alpha: {}, beta: {}, ignore: {} },
+            { name: "someone-elses", status: "watching", alpha: {}, beta: {}, ignore: {} },
+        ]);
+        const built = buildReport(
+            { pairings: [pairing({ sandboxId: "work", localDir: "/home/me/intentic/work" }), pairing({ sandboxId: "gone", localDir: "/home/me/intentic/gone" })] },
+            listing,
+            AGENT,
+            1,
+        );
+        // Mutagen leaves its zero status out of the JSON, and that zero is "disconnected".
+        expect(built.pairings.map((entry) => [entry.sandboxId, entry.mutagenStatus, entry.backupStatus])).toEqual([
+            ["work", "watching", "disconnected"],
+            ["gone", undefined, undefined],
         ]);
     });
 

@@ -66,9 +66,30 @@ flowchart LR
 - Only the resident agent creates Mutagen sessions: `setup` records the pairing and waits for the session to
   appear, since two creators racing left one name holding two identical sessions. The agent keeps one session per
   name, terminating any extras, and recreates a session whose rules drifted (its ignores, its folders, its sync mode,
-  its symlink mode). A two-way session replaced by another waits until no conflicts are left and has its derived
-  residue swept first; every other replacement happens as soon as the sandbox answers (`settlesFirst` in
-  [`sync/mutagen.ts`](src/sync/mutagen.ts) says why for each).
+  its symlink mode, how often it scans the sandbox). A two-way session replaced by another waits until no conflicts
+  are left and has its derived residue swept first; every other replacement happens as soon as the sandbox answers
+  (`settlesFirst` in [`sync/mutagen.ts`](src/sync/mutagen.ts) says why for each).
+- **What file sync costs this device is cycles, and the sandbox's side decides how many.** Mutagen's agent in the
+  sandbox has no recursive watcher, and both sessions force it to poll (`--watch-mode-<side> force-poll`): every 2 s
+  for the workspace, which is how late an agent's edit reaches the folder, and every 60 s for the state backup, which
+  nobody waits on. Mutagen's own mode there (`portable`) would also rescan on every write to any of the 50 paths that
+  changed last, which no interval bounds. Each scan that finds a change is a cycle here, and a cycle's cost follows
+  the size of the tree rather than of the change: the daemon reads the sandbox's whole snapshot again and reconciles
+  all of it. This device's side watches for real, but Mutagen's watcher wakes on every write under the folder, ignored
+  paths included, so the backup landing in `.intentic` wakes the workspace session too. The report reads every session
+  in one `sync list`.
+
+  (2026-10-02) Measured on Windows with Mutagen 0.18.1, its daemon isolated and a container standing in for the
+  sandbox (a 9k-file workspace, a 15k-entry state dir with three transcripts growing by 6 KB a second, an edit every
+  3 s and a build a minute, three minutes a run). Before: the daemon spent 30% of a core and the sandbox's agent 22%.
+  With only the transcripts growing, it was 25%, and 386 of the workspace session's cycles had been woken by the backup
+  with no workspace change at all. Either half alone barely moved it: a 60 s interval left 22% (312 backup cycles,
+  since `portable` rescans on writes), forced polling every 2 s left 20%. Both together: 2.6% and 2.5%, 6 backup
+  cycles, and the workspace's own edits cost exactly what they did before (120 cycles, 1.9%). Idle, the sandbox's
+  agent went from 5.5% to 1.6%. Moving the backup out of the folder was measured too and rejected: it removes only the
+  woken cycles, and the copy belongs where the owner already looks. So were `--hash xxh128` and `--compression none`
+  on top (5.3 s of the daemon's CPU against 5.2 s): no gain worth recreating every session for, or tying the agent to
+  a Mutagen build with its SSPL-licensed extras.
 - `setup` replaces what this agent's `known_hosts` holds for the pairing's alias (hashed entries included): with the
   host key the enrollment carries when it carries one (a sandbox reads its sshd's public key off its history volume and
   answers with it, `SyncEnrollmentAnswerSchema` in the contract), else with nothing, so `accept-new` records the key

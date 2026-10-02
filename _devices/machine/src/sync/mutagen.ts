@@ -145,6 +145,10 @@ export interface SyncSessionSpec {
     // Links are carried only where this device can create them (symlinks.ts). Where it cannot, they are left out
     // rather than failed on every cycle.
     readonly symlinks: SymlinkMode;
+    // Seconds between the sandbox side's own scans (SANDBOX_POLL_SECONDS, BACKUP_POLL_SECONDS). That side is only ever
+    // polled (SANDBOX_WATCH_MODE), so this is both how late a change made there arrives and how often one can cost this
+    // device a cycle.
+    readonly pollSeconds: number;
 }
 
 // Mutagen's names for the modes, as `sync create --sync-mode` takes them and `sync list` prints them back.
@@ -169,6 +173,7 @@ export const sessionSpec = (pairing: Pairing & { readonly localDir: string }, sy
     ignores: ignoresFor(pairing),
     from: "local",
     symlinks,
+    pollSeconds: SANDBOX_POLL_SECONDS,
 });
 
 // Mirrors the sandbox's state dir into `<localDir>/.intentic`, one-way, sandbox first — the daemon is the only
@@ -183,13 +188,34 @@ const backupSpec = (pairing: Pairing & { readonly localDir: string }, symlinks: 
     ignores: BACKUP_IGNORES,
     from: "sandbox",
     symlinks,
+    pollSeconds: BACKUP_POLL_SECONDS,
 });
 
 // Seconds between the sandbox endpoint's own scans. Mutagen's default is 10, and that number is the whole latency of a
-// change made in the sandbox reaching the device: measured there, the agent holds no inotify handle at all (5 file
-// descriptors: stdio, epoll, eventfd), so nothing tells it a file moved and the poll is the only thing that notices.
-// The device's own end is left at the default, since Windows and macOS watch recursively for real.
+// change made in the sandbox reaching the device: Mutagen's Linux agent has no recursive watcher, so the poll is what
+// notices. The device's own end is left at the default, since Windows and macOS watch recursively for real.
 const SANDBOX_POLL_SECONDS = 2;
+
+// THE SANDBOX SIDE IS SCANNED ON ITS TIMER AND ON NOTHING ELSE. Mutagen's default there (`portable`) also puts inotify
+// watches on the 50 paths that changed last, after the first change (an idle agent holds none, which is how it once
+// measured as unwatched), and rescans the whole tree on every write to one of them, at most 10 ms apart. A file written
+// all the time (a growing transcript, a log, a dev database) then drives a cycle per write here whatever the interval
+// says: measured, the state backup at a 60 s interval still ran 312 cycles in three minutes. Forced polling makes the
+// interval the bound it reads as, one change cycle per interval at most, at the price of a hot file's change waiting
+// for the next tick like any other.
+const SANDBOX_WATCH_MODE = "force-poll";
+
+// THE STATE BACKUP IS A COPY NOBODY WATCHES, so it is not polled like the workspace. While agents work, the state dir
+// changes every second (each conversation's transcript grows with every message), so every scan that finds a change is
+// a cycle, and each cycle re-reads every grown transcript whole on both ends (Mutagen's rsync) and writes it into
+// `<folder>/.intentic`. That folder sits inside the workspace session's root, whose watcher wakes on every write there,
+// ignored or not, and runs a whole workspace cycle of its own. Measured on Windows with three agents' worth of churn:
+// scanned every 2 s (and on every transcript write), the Mutagen daemon spent 30% of a core, 1.8 backup and 2.6
+// workspace cycles a second. A backup a minute behind loses nothing a backup is for.
+const BACKUP_POLL_SECONDS = 60;
+
+// What a session made without the flag polls at, and what protobuf JSON leaves out when it says nothing.
+const MUTAGEN_DEFAULT_POLL_SECONDS = 10;
 
 // The mode is pinned explicitly, so a version bump or global config can't silently switch it to clobbering.
 // No --ignore-vcs: it misses the pointer-file .git this layout leaves; IGNORES' bare `.git` covers that instead.
@@ -212,8 +238,10 @@ export const mutagenCreateArgs = (spec: SyncSessionSpec, paused: boolean): strin
         spec.symlinks,
         ...(paused ? ["--paused"] : []),
         ...spec.ignores.flatMap((pattern) => ["--ignore", pattern]),
+        `--watch-mode-${sandboxSide}`,
+        SANDBOX_WATCH_MODE,
         `--watch-polling-interval-${sandboxSide}`,
-        String(SANDBOX_POLL_SECONDS),
+        String(spec.pollSeconds),
         "--stage-mode-beta",
         "neighboring",
         // `from` decides which endpoint is alpha, since direction is endpoint order for a one-way session.
@@ -249,11 +277,19 @@ interface LiveConflict {
     readonly betaChanges?: readonly LiveChange[];
 }
 
+// How a live session's endpoint, or the session as a whole, watches (`--watch-mode[-alpha|-beta]`) and how often it
+// polls (`--watch-polling-interval[-alpha|-beta]`).
+interface LiveWatch {
+    readonly mode?: string;
+    readonly pollingInterval?: number;
+}
+
 // One end of a live session, as `sync list --template {{json .}}` prints it.
 export interface LiveEndpoint {
     readonly protocol?: string;
     readonly host?: string;
     readonly path?: string;
+    readonly watch?: LiveWatch;
 }
 
 // The protocol a live end was made with. Mutagen prints it, but a reader of an end that carries none (a fixture, an
@@ -262,9 +298,14 @@ export interface LiveEndpoint {
 export const liveProtocol = (end: LiveEndpoint): string => end.protocol ?? (end.host === undefined ? "local" : "ssh");
 
 export interface LiveSession {
+    // The name it was created with, which several sessions may share (readSessions); read where one listing of every
+    // session is looked up by name (sessionsByName).
+    readonly name?: string;
     // `mode` in `sync list --template {{json .}}`, spelled as `--sync-mode` takes it; absent on a session created
     // without that flag, which Mutagen runs two-way-safe (liveMode).
     readonly mode?: string;
+    // The session-wide polling interval, which an endpoint's own overrides (livePollSeconds).
+    readonly watch?: LiveWatch;
     // What tells one session from another under a shared name. Names are not unique; identifiers are.
     readonly identifier?: string;
     // Both ends carry an optional host since a session may run either way (the backup's alpha is the sandbox);
@@ -288,9 +329,31 @@ export interface LiveSession {
 // on one pair of roots flag each other's writes as conflicts and neither ever converges: measured on a dogfooding
 // machine as 2 identical sessions, 108 conflicts, and nothing propagating in either direction while a status of
 // "Watching for changes" claimed all was well. Reading `[0]` hid the second one from every check below.
-const readSessions = (mutagen: string, name: string): LiveSession[] => {
-    const result = spawnSync(mutagen, ["sync", "list", "--template", "{{json .}}", name], { encoding: "utf8", windowsHide: true });
-    return result.status === 0 ? ((JSON.parse(result.stdout) as LiveSession[]) ?? []) : [];
+const readSessions = (mutagen: string, name: string): LiveSession[] => listSessions(mutagen, [name]);
+
+// Every session the daemon holds, in ONE `sync list`: what a report reads, rather than a process per session. Spawning
+// is what that read costs on Windows, and the report runs every 15 seconds over every pairing, the paused and the long
+// gone included: a dogfooding PC with 10 pairings spawned 80 Mutagen processes a minute for it. A daemon that does not
+// answer reads as no sessions, as one name not found did.
+export const readAllSessions = (mutagen: string): LiveSession[] => listSessions(mutagen, []);
+
+const listSessions = (mutagen: string, names: readonly string[]): LiveSession[] => {
+    const result = spawnSync(mutagen, ["sync", "list", "--template", "{{json .}}", ...names], { encoding: "utf8", windowsHide: true });
+    // SAFETY: Mutagen's own JSON rendering of its session list (null when it holds none), and every field read off it
+    // is optional in LiveSession, so a field this build does not know or one Mutagen left out reads as absent.
+    return result.status === 0 ? ((JSON.parse(result.stdout) as LiveSession[] | null) ?? []) : [];
+};
+
+// That listing by name, the first session under each name kept: the one `readSessionState` would have read, since
+// Mutagen lists by creation time and duplicates are converged away rather than described.
+export const sessionsByName = (sessions: readonly LiveSession[]): ReadonlyMap<string, LiveSession> => {
+    const byName = new Map<string, LiveSession>();
+    for (const session of sessions) {
+        if (session.name !== undefined && !byName.has(session.name)) {
+            byName.set(session.name, session);
+        }
+    }
+    return byName;
 };
 
 // Two-way-safe flags conflicts by path, not just a count; alpha is always this device (workspace session is
@@ -389,19 +452,21 @@ export const conflictsFrom = (
 
 // Keeps Mutagen's status word instead of a traffic light; halted states name their own cause. `exists` is
 // separate from `status` since protobuf omits the zero value ("disconnected"), which would else look like no session.
-export const readSessionState = (
-    mutagen: string,
-    name: string,
-): {
-    exists: boolean;
-    status?: string | undefined;
-    paused?: boolean | undefined;
-    conflicts?: number | undefined;
-    conflictedPaths?: DeviceConflict[] | undefined;
-} => {
+export interface SessionState {
+    readonly exists: boolean;
+    readonly status?: string | undefined;
+    readonly paused?: boolean | undefined;
+    readonly conflicts?: number | undefined;
+    readonly conflictedPaths?: DeviceConflict[] | undefined;
+}
+
+export const readSessionState = (mutagen: string, name: string): SessionState =>
     // The first of them is enough for a report: what a reader needs is that this pairing is syncing and how it is
     // doing, and duplicates are converged away by `convergeSession` rather than described here.
-    const session = readSessions(mutagen, name)[0];
+    sessionStateOf(readSessions(mutagen, name)[0]);
+
+// The same, of a session already read (or of none).
+export const sessionStateOf = (session: LiveSession | undefined): SessionState => {
     if (session === undefined) {
         return { exists: false };
     }
@@ -481,13 +546,29 @@ export const sameEnds = (session: Pick<LiveSession, "alpha" | "beta">, spec: Syn
 // this agent's) runs Mutagen's default, two-way-safe.
 export const liveMode = (session: Pick<LiveSession, "mode">): string => session.mode ?? "two-way-safe";
 
+// How a live session watches its sandbox side, and how often it polls it: that endpoint's own setting, else the
+// session's, else Mutagen's default, each absent from the JSON when it was never set. Which endpoint is the sandbox
+// follows the spec's direction.
+const sandboxWatch = (session: Pick<LiveSession, "alpha" | "beta">, from: SyncSessionSpec["from"]): LiveWatch | undefined =>
+    (from === "local" ? session.beta : session.alpha).watch;
+
+export const liveWatchMode = (session: Pick<LiveSession, "alpha" | "beta" | "watch">, from: SyncSessionSpec["from"]): string =>
+    sandboxWatch(session, from)?.mode ?? session.watch?.mode ?? "portable";
+
+export const livePollSeconds = (session: Pick<LiveSession, "alpha" | "beta" | "watch">, from: SyncSessionSpec["from"]): number =>
+    sandboxWatch(session, from)?.pollingInterval ?? session.watch?.pollingInterval ?? MUTAGEN_DEFAULT_POLL_SECONDS;
+
 // Whether the running session is what this build would create. Mutagen freezes config at `sync create` with no
 // edit verb, so a stale ignore list means a session that will never behave like this version says. The mode is part of
 // it: a project whose direction changed, or one an older agent created two-way, is recreated in the mode it now has.
+// So is how the sandbox side is scanned: a session an older agent made rescans on every write to a busy file, its
+// backup every two seconds besides, for as long as it runs.
 export const sessionMatchesSpec = (session: LiveSession, spec: SyncSessionSpec): boolean => {
     return (
         sameEnds(session, spec) &&
         liveMode(session) === spec.mode &&
+        liveWatchMode(session, spec.from) === SANDBOX_WATCH_MODE &&
+        livePollSeconds(session, spec.from) === spec.pollSeconds &&
         session.ignore.vcs !== true &&
         (session.ignore.paths ?? []).join("\n") === spec.ignores.join("\n") &&
         // A session made before the mode was pinned carries none, and that is portable. It must still match a portable

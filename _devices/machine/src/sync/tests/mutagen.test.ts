@@ -68,7 +68,7 @@ describe("a project's sync mode", () => {
     const live = (mode?: string): LiveSession => {
         const session: LiveSession = {
             alpha: { path: "/home/u/code/app" },
-            beta: { host: "intentic-sync-x", path: `${WORKSPACE_ROOT}/app` },
+            beta: { host: "intentic-sync-x", path: `${WORKSPACE_ROOT}/app`, watch: { mode: "force-poll", pollingInterval: 2 } },
             ignore: { paths: [...PROJECT_IGNORES] },
         };
         return mode === undefined ? session : { ...session, mode };

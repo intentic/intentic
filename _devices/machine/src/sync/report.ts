@@ -7,7 +7,7 @@ import { installedBuild } from "../installed.js";
 import { machineId } from "../machine-id.js";
 import { wslEnvironment } from "../wsl.js";
 import { isProjectPairing, mirrorHeartbeatPath, type Pairing, readState, type SyncState } from "./config.js";
-import { backupSessionName, ensureMutagen, readSessionState, sessionName } from "./mutagen.js";
+import { backupSessionName, ensureMutagen, type LiveSession, readAllSessions, sessionName, sessionsByName, sessionStateOf } from "./mutagen.js";
 
 // Everything this agent knows about the device, in one shape fed to `status`, `status --json`, the mirror
 // watcher's post, and the device connection's `report` call, so they can't drift. No docker scan: enumerating a machine's containers
@@ -30,7 +30,11 @@ const agentState = async (installed: string | undefined): Promise<DeviceAgent> =
     return { running: resident !== undefined, pid: resident?.pid, build: resident?.build, installed, lastTickAt };
 };
 
-const pairingReport = (mutagen: string | undefined, pairing: Pairing): DevicePairing => {
+// Every session the daemon held as the report was built, by name (mutagen.ts readAllSessions): one read for the whole
+// report. Undefined when Mutagen was not consulted at all, which is not the same as a daemon holding nothing.
+export type LiveSessions = ReadonlyMap<string, LiveSession>;
+
+const pairingReport = (sessions: LiveSessions | undefined, pairing: Pairing): DevicePairing => {
     // Stated on every pairing rather than inferred from an empty port list: "nothing is listening" and "this device
     // was told not to" look identical otherwise, and only one has anything for a reader to do.
     const mirroring = pairing.mirrorOff === true ? "off" : "on";
@@ -39,15 +43,15 @@ const pairingReport = (mutagen: string | undefined, pairing: Pairing): DevicePai
     const remote = pairing.remoteDir === undefined ? {} : { remoteDir: pairing.remoteDir };
     // A mirror-only enrollment has no file sync to ask about; the absent status is a fact about the mode, not a
     // failed read.
-    if (pairing.mode !== "sync" || mutagen === undefined) {
+    if (pairing.mode !== "sync" || sessions === undefined) {
         return { sandboxId: pairing.sandboxId, mode: pairing.mode, localDir: pairing.localDir, ...remote, mirroring };
     }
     // A sync pairing with no session is carried as the absence of a status, not a word for it, so every reader
-    // renders it the same way instead of inventing a default. readSessionState resolves Mutagen's omitted zero.
-    const session = readSessionState(mutagen, sessionName(pairing.sandboxId));
+    // renders it the same way instead of inventing a default. sessionStateOf resolves Mutagen's omitted zero.
+    const session = sessionStateOf(sessions.get(sessionName(pairing.sandboxId)));
     // The state backup reads the same way: no status means no session, so the sandbox is the only copy of its state. A
     // project pairing has none by design, which the remote dir beside it says; its absence here is not a failure.
-    const backup = isProjectPairing(pairing) ? undefined : readSessionState(mutagen, backupSessionName(pairing.sandboxId));
+    const backup = isProjectPairing(pairing) ? undefined : sessionStateOf(sessions.get(backupSessionName(pairing.sandboxId)));
     return {
         sandboxId: pairing.sandboxId,
         mode: pairing.mode,
@@ -84,12 +88,13 @@ const portRows = (pairing: Pairing): DevicePort[] => [
     })),
 ];
 
-// `mutagen` undefined skips the session reads but still returns pairings, folders, ports and the agent.
-// `capturedAt` is stamped here, where the reading happens; downstream ages the report against it. `wsl` is passed in
-// for the same reason `agent` is: it costs a read, and this stays a pure shaping of what was already gathered.
+// `sessions` undefined (Mutagen not consulted) leaves out every session status but still returns pairings, folders,
+// ports and the agent. `capturedAt` is stamped here, where the reading happens; downstream ages the report against it.
+// `sessions` and `wsl` are passed in for the same reason `agent` is: each costs a read, and this stays a pure shaping
+// of what was already gathered.
 export const buildReport = (
     state: SyncState,
-    mutagen: string | undefined,
+    sessions: LiveSessions | undefined,
     agent: DeviceAgent,
     capturedAt: number,
     wsl?: { readonly distro: string } | undefined,
@@ -101,7 +106,7 @@ export const buildReport = (
     os: platform(),
     // Omitted rather than set to undefined off WSL, so a report says nothing at all about it instead of saying no.
     ...(wsl === undefined ? {} : { wsl }),
-    pairings: state.pairings.map((pairing) => pairingReport(mutagen, pairing)),
+    pairings: state.pairings.map((pairing) => pairingReport(sessions, pairing)),
     ports: state.pairings.flatMap(portRows),
     agent,
     capturedAt,
@@ -110,7 +115,10 @@ export const buildReport = (
 // The report for this machine right now, the one entry point every carrier uses.
 export const deviceReport = async (mutagen: string | undefined): Promise<DeviceReport> => {
     const [state, agent, wsl] = await Promise.all([readState(), agentState(installedBuild()), wslEnvironment()]);
-    return buildReport(state, mutagen, agent, Date.now(), wsl, machineId());
+    // Read only when some pairing syncs files: a machine that only mirrors ports has no session to ask about.
+    const syncing = mutagen !== undefined && state.pairings.some((pairing) => pairing.mode === "sync");
+    const sessions = syncing ? sessionsByName(readAllSessions(mutagen)) : undefined;
+    return buildReport(state, sessions, agent, Date.now(), wsl, machineId());
 };
 
 // One pairing's slice for posting to its sandbox: only that pairing and its ports cross the network. A `mirror`

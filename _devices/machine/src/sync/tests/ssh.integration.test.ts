@@ -6,12 +6,15 @@ import { REFERENCE_DIR, STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import type { Pairing } from "../config.js";
 import {
     convergePlan,
+    livePollSeconds,
+    liveWatchMode,
     mutagenCreateArgs,
     sameEnds,
     sessionMatchesSpec,
     sessionName,
     sessionSpec,
     sessionSpecs,
+    sessionsByName,
     surplusSessions,
     type SyncSessionSpec,
 } from "../mutagen.js";
@@ -197,6 +200,7 @@ const spec: SyncSessionSpec = {
     ignores: IGNORES,
     from: "local",
     symlinks: "portable",
+    pollSeconds: 2,
 };
 
 // The same pairing on a Windows PC without Developer Mode, which cannot create a link (symlinks.ts).
@@ -213,6 +217,7 @@ const backup: SyncSessionSpec = {
     ignores: BACKUP_IGNORES,
     from: "sandbox",
     symlinks: "portable",
+    pollSeconds: 60,
 };
 
 describe("mutagenCreateArgs", () => {
@@ -270,6 +275,14 @@ describe("mutagenCreateArgs", () => {
         expect(args).not.toContain("--watch-polling-interval-alpha");
     });
 
+    // On its timer and on nothing else: Mutagen's own mode there rescans on every write to a recently changed file,
+    // which no interval bounds. The laptop's side keeps its default, a real recursive watcher.
+    it("forces the sandbox side to poll, and leaves the laptop's side watching", () => {
+        expect(args[args.indexOf("--watch-mode-beta") + 1]).toBe("force-poll");
+        expect(args).not.toContain("--watch-mode-alpha");
+        expect(args).not.toContain("--watch-mode");
+    });
+
     // WHAT BOTH SIDES GENERATE MUST NEVER BE SYNCED. A tree each end writes for itself is a create-vs-create
     // conflict on every file in it, two-way-safe refuses to pick, and a pairing with standing conflicts propagates
     // nothing at all — measured as 98 of them under one dogfooding machine's `.image-out`.
@@ -309,11 +322,15 @@ describe("mutagenCreateArgs: the state backup", () => {
         expect(args).toContain("/home/u/proj/.intentic");
     });
 
-    // The same unwatched endpoint as the workspace session, on the other side of this one: polling beta here would
-    // speed up the laptop, which already watches for real, and leave the sandbox on ten seconds.
-    it("polls the sandbox fast on whichever side of this session it is", () => {
-        expect(args[args.indexOf("--watch-polling-interval-alpha") + 1]).toBe("2");
+    // The same unwatched endpoint as the workspace session, on the other side of this one, and polled far less often:
+    // nobody waits on a backup, and every poll that finds a grown transcript re-reads it whole on both ends and wakes
+    // the workspace session too, whose folder the copy lands in (mutagen.ts BACKUP_POLL_SECONDS has the measurement).
+    it("polls the sandbox side of this session once a minute, and only then, never the laptop's", () => {
+        expect(args[args.indexOf("--watch-polling-interval-alpha") + 1]).toBe("60");
+        expect(args[args.indexOf("--watch-mode-alpha") + 1]).toBe("force-poll");
         expect(args).not.toContain("--watch-polling-interval-beta");
+        expect(args).not.toContain("--watch-mode-beta");
+        expect(sessionSpecs({ sandboxUrl: "https://x.example.dev/", sandboxId: "x", mode: "sync", localDir: "/home/u/proj" }, "portable").map((one) => one.pollSeconds)).toEqual([2, 60]);
     });
 
     // The backup lands on the same device, so a link in the sandbox's state dir is refused here exactly as one in the
@@ -361,7 +378,7 @@ describe("mutagenCreateArgs: the state backup", () => {
 describe("sessionMatchesSpec", () => {
     const live = (ignore: { paths?: string[]; vcs?: boolean }) => ({
         alpha: { path: "/home/u/proj" },
-        beta: { host: "intentic-sync-x", path: WORKSPACE_ROOT },
+        beta: { host: "intentic-sync-x", path: WORKSPACE_ROOT, watch: { mode: "force-poll", pollingInterval: spec.pollSeconds } },
         ignore,
     });
 
@@ -453,6 +470,64 @@ describe("sessionMatchesSpec", () => {
         expect(sessionMatchesSpec({ ...live({ paths: [...IGNORES] }), alpha: { path: "/home/u/elsewhere" } }, spec)).toBe(false);
         expect(sessionMatchesSpec({ ...live({ paths: [...IGNORES] }), beta: { host: "intentic-sync-x", path: "/old" } }, spec)).toBe(false);
     });
+
+    // HOW OFTEN THE SANDBOX SIDE IS SCANNED IS PART OF WHAT A SESSION IS. Mutagen freezes it at creation like the rest,
+    // so a session this build would poll differently keeps its old cadence for as long as it runs unless drift says so:
+    // a backup an older agent made, scanning every two seconds, is exactly what costs a device a core's worth.
+    it("rejects a session that polls its sandbox side at another interval, the backup an older agent made among them", () => {
+        const matching = live({ paths: [...IGNORES] });
+        expect(sessionMatchesSpec({ ...matching, beta: { ...matching.beta, watch: { mode: "force-poll", pollingInterval: 10 } } }, spec)).toBe(false);
+        // Made before the interval was pinned: no flag, which Mutagen runs at its own ten seconds.
+        expect(sessionMatchesSpec({ ...matching, beta: { host: "intentic-sync-x", path: WORKSPACE_ROOT } }, spec)).toBe(false);
+        const olderBackup = {
+            mode: "one-way-replica",
+            alpha: { host: "intentic-sync-x", path: `${WORKSPACE_ROOT}/.intentic`, watch: { pollingInterval: 2 } },
+            beta: { path: "/home/u/proj/.intentic" },
+            ignore: { paths: [...BACKUP_IGNORES] },
+        };
+        expect(convergePlan([olderBackup], backup)).toBe("replace");
+        expect(convergePlan([{ ...olderBackup, alpha: { ...olderBackup.alpha, watch: { mode: "force-poll", pollingInterval: 60 } } }], backup)).toBe("keep");
+    });
+
+    // THE INTERVAL BOUNDS NOTHING UNLESS THE POLL IS FORCED. Mutagen's default mode on the sandbox side also watches the
+    // paths that changed last and rescans on every write to one of them, so a backup polled once a minute still ran
+    // 312 cycles in three minutes against a transcript written every second. Same interval, other mode: drift.
+    it("rejects a session that scans its sandbox side on writes as well as on its timer", () => {
+        const matching = live({ paths: [...IGNORES] });
+        expect(sessionMatchesSpec({ ...matching, beta: { ...matching.beta, watch: { pollingInterval: 2 } } }, spec)).toBe(false);
+        expect(sessionMatchesSpec({ ...matching, beta: { ...matching.beta, watch: { mode: "portable", pollingInterval: 2 } } }, spec)).toBe(false);
+        expect(sessionMatchesSpec(matching, spec)).toBe(true);
+    });
+
+    // The sandbox is beta for the workspace and alpha for the backup, so the interval is read off whichever end the
+    // spec says, never off the laptop's, which watches for real and carries no interval of ours.
+    it("reads the mode off the sandbox's end, else the session's, else Mutagen's own portable", () => {
+        const ends = { alpha: { watch: { mode: "no-watch" } }, beta: { watch: { mode: "force-poll" } } };
+        expect([liveWatchMode(ends, "local"), liveWatchMode(ends, "sandbox")]).toEqual(["force-poll", "no-watch"]);
+        expect(liveWatchMode({ alpha: {}, beta: {}, watch: { mode: "force-poll" } }, "sandbox")).toBe("force-poll");
+        expect(liveWatchMode({ alpha: {}, beta: {} }, "local")).toBe("portable");
+    });
+
+    it("reads the interval off the sandbox's end, else the session's, else Mutagen's own ten seconds", () => {
+        const ends = { alpha: { watch: { pollingInterval: 7 } }, beta: { watch: { pollingInterval: 3 } } };
+        expect([livePollSeconds(ends, "local"), livePollSeconds(ends, "sandbox")]).toEqual([3, 7]);
+        expect(livePollSeconds({ alpha: {}, beta: {}, watch: { pollingInterval: 5 } }, "local")).toBe(5);
+        expect(livePollSeconds({ alpha: {}, beta: { watch: { pollingInterval: 3 } }, watch: { pollingInterval: 5 } }, "local")).toBe(3);
+        expect(livePollSeconds({ alpha: {}, beta: {} }, "sandbox")).toBe(10);
+    });
+});
+
+// THE REPORT READS EVERY SESSION IN ONE LISTING, looked up by name: what was a `sync list` process per session, every
+// fifteen seconds, for every pairing the device ever kept.
+describe("sessionsByName", () => {
+    it("keeps the first session under each name, the one a per-name read would have answered with", () => {
+        const first = { name: "intentic-x", identifier: "sync_oldest", alpha: {}, beta: {}, ignore: {} };
+        const second = { ...first, identifier: "sync_second" };
+        const other = { ...first, name: "intentic-x-state", identifier: "sync_state" };
+        const byName = sessionsByName([first, other, second, { alpha: {}, beta: {}, ignore: {} }]);
+        expect([...byName.keys()]).toEqual(["intentic-x", "intentic-x-state"]);
+        expect(byName.get("intentic-x")?.identifier).toBe("sync_oldest");
+    });
 });
 
 // What every workspace session leaves on its own side, pairing kind aside: what the daemon's own walk leaves out
@@ -500,6 +575,7 @@ describe("a project pairing's sessions", () => {
             ignores: PROJECT_IGNORES,
             from: "local",
             symlinks: "portable",
+            pollSeconds: 2,
         });
         expect(mutagenCreateArgs(projectSpec, false).slice(-2)).toEqual(["/home/u/code/my-app", "intentic-sync-x:/work/my-app"]);
     });
@@ -535,7 +611,7 @@ describe("a project pairing's sessions", () => {
         expect(sessionMatchesSpec(onWorkspace, projectSpec)).toBe(false);
         expect(sameEnds(onWorkspace, projectSpec)).toBe(false);
         expect(convergePlan([onWorkspace], projectSpec)).toBe("replace");
-        const moved = { ...onWorkspace, mode: "one-way-safe", beta: { host: "intentic-sync-x", path: "/work/my-app" } };
+        const moved = { ...onWorkspace, mode: "one-way-safe", beta: { host: "intentic-sync-x", path: "/work/my-app", watch: { mode: "force-poll", pollingInterval: 2 } } };
         expect(sessionMatchesSpec(moved, projectSpec)).toBe(true);
         expect(sameEnds(moved, projectSpec)).toBe(true);
     });
@@ -554,10 +630,10 @@ describe("a project pairing's sessions", () => {
         const overSsh = {
             mode: "one-way-safe",
             alpha: { protocol: "local", path: "/home/u/code/my-app" },
-            beta: { protocol: "ssh", host: "intentic-sync-x", path: "/work/my-app" },
+            beta: { protocol: "ssh", host: "intentic-sync-x", path: "/work/my-app", watch: { mode: "force-poll", pollingInterval: 2 } },
             ignore: { paths: [...PROJECT_IGNORES] },
         };
-        const overDocker = { ...overSsh, beta: { protocol: "docker", host: "intentic-sandbox-sandbox-x", path: "/work/my-app" } };
+        const overDocker = { ...overSsh, beta: { ...overSsh.beta, protocol: "docker", host: "intentic-sandbox-sandbox-x" } };
         expect(sameEnds(overSsh, throughDocker)).toBe(false);
         expect(convergePlan([overSsh], throughDocker)).toBe("replace");
         expect(sessionMatchesSpec(overDocker, throughDocker)).toBe(true);
