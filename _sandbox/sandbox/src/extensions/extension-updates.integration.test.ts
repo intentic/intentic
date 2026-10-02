@@ -67,15 +67,16 @@ const registryRepo = async (author: { url: string }, sha: string, entry: object 
     return dir;
 };
 
-// Workspace with v1 installed the way the capability handler leaves it: a checkout pinned at the sha.
-const installedWorkspace = async (author: { url: string; v1: string }, registry: string) => {
+// Workspace with v1 installed the way the capability handler leaves it: a checkout pinned at the sha. `configRef`
+// stands for a capabilities.json whose ref was edited by hand, which moves no checkout.
+const installedWorkspace = async (author: { url: string; v1: string }, registry: string, configRef: string = author.v1) => {
     const workspace = workspacePaths(mkdtempSync(join(tmpdir(), "ext-updates-")));
     await mkdir(extensionsRoot(workspace.root), { recursive: true });
     await exec("git", ["clone", "-q", author.url, extensionDir(workspace.root, "demo")]);
     await git(extensionDir(workspace.root, "demo"), "checkout", "--detach", "-q", author.v1);
     const svc = services({
         workspace,
-        capabilities: memoryCapabilitiesStore([{ id: "demo", kind: "extension", config: { url: author.url, ref: author.v1, registry } }]),
+        capabilities: memoryCapabilitiesStore([{ id: "demo", kind: "extension", config: { url: author.url, ref: configRef, registry } }]),
         // Real git/files verbs, not stubs: this suite is about clones, swaps and heads against the fixtures above.
         git: { clone: gitClone, checkout: gitCheckout, head: gitHead, fullHead: gitFullHead },
         files: fakeFiles({ read: readWorkspaceFile, mkdir: makeWorkspaceDir, remove: removeWorkspacePath, move: moveWorkspacePath }),
@@ -97,6 +98,8 @@ test("discover → preview → apply → revert: the whole update lifecycle over
 
     const listed = await client.extensions.list();
     const row = listed.extensions.find((extension) => extension.id === "demo");
+    // Unabbreviated, so Browse's equality with the registry's pinned ref can hold at all.
+    expect(row?.commit).toBe(author.v1);
     expect(row?.update?.ref).toBe(author.v2);
     expect(row?.updatePolicy).toEqual({ updates: "notify", advisories: "auto-disable" });
     expect(listed.updatesCheckedAt).toEqual(expect.any(String));
@@ -114,6 +117,7 @@ test("discover → preview → apply → revert: the whole update lifecycle over
         version: string;
     };
     expect(kept.version).toBe("1.0.0");
+    expect((await client.extensions.list()).extensions.find((extension) => extension.id === "demo")?.commit).toBe(author.v2);
     const afterApply = await readExtensionUpdateState(workspace.root);
     expect(afterApply.extensions["acme.demo"]?.update).toBeUndefined();
     expect(afterApply.extensions["acme.demo"]?.health?.state).toBe("watching");
@@ -122,6 +126,22 @@ test("discover → preview → apply → revert: the whole update lifecycle over
     expect(reverted.ref).toBe(author.v1);
     expect(await installedVersion(workspace.root)).toBe("1.0.0");
     expect((await svc.capabilities.get("demo"))?.config).toMatchObject({ ref: author.v1 });
+});
+
+test("a ref bumped by hand with the checkout left behind is still offered, and updating moves the checkout", async () => {
+    const author = await authorRepo();
+    const registry = await registryRepo(author, author.v2);
+    // The config already names v2; the code on disk, which is what runs, is v1.
+    const { workspace, svc, client } = await installedWorkspace(author, registry, author.v2);
+
+    await checkExtensionUpdates(svc);
+    expect((await readExtensionUpdateState(workspace.root)).extensions["acme.demo"]?.update?.ref).toBe(author.v2);
+
+    const applied = await client.extensions.applyUpdate({ id: "demo", ref: author.v2 });
+    expect(applied.ref).toBe(author.v2);
+    expect(await installedVersion(workspace.root)).toBe("1.1.0");
+    expect((await client.extensions.list()).extensions.find((extension) => extension.id === "demo")?.commit).toBe(author.v2);
+    expect((await readExtensionUpdateState(workspace.root)).extensions["acme.demo"]?.health).toMatchObject({ state: "watching", fromRef: author.v1 });
 });
 
 test("a blocked listing raises an advisory and pulls the switch: the fail-safe direction", async () => {

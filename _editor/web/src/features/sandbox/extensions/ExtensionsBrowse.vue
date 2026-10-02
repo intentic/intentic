@@ -45,7 +45,7 @@ const router = useRouter();
 const { canShip: canOperate } = useRole();
 const { entries, registryName, url, token, isOfficial, isLoading, error, refetch, useRegistryAt, resetRegistry } = useRegistry();
 const outline = useSandboxOutline(isLoading);
-const { extensions } = useExtensions();
+const { extensions, applyUpdate } = useExtensions();
 const { add } = useCapabilities();
 const hubWork = useHubWork();
 
@@ -116,6 +116,35 @@ watch(
 
 // The same install the capability form performs, not a shortcut: the listing already carries everything a person would
 // type. Streams into a real terminal for the user to watch.
+const addFromListing = async (listing: DiscoverListing, pointer: NonNullable<DiscoverListing["entry"]["install"]>): Promise<void> => {
+    await add(
+        {
+            // Derived from the listing's own name. An update never comes here (it targets the id it is installed
+            // under), so a hand-installed copy named otherwise is not duplicated.
+            id: listing.entry.name.replace(/[^a-zA-Z0-9_-]/gu, `-`),
+            kind: `extension`,
+            config: {
+                url: pointer.url,
+                ...(pointer.ref !== undefined ? { ref: pointer.ref } : {}),
+                ...(pointer.path !== undefined && pointer.path !== `` ? { path: pointer.path } : {}),
+                // Code inside a private registry repo clones with the same token that read the registry.
+                ...(token.value !== `` && pointer.url === url.value.trim() ? { token: token.value } : {}),
+                // Where the daemon compares the pinned commit against for updates and advisories; a hand-typed
+                // install records none and falls back to the official registry.
+                ...(url.value.trim() !== `` ? { registry: url.value.trim() } : {}),
+            },
+        },
+        (line) => {
+            if (line[`kind`] === `terminal` && typeof line[`session`] === `string`) {
+                useTerminalPanel().openFocused(line[`session`]);
+            }
+        },
+    );
+};
+
+// An update is the Installed tab's update verb, on the id the extension is installed under: it keeps that install's
+// token and registry, sets the old checkout aside for revert, and clears the recorded offer. The pinned sha names the
+// code, so the install's own repo serves it.
 const install = async (listing: DiscoverListing): Promise<void> => {
     const pointer = listing.entry.install;
     if (pointer === undefined || listing.state.action === undefined || installing.value !== undefined) {
@@ -123,38 +152,19 @@ const install = async (listing: DiscoverListing): Promise<void> => {
     }
     installing.value = listing.entry.name;
     failure.value = undefined;
+    const { ref: pinned } = pointer;
+    const updateOf = listing.state.kind === `update` && pinned !== undefined ? listing.state.installedId : undefined;
+    const verb = updateOf === undefined ? `install` : `update`;
     // A clone and an install out in the sandbox: minutes on a big extension, and the terminal it streams to is
     // somewhere else entirely, so the row it was started from carries it.
-    const endMark = hubWork.begin(`Installing ${listing.entry.name}`);
+    const endMark = hubWork.begin(`${updateOf === undefined ? `Installing` : `Updating`} ${listing.entry.name}`);
     try {
-        await add(
-            {
-                // Derived from the listing's own name, so a later update collides with this install instead of
-                // duplicating it.
-                id: listing.entry.name.replace(/[^a-zA-Z0-9_-]/gu, `-`),
-                kind: `extension`,
-                config: {
-                    url: pointer.url,
-                    ...(pointer.ref !== undefined ? { ref: pointer.ref } : {}),
-                    ...(pointer.path !== undefined && pointer.path !== `` ? { path: pointer.path } : {}),
-                    // Code inside a private registry repo clones with the same token that read the registry.
-                    ...(token.value !== `` && pointer.url === url.value.trim() ? { token: token.value } : {}),
-                    // Where the daemon compares the pinned commit against for updates and advisories; a hand-typed
-                    // install records none and falls back to the official registry.
-                    ...(url.value.trim() !== `` ? { registry: url.value.trim() } : {}),
-                },
-            },
-            (line) => {
-                if (line[`kind`] === `terminal` && typeof line[`session`] === `string`) {
-                    useTerminalPanel().openFocused(line[`session`]);
-                }
-            },
-        );
+        await (updateOf !== undefined && pinned !== undefined ? applyUpdate(updateOf, pinned) : addFromListing(listing, pointer));
         // Installed but not yet running until the host reconciles; done here so it works without a page reload.
         await reloadExtensions();
         detailOpen.value = false;
     } catch (err) {
-        failure.value = noticeFrom(err, `Could not install ${listing.entry.name}.`);
+        failure.value = noticeFrom(err, `Could not ${verb} ${listing.entry.name}.`);
     } finally {
         installing.value = undefined;
         endMark();

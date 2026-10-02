@@ -180,6 +180,50 @@ test("removing a git-installed extension drops its capability entry and its chec
     await expect(readFile(join(checkout, "intentic-extension.json"), "utf8")).rejects.toThrow();
 });
 
+// Two capability ids over one identity: a hand-named install and the copy a Browse update once put beside it. The
+// connection, settings and switch are keyed to the identity, so the copy that stays still owns them.
+test("removing one of two installs of the same extension leaves the other's connections and settings alone", async () => {
+    const workspace = workspacePaths(mkdtempSync(join(tmpdir(), "ext-remove-sibling-")));
+    for (const id of ["toolbox", "acme-toolbox"]) {
+        const checkout = extensionDir(workspace.root, id);
+        await mkdir(join(checkout, "skills"), { recursive: true });
+        await writeFile(join(checkout, "intentic-extension.json"), JSON.stringify(MANIFEST));
+        await writeFile(join(checkout, "skills", "acme.md"), "---\nname: acme\n---\nRun acme.\n");
+    }
+    const settings = settingsFile(workspace.root);
+    await mkdir(dirname(settings), { recursive: true });
+    await writeFile(settings, JSON.stringify({ "acme.toolbox": { region: "eu" } }));
+    const svc = services({
+        workspace,
+        capabilities: memoryCapabilitiesStore([
+            { id: "toolbox", kind: "extension", config: { url: "https://example.test/acme.git", ref: "a".repeat(40) } },
+            { id: "acme-toolbox", kind: "extension", config: { url: "https://example.test/acme.git", ref: "b".repeat(40) } },
+            { id: "acme", kind: "cli", config: { provider: "acme-cli", token: "***" } },
+        ]),
+        extensionSecretVault: memorySecretVault({ "acme.toolbox": { apiKey: "***" } }),
+        files: fakeFiles({ remove: removeWorkspacePath }),
+    });
+    const client = clientFor(createApp(svc));
+
+    const plan = await client.extensions.removalPlan({ id: "toolbox" });
+    expect(plan.connections).toEqual([]);
+    expect(plan.settings).toEqual([]);
+    expect(plan.keeps).toContain(
+        `another copy of acme.toolbox stays installed as "acme-toolbox", so the connections configured from its cards, its settings and its switch stay with that copy`,
+    );
+
+    expect(await client.extensions.remove({ id: "toolbox" })).toEqual({ ok: true, connections: [] });
+    expect((await svc.capabilities.list()).map((capability) => capability.id)).toEqual(["acme-toolbox", "acme"]);
+    expect(await settingsOn(workspace.root)).toEqual({ "acme.toolbox": { region: "eu" } });
+    expect(await svc.extensionSecretVault.all()).toEqual({ "acme.toolbox": { apiKey: "***" } });
+    await expect(readFile(join(extensionDir(workspace.root, "toolbox"), "intentic-extension.json"), "utf8")).rejects.toThrow();
+
+    // The last copy going is an ordinary removal again: everything keyed to the identity goes with it.
+    expect(await client.extensions.remove({ id: "acme-toolbox" })).toEqual({ ok: true, connections: ["acme"] });
+    expect(await svc.capabilities.list()).toEqual([]);
+    expect(await svc.extensionSecretVault.all()).toEqual({});
+});
+
 test("a built-in extension answers a plan that refuses, and refuses the removal itself", async () => {
     const client = clientFor(createApp(services({ workspace: workspacePaths(mkdtempSync(join(tmpdir(), "ext-remove-builtin-"))) })));
 

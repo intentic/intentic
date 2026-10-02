@@ -17,7 +17,7 @@ import { extensionProcessKey, reconcileListenerProcesses } from "./extension-pro
 import { forgetExtensionSettings, readAllExtensionSettings } from "./extension-settings.js";
 import { forgetUpdateState, previousVersionOf } from "./extension-updates.js";
 import { forgetExtensionUsage } from "./extension-usage.js";
-import { ESSENTIAL_EXTENSIONS, type InstalledExtension } from "./installed-extensions.js";
+import { ESSENTIAL_EXTENSIONS, type InstalledExtension, installedExtensions } from "./installed-extensions.js";
 
 // Removing an extension, and the read an owner gets before deciding to. Removal is the one act that means an
 // extension's IDENTITY is going rather than its checkout: everything else in this directory deliberately keys state by
@@ -59,6 +59,14 @@ const contributedCapabilities = async (services: Services, extension: InstalledE
         return [];
     }
     return (await services.capabilities.list()).filter((capability) => contributedEntryOf(contributions, capability) !== undefined);
+};
+
+// Another install of the same identity that stays: two capability ids over one publisher.name, which a Browse update
+// once produced by installing beside a copy named by hand. Every connection and ledger this file sweeps is supplied by
+// or keyed to that identity, so it is still the sibling's, and removing this copy is only its checkout and entry.
+const remainingSiblingOf = async (services: Services, extension: InstalledExtension): Promise<InstalledExtension | undefined> => {
+    const identity = extensionIdOf(extension.manifest);
+    return (await installedExtensions(services)).find((other) => other.id !== extension.id && extensionIdOf(other.manifest) === identity);
 };
 
 // The card registry `echo` consults, forced to carry THIS extension's own cards even while it is switched off: a
@@ -142,10 +150,15 @@ const strandedAutomationsOf = async (services: Services, extension: InstalledExt
 
 // The other half of an honest plan: what it does NOT touch, so the list of what goes can be read as complete rather
 // than as everything the reader happened to think of.
-const keepsOf = (extension: InstalledExtension, strandedAutomations: number): string[] => {
+const keepsOf = (extension: InstalledExtension, strandedAutomations: number, sibling: InstalledExtension | undefined): string[] => {
     const presets = (extension.manifest.contributes?.capabilities ?? []).filter((spec) => spec.kind === "agent");
     const templated = extension.manifest.contributes?.automationTemplates !== undefined;
     return [
+        ...(sibling === undefined
+            ? []
+            : [
+                  `another copy of ${extensionIdOf(sibling.manifest)} stays installed as "${sibling.id}", so the connections configured from its cards, its settings and its switch stay with that copy`,
+              ]),
         "anything it wrote in your workspace stays where it is",
         ...(strandedAutomations > 0 || templated ? ["automations you built with it stay; a template is a starting point, not a dependency"] : []),
         ...(presets.length > 0 ? ["connections added from its preset cards stay: those are ordinary connections that never needed it"] : []),
@@ -156,12 +169,13 @@ const keepsOf = (extension: InstalledExtension, strandedAutomations: number): st
 export const planExtensionRemoval = async (services: Services, extension: InstalledExtension): Promise<ExtensionRemovalPlan> => {
     const identity = extensionIdOf(extension.manifest);
     const contributions = extension.manifest.contributes?.capabilities ?? [];
+    const sibling = await remainingSiblingOf(services, extension);
     const [configured, connectors, settings, files, automations] = await Promise.all([
-        contributedCapabilities(services, extension),
+        sibling === undefined ? contributedCapabilities(services, extension) : [],
         registryIncluding(services, extension),
-        storedSettingsOf(services, extension, identity),
+        sibling === undefined ? storedSettingsOf(services, extension, identity) : [],
         deletedDirsOf(services, extension),
-        strandedAutomationsOf(services, extension),
+        sibling === undefined ? strandedAutomationsOf(services, extension) : [],
     ]);
     const connections: ExtensionRemovalConnection[] = configured.map((capability) => ({
         id: capability.id,
@@ -182,8 +196,8 @@ export const planExtensionRemoval = async (services: Services, extension: Instal
         settings,
         processes: runningProcesses(services, extension),
         automations,
-        rebuildNeeded: extension.manifest.contributes?.environment !== undefined && extension.enabled,
-        keeps: keepsOf(extension, automations.length),
+        rebuildNeeded: sibling === undefined && extension.manifest.contributes?.environment !== undefined && extension.enabled,
+        keeps: keepsOf(extension, automations.length, sibling),
     };
 };
 
@@ -215,7 +229,8 @@ const tearDownExtension = async (services: Services, ctx: CapabilityCtx, extensi
 };
 
 // Order matters and is the whole risk surface: connections come down first, then the extension, then the ledgers keyed
-// by its identity, then the convergence every capability change does.
+// by its identity, then the convergence every capability change does. With another copy of the identity staying, only
+// this copy's processes, checkout and entry go: the connections and ledgers are that copy's too.
 export const removeExtension = async (
     services: Services,
     extension: InstalledExtension,
@@ -223,7 +238,8 @@ export const removeExtension = async (
     const root = services.workspace.root;
     const identity = extensionIdOf(extension.manifest);
     const ctx = capabilityCtx(services);
-    const configured = await contributedCapabilities(services, extension);
+    const sibling = await remainingSiblingOf(services, extension);
+    const configured = sibling === undefined ? await contributedCapabilities(services, extension) : [];
     await tearDownConnections(services, ctx, configured);
 
     // Stops every declared process, not just the running ones the plan named: a process that came up between the read
@@ -233,13 +249,15 @@ export const removeExtension = async (
     }
     await tearDownExtension(services, ctx, extension);
 
-    await Promise.all([
-        forgetExtensionSettings(root, services.extensionSecretVault, identity),
-        forgetExtensionEnablement(root, identity),
-        forgetExtensionApproval(services.config.historyRoot, identity),
-        forgetExtensionUsage(root, identity),
-        forgetUpdateState(root, identity),
-    ]);
+    if (sibling === undefined) {
+        await Promise.all([
+            forgetExtensionSettings(root, services.extensionSecretVault, identity),
+            forgetExtensionEnablement(root, identity),
+            forgetExtensionApproval(services.config.historyRoot, identity),
+            forgetExtensionUsage(root, identity),
+            forgetUpdateState(root, identity),
+        ]);
+    }
 
     // Same convergence as removing any capability: fragments leave the overlay, gateways stop being wanted, a removed
     // endpoint provider stops routing, and the backend host restarts on the set that no longer includes this one.

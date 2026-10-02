@@ -126,6 +126,9 @@ interface InstalledTarget {
     readonly config: ExtensionConfig;
     readonly identity: string;
     readonly version: string;
+    // The commit actually checked out, which is what runs. Usually config.ref, but a hand-edited capabilities.json
+    // moves the ref without re-cloning, and comparing that ref would hide the update the checkout still needs.
+    readonly ref: string;
 }
 
 const installedTargets = async (services: Services): Promise<InstalledTarget[]> => {
@@ -135,10 +138,12 @@ const installedTargets = async (services: Services): Promise<InstalledTarget[]> 
             continue;
         }
         const config = capability.config;
-        const manifest = await readExtensionManifest(extensionRootOf(extensionDir(services.workspace.root, capability.id), config.path));
+        const dir = extensionDir(services.workspace.root, capability.id);
+        const manifest = await readExtensionManifest(extensionRootOf(dir, config.path));
         // A rotted checkout has no identity to compare under; the capability row already reports that state.
         if (manifest !== undefined) {
-            targets.push({ id: capability.id, config, identity: extensionIdOf(manifest), version: manifest.version });
+            const ref = await services.git.fullHead(dir).catch(() => config.ref);
+            targets.push({ id: capability.id, config, identity: extensionIdOf(manifest), version: manifest.version, ref });
         }
     }
     return targets;
@@ -247,7 +252,8 @@ export const applyExtensionUpdate = async (
     try {
         const root = services.workspace.root;
         const config = capability.config;
-        const fromRef = config.ref;
+        // What ran before, read off the checkout for the same reason installedTargets does.
+        const fromRef = await services.git.fullHead(extensionDir(root, id)).catch(() => config.ref);
         const installed = await readExtensionManifest(extensionRootOf(extensionDir(root, id), config.path));
         const identity = installed === undefined ? undefined : extensionIdOf(installed);
         const recorded = identity === undefined ? undefined : (await readExtensionUpdateState(root)).extensions[identity]?.update;
@@ -429,7 +435,7 @@ const prepareAgentReview = (services: Services, target: InstalledTarget, update:
     const prompt = updateBrief({
         label: target.identity,
         url: update.url,
-        fromRef: target.config.ref,
+        fromRef: target.ref,
         toRef: update.ref,
         path: update.path ?? target.config.path ?? "",
     });
@@ -563,7 +569,7 @@ export const checkExtensionUpdates = (services: Services): Promise<string> => {
                     row?.admitted === true &&
                     isShaPinned(row.install) &&
                     row.install?.ref !== undefined &&
-                    row.install.ref !== target.config.ref
+                    row.install.ref !== target.ref
                 ) {
                     const known = previous.update?.ref === row.install.ref ? previous.update : undefined;
                     const update: ExtensionUpdate = {

@@ -14,10 +14,11 @@ const entry = (over: Partial<RegistryEntry> = {}): RegistryEntry => ({
     ...over,
 });
 
-// Only the three fields the join reads; the daemon's real summary is much wider.
+// Only the fields the join reads; the daemon's real summary is much wider. Installed under a capability id that is
+// not the one a listing derives (`intentic-saldeo`), the way a hand install often is.
 const installedAs = (id: string, commit: string, source: ExtensionSummary[`source`] = `installed`): ExtensionSummary => {
     const [publisher = ``, name = ``] = id.split(`.`);
-    return { manifest: { publisher, name }, commit, source } as unknown as ExtensionSummary;
+    return { id: name, manifest: { publisher, name }, commit, source } as unknown as ExtensionSummary;
 };
 
 describe(`what a registry row becomes against this sandbox`, () => {
@@ -30,9 +31,14 @@ describe(`what a registry row becomes against this sandbox`, () => {
         expect(listingState(entry(), installed).kind).toBe(`installed`);
     });
 
-    test(`a different commit at the same identity is an update, and says which commit is here`, () => {
+    test(`the listed commit reported in its short form is installed, not an update`, () => {
+        expect(listingState(entry(), [installedAs(`intentic.saldeo`, SHA.slice(0, 7))])).toEqual({ kind: `installed` });
+        expect(listingState(entry(), [installedAs(`intentic.saldeo`, OTHER_SHA.slice(0, 7))]).kind).toBe(`update`);
+    });
+
+    test(`a different commit at the same identity is an update, and says which commit and which install is here`, () => {
         const state = listingState(entry(), [installedAs(`intentic.saldeo`, OTHER_SHA)]);
-        expect(state).toEqual({ kind: `update`, action: `Update`, installedRef: OTHER_SHA });
+        expect(state).toEqual({ kind: `update`, action: `Update`, installedRef: OTHER_SHA, installedId: `saldeo` });
     });
 
     test(`an image-baked or workspace extension of the same name is installed, never updatable`, () => {
@@ -61,7 +67,7 @@ describe(`what a registry row becomes against this sandbox`, () => {
 
     test(`an unaudited newer commit is an update that carries the flag`, () => {
         const state = listingState(entry({ admitted: false }), [installedAs(`intentic.saldeo`, OTHER_SHA)]);
-        expect(state).toEqual({ kind: `update`, action: `Update`, installedRef: OTHER_SHA, unaudited: true });
+        expect(state).toEqual({ kind: `update`, action: `Update`, installedRef: OTHER_SHA, installedId: `saldeo`, unaudited: true });
     });
 
     test(`an unaudited commit already installed here is installed`, () => {

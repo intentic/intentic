@@ -111,8 +111,10 @@ export const createExtensionsRoutes = (services: Services) => {
             const { refused } = await listenerOwnership(services);
             const summaryOf = async (extension: InstalledExtension): Promise<ExtensionSummary> => {
                 const installed = extension.source === "installed";
-                // A git-installed extension alone has a pinned HEAD; others use their source as a sentinel.
-                const commit = installed ? await services.git.head(extensionDir(root, extension.id)) : extension.source;
+                // A git-installed extension alone has a pinned HEAD; others use their source as a sentinel. Unabbreviated,
+                // the form the registry pins and the capability stores: a short sha never equals a listing's ref, so
+                // Browse offered an update for every install, forever.
+                const commit = installed ? await services.git.fullHead(extensionDir(root, extension.id)) : extension.source;
                 // Keyed by publisher.name like settings and the switch, surviving a git install's remove/re-add.
                 const identity = extensionIdOf(extension.manifest);
                 const observed = usage[identity];

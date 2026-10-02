@@ -18,6 +18,11 @@ export interface ListingState {
     readonly reason?: string;
     /** The commit that is installed here, when one is and it differs from the listed one. */
     readonly installedRef?: string;
+    /**
+     * The capability id it is installed under, which an update must target: hand-installed ones are often named
+     * otherwise than the id a listing derives, and an add under the derived one installs a duplicate beside it.
+     */
+    readonly installedId?: string;
     /** The listed commit hasn't passed the registry's current security audit; acting on it needs an explicit yes. */
     readonly unaudited?: true;
 }
@@ -61,6 +66,10 @@ export const checksTip = (entry: RegistryEntry): Tip | undefined => {
     };
 };
 
+// The daemon reports the full sha now; one built before 2026-10-02 reports the short form, and the editor can run ahead
+// of its daemon. A prefix of the pinned sha is that same commit, which is not the same as a different one.
+const sameCommit = (installed: string, pinned: string | undefined): boolean => installed.length >= 7 && pinned?.startsWith(installed) === true;
+
 // Blocked wins even over already-installed, since a reader who installed before a block needs to know most.
 // Pointer validity is checked next, and only then does what's installed here decide the rest.
 export const listingState = (entry: RegistryEntry, installed: readonly ExtensionSummary[]): ListingState => {
@@ -80,10 +89,10 @@ export const listingState = (entry: RegistryEntry, installed: readonly Extension
         return { kind: `installable`, action: `Install`, ...audit };
     }
     // Built-in or workspace extensions here read as installed, never updatable: replacing either deletes work.
-    if (here.source !== `installed` || here.commit === entry.install.ref) {
+    if (here.source !== `installed` || sameCommit(here.commit, entry.install.ref)) {
         return { kind: `installed` };
     }
-    return { kind: `update`, action: `Update`, installedRef: here.commit, ...audit };
+    return { kind: `update`, action: `Update`, installedRef: here.commit, installedId: here.id, ...audit };
 };
 
 // Pre-lowercased and wider than the card shows: matches on description and publisher too, not just name.
