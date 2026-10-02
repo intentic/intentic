@@ -4,6 +4,10 @@ import { DEFAULT_PROBES, startIdleStop } from "../system/idle-stop.js";
 import type { BootPhase } from "./boot-phase.js";
 import { listSubagentSessions, subagentRunning } from "../agent/subagents/subagents.js";
 import { armedWatcherCount } from "../agent/verification/watchers.js";
+import { nextBookedSendAt } from "../agent/run/turn/turn-resume.js";
+
+// The sooner of two wakes, either 0 for none.
+const sooner = (a: number, b: number): number => (a === 0 ? b : b === 0 ? a : Math.min(a, b));
 
 // Container role only: a guest daemon or a local folder speaks for nobody.
 export const startPlatformPresence = ({ config, logger, role, services, shutdown }: BootPhase, reach: ReachPosture): void => {
@@ -23,7 +27,8 @@ export const startPlatformPresence = ({ config, logger, role, services, shutdown
                     turns: () => services.conversations.activeTurnCount(),
                     delegates: () => listSubagentSessions(services.conversations).filter((session) => subagentRunning(session)).length,
                     watchers: armedWatcherCount,
-                    nextOneTimeWakeAt: () => nextOneTimeWakeAt(services),
+                    // A person's scheduled send is a promised moment too: the sandbox's own clock is all that lets it go.
+                    nextOneTimeWakeAt: async () => sooner(await nextOneTimeWakeAt(services), nextBookedSendAt(services)),
                 },
             ),
         );

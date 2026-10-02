@@ -8,6 +8,7 @@ import {
     released,
     removed,
     rerouted,
+    rescheduled,
     returned,
     scheduled,
     taken,
@@ -50,11 +51,11 @@ describe("a conversation's queue", () => {
     });
 
     it("holds a scheduled send until its instant, keeps it through edits, and lets it go with the rest", () => {
-        const booked = scheduled(NO_QUEUE, message("m1", "one"), 5_000);
+        const booked = scheduled(NO_QUEUE, message("m1", "one"), { until: 5_000 });
         expect(booked).toMatchObject({ paused: "scheduled", until: 5_000 });
         expect(queueView(booked)).toMatchObject({ paused: "scheduled", until: 5_000 });
         // A second scheduled send joins it, on the newest reading of when the allowance reopens.
-        const both = scheduled(booked, message("m2", "two"), 6_000);
+        const both = scheduled(booked, message("m2", "two"), { until: 6_000 });
         expect(both.items.map((item) => item.id)).toEqual(["m1", "m2"]);
         expect(both.until).toBe(6_000);
         const reworded = edited(both, "m1", 1, "one, better");
@@ -67,8 +68,39 @@ describe("a conversation's queue", () => {
         expect(removed(booked, "m1", 1).queue).toEqual({ items: [], revision: 2 });
     });
 
+    it("holds a send for another conversation's land, shows only which one, and takes the newest booking whole", () => {
+        const after = { conversationId: "brave-otter-k2", since: 4_000 };
+        const waitingOn = scheduled(NO_QUEUE, message("m1", "one"), { after });
+        expect(waitingOn).toEqual({ items: [expect.objectContaining({ id: "m1", revision: 1 })], revision: 1, paused: "scheduled", after });
+        expect(queueView(waitingOn)).toEqual({
+            items: [{ id: "m1", text: "one", voice: "person", queuedAt: 1_000, revision: 1 }],
+            revision: 1,
+            paused: "scheduled",
+            after: "brave-otter-k2",
+        });
+        // A time booked after it replaces the land it waited for, and a land booked after a time replaces the time.
+        const timed = scheduled(waitingOn, message("m2", "two"), { until: 9_000 });
+        expect(timed).toMatchObject({ paused: "scheduled", until: 9_000 });
+        expect(timed).not.toHaveProperty("after");
+        expect(scheduled(timed, message("m3", "three"), { after })).not.toHaveProperty("until");
+        // Edits keep it; a plain send lets it go, as it does any hold.
+        expect(edited(waitingOn, "m1", 1, "one, better").queue).toMatchObject({ paused: "scheduled", after });
+        expect(joined(waitingOn, message("m4", "four"))).not.toHaveProperty("after");
+        expect(released(waitingOn)).not.toHaveProperty("after");
+    });
+
+    it("re-times what already waits, whatever held it, and holds nothing when nothing waits", () => {
+        const stopped = hold(waiting(message("m1", "one"), message("m2", "two")), "stopped");
+        const retimed = rescheduled(stopped, { until: 7_000 });
+        expect(retimed).toMatchObject({ paused: "scheduled", until: 7_000, revision: stopped.revision + 1 });
+        expect(retimed.items.map((item) => item.id)).toEqual(["m1", "m2"]);
+        // Messages that waited unheld behind a running turn are held by the booking too.
+        expect(rescheduled(waiting(message("m1", "one")), { until: 7_000 })).toMatchObject({ paused: "scheduled", until: 7_000 });
+        expect(rescheduled(NO_QUEUE, { until: 7_000 })).toBe(NO_QUEUE);
+    });
+
     it("carries an instant only on a scheduled hold", () => {
-        const booked = scheduled(NO_QUEUE, message("m1", "one"), 5_000);
+        const booked = scheduled(NO_QUEUE, message("m1", "one"), { until: 5_000 });
         expect(hold(released(booked), "stopped")).not.toHaveProperty("until");
         expect(returned(booked, [message("m0", "zero")])).not.toHaveProperty("until");
     });

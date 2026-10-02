@@ -13,6 +13,7 @@ import {
     type LandedRemover,
     type LandFailure,
     type LoopState,
+    type QueuePause,
     type SubagentStatus,
 } from "@intentic/sandbox-contract";
 import { t } from "@intentic/ui/i18n";
@@ -60,7 +61,35 @@ export interface AgentStanding {
     // A land that broke (AgentSummary.landFailure), standing until one goes through whatever turns run after it. Absent
     // from a sandbox older than it, where only a turn's own `failure` can say so.
     readonly landFailure?: LandFailure;
+    // What waits for its next turn (AgentSummary.queue), read here only for its hold: messages booked to go by
+    // themselves at a time or once another agent's work lands (`scheduled`), which make the conversation one that runs
+    // again by itself. Never the words.
+    readonly queue?: QueueHold | undefined;
 }
+
+// The part of a conversation's queue the board reads: why it holds, and what a scheduled hold waits for.
+export interface QueueHold {
+    readonly paused?: QueuePause | undefined;
+    readonly until?: number | undefined;
+    readonly after?: string | undefined;
+}
+
+// Messages booked to go by themselves (sendLater.ts, or a spent allowance's reopen): the conversation runs again with
+// nobody pressing anything, so it is not finished, and nothing is owed by the reader for it to.
+export const scheduledSend = (agent: Pick<AgentStanding, "queue">): boolean => agent.queue?.paused === `scheduled`;
+
+// The scheduled hold alone, copied for a standing that outlives its card (standingFrom); undefined for any other queue.
+const scheduledHold = (agent: Pick<AgentStanding, "queue">): QueueHold | undefined => {
+    if (!scheduledSend(agent)) {
+        return undefined;
+    }
+    // A scheduled hold waits on exactly one thing: another agent's land, or an instant.
+    const { until, after } = agent.queue ?? {};
+    if (after !== undefined) {
+        return { paused: `scheduled`, after };
+    }
+    return until === undefined ? { paused: `scheduled` } : { paused: `scheduled`, until };
+};
 
 // A spent allowance, not a failure to fix: nothing broken, and it comes back. Read off `failureCode` rather than
 // the provider's own sentence, which varies per provider; the code is the daemon's own classification
@@ -487,8 +516,10 @@ export type FleetLane = "attention" | "active" | "finished";
 // every field `laneOf` reads and nothing else, with absent ones left out rather than spelled as undefined, since
 // this is persisted and posted between windows.
 export const standingFrom = (agent: AgentStanding): AgentStanding => {
-    const standing = standingCopy(agent);
-    return agent.landFailure === undefined ? standing : { ...standing, landFailure: agent.landFailure };
+    const copied = standingCopy(agent);
+    const standing = agent.landFailure === undefined ? copied : { ...copied, landFailure: agent.landFailure };
+    const hold = scheduledHold(agent);
+    return hold === undefined ? standing : { ...standing, queue: hold };
 };
 const standingCopy = (agent: AgentStanding): AgentStanding => ({
     status: agent.status,
@@ -547,6 +578,11 @@ export const laneOf = (agent: AgentStanding): FleetLane => {
     // account. Reached only because `blocked` let it through; stated explicitly or the card would fall through to
     // Finished, which would announce as over work that resumes by itself.
     if (limitScheduled(agent)) {
+        return `active`;
+    }
+    // Messages booked for later are the same: the conversation starts again by itself, at a time or once the agent it
+    // waits for has landed, so filing it Finished would announce as done work that has not started yet.
+    if (scheduledSend(agent)) {
         return `active`;
     }
     // `landed`/`idle`/`ready` all finish here: `ready` is work held on the branch because auto-land is off, still
@@ -831,6 +867,8 @@ export interface StandingChip {
     readonly tone: string;
     // When the reader last opened it, raw, for a host with a clock to phrase (`unreadHint`); absent on every reason chip.
     readonly seenAt?: number;
+    // What the one word stands for, where it stands for more than itself: when a scheduled card's messages go.
+    readonly hint?: Tip;
 }
 
 // Muted for a spent allowance: it needs a person, but nothing is wrong and nothing is lost.
@@ -838,10 +876,23 @@ const LIMIT_TONE = `bg-content/10 text-muted`;
 const REASON_TONE = `bg-warning/15 text-warning`;
 const UNREAD_TONE = `bg-primary-600/15 text-link`;
 
-export const standingChip = (agent: AgentStanding & { readonly unread: boolean; readonly seenAt?: number }): StandingChip | undefined => {
+export const standingChip = (
+    agent: AgentStanding & { readonly unread: boolean; readonly seenAt?: number },
+    titleOf?: (conversationId: string) => string | undefined,
+): StandingChip | undefined => {
     const reason = attentionReason(agent);
     if (reason !== undefined) {
         return { label: reason, tone: limited(agent) ? LIMIT_TONE : REASON_TONE };
+    }
+    // When it goes by itself outranks news: it is what a card that looks idle is waiting for. One word in the corner,
+    // which a title shares the row with; when it goes is the word's hover.
+    const scheduled = scheduledWhen(agent, titleOf);
+    if (scheduled !== undefined) {
+        return {
+            label: t(`chat.chatHeld.scheduled`),
+            tone: LIMIT_TONE,
+            hint: { title: t(`chat.chatHeld.scheduled`), rows: [{ label: t(`chat.composerIntent.sendsAt`), value: scheduled }] },
+        };
     }
     // Never both at once: "needs you" outranks "there is news".
     const badge = unreadBadge(agent);
@@ -849,6 +900,20 @@ export const standingChip = (agent: AgentStanding & { readonly unread: boolean; 
         return undefined;
     }
     return { label: badge.label, tone: UNREAD_TONE, ...(badge.seenAt === undefined ? {} : { seenAt: badge.seenAt }) };
+};
+
+// When a conversation's booked messages go, as its card's corner says on hover: "Tue 09:00", or "After <agent> lands"
+// for work waiting on another agent's land, that agent named by its card when one does (`titleOf`). Undefined for a
+// conversation nothing is booked on.
+export const scheduledWhen = (agent: Pick<AgentStanding, "queue">, titleOf?: (conversationId: string) => string | undefined): string | undefined => {
+    const hold = agent.queue;
+    if (!scheduledSend(agent) || hold === undefined) {
+        return undefined;
+    }
+    if (hold.after !== undefined) {
+        return t(`chat.sendLater.afterLands`, { title: titleOf?.(hold.after) ?? t(`chat.sendLater.anotherAgent`) });
+    }
+    return hold.until === undefined ? t(`chat.chatHeld.sendsShortly`) : formatWhen(hold.until);
 };
 
 // Children a family chip's hover names before counting the rest.

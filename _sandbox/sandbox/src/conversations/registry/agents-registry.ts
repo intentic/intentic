@@ -52,7 +52,7 @@ import {
 } from "./agents-store.js";
 import type { LandOutcome } from "../land/land.js";
 import { type LandedPresence, type LandedPresences, removerKey } from "../land/landed-presence.js";
-import type { LandStandings } from "../land/standing.js";
+import type { LandStanding, LandStandings } from "../land/standing.js";
 import { nextPromptDayAt } from "../../agent/run/prompt-fingerprint.js";
 
 // The persisted half of the fleet: the in-memory entry list (loaded once, written through on persisted mutations), the
@@ -397,6 +397,30 @@ const openedEntry = (
     };
 };
 
+// The entry a scheduled send opens before any turn runs: everything a first turn's `begin` would write, from the same
+// opening, so the turn that runs later finds its placement and owner decided, resting as idle rather than as a turn cut
+// short, since none ran. An existing entry is left alone: a booking never restates a conversation.
+const bookedEntry = (turn: BeginTurn, entryOf: (id: string) => PersistedAgent | undefined, now: number): PersistedAgent | undefined =>
+    entryOf(turn.conversationId) === undefined ? { ...openedEntry(undefined, turn, entryOf, now), ending: { kind: "idle" } } : undefined;
+
+// The registry's `standingOf`, over the fleet's own reader and the live probe.
+const standingIn =
+    (entryOf: (id: string) => PersistedAgent | undefined, standings: LandStandings): AgentsRegistry["standingOf"] =>
+    (id) => {
+        const entry = entryOf(id);
+        return entry === undefined || entry.placement.kind === "main" ? "idle" : standings.of(id);
+    };
+
+// The books' `book`, over the fleet's own reader and writer.
+const bookInto =
+    (entryOf: (id: string) => PersistedAgent | undefined, replace: (entry: PersistedAgent) => void): ConversationBooks["book"] =>
+    (turn, now) => {
+        const booked = bookedEntry(turn, entryOf, now);
+        if (booked !== undefined) {
+            replace(booked);
+        }
+    };
+
 // How the turn ended goes on the entry: its failure, the user's stop, or the clean ending that hands off to standing.ts,
 // which a dismissal takes too. The open work is dropped and re-added only as this settle says.
 const settledEntry = (entry: PersistedAgent, flush: SettleFlush, now: number): PersistedAgent => {
@@ -541,6 +565,10 @@ export interface AgentsRegistry {
     readonly get: (id: string) => AgentSummary | undefined;
     // The persisted entry, including the per-repo bases diff and land need.
     readonly entry: (id: string) => PersistedAgent | undefined;
+    // What of the conversation's work is outstanding against the workspace, as its card's status reads it beneath any
+    // ending (land/standing.ts): `ready` or `conflict` while some is, `landed` or `idle` once none is. `idle` for a
+    // workspace conversation, which has nothing of its own to land, and for one there is no entry for.
+    readonly standingOf: (id: string) => LandStanding;
     // Writes what a worktree conversation's checkout is (its repos, each with the main-line base) and, only when given,
     // what it should carry (`composition`); callers that merely rewrite repos keep the opening turn's decision.
     // `parent`, once, on the opening compose of a spawned child cut from its parent's checkout (placement.parent).
@@ -932,6 +960,7 @@ export const createFleet = (
                 journalled.set(turn.conversationId, inFlight);
             }
         },
+        book: bookInto(entryOf, replace),
         settle: (id, flush, now) => {
             const entry = entryOf(id);
             if (entry !== undefined) {
@@ -1186,6 +1215,7 @@ export const createFleet = (
             return entry === undefined ? undefined : summaryOf(entry);
         },
         entry: entryOf,
+        standingOf: standingIn(entryOf, standings),
         recordWorktree: async (id, repos, composition, parent) => {
             const entry = entryOf(id);
             if (entry === undefined || !isIsolated(entry)) {

@@ -2,6 +2,7 @@ import { type AgentCommand, type ContextUsage, type ConversationQueue, newConver
 import { computed, effectScope, ref, shallowRef, watch } from "vue";
 import type { AgentStanding } from "../../agents/fleet/agentStatus";
 import type { PendingAttachment } from "../drafts/useChatAttachments";
+import type { SendLater } from "../composer/sendLater";
 import type { PickUp } from "../run/pickUp";
 import { TurnFailures } from "../run/turnFailures";
 import type { ForkLink, SessionRef } from "../run/turnRequest";
@@ -65,6 +66,14 @@ export class Conversation {
     readonly workflowId = ref<string | undefined>();
     // Saved loop the next message runs as, if any; not sticky, clears on send like `workflowId`.
     readonly loopId = ref<string | undefined>();
+
+    // When the next message goes, when not now (sendLater.ts): an instant, or after another agent's work lands. Not
+    // sticky: the booking it turns Send into spends it, and the message then waits in the daemon's queue.
+    readonly sendLater = shallowRef<SendLater | undefined>();
+
+    // This conversation's own answer to whether its finished work lands by itself, while the daemon has no record of it
+    // to hold one: the message that opens it carries it (`conversationAutoLand`). Once registered, the card's is the answer.
+    readonly autoLandDraft = ref<boolean | undefined>();
 
     // This conversation's composer draft: unsent text and staged attachments; per-tab, persisted per sandbox.
     readonly draft = ref(``);

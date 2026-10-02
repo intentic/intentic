@@ -1,18 +1,21 @@
 import { type AgentProvider, type CatalogOption, type Persona, providerLabel } from "@intentic/sandbox-contract";
 import type { IconName } from "@intentic/ui";
 import { filterEntries, normalize, type PickerEntry } from "../models/modelPickerState";
+import { type SendLater, sendTimeLabel, type TimeChoice } from "./sendLater";
 import { QUICK_KINDS, type QuickKind } from "./useMentions";
 import { t } from "@intentic/ui/i18n";
 
-// The rows the composer's `@` token offers besides files: the four turn settings, as one pure derivation over plain
-// data. A kind whose source is undefined is not offered at all (the pill row refuses it too), so it appears in
-// neither the summary nor a search. Files are the component's own list, appended after these.
+// The rows the composer's `@` token offers besides files: the turn settings, as one pure derivation over plain data. A
+// kind whose source is undefined is not offered at all (the pill row refuses it too), so it appears in neither the
+// summary nor a search. Files are the component's own list, appended after these.
 
 export const kindMeta = (): Record<QuickKind, { readonly label: string; readonly badge: string; readonly icon: IconName }> => ({
     persona: { label: t(`chat.words.acts`), badge: `Persona`, icon: `users` },
     sandbox: { label: t(`chat.words.whereRuns`), badge: `Where`, icon: `desktop` },
     model: { label: t(`shared.model`), badge: `Model`, icon: `cpu` },
     effort: { label: t(`chat.composerQuickPick.effort`), badge: `Effort`, icon: `bolt` },
+    send: { label: t(`chat.composerQuickPick.sendLater`), badge: `Send`, icon: `clock` },
+    land: { label: t(`chat.composerQuickPick.landWhenDone`), badge: `Land`, icon: `download` },
 });
 
 export interface QuickPickSources {
@@ -38,6 +41,19 @@ export interface QuickPickSources {
           }
         | undefined;
     readonly effort: { readonly options: readonly CatalogOption[]; readonly picked: string } | undefined;
+    // When the message goes: now, one of the quick times, a time of the reader's own (the panel), or after an agent's
+    // work lands. Absent where nothing can be booked (an older sandbox, a send a workflow claims).
+    readonly send?:
+        | {
+              readonly picked: SendLater | undefined;
+              readonly now: number;
+              readonly choices: readonly TimeChoice[];
+              // The agents a message can wait for (composerLanding.waitTargets), by their cards' titles.
+              readonly targets: readonly { readonly id: string; readonly title: string }[];
+          }
+        | undefined;
+    // Whether its finished work lands by itself, as this chat answers it now. Absent where that is not the reader's.
+    readonly land?: { readonly lands: boolean } | undefined;
 }
 
 interface RowBase {
@@ -56,7 +72,10 @@ type SandboxRow = RowBase & {
 };
 type ModelRow = RowBase & { readonly kind: `model`; readonly entry: PickerEntry; readonly current: boolean };
 type EffortRow = RowBase & { readonly kind: `effort`; readonly value: string; readonly current: boolean };
-export type QuickRow = DrillRow | PersonaRow | SandboxRow | ModelRow | EffortRow;
+// `now` clears a pick, `custom` opens the panel for a time of the reader's own; a pick books the next message.
+type SendRow = RowBase & { readonly kind: `send`; readonly to: SendLater | `now` | `custom`; readonly current: boolean };
+type LandRow = RowBase & { readonly kind: `land`; readonly on: boolean; readonly current: boolean };
+export type QuickRow = DrillRow | PersonaRow | SandboxRow | ModelRow | EffortRow | SendRow | LandRow;
 // Everything the popover can hand back: a setting row, or a file from its own list.
 export type QuickPick = QuickRow | { readonly kind: `file`; readonly key: string; readonly path: string };
 
@@ -158,6 +177,50 @@ const effortRows = (source: NonNullable<QuickPickSources[`effort`]>, query: stri
         }))
         .filter((row) => matches(query, row.label, row.value));
 
+// Now first, then the quick times, the reader's own, and the agents to wait for, newest work first.
+const sendRows = (source: NonNullable<QuickPickSources[`send`]>, query: string): SendRow[] => {
+    const { picked } = source;
+    const rows: SendRow[] = [
+        { kind: `send`, key: `send:now`, to: `now`, label: t(`chat.composerQuickPick.now`), detail: undefined, current: picked === undefined },
+        ...source.choices.map(
+            (choice): SendRow => ({
+                kind: `send`,
+                key: `send:${choice.key}`,
+                to: { kind: `at`, at: choice.at },
+                label: choice.label,
+                detail: sendTimeLabel(choice.at, source.now),
+                current: picked?.kind === `at` && picked.at === choice.at,
+            }),
+        ),
+        { kind: `send`, key: `send:custom`, to: `custom`, label: t(`chat.composerQuickPick.pickTime`), detail: undefined, current: false },
+        ...source.targets.map(
+            (target): SendRow => ({
+                kind: `send`,
+                key: `send:after:${target.id}`,
+                to: { kind: `after`, conversationId: target.id },
+                label: target.title,
+                detail: t(`chat.composerQuickPick.afterIt`),
+                current: picked?.kind === `after` && picked.conversationId === target.id,
+            }),
+        ),
+    ];
+    return rows.filter((row) => matches(query, row.label));
+};
+
+const landRows = (source: NonNullable<QuickPickSources[`land`]>, query: string): LandRow[] =>
+    [true, false]
+        .map(
+            (on): LandRow => ({
+                kind: `land`,
+                key: `land:${on ? `on` : `off`}`,
+                on,
+                label: on ? t(`chat.composerQuickPick.landOn`) : t(`chat.composerQuickPick.landOff`),
+                detail: undefined,
+                current: source.lands === on,
+            }),
+        )
+        .filter((row) => matches(query, row.label));
+
 const rowsOf = (sources: QuickPickSources, kind: QuickKind, query: string): QuickRow[] => {
     switch (kind) {
         case `persona`:
@@ -168,6 +231,10 @@ const rowsOf = (sources: QuickPickSources, kind: QuickKind, query: string): Quic
             return sources.model === undefined ? [] : modelRows(sources.model, query);
         case `effort`:
             return sources.effort === undefined ? [] : effortRows(sources.effort, query);
+        case `send`:
+            return sources.send === undefined ? [] : sendRows(sources.send, query);
+        case `land`:
+            return sources.land === undefined ? [] : landRows(sources.land, query);
     }
 };
 
@@ -185,6 +252,16 @@ const sandboxValue = (source: NonNullable<QuickPickSources[`sandbox`]>): string 
 };
 const effortValue = (source: NonNullable<QuickPickSources[`effort`]>): string =>
     source.options.find((option) => option.value === source.picked)?.label ?? source.picked;
+const sendValue = (source: NonNullable<QuickPickSources[`send`]>): string => {
+    const { picked } = source;
+    if (picked === undefined) {
+        return t(`chat.composerQuickPick.now`);
+    }
+    if (picked.kind === `at`) {
+        return sendTimeLabel(picked.at, source.now);
+    }
+    return source.targets.find((target) => target.id === picked.conversationId)?.title ?? t(`chat.sendLater.anotherAgent`);
+};
 
 const currentValue = (sources: QuickPickSources, kind: QuickKind): string | undefined => {
     switch (kind) {
@@ -196,6 +273,10 @@ const currentValue = (sources: QuickPickSources, kind: QuickKind): string | unde
             return sources.model?.label;
         case `effort`:
             return sources.effort === undefined ? undefined : effortValue(sources.effort);
+        case `send`:
+            return sources.send === undefined ? undefined : sendValue(sources.send);
+        case `land`:
+            return sources.land === undefined ? undefined : sources.land.lands ? t(`chat.composerQuickPick.landOn`) : t(`chat.composerQuickPick.landOff`);
     }
 };
 

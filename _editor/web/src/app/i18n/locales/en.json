@@ -1467,7 +1467,12 @@
                 "swapped": "Swapped",
                 "title": "Memory low",
                 "used": "Used"
-            }
+            },
+            "sendsAfter": "sends after {title} lands",
+            "waitsForGone": "waits for an agent that is gone",
+            "change": "Change",
+            "sendNowAfterNote": "It goes without waiting for that agent's work.",
+            "sendNowTimeNote": "It goes now rather than at its time."
         },
         "sandboxNotice": {
             "compacted": "Context compacted to free up space.",
@@ -1712,7 +1717,12 @@
             "upForPreviousMessage": "↑ for previous message",
             "writingAgent": "Writing as the agent",
             "sendStartsWorkflow": "Send starts \"{name}\": this message is what every step is asked to do. Model, effort, mode and looping are each step's own.",
-            "sendLoopsUntilEndsOn": "Send loops this message until it's met: ends on {design}."
+            "sendLoopsUntilEndsOn": "Send loops this message until it's met: ends on {design}.",
+            "landsWhenDone": "Lands when done",
+            "holdsOnBranch": "Holds on branch",
+            "landsWhenDoneNote": "Press to hold on branch",
+            "holdsOnBranchNote": "Press to land by itself",
+            "appliesAfterTurn": "Applies when this turn ends"
         },
         "chatPaneNotices": {
             "accountNeedsToReconnected": "This account needs to be reconnected.",
@@ -2074,7 +2084,11 @@
             "stopTurn": "Stop turn",
             "unconnectedHint": "Choose model",
             "unconnectedPlaceholder": "What should this agent do? Send picks a model first…",
-            "viewerPlaceholder": "You’re viewing: ask the owner for a collaborator role to drive agents"
+            "viewerPlaceholder": "You’re viewing: ask the owner for a collaborator role to drive agents",
+            "placeholderLater": "Write the message to schedule…",
+            "hintLater": "Schedule",
+            "hintLaterNote": "It waits in this chat, where you can send it sooner, change when, or take it back.",
+            "hintIdleScheduled": "What is scheduled in this chat goes now too."
         },
         "composerModelPill": {
             "chooseModel": "Choose a model",
@@ -2088,14 +2102,29 @@
             "loopRunWorkflow": "Loop it, or run a workflow.",
             "onePersonasAccountsOnly": "One persona's accounts only.",
             "runThrough": "Run through",
-            "writeAgent": "Write as agent"
+            "writeAgent": "Write as agent",
+            "sendLater": "Send later",
+            "sendLaterNow": "Now",
+            "sendLaterNote": "At a time, or after an agent lands.",
+            "landWhenDone": "Land when done",
+            "on": "On",
+            "off": "Off",
+            "landWhenDoneNote": "Its finished work lands by itself.",
+            "holdOnBranchNote": "Hold its finished work on the branch."
         },
         "composerQuickPick": {
             "anotherSandbox": "Another sandbox",
             "effort": "Effort",
             "everyConnectedAccount": "Every connected account",
             "here": "Here",
-            "runnerOnComputer": "Runner on your computer"
+            "runnerOnComputer": "Runner on your computer",
+            "sendLater": "Send",
+            "now": "Now",
+            "pickTime": "Pick a date and time…",
+            "afterIt": "After it lands",
+            "landWhenDone": "Land when done",
+            "landOn": "Lands by itself",
+            "landOff": "Holds on branch"
         },
         "effortMeter": {
             "reasoningEffort2": "Reasoning effort: {effortLabel}"
@@ -2333,6 +2362,36 @@
             "heldMemoryShare": "Held: sandbox memory is low ({share})",
             "wait": "Wait",
             "waitHint": "Held until you send"
+        },
+        "sendLater": {
+            "title": "Send later",
+            "atTime": "At a time",
+            "inAnHour": "In an hour",
+            "inThreeHours": "In 3 hours",
+            "tonight": "Tonight",
+            "tomorrowMorning": "Tomorrow morning",
+            "mondayMorning": "Monday morning",
+            "tomorrowAt": "Tomorrow {clock}",
+            "pickTime": "Pick a date and time",
+            "setTime": "Set",
+            "outOfRange": "Pick a time from a minute to 30 days from now.",
+            "afterAgent": "After an agent's work lands",
+            "afterAgentNote": "For work that builds on it.",
+            "noAgents": "No agent has work still to land.",
+            "filter": "Filter agents…",
+            "landsByItself": "lands by itself",
+            "waitsForYou": "waits for your land",
+            "inWorkspace": "works in your workspace",
+            "alsoLandIt": "Land automatically",
+            "alsoLandItNote": "Else this waits for you",
+            "uncommitted": "Landed work stays uncommitted, and this agent starts from your last commit: it sees that work only once it is committed.",
+            "saveVersions": "Commit each land automatically",
+            "clear": "Send now instead",
+            "afterLands": "After {title} lands",
+            "scheduleAria": "Schedule: {when}",
+            "reschedule": "Change when it sends",
+            "anotherAgent": "another agent",
+            "autoLand": "Auto-land"
         }
     },
     "common": {

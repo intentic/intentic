@@ -9,6 +9,9 @@ import { t } from "@intentic/ui/i18n";
 //  - `place`, the agent's voice is armed: words go into the transcript as the agent's own, no turn.
 //  - `edit`, a message is being replaced: the send rewinds to it and asks again.
 //  - `plan`, a plan is waiting on an answer: typing revises it rather than starting anything.
+//  - `later`, the reader picked when the message goes (sendLater.ts): a time, or once another agent's work has landed.
+//    The send is booked whatever this chat is doing, a turn running here included: the words wait in its queue, drawn as
+//    scheduled, and go when that comes. The reader chose the moment, so nothing below it decides it instead.
 //  - `scheduled`, nothing is running but the account the turn would run on is spent: the send is booked, not tried. The
 //    words wait in the conversation's queue, drawn as scheduled, and the sandbox lets them go when the allowance
 //    reopens; nothing reaches the provider before, so there is no refusal to show for a wait the reader chose knowingly.
@@ -18,7 +21,7 @@ import { t } from "@intentic/ui/i18n";
 //    idle over an agent that has been waiting for an answer.
 //  - `steer`, a live turn takes mid-turn input: the message reaches the turn already running.
 //  - `queue`, a live turn that doesn't: the message waits for it to end.
-export type SendIntent = `place` | `edit` | `plan` | `scheduled` | `idle` | `parked` | `steer` | `queue`;
+export type SendIntent = `place` | `edit` | `plan` | `later` | `scheduled` | `idle` | `parked` | `steer` | `queue`;
 
 // A stopped turn's instants, already resolved to booleans by the pane (which owns the clock), since a
 // pure predicate can't read time itself. `ready` is the only thing separating an offer from a countdown.
@@ -61,6 +64,8 @@ export interface ComposerSituation {
     readonly queueScheduled?: boolean;
     /** There is an account to send with. */
     readonly connected: boolean;
+    /** The reader picked when the next message goes, a time or another agent's land (sendLater.ts), and may book it. */
+    readonly later?: boolean;
     /**
      * When the account the next turn runs on reopens (ms), set only while it reads spent with a reopen still ahead, as
      * the pane resolves it against the clock. Undefined covers every case a plain send is right: room, no reading, a
@@ -81,6 +86,10 @@ export interface ComposerWords {
     readonly reopens?: string;
     /** A turn already waits on the limit here: it goes first when the allowance reopens, and the booked message after it. */
     readonly followsWaiting?: boolean;
+    /** When a message booked for later goes, as its pill says it (a time, or after which agent lands); `later` only. */
+    readonly later?: string;
+    /** This chat already holds a scheduled message, which an ordinary send lets go with it. */
+    readonly heldGoesToo?: boolean;
 }
 
 export const sendIntentOf = (situation: ComposerSituation): SendIntent => {
@@ -92,6 +101,9 @@ export const sendIntentOf = (situation: ComposerSituation): SendIntent => {
     }
     if (situation.pendingPlan) {
         return `plan`;
+    }
+    if (situation.later === true) {
+        return `later`;
     }
     if (!situation.streaming) {
         if (situation.waitingOnYou) {
@@ -114,6 +126,8 @@ const PLACEHOLDER: Record<SendIntent, (words: ComposerWords) => string> = {
     edit: () => t(`chat.composerIntent.placeholderEdit`),
     // Says what typing does here, since a reply that reads like consent ("go ahead") would otherwise look like approval.
     plan: () => t(`chat.composerIntent.placeholderPlan`),
+    // When it goes is on the pill and the button already; the box only says this message is the one being booked.
+    later: () => t(`chat.composerIntent.placeholderLater`),
     scheduled: (words) => t(`chat.composerIntent.placeholderScheduled`, { when: words.reopens ?? `` }),
     idle: (words) => (words.onTrial ? t(`chat.words.askAnything`) : t(`chat.composerIntent.placeholderIdle`, { provider: words.provider })),
     parked: () => t(`chat.composerIntent.placeholderParked`),
@@ -130,13 +144,21 @@ const SEND_HINT: Record<SendIntent, (words: ComposerWords) => TooltipValue> = {
             ? t(`chat.composerIntent.hintEditOne`)
             : { title: t(`chat.composerIntent.hintEditOne`), rows: [{ label: t(`chat.composerIntent.alsoReplaced`), value: words.editDropped - 1 }] },
     plan: () => ({ title: t(`chat.composerIntent.hintPlan`), note: t(`chat.composerIntent.hintPlanNote`) }),
+    // When it goes, and that it can still be sent sooner, re-timed or taken back from where it waits.
+    later: (words) => ({
+        title: t(`chat.composerIntent.hintLater`),
+        rows: [{ label: t(`chat.composerIntent.sendsAt`), value: words.later ?? `` }],
+        note: t(`chat.composerIntent.hintLaterNote`),
+    }),
     // Promises the one thing the sandbox guarantees: nothing goes before the reopen, unless the reader says so.
     scheduled: (words) => ({
         title: t(`chat.composerIntent.hintScheduled`),
         rows: [{ label: t(`chat.composerIntent.sendsAt`), value: words.reopens ?? `` }],
         note: words.followsWaiting === true ? t(`chat.composerIntent.hintScheduledAfter`) : t(`chat.composerIntent.hintScheduledHeld`),
     }),
-    idle: () => t(`chat.composerIntent.hintIdle`),
+    // An ordinary send lets go what this chat holds scheduled, as any send to a held queue does: said before the press.
+    idle: (words) =>
+        words.heldGoesToo === true ? { title: t(`chat.composerIntent.hintIdle`), note: t(`chat.composerIntent.hintIdleScheduled`) } : t(`chat.composerIntent.hintIdle`),
     // Says whether Send reaches the running turn or waits, so identical buttons don't mean different things.
     parked: () => ({ title: t(`chat.composerIntent.queue`), note: t(`chat.composerIntent.hintParked`) }),
     steer: () => t(`chat.composerIntent.hintSteer`),
@@ -246,9 +268,9 @@ export const sendable = (situation: ComposerSituation, intent: SendIntent, refus
         return false;
     }
     // Place and edit both need words in the box; empty would silently rewind without asking anything. A scheduled send
-    // does too: its button reads as a time, so a bare press meaning "Continue now" (or "flush the queue now") would do the
-    // opposite of what it says, and the strip's own Continue sits right above it for that.
-    if (intent === `place` || intent === `edit` || intent === `scheduled`) {
+    // does too, a booked one alike: its button reads as a time, so a bare press meaning "Continue now" (or "flush the
+    // queue now") would do the opposite of what it says, and the strip's own Continue sits right above it for that.
+    if (intent === `place` || intent === `edit` || intent === `scheduled` || intent === `later`) {
         return situation.staged;
     }
     return situation.staged || continueOffered(situation) || queueFlushable(situation);

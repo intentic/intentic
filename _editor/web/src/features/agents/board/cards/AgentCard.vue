@@ -158,8 +158,14 @@ const box = computed(() =>
 // The corner's word and tint, from the projection the rails read too (agentStatus.standingChip): why it needs you,
 // else why the agents it started do (their mark rides along, so their ask never reads as this card's own), else that it
 // worked since you last looked, else nothing and the resting glyph keeps the corner.
+// What another agent's card is called, for the corner of a card whose messages wait on that agent's land.
+const titleOfAgent = (conversationId: string): string | undefined => {
+    const awaited = useAgents().agentById(conversationId);
+    return awaited === undefined ? undefined : agentDisplayTitle(awaited);
+};
 const chip = computed<(StandingChip & { readonly hint?: Tip; readonly family?: true }) | undefined>(() => {
-    const own = props.call !== undefined && attentionReason(props.agent) === undefined ? { ...props.call, family: true as const } : standingChip(props.agent);
+    const own =
+        props.call !== undefined && attentionReason(props.agent) === undefined ? { ...props.call, family: true as const } : standingChip(props.agent, titleOfAgent);
     // Files a Sandbox page wrote are not "Your edits": named as the review names them (settingsPages, below), as the
     // rail's row names them too (settingsChip).
     return settingsChip(own, props.agent, settingsPages.value);

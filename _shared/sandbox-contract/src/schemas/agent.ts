@@ -304,15 +304,28 @@ const AgentTurnFieldsSchema = z.object({
     editorContext: EditorContextSchema.optional().describe(
         'What the user has open in their editor, folded into the prompt so that pointing words like "this" resolve.',
     ),
-    // The composer's scheduled send: a person who knows the account is spent books the message for its reopen instead of
-    // sending it into a refusal. Held in the conversation's queue, never started early; the queue's `until` is this.
+    // The composer's scheduled send: a time the person chose, or a spent account's reopen they would rather wait for than
+    // send into a refusal. Held in the conversation's queue, never started early; the queue's `until` is this.
     sendAt: z
         .number()
         .int()
         .positive()
         .optional()
         .describe(
-            "Hold this message until then (epoch milliseconds) instead of starting a turn now, for an allowance you know is spent. It waits in the conversation's queue, where it can be sent early, reworded or removed, and goes by itself at that instant. Ignored when already past, or when a turn is running.",
+            "Hold this message until then (epoch milliseconds) instead of starting a turn now: a time you chose, or the reopen of an allowance you know is spent. It waits in the conversation's queue, where it can be sent early, reworded, rescheduled or removed, and goes by itself at that instant, even for a conversation this message opens or one whose turn is running now. Ignored when already past; at most a month ahead.",
+        ),
+    // The other scheduled send: work that builds on another agent's, held until that agent's work is in the workspace.
+    // Held in the queue like `sendAt`; the queue's `after` is this. Never both: a hold waits on exactly one thing.
+    sendAfter: ConversationIdSchema.optional().describe(
+        "Hold this message until the conversation named here has finished and all of its work has landed in the workspace, instead of starting a turn now: for work that builds on another agent's. It waits in this conversation's queue, where it can be sent early, reworded, rescheduled or removed. Sent at once when that conversation has nothing running and nothing left to land.",
+    ),
+    // Decided like `isolated`: the opening turn's answer, latched on the entry it opens. A maintainer's alone, since the
+    // standing answer it sets is what `agents.autoLand` sets, and that route is a maintainer's.
+    conversationAutoLand: z
+        .boolean()
+        .optional()
+        .describe(
+            "Whether this conversation's finished work merges into the workspace by itself from now on: its own answer to the sandbox-wide setting, the one `agents.autoLand` changes later. Read only from the message that opens the conversation, and only from a maintainer. Unlike `autoLand`, it holds for every later turn.",
         ),
 });
 export const AgentTurnSchema = AgentTurnFieldsSchema
@@ -335,6 +348,12 @@ export const AgentTurnSchema = AgentTurnFieldsSchema
     // "then" needs a checkout of its own; rolling back the shared tree under everyone else is what it must never mean.
     .refine((turn) => turn.forkOf?.files !== "then" || turn.isolated === true, {
         message: 'forkOf.files "then" requires isolated',
+    })
+    .refine((turn) => turn.sendAt === undefined || turn.sendAfter === undefined, {
+        message: "sendAt and sendAfter are two different holds: name one",
+    })
+    .refine((turn) => turn.sendAfter === undefined || turn.sendAfter !== turn.conversationId, {
+        message: "a conversation cannot wait for its own work to land",
     });
 export type AgentTurn = z.infer<typeof AgentTurnSchema>;
 // What `agent.run` takes: a turn, plus the one field only a request carries and no stored turn keeps. A daemon from before
@@ -501,12 +520,15 @@ export const ConversationQueueSchema = z.object({
     items: z.array(QueuedMessageSchema).describe("What waits, in the order it goes out."),
     revision: z.number().int().nonnegative().describe("Moves with every change to the queue, so of two copies the higher is the newer."),
     paused: QueuePauseSchema.optional().describe(
-        "Why nothing goes out by itself: somebody stopped the turn, the turn these messages started was refused before it ran, or they were scheduled for later. Resuming lets them go, and so does sending another message unless they are scheduled.",
+        "Why nothing goes out by itself: somebody stopped the turn, the turn these messages started was refused before it ran, or they were scheduled for a time or for after another conversation's work lands. Resuming lets them go, and so does sending another message.",
     ),
     until: z
         .number()
         .optional()
         .describe("When scheduled messages go out by themselves, in milliseconds. Only on a queue paused as `scheduled`."),
+    after: ConversationIdSchema.optional().describe(
+        "The conversation whose finished work must land before scheduled messages go out by themselves. Only on a queue paused as `scheduled`, in place of `until`.",
+    ),
 });
 export type ConversationQueue = z.infer<typeof ConversationQueueSchema>;
 // What resuming a queue did: started a turn with what waited, when nothing else ran.

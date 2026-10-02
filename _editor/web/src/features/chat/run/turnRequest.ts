@@ -1,5 +1,6 @@
 import type { AgentHarness, AgentProvider, EditorContext, PermissionMode, TurnErrand } from "@intentic/sandbox-contract";
 import type { ProcedureInput } from "../../sandbox/client/sandboxRpc";
+import type { TurnBooking } from "../composer/sendLater";
 
 // The turn body the daemon receives: what a send carries and the shape that states it on the wire. Which session a turn
 // goes on in is the daemon's to decide (routing.ts); a session id rides only for a conversation it has no record of.
@@ -144,8 +145,12 @@ export const turnRequestBody = (input: {
     readonly editorContext: EditorContext | undefined;
     // What the words are for when this window composed them (an errand), which the row they open carries.
     readonly errand?: TurnErrand | undefined;
-    // A scheduled send's instant (ms): the daemon holds the words in the queue until then rather than starting a turn.
-    readonly sendAt?: number | undefined;
+    // A scheduled send: the daemon holds the words in the queue until its instant, or until another conversation's work
+    // has landed (sendLater.ts), rather than starting a turn.
+    readonly booking?: TurnBooking | undefined;
+    // This conversation's own answer to whether its finished work lands by itself, for the message that opens it; the
+    // daemon reads it there only, and only from a maintainer.
+    readonly conversationAutoLand?: boolean | undefined;
     // A Continue: the daemon carries the conversation on without the words, which only a daemon from before reads.
     readonly continues?: boolean | undefined;
 }): ProcedureInput<`agent.run`> => {
@@ -190,11 +195,29 @@ export const turnRequestBody = (input: {
         // Opt-in file/selection chip; a path in this workspace, so it stays here.
         ...(here && input.editorContext !== undefined ? { editorContext: input.editorContext } : {}),
     };
-    if (input.sendAt !== undefined) {
-        body.sendAt = input.sendAt;
-    }
+    stateOccasions(body, input, here);
     if (input.continues === true) {
         body.continues = true;
     }
     return body;
+};
+
+// What only some sends say beside the words: when they go, if not now (a booking), and, on the message that opens a
+// conversation here, its own answer to whether its finished work lands by itself. Written onto the body in place.
+const stateOccasions = (
+    body: ProcedureInput<`agent.run`>,
+    input: { readonly booking?: TurnBooking | undefined; readonly conversationAutoLand?: boolean | undefined; readonly registered: boolean },
+    here: boolean,
+): void => {
+    const { sendAt, sendAfter } = input.booking ?? {};
+    if (sendAt !== undefined) {
+        body.sendAt = sendAt;
+    }
+    if (sendAfter !== undefined) {
+        body.sendAfter = sendAfter;
+    }
+    // Only for a conversation the daemon has no record of yet, and only for this sandbox, whose land it is.
+    if (!input.registered && here && input.conversationAutoLand !== undefined) {
+        body.conversationAutoLand = input.conversationAutoLand;
+    }
 };

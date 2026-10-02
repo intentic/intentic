@@ -41,8 +41,9 @@ const queueResume = jest.fn<SandboxRpc["agent"]["queueResume"]>();
 const queueRemove = jest.fn<SandboxRpc["agent"]["queueRemove"]>();
 const queueEdit = jest.fn<SandboxRpc["agent"]["queueEdit"]>();
 const switchAccount = jest.fn<SandboxRpc["agent"]["switchAccount"]>();
+const queueSchedule = jest.fn<SandboxRpc["agent"]["queueSchedule"]>();
 jest.mock("../../sandbox/client/sandboxRpc", () => ({
-    sandboxRpc: fakeSandboxRpc({ agent: { run, attach, stop, resume, queueResume, queueRemove, queueEdit, switchAccount } }),
+    sandboxRpc: fakeSandboxRpc({ agent: { run, attach, stop, resume, queueResume, queueRemove, queueEdit, switchAccount, queueSchedule } }),
 }));
 
 const { TurnClient } = await import("./turnClient");
@@ -137,6 +138,7 @@ const clientOf = (settings: TurnSettings = SETTINGS, selection: Partial<Composer
         draft,
         attachments,
         queue: shallowRef<ConversationQueue | undefined>(),
+        autoLandDraft: ref<boolean | undefined>(),
     };
     const client = new TurnClient(host);
     const transcript = new TranscriptView(() => undefined, {
@@ -190,7 +192,7 @@ beforeEach(() => {
 
 afterEach(() => {
     unstubAllGlobals();
-    for (const procedure of [run, attach, stop, resume, queueResume, queueRemove, queueEdit]) {
+    for (const procedure of [run, attach, stop, resume, queueResume, queueRemove, queueEdit, queueSchedule]) {
         procedure.mockReset();
     }
 });
@@ -523,7 +525,7 @@ describe(`saying something`, () => {
         answers({ delivered: `queued` });
         const at = Date.now() + 60 * 60 * 1_000;
 
-        await client.schedule(`ship it`, at, [FILE]);
+        await client.schedule(`ship it`, { sendAt: at }, [FILE]);
 
         expect(run.mock.calls.map(([body]) => ({ prompt: body.prompt, sendAt: body.sendAt }))).toEqual([{ prompt: `ship it`, sendAt: at }]);
         expect(attach).not.toHaveBeenCalled();
@@ -537,14 +539,51 @@ describe(`saying something`, () => {
         });
     });
 
-    // Nothing to hold it on: the daemon would start it anyway, so it goes the ordinary way, drawn as any send is.
-    it(`sends a scheduled message the ordinary way in a chat the daemon has no record of yet`, async () => {
-        const { client } = clientOf();
+    // The booking opens a chat the daemon has no record of yet: it comes back on the board as scheduled, named after its
+    // words, with its own answer to whether its work lands by itself; nothing starts here.
+    it(`books a message that opens its chat, carrying the chat's own landing answer, drawing no turn`, async () => {
+        const { client, host } = clientOf();
+        host.autoLandDraft.value = true;
         answers({ delivered: `queued` });
 
-        await client.schedule(`ship it`, Date.now() + 60_000);
+        await client.schedule(`ship it after the auth refactor`, { sendAfter: `brave-otter` });
+
+        expect(run.mock.calls.map(([body]) => ({ sendAt: body.sendAt, sendAfter: body.sendAfter, conversationAutoLand: body.conversationAutoLand }))).toEqual([
+            { sendAt: undefined, sendAfter: `brave-otter`, conversationAutoLand: true },
+        ]);
+        expect(attach).not.toHaveBeenCalled();
+        expect(host.title.value).toBe(deriveTitle(`ship it after the auth refactor`));
+        expect(host.queue.value).toMatchObject({ items: [{ text: `ship it after the auth refactor` }], paused: `scheduled`, after: `brave-otter` });
+        expect(host.queue.value).not.toHaveProperty(`until`);
+    });
+
+    // A sandbox from before bookings could open a chat has nothing to hold one on: it goes the ordinary way, drawn as any send is.
+    it(`sends a scheduled message the ordinary way to a sandbox that cannot hold it`, async () => {
+        const { client } = clientOf();
+        answers({ delivered: `queued` });
+        setDaemonRoutes(SANDBOX_ROUTE_NAMES.filter((name) => name !== `agent.queueSchedule`));
+
+        await client.schedule(`ship it`, { sendAt: Date.now() + 60_000 });
+        setDaemonRoutes(undefined);
 
         expect(run.mock.calls.map(([body]) => body.sendAt)).toEqual([undefined]);
+    });
+
+    it(`re-times what waits through the queue's own door, and follows a turn it let go at once`, async () => {
+        const { client, host } = clientOf();
+        host.queue.value = { ...WAITING, paused: `scheduled`, until: Date.now() + 60_000 };
+        queueSchedule.mockImplementationOnce(async () => ({ ...WAITING, revision: 2, paused: `scheduled` as const, after: `brave-otter` }));
+
+        expect(await client.reschedule({ sendAfter: `brave-otter` })).toBe(true);
+        expect(queueSchedule.mock.calls.map(([input]) => input)).toEqual([{ conversationId: `c1`, sendAfter: `brave-otter` }]);
+        expect(host.queue.value).toMatchObject({ revision: 2, paused: `scheduled`, after: `brave-otter` });
+        expect(attach).not.toHaveBeenCalled();
+
+        // What it waited for had already come: the queue comes back empty and the turn it started is followed.
+        queueSchedule.mockImplementationOnce(async () => ({ items: [], revision: 3 }));
+        attach.mockImplementation(async () => attached(`r9`, 6_000, `and the docs`));
+        expect(await client.reschedule({ sendAt: Date.now() - 1 })).toBe(true);
+        expect(attach).toHaveBeenCalledTimes(1);
     });
 
     it(`sends a nudge behind a waiting nudge nowhere, and anything else as ever`, async () => {

@@ -1,16 +1,18 @@
 import { routingFor } from "../../providers/accounts/routing.js";
 import { randomUUID } from "node:crypto";
 import { keyedLock } from "@intentic/base/async";
-import { MENTION_LIMIT, type MessageReceipt, profileOf } from "@intentic/sandbox-contract";
-import type { BeginRefusal } from "../../../conversations/actor/conversation-decide.js";
+import { MENTION_LIMIT, type MessageReceipt, profileOf, withRuntimeDefaults } from "@intentic/sandbox-contract";
+import type { BeginRefusal, BeginTurn } from "../../../conversations/actor/conversation-decide.js";
 import { type LiveRun, liveRunOf, turnRunOf } from "../../../conversations/actor/conversation-holdings.js";
-import type { QueuedItem } from "../../../conversations/actor/conversation-queue.js";
+import type { Booking, QueuedItem } from "../../../conversations/actor/conversation-queue.js";
 import { windowShut } from "../../../conversations/actor/conversation-state.js";
 import { cardsParkedOn } from "../../../conversations/actor/parked-cards.js";
+import { unwaitable, workLanded } from "../../../conversations/land/work-landed.js";
 import { conversationProfile, worktreeOf } from "../../../conversations/registry/agents-store.js";
 import type { Services } from "../../../composition.js";
 import { opt } from "../../../opt.js";
 import type { Said, Steer, TurnInput, TurnStarter, Unsaid, Unsteered } from "../../../seams/turn-starter.js";
+import { conversationIdentity } from "../placement/turn-placement.js";
 import { recordConversationPrompt, recordPrompt } from "../../../sessions/transcript-search.js";
 import { steerTurn } from "../../checkpoints/agent-steering.js";
 import { checkpointSteeredMessage } from "../../checkpoints/steer-checkpoints.js";
@@ -86,8 +88,8 @@ export const steerPerson = async (services: Services, conversationId: string, st
 
 // The message as the queue keeps it, named: a sender that gave no id gets one, since the queue and a rewind name it.
 const named = (said: Said): Omit<QueuedItem, "revision"> => {
-    // The booking is the admission's to act on (bookedFor), never a field the started turn carries.
-    const { actor, owner, areas, unseenRuns: _unseen, speaker, sendAt: _booked, ...turn } = said.turn;
+    // The booking is the admission's to act on (bookingFor), never a field the started turn carries.
+    const { actor, owner, areas, unseenRuns: _unseen, speaker, sendAt: _at, sendAfter: _after, ...turn } = said.turn;
     const id = turn.messageId ?? randomUUID();
     return {
         id,
@@ -144,28 +146,55 @@ const goesFirst = (services: Services, conversationId: string): boolean => {
 const heldBehindLimit = (services: Services, conversationId: string, voices: readonly QueuedItem["voice"][]): boolean =>
     voices.every((voice) => voice !== "person") && windowShut(services.conversations.state(conversationId)?.resume.held, Date.now());
 
-// How far ahead a scheduled send may be booked: past the longest allowance window a provider names (a week), a booking
-// is a mistake, not an appointment.
-const LONGEST_BOOKING_MS = 8 * 24 * 60 * 60 * 1000;
+// How far ahead a scheduled send may be booked. A time somebody chose is an appointment, and a month holds every one
+// worth keeping (a spent allowance reopens within a week); past it a booking is a slip, a year typed for a day.
+const LONGEST_BOOKING_MS = 31 * 24 * 60 * 60 * 1000;
+
+// What a scheduled send asks to wait for, as its fields name it: an instant, or another conversation's work; and which
+// conversation is asking.
+interface BookingAsk {
+    readonly conversationId: string;
+    readonly sendAt?: number | undefined;
+    readonly sendAfter?: string | undefined;
+}
 
 /**
- * When a person's scheduled send waits until, or undefined when it goes the ordinary way: an instant already past, a
- * turn live or a recovery going first (the message is for that, and waits behind it anyway), or a conversation not on
- * record yet, whose queue has no entry to be kept on across a restart and no card to be seen on. Clamped, not refused:
- * the person asked for it to wait, and a week is the longest wait there is.
+ * The booking a scheduled send waits by, undefined when there is nothing left to wait for (an instant already past, a
+ * conversation whose work is all in the workspace already: it goes now, the ordinary way), or why it cannot wait (the
+ * conversation it names cannot land anything). Clamped, not refused: the person asked for it to wait, and a month is the
+ * longest wait there is. A turn running here, or a recovery going first, books it all the same: the person chose when it
+ * goes, and a turn ending is not that moment.
  */
-const bookedFor = (services: Services, said: Said, now: number): number | undefined => {
-    const { sendAt, conversationId } = said.turn;
-    if (said.voice !== "person" || sendAt === undefined || sendAt <= now) {
-        return undefined;
+const bookingOfAsk = (services: Services, ask: BookingAsk, now: number): Booking | undefined | Unsaid => {
+    if (ask.sendAfter !== undefined) {
+        const why = unwaitable(services, ask.sendAfter, ask.conversationId);
+        if (why !== undefined) {
+            return { invalid: why };
+        }
+        return workLanded(services, ask.sendAfter, now) ? undefined : { after: { conversationId: ask.sendAfter, since: now } };
     }
-    if (services.agents.entry(conversationId) === undefined || goesFirst(services, conversationId)) {
-        return undefined;
+    return ask.sendAt === undefined || ask.sendAt <= now ? undefined : { until: Math.min(ask.sendAt, now + LONGEST_BOOKING_MS) };
+};
+
+// A person's words only: the sandbox's and an agent's never wait on a clock somebody set.
+const bookingFor = (services: Services, said: Said, now: number): Booking | undefined | Unsaid =>
+    said.voice === "person" ? bookingOfAsk(services, said.turn, now) : undefined;
+
+const unbookable = (booking: Booking | Unsaid | undefined): booking is Unsaid => booking !== undefined && ("invalid" in booking || "why" in booking);
+
+/**
+ * The opening a scheduled send writes for a conversation it opens: what that conversation's first turn would record at
+ * its `begin` (stream-agent.ts, runConversationTurn), from the same request, so the card is on the board and the booking
+ * survives a restart, and the turn that runs later finds its placement already decided. A runner nobody paired refuses
+ * here as it would there, rather than at a moment nobody is watching.
+ */
+const openingOf = async (services: Services, turn: Turn): Promise<BeginTurn | Unsaid> => {
+    const routed = withRuntimeDefaults(turn);
+    const runner = routed.placement?.kind === "runner" ? routed.placement.id : undefined;
+    if (runner !== undefined && !(await services.runners.enrolled(runner))) {
+        return { invalid: `No runner named "${runner}" is paired with this sandbox — pair one first, or leave placement out to run here.` };
     }
-    if (liveRunOf(services.conversations, conversationId) !== undefined || services.conversations.state(conversationId)?.phase.kind === "running") {
-        return undefined;
-    }
-    return Math.min(sendAt, now + LONGEST_BOOKING_MS);
+    return conversationIdentity(routed, turn.conversationId, { isolated: runner !== undefined || routed.isolated === true, runner });
 };
 
 // Whether the live turn takes words now: not being stopped, and not parked on a card, whose answer comes first.
@@ -263,7 +292,7 @@ interface Carrying {
 export const createAdmission = (
     services: () => Services,
     start: TurnStarter["start"],
-): Pick<TurnStarter, "say" | "steerIn" | "drain" | "unqueue" | "reword" | "release"> => {
+): Pick<TurnStarter, "say" | "steerIn" | "drain" | "unqueue" | "reword" | "release" | "reschedule"> => {
     // One piece of work per conversation at a time.
     const inTurn = keyedLock<string>();
     const carrying = new Map<string, readonly Carrying[]>();
@@ -434,6 +463,22 @@ export const createAdmission = (
         }
     };
 
+    // Holds the message and what waits with it by the booking, opening the conversation's entry when this message is
+    // the first it gets, so the card and the queue are on record from the press.
+    const book = async (item: Omit<QueuedItem, "revision">, booking: Booking): Promise<MessageReceipt | Unsaid> => {
+        const daemon = services();
+        const { conversationId } = item.turn;
+        const opening = daemon.agents.entry(conversationId) === undefined ? await openingOf(daemon, requestOf(item)) : undefined;
+        if (opening !== undefined && !("conversationId" in opening)) {
+            return opening;
+        }
+        await daemon.conversations.send(conversationId, { kind: "queue-scheduled", item, booking, ...opt("opening", opening) }).settled;
+        const booked: MessageReceipt = { delivered: "queued" };
+        kept(conversationId, new Map([[item.id, booked]]));
+        daemon.logger.info({ conversationId, until: booking.until, after: booking.after?.conversationId }, "admission: a scheduled send is booked");
+        return booked;
+    };
+
     return {
         say: (said) =>
             inTurn(said.turn.conversationId, async () => {
@@ -444,13 +489,13 @@ export const createAdmission = (
                 }
                 const item = named(said);
                 // A scheduled send is booked, not delivered: it waits in the queue, where every window draws it as
-                // scheduled, and the resume pass lets it go at its instant (turn-resume.ts, releaseBooked).
-                const until = bookedFor(services(), said, Date.now());
-                if (until !== undefined) {
-                    services().conversations.send(conversationId, { kind: "queue-scheduled", item, until });
-                    const booked: MessageReceipt = { delivered: "queued" };
-                    kept(conversationId, new Map([[item.id, booked]]));
-                    return booked;
+                // scheduled, and the resume pass lets it go when what it waits for comes (turn-resume.ts, releaseBooked).
+                const booking = bookingFor(services(), said, Date.now());
+                if (unbookable(booking)) {
+                    return booking;
+                }
+                if (booking !== undefined) {
+                    return book(item, booking);
                 }
                 const receipt = await admit(item);
                 if ("delivered" in receipt) {
@@ -490,6 +535,25 @@ export const createAdmission = (
                 const delivered = await deliver(conversationId);
                 kept(conversationId, delivered);
                 return opt("run", [...delivered.values()].find((receipt) => receipt.delivered === "started")?.run);
+            }),
+        // What waits, booked anew: held by whatever held it before or by nothing (messages behind a running turn), it now
+        // waits for this. Nothing left to wait for lets it go now, as a release would.
+        reschedule: ({ conversationId, sendAt, sendAfter }) =>
+            inTurn(conversationId, async () => {
+                const daemon = services();
+                if (daemon.conversations.queued(conversationId).items.length === 0) {
+                    return "missing";
+                }
+                const booking = bookingOfAsk(daemon, { conversationId, sendAt, sendAfter }, Date.now());
+                if (unbookable(booking)) {
+                    return { invalid: "invalid" in booking ? booking.invalid : booking.why };
+                }
+                if (booking === undefined) {
+                    daemon.conversations.send(conversationId, { kind: "queue-released" });
+                    kept(conversationId, await deliver(conversationId));
+                    return "released";
+                }
+                return daemon.conversations.send(conversationId, { kind: "queue-rescheduled", booking }).reply ? "booked" : "missing";
             }),
     };
 };

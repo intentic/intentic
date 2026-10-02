@@ -20,8 +20,14 @@ import type { AgentWorktrees } from "../worktrees/worktrees.js";
 // - ready: held work nobody has landed yet
 // - error/interrupted: a failure or a daemon death nobody has seen
 // - watching: an idle card parked on an armed watch is waiting for its wake, not finished
+// - waiting words: a message booked for later (a time, another agent's land) or held by a stop or a refusal is work
+//   still to come, which an archive would drop; a conversation a booking opened has no checkout or branch yet either,
+//   which the boot's vanished-checkout pass must not read as one ended for good
 export const archivable = (agent: AgentSummary): boolean =>
-    agent.archivedAt === undefined && (agent.status === "landed" || agent.status === "idle") && (agent.watches ?? []).length === 0;
+    agent.archivedAt === undefined &&
+    (agent.status === "landed" || agent.status === "idle") &&
+    (agent.watches ?? []).length === 0 &&
+    (agent.queue?.items.length ?? 0) === 0;
 
 // Aged out per the retention setting: the unattended sweep's rule, narrower than the board's Clear, which names its ids.
 // A conversation somebody's composer still holds an unsent message for is waiting on them, not finished, however long

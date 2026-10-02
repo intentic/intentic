@@ -12,6 +12,7 @@ import type {
     QueueEdit,
     QueueResume,
     QueueResumed,
+    QueueSchedule,
     ResumeReason,
     ResumeRouting,
     SessionOwner,
@@ -47,9 +48,10 @@ export type TurnInput = AgentTurn & {
     // Whose words `title` is when they are not a head cut from the prompt: `model`, a name an agent chose (a parent's
     // description of the child it spawns), which the naming pass keeps. Read only by the turn that opens the conversation.
     readonly titleSource?: "model";
-    // The conversation's own answers to the sandbox-wide defaults it opens with: a spawned child's to a spent allowance.
-    // Read only by the turn that opens the conversation, so no later turn overwrites an answer its owner gave since.
-    readonly postures?: { readonly limit?: LimitPolicy };
+    // The conversation's own answers to the sandbox-wide defaults it opens with: a spawned child's to a spent allowance,
+    // a maintainer's to whether finished work lands by itself (`conversationAutoLand`). Read only by the turn that opens
+    // the conversation, so no later turn overwrites an answer its owner gave since.
+    readonly postures?: { readonly limit?: LimitPolicy; readonly autoLand?: boolean };
 };
 
 // A turn as the engine takes it: provider and loop named, by the port it came in through (withRuntimeDefaults), so
@@ -81,6 +83,10 @@ export type Unsteered = { readonly why: string } | { readonly invalid: string };
 // Why words went nowhere, not even the queue: a reference escapes the workspace (`invalid` names it), or the conversation
 // is archived and they are not a person's (`why` says so).
 export type Unsaid = { readonly invalid: string } | { readonly why: string };
+
+// What a reschedule did: booked what waits (`booked`), let it go because what it would wait for has already come
+// (`released`), found nothing waiting (`missing`), or was asked to wait for a conversation that cannot land (`invalid`).
+export type Rescheduled = "booked" | "released" | "missing" | { readonly invalid: string };
 
 // Words for a conversation from whoever speaks, and the turn they start should they start one.
 export interface Said {
@@ -140,6 +146,9 @@ export interface TurnStarter {
     readonly reword: (edit: QueueEdit) => Promise<QueueChange>;
     // Lets a held queue go, re-routed where the press names who serves it.
     readonly release: (resume: QueueResume) => Promise<QueueResumed>;
+    // Books what waits for another instant or for after another conversation's work lands; what that leaves waiting,
+    // or why it could not (nothing waits, or the conversation to wait for cannot land anything).
+    readonly reschedule: (schedule: QueueSchedule) => Promise<Rescheduled>;
     // An answer to a card some turn is parked on: `missing` for no such card, `refused` for one addressed elsewhere.
     readonly reply: (reply: AgentReply) => Promise<"settled" | "missing" | { readonly refused: string }>;
     // Hard-cancels the named run, or whatever is live for a caller that cannot name one, and returns once it has

@@ -65,9 +65,10 @@ export const useHeldQueue = () => {
         const said = notice.value?.text ?? cardMemory.value?.text;
         return said === undefined ? undefined : memoryReading(said);
     });
-    // When a scheduled send goes by itself (ms); only while the queue is scheduled.
+    // When a scheduled send goes by itself (ms), or whose landed work it waits for; only while the queue is scheduled.
     const until = computed(() => (queuePaused.value === `scheduled` ? conversation.value.queue.value?.until : undefined));
-    return { held, notice, reason, detail, until };
+    const after = computed(() => (queuePaused.value === `scheduled` ? conversation.value.queue.value?.after : undefined));
+    return { held, notice, reason, detail, until, after };
 };
 
 /**

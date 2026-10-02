@@ -289,19 +289,139 @@ describe("the conversation's queue", () => {
         gates[1]?.();
     });
 
-    it("sends a scheduled message at once where there is nothing to hold it on: a conversation not on record yet, or a time already past", async () => {
-        const { gates, services: turns } = unsteerableTurns();
+    // A message that opens its conversation can wait too: the card is on the board from the press, scheduled, with the
+    // answers the opening message gave, and the turn it starts at its time is that conversation's first.
+    it("opens the conversation on the board for a scheduled first message, and starts its first turn at the time", async () => {
+        const { gates, prompts, services: turns } = unsteerableTurns();
         const client = clientFor(createApp(turns));
-        expect(await client.agent.run({ prompt: "first words", conversationId: "conv-new-at", agent: "grok", sendAt: Date.now() + 60_000 })).toMatchObject({
-            delivered: "started",
+        const at = Date.now() + 60 * 60 * 1000;
+        expect(
+            await client.agent.run({
+                prompt: "write the migration guide",
+                conversationId: "conv-new-at",
+                agent: "grok",
+                isolated: true,
+                messageId: "m-first",
+                sendAt: at,
+                conversationAutoLand: true,
+            }),
+        ).toEqual({ delivered: "queued" });
+        const card = (await client.agents.list()).agents.find((agent) => agent.id === "conv-new-at");
+        expect(card).toMatchObject({
+            status: "idle",
+            title: "Write the migration guide",
+            branch: "agent/conv-new-at",
+            autoLand: true,
+            queue: { items: [{ id: "m-first", text: "write the migration guide" }], paused: "scheduled", until: at },
         });
+        expect(gates).toHaveLength(0);
+
+        await createTurnResumeScheduler(turns).tick(at);
         await waitFor(() => expect(gates).toHaveLength(1), SETTLES);
+        expect(prompts[0]).toContain("write the migration guide");
+        expect((await queueOf(client, "conv-new-at"))?.items).toEqual([]);
         gates[0]?.();
         await collect(await client.agent.attach({ conversationId: "conv-new-at" }));
+
+        // A time already past has nothing to wait for.
         expect(await client.agent.run({ prompt: "late", conversationId: "conv-new-at", agent: "grok", sendAt: Date.now() - 1 })).toMatchObject({
             delivered: "started",
         });
         await waitFor(() => expect(gates).toHaveLength(2), SETTLES);
+        gates[1]?.();
+    });
+
+    // Scheduling is the person choosing when the words go: a turn running when they press is not that moment.
+    it("holds a send booked while a turn runs, and lets it go at its time rather than when that turn ends", async () => {
+        const { gates, prompts, services: turns } = unsteerableTurns();
+        const client = clientFor(createApp(turns));
+        await startedRun(client, { prompt: "draft the release notes", conversationId: "conv-live-at", agent: "grok" });
+        await waitFor(() => expect(gates).toHaveLength(1), SETTLES);
+        const at = Date.now() + 60 * 60 * 1000;
+        expect(await client.agent.run({ prompt: "then tag it", conversationId: "conv-live-at", agent: "grok", sendAt: at })).toEqual({ delivered: "queued" });
+
+        gates[0]?.();
+        await collect(await client.agent.attach({ conversationId: "conv-live-at" }));
+        expect(await queueOf(client, "conv-live-at")).toMatchObject({ items: [{ text: "then tag it" }], paused: "scheduled", until: at });
+        expect(gates).toHaveLength(1);
+
+        await createTurnResumeScheduler(turns).tick(at);
+        await waitFor(() => expect(gates).toHaveLength(2), SETTLES);
+        expect(prompts[1]).toContain("then tag it");
+        gates[1]?.();
+    });
+
+    // Work that builds on another agent's waits for that agent's work to be in the workspace: here a conversation in the
+    // shared tree, whose work is there as soon as its turn ends clean.
+    it("holds a message until the conversation it waits for has finished with its work in, and lets it go then", async () => {
+        const { gates, prompts, services: turns } = unsteerableTurns();
+        const client = clientFor(createApp(turns));
+        await startedRun(client, { prompt: "rename the auth module", conversationId: "conv-first", agent: "grok" });
+        await waitFor(() => expect(gates).toHaveLength(1), SETTLES);
+
+        expect(
+            await client.agent.run({ prompt: "update the docs for it", conversationId: "conv-next", agent: "grok", messageId: "m-next", sendAfter: "conv-first" }),
+        ).toEqual({ delivered: "queued" });
+        expect(await queueOf(client, "conv-next")).toEqual({
+            items: [{ id: "m-next", text: "update the docs for it", voice: "person", queuedAt: expect.any(Number), revision: 1 }],
+            revision: 1,
+            paused: "scheduled",
+            after: "conv-first",
+        });
+        const pass = createTurnResumeScheduler(turns);
+        await pass.tick();
+        expect(gates).toHaveLength(1);
+
+        gates[0]?.();
+        await collect(await client.agent.attach({ conversationId: "conv-first" }));
+        await pass.tick();
+        await waitFor(() => expect(gates).toHaveLength(2), SETTLES);
+        expect(prompts[1]).toContain("update the docs for it");
+        gates[1]?.();
+    });
+
+    it("sends at once after a conversation with nothing left to land, and refuses to wait for one that cannot land", async () => {
+        const { gates, services: turns } = unsteerableTurns();
+        const client = clientFor(createApp(turns));
+        await startedRun(client, { prompt: "rename the auth module", conversationId: "conv-done", agent: "grok" });
+        await waitFor(() => expect(gates).toHaveLength(1), SETTLES);
+        gates[0]?.();
+        await collect(await client.agent.attach({ conversationId: "conv-done" }));
+
+        expect(await client.agent.run({ prompt: "update the docs", conversationId: "conv-after-done", agent: "grok", sendAfter: "conv-done" })).toMatchObject({
+            delivered: "started",
+        });
+        await waitFor(() => expect(gates).toHaveLength(2), SETTLES);
+        gates[1]?.();
+        expect(await errorCode(client.agent.run({ prompt: "wait for nobody", conversationId: "conv-orphan", agent: "grok", sendAfter: "conv-nobody" }))).toBe(
+            "BAD_REQUEST",
+        );
+        expect(await errorCode(client.agent.run({ prompt: "wait for myself", conversationId: "conv-self", agent: "grok", sendAfter: "conv-self" }))).toBe(
+            "BAD_REQUEST",
+        );
+    });
+
+    // What waits can be re-timed from any window: another instant, another conversation's land, or now when that has come.
+    it("re-times what waits, and lets it go when what it would wait for has already come", async () => {
+        const { gates, prompts, services: turns } = unsteerableTurns();
+        const client = clientFor(createApp(turns));
+        const at = Date.now() + 60 * 60 * 1000;
+        await client.agent.run({ prompt: "write the guide", conversationId: "conv-retime", agent: "grok", sendAt: at });
+        await startedRun(client, { prompt: "rename the auth module", conversationId: "conv-other", agent: "grok" });
+        await waitFor(() => expect(gates).toHaveLength(1), SETTLES);
+
+        expect(await client.agent.queueSchedule({ conversationId: "conv-retime", sendAt: at + 1_000 })).toMatchObject({ paused: "scheduled", until: at + 1_000 });
+        const waiting = await client.agent.queueSchedule({ conversationId: "conv-retime", sendAfter: "conv-other" });
+        expect(waiting).toMatchObject({ paused: "scheduled", after: "conv-other" });
+        expect(waiting).not.toHaveProperty("until");
+        expect(await errorCode(client.agent.queueSchedule({ conversationId: "conv-retime", sendAfter: "conv-nobody" }))).toBe("BAD_REQUEST");
+        expect(await errorCode(client.agent.queueSchedule({ conversationId: "conv-empty", sendAt: at }))).toBe("NOT_FOUND");
+
+        gates[0]?.();
+        await collect(await client.agent.attach({ conversationId: "conv-other" }));
+        expect(await client.agent.queueSchedule({ conversationId: "conv-retime", sendAt: Date.now() - 1 })).toEqual({ items: [], revision: expect.any(Number) });
+        await waitFor(() => expect(gates).toHaveLength(2), SETTLES);
+        expect(prompts[1]).toContain("write the guide");
         gates[1]?.();
     });
 

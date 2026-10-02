@@ -2,6 +2,8 @@ import {
     type AgentSearchResult,
     type AgentSummary,
     type AttachFrame,
+    type ConversationQueue,
+    deriveTitle,
     type DeviceFlowLine,
     type Info,
     isTurnBreakPolicy,
@@ -311,6 +313,150 @@ const sandboxFlow = (slug: string, op: string): Frames<DeviceFlowLine> =>
 // Prefixes for the rail's isolated extension runs (xt-/dg-/mt-), refused here; a prefixless run still works.
 const EXTENSION_RUN_PREFIXES = [`xt-`, `dg-`, `mt-`];
 
+// What waits for a conversation's next turn, as the daemon's queue holds it (conversation-queue.ts): messages booked to
+// go by themselves at a time or once another agent's work has landed, and the doors that send them sooner, re-time,
+// reword or take them back. Kept on the card, as the daemon's roster carries it, so every surface reads one copy.
+const NO_QUEUE: ConversationQueue = { items: [], revision: 0 };
+const queueOf = (id: string): ConversationQueue => roster.agents.find((agent) => agent.id === id)?.queue ?? NO_QUEUE;
+const writeQueue = (id: string, queue: ConversationQueue): ConversationQueue => {
+    amendAgent(id, ({ queue: _old, ...card }) => (queue.items.length === 0 && queue.revision === 0 ? card : { ...card, queue }));
+    return queue;
+};
+
+// A booking's hold, or nothing when what it would wait for has already come: a time past, or an agent with nothing
+// running and nothing left to land (work-landed.ts, read here off its card).
+const holdOf = (booking: { readonly sendAt?: number | undefined; readonly sendAfter?: string | undefined }): Pick<ConversationQueue, `until` | `after`> | undefined => {
+    if (booking.sendAfter !== undefined) {
+        const awaited = roster.agents.find((agent) => agent.id === booking.sendAfter);
+        const done = awaited === undefined || ((awaited.status === `landed` || awaited.status === `idle`) && (awaited.queue?.items.length ?? 0) === 0);
+        return done ? undefined : { after: booking.sendAfter };
+    }
+    return booking.sendAt === undefined || booking.sendAt <= Date.now() ? undefined : { until: booking.sendAt };
+};
+
+// One timer per booked time: the daemon's resume pass, for a page that is open for minutes rather than days.
+const bookingTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const LONGEST_TIMER_MS = 2 ** 31 - 1;
+const armBooking = (id: string, until: number | undefined): void => {
+    clearTimeout(bookingTimers.get(id));
+    bookingTimers.delete(id);
+    if (until !== undefined) {
+        bookingTimers.set(id, setTimeout(() => letGo(id), Math.min(Math.max(0, until - Date.now()), LONGEST_TIMER_MS)));
+    }
+};
+
+// What waits goes out as one turn, the words joined as the daemon joins them; the run it started, if anything waited.
+const letGo = (id: string): string | undefined => {
+    const queue = queueOf(id);
+    armBooking(id, undefined);
+    if (queue.items.length === 0) {
+        return undefined;
+    }
+    writeQueue(id, { items: [], revision: queue.revision + 1 });
+    return startTurn({ conversationId: id, prompt: queue.items.map((item) => item.text).join(`\n\n`) }).run;
+};
+
+// The card a booked first message opens, as the daemon's registry writes one before any turn runs: idle, on its own
+// branch, titled after its words, with the landing answer it opened with.
+const bookedCard = (input: SandboxHandlerInput<`agent`, `run`>, id: string, now: number): AgentSummary => {
+    const card: AgentSummary = {
+        id,
+        title: deriveTitle(input.prompt),
+        status: `idle`,
+        provider: input.agent ?? `claude`,
+        harness: input.harness ?? `native`,
+        updatedAt: now,
+        attention: { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false },
+    };
+    if (input.model !== undefined) {
+        card.model = input.model;
+    }
+    if (input.isolated === true) {
+        card.branch = `agent/${id}`;
+    }
+    if (input.conversationAutoLand !== undefined) {
+        card.autoLand = input.conversationAutoLand;
+    }
+    return card;
+};
+
+// A message booked for later: it joins the queue and holds it by the newest booking, opening the conversation's card
+// when this is its first message. Nothing starts.
+const book = (input: SandboxHandlerInput<`agent`, `run`>, id: string, hold: Pick<ConversationQueue, `until` | `after`>) => {
+    const now = Date.now();
+    if (!roster.agents.some((agent) => agent.id === id)) {
+        roster.agents = [bookedCard(input, id, now), ...roster.agents];
+    }
+    const queue = queueOf(id);
+    const item = { id: input.messageId ?? crypto.randomUUID(), text: input.prompt, voice: `person` as const, queuedAt: now, revision: queue.revision + 1 };
+    writeQueue(id, { items: [...queue.items, item], revision: item.revision, paused: `scheduled`, ...hold });
+    armBooking(id, hold.until);
+    return { delivered: `queued` as const };
+};
+
+const sayOrBook = (input: SandboxHandlerInput<`agent`, `run`>): { delivered: `started`; run: string } | { delivered: `queued` } => {
+    const id = input.conversationId ?? FEATURED_ID;
+    const hold = holdOf(input);
+    return hold === undefined ? startTurn(input) : book(input, id, hold);
+};
+
+// The queue's four doors, each refused as the daemon refuses it: nothing waiting, or a message changed since it was read.
+const queueDoors = {
+    queueSchedule: ({ conversationId, sendAt, sendAfter }: SandboxHandlerInput<`agent`, `queueSchedule`>): ConversationQueue => {
+        const queue = queueOf(conversationId);
+        if (queue.items.length === 0) {
+            return refuse(`Nothing waits in that conversation's queue to schedule.`, 404);
+        }
+        const hold = holdOf({ sendAt, sendAfter });
+        if (hold === undefined) {
+            letGo(conversationId);
+            return queueOf(conversationId);
+        }
+        const { until: _until, after: _after, ...rest } = queue;
+        armBooking(conversationId, hold.until);
+        return writeQueue(conversationId, { ...rest, revision: queue.revision + 1, paused: `scheduled`, ...hold });
+    },
+    queueResume: ({ conversationId }: SandboxHandlerInput<`agent`, `queueResume`>): SandboxHandlerOutput<`agent`, `queueResume`> => {
+        const run = letGo(conversationId);
+        const answer: SandboxHandlerOutput<`agent`, `queueResume`> = { queue: queueOf(conversationId) };
+        if (run !== undefined) {
+            answer.run = run;
+        }
+        return answer;
+    },
+    queueRemove: ({ conversationId, id, revision }: SandboxHandlerInput<`agent`, `queueRemove`>): ConversationQueue => {
+        const queue = queueOf(conversationId);
+        const item = queue.items.find((waiting) => waiting.id === id) ?? refuse(`That message is no longer waiting.`, 404);
+        if (item.revision !== revision) {
+            return refuse(`That message was changed since you read it.`, 412);
+        }
+        const items = queue.items.filter((waiting) => waiting !== item);
+        if (items.length === 0) {
+            armBooking(conversationId, undefined);
+            return writeQueue(conversationId, { items, revision: queue.revision + 1 });
+        }
+        return writeQueue(conversationId, { ...queue, items, revision: queue.revision + 1 });
+    },
+    queueEdit: ({ conversationId, id, revision, text }: SandboxHandlerInput<`agent`, `queueEdit`>): ConversationQueue => {
+        const queue = queueOf(conversationId);
+        const item = queue.items.find((waiting) => waiting.id === id) ?? refuse(`That message is no longer waiting.`, 404);
+        if (item.revision !== revision) {
+            return refuse(`That message was changed since you read it.`, 412);
+        }
+        const next = queue.revision + 1;
+        return writeQueue(conversationId, { ...queue, items: queue.items.map((waiting) => (waiting === item ? { ...waiting, text, revision: next } : waiting)), revision: next });
+    },
+};
+
+// What waited on an agent's land goes once that land is in.
+const releaseAfter = (landed: string): void => {
+    for (const agent of roster.agents) {
+        if (agent.queue?.paused === `scheduled` && agent.queue.after === landed) {
+            letGo(agent.id);
+        }
+    }
+};
+
 const startTurn = ({ conversationId = FEATURED_ID, prompt }: SandboxHandlerInput<`agent`, `run`>): { delivered: `started`; run: string } => {
     if (EXTENSION_RUN_PREFIXES.some((prefix) => conversationId.startsWith(prefix))) {
         return refuse(`This is the demo workspace: a run needs your repositories and a sandbox to walk them in. Start one and this button works.`);
@@ -369,6 +515,7 @@ const land = (id: string): ReturnType<typeof landAgentDelta> => {
     for (const listener of listeners) {
         listener({ kind: `workspaceChanged`, paths });
     }
+    releaseAfter(id);
     return result;
 };
 
@@ -570,7 +717,8 @@ export const procedures = {
         unsent: ({ id, at }) => agentAnswer(amendAgent(id, ({ unsentAt: _cleared, ...card }) => (at === null ? card : { ...card, unsentAt: at }))),
         react: reactToAgent,
         assign: assignAgent,
-        autoLand: ({ id }) => agentAnswer(patchAgent(id, {})),
+        // As the registry does: `null` clears the conversation's own answer back to the sandbox's.
+        autoLand: ({ id, autoLand }) => agentAnswer(amendAgent(id, ({ autoLand: _held, ...card }) => (autoLand === null ? card : { ...card, autoLand }))),
         breakPolicy: setBreakPolicy,
         keepWarm: keepWarmAgent,
         // Ends a job the way the daemon's answer reads once it has: stopped by the person, its wait and hand-over over.
@@ -594,7 +742,8 @@ export const procedures = {
         unarchive: () => ({ moved: [], rev: roster.rev }),
     },
     agent: {
-        run: startTurn,
+        run: sayOrBook,
+        ...queueDoors,
         attach: ({ conversationId }) => attach(conversationId),
         reply,
         steer: () => ({ delivered: `steered` as const }),

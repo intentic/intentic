@@ -4,6 +4,7 @@ import { otherBoxes } from "../../../sandbox/live/fleetAcross";
 import { modelLabelFor } from "../../accounts/providerCatalog";
 import type { QuickPick, QuickPickSources } from "../../composer/composerQuickPick";
 import { drillMention, fileMention, mentionQueryAt, replaceMention } from "../../composer/useMentions";
+import { type SendLater, timeChoices } from "../../composer/sendLater";
 import { chatPickable, pickerEntries } from "../../models/modelPickerState";
 import { effortsFor } from "../../models/run-settings/effortScale";
 import { ensureProviderCommands } from "../../models/useChat-catalog";
@@ -18,7 +19,7 @@ import { placeConversation } from "./composerControls";
 
 // The pill whose value an `@` pick just changed, pulsed once: the token vanishes from the text, so the eye is sent to
 // where the setting now lives.
-export type FlashedControl = `persona` | `placement` | `model` | `effort`;
+export type FlashedControl = `persona` | `placement` | `model` | `effort` | `later` | `land`;
 const FLASH_MS = 700;
 
 export interface PopoversHost {
@@ -37,6 +38,19 @@ export interface PopoversHost {
     readonly steered: Readonly<Ref<boolean>>;
     // A guest is shown no tree, so nothing to mention.
     readonly isGuest: Readonly<Ref<boolean>>;
+    // When the message goes: whether a booking is offered here, the agents it can wait for, and the panel for a time of
+    // the reader's own, which a typed token cannot hold.
+    readonly later: {
+        readonly offered: Readonly<Ref<boolean>>;
+        readonly targets: Readonly<Ref<readonly { readonly id: string; readonly title: string }[]>>;
+        readonly open: () => void;
+    };
+    // Whether finished work lands by itself (composerLanding.ts), where that is the reader's to answer.
+    readonly landing: {
+        readonly offered: Readonly<Ref<boolean>>;
+        readonly lands: Readonly<Ref<boolean>>;
+        readonly set: (on: boolean) => void;
+    };
 }
 
 // What the `@` picker may change, mirroring the pill row control for control: a kind the row refuses is `undefined`.
@@ -67,7 +81,15 @@ const quickSourcesOf = (chat: Conversation, host: PopoversHost): QuickPickSource
                   isReady: providerReady,
               },
         effort: steered || selection.auto.value || !selection.capabilities.value.effort ? undefined : effortSourceOf(chat),
+        // Both are this sandbox's, and neither is the send's while a workflow takes it, as their pills say.
+        send: steered || host.placement.remote.value || !host.later.offered.value ? undefined : sendSourceOf(chat, host.later.targets.value),
+        land: steered || host.placement.remote.value || !host.landing.offered.value ? undefined : { lands: host.landing.lands.value },
     };
+};
+// Read at the token, not ticking: the list is open for the seconds a pick takes.
+const sendSourceOf = (chat: Conversation, targets: readonly { readonly id: string; readonly title: string }[]): NonNullable<QuickPickSources[`send`]> => {
+    const now = Date.now();
+    return { picked: chat.sendLater.value, now, choices: timeChoices(now), targets };
 };
 const effortSourceOf = (chat: Conversation): NonNullable<QuickPickSources[`effort`]> => {
     const { selection } = chat;
@@ -75,8 +97,14 @@ const effortSourceOf = (chat: Conversation): NonNullable<QuickPickSources[`effor
 };
 
 // A setting pick goes through the same setter its pill uses and leaves no text behind; which pill it changed.
-const applyQuickPick = (chat: Conversation, pick: QuickPick, pickPersona: (id: string | undefined) => void): FlashedControl | undefined => {
+const applyQuickPick = (chat: Conversation, pick: QuickPick, host: Pick<PopoversHost, "pickPersona" | "later" | "landing">): FlashedControl | undefined => {
+    const { pickPersona } = host;
     switch (pick.kind) {
+        case `send`:
+            return applySend(chat, pick.to, host.later.open);
+        case `land`:
+            host.landing.set(pick.on);
+            return `land`;
         case `persona`:
             pickPersona(pick.id);
             return `persona`;
@@ -92,6 +120,17 @@ const applyQuickPick = (chat: Conversation, pick: QuickPick, pickPersona: (id: s
         default:
             return undefined;
     }
+};
+
+// Now clears the pick; a time of the reader's own opens the panel, since no typed token holds a date; anything else is
+// the pick, whose pill pulses.
+const applySend = (chat: Conversation, to: SendLater | `now` | `custom`, openPanel: () => void): FlashedControl | undefined => {
+    if (to === `custom`) {
+        openPanel();
+        return undefined;
+    }
+    chat.sendLater.value = to === `now` ? undefined : to;
+    return to === `now` ? undefined : `later`;
 };
 
 export const useComposerPopovers = (host: PopoversHost) => {
@@ -196,7 +235,7 @@ export const useComposerPopovers = (host: PopoversHost) => {
                 applyDraftEdit(result.text, result.caret);
                 return;
             }
-            const control = applyQuickPick(host.view.conversation.value, pick, host.pickPersona);
+            const control = applyQuickPick(host.view.conversation.value, pick, host);
             const result = replaceMention(draft.value, mention, caret.value, ``);
             applyDraftEdit(result.text, result.caret);
             if (control !== undefined) {

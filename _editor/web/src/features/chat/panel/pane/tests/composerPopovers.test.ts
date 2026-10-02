@@ -36,6 +36,8 @@ const composerOf = () => {
         placement: { remote: ref(false), shown: ref(true), runners: ref<RunnerSummary[]>([]) },
         steered: ref(false),
         isGuest: ref(false),
+        later: { offered: ref(true), targets: ref([{ id: `brave-otter`, title: `Fix the login bug` }]), open: jest.fn() },
+        landing: { offered: ref(true), lands: ref(false), set: jest.fn() },
     };
     let lists: ReturnType<typeof useComposerPopovers> | undefined;
     const app = createApp({
@@ -84,12 +86,19 @@ describe(`the @ list`, () => {
             Object.entries(lists.quickSources.value)
                 .filter(([, source]) => source !== undefined)
                 .map(([kind]) => kind);
-        expect(offered()).toEqual([`persona`, `sandbox`, `model`, `effort`]);
+        expect(offered()).toEqual([`persona`, `sandbox`, `model`, `effort`, `send`, `land`]);
 
         // Placement latches with the branch once the board has seen the chat; Auto owns the effort question.
         chat.registered.value = true;
         chat.selection.apply({ kind: `set`, picks: { auto: true } });
+        expect(offered()).toEqual([`persona`, `model`, `send`, `land`]);
+
+        // Booking and landing are offered where their pills are.
+        host.later.offered.value = false;
+        host.landing.offered.value = false;
         expect(offered()).toEqual([`persona`, `model`]);
+        host.later.offered.value = true;
+        host.landing.offered.value = true;
 
         // A workflow badge greys the setting pills, and the list withholds the same kinds.
         host.steered.value = true;
@@ -148,6 +157,47 @@ describe(`an @ pick`, () => {
         expect(lists.flashed.value).toBe(`effort`);
         jest.advanceTimersByTime(700);
         expect(lists.flashed.value).toBeUndefined();
+    });
+
+    it(`books the next message for a time or another agent's land, and lets Now take it back`, async () => {
+        const { chat, host, type, lists } = composerOf();
+        type(`ship it @send:tom`);
+        lists.pickMention({ kind: `send`, key: `send:morning`, label: `Tomorrow morning`, detail: undefined, to: { kind: `at`, at: 9_000 }, current: false });
+        await nextTick();
+        expect(chat.sendLater.value).toEqual({ kind: `at`, at: 9_000 });
+        expect(chat.draft.value).toBe(`ship it `);
+        expect(lists.flashed.value).toBe(`later`);
+
+        type(`@send:login`);
+        lists.pickMention({
+            kind: `send`,
+            key: `send:after:brave-otter`,
+            label: `Fix the login bug`,
+            detail: undefined,
+            to: { kind: `after`, conversationId: `brave-otter` },
+            current: false,
+        });
+        expect(chat.sendLater.value).toEqual({ kind: `after`, conversationId: `brave-otter` });
+
+        type(`@send:now`);
+        lists.pickMention({ kind: `send`, key: `send:now`, label: `Now`, detail: undefined, to: `now`, current: false });
+        expect(chat.sendLater.value).toBeUndefined();
+
+        // A time of the reader's own is the panel's: no typed token holds a date.
+        type(`@send:pick`);
+        lists.pickMention({ kind: `send`, key: `send:custom`, label: `Pick a date and time…`, detail: undefined, to: `custom`, current: false });
+        expect(host.later.open).toHaveBeenCalledTimes(1);
+        expect(chat.sendLater.value).toBeUndefined();
+    });
+
+    it(`answers whether its work lands by itself through the landing control, and pulses its pill`, () => {
+        const { host, type, lists } = composerOf();
+        type(`@land:`);
+
+        lists.pickMention({ kind: `land`, key: `land:on`, label: `Lands by itself`, detail: undefined, on: true, current: false });
+
+        expect(host.landing.set.mock.calls).toEqual([[true]]);
+        expect(lists.flashed.value).toBe(`land`);
     });
 
     it(`picks a persona the way its pill does`, () => {

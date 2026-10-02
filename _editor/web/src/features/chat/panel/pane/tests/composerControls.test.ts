@@ -40,6 +40,7 @@ const rowOf = () => {
         mode: ref<HTMLElement>(document.createElement(`button`)),
         persona: ref<HTMLElement>(),
         runThrough: ref<HTMLElement>(),
+        later: ref<HTMLElement>(),
         more: ref<HTMLElement>(document.createElement(`button`)),
     };
     let row: ReturnType<typeof useComposerControls> | undefined;
@@ -75,14 +76,20 @@ afterEach(() => {
 describe(`the row and its overflow`, () => {
     it(`keeps each control in the overflow at this chat's default, and brings a set one into the row`, () => {
         const { chat, mode, runState, row } = rowOf();
-        expect(keys(row)).toEqual([`mode`, `persona`, `runThrough`]);
-        expect(row.inRow.value).toEqual({ mode: false, persona: false, runThrough: false, voice: false });
+        expect(keys(row)).toEqual([`mode`, `persona`, `runThrough`, `land`, `later`]);
+        expect(row.inRow.value).toEqual({ mode: false, persona: false, runThrough: false, voice: false, land: false, later: false });
 
         mode.value = `plan`;
         chat.selection.apply({ kind: `set`, picks: { actsAs: `backend` } });
+        chat.autoLandDraft.value = true;
+        chat.sendLater.value = { kind: `at`, at: Date.now() + 60 * 60 * 1_000 };
+        expect(keys(row)).toEqual([`runThrough`]);
+        expect(row.inRow.value).toEqual({ mode: true, persona: true, runThrough: false, voice: false, land: true, later: true });
+
+        // A loop takes the send somewhere a booking cannot follow: the time picked waits, unshown, until it is gone.
         runState.value = `loop`;
         expect(keys(row)).toEqual([]);
-        expect(row.inRow.value).toEqual({ mode: true, persona: true, runThrough: true, voice: false });
+        expect(row.inRow.value).toEqual({ mode: true, persona: true, runThrough: true, voice: false, land: true, later: false });
     });
 
     it(`offers writing as the agent once the chat has somewhere to place the words`, () => {
@@ -91,11 +98,12 @@ describe(`the row and its overflow`, () => {
 
         // On the roster: the daemon has an entry to place into, whatever this tab has latched.
         rostered.value = [`c1`];
-        expect(keys(row)).toEqual([`mode`, `persona`, `runThrough`, `voice`]);
+        expect(keys(row)).toEqual([`mode`, `persona`, `runThrough`, `voice`, `land`, `later`]);
 
+        // Registered, landing is the card's to answer: with no card on its branch in this window, it is not offered.
         rostered.value = [];
         chat.registered.value = true;
-        expect(keys(row)).toEqual([`mode`, `persona`, `runThrough`, `voice`]);
+        expect(keys(row)).toEqual([`mode`, `persona`, `runThrough`, `voice`, `later`]);
 
         row.voiceAgent.value = true;
         expect(row.inRow.value.voice).toBe(true);
@@ -110,9 +118,9 @@ describe(`the row and its overflow`, () => {
         expect(row.remote.value).toBe(true);
     });
 
-    it(`hands a row to the picker that owns it, closing itself first; the voice row is the press`, () => {
-        const { runThrough, row } = rowOf();
-        const picks = [`mode`, `persona`, `runThrough`, `voice`] as const;
+    it(`hands a row to the picker that owns it, closing itself first; the voice and landing rows are the press`, () => {
+        const { chat, runThrough, row } = rowOf();
+        const picks = [`mode`, `persona`, `runThrough`, `voice`, `land`, `later`] as const;
         for (const control of picks) {
             row.moreOpen.value = true;
             row.openFromMore(control);
@@ -123,6 +131,9 @@ describe(`the row and its overflow`, () => {
         expect(row.personaOpen.value).toBe(true);
         expect(runThrough.open.value).toBe(true);
         expect(row.voiceAgent.value).toBe(true);
+        // Unregistered, the chat holds its own answer until its opening message carries it.
+        expect(chat.autoLandDraft.value).toBe(true);
+        expect(row.laterOpen.value).toBe(true);
     });
 
     it(`opens a picker over its own chip while that rides the row, and over the overflow button otherwise`, () => {
@@ -136,27 +147,30 @@ describe(`the row and its overflow`, () => {
 });
 
 describe(`what Send means`, () => {
-    it(`drops the agent's voice and both run-through picks once an edit is armed`, async () => {
-        const { editing, runThrough, row } = rowOf();
+    it(`drops the agent's voice, both run-through picks and a time picked once an edit is armed`, async () => {
+        const { chat, editing, runThrough, row } = rowOf();
         row.voiceAgent.value = true;
+        chat.sendLater.value = { kind: `after`, conversationId: `brave-otter` };
 
         editing.value = { id: 1, role: `user`, text: `first` };
         await nextTick();
 
         expect(row.voiceAgent.value).toBe(false);
         expect(runThrough.clear).toHaveBeenCalledTimes(1);
+        expect(chat.sendLater.value).toBeUndefined();
     });
 
     it(`gives a workflow badge the composer: the voice disarms and the panels its greyed pills open close`, async () => {
         const { steered, row } = rowOf();
-        for (const open of [row.voiceAgent, row.modelOpen, row.modeOpen, row.personaOpen, row.moreOpen, row.placementOpen]) {
+        for (const open of [row.voiceAgent, row.modelOpen, row.modeOpen, row.personaOpen, row.laterOpen, row.moreOpen, row.placementOpen]) {
             open.value = true;
         }
 
         steered.value = true;
         await nextTick();
 
-        expect([row.voiceAgent, row.modelOpen, row.modeOpen, row.personaOpen, row.moreOpen].map((open) => open.value)).toEqual([
+        expect([row.voiceAgent, row.modelOpen, row.modeOpen, row.personaOpen, row.laterOpen, row.moreOpen].map((open) => open.value)).toEqual([
+            false,
             false,
             false,
             false,

@@ -40,14 +40,33 @@ const QueuedItemSchema = z.object({
 });
 export type QueuedItem = z.infer<typeof QueuedItemSchema>;
 
+// The other thing a `scheduled` hold can wait for: another conversation's work, in the workspace (turn-resume.ts,
+// releaseBooked). `since` is when the booking was made: a stopped or failed conversation counts only once work of its
+// was landed after it.
+const AfterLandSchema = z.object({ conversationId: z.string(), since: z.number() });
+export type AfterLand = z.infer<typeof AfterLandSchema>;
+
 export const TurnQueueSchema = z.object({
     items: z.array(QueuedItemSchema),
     revision: z.number(),
     paused: QueuePauseSchema.optional(),
     // When a `scheduled` hold lets its messages go by itself (ms); nothing else carries an instant.
     until: z.number().optional(),
+    // Or whose landed work it lets them go after, in place of an instant; only on a `scheduled` hold too.
+    after: AfterLandSchema.optional(),
 });
 export type TurnQueue = z.infer<typeof TurnQueueSchema>;
+
+// What a `scheduled` hold waits for: an instant, or another conversation's work landing. Exactly one.
+export type Booking = { readonly until: number; readonly after?: undefined } | { readonly after: AfterLand; readonly until?: undefined };
+
+// The booking a scheduled queue holds by, if any.
+export const bookingOf = (queue: Pick<TurnQueue, "until" | "after">): Booking | undefined => {
+    if (queue.until !== undefined) {
+        return { until: queue.until };
+    }
+    return queue.after === undefined ? undefined : { after: queue.after };
+};
 
 export const NO_QUEUE: TurnQueue = { items: [], revision: 0 };
 
@@ -55,13 +74,17 @@ export const NO_QUEUE: TurnQueue = { items: [], revision: 0 };
 export type QueueChange = "done" | "stale" | "missing";
 
 // The next queue: its revision moved, and no hold left over a queue with nothing in it to hold. A scheduled hold keeps
-// its instant unless one is given; any other hold has none.
-const next = (queue: TurnQueue, items: readonly QueuedItem[], paused: QueuePause | undefined, until: number | undefined = queue.until): TurnQueue => ({
-    items: [...items],
-    revision: queue.revision + 1,
-    ...(paused === undefined || items.length === 0 ? {} : { paused }),
-    ...opt("until", paused === "scheduled" && items.length > 0 ? until : undefined),
-});
+// its booking unless one is given; any other hold has none.
+const next = (queue: TurnQueue, items: readonly QueuedItem[], paused: QueuePause | undefined, booking: Booking | undefined = bookingOf(queue)): TurnQueue => {
+    const holding = paused === "scheduled" && items.length > 0 ? booking : undefined;
+    return {
+        items: [...items],
+        revision: queue.revision + 1,
+        ...(paused === undefined || items.length === 0 ? {} : { paused }),
+        ...opt("until", holding?.until),
+        ...opt("after", holding?.after),
+    };
+};
 
 /** Joins the end of the queue; a person's message lets a held queue go, since sending again is them saying so. */
 export const joined = (queue: TurnQueue, item: Omit<QueuedItem, "revision">): TurnQueue => {
@@ -72,14 +95,19 @@ export const joined = (queue: TurnQueue, item: Omit<QueuedItem, "revision">): Tu
 };
 
 /**
- * Joins the end of the queue and holds everything in it until `until`: a person's scheduled send, booked for when a
- * spent allowance reopens. The latest booking's instant wins, since it is the newest reading of when that is.
+ * Joins the end of the queue and holds everything in it by `booking`: a person's scheduled send, booked for an instant
+ * (a time they chose, a spent allowance's reopen) or for after another conversation's work lands. The latest booking
+ * wins, since it is the newest word on when what waits should go.
  */
-export const scheduled = (queue: TurnQueue, item: Omit<QueuedItem, "revision">, until: number): TurnQueue => {
+export const scheduled = (queue: TurnQueue, item: Omit<QueuedItem, "revision">, booking: Booking): TurnQueue => {
     const present = queue.items.some((waiting) => waiting.id === item.id);
     const items = present ? queue.items : [...queue.items, { ...item, revision: queue.revision + 1 }];
-    return next(queue, items, "scheduled", until);
+    return next(queue, items, "scheduled", booking);
 };
+
+/** Holds what already waits by another booking, whatever held it before; an empty queue has nothing to hold. */
+export const rescheduled = (queue: TurnQueue, booking: Booking): TurnQueue =>
+    queue.items.length === 0 ? queue : next(queue, queue.items, "scheduled", booking);
 
 /** Takes out what a turn just delivered. */
 export const taken = (queue: TurnQueue, ids: readonly string[]): TurnQueue =>
@@ -177,4 +205,5 @@ export const queueView = (queue: TurnQueue): ConversationQueue => ({
     revision: queue.revision,
     ...(queue.paused === undefined ? {} : { paused: queue.paused }),
     ...opt("until", queue.paused === "scheduled" ? queue.until : undefined),
+    ...opt("after", queue.paused === "scheduled" ? queue.after?.conversationId : undefined),
 });

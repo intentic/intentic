@@ -72,6 +72,11 @@ describe("archivable", () => {
         expect(archivable(card({ archivedAt: 1 }))).toBe(false);
         // Parked on an armed watch: waiting for its wake, not finished.
         expect(archivable(card({ status: "idle", watches: [{ id: "watch-k3f9", note: "CI", intervalSeconds: 60, deadlineAt: 1 }] }))).toBe(false);
+        // A message booked for later, or held, is work still to come: archiving would drop it.
+        const waiting = { items: [{ id: "m1", text: "after the auth refactor lands", voice: "person" as const, queuedAt: 1, revision: 1 }], revision: 1 };
+        expect(archivable(card({ status: "idle", queue: { ...waiting, paused: "scheduled", after: "brave-otter" } }))).toBe(false);
+        expect(archivable(card({ status: "idle", queue: { ...waiting, paused: "stopped" } }))).toBe(false);
+        expect(archivable(card({ status: "idle", queue: { items: [], revision: 2 } }))).toBe(true);
     });
 
     it("ages out on updatedAt, and never when retention is off", () => {

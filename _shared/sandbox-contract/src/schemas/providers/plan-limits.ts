@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { ChildRunSchema } from "../../events/requests.js";
 import { TRANSLATOR_PROVIDERS, type TranslatorProvider } from "../../models/provider-specs.js";
-import { AgentHarnessSchema, AgentProviderSchema, EditorContextSchema } from "../agent.js";
+import { AgentHarnessSchema, AgentProviderSchema, ConversationIdSchema, EditorContextSchema } from "../agent.js";
 import { MENTION_LIMIT } from "../../text/mentions.js";
 // Headroom is one shape shared by every provider, not a Claude idea others imitate: a native account and a routed
 // subscription differ in who holds the credential, never in what a reading is. Every surface that draws a percentage
@@ -412,6 +412,28 @@ export const QueueResumeSchema = z.object({
     ),
 });
 export type QueueResume = z.infer<typeof QueueResumeSchema>;
+// Re-times what a conversation's queue holds: the same messages, booked for another instant or for after another
+// conversation's work lands. One of the two, never both, since a hold waits on exactly one thing.
+export const QueueScheduleSchema = z
+    .object({
+        conversationId: z.string().min(1).describe("Whose queue."),
+        sendAt: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe("Send what waits at this instant (epoch milliseconds) instead. At most a month ahead; an instant already past sends it now."),
+        sendAfter: ConversationIdSchema.optional().describe(
+            "Send what waits once that conversation has finished and all of its work has landed in the workspace, instead. Sent now when it has nothing running and nothing left to land.",
+        ),
+    })
+    .refine((input) => (input.sendAt === undefined) !== (input.sendAfter === undefined), {
+        message: "name exactly one of sendAt and sendAfter",
+    })
+    .refine((input) => input.sendAfter !== input.conversationId, {
+        message: "a conversation cannot wait for its own work to land",
+    });
+export type QueueSchedule = z.infer<typeof QueueScheduleSchema>;
 // Moves a conversation to another account of the provider it runs on: the one command that changes who pays, so the
 // account a conversation runs on is always the daemon's record and never a window's guess.
 export const SwitchAccountSchema = z.object({

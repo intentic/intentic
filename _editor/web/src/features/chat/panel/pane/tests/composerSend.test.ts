@@ -43,6 +43,8 @@ const composerOf = (spentReopensAt?: number) => {
         refocus: jest.fn(),
         openModels: jest.fn(),
         armLimitResend: jest.fn(() => Promise.resolve()),
+        laterOffered: ref(true),
+        titleOf: (id: string): string | undefined => (id === `brave-otter` ? `Fix the login bug` : undefined),
     };
     let send: ReturnType<typeof useComposerSend> | undefined;
     const app = createApp({
@@ -63,6 +65,60 @@ afterEach(() => {
     resetSandboxScope();
 });
 
+// A time or an agent the reader picked: the press books the message for it whatever the chat is doing, spends the pick,
+// and never touches the limit answer, which is about a spent allowance and not about a moment somebody chose.
+describe(`a message sent later`, () => {
+    it(`is booked for the picked time, even mid-turn, and the pick is spent by it`, () => {
+        const { chat, host, say, send } = composerOf();
+        const schedule = jest.spyOn(chat.turn, `schedule`).mockResolvedValue(undefined);
+        const at = Date.now() + 3 * 60 * 60 * 1_000;
+        runningTurn(chat.turn);
+        chat.sendLater.value = { kind: `at`, at };
+        chat.draft.value = `tag the release`;
+
+        expect(send.intent.value).toBe(`later`);
+        expect(send.scheduledLabel.value).toBe(`Schedule`);
+        expect(send.scheduledIcon.value).toBe(`clock`);
+        send.submit();
+
+        expect(schedule.mock.calls).toEqual([[`tag the release`, { sendAt: at }, [], undefined]]);
+        expect(say).not.toHaveBeenCalled();
+        expect(host.armLimitResend).not.toHaveBeenCalled();
+        expect(chat.sendLater.value).toBeUndefined();
+        expect(chat.draft.value).toBe(``);
+    });
+
+    it(`waits for another agent's land, named on the press by that agent`, () => {
+        const { chat, send } = composerOf();
+        const schedule = jest.spyOn(chat.turn, `schedule`).mockResolvedValue(undefined);
+        chat.sendLater.value = { kind: `after`, conversationId: `brave-otter` };
+        chat.draft.value = `update the docs for it`;
+
+        expect(send.scheduledLabel.value).toBe(`Schedule`);
+        expect(send.scheduledIcon.value).toBe(`link`);
+        expect(send.scheduledWhen.value).toBe(`After Fix the login bug lands`);
+        expect(send.sendHint.value).toEqual({
+            title: `Schedule`,
+            rows: [{ label: `Sends`, value: `After Fix the login bug lands` }],
+            note: `It waits in this chat, where you can send it sooner, change when, or take it back.`,
+        });
+        send.submit();
+
+        expect(schedule.mock.calls).toEqual([[`update the docs for it`, { sendAfter: `brave-otter` }, [], undefined]]);
+    });
+
+    it(`is an ordinary send where this composer cannot book one`, () => {
+        const { chat, host, say, send } = composerOf();
+        host.laterOffered.value = false;
+        chat.sendLater.value = { kind: `after`, conversationId: `brave-otter` };
+        chat.draft.value = `now please`;
+
+        expect(send.intent.value).toBe(`idle`);
+        send.submit();
+        expect(say).toHaveBeenCalledTimes(1);
+    });
+});
+
 describe(`a scheduled send`, () => {
     // Half a minute short of the half hour, so the label's round-up lands on 30 whichever way the seconds fell.
     const inHalfAnHour = (): number => Math.round(Date.now() / 1_000) + 1_770;
@@ -78,7 +134,7 @@ describe(`a scheduled send`, () => {
         send.submit();
 
         expect(host.armLimitResend).toHaveBeenCalledTimes(1);
-        expect(schedule.mock.calls).toEqual([[`ship it`, reopens * 1_000, [], undefined]]);
+        expect(schedule.mock.calls).toEqual([[`ship it`, { sendAt: reopens * 1_000 }, [], undefined]]);
         expect(say).not.toHaveBeenCalled();
         // The box is spent as for any send: the words now wait in the queue.
         expect(chat.draft.value).toBe(``);

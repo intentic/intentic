@@ -83,17 +83,21 @@ const tooltip: Directive = {
 
 let app: App | undefined;
 // The board's card for the chat, where a test says what it reports about the last turn.
-const mount = (chat: Conversation, props: Record<string, unknown> = {}, card?: Pick<AgentStanding, `failureCode` | `failure`>): HTMLElement => {
+// `spentReopensAt` stands for the account the chat runs on reading spent, with that reopen (epoch s).
+const mount = (
+    chat: Conversation,
+    props: Record<string, unknown> = {},
+    card?: Pick<AgentStanding, `failureCode` | `failure`>,
+    spentReopensAt?: number,
+): HTMLElement => {
     const element = document.createElement(`div`);
     document.body.append(element);
     app = createApp({ render: () => h(ChatHeldMessages, props) });
-    app.provide(
-        PANE_VIEW,
-        conversationView(
-            computed(() => chat),
-            card === undefined ? undefined : () => ({ status: `error`, attention: NO_ATTENTION, ...card }),
-        ),
+    const view = conversationView(
+        computed(() => chat),
+        card === undefined ? undefined : () => ({ status: `error`, attention: NO_ATTENTION, ...card }),
     );
+    app.provide(PANE_VIEW, spentReopensAt === undefined ? view : { ...view, spentReopensAt: computed(() => spentReopensAt) });
     app.component(`Icon`, IconStub);
     app.directive(`tooltip`, tooltip);
     app.mount(element);
@@ -286,13 +290,33 @@ describe(`a scheduled send`, () => {
     it(`offers Send now, which lets it go before its time, saying the allowance may still refuse it`, async () => {
         const chat = chatHolding({ items: [held({ attachments: [] })], paused: `scheduled`, until: Date.now() + 60_000 }, SENT);
         const resume = jest.spyOn(chat.turn, `resume`).mockResolvedValue(undefined);
-        const element = mount(chat);
+        const element = mount(chat, {}, undefined, Math.round(Date.now() / 1_000) + 60);
         await nextTick();
 
         const [press] = pressNamed(element, `Send now`);
         expect(tips.get(press!)).toEqual({ title: `Send it now instead`, note: `The allowance may still be spent, and refuse it` });
         press!.click();
         expect(resume).toHaveBeenCalledTimes(1);
+    });
+
+    // A time the reader picked rather than an allowance's reopen: going sooner costs nothing to say, and it can be re-timed.
+    it(`offers Send now and Change for a time the reader picked, saying only that it goes now`, async () => {
+        const element = mount(chatHolding({ items: [held({ attachments: [] })], paused: `scheduled`, until: Date.now() + 60_000 }, SENT));
+        await nextTick();
+
+        const [press] = pressNamed(element, `Send now`);
+        expect(tips.get(press!)).toEqual({ title: `Send it now instead`, note: `It goes now rather than at its time.` });
+        expect(pressNamed(element, `Change`)).toHaveLength(1);
+    });
+
+    it(`says it waits for another agent's land, and that it goes without that work if sent now`, async () => {
+        const element = mount(chatHolding({ items: [held({ attachments: [] })], paused: `scheduled`, after: `gone-fox` }, SENT));
+        await nextTick();
+
+        // No card names that agent any more: it is gone, and nothing of it will land by itself.
+        expect(statusLine(element)).toBe(`Scheduled · waits for an agent that is gone`);
+        const [press] = pressNamed(element, `Send now`);
+        expect(tips.get(press!)).toEqual({ title: `Send it now instead`, note: `It goes without waiting for that agent's work.` });
     });
 
     it(`says it is going once its time has come, while the sandbox lets it go`, async () => {

@@ -57,6 +57,10 @@ import ChatRunThroughMenu from "../models/run-settings/ChatRunThroughMenu.vue";
 import ComposerEffort from "../composer/ComposerEffort.vue";
 import ComposerModelPill from "../composer/ComposerModelPill.vue";
 import ComposerMoreMenu from "../composer/ComposerMoreMenu.vue";
+import ComposerSendLater from "../composer/ComposerSendLater.vue";
+import { waitTargets } from "../composer/waitTargets";
+import { laterLabel, type SendLater } from "../composer/sendLater";
+import { useNow } from "@intentic/ui/async";
 
 // One chat on screen: the transcript, its composer, and the pickers/banners for one conversation (ChatPanel owns
 // the surrounding frame — list, pop-out, resize, shell commands). Takes its conversation as a prop rather than
@@ -107,6 +111,8 @@ const modePill = ref<HTMLElement>();
 const placementPill = ref<HTMLElement>();
 const runThroughPill = ref<HTMLElement>();
 const personaPill = ref<HTMLElement>();
+// The "send later" pill, which its panel opens over while it rides the row.
+const laterPill = ref<HTMLElement>();
 // The overflow's button; also the anchor three pickers fall back to when their own chip isn't in the row.
 const morePill = ref<HTMLElement>();
 const mentionPopover = ref<InstanceType<typeof ChatMentionPopover>>();
@@ -119,7 +125,7 @@ usePaneAttach({ conversation: () => props.conversation, focused: () => props.foc
 // A SPAWNED SUBAGENT'S CHAT: its parent directs it, so the composer gives way to the subagent bar, which says whose it is
 // and leads back there (ChatSubagentBar); the reader can still choose to write to it. A child whose parent has left the
 // fleet is a conversation in its own right again (parentCardOf), and keeps its composer.
-const { agentById } = useAgents();
+const { agentById, fleet } = useAgents();
 const card = computed(() => agentById(props.conversation.conversationId));
 const subagentOf = computed(() => {
     const parent = parentCardOf(card.value, agentById);
@@ -186,8 +192,11 @@ const {
     modeOpen,
     personaOpen,
     placementOpen,
+    laterOpen,
     moreOpen,
     voiceAgent,
+    landing,
+    controlSituation,
     conversationBox,
     remote,
     pairedRunners,
@@ -205,6 +214,7 @@ const {
     modeAnchor,
     personaAnchor,
     runThroughAnchor,
+    laterAnchor,
     openFromMore,
 } = useComposerControls({
     conversation: () => props.conversation,
@@ -214,8 +224,27 @@ const {
     runThrough,
     steered,
     editing,
-    pills: { mode: modePill, persona: personaPill, runThrough: runThroughPill, more: morePill },
+    pills: { mode: modePill, persona: personaPill, runThrough: runThroughPill, later: laterPill, more: morePill },
 });
+// What an agent's card is called, for a message booked to wait on it.
+const titleOf = (conversationId: string): string | undefined => {
+    const agent = agentById(conversationId);
+    return agent === undefined ? undefined : agentDisplayTitle(agent);
+};
+// When the next message goes, when not now, as its pill says it (sendLater.ts).
+const laterNow = useNow(() => props.conversation.sendLater.value?.kind === `at`);
+const laterText = computed(() => {
+    const picked = props.conversation.sendLater.value;
+    return picked === undefined ? undefined : laterLabel(picked, laterNow.value, titleOf);
+});
+const pickLater = (later: SendLater): void => {
+    props.conversation.sendLater.value = later;
+    laterOpen.value = false;
+};
+const clearLater = (): void => {
+    props.conversation.sendLater.value = undefined;
+    laterOpen.value = false;
+};
 
 // Files staged for the next turn; bytes go to the conversation's own box and path.
 const staging = useChatAttachments({ attachments, reachable, connected, at: conversationBox });
@@ -242,6 +271,8 @@ const history = useRecallRing(() => props.conversation);
 const {
     intent,
     scheduledLabel,
+    scheduledIcon,
+    scheduledWhen,
     continueStrip,
     continueOffer,
     canSend,
@@ -280,6 +311,8 @@ const {
             modelOpen.value = true;
         },
         armLimitResend: useLimitResend(() => props.conversation),
+        laterOffered: computed(() => controlSituation.value.laterOffered),
+        titleOf,
     });
 
 // A spent account turns Send into a schedule; the caret beside it offers the ways that skip the wait.
@@ -314,6 +347,19 @@ const popovers = useComposerPopovers({
     placement: { remote, shown: placementShown, runners: pairedRunners },
     steered,
     isGuest,
+    later: {
+        offered: computed(() => controlSituation.value.laterOffered),
+        targets: computed(() =>
+            waitTargets(fleet.value, props.conversation.conversationId, landing.sandboxLands.value).map(({ agent }) => ({
+                id: agent.id,
+                title: agentDisplayTitle(agent),
+            })),
+        ),
+        open: () => {
+            laterOpen.value = true;
+        },
+    },
+    landing,
 });
 const { syncCaret, activeMention, commandMatches, filesOffered, quickSources, mentionOpen, commandOpen, flashed, pickMention, pickCommand } =
     popovers;
@@ -607,6 +653,52 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                                         <span>{{ t(`chat.chatPane.agent`) }}</span>
                                     </button>
 
+                                    <!-- This chat's own answer to whether its finished work lands by itself; the press turns it back to the sandbox's. -->
+                                    <button
+                                        v-if="inRow.land"
+                                        type="button"
+                                        class="composer-ghost h-8 shrink-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"
+                                        :class="{
+                                            'composer-active': pickedWorkflow === undefined,
+                                            'composer-steered': pickedWorkflow !== undefined,
+                                            'composer-flash': flashed === 'land',
+                                        }"
+                                        :disabled="pickedWorkflow !== undefined"
+                                        @click="landing.toggle()"
+                                        v-tooltip.top="{
+                                            title: landing.lands.value ? t(`chat.chatPane.landsWhenDone`) : t(`chat.chatPane.holdsOnBranch`),
+                                            note: landing.midTurn.value
+                                                ? t(`chat.chatPane.appliesAfterTurn`)
+                                                : landing.lands.value
+                                                  ? t(`chat.chatPane.landsWhenDoneNote`)
+                                                  : t(`chat.chatPane.holdsOnBranchNote`),
+                                        }"
+                                        :aria-pressed="landing.lands.value"
+                                        :aria-label="landing.lands.value ? t(`chat.chatPane.landsWhenDone`) : t(`chat.chatPane.holdsOnBranch`)"
+                                    >
+                                        <Icon :name="landing.lands.value ? `download` : `pause`" class="text-2xs text-link" />
+                                        <span class="@max-md:hidden">{{
+                                            landing.lands.value ? t(`chat.chatPane.landsWhenDone`) : t(`chat.chatPane.holdsOnBranch`)
+                                        }}</span>
+                                    </button>
+
+                                    <!-- When the next message goes, when not now: a time, or once another agent's work lands. The press opens its panel. -->
+                                    <button
+                                        v-if="inRow.later"
+                                        ref="laterPill"
+                                        type="button"
+                                        class="composer-ghost composer-active h-8 shrink-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"
+                                        :class="{ 'composer-flash': flashed === 'later' }"
+                                        @click="laterOpen = !laterOpen"
+                                        v-tooltip.top="{ title: t(`chat.sendLater.title`), note: laterText }"
+                                        :aria-expanded="laterOpen"
+                                        :aria-label="t(`chat.sendLater.scheduleAria`, { when: laterText ?? `` })"
+                                    >
+                                        <Icon :name="conversation.sendLater.value?.kind === `after` ? `link` : `clock`" class="text-2xs text-link" />
+                                        <span class="max-w-40 truncate">{{ laterText }}</span>
+                                        <span class="inline-flex max-md:hidden"><Icon name="chevron-down" class="text-2xs text-subtle" /></span>
+                                    </button>
+
                                     <!-- Files from this device; the same chips as a drop or a paste, since one `attach` serves all three. -->
                                     <button
                                         v-if="canDrive"
@@ -686,9 +778,13 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                                             :class="{ 'composer-split-main': hasWays }"
                                             :disabled="!canSend || !reachable"
                                             v-tooltip.top="sendHint"
-                                            :aria-label="t(`chat.composerIntent.scheduleAria`, { when: scheduledLabel })"
+                                            :aria-label="
+                                                intent === `later`
+                                                    ? t(`chat.sendLater.scheduleAria`, { when: scheduledWhen ?? scheduledLabel })
+                                                    : t(`chat.composerIntent.scheduleAria`, { when: scheduledLabel })
+                                            "
                                         >
-                                            <Icon name="clock" class="text-xs" />
+                                            <Icon :name="scheduledIcon" class="text-xs" />
                                             <span class="text-xs tabular-nums">{{ scheduledLabel }}</span>
                                         </button>
                                         <button
@@ -810,6 +906,10 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                 </button>
                 <p v-if="waysNote" class="px-2.5 py-1 text-2xs text-warning">{{ waysNote }}</p>
             </div>
+        </ResponsiveOverlay>
+        <!-- When the next message goes: a time, or once another agent's work lands (sendLater.ts). -->
+        <ResponsiveOverlay v-model="laterOpen" :anchor="laterAnchor" cross="end" :header="t(`chat.sendLater.title`)" panel-class="w-80 p-1">
+            <ComposerSendLater :conversation="conversation" :picked="conversation.sendLater.value" @pick="pickLater($event)" @clear="clearLater()" />
         </ResponsiveOverlay>
         <!-- The overflow itself; its rows hand off to the three panels above. -->
         <ResponsiveOverlay v-model="moreOpen" :anchor="morePill" cross="end" :header="t(`chat.chatPane.message`)" panel-class="w-80 p-1">

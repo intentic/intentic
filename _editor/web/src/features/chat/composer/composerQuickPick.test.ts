@@ -18,7 +18,12 @@ const MODELS: readonly PickerEntry[] = [
     entry(`codex`, `gpt-5.1`, `GPT 5.1`),
 ];
 
-// Everything offered, a persona picked, running here on Opus at high effort.
+// A fixed noon on the reader's own clock, so the quick times are the same however the suite is run.
+const NOON = new Date(2026, 9, 2, 12, 0).getTime();
+const HOUR = 60 * 60 * 1_000;
+const TOMORROW_NINE = new Date(2026, 9, 3, 9, 0).getTime();
+
+// Everything offered, a persona picked, running here on Opus at high effort, sent now and held on its branch.
 const ALL: QuickPickSources = {
     persona: { personas: [persona(`intentic`, { label: `Intentic`, brief: `Product work` }), persona(`radarsu`)], picked: `intentic` },
     sandbox: { runners: [{ id: `omen` }], boxes: [{ id: `box-2`, name: `Paperwork` }], box: undefined, runner: undefined },
@@ -31,16 +36,26 @@ const ALL: QuickPickSources = {
         ],
         picked: `high`,
     },
+    send: {
+        picked: undefined,
+        now: NOON,
+        choices: [
+            { key: `hour`, label: `In an hour`, at: NOON + HOUR },
+            { key: `morning`, label: `Tomorrow morning`, at: TOMORROW_NINE },
+        ],
+        targets: [{ id: `brave-otter`, title: `Fix the login bug` }],
+    },
+    land: { lands: false },
 };
 
 const labels = (sources: QuickPickSources, token: Parameters<typeof quickRows>[1]): string[] => quickRows(sources, token).map((row) => row.label);
 
 it(`lists one summary row per offered kind, in kind order, each carrying the current value`, () => {
     const rows = quickRows(ALL, { kind: undefined, query: `` });
-    expect(rows.map((row) => row.kind)).toEqual([`drill`, `drill`, `drill`, `drill`]);
+    expect(rows.map((row) => row.kind)).toEqual([`drill`, `drill`, `drill`, `drill`, `drill`, `drill`]);
     expect(rows.map((row) => (row.kind === `drill` ? row.into : undefined))).toEqual([...QUICK_KINDS]);
     expect(rows.map((row) => row.label)).toEqual(QUICK_KINDS.map((kind) => kindMeta()[kind].label));
-    expect(rows.map((row) => row.detail)).toEqual([`Intentic`, `Here`, `Claude Opus 5`, `High`]);
+    expect(rows.map((row) => row.detail)).toEqual([`Intentic`, `Here`, `Claude Opus 5`, `High`, `Now`, `Holds on branch`]);
 });
 
 it(`names a pick on no list by its raw id or the model's own name, never an empty value`, () => {
@@ -50,7 +65,17 @@ it(`names a pick on no list by its raw id or the model's own name, never an empt
         sandbox: { runners: [], boxes: [], box: `unknown-box`, runner: undefined },
         model: { entries: [], provider: `claude`, model: `claude-opus-9`, label: `Claude Opus 9`, isReady: () => true },
     };
-    expect(quickRows(gone, { kind: undefined, query: `` }).map((row) => row.detail)).toEqual([`deleted`, `Another sandbox`, `Claude Opus 9`, `High`]);
+    expect(quickRows(gone, { kind: undefined, query: `` }).map((row) => row.detail)).toEqual([
+        `deleted`,
+        `Another sandbox`,
+        `Claude Opus 9`,
+        `High`,
+        `Now`,
+        `Holds on branch`,
+    ]);
+    // A booked agent no card names any more is still named, as another agent.
+    const lost: QuickPickSources = { ...ALL, send: { ...ALL.send!, picked: { kind: `after`, conversationId: `gone-fox` } } };
+    expect(quickRows(lost, { kind: undefined, query: `send` })[0]).toMatchObject({ kind: `drill`, into: `send`, detail: `another agent` });
     expect(
         quickRows({ ...ALL, sandbox: { runners: [], boxes: [], box: undefined, runner: `omen` } }, { kind: undefined, query: `` })[1]?.detail,
     ).toBe(`omen`);
@@ -62,7 +87,19 @@ it(`offers a kind in neither the summary nor a search once its source is withhel
         `sandbox`,
         `model`,
         `effort`,
+        `send`,
+        `land`,
     ]);
+    // Where nothing can be booked or landing is not the reader's, those two are nowhere either.
+    const neither: QuickPickSources = { ...ALL, send: undefined, land: undefined };
+    expect(quickRows(neither, { kind: undefined, query: `` }).map((row) => (row.kind === `drill` ? row.into : row.kind))).toEqual([
+        `persona`,
+        `sandbox`,
+        `model`,
+        `effort`,
+    ]);
+    expect(quickRows(neither, { kind: `send`, query: `` })).toEqual([]);
+    expect(quickRows(neither, { kind: undefined, query: `login` })).toEqual([]);
     expect(quickRows(noPersona, { kind: undefined, query: `int` })).toEqual([]);
     expect(quickRows(noPersona, { kind: `persona`, query: `` })).toEqual([]);
     expect(quickRows({ persona: undefined, sandbox: undefined, model: undefined, effort: undefined }, { kind: undefined, query: `` })).toEqual([]);
@@ -138,4 +175,43 @@ it(`carries what a pick needs: the persona id, both placement axes, the model en
 it(`marks the placed box or runner current, not This sandbox`, () => {
     const placed: QuickPickSources = { ...ALL, sandbox: { ...ALL.sandbox!, box: `box-2` } };
     expect(quickRows(placed, { kind: `sandbox`, query: `` }).map((row) => row.kind === `sandbox` && row.current)).toEqual([false, false, true]);
+});
+
+// When the message goes is one more setting at the `@`: now, a quick time, a time of the reader's own (which opens the
+// panel, since no token holds a date), or after another agent's work lands.
+it(`drills the send kind to now, the quick times, a time of one's own, then the agents to wait for`, () => {
+    const rows = quickRows(ALL, { kind: `send`, query: `` });
+    expect(rows.map((row) => row.label)).toEqual([`Now`, `In an hour`, `Tomorrow morning`, `Pick a date and time…`, `Fix the login bug`]);
+    expect(rows.map((row) => (row.kind === `send` ? row.to : undefined))).toEqual([
+        `now`,
+        { kind: `at`, at: NOON + HOUR },
+        { kind: `at`, at: TOMORROW_NINE },
+        `custom`,
+        { kind: `after`, conversationId: `brave-otter` },
+    ]);
+    expect(rows.map((row) => (row.kind === `send` ? row.current : undefined))).toEqual([true, false, false, false, false]);
+    expect(rows[4]).toMatchObject({ detail: `After it lands` });
+});
+
+it(`ticks the booked time or agent, and finds an agent to wait for by a word typed at the @`, () => {
+    const booked: QuickPickSources = { ...ALL, send: { ...ALL.send!, picked: { kind: `after`, conversationId: `brave-otter` } } };
+    expect(quickRows(booked, { kind: `send`, query: `` }).map((row) => (row.kind === `send` ? row.current : undefined))).toEqual([
+        false,
+        false,
+        false,
+        false,
+        true,
+    ]);
+    expect(quickRows(booked, { kind: undefined, query: `send` })[0]).toMatchObject({ kind: `drill`, into: `send`, detail: `Fix the login bug` });
+    const rows = quickRows(ALL, { kind: undefined, query: `login` });
+    expect(rows.map((row) => `${row.kind}:${row.label}`)).toEqual([`send:Fix the login bug`]);
+});
+
+it(`drills landing to its two answers, the one in force ticked`, () => {
+    expect(quickRows(ALL, { kind: `land`, query: `` })).toMatchObject([
+        { kind: `land`, on: true, label: `Lands by itself`, current: false },
+        { kind: `land`, on: false, label: `Holds on branch`, current: true },
+    ]);
+    const landing: QuickPickSources = { ...ALL, land: { lands: true } };
+    expect(quickRows(landing, { kind: undefined, query: `land` })[0]).toMatchObject({ kind: `drill`, into: `land`, detail: `Lands by itself` });
 });

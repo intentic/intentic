@@ -23,6 +23,7 @@ import type { HeldTurn } from "../../agent/run/turn/turn-resume.js";
 import { opt } from "../../opt.js";
 import type { FailedEnding, PersistedAgent } from "../registry/agents-store.js";
 import {
+    type Booking,
     edited,
     hold,
     joined,
@@ -31,6 +32,7 @@ import {
     released,
     removed,
     rerouted,
+    rescheduled,
     returned,
     scheduled,
     taken,
@@ -66,8 +68,9 @@ export interface BeginTurn {
     readonly title?: string;
     // `model` when the title is a name an agent chose rather than a head cut from a prompt (seams/turn-starter.ts).
     readonly titleSource?: "model";
-    // A spawned child's own answer to a spent allowance, which it opens with.
-    readonly postures?: { readonly limit?: LimitPolicy };
+    // A spawned child's own answer to a spent allowance, and a maintainer's to whether finished work lands by itself,
+    // which the conversation opens with.
+    readonly postures?: { readonly limit?: LimitPolicy; readonly autoLand?: boolean };
     readonly origin?: AgentOrigin;
     readonly startIn?: string;
     // Who asked for this turn, as the daemon verified it.
@@ -170,8 +173,13 @@ export type ConversationEvent =
     | { readonly kind: "workflow-shown"; readonly workflow: NonNullable<AgentSummary["workflow"]> }
     // A message joins the queue: it arrived while a turn that could not take it ran, or behind others waiting.
     | { readonly kind: "queue-joined"; readonly item: Omit<QueuedItem, "revision"> }
-    // A person's scheduled send joins the queue, and everything in it waits until `until` (a spent allowance's reopen).
-    | { readonly kind: "queue-scheduled"; readonly item: Omit<QueuedItem, "revision">; readonly until: number }
+    // A person's scheduled send joins the queue, and everything in it waits by `booking`: until an instant (a time they
+    // chose, a spent allowance's reopen), or until another conversation's work lands. `opening` is the conversation's
+    // own opening, for a message that opens it: its entry is written with the booking, so the card and the queue are on
+    // record from the press, as a turn's `begin` would have put them.
+    | { readonly kind: "queue-scheduled"; readonly item: Omit<QueuedItem, "revision">; readonly booking: Booking; readonly opening?: BeginTurn }
+    // What already waits is held by another booking, whatever held it before; answers whether anything waits.
+    | { readonly kind: "queue-rescheduled"; readonly booking: Booking }
     // A turn delivered these waiting messages: it started with them, or they were said into it.
     | { readonly kind: "queue-taken"; readonly ids: readonly string[] }
     // A refusal at the door handed these back: at the head again, held.
@@ -201,6 +209,9 @@ export type ConversationEffect =
     | { readonly kind: "reprobe" }
     // The turn's entry, and its journal row when the run filed one: written together by the `persist` after it.
     | { readonly kind: "entry-opened"; readonly turn: BeginTurn; readonly inFlight?: JournalledTurn }
+    // The entry a scheduled send opens, before any turn: what `entry-opened` writes, resting as idle, never as a turn cut
+    // short. Nothing when the conversation already has one.
+    | { readonly kind: "entry-booked"; readonly turn: BeginTurn }
     // The begun run's journal row rewritten, or deleted, on its own.
     | { readonly kind: "journal-written"; readonly entry: JournalledTurn }
     | { readonly kind: "journal-cleared" }
@@ -232,6 +243,7 @@ interface Replies {
     readonly "rewind-leased": boolean;
     readonly "queue-removed": QueueChange;
     readonly "queue-edited": QueueChange;
+    readonly "queue-rescheduled": boolean;
 }
 
 export type ReplyOf<E extends ConversationEvent> = E["kind"] extends keyof Replies ? Replies[E["kind"]] : undefined;
@@ -745,7 +757,15 @@ const HANDLERS: { readonly [K in ConversationEvent["kind"]]: Handler<K> } = {
             state.steers.slots.map((box) => box.checkpoint),
         ),
     "queue-joined": (state, event) => withQueue(state, joined(state.queue, event.item), undefined),
-    "queue-scheduled": (state, event) => withQueue(state, scheduled(state.queue, event.item, event.until), undefined),
+    "queue-scheduled": (state, event) => {
+        const booked = withQueue(state, scheduled(state.queue, event.item, event.booking), undefined);
+        // The entry first: the queue is written onto it, and the persist after both carries them together.
+        return event.opening === undefined ? booked : { ...booked, effects: [{ kind: "entry-booked", turn: event.opening }, ...booked.effects] };
+    },
+    "queue-rescheduled": (state, event) => {
+        const queue = rescheduled(state.queue, event.booking);
+        return withQueue(state, queue, queue.items.length > 0);
+    },
     "queue-taken": (state, event) => withQueue(state, taken(state.queue, event.ids), undefined),
     "queue-returned": (state, event) => withQueue(state, returned(state.queue, event.items), undefined),
     "queue-removed": (state, event) => {

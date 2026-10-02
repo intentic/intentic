@@ -20,6 +20,8 @@ import { orRefusal, SandboxHttpError } from "../../sandbox/client/sandboxHttpErr
 import { type ProcedureInput, sandboxRpc } from "../../sandbox/client/sandboxRpc";
 import type { PendingAttachment } from "../drafts/useChatAttachments";
 import { accountIntent, type SessionRef, type TurnSettings, turnRequestBody } from "../run/turnRequest";
+import type { TurnBooking } from "../composer/sendLater";
+import { supportsRoute } from "../../sandbox/overview/useDaemonRoutes";
 import { accountsOutdated } from "../accounts/accountsOutdated";
 import { repointedPickUp } from "../run/pickUp";
 import { type AttachHead, type FollowEnd, followRun, type SentMessage, type TurnContext } from "../run/turnStream";
@@ -115,6 +117,7 @@ type TurnHost = Pick<
     | "draft"
     | "attachments"
     | "queue"
+    | "autoLandDraft"
 >;
 
 /** Of two copies of the daemon's queue, the one written last: a card read late must not undo a change made here. */
@@ -238,22 +241,43 @@ export class TurnClient {
     }
 
     /**
-     * A scheduled send: the words wait in the conversation's queue until `sendAt` (a spent allowance's reopen), drawn there
-     * as scheduled in every window, and nothing starts or reaches the provider before then. Nothing is drawn here either:
-     * no bubble, no working line, since no turn opens. Where there is nothing to hold them on (a chat the daemon has no
-     * record of yet, a turn live here) they go the ordinary way, which the daemon would do with them anyway.
+     * A scheduled send: the words wait in the conversation's queue until the booking's moment (a time the reader chose, a
+     * spent allowance's reopen, another agent's work landing), drawn there as scheduled in every window, and nothing
+     * starts or reaches the provider before then. Nothing is drawn here either: no bubble, no working line, since no turn
+     * opens. A chat the daemon has no record of yet is opened on the board by the booking itself, and a turn live here
+     * goes on undisturbed. Only a sandbox from before either (no `agent.queueSchedule`) takes them the ordinary way.
      */
-    async schedule(text: string, sendAt: number, attachments: readonly ChatAttachment[] = [], editorContext?: EditorContext): Promise<void> {
+    async schedule(text: string, booking: TurnBooking, attachments: readonly ChatAttachment[] = [], editorContext?: EditorContext): Promise<void> {
         const trimmed = text.trim();
         this.host.peek.value = false;
         if (trimmed.length === 0 && attachments.length === 0) {
             return;
         }
-        if (!this.host.registered.value || this.streaming.value || this.unwinding) {
+        if (!supportsRoute(`agent.queueSchedule`) && (!this.host.registered.value || this.streaming.value || this.unwinding)) {
             await this.say(trimmed, attachments, editorContext);
             return;
         }
-        await this.sayInto(trimmed, attachments, editorContext, sendAt);
+        if (this.unwinding) {
+            await this.afterEnding();
+        }
+        this.nameAfter(trimmed, attachments);
+        await this.sayInto(trimmed, attachments, editorContext, booking);
+    }
+
+    /**
+     * Books what waits in the conversation's queue for another moment, whatever held it: what the held messages' Change
+     * does. Refused when nothing waits any more or the agent to wait for cannot land, which the error line says.
+     */
+    async reschedule(booking: TurnBooking): Promise<boolean> {
+        const { host } = this;
+        host.error.value = null;
+        const left = await orRefusal(sandboxRpc.agent.queueSchedule({ conversationId: host.conversationId, ...booking }, { context: { at: host.box.value } }));
+        const heard = this.heard(left);
+        // What it waited for had already come, so it went out as a turn: this window follows it.
+        if (heard && !(left instanceof SandboxHttpError) && left.items.length === 0) {
+            await this.reattach();
+        }
+        return heard;
     }
 
     // An app errand whose words need a read first: the turn opens at the call, its row and the working line drawn, and
@@ -427,6 +451,7 @@ export class TurnClient {
                     mentionedPaths,
                     editorContext,
                     errand,
+                    conversationAutoLand: host.autoLandDraft.value,
                 }),
                 controller.signal,
             );
@@ -493,7 +518,7 @@ export class TurnClient {
         text: string,
         attachments: readonly ChatAttachment[],
         editorContext: EditorContext | undefined,
-        sendAt: number | undefined = undefined,
+        booking: TurnBooking | undefined = undefined,
     ): Promise<void> {
         const { host } = this;
         const settings = host.selection.turnSettings();
@@ -519,7 +544,8 @@ export class TurnClient {
                     attachmentPaths,
                     mentionedPaths: mentionPaths(text).filter((path) => !attachmentPaths.includes(path)),
                     editorContext,
-                    sendAt,
+                    booking,
+                    conversationAutoLand: host.autoLandDraft.value,
                 }),
                 new AbortController().signal,
             );
@@ -528,12 +554,12 @@ export class TurnClient {
             } else if (receipt.delivered === `started`) {
                 // The turn it was typed into ended meanwhile, so these words opened one of their own on the settings.
                 this.ranOn(settings);
-                // A scheduled send the daemon started after all (its time came, or nothing held it): this window follows it.
-                if (sendAt !== undefined) {
+                // A scheduled send the daemon started after all (what it waited for had come): this window follows it.
+                if (booking !== undefined) {
                     await this.reattach();
                 }
-            } else if (sendAt !== undefined && receipt.delivered === `queued`) {
-                this.booked({ id: messageId, text, attachments: attachmentPaths }, sendAt);
+            } else if (booking !== undefined && receipt.delivered === `queued`) {
+                this.booked({ id: messageId, text, attachments: attachmentPaths }, booking);
             }
         } catch (err) {
             this.giveBack(sent, messageId);
@@ -543,7 +569,7 @@ export class TurnClient {
 
     // The scheduled words as the queue will hold them, drawn at the ack rather than on a roster frame that may come late
     // (a busy sandbox, another box whose roster is polled). The daemon's own queue, at the same revision, replaces it.
-    private booked(message: { readonly id: string; readonly text: string; readonly attachments: readonly string[] }, until: number): void {
+    private booked(message: { readonly id: string; readonly text: string; readonly attachments: readonly string[] }, booking: TurnBooking): void {
         const { host } = this;
         const held = host.queue.value ?? { items: [], revision: 0 };
         if (held.items.some((item) => item.id === message.id)) {
@@ -554,7 +580,9 @@ export class TurnClient {
         if (message.attachments.length > 0) {
             item.attachments = [...message.attachments];
         }
-        host.queue.value = { items: [...held.items, item], revision, paused: `scheduled`, until };
+        // The newest booking holds the whole queue, as the daemon's does: an instant or an agent to wait for, never both.
+        const waitsFor = booking.sendAfter === undefined ? { until: booking.sendAt } : { after: booking.sendAfter };
+        host.queue.value = { items: [...held.items, item], revision, paused: `scheduled`, ...waitsFor };
     }
 
     // Where a sent turn's request or stream threw. A user-initiated Stop aborts the fetch, which is expected, not an error

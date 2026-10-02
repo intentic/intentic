@@ -1,4 +1,5 @@
 import type { AgentStatus, AgentWatch } from "@intentic/sandbox-contract";
+import { formatWhen } from "@intentic/ui/format";
 import {
     type AgentStanding,
     agentStandingMeta,
@@ -25,6 +26,9 @@ import {
     onlyOwnerCanAnswer,
     type RimAgent,
     reviewAction,
+    scheduledSend,
+    scheduledWhen,
+    standingChip,
     tileRim,
     turnInFlight,
     unfinishedMark,
@@ -929,5 +933,48 @@ describe("a message held for low memory", () => {
         expect(attentionReason(broken)).toBe(`Error`);
         expect(agentStandingMeta(broken)).toEqual(agentStatusMeta(`error`));
         expect(memoryHeld({ status: `idle`, failureCode: `sandbox-memory-low` })).toBe(false);
+    });
+});
+
+// Messages booked to go by themselves (a time, or another agent's land): the conversation starts again with nobody
+// pressing anything, so it is not finished, and its corner says when it goes.
+describe("a conversation with messages booked for later", () => {
+    const at = NOW + 3 * 60 * 60 * 1000;
+    const timed: AgentStanding = { status: `idle`, attention: none, queue: { paused: `scheduled`, until: at } };
+    const waiting: AgentStanding = { status: `ready`, attention: none, queue: { paused: `scheduled`, after: `brave-otter` } };
+
+    it("is Active, not Finished, whatever its last turn left; a call on the reader still outranks it", () => {
+        expect(scheduledSend(timed)).toBe(true);
+        expect(laneOf(timed)).toBe(`active`);
+        expect(laneOf(waiting)).toBe(`active`);
+        expect(laneOf({ ...timed, status: `awaiting` })).toBe(`attention`);
+        // Any other hold is a person's to lift, never a schedule.
+        expect(scheduledSend({ queue: { paused: `stopped` } })).toBe(false);
+        expect(laneOf({ status: `idle`, attention: none, queue: { paused: `stopped` } })).toBe(`finished`);
+    });
+
+    // One word in the corner, which the title shares a row with; when it goes is that word's hover.
+    it("says Scheduled in its corner, and when it goes on hover, ahead of news and behind a call", () => {
+        const titleOf = (id: string): string | undefined => (id === `brave-otter` ? `Fix the login bug` : undefined);
+        expect(scheduledWhen(timed)).toBe(formatWhen(at));
+        expect(scheduledWhen(waiting, titleOf)).toBe(`After Fix the login bug lands`);
+        expect(scheduledWhen(waiting)).toBe(`After another agent lands`);
+        expect(scheduledWhen({ queue: { paused: `stopped` } })).toBeUndefined();
+        expect(standingChip({ ...timed, unread: true }, titleOf)).toEqual({
+            label: `Scheduled`,
+            tone: `bg-content/10 text-muted`,
+            hint: { title: `Scheduled`, rows: [{ label: `Sends`, value: formatWhen(at) }] },
+        });
+        expect(standingChip({ ...waiting, unread: false }, titleOf)?.hint).toEqual({
+            title: `Scheduled`,
+            rows: [{ label: `Sends`, value: `After Fix the login bug lands` }],
+        });
+        expect(standingChip({ ...waiting, status: `conflict`, unread: false }, titleOf)?.label).toBe(attentionReason({ ...waiting, status: `conflict` }));
+    });
+
+    it("keeps the hold, and only the hold, on a standing that outlives its card", () => {
+        expect(standingFrom(timed).queue).toEqual({ paused: `scheduled`, until: at });
+        expect(standingFrom(waiting).queue).toEqual({ paused: `scheduled`, after: `brave-otter` });
+        expect(standingFrom({ status: `idle`, attention: none, queue: { paused: `stopped` } })).not.toHaveProperty(`queue`);
     });
 });

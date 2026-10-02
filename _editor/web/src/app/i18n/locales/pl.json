@@ -1467,7 +1467,12 @@
                 "swapped": "W swapie",
                 "title": "Mało pamięci",
                 "used": "Użyta"
-            }
+            },
+            "sendsAfter": "wyjdzie po scaleniu {title}",
+            "waitsForGone": "czeka na agenta, którego już nie ma",
+            "change": "Zmień",
+            "sendNowAfterNote": "Wyjdzie bez czekania na pracę tamtego agenta.",
+            "sendNowTimeNote": "Wyjdzie teraz zamiast o swojej porze."
         },
         "sandboxNotice": {
             "compacted": "Kontekst został skrócony, żeby zwolnić miejsce.",
@@ -1712,7 +1717,12 @@
             "upForPreviousMessage": "↑ – poprzednia wiadomość",
             "writingAgent": "Piszesz jako agent",
             "sendStartsWorkflow": "Wyślij uruchamia „{name}”: ta wiadomość to to, o co proszony jest każdy krok. Model, wysiłek, tryb i pętla należą do każdego kroku z osobna.",
-            "sendLoopsUntilEndsOn": "Wyślij powtarza tę wiadomość, aż warunek będzie spełniony: kończy się na {design}."
+            "sendLoopsUntilEndsOn": "Wyślij powtarza tę wiadomość, aż warunek będzie spełniony: kończy się na {design}.",
+            "landsWhenDone": "Scali po zakończeniu",
+            "holdsOnBranch": "Czeka na gałęzi",
+            "landsWhenDoneNote": "Naciśnij, by trzymać na gałęzi",
+            "holdsOnBranchNote": "Naciśnij, by scalał się sam",
+            "appliesAfterTurn": "Zadziała po tej turze"
         },
         "chatPaneNotices": {
             "accountNeedsToReconnected": "To konto trzeba podłączyć ponownie.",
@@ -2074,7 +2084,11 @@
             "stopTurn": "Zatrzymaj turę",
             "unconnectedHint": "Wybierz model",
             "unconnectedPlaceholder": "Co ma zrobić ten agent? Wysłanie najpierw wybierze model…",
-            "viewerPlaceholder": "Tylko patrzysz: poproś właściciela o rolę współpracownika, żeby sterować agentami"
+            "viewerPlaceholder": "Tylko patrzysz: poproś właściciela o rolę współpracownika, żeby sterować agentami",
+            "placeholderLater": "Napisz wiadomość do zaplanowania…",
+            "hintLater": "Zaplanuj",
+            "hintLaterNote": "Czeka w tym czacie, gdzie możesz wysłać ją wcześniej, zmienić termin albo ją wycofać.",
+            "hintIdleScheduled": "To, co zaplanowane w tym czacie, też pójdzie teraz."
         },
         "composerModelPill": {
             "chooseModel": "Wybierz model",
@@ -2088,14 +2102,29 @@
             "loopRunWorkflow": "Zapętl to albo uruchom workflow.",
             "onePersonasAccountsOnly": "Tylko konta jednej persony.",
             "runThrough": "Przepuść przez",
-            "writeAgent": "Pisz jako agent"
+            "writeAgent": "Pisz jako agent",
+            "sendLater": "Wyślij później",
+            "sendLaterNow": "Teraz",
+            "sendLaterNote": "O porze albo po scaleniu agenta.",
+            "landWhenDone": "Scal po zakończeniu",
+            "on": "Wł.",
+            "off": "Wył.",
+            "landWhenDoneNote": "Gotowa praca scali się sama.",
+            "holdOnBranchNote": "Zatrzymaj gotową pracę na gałęzi."
         },
         "composerQuickPick": {
             "anotherSandbox": "Inny sandbox",
             "effort": "Wysiłek",
             "everyConnectedAccount": "Każde podłączone konto",
             "here": "Tutaj",
-            "runnerOnComputer": "Runner na Twoim komputerze"
+            "runnerOnComputer": "Runner na Twoim komputerze",
+            "sendLater": "Wysyłka",
+            "now": "Teraz",
+            "pickTime": "Wybierz datę i godzinę…",
+            "afterIt": "Po jego scaleniu",
+            "landWhenDone": "Scal po zakończeniu",
+            "landOn": "Scala się sam",
+            "landOff": "Czeka na gałęzi"
         },
         "effortMeter": {
             "reasoningEffort2": "Wysiłek rozumowania: {effortLabel}"
@@ -2333,6 +2362,36 @@
             "heldMemoryShare": "Wstrzymane: w sandboxie kończy się pamięć ({share})",
             "wait": "Poczekaj",
             "waitHint": "Wiadomość zostaje wstrzymana. Wyślesz ją z czatu, gdy zwolni się pamięć."
+        },
+        "sendLater": {
+            "title": "Wyślij później",
+            "atTime": "O wybranej porze",
+            "inAnHour": "Za godzinę",
+            "inThreeHours": "Za 3 godziny",
+            "tonight": "Dziś wieczorem",
+            "tomorrowMorning": "Jutro rano",
+            "mondayMorning": "W poniedziałek rano",
+            "tomorrowAt": "Jutro {clock}",
+            "pickTime": "Wybierz datę i godzinę",
+            "setTime": "Ustaw",
+            "outOfRange": "Wybierz porę od minuty do 30 dni od teraz.",
+            "afterAgent": "Gdy praca agenta zostanie scalona",
+            "afterAgentNote": "Dla pracy, która na niej buduje.",
+            "noAgents": "Żaden agent nie ma pracy do scalenia.",
+            "filter": "Filtruj agentów…",
+            "landsByItself": "scali się sam",
+            "waitsForYou": "czeka, aż go scalisz",
+            "inWorkspace": "pracuje w Twoim obszarze roboczym",
+            "alsoLandIt": "Scalaj automatycznie",
+            "alsoLandItNote": "Inaczej to czeka na Ciebie",
+            "uncommitted": "Scalona praca zostaje bez commita, a ten agent startuje od Twojego ostatniego commita: zobaczy tę pracę dopiero po commicie.",
+            "saveVersions": "Commituj każde scalenie automatycznie",
+            "clear": "Wyślij jednak teraz",
+            "afterLands": "Po scaleniu {title}",
+            "scheduleAria": "Zaplanuj: {when}",
+            "reschedule": "Zmień, kiedy wyjdzie",
+            "anotherAgent": "innego agenta",
+            "autoLand": "Auto-scalanie"
         }
     },
     "common": {

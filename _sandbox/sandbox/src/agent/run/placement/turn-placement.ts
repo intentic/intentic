@@ -92,6 +92,12 @@ const endingOf = (failed: boolean, stopped: boolean, awaiting: boolean): TurnEnd
     return awaiting ? "awaiting-wake" : "finished";
 };
 
+// The answers to the sandbox-wide defaults a conversation opens with: the daemon's own (a spawned child's to a spent
+// allowance), and the opening message's own answer to whether its finished work lands by itself (`conversationAutoLand`,
+// which the route takes only from a maintainer).
+const openingPostures = (input: TurnInput): BeginTurn["postures"] =>
+    input.conversationAutoLand === undefined ? input.postures : { ...input.postures, autoLand: input.conversationAutoLand };
+
 // What a conversation's turn begins as: its profile whole, and what an opening turn decides. Placement is the
 // conversation's: a fresh one takes the request's, later turns follow the registry's own record.
 export const conversationIdentity = (
@@ -106,7 +112,7 @@ export const conversationIdentity = (
     profile: profileOf(input),
     ...opt("title", input.title),
     ...opt("titleSource", input.titleSource),
-    ...opt("postures", input.postures),
+    ...opt("postures", openingPostures(input)),
     ...opt("origin", input.origin),
     ...opt("startedBy", input.actor),
     ...opt("owner", input.owner),

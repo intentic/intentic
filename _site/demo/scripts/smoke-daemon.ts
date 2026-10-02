@@ -204,6 +204,12 @@ const samplesOf = ({ fleet, automations, ci, workflows, loops, devices, approval
             reply: { kind: `plan`, requestId: `smoke`, approve: true },
             steer: { conversationId: fleet.FEATURED_AGENT_ID, text: `Keep going.` },
             stop: { conversationId: `smoke-run`, live: true },
+            // The scheduled card's one message, through each door in turn: reworded, re-timed to wait on the running checkout
+            // agent, taken back, and the emptied queue let go.
+            queueEdit: { conversationId: fleet.SCHEDULED_AGENT_ID, id: fleet.SCHEDULED_MESSAGE_ID, revision: 1, text: `Reworded by the smoke run` },
+            queueSchedule: { conversationId: fleet.SCHEDULED_AGENT_ID, sendAfter: fleet.FEATURED_AGENT_ID },
+            queueRemove: { conversationId: fleet.SCHEDULED_AGENT_ID, id: fleet.SCHEDULED_MESSAGE_ID, revision: 2 },
+            queueResume: { conversationId: fleet.SCHEDULED_AGENT_ID },
             commands: {},
             refusals: undefined,
         },

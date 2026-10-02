@@ -1,7 +1,7 @@
 import type { EditorContext } from "@intentic/sandbox-contract";
-import type { TooltipValue } from "@intentic/ui";
+import type { IconName, TooltipValue } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
-import { useT } from "@intentic/ui/i18n";
+import { t as translate, useT } from "@intentic/ui/i18n";
 import { computed, nextTick, type Ref } from "vue";
 import {
     type ComposerSituation,
@@ -12,6 +12,7 @@ import {
     sendable,
     sendHintFor,
     sendIntentOf,
+    type SendIntent,
     sendRefusal,
     sendRefusalTitle,
     unconnectedHint,
@@ -19,6 +20,7 @@ import {
     viewerPlaceholder,
 } from "../../composer/composerIntent";
 import type { InputHistory } from "../../drafts/inputHistory";
+import { bookingOf, laterLabel, type SendLater, type TurnBooking } from "../../composer/sendLater";
 import type { RunThrough } from "../../models/run-settings/useRunThrough";
 import type { ChatRouting } from "../../routing/chatRoute";
 import { pickUpReady, pickUpShort } from "../../run/pickUp";
@@ -60,6 +62,10 @@ export interface SendHost {
     // again when the reopen it was booked for came too early and was refused. Runs beside the send, never ahead of it (a
     // chat's first message is what registers it), which is safe because the daemon asks the answer afresh at the refusal.
     readonly armLimitResend: () => Promise<void>;
+    // Whether this composer may book a message for a time or another agent's land (composerMore's `later` control).
+    readonly laterOffered: Readonly<Ref<boolean>>;
+    // The title an agent's card goes by, for a message booked to wait for it.
+    readonly titleOf: (conversationId: string) => string | undefined;
 }
 
 // The turn as the composer treats it: a turn a person already ended is over here from the press, whatever is still
@@ -127,13 +133,46 @@ const planAnswers = (
     return { approvePlan, keepPlanning };
 };
 
+// When the reader picked for the next message to go, where this composer may book one (sendLater.ts).
+const laterPick = (host: Pick<SendHost, "view" | "laterOffered">) =>
+    computed(() => (host.laterOffered.value ? host.view.conversation.value.sendLater.value : undefined));
+
+// The scheduled press as the row draws it: a time-labelled button for a spent account's reopen or a booked message.
+const scheduledPress = (press: {
+    readonly intent: Readonly<Ref<SendIntent>>;
+    readonly later: Readonly<Ref<SendLater | undefined>>;
+    readonly spentUntil: Readonly<Ref<number | undefined>>;
+    readonly now: Readonly<Ref<number>>;
+    readonly words: Readonly<Ref<ComposerWords>>;
+}) => {
+    const booked = computed(() => (press.intent.value === `later` ? press.later.value : undefined));
+    return {
+        // The button's label: when a spent allowance's reopen sends it ("40m", "14:20", "Sun 08:20"), or "Schedule" for a
+        // message booked for later, whose pill beside it already says when, in the words the panel used. Undefined for
+        // every other press.
+        scheduledLabel: computed(() => {
+            if (booked.value !== undefined) {
+                return translate(`chat.composerIntent.hintLater`);
+            }
+            const until = press.spentUntil.value;
+            return press.intent.value === `scheduled` && until !== undefined ? pickUpShort(until, press.now.value) : undefined;
+        }),
+        // What the press waits for, as its glyph: a clock for a time, a link for another agent's land.
+        scheduledIcon: computed<IconName>(() => (booked.value?.kind === `after` ? `link` : `clock`)),
+        // The whole sentence for the press's accessible name: when it goes.
+        scheduledWhen: computed(() => press.words.value.later ?? press.words.value.reopens),
+    };
+};
+
 export const useComposerSend = (host: SendHost) => {
     const { view, voiceAgent, history, editorContext } = host;
     const { draft, attachments, editing, awaitingDecision, pickUp, queued, connected, staged } = view;
     const { live, parked, planMessage } = composerTurn(view);
     const t = useT();
-    // Running only while something counts down to a named instant (an allowance reset); nothing else here is timed.
-    const paneNow = useNow(() => pickUp.value?.readyAt !== undefined || view.spentReopensAt.value !== undefined);
+    const later = laterPick(host);
+    // Running only while something counts down to a named instant (an allowance reset, a booked time); nothing else here
+    // is timed.
+    const paneNow = useNow(() => pickUp.value?.readyAt !== undefined || view.spentReopensAt.value !== undefined || later.value?.kind === `at`);
     // When the account this send would run on reopens (ms), while that is still ahead; a reset the clock has passed is a
     // stale reading, and a plain send is the honest press for it.
     const spentUntil = computed(() => {
@@ -142,12 +181,15 @@ export const useComposerSend = (host: SendHost) => {
     });
     // The pane's words, plus what only a scheduled send says: when, and whether a turn already waiting goes ahead of it.
     const words = computed<ComposerWords>(() => {
+        const base: ComposerWords = { ...host.words.value, heldGoesToo: view.queuePaused.value === `scheduled` };
+        const picked = later.value;
+        const own: ComposerWords = picked === undefined ? base : { ...base, later: laterLabel(picked, paneNow.value, host.titleOf) };
         const until = spentUntil.value;
         if (until === undefined) {
-            return host.words.value;
+            return own;
         }
         const waiting = pickUp.value?.reason === `limit` && pickUp.value.held !== undefined;
-        return { ...host.words.value, reopens: formatReset(Math.round(until / 1_000), paneNow.value), followsWaiting: waiting };
+        return { ...own, reopens: formatReset(Math.round(until / 1_000), paneNow.value), followsWaiting: waiting };
     });
     // One snapshot of the composer for the ladder; the pane supplies only what a mounted chat alone has.
     const situation = computed<ComposerSituation>(() => ({
@@ -168,6 +210,7 @@ export const useComposerSend = (host: SendHost) => {
         queueScheduled: view.queuePaused.value === `scheduled`,
         connected: connected.value,
         spentUntil: spentUntil.value,
+        later: later.value !== undefined,
     }));
     const intent = computed(() => sendIntentOf(situation.value));
     // Why Send is refusing, in the user's words; undefined when the press will land.
@@ -221,9 +264,9 @@ export const useComposerSend = (host: SendHost) => {
     };
 
     // One path whether or not a turn runs (TurnClient.enqueue); typed during a pending plan, the words reject it as
-    // revision feedback instead. The chips go with the message, which owns their thumbnails from here. `sendAt` books
+    // revision feedback instead. The chips go with the message, which owns their thumbnails from here. A `booking` books
     // the words for later instead (a scheduled send): they wait in the queue, and no turn opens.
-    const sendDraft = (sendAt?: number): void => {
+    const sendDraft = (booking?: TurnBooking): void => {
         const text = draft.value.trim();
         const plan = planMessage.value?.plan;
         if (plan !== undefined) {
@@ -238,11 +281,11 @@ export const useComposerSend = (host: SendHost) => {
             const context = editorContext.forSend();
             // A routed chat's opening message waits for its one reading, so the card and model are on for the turn that
             // decides the tree; every other send goes now.
-            const readings = sendAt === undefined ? host.route.beforeSend(text, editorContext.include.value) : undefined;
-            if (sendAt !== undefined) {
+            const readings = booking === undefined ? host.route.beforeSend(text, editorContext.include.value) : undefined;
+            if (booking !== undefined) {
                 // The funnel's milestone all the same: a booked message is a sent one, as the reader meant it.
                 track(`message_sent`, { agent: view.conversation.value.selection.provider.value, scheduled: true });
-                void view.conversation.value.turn.schedule(text, sendAt, snapshot, context);
+                void view.conversation.value.turn.schedule(text, booking, snapshot, context);
             } else if (readings === undefined) {
                 void view.send(text, snapshot, context);
             } else {
@@ -294,6 +337,13 @@ export const useComposerSend = (host: SendHost) => {
         if (!canSend.value) {
             return;
         }
+        // A message booked for the moment the reader picked: the pick is spent by it, as a workflow badge is by its send.
+        const picked = intent.value === `later` ? later.value : undefined;
+        if (picked !== undefined) {
+            view.conversation.value.sendLater.value = undefined;
+            sendDraft(bookingOf(picked));
+            return;
+        }
         // A scheduled send is booked, not tried: the words wait in the queue, drawn as scheduled, and the sandbox lets them
         // go when the window reopens; nothing reaches the provider before, so there is no refusal to show. The limit answer
         // is set to resend as well, for a reopen the provider named too early (that turn is refused, and goes again at the
@@ -303,15 +353,12 @@ export const useComposerSend = (host: SendHost) => {
             // allow(silent-catch): the write is optimistic and rolls back on failure, so the card's control saying `wait` is the report.
             void host.armLimitResend().catch(() => undefined);
         }
-        sendDraft(booking);
+        sendDraft(booking === undefined ? undefined : { sendAt: booking });
     };
 
     return {
         intent,
-        // The scheduled send's button label ("40m", "14:20", "Sun 08:20"), undefined for every other press.
-        scheduledLabel: computed(() =>
-            intent.value === `scheduled` && spentUntil.value !== undefined ? pickUpShort(spentUntil.value, paneNow.value) : undefined,
-        ),
+        ...scheduledPress({ intent, later, spentUntil, now: paneNow, words }),
         refusal,
         continueOffer,
         canSend,

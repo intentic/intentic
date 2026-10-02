@@ -6,7 +6,9 @@ import { boxNameOf, scopeOffered } from "../../../agents/fleet/fleetScope";
 import { useAgents } from "../../../agents/fleet/useAgents";
 import { useRunners } from "../../../sandbox/devices/runners/useRunners";
 import { providerDisplayLabel } from "../../accounts/providerCatalog";
+import { useComposerLanding } from "../../composer/composerLanding";
 import { type ComposerControl, overflowRows, ridesRow } from "../../composer/composerMore";
+import { supportsRoute } from "../../../sandbox/overview/useDaemonRoutes";
 import { composerModelReading } from "../../composer/composerModelLabel";
 import { modeMeta } from "../../models/catalog";
 import type { RunThrough } from "../../models/run-settings/useRunThrough";
@@ -23,6 +25,7 @@ export interface ControlPills {
     readonly mode: Readonly<Ref<HTMLElement | undefined>>;
     readonly persona: Readonly<Ref<HTMLElement | undefined>>;
     readonly runThrough: Readonly<Ref<HTMLElement | undefined>>;
+    readonly later: Readonly<Ref<HTMLElement | undefined>>;
     readonly more: Readonly<Ref<HTMLElement | undefined>>;
 }
 
@@ -40,6 +43,28 @@ export const placeConversation = (
     conversation.runner.value = at.runner;
     return true;
 };
+
+// What each overflow row opens: the flag of the panel that owns the choice, or, for the two with nothing to pick, the
+// press itself (writing as the agent arms; landing turns the other way).
+const openersOf = (flags: Record<Exclude<ComposerControl, `land`>, Ref<boolean>>, toggleLanding: () => void) =>
+    ({
+        mode: () => {
+            flags.mode.value = true;
+        },
+        persona: () => {
+            flags.persona.value = true;
+        },
+        runThrough: () => {
+            flags.runThrough.value = true;
+        },
+        voice: () => {
+            flags.voice.value = true;
+        },
+        land: toggleLanding,
+        later: () => {
+            flags.later.value = true;
+        },
+    }) satisfies Record<ComposerControl, () => void>;
 
 export interface ControlsHost {
     readonly conversation: () => Conversation;
@@ -61,6 +86,7 @@ export const useComposerControls = (host: ControlsHost) => {
     const modeOpen = ref(false);
     const personaOpen = ref(false);
     const placementOpen = ref(false);
+    const laterOpen = ref(false);
     const moreOpen = ref(false);
     // Armed, the next Send places the words into the transcript as the agent's (no turn) and disarms itself.
     const voiceAgent = ref(false);
@@ -81,6 +107,8 @@ export const useComposerControls = (host: ControlsHost) => {
     );
     // Writing as the agent needs a registry entry to place into, which the chat has from its first turn on.
     const placeable = computed(() => conversation().registered.value || agentById(conversation().conversationId) !== undefined);
+    // Whether its finished work lands by itself, as this chat answers it (composerLanding.ts).
+    const landing = useComposerLanding(conversation);
 
     // The pill's own rule (composerModelLabel.ts), read here for the accessible name beside it too.
     const modelReading = computed(() =>
@@ -101,12 +129,21 @@ export const useComposerControls = (host: ControlsHost) => {
         voiceAgent: voiceAgent.value,
         personaOffered: !remote.value,
         voiceOffered: placeable.value,
+        landOffered: landing.offered.value,
+        lands: landing.lands.value,
+        landOwn: landing.own.value,
+        // A booking is held by this sandbox's own daemon, for a send nothing else claims: a workflow or a loop takes the
+        // message somewhere a booking cannot follow.
+        laterOffered: supportsRoute(`agent.queueSchedule`) && !remote.value && runThrough.state.value === `idle`,
+        later: conversation().sendLater.value !== undefined,
     }));
     const inRow = computed(() => ridesRow(controlSituation.value));
     const moreRows = computed(() => overflowRows(controlSituation.value));
     // Each picker opens over whichever element it was reached from, so nothing anchors to an element that has gone.
     const anchorOf = (control: ComposerControl, own: Readonly<Ref<HTMLElement | undefined>>) =>
         computed(() => (inRow.value[control] ? own.value : host.pills.more.value));
+
+    const OPENERS = openersOf({ mode: modeOpen, persona: personaOpen, runThrough: runThrough.open, voice: voiceAgent, later: laterOpen }, landing.toggle);
 
     // Only one answer to "what does send do" can hold, and an armed edit wins as the most specific act; cleared visibly
     // rather than disabled, so the precedence is seen rather than discovered by pressing Send.
@@ -116,6 +153,7 @@ export const useComposerControls = (host: ControlsHost) => {
         }
         voiceAgent.value = false;
         runThrough.clear();
+        conversation().sendLater.value = undefined;
     });
     // A workflow badge takes the composer over: an armed voice under it misattributes the next send, and the panels
     // its greyed pills open close with them. Run-through stays live, since it holds the pick.
@@ -127,6 +165,7 @@ export const useComposerControls = (host: ControlsHost) => {
         modelOpen.value = false;
         modeOpen.value = false;
         personaOpen.value = false;
+        laterOpen.value = false;
         moreOpen.value = false;
     });
 
@@ -135,8 +174,11 @@ export const useComposerControls = (host: ControlsHost) => {
         modeOpen,
         personaOpen,
         placementOpen,
+        laterOpen,
         moreOpen,
         voiceAgent,
+        landing,
+        controlSituation,
         conversationBox,
         remote,
         pairedRunners,
@@ -159,19 +201,12 @@ export const useComposerControls = (host: ControlsHost) => {
         modeAnchor: anchorOf(`mode`, host.pills.mode),
         personaAnchor: anchorOf(`persona`, host.pills.persona),
         runThroughAnchor: anchorOf(`runThrough`, host.pills.runThrough),
+        laterAnchor: anchorOf(`later`, host.pills.later),
         // A row hands off to the control that owns the choice, closing the overflow first so the next panel's
-        // dismissal never catches the same press; voice has nothing to pick, so its row is the press itself.
+        // dismissal never catches the same press; voice and landing have nothing to pick, so their rows are the press.
         openFromMore: (control: ComposerControl): void => {
             moreOpen.value = false;
-            if (control === `mode`) {
-                modeOpen.value = true;
-            } else if (control === `persona`) {
-                personaOpen.value = true;
-            } else if (control === `runThrough`) {
-                runThrough.open.value = true;
-            } else {
-                voiceAgent.value = true;
-            }
+            OPENERS[control]();
         },
     };
 };

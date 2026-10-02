@@ -27,8 +27,10 @@ export const mentionQueryAt = (text: string, caret: number): MentionQuery | unde
     return { start, query };
 };
 
-// The four settings the token can drill into; each is the keyword typed before the colon (`@model:son`).
-export const QUICK_KINDS = [`persona`, `sandbox`, `model`, `effort`] as const;
+// The settings the token can drill into; each is the keyword typed before the colon (`@model:son`). The last two are
+// about when the work moves rather than how it is done: when the message goes (`@send:tomorrow`, `@send:auth` for after
+// that agent lands), and whether its finished work lands by itself (`@land:`).
+export const QUICK_KINDS = [`persona`, `sandbox`, `model`, `effort`, `send`, `land`] as const;
 export type QuickKind = (typeof QUICK_KINDS)[number];
 
 export interface MentionToken {

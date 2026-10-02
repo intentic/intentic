@@ -19,6 +19,10 @@ export const CONFLICT_AGENT_ID = `cnv_auth_middleware`;
 export const HELD_AGENT_ID = `cnv_support_card`;
 // That message, as the queue holds it; its picture is the sweep capture the workspace carries (fixture/browserShots.ts).
 export const HELD_MESSAGE_ID = `msg_01j9supportcard`;
+// A conversation that has not started: its first message waits for the checkout agent's work to land, booked from the
+// composer's Send later, and its own work lands by itself once it finishes.
+export const SCHEDULED_AGENT_ID = `cnv_checkout_docs`;
+export const SCHEDULED_MESSAGE_ID = `msg_01j9checkoutdocs`;
 // The one fix agent the sandbox put on each failing main line (fixture/ci.ts), at the first failed job of the run that
 // made it fail. Their ids are the daemon's own shape (ciFixConversationId): the repository, then that run's id, which a
 // later failed run on the same branch does not share.
@@ -632,6 +636,36 @@ export const fleetRoster = (now: number): AgentSummary[] => [
             ],
             revision: 3,
             paused: `refused`,
+        },
+    },
+    {
+        id: SCHEDULED_AGENT_ID,
+        startIn: `web`,
+        title: `Document the new checkout in the user guide`,
+        status: `idle`,
+        provider: `claude`,
+        harness: `claude-code`,
+        model: `claude-sonnet-5`,
+        effort: `medium`,
+        account: `acc_claude_demo`,
+        branch: `agent/checkout-docs`,
+        updatedAt: now - minutes(3),
+        seenAt: now - minutes(3),
+        attention: NO_ATTENTION,
+        autoLand: true,
+        queue: {
+            items: [
+                {
+                    id: SCHEDULED_MESSAGE_ID,
+                    text: `Once the Stripe checkout is in, document it in the user guide: the new plan picker, the checkout steps, and what a declined card shows.`,
+                    voice: `person`,
+                    queuedAt: now - minutes(3),
+                    revision: 1,
+                },
+            ],
+            revision: 1,
+            paused: `scheduled`,
+            after: FEATURED_AGENT_ID,
         },
     },
     ...spawnedChildren(now),

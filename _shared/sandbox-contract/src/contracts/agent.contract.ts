@@ -11,6 +11,7 @@ import {
     QueuedMessageRefSchema,
     QueueEditSchema,
     QueueResumeSchema,
+    QueueScheduleSchema,
     ResumeTurnSchema,
     AccountSwitchedSchema,
     SteerSchema,
@@ -22,7 +23,7 @@ import { OkSchema } from "../schemas/shared.js";
 
 // A turn executes as a detached daemon-side run. `run` starts it, or says the message into the running turn, or queues it
 // for the next; `attach` streams it to any number of clients (replay then live, no special stream for the initiator),
-// `reply` un-parks it, `steer` injects a message, `stop` hard-cancels it, and the queue's three doors change what waits.
+// `reply` un-parks it, `steer` injects a message, `stop` hard-cancels it, and the queue's four doors change what waits.
 export const agentContract = {
     run: procedure
         .route({
@@ -116,6 +117,18 @@ export const agentContract = {
         .meta({ floor: "collaborator", guest: true })
         .input(QueueResumeSchema)
         .output(QueueResumedSchema),
+    // NOT_FOUND when nothing waits; BAD_REQUEST when the conversation named to wait for is unknown or archived.
+    queueSchedule: procedure
+        .route({
+            method: "POST",
+            path: "/agent/queue/schedule",
+            summary: "Reschedule waiting messages",
+            description:
+                "Books what waits in the conversation's queue to go out by itself at another instant, or once another conversation has finished and its work has landed, holding it until then. Works on a queue that is held for any reason, or on messages waiting behind a running turn. A time already past, or a conversation with nothing left to land, lets them go now.",
+        })
+        .meta({ floor: "collaborator", guest: true })
+        .input(QueueScheduleSchema)
+        .output(ConversationQueueSchema),
     // CONFLICT while a turn already runs (the client follows it); NOT_FOUND when nothing is held (it falls back to `run`).
     resume: procedure
         .route({

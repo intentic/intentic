@@ -17,6 +17,9 @@ const props = defineProps<{
     detail?: string | undefined;
     // When a scheduled send goes by itself (ms).
     until?: number | undefined;
+    // Or the agent whose landed work it waits for: its title, or undefined for one no card names any more, and the
+    // press that opens it.
+    after?: { readonly title: string | undefined; readonly open: () => void } | undefined;
     // Why on the left and the way on at the right, across a card of its own (the quick bar), rather than hung off the
     // right edge under a prompt.
     spread?: boolean;
@@ -45,6 +48,10 @@ const why = computed(() => {
         case `stopped`:
             return t(`chat.chatHeld.stopped`);
         case `scheduled`:
+            // Waiting on another agent's land: said with that agent's name, which is a link to it (the template's).
+            if (props.after !== undefined) {
+                return props.after.title === undefined ? t(`chat.chatHeld.waitsForGone`) : ``;
+            }
             // Past its instant, the sandbox is letting it go on its next pass (every few seconds).
             return props.until === undefined || props.until <= now.value ? t(`chat.chatHeld.sendsShortly`) : sendsWhen(props.until, now.value);
         default:
@@ -66,7 +73,27 @@ const why = computed(() => {
                 <Icon name="pause" class="shrink-0 text-2xs" />{{ t(`chat.chatHeld.notSent`) }}
             </span>
             <span aria-hidden="true">·</span>
-            <span class="min-w-0 tabular-nums" :class="figures !== undefined && `cursor-help`" v-tooltip.top="figures">{{ why }}</span>
+            <!-- The agent it waits for, by name, opening its chat: "sends after <Fix the login> lands". -->
+            <i18n-t
+                v-if="reason === `scheduled` && after?.title !== undefined"
+                keypath="chat.chatHeld.sendsAfter"
+                tag="span"
+                class="min-w-0"
+                scope="global"
+            >
+                <template #title
+                    ><button type="button" class="max-w-48 truncate align-bottom font-medium text-link hover:underline" @click="after.open()">
+                        {{ after.title }}
+                    </button></template
+                >
+            </i18n-t>
+            <span
+                v-else
+                class="min-w-0 tabular-nums"
+                :class="[figures !== undefined && `cursor-help`, after !== undefined && `text-warning`]"
+                v-tooltip.top="figures"
+                >{{ why }}</span
+            >
         </span>
         <slot />
     </div>

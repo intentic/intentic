@@ -9,6 +9,7 @@ import { rewindConversation } from "../checkpoints/rewind.js";
 import { commandsOf } from "../providers/agent-commands.js";
 import { switchAccount } from "../providers/accounts/switch-account.js";
 import { areasOf } from "../../auth/principal.js";
+import { operatorHere } from "../../auth/operator.js";
 import { speakerOf, spokenBy } from "../../seams/turn-speaker.js";
 import { turnRunOf } from "../../conversations/actor/conversation-holdings.js";
 import { provenanceOf, refuseUnlessVisible } from "../../auth/fleet-scope.js";
@@ -67,8 +68,10 @@ export const createAgentRoutes = (services: Services) => {
             await services.agents.clearArchived([conversationId]);
             // Push rides the run's own lifecycle, not this request, since a tab may be asleep.
             // A client composes only the land-conflict errand (the editor's own words); every other errand is the sandbox's,
-            // so a request naming one would pass its sender's words off as the sandbox's.
-            const { errand, continues, ...asked } = input;
+            // so a request naming one would pass its sender's words off as the sandbox's. The opening answer to whether
+            // work lands by itself is a maintainer's alone, as `agents.autoLand` is: a collaborator's work waits for a land.
+            const { errand, continues, conversationAutoLand, ...asked } = input;
+            const opensLanding = operatorHere(services, context) ? conversationAutoLand : undefined;
             // A Continue carries no words, so it skips the queue, which holds words: it starts the turn or is refused.
             if (continues === true) {
                 const started = await carryOnTurn(services, {
@@ -86,6 +89,7 @@ export const createAgentRoutes = (services: Services) => {
                 voice: speaker === undefined ? "person" : speakerVoice(speaker),
                 turn: {
                     ...asked,
+                    ...opt("conversationAutoLand", opensLanding),
                     ...opt("errand", errand === "land-conflict" ? errand : undefined),
                     conversationId,
                     ...spokenBy(speaker),
@@ -251,6 +255,19 @@ export const createAgentRoutes = (services: Services) => {
             // Answered with the queue it left, since the roster's frame saying so can reach a busy browser long after the
             // turn it started: without it the window draws the words it just sent as still held beneath that turn.
             return { ...released, queue: queueView(services.conversations.queued(input.conversationId)) };
+        }),
+        // Books what waits for another instant or for after another conversation's work lands. Answered with the queue it
+        // left, which is empty of these words when what they would wait for has already come and they went out.
+        queueSchedule: i.queueSchedule.handler(async ({ input, context }) => {
+            own(context, input.conversationId);
+            const outcome = await services.turns.reschedule(input);
+            if (outcome === "missing") {
+                throw new ORPCError("NOT_FOUND", { message: "Nothing waits in that conversation's queue to schedule: it has gone out, or was taken back." });
+            }
+            if (outcome !== "booked" && outcome !== "released") {
+                throw new ORPCError("BAD_REQUEST", { message: outcome.invalid });
+            }
+            return queueView(services.conversations.queued(input.conversationId));
         }),
         // Rewinds a message, its files, transcript and session together. CONFLICT rather than queuing behind a running
         // turn: by the time it finished, the workspace would have moved on from what the user is looking at.

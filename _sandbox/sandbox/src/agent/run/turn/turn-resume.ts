@@ -33,7 +33,11 @@ import { refusedBegin } from "../placement/turn-placement.js";
 import { sessionFor } from "./turn-admission.js";
 import { startTurnRun, type TurnRun } from "./turn-runs.js";
 import type { BeginRefusal } from "../../../conversations/actor/conversation-decide.js";
+import type { Booked } from "../../../conversations/actor/conversation-actors.js";
+import { type Booking, bookingOf } from "../../../conversations/actor/conversation-queue.js";
 import { type HeldRecord, windowShut } from "../../../conversations/actor/conversation-state.js";
+import { versionCommitsSettled } from "../../../conversations/land/version-landed.js";
+import { landingRepos, workLanded } from "../../../conversations/land/work-landed.js";
 import { opt } from "../../../opt.js";
 import type { VerificationStanding } from "../../verification/agent-verification.js";
 
@@ -517,23 +521,63 @@ const wakesReopened = (services: Services, conversationId: string, held: HeldRec
     !windowShut(held, now) &&
     services.conversations.queued(conversationId).items.some((item) => item.voice !== "person");
 
-// A person's scheduled sends whose instant has come (turn-admission.ts, bookedFor): the hold is let go and what waits
-// goes out as the ordinary turn it would have been. Should the allowance still be spent, that turn is refused like any
-// other, and the conversation's limit answer (which the composer arms to resend) takes it from there.
-const releaseBooked = async (services: Services, now: number): Promise<void> => {
-    for (const { conversationId, until } of services.conversations.booked()) {
-        if (until > now) {
+// Whether what a scheduled send waits for has come: its instant, or the conversation it waits on finished with all of its
+// work in the workspace (work-landed.ts).
+const bookingDue = (services: Services, booking: Booking, now: number): boolean =>
+    booking.after === undefined ? booking.until <= now : workLanded(services, booking.after.conversationId, booking.after.since);
+
+// Whether the queue still holds by the same booking: a person may have sent it, taken it back or re-timed it while the
+// release waited on a version commit, and their word is the newer one.
+const sameBooking = (held: Booking | undefined, booked: Booking): boolean =>
+    held !== undefined && held.until === booked.until && held.after?.conversationId === booked.after?.conversationId;
+
+// Lets one scheduled send go. One that waited on another conversation's land first waits out that land's version commit
+// (version-landed.ts), so the turn it starts reads that work committed under its own subject, rather than sweeping it
+// into the "Your edits" commit an isolated turn makes of the main tree before it starts (versionMainTree).
+const letGo = async (services: Services, { conversationId, booking }: Booked, now: number): Promise<void> => {
+    if (booking.after !== undefined) {
+        await versionCommitsSettled(services, landingRepos(services, booking.after.conversationId));
+        const queue = services.conversations.queued(conversationId);
+        if (queue.paused !== "scheduled" || !sameBooking(bookingOf(queue), booking)) {
+            return;
+        }
+    }
+    services.conversations.send(conversationId, { kind: "queue-released" }, now);
+    services.logger.info(
+        { conversationId, after: booking.after?.conversationId },
+        booking.after === undefined ? "resume pass: a scheduled send's time came, what waited goes out" : "resume pass: the work a scheduled send waited for landed, what waited goes out",
+    );
+    await services.turns.drain(conversationId);
+};
+
+// A person's scheduled sends whose time has come (turn-admission.ts, bookingFor): the hold is let go and what waits goes
+// out as the ordinary turn it would have been. Should the allowance still be spent, that turn is refused like any other,
+// and the conversation's limit answer (which the composer arms to resend) takes it from there. `releasing` keeps a pass
+// that overlaps one still waiting on a version commit from letting the same send go twice.
+const releaseBooked = async (services: Services, now: number, releasing: Set<string>): Promise<void> => {
+    for (const booked of services.conversations.booked()) {
+        if (releasing.has(booked.conversationId) || !bookingDue(services, booked.booking, now)) {
             continue;
         }
-        services.conversations.send(conversationId, { kind: "queue-released" }, now);
-        services.logger.info({ conversationId }, "resume pass: a scheduled send's time came, what waited goes out");
-        await services.turns.drain(conversationId);
+        releasing.add(booked.conversationId);
+        try {
+            await letGo(services, booked, now);
+        } finally {
+            releasing.delete(booked.conversationId);
+        }
     }
+};
+
+/** The soonest instant a scheduled send is booked for (ms), or 0 for none: a wake the machine must not sleep through. */
+export const nextBookedSendAt = (services: Pick<Services, "conversations">): number => {
+    const instants = services.conversations.booked().flatMap(({ booking }) => (booking.until === undefined ? [] : [booking.until]));
+    return instants.length === 0 ? 0 : Math.min(...instants);
 };
 
 // One pass over every held turn, oldest first; snapshotted, since every rung stamps or drops the records it walks.
 export const createTurnResumeScheduler = (services: Services, intervalMs = 5_000): TurnResumeScheduler => {
     let timer: NodeJS.Timeout | undefined;
+    const releasing = new Set<string>();
 
     const tick = async (now: number = Date.now()): Promise<void> => {
         for (const { conversationId, record } of services.conversations.stranded()) {
@@ -543,7 +587,7 @@ export const createTurnResumeScheduler = (services: Services, intervalMs = 5_000
                 await services.turns.drain(conversationId);
             }
         }
-        await releaseBooked(services, now);
+        await releaseBooked(services, now, releasing);
     };
 
     return {

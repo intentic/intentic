@@ -95,8 +95,38 @@ it(`says when a scheduled send goes, and that a turn already waiting goes ahead 
     expect(sendHintFor(`scheduled`, { ...words, followsWaiting: true })).not.toEqual(sendHintFor(`scheduled`, words));
 });
 
+// A time or an agent picked for the message is the reader choosing the moment: it books the send whatever the chat is
+// doing, a running turn or a spent account included, and only acts that are not a send at all outrank it.
+it(`books a message for the moment the reader picked, whatever the chat is doing`, () => {
+    const later = { later: true };
+    expect(sendIntentOf(chat(later))).toBe(`later`);
+    expect(sendIntentOf(chat({ ...later, streaming: true, steerable: true }))).toBe(`later`);
+    expect(sendIntentOf(chat({ ...later, streaming: true, awaitingDecision: true }))).toBe(`later`);
+    expect(sendIntentOf(chat({ ...later, spentUntil: 5_000 }))).toBe(`later`);
+    expect(sendIntentOf(chat({ ...later, waitingOnYou: true }))).toBe(`later`);
+    // A plan's revision, an armed edit and the agent's voice are not sends to book.
+    expect(sendIntentOf(chat({ ...later, pendingPlan: true }))).toBe(`plan`);
+    expect(sendIntentOf(chat({ ...later, editing: true }))).toBe(`edit`);
+    expect(sendIntentOf(chat({ ...later, voiceAgent: true }))).toBe(`place`);
+    // Its button reads as a time, so an empty press does nothing rather than continue or flush the queue now.
+    expect(sendable(chat({ ...later, staged: true }), `later`, undefined)).toBe(true);
+    expect(sendable(chat({ ...later, pickUp: { ready: true } }), `later`, undefined)).toBe(false);
+    expect(sendable(chat({ ...later, queued: 1 }), `later`, undefined)).toBe(false);
+});
+
+it(`says when a booked message goes, and that an ordinary send takes what is scheduled with it`, () => {
+    expect(sendHintFor(`later`, { ...WORDS, later: `Tomorrow 09:00` })).toEqual({
+        title: `Schedule`,
+        rows: [{ label: `Sends`, value: `Tomorrow 09:00` }],
+        note: `It waits in this chat, where you can send it sooner, change when, or take it back.`,
+    });
+    expect(placeholderFor(`later`, WORDS)).toBe(`Write the message to schedule…`);
+    expect(sendHintFor(`idle`, WORDS)).toBe(`Send`);
+    expect(sendHintFor(`idle`, { ...WORDS, heldGoesToo: true })).toEqual({ title: `Send`, note: `What is scheduled in this chat goes now too.` });
+});
+
 it(`gives every intent its own sentence in both slots`, () => {
-    const intents: readonly SendIntent[] = [`place`, `edit`, `plan`, `scheduled`, `idle`, `parked`, `steer`, `queue`];
+    const intents: readonly SendIntent[] = [`place`, `edit`, `plan`, `later`, `scheduled`, `idle`, `parked`, `steer`, `queue`];
     const placeholders = intents.map((intent) => placeholderFor(intent, WORDS));
     const hints = intents.map((intent) => JSON.stringify(sendHintFor(intent, WORDS)));
 
