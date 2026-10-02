@@ -544,6 +544,7 @@ async function* streamTurn(events: AsyncIterable<CodexEvent>, context: CodexStre
     const capture: TurnCapture = {};
     // The subagents this turn's multi-agent calls start; their items read as the turn's own do, under their spawn call.
     const subagents = codexSubagents();
+    let charged = subagentSpend(subagents);
     const subagentItems = (event: Extract<CodexEvent, { type: "item.started" | "item.updated" | "item.completed" }>): AsyncIterable<AgentEvent> =>
         itemFrames(event, { ...context, holdMessages: false }, {});
     for await (const event of events) {
@@ -569,11 +570,16 @@ async function* streamTurn(events: AsyncIterable<CodexEvent>, context: CodexStre
             if (event.usage !== undefined) {
                 yield {
                     kind: "usage",
-                    inputTokens: event.usage.input_tokens + delegated.input,
-                    outputTokens: event.usage.output_tokens + delegated.output,
-                    cacheReadTokens: event.usage.cached_input_tokens,
-                    cacheCreationTokens: event.usage.cache_write_input_tokens,
+                    inputTokens:
+                        Math.max(0, event.usage.input_tokens - event.usage.cached_input_tokens - event.usage.cache_write_input_tokens) +
+                        delegated.input -
+                        charged.input,
+                    outputTokens: event.usage.output_tokens + delegated.output - charged.output,
+                    cacheReadTokens: event.usage.cached_input_tokens + delegated.cacheRead - charged.cacheRead,
+                    cacheCreationTokens: event.usage.cache_write_input_tokens + delegated.cacheCreation - charged.cacheCreation,
                 };
+                // A refused steer can start another turn; subagent reports remain cumulative across it.
+                charged = delegated;
             }
         } else if (event.type === "rate_limits") {
             // Headroom pushed as the turn spends it; a snapshot with no window yields no frame, not a false "no
@@ -632,7 +638,19 @@ const codexPhase = (
                     ...(phase.images.length > 0 ? { images: phase.images } : {}),
                     ...(phase.sessionId !== undefined ? { sessionId: phase.sessionId } : {}),
                     ...turnBase,
-                    ...(steering !== undefined ? { steering: steering.steering } : {}),
+                    ...(steering !== undefined
+                        ? {
+                              steering: steering.steering,
+                              closeSteering: () => {
+                                  // Planning lends the queue onward; execution closes admission before terminal yields.
+                                  if (phase.holdMessages) {
+                                      steering.close();
+                                  } else {
+                                      request.spec.steering?.close();
+                                  }
+                              },
+                          }
+                        : {}),
                     options: threadOptions(request, phase.sandboxMode, context.gate?.enforcing === true),
                     signal: request.signal,
                 }),

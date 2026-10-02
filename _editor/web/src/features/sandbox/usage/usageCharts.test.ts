@@ -12,6 +12,7 @@ import { type RankedEntry, rankedBars, type SpendBucket, type UsageTotals } from
 
 const totals = (over: Partial<UsageTotals> = {}): UsageTotals => ({
     costUsd: 0,
+    costKnown: true,
     turns: 0,
     inputTokens: 0,
     outputTokens: 0,

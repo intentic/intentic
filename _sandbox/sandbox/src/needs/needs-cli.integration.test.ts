@@ -258,8 +258,8 @@ describe("the asking commands speak the needs contract", () => {
             expect(baked).toEqual({ code: 0, stdout: "The office pack is already in this image: nothing to propose, use it now.\n", stderr: "" });
             expect(server.seen).toEqual([]);
             const unknown = await run(server.port, "environment", ["propose", "no-such-pack", "--pack"]);
-            expect(unknown.code).toBe(1);
-            expect(unknown.stderr).toContain("environment: no feature pack named no-such-pack: the packs are ");
+            expect(unknown.code).toBe(2);
+            expect(unknown.stdout).toContain("environment: no feature pack named no-such-pack: the packs are ");
         } finally {
             delete process.env["INTENTIC_PACKS_DIR"];
             delete process.env["INTENTIC_PACK_STAMPS_DIR"];
@@ -289,10 +289,10 @@ describe("the asking commands speak the needs contract", () => {
         expect(server.seen[0]?.body).toEqual({ key: "WEBHOOK_SECRET" });
     });
 
-    it("secrets generate hands back the daemon's sentence for a name something already holds, and exits 1", async () => {
+    it("secrets generate hands back the daemon's sentence for a name something already holds, and exits 2", async () => {
         server.answer = () => ({ status: 409, body: { message: '"SESSION_SECRET" is already stored: use it as it is, or pick a name nothing here holds.' } });
         const taken = await run(server.port, "secrets", ["generate", "SESSION_SECRET"]);
-        expect(taken).toMatchObject({ code: 1, stdout: "", stderr: 'secrets: "SESSION_SECRET" is already stored: use it as it is, or pick a name nothing here holds.\n' });
+        expect(taken).toMatchObject({ code: 2, stderr: "", stdout: 'secrets: "SESSION_SECRET" is already stored: use it as it is, or pick a name nothing here holds.\n' });
         expect(server.seen.map((seen) => `${seen.method} ${seen.path}`)).toEqual([declared(["secrets", "generate"], { key: "SESSION_SECRET" })]);
     });
 
@@ -412,17 +412,17 @@ describe("the asking commands speak the needs contract", () => {
     it("secrets hosts remove refuses a host the guard does not hold, without asking the daemon to change anything", async () => {
         server.answer = hostsDaemon([GITHUB]);
         const result = await run(server.port, "secrets", ["hosts", "GITHUB_TOKEN", "remove", "evil.example"]);
-        expect(result).toMatchObject({ code: 1, stderr: "secrets: evil.example is not on GITHUB_TOKEN's guard (api.github.com)\n" });
+        expect(result).toMatchObject({ code: 2, stderr: "", stdout: "secrets: evil.example is not on GITHUB_TOKEN's guard (api.github.com)\n" });
         expect(server.seen.map((seen) => seen.method)).toEqual(["GET"]);
     });
 
-    it("secrets hosts hands back the daemon's refusal of a loosening, and exits 1", async () => {
+    it("secrets hosts hands back the daemon's refusal of a loosening, and exits 2", async () => {
         server.answer = (seen) =>
             seen.method === "GET"
                 ? hostsDaemon([GITHUB])(seen)
                 : { status: 403, body: { message: "The owner kept GITHUB_TOKEN's host guard on: nothing changed." } };
         const result = await run(server.port, "secrets", ["hosts", "GITHUB_TOKEN", "off"]);
-        expect(result).toMatchObject({ code: 1, stdout: "", stderr: "secrets: The owner kept GITHUB_TOKEN's host guard on: nothing changed.\n" });
+        expect(result).toMatchObject({ code: 2, stderr: "", stdout: "secrets: The owner kept GITHUB_TOKEN's host guard on: nothing changed.\n" });
     });
 
     it("needs lists this conversation's needs and cancel withdraws one, at the routes the contract declares", async () => {
@@ -441,10 +441,41 @@ describe("the asking commands speak the needs contract", () => {
         expect(cancelled).toMatchObject({ code: 0, stdout: "need-a1b2c is cancelled: The OPENAI_API_KEY secret.\n" });
     });
 
-    it("refuses an option it does not know rather than asking for the wrong thing", async () => {
+    it("a typo exits 2 on stdout without asking for the wrong thing", async () => {
         const result = await run(server.port, "capabilities", ["request", "github", "--targte", "github.com"]);
-        expect(result.code).toBe(1);
-        expect(result.stderr).toBe("capabilities: unknown option --targte\n");
+        expect(result).toEqual({ code: 2, stdout: "capabilities: unknown option --targte\n", stderr: "" });
         expect(server.seen).toEqual([]);
+    });
+
+    it("unknown subcommands exit 2 with help on stdout", async () => {
+        for (const command of ["capabilities", "secrets", "environment", "grants", "needs"]) {
+            const result = await run(server.port, command, ["typo"]);
+            expect(result.code).toBe(2);
+            expect(result.stdout).toContain(command);
+            expect(result.stderr).toBe("");
+        }
+    });
+
+    it("an unreachable daemon exits 2 with the transport error on stdout", async () => {
+        const stopped = await daemon();
+        await stopped.close();
+        const result = await run(stopped.port, "capabilities", ["request", "github"]);
+        expect(result.code).toBe(2);
+        expect(result.stdout).toContain("ECONNREFUSED");
+        expect(result.stderr).toBe("");
+    });
+
+    it("an HTTP failure exits 2 with the daemon's message on stdout", async () => {
+        server.answer = () => ({ status: 503, body: { message: "daemon restarting" } });
+        expect(await run(server.port, "capabilities", ["request", "github"])).toEqual({
+            code: 2, stdout: "capabilities: daemon restarting\n", stderr: "",
+        });
+    });
+
+    it("an unreadable verdict exits 2 rather than claiming a refusal", async () => {
+        server.answer = () => ({ status: 200, body: { state: "unknown", message: "bad verdict" } });
+        expect(await run(server.port, "capabilities", ["request", "github"])).toEqual({
+            code: 2, stdout: "capabilities: unreadable answer from the daemon: expected a need verdict and message\n", stderr: "",
+        });
     });
 });

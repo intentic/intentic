@@ -101,6 +101,14 @@ describe(`totals`, () => {
         expect(totalTokens(totals)).toBe(200 + 100 + 600 + 40);
     });
 
+    // A runtime that reports no cost (Codex, Cursor) records a zero that is not a price, so a window holding one has a
+    // spend floor, not a total; rows from before the marker carry none and stay exact.
+    it(`is a floor once any row holds an unpriced turn, and exact otherwise`, () => {
+        expect(totalsOf([row(), row({ costUsd: 2 })]).costKnown).toBe(true);
+        expect(totalsOf([row(), row({ costUsd: 0, costKnown: false })]).costKnown).toBe(false);
+        expect(totalsOf([]).costKnown).toBe(true);
+    });
+
     it(`is zero, not NaN: over no rows`, () => {
         expect(totalsOf([])).toMatchObject({ costUsd: 0, turns: 0 });
         expect(cacheHitRate(totalsOf([]))).toBeUndefined();

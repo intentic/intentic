@@ -186,6 +186,9 @@ export const createAcpConnections = (logger: Services["logger"], terminalRun: Te
                 turns.set(sessionId, hooks);
                 clearTimeout(idleTimer);
                 return () => {
+                    if (turns.get(sessionId) !== hooks) {
+                        return;
+                    }
                     turns.delete(sessionId);
                     if (turns.size === 0 && !dead) {
                         armIdleReap();

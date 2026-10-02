@@ -531,9 +531,9 @@ describe("diff invalidation", () => {
         setAgents([summary(`a1`, `landed`)], 2);
 
         // The whole review, the file diffs and history read beside the change list included.
-        expect(invalidate).toHaveBeenCalledWith({ queryKey: [`agents.diff`, { id: `a1` }, `sbx-1`] });
-        expect(invalidate).toHaveBeenCalledWith({ queryKey: [`agents.fileDiff`, { id: `a1` }, `unpersisted`, `sbx-1`] });
-        expect(invalidate).toHaveBeenCalledWith({ queryKey: [`agents.history`, { id: `a1` }, `sbx-1`] });
+        expect(invalidate).toHaveBeenCalledWith({ queryKey: [`agents.diff`, { id: `a1` }, `sbx-1`] }, { cancelRefetch: false });
+        expect(invalidate).toHaveBeenCalledWith({ queryKey: [`agents.fileDiff`, { id: `a1` }, `unpersisted`, `sbx-1`] }, { cancelRefetch: false });
+        expect(invalidate).toHaveBeenCalledWith({ queryKey: [`agents.history`, { id: `a1` }, `sbx-1`] }, { cancelRefetch: false });
         invalidate.mockRestore();
     });
 
@@ -563,9 +563,9 @@ describe("diff invalidation", () => {
 
         setAgents([summary(`a1`, `landed`)], 0);
 
-        expect(invalidate).toHaveBeenCalledWith({ queryKey: [`agents.diff`, { id: `a1` }, `sbx-1`] });
-        expect(invalidate).toHaveBeenCalledWith({ queryKey: [`agents.fileDiff`, { id: `a1` }, `unpersisted`, `sbx-1`] });
-        expect(invalidate).toHaveBeenCalledWith({ queryKey: [`agents.history`, { id: `a1` }, `sbx-1`] });
+        expect(invalidate).toHaveBeenCalledWith({ queryKey: [`agents.diff`, { id: `a1` }, `sbx-1`] }, { cancelRefetch: false });
+        expect(invalidate).toHaveBeenCalledWith({ queryKey: [`agents.fileDiff`, { id: `a1` }, `unpersisted`, `sbx-1`] }, { cancelRefetch: false });
+        expect(invalidate).toHaveBeenCalledWith({ queryKey: [`agents.history`, { id: `a1` }, `sbx-1`] }, { cancelRefetch: false });
         invalidate.mockRestore();
     });
 });

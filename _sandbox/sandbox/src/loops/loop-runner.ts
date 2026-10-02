@@ -118,6 +118,17 @@ export interface LoopSettlement {
 
 // Drives one loop to completion; never rejects, since a failed loop has its own error state and every caller would just
 // convert a rejection back into one.
+// A spend ceiling cannot hold on a runtime that reports tokens but no cost (Codex, Cursor): counting its missing price
+// as $0 would let the loop spend past the ceiling unseen, so such a turn ends the loop, saying why. A turn with no usage
+// at all spent nothing a ceiling could count.
+const unpricedEnding = (record: LoopRecord, usage: UsageFrame | undefined): { readonly state: LoopState; readonly detail: string } | undefined =>
+    record.maxSpendUsd === undefined || usage === undefined || usage.costUsd !== undefined
+        ? undefined
+        : {
+              state: "unpriced",
+              detail: `This runtime reports no cost, so the $${record.maxSpendUsd.toFixed(2)} spend ceiling cannot be held. Use a runtime that reports cost, or remove the ceiling.`,
+          };
+
 export const runLoop = async (services: Services, record: LoopRecord): Promise<LoopSettlement> => {
     const { conversationId } = record;
     const loops = services.conversations.holdings(LOOPS);
@@ -184,6 +195,7 @@ export const runLoop = async (services: Services, record: LoopRecord): Promise<L
             const changed = before !== after;
             stalls = changed ? 0 : stalls + 1;
             const cost = outcome.usage?.costUsd;
+            ended = unpricedEnding(record, outcome.usage);
             spentUsd += cost ?? 0;
             // Runs even after an errored iteration: a turn can fail on its closing frame after already meeting the
             // goal, and skipping the check here would redo finished work.

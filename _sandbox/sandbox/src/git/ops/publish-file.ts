@@ -9,14 +9,21 @@ import { pushBranch, remoteState } from "../remote/remote.js";
 // a creator would otherwise do by hand. A proof only counts on the DEFAULT branch (the verifier reads `HEAD/<file>`),
 // so the branch is checked before anything is written.
 
-// The remote's default branch. `origin/HEAD` (local, free) covers a clone; a pushed-not-cloned repo falls back to
-// `ls-remote --symref`. Undefined means genuinely unknown, not "does not match".
-export const defaultBranchOf = async (dir: string, remote: string, git: GitRunner = defaultGit): Promise<string | undefined> => {
+// The default branch a clone recorded for the remote (`<remote>/HEAD`): local and free, so a hot path may ask it;
+// undefined for a repo pushed rather than cloned.
+export const trackedDefaultBranchOf = async (dir: string, remote: string, git: GitRunner = defaultGit): Promise<string | undefined> => {
     const prefix = `${remote}/`;
     const local = await git(dir, ["symbolic-ref", "--short", `refs/remotes/${remote}/HEAD`]).catch(() => undefined);
     const short = local?.stdout.trim() ?? "";
-    if (short.startsWith(prefix) && short.length > prefix.length) {
-        return short.slice(prefix.length);
+    return short.startsWith(prefix) && short.length > prefix.length ? short.slice(prefix.length) : undefined;
+};
+
+// The remote's default branch. `origin/HEAD` (local, free) covers a clone; a pushed-not-cloned repo falls back to
+// `ls-remote --symref`. Undefined means genuinely unknown, not "does not match".
+export const defaultBranchOf = async (dir: string, remote: string, git: GitRunner = defaultGit): Promise<string | undefined> => {
+    const tracked = await trackedDefaultBranchOf(dir, remote, git);
+    if (tracked !== undefined) {
+        return tracked;
     }
     const remoteRead = await git(dir, ["ls-remote", "--symref", remote, "HEAD"]).catch(() => undefined);
     // `ref: refs/heads/main\tHEAD` on the first line, when the remote advertises a symref at all.

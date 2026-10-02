@@ -31,6 +31,7 @@ Every ask answers the same way:
 - **exit 0: met.** The capability is live now (or already was, and the sentence says so): use it.
 - **exit 1: refused or declined.** Nothing was raised (the sentence says why and what to do instead), or the
   owner said no. Carry on without it and say plainly what it would have enabled.
+- **exit 2: no verdict.** Read the error on stdout; correct the command or restore the daemon before retrying.
 - **exit 3: still waiting.** The card is up and stays up after your turn ends. Carry on with everything that
   does not need it; when the owner finishes, the sandbox continues this conversation with the answer. Do not
   poll, and do not ask again: `needs` lists what is still waiting, and `needs cancel <id>` withdraws an ask the

@@ -26,6 +26,7 @@ const fanOut = (label: string): { on: (listener: ReposListener) => Disposable; e
     };
 };
 
+// An empty batch on either channel means the connection missed changes; listeners must re-read their own scope.
 // Which repos' refs moved (commit, checkout, branch, tag, rebase).
 const refs = fanOut(`refs`);
 export const onRefsChanged = refs.on;

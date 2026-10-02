@@ -34,7 +34,8 @@ export interface IdleStopProbes {
     readonly terminalActivityAt: () => Promise<number>;
     // The soonest one-time wake, or 0 for none. Same problem as an armed watch: nothing outside restarts this machine
     // for a clock, so a moment somebody was promised passes unnoticed while it sleeps. Recurring schedules are left
-    // out on purpose — see the scheduler's own note on why a cron is not worth a night of billing.
+    // out on purpose: a cron's missed moment fires once, late, when the daemon next starts (the scheduler's catch-up),
+    // and is not worth a night of billing to be punctual.
     readonly nextOneTimeWakeAt: () => Promise<number>;
 }
 
@@ -76,8 +77,9 @@ export const startIdleStop = (
         }
         // A wake landing within one window holds the machine up, because stopping now would miss it: only a visit
         // restarts this daemon, and nothing outside pays attention to a clock in here. One due further out is left to
-        // sleep through — an always-awake machine to keep a nightly chore punctual costs more than the chore is worth —
-        // and the scheduler fires it late, saying so, when somebody next comes back.
+        // sleep through, and the scheduler fires it late, saying so, when somebody next comes back. Crons never hold
+        // the machine: an always-awake machine to keep a nightly chore punctual costs more than the chore is worth, and
+        // the scheduler's start fires each one that missed a moment, once, late, just the same.
         if (wakeAt > 0 && wakeAt - now <= windowMs) {
             quietSince = now;
             return;

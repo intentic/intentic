@@ -1,6 +1,6 @@
 import { errorMessage } from "@intentic/base/errors";
 import type { WorkPlace } from "../../workload/resource-budget.js";
-import { isIsolated, worktreeOf } from "../../conversations/registry/agents-store.js";
+import { conversationProfile, isIsolated, worktreeOf } from "../../conversations/registry/agents-store.js";
 import { landByHandLeased } from "../../conversations/land/land-by-hand.js";
 import { landTargetOf } from "../../conversations/land/land-target.js";
 import { parentOfActor } from "../../auth/principal.js";
@@ -29,6 +29,7 @@ import { killCauseOf, killNote, runtimeKilled } from "./child-death.js";
 import { noteChildWork } from "./child-verification.js";
 import { type SpawnableProvider, spawnableProviders } from "./spawn-catalog.js";
 import {
+    blockedMoveReporter,
     markSubagentEndingReported,
     noteSpawnedChild,
     openSpawnedChild,
@@ -41,6 +42,7 @@ import {
 } from "./subagents.js";
 import { bookedRerunWords, childLandingWords, sayToParent } from "./child-lands.js";
 import { waitForWork, type WorkWaitOutcome } from "./work-wait.js";
+import { deliverWake } from "../run/turn/wake-delivery.js";
 import { spokenBy } from "../../seams/turn-speaker.js";
 import type { TurnInput } from "../../seams/turn-starter.js";
 import type { DomainEventMap } from "../../seams/domain-events.js";
@@ -351,7 +353,46 @@ const takeProse = (tally: ChildTurnTally, event: Extract<AgentEvent, { kind: "de
     tally.bubble = "";
 };
 
-// A card the child parked on: blocked, saying on what, with the whole card kept for `answer`.
+// What a parent is told of the question its child parked on: the questions whole, options and all, and the door that
+// answers them, since the parent may have no wait open to read them from.
+const questionWords = (childId: string, spec: ChildSpawnSpec, questions: readonly AskQuestion[]): string =>
+    [
+        `Your subagent \`${childId}\` ("${taskLine(spec)}") stopped on a question and is waiting for your answer; until you give one it does nothing and keeps its seat.`,
+        ...questions.map((asked) => {
+            const options = asked.options.map((option) => option.label);
+            return `- ${asked.question}${options.length === 0 ? "" : ` (options: ${options.join(", ")}${asked.multiSelect ? "; pick any number" : ""})`}`;
+        }),
+        `Answer with answer(child: "${childId}", answers: [{ question, picks }]), one entry per question in its own words. If it is not yours to decide, say so to the owner rather than guessing.`,
+    ].join("\n");
+
+// Wakes the parent with a question its child parked on, where no wait of the parent's took it: a parent with no live turn
+// hears of nothing else until the child ends, so the child would sit blocked until a person happened to look. Said
+// through the door a child's report takes (child-report.ts): into the parent's live turn, else a turn of its own.
+// `reported` files the move as handed over once the parent has it, so a later wait does not return it again. Never
+// throws: it runs off a frame of the child's turn, which must not fail with it.
+const askParent = async (services: Services, childId: string, kid: ChildRecord, questions: readonly AskQuestion[], reported: () => void): Promise<void> => {
+    const entry = services.agents.entry(kid.parent);
+    if (entry === undefined || entry.archivedAt !== undefined) {
+        return;
+    }
+    try {
+        const receipt = await deliverWake(
+            { turns: services.turns, sessionIdOf: (conversationId) => services.conversations.sessionIdOf(conversationId) },
+            { conversationId: kid.parent, prompt: questionWords(childId, kid.spec, questions), voice: "sandbox", source: "subagents", profile: conversationProfile(entry) },
+        );
+        if ("invalid" in receipt || "why" in receipt) {
+            services.logger.info({ child: childId, parent: kid.parent, receipt }, "child question: its parent took nothing, it waits on a wait or the owner");
+            return;
+        }
+        reported();
+    } catch (error) {
+        services.logger.warn({ err: error, child: childId }, "child question: could not be said to its parent");
+    }
+};
+
+// A card the child parked on: blocked, saying on what, with the whole card kept for `answer`. A question no parked wait
+// took also wakes the parent, which is the one to answer it; a permission or plan card is the owner's, and the owner's
+// own devices hear of it (the awaiting push), never the parent.
 const takeParked = (services: Services, childId: string, kid: ChildRecord | undefined, event: AgentEvent): void => {
     const parked = pendingOf(event);
     if (parked === undefined) {
@@ -361,6 +402,11 @@ const takeParked = (services: Services, childId: string, kid: ChildRecord | unde
         kid.pending = parked.card;
     }
     noteSpawnedChild(services.conversations, childId, { status: "blocked", summary: parked.summary });
+    // Asked in the same step as the move: a wait answers inside it, so nothing can take the move in between.
+    const reported = parked.card.kind === "question" ? blockedMoveReporter(services.conversations, childId) : undefined;
+    if (kid !== undefined && reported !== undefined) {
+        void askParent(services, childId, kid, parked.card.questions ?? [], reported);
+    }
 };
 
 // One frame of a child's turn onto its roster row and its tally. Normalized frames make this work across providers, and

@@ -79,7 +79,7 @@ import { cardDeps } from "./conversations/actor/card-offers.js";
 import { turnRunOf } from "./conversations/actor/conversation-holdings.js";
 import { dispatchWorkspaceEvent } from "./automations/workspace-events.js";
 import { clearTurnTaint } from "./guard/turn-taint.js";
-import { turnFinished } from "./push/notifications.js";
+import { awaitingResolved, turnFinished } from "./push/notifications.js";
 import { notifyAwaiting } from "./push/awaiting-detail.js";
 import { createDomainEvents, type DomainEvents } from "./seams/domain-events.js";
 import { type Announcer, createAnnouncer } from "./system/boot/announce.js";
@@ -660,6 +660,11 @@ export const wireReactions = (services: Services): void => {
     );
     services.events.subscribe("turn.finished", ({ conversationId, prompt, outcome }) =>
         services.pushSender.notifyIfAway(turnFinished(conversationId, prompt, outcome)),
+    );
+    // Each card's own push is replaced as it settles (conversations-slice.ts); this is the conversation-wide tag an ask
+    // goes out under when its card could not be read, which nothing but the turn's end can say is over.
+    services.events.subscribe("turn.finished", ({ conversationId }) =>
+        services.pushSender.withdraw(awaitingResolved(conversationId, `awaiting-${conversationId}`)),
     );
     services.events.subscribe("tree.changed", ({ label }) =>
         services.history.snapshot("turn", label).catch((error: unknown) => services.logger.warn({ err: error }, "history: turn snapshot failed")),

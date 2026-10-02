@@ -145,3 +145,23 @@ test("the privacy shield's redaction reaches a native install's notification and
     expect(JSON.parse(relayed[0] ?? "{}").notification).toMatchObject({ title: "‹person› wrote", body: "about ‹person›'s invoice" });
     expect(reached[0]?.payload).toContain("Jan Kowalski");
 });
+
+// A withdrawal replaces an ask only where its persistent notification showed: the device of a member who was away gets
+// the replacement under the same tag, the device of a member who was looking (and so never saw the ask) gets nothing,
+// and an ask that never pushed at all, or was already withdrawn, sends nothing anywhere.
+test("a withdrawn ask is replaced on exactly the devices it reached, once, and never pushes where it never showed", async () => {
+    const reached = stubSends();
+    tab("ada-tab", "ada@example.com");
+    const push = sender(storeOf(device("https://push.example/ada", "ada@example.com"), device("https://push.example/bob", "bob@example.com")));
+    await push.notifyIfAway(waiting);
+    reached.splice(0);
+
+    const replacement = { title: "No longer waiting", body: "The agent is not waiting on you anymore.", tag: waiting.tag ?? "" };
+    expect(await push.withdraw(replacement)).toEqual({ delivered: 1, failed: 0 });
+    expect(reached.map(({ endpoint }) => endpoint)).toEqual(["https://push.example/bob"]);
+    expect(JSON.parse(reached[0]?.payload ?? "{}")).toMatchObject({ tag: waiting.tag, requireInteraction: false });
+
+    expect(await push.withdraw(replacement)).toEqual({ delivered: 0, failed: 0 });
+    expect(await push.withdraw({ ...replacement, tag: "awaiting-never-pushed" })).toEqual({ delivered: 0, failed: 0 });
+    expect(reached).toHaveLength(1);
+});

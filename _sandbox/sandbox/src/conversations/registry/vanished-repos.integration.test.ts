@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { gitInit } from "@intentic/scaffold";
 import { conversationsDbPath, openConversationsDb } from "../../store/conversations-db.js";
-import { beginTurn, fleetStoreOver, noIsolation, noPresences } from "../../testing.js";
+import { beginTurn, fleetStoreOver, isolatedAgent, noIsolation, noPresences } from "../../testing.js";
 import { ensureRootRepo } from "../../git/remote/root-repo.js";
 import { repoGitDir } from "../../workspace/layout/git-layout.js";
 import { createLogger } from "../../logger.js";
@@ -148,4 +148,45 @@ test("a repo that stopped being a repo but kept its files is never dropped", asy
     expect(reposOf(agents, "c1")).toEqual(["root", "client"]);
     expect(existsSync(join(worktrees.conversationDir("c1"), "client"))).toBe(true);
     expect(existsSync(join(work, "client", "index.ts"))).toBe(true);
+});
+
+// ENOTDIR, EACCES, EIO: the probe failed, which says nothing about whether the repo is there.
+test("a repo the probe cannot reach is never taken for deleted", async () => {
+    const { work, historyRoot, worktrees, agents } = await setup();
+    // client's path runs through a file: access answers ENOTDIR, not ENOENT.
+    const unreachable = { ...worktrees, mainDir: (repo: string) => (repo === "client" ? join(work, "CLAUDE.md", "client") : worktrees.mainDir(repo)) };
+
+    expect(await dropVanishedRepos({ agents, agentWorktrees: unreachable, logger })).toEqual([]);
+
+    expect(reposOf(agents, "c1")).toEqual(["root", "client"]);
+    expect(existsSync(join(worktrees.conversationDir("c1"), "client"))).toBe(true);
+    expect(existsSync(join(historyRoot, "trash"))).toBe(false);
+});
+
+// Five repos leaving in the same instant is a mount not up yet, not five deletions; acting would strip every composition.
+test("a pass that reads most of the workspace's repos gone at once drops none of them", async () => {
+    const base = await mkdtemp(join(tmpdir(), "intentic-vanished-mass-"));
+    tempDirs.push(base);
+    const repos = ["a", "b", "c", "d", "e"].map((repo) => ({ repo, base: "0".repeat(40) }));
+    const entry = isolatedAgent([{ repo: "root", base: "0".repeat(40) }, ...repos]);
+    const dropped: string[][] = [];
+    const reaped: string[] = [];
+
+    const gone = await dropVanishedRepos({
+        agents: {
+            ids: () => [entry.id],
+            entry: () => entry,
+            dropRepos: async (names) => {
+                dropped.push([...names]);
+                return [entry.id];
+            },
+        },
+        // Every repo's main checkout is a path nothing stands at: ENOENT, the one answer that reads as deleted.
+        agentWorktrees: { mainDir: (repo) => join(base, repo), reapRepoCheckout: async (_id, repo) => void reaped.push(repo) },
+        logger,
+    });
+
+    expect(gone).toEqual([]);
+    expect(dropped).toEqual([]);
+    expect(reaped).toEqual([]);
 });

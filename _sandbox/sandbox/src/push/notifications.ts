@@ -113,3 +113,20 @@ export const automationPending = (automationId: string, prompt: string): PushNot
     tag: `approval-${automationId}`,
     requireInteraction: true,
 });
+
+// Withdrawals: an ask that stopped waiting is replaced under its own tag (PushSender.withdraw), only on the devices its
+// persistent notification reached. A replacement that shows something rather than a silent close, since browsers
+// penalise a push that displays nothing; it carries no detail of the ask, which the lock screen already showed.
+export const awaitingResolved = (conversationId: string, tag: string): PushNotification & { readonly tag: string } => ({
+    title: "No longer waiting",
+    body: "The agent is not waiting on you anymore.",
+    url: conversationUrl(conversationId),
+    tag,
+});
+
+export const needResolved = (need: { readonly id: string; readonly conversationId: string }): PushNotification & { readonly tag: string } => ({
+    title: "No longer waiting",
+    body: "This ask is settled.",
+    url: conversationUrl(need.conversationId),
+    tag: `need-${need.id}`,
+});

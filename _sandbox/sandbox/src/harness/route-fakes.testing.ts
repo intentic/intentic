@@ -95,7 +95,7 @@ export const realCheckout = async (
             worktreeDir: () => worktree,
             mainDir: () => work,
             sessionStore: (entry) => claudeStoreOf(work, root, entry),
-            exists: async () => true,
+            presence: async () => "present",
             // Read off the real checkout, so a test that moves it to a branch of its own sees what the daemon would.
             attached: async () => (await gitOut(worktree, "rev-parse", "--abbrev-ref", "HEAD")) === `agent/${id}`,
             elsewhere: async () => {

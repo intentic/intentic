@@ -965,6 +965,8 @@ export const loopMeta = (loop: NonNullable<AgentSummary["loop"]>): { readonly te
         exhausted: { text: `Ran out of iterations after ${loop.iteration}`, class: `text-warning` },
         stalled: { text: `Stalled after ${loop.iteration}, nothing changed`, class: `text-warning` },
         overspent: { text: `Hit the spend ceiling after ${loop.iteration}`, class: `text-warning` },
+        // Wants a priced runtime or no ceiling: its runtime reports no cost, so the ceiling could not hold.
+        unpriced: { text: `Stopped after ${loop.iteration}: its runtime reports no cost to hold the ceiling to`, class: `text-warning` },
         stopped: { text: `Loop stopped after ${loop.iteration}`, class: `text-muted` },
         error: { text: `Loop failed after ${loop.iteration}`, class: `text-danger` },
     };

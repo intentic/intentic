@@ -325,6 +325,74 @@ async fn viewers_of_one_session_share_one_control_client() {
 }
 
 #[tokio::test]
+async fn a_shared_grid_is_announced_to_every_viewer_and_expands_when_the_smallest_leaves() {
+    let server = Server::start("shared-grid").await;
+    server.session("shared-grid", 120, 40).await;
+    let (_harness, daemon) = started("term-shared-grid", &server).await;
+    let mut large = open(daemon, "plan=tmux&session=shared-grid&cols=120&rows=40").await;
+    let has_grid = |seen: &Seen, cols, rows| {
+        seen.texts.iter().any(|text| {
+            serde_json::from_str::<serde_json::Value>(text).unwrap()
+                == serde_json::json!({"type": "grid", "cols": cols, "rows": rows})
+        })
+    };
+    read_until(&mut large, |seen| {
+        has_grid(seen, 120, 40) && seen.text().contains("\x1bc")
+    })
+    .await;
+    let mut small = open(daemon, "plan=tmux&session=shared-grid&cols=80&rows=24").await;
+    read_until(&mut small, |seen| {
+        has_grid(seen, 80, 24) && seen.text().contains("\x1bc")
+    })
+    .await;
+    read_until(&mut large, |seen| has_grid(seen, 80, 24)).await;
+    assert_eq!(
+        server
+            .tmux(&[
+                "display-message",
+                "-p",
+                "-t",
+                "=shared-grid:",
+                "#{pane_width}x#{pane_height}"
+            ])
+            .await,
+        "80x24"
+    );
+    small.close(None).await.unwrap();
+    drop(small);
+    read_until(&mut large, |seen| has_grid(seen, 120, 40)).await;
+    // The announcement can reach the browser before tmux finishes applying the queued refresh.
+    for _ in 0..200 {
+        if server
+            .tmux(&[
+                "display-message",
+                "-p",
+                "-t",
+                "=shared-grid:",
+                "#{pane_width}x#{pane_height}",
+            ])
+            .await
+            == "120x40"
+        {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
+    assert_eq!(
+        server
+            .tmux(&[
+                "display-message",
+                "-p",
+                "-t",
+                "=shared-grid:",
+                "#{pane_width}x#{pane_height}"
+            ])
+            .await,
+        "120x40"
+    );
+}
+
+#[tokio::test]
 async fn a_resize_reaches_the_pane() {
     let server = Server::start("resize").await;
     server.session("resize", 80, 24).await;
@@ -359,8 +427,13 @@ async fn tmux_ending_the_session_or_refusing_the_attach_is_an_exit_with_its_word
     let (_harness, daemon) = started("term-exits", &server).await;
 
     let mut missing = open(daemon, "plan=tmux&session=nowhere").await;
-    let refused = read_until(&mut missing, |seen| !seen.texts.is_empty()).await;
-    let exit: serde_json::Value = serde_json::from_str(&refused.texts[0]).unwrap();
+    let refused = read_until(&mut missing, |seen| {
+        seen.texts
+            .iter()
+            .any(|text| serde_json::from_str::<serde_json::Value>(text).unwrap()["type"] == "exit")
+    })
+    .await;
+    let exit: serde_json::Value = serde_json::from_str(refused.texts.last().unwrap()).unwrap();
     assert_eq!(exit["type"], "exit");
     assert!(
         exit["reason"]
@@ -374,8 +447,13 @@ async fn tmux_ending_the_session_or_refusing_the_attach_is_an_exit_with_its_word
     let mut doomed = open(daemon, "plan=tmux&session=doomed").await;
     read_until(&mut doomed, |seen| seen.text().contains("\x1bc")).await;
     server.tmux(&["kill-session", "-t", "=doomed"]).await;
-    let ended = read_until(&mut doomed, |seen| !seen.texts.is_empty()).await;
-    let exit: serde_json::Value = serde_json::from_str(&ended.texts[0]).unwrap();
+    let ended = read_until(&mut doomed, |seen| {
+        seen.texts
+            .iter()
+            .any(|text| serde_json::from_str::<serde_json::Value>(text).unwrap()["type"] == "exit")
+    })
+    .await;
+    let exit: serde_json::Value = serde_json::from_str(ended.texts.last().unwrap()).unwrap();
     assert_eq!(
         (exit["type"].as_str(), exit["code"].as_i64()),
         (Some("exit"), Some(0))

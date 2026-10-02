@@ -2,10 +2,12 @@ import { isPipelineInFlight, type PipelineJob, type PipelineRun, type PipelineSt
 import { githubHeaders } from "../capabilities/cli/git-access.js";
 import { plainText } from "@intentic/base/plain-text";
 import type { CiProject } from "./projects.js";
+import { z } from "zod";
 import { localWorkflowCalls, resolveNeeds } from "./workflowGraph.js";
 
 // Both vendors' pipeline APIs behind one client shape (CiClient), keyed off the account a project mapped to; the vendor
-// branch exists exactly once. `fetch` is injectable for tests; failures throw with the vendor's status and body tail.
+// branch exists exactly once. `fetch` is injectable for tests; failures throw with the vendor's status and body tail, and a
+// spent rate limit throws CiRateLimited, after which the account is left alone until it lifts.
 
 // The call shape only, not `typeof fetch`: a test's stand-in answers requests, it does not carry fetch's own statics.
 export type FetchFn = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
@@ -48,14 +50,67 @@ export interface CiClient {
     readonly ensureHook: (project: CiProject, spec: HookSpec) => Promise<void>;
     // Best-effort inverse; a hook is identified by its delivery url alone.
     readonly removeHook: (project: CiProject, url: string) => Promise<void>;
+    // The forge's own word on the project, through any redirect a rename left: its stable id, where it lives now, and
+    // its default branch.
+    readonly repository: (project: CiProject) => Promise<ForgeRepository>;
     readonly projectUrl: (project: CiProject) => string;
 }
+
+export interface ForgeRepository {
+    readonly id: number;
+    readonly path: string;
+    readonly defaultBranch?: string | undefined;
+}
+
+/** The forge refused because the token's API rate limit is spent, not because of anything about the request: nothing
+ *  on this account is asked again until `until` (epoch ms). Every caller shares one token with the agents' own `gh`. */
+export class CiRateLimited extends Error {
+    constructor(
+        what: string,
+        readonly until: number,
+    ) {
+        super(`${what} is rate-limited until ${new Date(until).toISOString()}`);
+        this.name = "CiRateLimited";
+    }
+}
+
+// How long to hold off when a forge says its limit is spent but not until when.
+const RATE_LIMIT_FALLBACK_MS = 60_000;
+
+// When a refusal is a spent rate limit, the moment it lifts. GitHub says it with a 403 or a 429: X-RateLimit-Remaining 0
+// for the primary limit, Retry-After or the body's own words for the secondary one; any other 403 is about the token or
+// the repository. GitLab says it with a 429 and RateLimit-Reset.
+const rateLimitLifts = (response: Response, body: string, now: number): number | undefined => {
+    if (response.status !== 403 && response.status !== 429) {
+        return undefined;
+    }
+    const headers = response.headers;
+    const retryAfter = headers.get("retry-after");
+    if (
+        response.status === 403 &&
+        (headers.get("x-ratelimit-remaining") ?? headers.get("ratelimit-remaining")) !== "0" &&
+        retryAfter === null &&
+        !/rate limit|abuse detection/i.test(body)
+    ) {
+        return undefined;
+    }
+    const seconds = retryAfter === null ? Number.NaN : Number(retryAfter);
+    if (Number.isFinite(seconds) && seconds >= 0) {
+        return now + seconds * 1000;
+    }
+    const reset = Number(headers.get("x-ratelimit-reset") ?? headers.get("ratelimit-reset") ?? Number.NaN);
+    return Number.isFinite(reset) && reset > 0 ? reset * 1000 : now + RATE_LIMIT_FALLBACK_MS;
+};
 
 const BODY_TAIL = 300;
 
 const throwOn = async (response: Response, what: string): Promise<Response> => {
     if (!response.ok) {
         const body = await response.text().catch(() => "");
+        const lifts = rateLimitLifts(response, body, Date.now());
+        if (lifts !== undefined) {
+            throw new CiRateLimited(what, lifts);
+        }
         throw new Error(`${what} failed (${response.status}): ${body.slice(0, BODY_TAIL)}`);
     }
     return response;
@@ -446,6 +501,12 @@ const githubClient = (fetchFn: FetchFn): CiClient => {
                 );
             }
         },
+        repository: async (project) => {
+            const repo = GithubRepositorySchema.parse(
+                await json<unknown>(await fetchFn(githubApi(project, ""), { headers: githubHeaders(project.account.token) }), "github repository"),
+            );
+            return { id: repo.id, path: repo.full_name, defaultBranch: repo.default_branch ?? undefined };
+        },
         projectUrl: (project) => `https://${project.account.host}/${project.project}`,
     };
 };
@@ -532,7 +593,8 @@ export interface GitlabPipelineHook {
         readonly duration?: number | null;
         readonly url?: string;
     };
-    readonly project: { readonly path_with_namespace: string; readonly web_url: string };
+    // `id` and `default_branch` are the forge's word on the project (main-line.ts), not on the run.
+    readonly project: { readonly id?: number; readonly path_with_namespace: string; readonly web_url: string; readonly default_branch?: string | null };
     readonly commit?: { readonly title?: string };
     // The hook is the one gitlab path that hands us an avatar outright, no /avatar lookup needed.
     readonly user?: { readonly name?: string; readonly username?: string; readonly avatar_url?: string };
@@ -768,9 +830,66 @@ const gitlabClient = (fetchFn: FetchFn): CiClient => {
                 );
             }
         },
+        repository: async (project) => {
+            const repo = GitlabProjectSchema.parse(
+                await json<unknown>(await fetchFn(gitlabApi(project, ""), { headers: gitlabHeaders(project) }), "gitlab project"),
+            );
+            return { id: repo.id, path: repo.path_with_namespace, defaultBranch: repo.default_branch ?? undefined };
+        },
         projectUrl: (project) => `${project.account.apiBase.replace(/\/api\/v4$/, "")}/${project.project}`,
     };
 };
 
+// The repository reads, narrowed to what they promise: an answer without an id or a path is no answer. An empty
+// repository has no default branch yet.
+const GithubRepositorySchema = z.object({ id: z.number(), full_name: z.string(), default_branch: z.string().nullish() });
+const GitlabProjectSchema = z.object({ id: z.number(), path_with_namespace: z.string(), default_branch: z.string().nullish() });
+
+// ---- the rate limit, shared by every caller ----
+
+// When each account's limit lifts, kept per transport like the job lists, so one test's stand-in never cools another's.
+// An account is its API and its token: the limit is the token's, whichever repository asked.
+const cooldowns = new WeakMap<FetchFn, Map<string, number>>();
+
+// The client with the cooldown in front: while an account's limit is spent, every call on it fails at once with the same
+// typed refusal instead of spending a request the forge will refuse, so the poller, the hook reconcile and the board's
+// backfill all wait it out without each knowing about it.
+const cooled = (client: CiClient, fetchFn: FetchFn): CiClient => {
+    const held = cooldowns.get(fetchFn) ?? new Map<string, number>();
+    cooldowns.set(fetchFn, held);
+    const guard =
+        <A extends unknown[], R>(call: (project: CiProject, ...rest: A) => Promise<R>) =>
+        async (project: CiProject, ...rest: A): Promise<R> => {
+            const account = `${project.account.apiBase}\n${project.account.token}`;
+            const until = held.get(account);
+            if (until !== undefined && Date.now() < until) {
+                throw new CiRateLimited(`${project.account.host}'s API`, until);
+            }
+            held.delete(account);
+            try {
+                return await call(project, ...rest);
+            } catch (error) {
+                if (error instanceof CiRateLimited) {
+                    held.set(account, Math.max(held.get(account) ?? 0, error.until));
+                }
+                throw error;
+            }
+        };
+    return {
+        listRuns: guard(client.listRuns),
+        failedJobs: guard(client.failedJobs),
+        failedSteps: guard(client.failedSteps),
+        allJobs: guard(client.allJobs),
+        failedJobLogs: guard(client.failedJobLogs),
+        jobLog: guard(client.jobLog),
+        rerun: guard(client.rerun),
+        cancel: guard(client.cancel),
+        ensureHook: guard(client.ensureHook),
+        removeHook: guard(client.removeHook),
+        repository: guard(client.repository),
+        projectUrl: client.projectUrl,
+    };
+};
+
 export const ciClientFor = (host: "github" | "gitlab", fetchFn: FetchFn = fetch): CiClient =>
-    host === "github" ? githubClient(fetchFn) : gitlabClient(fetchFn);
+    cooled(host === "github" ? githubClient(fetchFn) : gitlabClient(fetchFn), fetchFn);

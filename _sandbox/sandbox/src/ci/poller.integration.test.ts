@@ -31,11 +31,13 @@ jest.mock("../seams/runtime-feed.js", () => ({ publishRuntimeChange: (...domains
 // The runs still going that reach main's fix agent, recorded at its door: what it does with them is
 // main-fixer.integration.test.ts's.
 const inFlight: number[] = [];
+// What main's fix agent does with a finished run, swappable per test: nothing, unless a test says.
+const fixer = { finished: async (_services: Services, _run: { runId: number }): Promise<void> => {} };
 jest.mock("./main-fixer.js", () => ({
     runInFlight: async (_services: unknown, _project: unknown, pipeline: { runId: number }) => {
         inFlight.push(pipeline.runId);
     },
-    runFinished: async () => {},
+    runFinished: (services: Services, pipeline: { runId: number }) => fixer.finished(services, pipeline),
 }));
 
 const run = (id: number, conclusion: string | null, branch = "main", status = "completed") => ({
@@ -75,7 +77,9 @@ const harness = async (warned: boolean, narrow: { branch?: string } = {}) => {
         capabilities,
         automations,
         ciStore: fileCiStore(join(root, `${STATE_DIR}`, "secrets", "ci.json")),
-        sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
+        // Repair off: with it on, main's failures are its fix agent's and wake no automation (events.ts), and these tests
+        // are about what an automation hears.
+        sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({ autoRepair: false }) }),
         ciRuns: createRunsCache(60_000),
         ciHooks: unstubbed<Services["ciHooks"]>("ciHooks", {
             warnings: () => new Map(warned ? [["web", { reason: "Pipeline webhooks are off: this sandbox has no public URL." }]] : []),
@@ -156,4 +160,27 @@ test("a run still going is handed to main's fix agent, which reads the jobs it a
     expect(inFlight).toEqual([]);
     await poller.poll();
     expect(inFlight).toEqual([3]);
+});
+
+// A run recorded as announced is never announced again, so main's fix agent must have it on file first: a crash between
+// the two re-announces it rather than losing main's failure.
+test("a run is recorded as announced only after main's fix agent is done with it", async () => {
+    const { services, poller, publish } = await harness(true);
+    await poller.poll();
+    publish([run(2, "failure"), run(1, "success")]);
+    const announcedWhenDone: (number[] | undefined)[] = [];
+    fixer.finished = async (seen, pipeline) => {
+        // Its own reads and writes take a while; the poller must not run ahead of them.
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        if (pipeline.runId === 2) {
+            announcedWhenDone.push(await seen.ciStore.announcedRuns("web"));
+        }
+    };
+    try {
+        await poller.poll();
+    } finally {
+        fixer.finished = async () => {};
+    }
+    expect(announcedWhenDone).toEqual([[1]]);
+    expect(await services.ciStore.announcedRuns("web")).toEqual([2, 1]);
 });

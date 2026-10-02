@@ -119,6 +119,8 @@ const failureOf = (failure: TurnFailure | undefined): Pick<UsageRow, "errorCode"
     failure === undefined ? {} : { ...opt("errorCode", failure.code), errorMessage: failure.message.slice(0, ERROR_MESSAGE_CHARS) };
 
 // What the turn cost, zero where the provider billed nothing; a billed turn with no count of its own is one turn.
+// `costKnown` is false when the runtime reported tokens but no price (Codex, Cursor), so the ledger's zero is a
+// placeholder rather than a real cost, and a spend ceiling cannot trust it.
 export const costOf = (
     usage: UsageFrame | undefined,
 ): Pick<
@@ -129,12 +131,16 @@ export const costOf = (
     | "cacheReadTokens"
     | "cacheCreationTokens"
     | "costUsd"
+    | "costKnown"
     | "durationMs"
     | "openingCacheReadTokens"
     | "openingCacheCreationTokens"
     | "promptFingerprint"
 > => {
     const bill = usage ?? { kind: "usage" };
+    // A turn with usage frames that carried tokens but no costUsd is unpriced, distinct from a turn with no usage
+    // (unbilled) and a turn that was explicitly free (costUsd: 0).
+    const priced = usage === undefined || bill.costUsd !== undefined;
     return {
         turns: bill.numTurns ?? (usage === undefined ? 0 : 1),
         inputTokens: counted(bill.inputTokens),
@@ -142,6 +148,7 @@ export const costOf = (
         cacheReadTokens: counted(bill.cacheReadTokens),
         cacheCreationTokens: counted(bill.cacheCreationTokens),
         costUsd: counted(bill.costUsd),
+        ...(!priced ? { costKnown: false } : {}),
         durationMs: counted(bill.durationMs),
         ...opt("openingCacheReadTokens", bill.openingCacheReadTokens),
         ...opt("openingCacheCreationTokens", bill.openingCacheCreationTokens),

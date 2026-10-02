@@ -47,6 +47,7 @@ interface Harness {
     readonly drawn: Need[];
     readonly shown: { conversationId: string; needs: readonly AgentNeed[] }[];
     readonly notified: Need[];
+    readonly withdrawn: Need[];
     readonly steered: { conversationId: string; prompt: string }[];
     readonly woken: { conversationId: string; prompt: string }[];
     readonly settings: { continueWhenMet: boolean; live: boolean; steerable: boolean; standing: TurnStanding | undefined };
@@ -64,6 +65,7 @@ const harness = (): Harness => {
     const drawn: Need[] = [];
     const shown: Harness["shown"] = [];
     const notified: Need[] = [];
+    const withdrawn: Need[] = [];
     const steered: Harness["steered"] = [];
     const woken: Harness["woken"] = [];
     const settings: Harness["settings"] = { continueWhenMet: true, live: true, steerable: true, standing: STANDING };
@@ -81,6 +83,7 @@ const harness = (): Harness => {
         draw: (_conversationId, need) => drawn.push(need),
         show: (conversationId, needs) => shown.push({ conversationId, needs }),
         notify: (need) => notified.push(need),
+        withdrawNotification: (need) => withdrawn.push(need),
         steer: async (conversationId, prompt) => {
             if (!settings.steerable) {
                 return false;
@@ -107,6 +110,7 @@ const harness = (): Harness => {
         drawn,
         shown,
         notified,
+        withdrawn,
         steered,
         woken,
         settings,
@@ -386,4 +390,15 @@ test("a need the harness saw asked is drawn like any other and never held, and t
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect((await needs.get("need-1"))?.status).toBe("met");
     expect(woken.map((wake) => wake.conversationId)).toEqual(["conv-web"]);
+});
+
+test("a need answered is withdrawn from the owner's devices once, as it stops waiting", async () => {
+    const { deps, withdrawn } = harness();
+    const needs = createNeeds(deps);
+    const { state } = await needs.ask({ raise: raise(0), conversationId: "conv-1", signal: signal() });
+    expect(state).toBe("open");
+    expect(withdrawn).toEqual([]);
+
+    await needs.answer("need-1", { kind: "accept" }, { email: "user@example.com" });
+    expect(withdrawn.map((need) => [need.id, need.status])).toEqual([["need-1", "met"]]);
 });

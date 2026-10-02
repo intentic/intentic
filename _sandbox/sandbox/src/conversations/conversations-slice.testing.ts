@@ -28,7 +28,7 @@ const absentWorktrees = () =>
         conversationDir,
         worktreeDir: (id, repo) => (repo === "root" ? `${HISTORY_ROOT}/worktrees/${id}` : `${HISTORY_ROOT}/worktrees/${id}/${repo}`),
         mainDir: (repo) => (repo === "root" ? ABSENT_MAIN : join(ABSENT_MAIN, repo)),
-        exists: async () => false,
+        presence: async () => "gone",
         // Live checkout standing on its own branch: routes read the worktree path, the steady state these fakes
         // model, and nothing has strayed off it.
         attached: async () => true,

@@ -175,6 +175,24 @@ test("the spend ceiling ends the loop, and the iterations' own usage is what cou
     expect(settled?.detail).toContain("1.20");
 });
 
+test("a spend ceiling on a runtime that reports no cost stops the loop as unpriced rather than running to maxIterations", async () => {
+    const root = tempRoot();
+    const services = fakeServices(root);
+    const prompts: string[] = [];
+    // Codex/Cursor report tokens but no costUsd: usage frame carries no costUsd field.
+    const unpriced = fakeTurn(prompts, [{ kind: "usage", inputTokens: 500, outputTokens: 200 }, { kind: "done" }]);
+    const record = await services.loops.start({ ...baseLoop("c6b"), maxIterations: 20, stallLimit: 99, maxSpendUsd: 1 }, 1);
+    const settlement = await runLoop(drivenBy(services, unpriced), record);
+
+    // The first unpriced turn ends it: the loop cannot tell whether that turn already crossed the ceiling, and a second
+    // could only spend more unseen.
+    expect(prompts).toHaveLength(1);
+    expect(settlement.state).toBe("unpriced");
+    expect(settlement.detail).toBe(
+        "This runtime reports no cost, so the $1.00 spend ceiling cannot be held. Use a runtime that reports cost, or remove the ceiling.",
+    );
+});
+
 test("an errored turn is an iteration outcome, not the end of the loop", async () => {
     const root = tempRoot();
     const services = fakeServices(root);

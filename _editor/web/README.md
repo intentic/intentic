@@ -33,7 +33,9 @@ flowchart LR
   on the selector. It saves a queued edit against its original persona when the selection changes.
 - **Live state.** Server state lives in vue-query, mirrored per user to IndexedDB so a reload paints the last-known
   workspace. One `/events` stream per active sandbox (`useSandboxLiveness.ts`) invalidates what each frame makes
-  stale (`systemEvents.ts`). Terminals and the browser view use WebSockets opened with a short-lived ticket
+  stale (`systemEvents.ts`). Push refreshes let an in-flight read finish and queue one catch-up when another frame
+  arrives. Hello reannounces file, runtime, derived-text and repository changes with wildcard batches to recover
+  frames missed while disconnected. Terminals and the browser view use WebSockets opened with a short-lived ticket
   (`wsTicket.ts`); a terminal's is spoken on a stream of the edge's WebTransport session where the sandbox row says the
   edge serves one (`features/terminal/channel/`).
 - **When the sandbox stops answering.** A failed `/events` stream starts a diagnosis (`features/sandbox/diagnosis/`):

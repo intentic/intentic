@@ -201,3 +201,17 @@ describe(`a resume the sandbox promised`, () => {
         expect(refreshAccounts).toHaveBeenCalledTimes(1);
     });
 });
+
+describe(`an ACP agent that wants signing in`, () => {
+    // Its session is kept (the daemon no longer files a sign-in refusal as a lost session), so the one thing to say is
+    // where the sign-in is, and the session must survive for the next send to resume it.
+    it(`is the error line naming where to sign in, keeping the session and offering no pick-up`, () => {
+        const host = hostOf();
+        const kept: SessionRef = { id: `s1`, provider: `claude`, account: undefined, harness: `native` };
+        host.session.value = kept;
+        new TurnFailures(host).apply({ kind: `error`, message: `Authentication required.`, code: `acp-auth-required` });
+        expect(host.error.value).toBe(`Authentication required. Sign this agent in from its row under Capabilities (Sign in).`);
+        expect(host.session.value).toEqual(kept);
+        expect(host.pickUp.value).toBeUndefined();
+    });
+});

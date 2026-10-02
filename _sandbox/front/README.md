@@ -30,7 +30,12 @@ flowchart LR
   keystroke. It never gives up, because it is the only way in. The front pings its sockets; QUIC keeps itself alive.
 - Terminals are the front's own: `GET /system/terminal` never reaches Node's HTTP. Node answers once what a socket may
   open, and the front serves it with one `tmux -C` client per session shared by every viewer; one that falls behind
-  gets a snapshot instead of a backlog. A terminal is a WebSocket however it arrives: a browser's over TCP, or one the
+  gets a snapshot instead of a backlog. The shared grid is the minimum columns and rows across connected viewers,
+  recomputed on join, resize and leave, and applied to tmux only when it changes. A `grid` message tells every editor
+  what to render; viewport requests stay separate from that grid. (2026-10-01: smallest-fits-all was chosen over
+  largest-with-scaling to keep the editor's current font size and avoid a new scaling UI. Older editors ignore `grid`
+  and still attach, though their local grid can differ; newer editors fall back to local fitting with older fronts.)
+  A terminal is a WebSocket however it arrives: a browser's over TCP, or one the
   editor speaks on a WebTransport stream, which the edge relays as the same HTTP/1.1 upgrade.
 - The sandbox's proof of life is the front's too: `GET /system/vitals` on the daemon's host (`vitals.rs`) is answered
   before anything waits for Node, whether Node has not said hello yet, is up, or is being restarted. It reports Node's

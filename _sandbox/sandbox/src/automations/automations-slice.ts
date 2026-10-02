@@ -6,6 +6,7 @@ import type { InstallsStore } from "../store/installs.js";
 import type { OutboxSink, WebchatOutbox } from "../webchat/webchat-outbox.js";
 import { automationRunsDocument, automationsDocument, type AutomationsStore, fileAutomationsStore } from "./automations-store.js";
 import { fileHeldWakesStore, heldWakesDocument, type HeldWakesStore } from "./held-wakes-store.js";
+import { fileScheduleCoverageStore, scheduleCoverageDocument, type ScheduleCoverageStore } from "./schedule-coverage.js";
 import { fileSendersStore, sendersDocument, type SendersStore } from "./senders-store.js";
 
 // Automations and what a fire carries: held wakes, threads, senders, and the web chat outbox.
@@ -14,6 +15,8 @@ export interface AutomationsSlice {
     readonly automations: AutomationsStore;
     // Wakes from requireApproval automations, held for the owner; /automations pending routes approve or reject.
     readonly heldWakes: HeldWakesStore;
+    // How far the scheduler has accounted for each schedule's clock; what a boot reads to fire the moments it slept through.
+    readonly scheduleCoverage: ScheduleCoverageStore;
     // Which conversation each inbound thread owns; lets a message stream remember instead of starting fresh.
     readonly threadSessions: ThreadSessionsStore;
     // Who has written to each listener source, admitted or not; what the sender rules picker offers by name.
@@ -44,6 +47,7 @@ export type IntakeMembers = "issues" | "issueInstalls" | "webchatOutbox" | "outb
 export const createAutomationsSlice = ({ workspaceRoot, archived }: AutomationsDeps): Omit<AutomationsSlice, IntakeMembers> => ({
     automations: fileAutomationsStore(join(workspaceRoot, automationsDocument.path), join(workspaceRoot, automationRunsDocument.path)),
     heldWakes: fileHeldWakesStore(join(workspaceRoot, heldWakesDocument.path)),
+    scheduleCoverage: fileScheduleCoverageStore(join(workspaceRoot, scheduleCoverageDocument.path)),
     threadSessions: fileThreadSessionsStore(join(workspaceRoot, threadSessionsDocument.path), archived),
     senders: fileSendersStore(join(workspaceRoot, sendersDocument.path)),
 });

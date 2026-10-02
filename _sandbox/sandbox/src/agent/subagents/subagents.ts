@@ -827,7 +827,30 @@ export const noteSpawnedChild = (
     if (move.status === "paused") {
         takeReportedAhead(record, "paused");
     }
+    // A card parked after an earlier one was answered is a new move: what a wait or a wake handed over of the last one
+    // must not stand for it, or the second question of a child would reach nobody.
+    if (move.status === "blocked" && record.status !== "blocked" && record.reported === "blocked") {
+        record.reported = undefined;
+    }
     toParent(actors, record.conversationId, patch(actors, id, move));
+};
+
+/**
+ * Taken as a child parks on a card, right after the move is noted: undefined when a wait already handed it to the
+ * parent (waits answer inside the move itself, so nothing can come between), else the filing for the other door, a wake
+ * said to the parent. Called once the wake is delivered, it files the move as handed over, so a later wait on "any"
+ * does not hand the same question back; a record that has moved on since is left alone.
+ */
+export const blockedMoveReporter = (actors: Actors, id: string): (() => void) | undefined => {
+    const record = actors.holdings(ROSTER).get(id);
+    if (record === undefined || record.status !== "blocked" || record.reported === "blocked") {
+        return undefined;
+    }
+    return () => {
+        if (actors.holdings(ROSTER).get(id) === record && record.status === "blocked") {
+            record.reported = "blocked";
+        }
+    };
 };
 
 // A record whose turn's ending already reached its parent as a report: the status it now takes is filed as handed over

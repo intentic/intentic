@@ -238,3 +238,40 @@ describe("a conversation's standing yes", () => {
         expect(kept).toEqual([]);
     });
 });
+
+// What withdraws a card's lock-screen push: every card that stops waiting is heard once, answered or aborted, with the
+// conversation it waited in, and a card refused to the wrong person is not heard at all, since it still waits.
+test("each card that stops waiting is heard once with its conversation, and a refused answer is not heard", async () => {
+    const heard: [string, string | undefined][] = [];
+    const watched = parkedCards(memoryFleet().conversations, undefined, (requestId, conversationId) => heard.push([requestId, conversationId]));
+    const answered = watched.create("question", onAbort, "conv-1");
+    const answering = answered.wait(new AbortController().signal);
+    const guarded = watched.create("question", onAbort, "conv-1", { mayAnswer: () => "not yours" });
+    const controller = new AbortController();
+    void guarded.wait(controller.signal);
+
+    expect(watched.resolve({ kind: "question", requestId: guarded.id, answers: {} })).toEqual({ refused: "not yours" });
+    expect(watched.resolve({ kind: "question", requestId: answered.id, answers: { Which: ["A"] } })).toBe("settled");
+    await answering;
+    expect(watched.resolve({ kind: "question", requestId: answered.id, answers: { Which: ["B"] } })).toBe("missing");
+    controller.abort();
+
+    expect(heard).toEqual([
+        [answered.id, "conv-1"],
+        [guarded.id, "conv-1"],
+    ]);
+});
+
+// A card a standing yes answers stops waiting like any other, and one held conversationless is heard under the
+// conversation its turn raised it for, the one whose devices were told it waited.
+test("a card the standing yes answers is heard too, under the conversation that raised it", async () => {
+    const heard: [string, string | undefined][] = [];
+    const watched = parkedCards(
+        memoryFleet().conversations,
+        { allowed: async (conversationId) => conversationId === "c-1", allow: async () => {}, failed: () => {} },
+        (requestId, conversationId) => heard.push([requestId, conversationId]),
+    );
+    const { id, wait } = standingOn(watched, "c-1").create("permission", { kind: "permission", requestId: "", decision: "deny" });
+    expect((await wait(new AbortController().signal)).reply).toMatchObject({ decision: "everything" });
+    expect(heard).toEqual([[id, "c-1"]]);
+});

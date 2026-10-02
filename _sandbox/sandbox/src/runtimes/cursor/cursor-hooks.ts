@@ -271,7 +271,9 @@ export const createCursorHookService = (socketDir: string, logger: Logger): Curs
         register: (turn) => {
             turns.set(turn.conversationId, turn);
             return () => {
-                turns.delete(turn.conversationId);
+                if (turns.get(turn.conversationId) === turn) {
+                    turns.delete(turn.conversationId);
+                }
             };
         },
         ready: () => server !== undefined,

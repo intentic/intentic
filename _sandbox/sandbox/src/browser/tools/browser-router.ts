@@ -4,6 +4,7 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { errorMessage } from "@intentic/base/errors";
 import type { RpcMessage } from "../../agent/tools/turn-mounts.js";
+import { networkCallOf, networkCallRefusal, redactNetworkAnswer } from "./network-redaction.js";
 
 // One MCP server standing in for every browser a turn may drive, hosted in this daemon and reached over HTTP, so a
 // session costs no router process of its own. Each tool takes an `account`, resolved through the turn's manifest to an
@@ -332,6 +333,13 @@ export const createBrowserRouter = (manifest: RouterManifest, deps: RouterDeps):
         if (closed) {
             return toolRefusal(message.id, "this turn's browsers are already closed");
         }
+        // Screened here, for every owner, since this is the one place every browser's answer passes (network-redaction.ts
+        // says what is cut and why `web` is not exempt). A refused call costs no bring-up.
+        const network = networkCallOf({ ...message.params, arguments: rest });
+        const refusal = network === undefined ? undefined : networkCallRefusal(network);
+        if (refusal !== undefined) {
+            return toolRefusal(message.id, refusal);
+        }
         // The first call for an owner waits on its bring-up; other requests are separate HTTP calls, so a second
         // account's call is not stuck behind the first one's Chromium starting.
         const ready = await backendFor(owner, reserved.port);
@@ -349,7 +357,7 @@ export const createBrowserRouter = (manifest: RouterManifest, deps: RouterDeps):
         signal?.addEventListener("abort", hangUp, { once: true });
         try {
             const answer = await sent.answer;
-            return { ...answer, id: message.id ?? null };
+            return { ...(network === undefined ? answer : redactNetworkAnswer(network, answer)), id: message.id ?? null };
         } finally {
             signal?.removeEventListener("abort", hangUp);
             if (clientId !== undefined && clientId !== null) {

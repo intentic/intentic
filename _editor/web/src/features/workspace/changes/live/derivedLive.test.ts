@@ -25,3 +25,17 @@ it(`drops it all on switching sandboxes, where the same path is a different file
     resetSandboxScope();
     expect(derivedEpochOf(`docs/spec.docx`)).toBe(0);
 });
+
+it(`a reconnect wildcard advances known and unseen paths, then named renders stay local`, () => {
+    markDerivedChanged([`docs/spec.docx`]);
+    const before = derivedEpochOf(`docs/spec.docx`);
+    markDerivedChanged([]);
+    expect(derivedEpochOf(`docs/spec.docx`)).toBe(before + 1);
+    expect(derivedEpochOf(`other/photo.png`)).toBe(before + 1);
+    markDerivedChanged([`docs/spec.docx`]);
+    expect(derivedEpochOf(`docs/spec.docx`)).toBe(before + 2);
+    expect(derivedEpochOf(`other/photo.png`)).toBe(before + 1);
+    resetSandboxScope();
+    expect(derivedEpochOf(`docs/spec.docx`)).toBe(0);
+    expect(derivedEpochOf(`other/photo.png`)).toBe(0);
+});

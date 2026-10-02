@@ -19,10 +19,11 @@ export const onRuntimeChanged = (domains: readonly string[], listener: RuntimeLi
     return () => void subscriptions.delete(entry);
 };
 
+// An empty domain batch means every runtime may have moved while disconnected.
 // Announces one frame's domains; one listener throwing must not cost the others their notification.
 export const emitRuntimeChanged = (domains: readonly string[]): void => {
     for (const { domains: wanted, listener } of subscriptions) {
-        if (!wanted.some((domain) => domains.includes(domain))) {
+        if (domains.length > 0 && !wanted.some((domain) => domains.includes(domain))) {
             continue;
         }
         try {

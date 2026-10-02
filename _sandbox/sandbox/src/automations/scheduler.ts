@@ -16,6 +16,7 @@ import { automationPending, turnFinished } from "../push/notifications.js";
 import { pinnedRunModel } from "../agent/models/run-role-model.js";
 import type { OutboxSink } from "../webchat/webchat-outbox.js";
 import { type AutomationRecord, consecutiveFailures } from "./automations-store.js";
+import type { ScheduleMark } from "./schedule-coverage.js";
 import { sandboxZone, zoneOf } from "./schedule-zone.js";
 import type { SenderLane } from "./senders.js";
 
@@ -211,6 +212,10 @@ export interface FireOptions {
     readonly origin?: AgentOrigin;
     // Card/tab title, since the prompt repeats across fires and can't tell two apart; derived below if absent.
     readonly title?: string;
+    // Said under the prompt when this fire is a schedule's moment the sandbox slept through (the catch-up at start), so
+    // a nightly chore run at noon knows it is late. Its own section rather than the payload: a gated schedule's payload
+    // is its sessions listing, which a guard reads, and this note is for the agent only.
+    readonly late?: string;
     // What happens when this automation is already running:
     // - `drop` (default): a cron or workspace-event re-fire is not wanted twice; the next tick comes anyway.
     // - `queue`: for an inbound message with no next tick; waits for the run in progress, keeping its reply sink open.
@@ -322,6 +327,15 @@ const heldWakeSnapshot = (
     createdAt: Date.now(),
 });
 
+// The prompt as the woken turn reads it: the trigger's payload under its heading, then a late fire's note under its own.
+// A listener payload is wrapped in the outside-content envelope here only; guard env and journal keep it raw.
+const wakeBody = (automation: AutomationRecord, payload: string | undefined, late: string | undefined): string => {
+    const sealed = automation.trigger.kind === "listener" ? wrapOutsideContent(payload ?? "", { source: automation.trigger.provider }) : payload;
+    const told =
+        payload !== undefined && payload !== "" ? `${automation.prompt}\n\n--- ${PAYLOAD_HEADING[automation.trigger.kind]} ---\n${sealed}` : automation.prompt;
+    return late === undefined ? told : `${told}\n\n--- ${PAYLOAD_HEADING.once} ---\n${late}`;
+};
+
 // Guard, then wake, then record the run; reached only through fireAutomation, which guarantees no two runs of one
 // automation overlap here.
 const runFire = async (
@@ -339,6 +353,7 @@ const runFire = async (
         stream,
         origin,
         title,
+        late,
     }: FireOptions,
 ): Promise<FireOutcome> => {
     try {
@@ -435,10 +450,7 @@ const runFire = async (
                 attempts,
             })
             .catch((error: unknown) => services.logger.warn({ err: error, automation: automation.id }, "turn journal: fire not recorded"));
-        // A listener payload is wrapped in the outside-content envelope here only; guard env and journal keep it raw.
-        const sealed = automation.trigger.kind === "listener" ? wrapOutsideContent(capped ?? "", { source: automation.trigger.provider }) : capped;
-        const heading = PAYLOAD_HEADING[automation.trigger.kind];
-        const body = capped !== undefined && capped !== "" ? `${automation.prompt}\n\n--- ${heading} ---\n${sealed}` : automation.prompt;
+        const body = wakeBody(automation, capped, late);
         let failure: string | undefined;
         let runtimeSessionId: string | undefined;
         // Every fire lands in a conversation; a channel or visitor keeps one active, a schedule wake mints a fresh one.
@@ -600,9 +612,10 @@ export const nextRunOf = (automation: AutomationRecord, sandbox: Zone): number |
 // The soonest one-time wake, for the idle-stop watchdog; 0 when none is armed. Stopped, this daemon is the only thing
 // that could fire one and only a visit brings it back, so the watchdog holds the machine up rather than sleeping
 // through a moment somebody was promised (system/idle-stop.ts).
-// Only `once` counts, deliberately. A cron that misses a beat has another one coming, and a hosted machine held awake
-// all month so a nightly chore is punctual costs more than the chore; a one-time wake has nothing behind it, and holds
-// the machine for at most one window, since it retires as it fires.
+// Only `once` counts, deliberately. A cron whose moment passes while the machine sleeps fires once, late, the next time
+// the daemon starts (`catchUp`), and a hosted machine held awake all month so a nightly chore is punctual costs more
+// than the chore; a one-time wake is a moment somebody was promised, and holds the machine for at most one window,
+// since it retires as it fires.
 export const nextOneTimeWakeAt = async (services: Services): Promise<number> => {
     // Reads the moment off the trigger rather than through `nextRunOf`: a one-time wake IS an instant, so it needs no
     // zone, and routing it through the cron path would make this depend on a setting it has no business reading.
@@ -637,9 +650,9 @@ export const resumable = (automation: Pick<Automation, "enabled" | "trigger">): 
 // later poll would match it again and the switch is the only thing standing between one reminder and one every 30
 // seconds. Retired before the fire rather than after, so a daemon that dies mid-wake still cannot repeat it — the
 // interrupted fire comes back through the turn journal instead (see `resumable`).
-// Deliberately not gated on the poll window the cron path uses: a schedule that misses a beat has another one coming,
-// a one-time wake has nothing behind it, so a moment that passed while the sandbox was down still fires, late and
-// saying so.
+// Deliberately not gated on the poll window the cron path uses: a moment that passed while the sandbox was down still
+// fires, late and saying so. A cron's missed moments are the boot's catch-up instead (`catchUp`), since a cron has
+// many and is owed only one of them.
 const fireOnceWake = async (services: Services, automation: AutomationRecord, at: number, now: number, sandbox: Zone): Promise<void> => {
     if (at > now) {
         return;
@@ -655,14 +668,14 @@ const fireOnceWake = async (services: Services, automation: AutomationRecord, at
 
 // One enabled automation's clock, per poll: a one-time wake fires the moment it is due or already overdue, a cron
 // fires when its next run measured from the last poll falls inside this one. Every other trigger has its own
-// dispatcher and nothing to do here.
-const fireIfDue = async (services: Services, automation: AutomationRecord, windowStart: number, now: number, sandbox: Zone): Promise<void> => {
+// dispatcher and nothing to do here. Answers the moment a cron fired for, which is how far its clock is now covered.
+const fireIfDue = async (services: Services, automation: AutomationRecord, windowStart: number, now: number, sandbox: Zone): Promise<number | undefined> => {
     if (automation.trigger.kind === "once") {
         await fireOnceWake(services, automation, automation.trigger.at, now, sandbox);
-        return;
+        return undefined;
     }
     if (automation.trigger.kind !== "schedule") {
-        return;
+        return undefined;
     }
     // A cron hand-edited into invalidity only silences its own automation, never the tick.
     let due: Date | null;
@@ -670,14 +683,77 @@ const fireIfDue = async (services: Services, automation: AutomationRecord, windo
         due = new Cron(automation.trigger.cron, cronOptions(zoneOf(automation.trigger, sandbox))).nextRun(new Date(windowStart));
     } catch {
         // allow(silent-catch): an invalid cron silences only its own automation, never the tick.
-        return;
+        return undefined;
     }
     if (due === null || due.getTime() > now) {
-        return;
+        return undefined;
     }
     void fireAutomation(services, automation).catch((error: unknown) =>
         services.logger.error({ err: error, automation: automation.id }, "automation run failed"),
     );
+    return due.getTime();
+};
+
+// A detached fire's failure, logged rather than lost: nothing awaits it.
+const loggedAs =
+    (services: Pick<Services, "logger">, message: string, automation?: string) =>
+    (error: unknown): void =>
+        services.logger.error({ err: error, automation }, message);
+
+// What a pass changes about the schedules' coverage marks (schedule-coverage.ts); undefined drops a mark.
+type MarkChanges = Record<string, ScheduleMark | undefined>;
+
+// The marks that follow from the manifest alone, as of `at`: a schedule seen on with no live mark is armed from then (a
+// new one, or one switched back on, owes nothing from before); one seen off is marked off; a mark whose automation is
+// gone or no longer a schedule is dropped. Empty when nothing moved, which is every ordinary poll.
+export const armingMarks = (automations: readonly AutomationRecord[], marks: Readonly<Record<string, ScheduleMark>>, at: number) => {
+    const changes: MarkChanges = {};
+    const schedules = new Set<string>();
+    for (const automation of automations) {
+        if (automation.trigger.kind !== "schedule") {
+            continue;
+        }
+        schedules.add(automation.id);
+        const mark = marks[automation.id];
+        if (automation.enabled && (mark === undefined || mark.off === true)) {
+            changes[automation.id] = { coveredUntil: at };
+        }
+        if (!automation.enabled && mark?.off !== true) {
+            changes[automation.id] = { coveredUntil: at, off: true };
+        }
+    }
+    for (const id of Object.keys(marks)) {
+        if (!schedules.has(id)) {
+            changes[id] = undefined;
+        }
+    }
+    return changes;
+};
+
+// The latest moment of an enabled schedule that passed after its clock was last accounted for and by `horizon`, or
+// undefined when none is owed. Accounted for is the later of its coverage mark and its newest run; with neither (an
+// automation this build has never seen armed and that never ran) nothing is owed, so nothing fires unasked. One seen
+// switched off owes nothing either: switching it back on is not asking for what it skipped.
+export const missedMoment = (automation: AutomationRecord, mark: ScheduleMark | undefined, horizon: number, sandbox: Zone): number | undefined => {
+    if (automation.trigger.kind !== "schedule" || mark?.off === true) {
+        return undefined;
+    }
+    const accounted = [mark?.coveredUntil, automation.runs[0]?.at].filter((at): at is number => at !== undefined);
+    if (accounted.length === 0) {
+        return undefined;
+    }
+    try {
+        const cron = new Cron(automation.trigger.cron, cronOptions(zoneOf(automation.trigger, sandbox)));
+        const first = cron.nextRun(new Date(Math.max(...accounted)))?.getTime();
+        if (first === undefined || first > horizon) {
+            return undefined;
+        }
+        // Strictly before its reference, so one past the horizon finds a moment AT the horizon too.
+        return Math.max(first, cron.previousRuns(1, new Date(horizon + 1))[0]?.getTime() ?? first);
+    } catch {
+        // allow(silent-catch): an invalid cron owes nothing, as it never fires on a poll either.
+        return undefined;
+    }
 };
 
 // A repair of the main tree waits for lands to stop moving it, and no longer than this once its countdown is over.
@@ -724,15 +800,19 @@ const releaseCountdownHolds = async (services: Services, now: number): Promise<v
         if (!(await services.heldWakes.remove(held.id)) || automation === undefined || !resumable(automation)) {
             continue;
         }
-        void runHeldWake(services, automation, held).catch((error: unknown) =>
-            services.logger.error({ err: error, automation: automation.id }, "countdown-released automation run failed"),
-        );
+        void runHeldWake(services, automation, held).catch(loggedAs(services, "countdown-released automation run failed", automation.id));
     }
 };
 
-// Polls the manifest and fires whatever came due since the last pass, with no resync bookkeeping; fires run detached,
-// since a turn can outlast many polls. Event automations fire from the fire route instead.
+// Polls the manifest and fires whatever came due since the last pass; fires run detached, since a turn can outlast many
+// polls. Event automations fire from the fire route instead.
+// What happened while nothing was running is the start's to settle (`catchUp`): a hosted sandbox stops itself when
+// nobody is connected (system/idle-stop.ts) and is not woken for a cron, so a machine asleep at the same hour every day
+// would otherwise never run its nightly chore at all. Each schedule that missed a moment fires ONCE, however many it
+// missed, late and saying so, through the same gates as any fire: the sessions bar, the guard, an approval hold. A
+// schedule asks for its work to be done regularly, not for a backlog to be replayed.
 export const createAutomationsScheduler = (services: Services, intervalMs = 30_000): AutomationsScheduler => {
+    // Where the first poll's window opens, and so where the catch-up's ends: a moment is one pass's or the other's.
     let since = Date.now();
     let timer: NodeJS.Timeout | undefined;
 
@@ -742,17 +822,47 @@ export const createAutomationsScheduler = (services: Services, intervalMs = 30_0
         // Read once per poll, not per automation: the owner's zone cannot change between two rows of the same pass,
         // and a settings read per automation would make a manifest of fifty chores fifty file reads a tick.
         const sandbox = await sandboxZone(services);
-        for (const automation of await services.automations.list()) {
+        const automations = await services.automations.list();
+        const changes = armingMarks(automations, await services.scheduleCoverage.read(), windowStart);
+        for (const automation of automations) {
             if (automation.enabled) {
-                await fireIfDue(services, automation, windowStart, now, sandbox);
+                const fired = await fireIfDue(services, automation, windowStart, now, sandbox);
+                if (fired !== undefined) {
+                    changes[automation.id] = { coveredUntil: fired };
+                }
             }
         }
+        await services.scheduleCoverage.mark(changes);
         await releaseCountdownHolds(services, now);
+    };
+
+    const catchUp = async (): Promise<void> => {
+        const horizon = since;
+        const sandbox = await sandboxZone(services);
+        const automations = await services.automations.list();
+        const marks = await services.scheduleCoverage.read();
+        const changes = armingMarks(automations, marks, horizon);
+        const owed = automations.flatMap((automation) => {
+            const missed = automation.enabled ? missedMoment(automation, marks[automation.id], horizon, sandbox) : undefined;
+            return missed === undefined ? [] : [{ automation, missed }];
+        });
+        for (const { automation } of owed) {
+            changes[automation.id] = { coveredUntil: horizon };
+        }
+        // Covered before fired, as a one-time wake retires before it fires: a daemon that dies under the catch-up
+        // resumes that fire from the turn journal, and must not owe the same moment again on top of it.
+        await services.scheduleCoverage.mark(changes);
+        for (const { automation, missed } of owed) {
+            void fireAutomation(services, automation, { late: lateWakeNote(missed, Date.now(), sandbox) }).catch(
+                loggedAs(services, "missed scheduled run failed", automation.id),
+            );
+        }
     };
 
     return {
         tick,
         start: () => {
+            void catchUp().catch(loggedAs(services, "automations catch-up failed"));
             timer = setInterval(() => void tick(), intervalMs);
         },
         stop: () => clearInterval(timer),

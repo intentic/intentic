@@ -41,6 +41,8 @@ export interface NeedsDeps {
     readonly show: (conversationId: string, needs: readonly AgentNeed[]) => void;
     // The owner's devices, when nobody is looking.
     readonly notify: (need: Need) => void;
+    // Replaces a raised need's lock-screen notification once it stops waiting, on the devices it showed on.
+    readonly withdrawNotification: (need: Need) => void;
     // Words into the live turn only: false when nothing steerable runs, and then nothing starts.
     readonly steer: (conversationId: string, prompt: string) => Promise<boolean>;
     // Words into the live turn, a turn of their own, or queued behind what runs; undefined when they went nowhere.
@@ -183,6 +185,8 @@ export const createNeeds = (deps: NeedsDeps): Needs => {
         if (settled === undefined) {
             return need;
         }
+        // Settled wherever it was answered, so the devices still showing the ask are told it is over.
+        deps.withdrawNotification(need);
         await publish(need.conversationId);
         const waiters = holding.get(id);
         if (waiters !== undefined && waiters.size > 0) {

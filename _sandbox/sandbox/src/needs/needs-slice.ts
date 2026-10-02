@@ -17,7 +17,7 @@ import { conversationProfile } from "../conversations/registry/agents-store.js";
 import { appliedEnvironmentHash, approveDraft, proposeDraft, rejectDraft } from "../environment/environment.js";
 import { deliverWake } from "../agent/run/turn/wake-delivery.js";
 import { deliverToListenerChannel } from "../extensions/listener/listener-deliver.js";
-import { needRaised } from "../push/notifications.js";
+import { needRaised, needResolved } from "../push/notifications.js";
 import { upsertEnv } from "../secrets/secrets.routes.js";
 import { textFile } from "../store/text-file.js";
 import { capabilityNeed } from "./kinds/capability-need.js";
@@ -26,7 +26,7 @@ import { grantNeed } from "./kinds/grant-need.js";
 import { releaseNeed } from "./kinds/release-need.js";
 import { secretNeed } from "./kinds/secret-need.js";
 import { needChannelOf, needChannelText } from "./need-channel.js";
-import { createNeeds, type Needs } from "./needs.js";
+import { createNeeds, type Needs, type NeedsDeps } from "./needs.js";
 import { fileNeedsStore, needsDocument } from "./needs-store.js";
 
 // How long one browser may take to say which sites it allows before the last answer stands, so a sleeping laptop never
@@ -81,6 +81,12 @@ const keepSecret = async (services: Services, name: string, value: string): Prom
     }
     await services.sandboxSecrets.set(name, value);
 };
+
+// A settled need's lock-screen ask is replaced on the devices it showed on (push.ts `withdraw`).
+const withdrawNeedPush =
+    (whole: NeedsSliceDeps["whole"]): NeedsDeps["withdrawNotification"] =>
+    (need) =>
+        void whole().pushSender.withdraw(needResolved(need));
 
 export const createNeedsSlice = ({ workspaceRoot, logger, whole }: NeedsSliceDeps): NeedsSlice => {
     const capabilities = (): Promise<readonly Capability[]> => whole().capabilities.list();
@@ -154,6 +160,7 @@ export const createNeedsSlice = ({ workspaceRoot, logger, whole }: NeedsSliceDep
                 );
             }
         },
+        withdrawNotification: withdrawNeedPush(whole),
         steer: async (conversationId, prompt) => (await whole().turns.steer(conversationId, { text: prompt, voice: "sandbox" })) === true,
         wake: async (conversationId, prompt) => {
             const services = whole();

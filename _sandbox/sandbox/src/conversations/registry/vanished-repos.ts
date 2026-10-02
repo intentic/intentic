@@ -1,13 +1,15 @@
 import { serialLock } from "@intentic/base/async";
-import { pathExists } from "@intentic/base/fs";
+import { pathPresence } from "@intentic/base/fs";
 import type { Logger } from "pino";
 import type { AgentsRegistry } from "./agents-registry.js";
 import { reposOf } from "./agents-store.js";
 import type { AgentWorktrees } from "../worktrees/worktrees.js";
+import { massAbsence } from "./mass-absence.js";
 
 // Drops a repo from every conversation once its directory is gone; composition is frozen at first turn, so deletion is
-// the one change it can't absorb. Only this pass decides gone, by checking disk for named repos; a repo-set change just
-// triggers a re-check, and root is never a candidate. A repo whose `.git` alone vanishing still counts as present.
+// the one change it can't absorb. Only this pass decides gone, by checking disk for named repos (ENOENT alone, and never
+// on a pass reading most of them gone at once: mass-absence.ts); a repo-set change just triggers a re-check, and root
+// is never a candidate. A repo whose `.git` alone vanishing still counts as present.
 
 export interface VanishedRepoDeps {
     readonly agents: Pick<AgentsRegistry, "ids" | "entry" | "dropRepos">;
@@ -31,14 +33,20 @@ export const dropVanishedRepos = async (deps: VanishedRepoDeps): Promise<string[
             }
         }
     }
+    // Only ENOENT reads as deleted: EACCES, EIO or ENOTDIR say nothing about whether the repo is still there.
     const gone: string[] = [];
-    for (const [repo, ids] of named) {
-        if (await pathExists(agentWorktrees.mainDir(repo))) {
-            continue;
+    for (const repo of named.keys()) {
+        if ((await pathPresence(agentWorktrees.mainDir(repo))) === "absent") {
+            gone.push(repo);
         }
-        gone.push(repo);
-        // Reap checkouts before the row drops, so nothing else touches a dead checkout meanwhile.
-        for (const id of ids) {
+    }
+    if (massAbsence(gone.length, named.size)) {
+        logger.error({ repos: gone, named: named.size }, "agents: most repos read deleted at once, taken for an outage; no composition is changed");
+        return [];
+    }
+    // Reap checkouts before the row drops, so nothing else touches a dead checkout meanwhile.
+    for (const repo of gone) {
+        for (const id of named.get(repo) ?? []) {
             await agentWorktrees.reapRepoCheckout(id, repo);
         }
     }

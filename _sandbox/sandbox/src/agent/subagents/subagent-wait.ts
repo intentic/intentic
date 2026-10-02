@@ -79,7 +79,7 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
                               "which returns when it is blocked on input or finished, with its report. On a sandbox short of memory it " +
                               "holds as pending until there is room, and wait covers that too. A start the owner must allow also returns " +
                               "at once, held, and waits on their card the same way; you carry on meanwhile. If your turn ends first, its " +
-                              "report wakes this conversation when it finishes. Give it a self-contained prompt " +
+                              "report wakes this conversation when it finishes, and a question it stops on wakes it to answer. Give it a self-contained prompt " +
                               "with every path, requirement, and constraint — it sees none of this conversation. You must name the " +
                               "provider AND the model: this spends a real allowance and nothing is chosen for you. Call the providers " +
                               "tool for what is connected and what still has room. A provider nobody has connected fails with the " +

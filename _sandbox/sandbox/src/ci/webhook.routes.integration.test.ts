@@ -20,6 +20,7 @@ import { unstubbed } from "@intentic/testing";
 import { fileCiStore } from "./ci-store.js";
 import type { FetchFn } from "./providers.js";
 import { createRunsCache } from "./runs-cache.js";
+import { createCiHookReconciler } from "./hooks.js";
 import { createCiWebhookRoute } from "./webhook.routes.js";
 import type { TurnStarter } from "../seams/turn-starter.js";
 import { drivenBy } from "../testing.js";
@@ -41,7 +42,9 @@ jest.mock("./main-fixer.js", () => ({
 
 // The receiver touches ciStore/ciRuns/workspace/capabilities plus the listener dispatch path
 // (automations/activity/logger); `unstubbed` keeps the fake that small: the listeners.integration.test.ts convention.
-const harness = async (automationId: string, narrow: { eventType?: string; branch?: string; channelId?: string } = {}) => {
+// Repair off unless a test says otherwise: with it on, main's failures are its fix agent's and reach no automation (the
+// test that says so below), and these tests are about what an automation hears.
+const harness = async (automationId: string, narrow: { eventType?: string; branch?: string; channelId?: string } = {}, autoRepair = false) => {
     const root = mkdtempSync(join(tmpdir(), "ci-webhook-"));
     const dir = join(root, "web");
     await mkdir(dir, { recursive: true });
@@ -59,7 +62,7 @@ const harness = async (automationId: string, narrow: { eventType?: string; branc
         capabilities,
         automations,
         ciStore: fileCiStore(join(root, `${STATE_DIR}`, "secrets", "ci.json")),
-        sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
+        sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({ autoRepair }) }),
         ciRuns: createRunsCache(60_000),
         threadSessions: fileThreadSessionsStore(join(root, `${STATE_DIR}`, "records", "thread-sessions.json"), () => false),
         senders: fileSendersStore(join(root, `${STATE_DIR}`, "records", "senders.json")),
@@ -78,7 +81,7 @@ const harness = async (automationId: string, narrow: { eventType?: string; branc
         new Response(JSON.stringify({ jobs: [{ id: 1, name: "lint", conclusion: "failure" }] }), { status: 200 })) as FetchFn;
     const app = new Hono();
     app.post("/ci/webhook/:host", createCiWebhookRoute(drivenBy(services, wake), fetchFn));
-    return { app, services, prompts };
+    return { app, services, prompts, root };
 };
 
 const workflowRun = (conclusion: string) => ({
@@ -360,4 +363,64 @@ test("a gitlab Job Hook's failure reaches the fix agent with gitlab's own reason
     const passed = await send(hook({ build_status: "success" }));
     expect(((await passed.json()) as { ignored?: boolean }).ignored).toBe(true);
     expect(heardJobs).toHaveLength(1);
+});
+
+// Identity is the forge's id, and the name is display data: after a rename git and the API follow redirects, the hook
+// is still found, and every delivery names the repository by its new name.
+test("a delivery naming a renamed repository is matched on the repository's id, which the reconcile learned", async () => {
+    const { app, services, prompts, root } = await harness("wh-renamed");
+    // SAFETY: the reconciler calls its transport with (url, init) only; the repository read answers its new name.
+    const forge: FetchFn = (async (input: RequestInfo | URL) =>
+        String(input) === "https://api.github.com/repos/acme/web"
+            ? new Response(JSON.stringify({ id: 99, full_name: "acme/web-next", default_branch: "main" }))
+            : new Response("[]")) as FetchFn;
+    const warned: string[] = [];
+    await createCiHookReconciler(
+        {
+            workspace: { root },
+            capabilities: services.capabilities,
+            ciStore: services.ciStore,
+            config: { sandbox: { publicUrl: "https://sandbox.example.com" } },
+            logger: unstubbed<Services["logger"]>("logger", { warn: (...args: unknown[]) => void warned.push(String(args[1])) }),
+        },
+        forge,
+    ).reconcile();
+
+    const renamed = { ...workflowRun("failure"), repository: { id: 99, full_name: "acme/web-next" } };
+    expect(await (await deliver(app, await services.ciStore.secret(), renamed)).json()).toEqual({ ok: true });
+    await waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
+    expect(prompts[0]).toContain("pipeline_failed");
+    // Another repository that took the old name is not this one.
+    const other = { ...workflowRun("failure"), repository: { id: 7, full_name: "acme/web-next" } };
+    expect(await (await deliver(app, await services.ciStore.secret(), other)).json()).toEqual({ ok: true, ignored: true });
+    // The remote still names the old path, which the log says.
+    expect(warned).toEqual(["ci: the repository's remote names it by an old path"]);
+});
+
+// One failed main run, one agent: with Repair on, the default branch's failure is its fix agent's (main-fixer.ts), and
+// an automation told to "push the fix to the branch that failed" would be a second agent pushing to main.
+test("while Repair is on, the default branch's failure events reach no automation; its pass, and other branches, still do", async () => {
+    const { app, services, prompts } = await harness("wh-repair", {}, true);
+    const secret = await services.ciStore.secret();
+    await services.ciStore.recordConclusion("web", "main", "success", 1);
+    expect((await deliver(app, secret, workflowRun("failure"))).status).toBe(200);
+    expect((await deliver(app, secret, workflowRun("success"))).status).toBe(200);
+    await waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
+    expect(prompts[0]).toContain("pipeline_fixed");
+    expect(prompts[0]).not.toContain("pipeline_failed");
+    expect(prompts[0]).not.toContain("pipeline_broken");
+
+    const feature = workflowRun("failure");
+    expect((await deliver(app, secret, { ...feature, workflow_run: { ...feature.workflow_run, id: 8, head_branch: "agent/x" } })).status).toBe(200);
+    await waitFor(() => expect(prompts).toHaveLength(2), SETTLES);
+    expect(prompts[1]).toContain("pipeline_failed");
+});
+
+test("while Repair is on, an automation that names the default branch still hears it fail", async () => {
+    const { app, services, prompts } = await harness("wh-repair-main", { branch: "main" }, true);
+    const secret = await services.ciStore.secret();
+    await services.ciStore.recordConclusion("web", "main", "success", 1);
+    expect((await deliver(app, secret, workflowRun("failure"))).status).toBe(200);
+    await waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
+    expect(prompts[0]).toContain("pipeline_broken");
 });

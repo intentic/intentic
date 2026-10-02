@@ -159,6 +159,11 @@ export class TurnFailures {
                 `${floor === undefined ? `` : ` (${floor} or newer)`}.`;
             return;
         }
+        if (code === `acp-auth-required`) {
+            // The agent refuses every turn until it is signed in, and only its own login command does that: say where.
+            this.host.error.value = `${message} Sign this agent in from its row under Capabilities (Sign in).`;
+            return;
+        }
         this.host.error.value = message;
         // Continue only for an unknown code, since a named one re-fails; `held` makes the press re-run the kept turn.
         if (code === undefined) {

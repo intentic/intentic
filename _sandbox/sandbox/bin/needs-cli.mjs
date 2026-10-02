@@ -3,6 +3,7 @@
 //
 //   exit 0  met: usable now (or already was); the sentence says how
 //   exit 1  refused: nothing was raised, or a person declined; the sentence says what to do instead
+//   exit 2  error: misuse, transport failure or unreadable answer; no verdict was reached
 //   exit 3  open: asked, still waiting; the answer reaches the conversation by itself, so neither poll nor ask again
 //
 // A raise holds its call up to 90 seconds by default (--wait sets it, 0..100), always under the agent shell's 110-second
@@ -29,12 +30,14 @@ export const EXIT_OPEN = 3;
 
 export const WAIT_HELP = `The call holds up to 90 seconds for a person's answer (--wait <0..100> changes that, and an unattended turn never
 holds). Exit 0: met, usable now. Exit 1: refused or declined: carry on without it and say what it would have enabled.
+Exit 2: no verdict: check the error on stdout and correct the command or restore the daemon before retrying.
 Exit 3: asked and still waiting: carry on with what does not need it; the answer reaches this conversation by itself, so
 do not poll and do not ask again. \`needs\` lists what is still waiting.`;
 
 export const die = (command, message) => {
-    process.stderr.write(`${command}: ${message}\n`);
-    process.exit(1);
+    // Agents discard stderr, so a failure must survive on the stream they read.
+    process.stdout.write(`${command}: ${message}\n`);
+    process.exit(2);
 };
 
 // Read lazily: `--help` must work in a shell where the daemon is not running yet.
@@ -88,7 +91,7 @@ export const refusalOf = (text) => {
 };
 
 // `--name value` flags anywhere after the verb, `--set key=value` repeatable, bare `--flag` switches; what remains is
-// positional. Unknown flags are refused rather than read as positionals, so a typo never becomes a card's subject.
+// positional. Unknown flags fail rather than being read as positionals, so a typo never becomes a card's subject.
 export const parseArgs = (command, args, { values = [], switches = [], repeated = [] } = {}) => {
     const flags = {};
     const rest = [];
@@ -140,6 +143,9 @@ export const raise = async (command, ask, flags) => {
         return die(command, refusalOf(text));
     }
     const answer = JSON.parse(text);
+    if (!["met", "open", "refused"].includes(answer?.state) || typeof answer?.message !== "string") {
+        return die(command, "unreadable answer from the daemon: expected a need verdict and message");
+    }
     process.stdout.write(`${answer.message}\n`);
     process.exit(answer.state === "met" ? 0 : answer.state === "open" ? EXIT_OPEN : 1);
 };

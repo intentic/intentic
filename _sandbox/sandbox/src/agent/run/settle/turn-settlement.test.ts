@@ -4,7 +4,7 @@ import type { AgentRequest } from "../../providers/agent-request.js";
 import { createTurnFrames } from "../frames/frame-reducers.js";
 import type { RoutedTurn } from "../../../seams/turn-starter.js";
 import type { HeldTurn } from "../turn/turn-resume.js";
-import { settleTurn, type TurnEnd } from "./turn-settlement.js";
+import { costOf, settleTurn, type TurnEnd } from "./turn-settlement.js";
 import { parkedCards } from "../../../conversations/actor/parked-cards.js";
 import { memoryFleet } from "../../../testing.js";
 
@@ -263,5 +263,27 @@ describe("the proof it records", () => {
 
     test("is nothing without a conversation to record it on", () => {
         expect(settleTurn(ended([edit], { input: { agent: "claude", harness: "native", prompt: "p" } })).proof).toBeUndefined();
+    });
+});
+
+describe("costOf", () => {
+    test("a usage frame with costUsd records the cost and marks it known", () => {
+        const cost = costOf({ kind: "usage", costUsd: 0.5, inputTokens: 100, outputTokens: 50 });
+        expect(cost.costUsd).toBe(0.5);
+        expect(cost.costKnown).not.toBe(false);
+    });
+
+    test("a usage frame without costUsd records zero cost and marks it unknown", () => {
+        const cost = costOf({ kind: "usage", inputTokens: 500, outputTokens: 200 });
+        expect(cost.costUsd).toBe(0);
+        // The key distinction: unpriced is not the same as free.
+        expect(cost.costKnown).toBe(false);
+    });
+
+    test("no usage at all records zero cost and no costKnown marker", () => {
+        const cost = costOf(undefined);
+        expect(cost.costUsd).toBe(0);
+        // A turn with no usage is unbilled, not unpriced: it never ran.
+        expect(cost.costKnown).not.toBe(false);
     });
 });

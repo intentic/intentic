@@ -81,6 +81,7 @@ struct Queue {
     bytes: BytesMut,
     delivery: Delivery,
     ended: Option<(i32, String)>,
+    grid: Option<(u16, u16)>,
 }
 
 /// What one socket has yet to send, filled by its hub or its log and emptied by the socket.
@@ -93,6 +94,7 @@ pub struct Outbox {
 /// What a socket takes from its outbox next.
 #[derive(Debug, PartialEq, Eq)]
 pub enum Taken {
+    Grid(u16, u16),
     Bytes(Bytes),
     /// Drained after a stall: the socket asks for a snapshot.
     Resync,
@@ -107,6 +109,7 @@ impl Outbox {
                 bytes: BytesMut::new(),
                 delivery,
                 ended: None,
+                grid: None,
             }),
             ready: Notify::new(),
             room: Notify::new(),
@@ -185,6 +188,10 @@ impl Outbox {
     /// At most `max` bytes, then the end once everything before it is taken.
     pub fn take(&self, max: usize) -> Taken {
         let mut queue = self.queue.lock().expect("outbox poisoned");
+        // Take the grid and bytes under the same lock so resized output cannot overtake its announcement.
+        if let Some((cols, rows)) = queue.grid.take() {
+            return Taken::Grid(cols, rows);
+        }
         if !queue.bytes.is_empty() {
             let length = queue.bytes.len().min(max);
             let bytes = queue.bytes.split_to(length).freeze();
@@ -200,6 +207,10 @@ impl Outbox {
             return Taken::Resync;
         }
         Taken::Nothing
+    }
+
+    fn grid(&self, cols: u16, rows: u16) {
+        self.with(|queue| queue.grid = Some((cols, rows)));
     }
 
     pub async fn changed(&self) {
@@ -219,6 +230,7 @@ enum Command {
     },
     Input(Vec<u8>),
     Resize {
+        viewer: u64,
         cols: u16,
         rows: u16,
     },
@@ -250,6 +262,7 @@ pub struct Viewer {
 /// What a socket's reader sends its hub: keystrokes and sizes, from any viewer, into the one pane they share.
 #[derive(Clone)]
 pub struct Controls {
+    viewer: u64,
     commands: mpsc::UnboundedSender<Command>,
 }
 
@@ -259,13 +272,18 @@ impl Controls {
     }
 
     pub fn resize(&self, cols: u16, rows: u16) {
-        let _ = self.commands.send(Command::Resize { cols, rows });
+        let _ = self.commands.send(Command::Resize {
+            viewer: self.viewer,
+            cols,
+            rows,
+        });
     }
 }
 
 impl Viewer {
     pub fn controls(&self) -> Controls {
         Controls {
+            viewer: self.id,
             commands: self.commands.clone(),
         }
     }
@@ -506,6 +524,8 @@ fn first_line(lines: Option<&Vec<Vec<u8>>>) -> String {
 #[derive(Default)]
 struct Hub {
     viewers: HashMap<u64, Arc<Outbox>>,
+    sizes: HashMap<u64, (u16, u16)>,
+    grid: Option<(u16, u16)>,
     expected: VecDeque<Expect>,
     batch: u64,
     parts: Parts,
@@ -559,8 +579,24 @@ impl Hub {
         }
     }
 
-    fn resize(&mut self, cols: u16, rows: u16) {
+    // Per-axis minima fit every viewer at the editor's existing font size, without scaling or clipping.
+    fn reconcile_grid(&mut self) {
+        let grid = self
+            .sizes
+            .values()
+            .copied()
+            .reduce(|a, b| (a.0.min(b.0), a.1.min(b.1)));
+        let Some((cols, rows)) = grid else {
+            return;
+        };
+        if self.grid == grid {
+            return;
+        }
+        self.grid = grid;
         self.ask(&format!("refresh-client -C {cols}x{rows}"), Expect::Ignore);
+        for outbox in self.viewers.values() {
+            outbox.grid(cols, rows);
+        }
     }
 
     fn command(&mut self, command: Command) {
@@ -571,12 +607,20 @@ impl Hub {
                 cols,
                 rows,
             } => {
-                self.resize(cols, rows);
+                self.viewers.insert(viewer, outbox.clone());
+                if cols > 0 && rows > 0 {
+                    self.sizes.insert(viewer, (cols, rows));
+                }
+                self.reconcile_grid();
+                if let Some((cols, rows)) = self.grid {
+                    outbox.grid(cols, rows);
+                }
                 outbox.wait_for(self.snapshot());
-                self.viewers.insert(viewer, outbox);
             }
             Command::Leave { viewer } => {
                 self.viewers.remove(&viewer);
+                self.sizes.remove(&viewer);
+                self.reconcile_grid();
             }
             Command::Input(bytes) if bytes.is_empty() => {}
             Command::Input(bytes) => match self.location.as_ref().map(|at| at.pane.clone()) {
@@ -584,7 +628,12 @@ impl Hub {
                 None if self.queued.len() < QUEUED_INPUT_MAX => self.queued.push(bytes),
                 None => {}
             },
-            Command::Resize { cols, rows } => self.resize(cols, rows),
+            Command::Resize { viewer, cols, rows } => {
+                if self.viewers.contains_key(&viewer) && cols > 0 && rows > 0 {
+                    self.sizes.insert(viewer, (cols, rows));
+                    self.reconcile_grid();
+                }
+            }
             Command::Resync { viewer } => {
                 if self.viewers.contains_key(&viewer) {
                     let batch = self.snapshot();
@@ -730,6 +779,7 @@ mod tests {
 
     fn taken(outbox: &Outbox) -> Vec<u8> {
         match outbox.take(usize::MAX) {
+            Taken::Grid(_, _) => taken(outbox),
             Taken::Bytes(bytes) => bytes.to_vec(),
             other => panic!("expected bytes, took {other:?}"),
         }
@@ -740,6 +790,105 @@ mod tests {
             pane: pane.into(),
             bytes: bytes.to_vec(),
         }
+    }
+
+    #[test]
+    fn shared_grid_is_independent_of_join_order_and_recomputed_on_leave() {
+        let mut hub = Hub::default();
+        joined(&mut hub, 1);
+        hub.out.clear();
+        hub.command(Command::Join {
+            viewer: 2,
+            outbox: Arc::new(Outbox::live()),
+            cols: 120,
+            rows: 40,
+        });
+        let sent = String::from_utf8(std::mem::take(&mut hub.out)).unwrap();
+        assert_eq!(
+            sent.lines()
+                .filter(|line| line.starts_with("refresh-client"))
+                .collect::<Vec<_>>(),
+            Vec::<&str>::new()
+        );
+        hub.command(Command::Leave { viewer: 1 });
+        assert_eq!(
+            String::from_utf8(hub.out).unwrap(),
+            "refresh-client -C 120x40\n"
+        );
+    }
+
+    #[test]
+    fn shared_grid_tracks_each_viewer_and_announces_changes_without_duplicate_refreshes() {
+        let mut hub = Hub::default();
+        let large = Arc::new(Outbox::live());
+        hub.command(Command::Join {
+            viewer: 1,
+            outbox: large.clone(),
+            cols: 120,
+            rows: 40,
+        });
+        assert_eq!(large.take(usize::MAX), Taken::Grid(120, 40));
+        hub.out.clear();
+        let small = joined(&mut hub, 2);
+        assert_eq!(hub.grid, Some((80, 24)));
+        assert_eq!(large.take(usize::MAX), Taken::Grid(80, 24));
+        assert_eq!(small.take(usize::MAX), Taken::Grid(80, 24));
+        hub.out.clear();
+        let same = joined(&mut hub, 3);
+        assert_eq!(same.take(usize::MAX), Taken::Grid(80, 24));
+        assert_eq!(large.take(usize::MAX), Taken::Nothing);
+        assert!(
+            !String::from_utf8(std::mem::take(&mut hub.out))
+                .unwrap()
+                .contains("refresh-client")
+        );
+        hub.command(Command::Resize {
+            viewer: 1,
+            cols: 100,
+            rows: 30,
+        });
+        assert_eq!(hub.out, Vec::<u8>::new());
+        hub.command(Command::Resize {
+            viewer: 2,
+            cols: 60,
+            rows: 35,
+        });
+        assert_eq!(
+            String::from_utf8(std::mem::take(&mut hub.out)).unwrap(),
+            "refresh-client -C 60x24\n"
+        );
+        assert_eq!(large.take(usize::MAX), Taken::Grid(60, 24));
+        assert_eq!(small.take(usize::MAX), Taken::Grid(60, 24));
+        assert_eq!(same.take(usize::MAX), Taken::Grid(60, 24));
+        hub.command(Command::Resize {
+            viewer: 2,
+            cols: 60,
+            rows: 35,
+        });
+        hub.command(Command::Resize {
+            viewer: 99,
+            cols: 1,
+            rows: 1,
+        });
+        hub.command(Command::Resize {
+            viewer: 1,
+            cols: 0,
+            rows: 0,
+        });
+        assert_eq!(hub.out, Vec::<u8>::new());
+        hub.command(Command::Leave { viewer: 3 });
+        assert_eq!(
+            String::from_utf8(std::mem::take(&mut hub.out)).unwrap(),
+            "refresh-client -C 60x30\n"
+        );
+        hub.command(Command::Leave { viewer: 2 });
+        assert_eq!(
+            String::from_utf8(std::mem::take(&mut hub.out)).unwrap(),
+            "refresh-client -C 100x30\n"
+        );
+        assert_eq!(large.take(usize::MAX), Taken::Grid(100, 30));
+        hub.command(Command::Leave { viewer: 1 });
+        assert_eq!(hub.out, Vec::<u8>::new());
     }
 
     #[test]
@@ -796,6 +945,7 @@ mod tests {
             let _ = taken(&fast);
         }
         // Dropped whole at the mark, not trimmed: a partial stream would draw a torn screen.
+        assert_eq!(slow.take(usize::MAX), Taken::Grid(80, 24));
         assert_eq!(slow.take(usize::MAX), Taken::Resync);
         hub.event(output("%3", b"lost"));
         hub.command(Command::Resync { viewer: 1 });

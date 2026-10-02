@@ -1,7 +1,7 @@
 import { lstat, mkdir, mkdtemp, readdir, readFile, realpath, rename, rm, rmdir, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
-import { pathExists, writeFileAtomic } from "@intentic/base/fs";
+import { pathExists, pathPresence, writeFileAtomic } from "@intentic/base/fs";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import { keyedLock } from "@intentic/base/async";
 import { undefinedIfMissing } from "@intentic/base/errors";
@@ -12,7 +12,7 @@ import type { PerfTracker } from "../../system/resources/perf.js";
 import { textFile } from "../../store/text-file.js";
 import { discoverRepos } from "../../workspace/layout/repo-discovery.js";
 import type { WorkspacePaths } from "../../workspace/workspace.js";
-import { dropAgentRef, parkAgentRefs, unparkAgentRef } from "../land/agent-refs.js";
+import { branchSha, dropAgentRef, parkAgentRefs, unparkAgentRef } from "../land/agent-refs.js";
 import { claudeStoreOf, type StoreOwner } from "../../sessions/session-store.js";
 import { mirroredDirs, overlaysDir, PACKAGE_STORE, type TurnIsolation } from "./isolation.js";
 import { coneFor, fencedComposition } from "./worktree-cone.js";
@@ -47,7 +47,11 @@ export interface AgentWorktrees {
     readonly mainDir: (repo: string) => string;
     // The conversation's runtime session store, wherever the fence it was born with puts it (sessions/session-store.ts).
     readonly sessionStore: (entry: StoreOwner | undefined) => string;
-    readonly exists: (id: string) => Promise<boolean>;
+    // What stands of a conversation's checkout, for a sweep deciding whether it ended: on disk (`present`); off disk
+    // with `agent/<id>` still in root, live or parked, so the next ensure re-attaches it (`restorable`); off disk with
+    // nothing to restore it from (`gone`). `unknown` when either probe failed rather than answered: only ENOENT reads
+    // as off disk, since EACCES, EIO or ENOTDIR say nothing about whether the checkout is there.
+    readonly presence: (id: string) => Promise<"present" | "restorable" | "gone" | "unknown">;
     // Is this repo's checkout on disk AND still on `agent/<id>`; `archivedAt` cannot answer it since a restored agent's
     // checkout stays retired until the next ensure().
     // Diff, fileDiff and land branch on this: the checkout when present, branch refs when not. A checkout the turn moved
@@ -130,6 +134,27 @@ const eachRepo = async (
 // same relative path) so imports resolve like /work's.
 // Where overlay mounts are available (isolation.ts) this only creates the empty mount point instead: a mirrored symlink
 // would loop back into /work and share writes; an overlay keeps writes on the turn's layer.
+
+// AgentWorktrees.presence: the disk first, then root's ref only once the disk has answered ENOENT; a failure of either
+// answers unknown rather than guessing.
+const presenceOf = async (
+    checkout: string,
+    main: string,
+    id: string,
+    git: GitRunner,
+    logger: Logger,
+): Promise<"present" | "restorable" | "gone" | "unknown"> => {
+    const disk = await pathPresence(checkout);
+    if (disk !== "absent") {
+        return disk;
+    }
+    try {
+        return (await branchSha(main, `agent/${id}`, git)) === undefined ? "gone" : "restorable";
+    } catch (error) {
+        logger.warn({ err: error, id }, "agents: could not read whether a conversation's branch survives");
+        return "unknown";
+    }
+};
 
 export const createAgentWorktrees = (
     options: {
@@ -398,7 +423,10 @@ export const createAgentWorktrees = (
         if (await pathExists(target)) {
             await relinkOne(id, repo);
         } else {
-            await git(mainDir(repo), ["worktree", "add", target, `agent/${id}`]).catch((error: unknown) =>
+            // One --force: git refuses a path whose registration outlived its directory ("missing but already
+            // registered worktree") without it. It still refuses a path that exists and is non-empty, and a LOCKED
+            // registration (that takes -f twice), so it never lands on files or overrides a lock.
+            await git(mainDir(repo), ["worktree", "add", "--force", target, `agent/${id}`]).catch((error: unknown) =>
                 logger.warn({ err: error, repo }, "agents: worktree re-attach failed"),
             );
         }
@@ -583,7 +611,8 @@ export const createAgentWorktrees = (
     };
 
     // Commits what one checkout still holds onto its branch before the checkout goes (retire pass 1 / a leaving repo's
-    // first half); no repo lock needed since this only touches the agent's own worktree.
+    // first half, and again under the lock in releaseOne); no repo lock needed since this only touches the agent's own
+    // worktree.
     // The porcelain probe covers staged, unstaged and untracked, but the commit itself happens in
     // commitWorktreeRemainder, not here.
     const preserveOne = async (id: string, repo: string, title: string | undefined): Promise<void> => {
@@ -605,10 +634,14 @@ export const createAgentWorktrees = (
 
     // Drops one checkout and parks its branch (retire pass 2 / a leaving repo's second half); under the repo lock,
     // checkout removed before the ref parks since that's what makes it deletable.
+    // Preserves again first, under the lock: pass 1 ran without it, and the wait for it can sit behind a land while a
+    // kept job or background process is still writing. Without this, `worktree remove --force` takes what landed in
+    // that window while the branch claims the work was kept. A failing preserve throws, so nothing is removed.
     // Best-effort: a ref that fails to park just leaves a branch behind for the next boot sweep to pick up.
-    const releaseOne = (id: string, repo: string): Promise<void> =>
+    const releaseOne = (id: string, repo: string, title: string | undefined): Promise<void> =>
         withRepoLock(repo, async () => {
             const main = mainDir(repo);
+            await preserveOne(id, repo, title);
             await removeCheckout(main, worktreeDir(id, repo));
             await parkAgentRefs(main, new Set([id]), git).catch((error: unknown) =>
                 logger.warn({ err: error, repo, id }, "agents: branch park failed"),
@@ -640,7 +673,7 @@ export const createAgentWorktrees = (
         await Promise.all([
             ...leaving.map(async ({ repo }) => {
                 await preserveOne(id, repo, undefined);
-                await releaseOne(id, repo);
+                await releaseOne(id, repo, undefined);
                 logger.info({ id, repo }, "agents: repo left the conversation's composition");
             }),
             ...joining.map(async ({ repo, base }) => {
@@ -661,7 +694,7 @@ export const createAgentWorktrees = (
         worktreeDir,
         mainDir,
         sessionStore: (entry) => claudeStoreOf(workspace.root, historyRoot, entry),
-        exists: (id) => pathExists(conversationDir(id)),
+        presence: (id) => presenceOf(conversationDir(id), mainDir("root"), id, git, logger),
         attached: async (id, repo) => (await checkedOutBranch(worktreeDir(id, repo))) === `agent/${id}`,
         elsewhere: elsewhereIn,
         snapshot: async () => {
@@ -740,7 +773,7 @@ export const createAgentWorktrees = (
             // each other.
             // Root goes last: removing its dir first would delete nested checkouts out from under their own `worktree
             // remove`, forcing a wasted prune fallback.
-            await eachRepo(recorded, "root-last", (repo) => releaseOne(id, repo));
+            await eachRepo(recorded, "root-last", (repo) => releaseOne(id, repo, title));
             await rm(conversationDir(id), { recursive: true, force: true });
             // The branch is the archive; overlays aren't part of it and get dropped like a plain removal's.
             await rm(overlaysFor(id), { recursive: true, force: true });

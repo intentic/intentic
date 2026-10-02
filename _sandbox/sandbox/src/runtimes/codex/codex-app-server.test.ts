@@ -1,3 +1,8 @@
+import { SteeringQueue } from "../../agent/checkpoints/agent-steering.js";
+import { createCodexAgent } from "./codex-agent.js";
+import { parkedCards } from "../../conversations/actor/parked-cards.js";
+import { fakeCodexProcess, memoryFleet } from "../../testing.js";
+import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import {
     type AppServerNotification,
@@ -5,6 +10,7 @@ import {
     type CodexEvent,
     type CodexTurn,
     createCodexAppServerRunner,
+    stdioConnector,
 } from "./codex-app-server.js";
 
 interface RequestCall {
@@ -19,6 +25,8 @@ type Incoming = AppServerNotification | { readonly request: string; readonly par
 interface FakeAppServerOptions {
     // What skills/list answers with: the SkillMetadata array of the one cwd entry.
     readonly skills?: readonly unknown[];
+    readonly refuseBeforeStarted?: boolean;
+    readonly refuseSteers?: boolean;
     // The turn id turn/steer reports the message landed on. Defaults to the turn already running.
     readonly steeredTurnId?: string;
 }
@@ -28,6 +36,9 @@ const fakeAppServer = (incoming: readonly Incoming[], options: FakeAppServerOpti
     const notices: RequestCall[] = [];
     const answered: unknown[] = [];
     let closed = false;
+    let active = false;
+    let starts = 0;
+    const accepted: unknown[] = [];
     const connector: CodexAppServerConnector = async () => ({
         request: async (method, params) => {
             requests.push({ method, params });
@@ -44,9 +55,14 @@ const fakeAppServer = (incoming: readonly Incoming[], options: FakeAppServerOpti
                 return { data: [{ cwd: "/workspace/repo", errors: [], skills: options.skills ?? [] }] };
             }
             if (method === "turn/start") {
-                return { turn: { id: "turn-1" } };
+                starts += 1;
+                return { turn: { id: `turn-${starts}` } };
             }
             if (method === "turn/steer") {
+                if (options.refuseSteers || (options.refuseBeforeStarted && !active)) {
+                    throw new Error("no active turn to steer");
+                }
+                accepted.push(params);
                 return { turnId: options.steeredTurnId ?? "turn-1" };
             }
             throw new Error(`unstubbed app-server request ${method}`);
@@ -62,6 +78,9 @@ const fakeAppServer = (incoming: readonly Incoming[], options: FakeAppServerOpti
                     yield { kind: "request", method: message.request, params: message.params, respond: (result) => answered.push(result) };
                     continue;
                 }
+                if (message.method === "turn/started") {
+                    active = true;
+                }
                 yield { kind: "notification", ...message };
             }
         })(),
@@ -69,7 +88,7 @@ const fakeAppServer = (incoming: readonly Incoming[], options: FakeAppServerOpti
             closed = true;
         },
     });
-    return { connector, requests, notices, answered, closed: () => closed };
+    return { connector, requests, notices, answered, accepted, closed: () => closed };
 };
 
 const TRANSLATOR_CONFIG: NonNullable<CodexTurn["config"]> = {
@@ -529,6 +548,7 @@ test("a steering message reaches the running turn, and the run follows the turn 
     })();
     const appServer = fakeAppServer(
         [
+            { method: "turn/started", params: { threadId: "thr-new", turn: { id: "turn-1" } } },
             { await: landed },
             // The turn the steer replaced completes as interrupted; that must NOT end this run.
             { method: "turn/completed", params: { threadId: "thr-new", turn: { id: "turn-1", status: "interrupted", error: null } } },
@@ -543,6 +563,7 @@ test("a steering message reaches the running turn, and the run follows the turn 
 
     expect(await collect(createCodexAppServerRunner(appServer.connector)({ ...turn(), steering }))).toEqual([
         { type: "thread.started", thread_id: "thr-new" },
+        { type: "turn.started" },
         { type: "item.completed", item: { id: "m1", type: "agent_message", text: "Using fetch." } },
         { type: "turn.completed" },
     ]);
@@ -552,33 +573,75 @@ test("a steering message reaches the running turn, and the run follows the turn 
     });
 });
 
-test("a refused steer is swallowed rather than failing the turn", async () => {
-    let released = (): void => {};
-    const landed = new Promise<void>((resolve) => {
-        released = resolve;
-    });
+test("steering waits for turn/started before reaching an app-server that refuses early input", async () => {
+    const appServer = fakeAppServer(
+        [
+            { await: new Promise<void>((resolve) => setTimeout(resolve, 0)) },
+            { method: "turn/started", params: { threadId: "thr-new", turn: { id: "turn-1" } } },
+            { method: "turn/completed", params: { threadId: "thr-new", turn: { id: "turn-1", status: "completed" } } },
+        ],
+        { refuseBeforeStarted: true },
+    );
+    const steering = (async function* () {
+        yield "use fetch instead";
+    })();
+    await collect(createCodexAppServerRunner(appServer.connector)({ ...turn(), steering }));
+    expect(appServer.accepted).toEqual([
+        {
+            threadId: "thr-new",
+            expectedTurnId: "turn-1",
+            input: [{ type: "text", text: "use fetch instead", text_elements: [] }],
+        },
+    ]);
+});
+
+test("a refused steer becomes the next turn's input on the same thread", async () => {
+    const appServer = fakeAppServer(
+        [
+            { method: "turn/started", params: { threadId: "thr-new", turn: { id: "turn-1" } } },
+            { method: "turn/completed", params: { threadId: "thr-new", turn: { id: "turn-1", status: "completed" } } },
+            { method: "turn/started", params: { threadId: "thr-new", turn: { id: "turn-2" } } },
+            { method: "turn/completed", params: { threadId: "thr-new", turn: { id: "turn-2", status: "completed" } } },
+        ],
+        { refuseSteers: true },
+    );
     const steering = (async function* () {
         yield "too late";
-        released();
     })();
-    const appServer = fakeAppServer([
-        { await: landed },
-        { method: "turn/completed", params: { threadId: "thr-new", turn: { id: "turn-1", status: "completed", error: null } } },
+    await collect(createCodexAppServerRunner(appServer.connector)({ ...turn(), steering }));
+    expect(appServer.requests.filter((call) => call.method === "turn/start").map((call) => call.params)).toEqual([
+        expect.objectContaining({
+            threadId: "thr-new",
+            input: [
+                { type: "text", text: "draw a crocodile", text_elements: [] },
+                { type: "localImage", path: "/workspace/reference.png" },
+            ],
+        }),
+        expect.objectContaining({ threadId: "thr-new", input: [{ type: "text", text: "too late", text_elements: [] }] }),
     ]);
-    // What app-server answers when the turn finished between the user's click and the steer reaching it.
-    const connector: CodexAppServerConnector = async (started) => {
-        const connection = await appServer.connector(started);
-        return {
-            ...connection,
-            request: (method, params) =>
-                method === "turn/steer" ? Promise.reject(new Error("no active turn to steer")) : connection.request(method, params),
-        };
-    };
+});
 
-    expect(await collect(createCodexAppServerRunner(connector)({ ...turn(), steering }))).toEqual([
-        { type: "thread.started", thread_id: "thr-new" },
-        { type: "turn.completed" },
-    ]);
+test("aborting an active stdio turn sends turn/interrupt before killing the app-server", async () => {
+    jest.useFakeTimers();
+    const process = fakeCodexProcess();
+    const controller = new AbortController();
+    const connection = await stdioConnector(
+        async () => "codex",
+        () => process.child,
+    )({ ...turn(), signal: controller.signal });
+    try {
+        await connection.request("turn/start", { threadId: "thr-new" });
+        process.notify("turn/started", { threadId: "thr-new", turn: { id: "turn-1" } });
+        await connection.messages[Symbol.asyncIterator]().next();
+        controller.abort();
+        expect(process.requests).toContainEqual({ method: "turn/interrupt", params: { threadId: "thr-new", turnId: "turn-1" } });
+        expect(process.kills()).toBe(0);
+        await advanceTimersByTimeAsync(3000);
+        expect(process.kills()).toBe(1);
+    } finally {
+        connection.close();
+        jest.useRealTimers();
+    }
 });
 
 test("a question request is handed over with its options, and the picks travel back on the same request", async () => {
@@ -728,4 +791,110 @@ test("rejects malformed fields on a known app-server item", async () => {
 
     await expect(collect(createCodexAppServerRunner(appServer.connector)(turn()))).rejects.toThrow("invalid agentMessage.text");
     expect(appServer.closed()).toBe(true);
+});
+
+test("final completion refuses a steer while terminal usage is still being consumed", async () => {
+    const steering = new SteeringQueue();
+    const appServer = fakeAppServer([
+        { method: "turn/started", params: { threadId: "thr-new", turn: { id: "turn-1" } } },
+        {
+            method: "thread/tokenUsage/updated",
+            params: {
+                threadId: "thr-new",
+                turnId: "turn-1",
+                tokenUsage: {
+                    last: {
+                        inputTokens: 10,
+                        cachedInputTokens: 3,
+                        cacheWriteInputTokens: 1,
+                        outputTokens: 5,
+                        reasoningOutputTokens: 0,
+                    },
+                },
+            },
+        },
+        { method: "turn/completed", params: { threadId: "thr-new", turn: { id: "turn-1", status: "completed" } } },
+    ]);
+    const agent = createCodexAgent({ codexHome: "/codex", runner: createCodexAppServerRunner(appServer.connector) });
+    const admitted: boolean[] = [];
+    for await (const event of agent({
+        spec: { prompt: "hello", cwd: WORKSPACE_ROOT, steering },
+        policy: {},
+        tools: {},
+        credential: { kind: "container" },
+        hooks: { cards: parkedCards(memoryFleet().conversations) },
+        signal: new AbortController().signal,
+    })) {
+        if (event.kind === "usage") {
+            admitted.push(steering.push("too late"));
+        }
+    }
+    steering.close();
+    expect(admitted).toEqual([false]);
+    expect(steering.delivered).toBe(0);
+});
+
+test("stdio interruption settles without killing, and a subagent cannot become its target", async () => {
+    jest.useFakeTimers();
+    const process = fakeCodexProcess();
+    const controller = new AbortController();
+    const connection = await stdioConnector(
+        async () => "codex",
+        () => process.child,
+    )({ ...turn(), signal: controller.signal });
+    const messages = connection.messages[Symbol.asyncIterator]();
+    try {
+        await connection.request("turn/start", { threadId: "thr-new" });
+        process.notify("turn/started", { threadId: "thr-new", turn: { id: "turn-1" } });
+        await messages.next();
+        process.notify("turn/started", { threadId: "thr-child", turn: { id: "child-turn" } });
+        await messages.next();
+        controller.abort();
+        expect(process.requests.filter((call) => call.method === "turn/interrupt")).toEqual([
+            { method: "turn/interrupt", params: { threadId: "thr-new", turnId: "turn-1" } },
+        ]);
+        process.notify("turn/completed", { threadId: "thr-new", turn: { id: "turn-1", status: "interrupted" } });
+        await messages.next();
+        await advanceTimersByTimeAsync(3000);
+        expect(process.kills()).toBe(0);
+    } finally {
+        connection.close();
+        jest.useRealTimers();
+    }
+});
+
+test("subagent usage separates cached and cache-written input from uncached input", async () => {
+    const appServer = fakeAppServer([
+        {
+            method: "item/completed",
+            params: {
+                threadId: "thr-new",
+                turnId: "turn-1",
+                item: {
+                    id: "spawn-1",
+                    type: "collabAgentToolCall",
+                    tool: "spawnAgent",
+                    status: "completed",
+                    senderThreadId: "thr-new",
+                    receiverThreadIds: ["thr-child"],
+                    agentsStates: {},
+                },
+            },
+        },
+        {
+            method: "thread/tokenUsage/updated",
+            params: {
+                threadId: "thr-child",
+                turnId: "child-turn",
+                tokenUsage: {
+                    total: { inputTokens: 500, cachedInputTokens: 300, cacheWriteInputTokens: 100, outputTokens: 50 },
+                },
+            },
+        },
+        { method: "turn/completed", params: { threadId: "thr-new", turn: { id: "turn-1", status: "completed" } } },
+    ]);
+    const events = await collect(createCodexAppServerRunner(appServer.connector)(turn()));
+    expect(events.filter((event) => event.type === "subagent.usage")).toEqual([
+        { type: "subagent.usage", parent: "spawn-1", input: 100, output: 50, cacheRead: 300, cacheCreation: 100 },
+    ]);
 });

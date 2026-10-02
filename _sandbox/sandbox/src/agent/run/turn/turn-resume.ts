@@ -752,6 +752,16 @@ export const resumeInterruptedTurns = async (services: Services, now: number = D
             );
             continue;
         }
+        // The cut turn never settled, so nothing recorded it, and the re-run's prompt carries the restart note, which
+        // records a notice where the user's bubble would be: written here, before the re-run, or the message is gone
+        // from the record (and from the receipts seeded off it). A failed write keeps the entry, attempt unspent.
+        if (!(await recordInterruptedTurn(services, entry.turn, entry.sessionId ?? entry.turn.sessionId, entry.startedAt, true))) {
+            services.logger.warn(
+                { conversationId: entry.turn.conversationId },
+                "interrupted turn transcript could not be written before its re-run; journal entry was retained",
+            );
+            continue;
+        }
         // The attempt is spent on disk before the turn restarts; this write has to survive the death it guards against.
         await spendAttempt(services, entry);
         const { conversationId } = entry.turn;

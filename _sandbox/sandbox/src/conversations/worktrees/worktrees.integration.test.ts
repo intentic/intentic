@@ -397,6 +397,21 @@ test("ensure with a recorded composition repairs a deleted .git pointer", async 
     expect(await sh(repaired.cwd, "branch", "--show-current")).toBe("agent/c1");
 });
 
+// The directory is gone but main still registers it: plain `worktree add` refuses a "missing but already registered
+// worktree", so the checkout only comes back through the override.
+test("ensure re-attaches a deleted checkout git still registers, from its surviving branch", async () => {
+    const { worktrees } = await setup();
+    const created = await worktrees.ensure("c1", []);
+    await writeFile(join(created.cwd, "intent", "deploy.config.ts"), "agent edit\n");
+    await sh(join(created.cwd, "intent"), "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-am", "agent work");
+    await rm(created.cwd, { recursive: true, force: true });
+
+    const repaired = await worktrees.ensure("c1", created.repos);
+    expect(await sh(repaired.cwd, "branch", "--show-current")).toBe("agent/c1");
+    expect(await sh(join(repaired.cwd, "intent"), "branch", "--show-current")).toBe("agent/c1");
+    expect(await readFile(join(repaired.cwd, "intent", "deploy.config.ts"), "utf8")).toBe("agent edit\n");
+});
+
 test("ensure re-links a checkout a turn re-initialised as a standalone repo, keeping its files", async () => {
     const { work, historyRoot, worktrees } = await setup();
     const created = await worktrees.ensure("c1", []);
@@ -469,6 +484,41 @@ test("retire commits the worktree's uncommitted state onto the branch and keeps 
     expect(await sh(join(work, "intent"), "show", "agent/c1:deploy.config.ts")).toBe("agent edit");
     expect(await sh(work, "log", "-1", "--format=%s", "agent/c1")).toBe("Agent: Fix the parser");
     expect(await sh(work, "status", "--porcelain")).toBe("");
+});
+
+// Pass 1 commits without the repo lock and pass 2 may queue behind a land for it; a kept job or background process is
+// still writing meanwhile. What lands in that window is removed by `worktree remove --force`, so it must reach the branch.
+test("retire keeps work written after the first preserve, while the checkout waits for the repo lock", async () => {
+    const { work, worktrees } = await setup();
+    const conversation = await worktrees.ensure("c1", []);
+    const intent = join(work, "intent");
+    await writeFile(join(conversation.cwd, "new-file.md"), "agent file\n");
+    await writeFile(join(conversation.cwd, "intent", "deploy.config.ts"), "agent edit\n");
+    // A land holding both repo locks, so pass 2 queues behind it.
+    let release = (): void => undefined;
+    const landing = new Promise<void>((resolve) => {
+        release = resolve;
+    });
+    const held = Promise.all(["root", "intent"].map((repo) => worktrees.withRepoLock(repo, () => landing)));
+
+    const retiring = worktrees.retire("c1", conversation.repos, "Fix the parser");
+    // Pass 1 is done once both branches carry its commit; a hang bound, not a timing.
+    const preserved = async (dir: string): Promise<boolean> =>
+        (await sh(dir, "log", "-1", "--format=%s", "agent/c1")) === "Agent: Fix the parser";
+    for (const deadline = Date.now() + 10_000; !((await preserved(work)) && (await preserved(intent))); ) {
+        expect(Date.now()).toBeLessThan(deadline);
+        await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    await writeFile(join(conversation.cwd, "late.md"), "written late\n");
+    await writeFile(join(conversation.cwd, "intent", "deploy.config.ts"), "written late\n");
+    release();
+    await held;
+    await retiring;
+
+    expect(existsSync(conversation.cwd)).toBe(false);
+    expect(await sh(work, "show", "agent/c1:new-file.md")).toBe("agent file");
+    expect(await sh(work, "show", "agent/c1:late.md")).toBe("written late");
+    expect(await sh(intent, "show", "agent/c1:deploy.config.ts")).toBe("written late");
 });
 
 test("a retired agent's checkout comes back from its branch, with its work", async () => {

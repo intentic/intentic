@@ -109,8 +109,15 @@ export const standingOn = (cards: ParkedCards, conversationId: string | undefine
                   cards.create(kind, onAbort, cardConversation, cardConversation === undefined ? { ...options, standingFor: conversationId } : options),
           };
 
-// The cards parked in these actors' conversations, and in their conversationless bucket.
-export const parkedCards = (conversations: Pick<ConversationActors, "holdings">, standing?: StandingYes): ParkedCards => {
+// The cards parked in these actors' conversations, and in their conversationless bucket. `settled` hears every card
+// that stops waiting, answered (by a person or a standing yes) or aborted, as it stops: the one moment that is true
+// wherever the answer came from (this browser, another device, a stop), which is what withdrawing the card's push
+// notification needs. A conversationless card names the conversation its turn raised it for, where one did.
+export const parkedCards = (
+    conversations: Pick<ConversationActors, "holdings">,
+    standing?: StandingYes,
+    settled?: (requestId: string, conversationId: string | undefined) => void,
+): ParkedCards => {
     // Every parked card a standing yes may answer, by id, with the conversation it may answer it for.
     const answerable = new Map<string, string>();
     const restore = <K extends AgentReply["kind"]>(
@@ -131,6 +138,7 @@ export const parkedCards = (conversations: Pick<ConversationActors, "holdings">,
                     done = true;
                     parked.drop(id);
                     answerable.delete(id);
+                    settled?.(id, conversationId ?? options?.standingFor);
                     // A reply for the wrong card can only be a client bug: the waiter's kind is what its caller is
                     // typed against.
                     const answered = fromUser && reply.kind === kind;

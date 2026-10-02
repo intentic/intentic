@@ -1,3 +1,4 @@
+import { invalidatePushedQueries } from "../../../lib/pushInvalidation";
 import { sandboxRef, sandboxScopeGuard } from "@intentic/extension-api";
 import { errorMessage } from "@intentic/ui/async";
 import type {
@@ -47,10 +48,10 @@ const refreshReviewable = throttleTrailing(() => {
     // The timeline is cheap and a land's own commits belong on it; the review is neither, so it waits (see below).
     if (!landingNow.value) {
         for (const queryKey of workingReviewKeys) {
-            void queryClient.invalidateQueries({ queryKey });
+            void invalidatePushedQueries(queryClient, { queryKey });
         }
     }
-    void queryClient.invalidateQueries({ queryKey: rpcPrefix(`history.list`) });
+    void invalidatePushedQueries(queryClient, { queryKey: rpcPrefix(`history.list`) });
 }, TURN_END_REFRESH_MS);
 watch(turnsRunning, (now, was) => {
     if (now < was) {
@@ -190,7 +191,7 @@ const invalidateChanges = (): Promise<void> =>
 // ends the pause — for a land nobody in this browser asked for as much as for one somebody pressed.
 watch(landingNow, (now, was) => {
     if (was && !now) {
-        void invalidateChanges();
+        void Promise.all([...workingReviewKeys, ...agentReviewPrefixes].map((queryKey) => invalidatePushedQueries(queryClient, { queryKey })));
     }
 });
 

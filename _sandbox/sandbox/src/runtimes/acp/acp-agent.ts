@@ -49,6 +49,10 @@ const failureOf = (error: unknown): string => {
     return typeof details === "string" && details !== "" ? details : error instanceof Error ? error.message : "ACP agent failed";
 };
 
+// ACP credentials belong to the capability, not a native provider account's reconnect flow.
+const authCodeOf = (error: RequestError | undefined): Pick<Extract<AgentEvent, { kind: "error" }>, "code"> =>
+    error?.code === RequestError.authRequired().code ? { code: "acp-auth-required" } : {};
+
 // The session a phase runs on: the one asked for when this process holds it or can load it, else a new one, announced. A
 // session the agent can't bring back is the coded self-heal every runtime shares: the next send starts fresh.
 async function* sessionFor(
@@ -69,8 +73,7 @@ async function* sessionFor(
             };
             return undefined;
         }
-        // Only the agent's own refusal means the session is gone: a connection that dropped mid-load throws on, so the
-        // client keeps the id instead of discarding a session nobody said was lost.
+        // Only an explicit missing resource retires the session; authentication and replay failures may recover.
         const refused = await connection.agent
             .request(methods.agent.session.load, {
                 sessionId,
@@ -80,7 +83,7 @@ async function* sessionFor(
             .then(
                 () => false,
                 (error: unknown) => {
-                    if (error instanceof RequestError) {
+                    if (error instanceof RequestError && error.code === RequestError.resourceNotFound().code) {
                         return true;
                     }
                     throw error;
@@ -200,7 +203,13 @@ async function* runAcpTurn(
         readonly sink: { push: (event: AgentEvent) => void };
     },
 ): AsyncGenerator<AgentEvent, PlanPhaseResult> {
-    const session = yield* sessionFor(connection, request, sessionId);
+    let session: string | undefined;
+    try {
+        session = yield* sessionFor(connection, request, sessionId);
+    } catch (error) {
+        yield { kind: "error", message: withStderrTail(failureOf(error), connection.stderrTail()), ...authCodeOf(error instanceof RequestError ? error : undefined) };
+        return { sessionId, planText: "", errored: true };
+    }
     if (session === undefined) {
         return { sessionId: undefined, planText: "", errored: true };
     }
@@ -243,7 +252,7 @@ async function* runAcpTurn(
         await promptPromise;
         const failed = settledFailure(response, failure, connection.stderrTail);
         if (failed !== undefined) {
-            yield { kind: "error", message: failed };
+            yield { kind: "error", message: failed, ...authCodeOf(failure instanceof RequestError ? failure : undefined) };
         }
         return { sessionId: session, planText: held.text, errored: failed !== undefined };
     } finally {

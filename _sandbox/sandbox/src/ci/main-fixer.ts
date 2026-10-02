@@ -19,10 +19,12 @@ import { opt } from "../opt.js";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
 import type { CiFailure, CiFinding } from "./ci-store.js";
 import { FIX_LOG_BYTES, infraLog, startCiFix } from "./ci-fix.js";
+import { isMainLine } from "./main-line.js";
 import { ciProjects, type CiProject } from "./projects.js";
 import { ciClientFor, type FailedStep, type FetchFn } from "./providers.js";
 
-/* MAIN'S CI HAS ONE FIX AGENT. The first job that fails on a main-line branch starts it, with that job's log, while the
+/* MAIN'S CI HAS ONE FIX AGENT. The first job that fails on a repository's main line (its default branch, main-line.ts)
+   starts it, with that job's log, while the
    rest of the run goes on. Every later failure on the branch, in that run or a later one, is said to the same
    conversation: into its live turn, as a turn of its own when it is idle, queued otherwise. So it never watches a run
    itself, and nobody decides who broke what. The streak ends when a later run of every workflow that failed on it
@@ -31,11 +33,9 @@ import { ciClientFor, type FailedStep, type FetchFn } from "./providers.js";
    It gets a few turns, and hands the failure to the owner when they are spent, or when its turn ends without it having
    changed anything (a failure that is not in the code: the runner's environment, a tool's version, a secret) or ends
    failed, stopped or archived. A failed job the CI fleet died in is never its work: a run whose every failure is the
-   fleet's is re-run once. The streak is kept in the CI store (ci-store.ts), so a restart neither forgets it nor starts a
+   fleet's is re-run once, which the CI store keeps too. The streak is kept in the CI store (ci-store.ts), so a restart neither forgets it nor starts a
    second agent on it; the Agent tab's Repair switch (`autoRepair`) off, a failing main is only reported. */
 
-// Branches whose failures a fix agent is for; any other branch is somebody's work in progress.
-const MAIN_BRANCHES: ReadonlySet<string> = new Set(["main", "master"]);
 // Turns the sandbox starts for the fix agent in one streak; words said into its live turn are none.
 export const TURNS_PER_STREAK = 3;
 // Failed jobs one streak remembers having heard of.
@@ -73,11 +73,10 @@ export interface FailedJob {
 // What became of one failed job: somebody's (sent, recorded, or not main's), or the fleet's.
 type Verdict = "code" | "fleet" | "skipped";
 
-// What only this process holds: a lock per branch, so one branch's news is decided in the order it arrived; the fleet
-// failures already judged, so a job is not read twice for them; and the runs re-run for the fleet.
+// What only this process holds: a lock per branch, so one branch's news is decided in the order it arrived; and the
+// fleet failures already judged, so a job's log is not read twice for them. Losing either to a restart costs a read.
 const locks = new Map<string, ReturnType<typeof serialLock>>();
 const fleetJobs = new Set<string>();
-const rerunOnce = new Set<string>();
 
 const keyOf = (repo: string, branch: string): string => `${repo}\n${branch}`;
 const heardOf = (job: Pick<FailedJob, "runId" | "jobId">): string => `${job.runId}/${job.jobId}`;
@@ -374,7 +373,7 @@ const sendOn = async (services: Services, project: CiProject, streak: CiFailure,
  *  handled once however many ways it arrives; a fleet failure, and a failure older than main's newest pass, are not the
  *  agent's. */
 export const jobFailed = async (services: Services, project: CiProject, job: FailedJob, fetchFn: FetchFn = fetch): Promise<Verdict> => {
-    if (!MAIN_BRANCHES.has(job.branch)) {
+    if (!(await isMainLine(services, project, job.branch))) {
         return "skipped";
     }
     const key = keyOf(project.repo, job.branch);
@@ -451,10 +450,10 @@ const failedStepsOf = async (services: Services, project: CiProject, run: Pipeli
         },
     );
 
-// A run the fleet failed is re-run once; the fleet failing it again is said and left to the owner.
+// A run the fleet failed is re-run once, kept on file so a restart that hears of it again does not re-run it twice; the
+// fleet failing it again is said and left to the owner.
 const rerunFleet = async (services: Services, project: CiProject, run: PipelineRun, fetchFn: FetchFn): Promise<void> => {
-    const once = `${run.repo}/${run.runId}`;
-    if (rerunOnce.has(once)) {
+    if (!(await services.ciStore.fleetRerun(run.repo, run.runId))) {
         tell(
             services,
             "ci.fleet_failed",
@@ -463,7 +462,6 @@ const rerunFleet = async (services: Services, project: CiProject, run: PipelineR
         );
         return;
     }
-    rerunOnce.add(once);
     const rerun = await orElse(
         services,
         ciClientFor(project.account.provider, fetchFn)
@@ -569,11 +567,11 @@ const failedRun = async (services: Services, project: CiProject, run: PipelineRu
 /** A finished run, from its webhook or the poller: a pass takes its workflow off main's failure, and a failure hands every
  *  failed job not yet heard of to the fixer, re-running a run only the fleet failed. */
 export const runFinished = async (services: Services, run: PipelineRun, fetchFn: FetchFn = fetch): Promise<void> => {
-    if (!MAIN_BRANCHES.has(run.branch) || (run.status !== "success" && run.status !== "failed")) {
+    if (run.status !== "success" && run.status !== "failed") {
         return;
     }
     const project = (await ciProjects(services)).find((candidate) => candidate.repo === run.repo);
-    if (project === undefined) {
+    if (project === undefined || !(await isMainLine(services, project, run.branch))) {
         return;
     }
     if (run.status === "success") {
@@ -597,7 +595,7 @@ export const runFinished = async (services: Services, run: PipelineRun, fetchFn:
 
 /** A run still going, from the poller where no webhook is live: every job that already failed goes to the fixer. */
 export const runInFlight = async (services: Services, project: CiProject, run: PipelineRun, fetchFn: FetchFn = fetch): Promise<void> => {
-    if (!MAIN_BRANCHES.has(run.branch)) {
+    if (!(await isMainLine(services, project, run.branch))) {
         return;
     }
     for (const step of await failedStepsOf(services, project, run, fetchFn)) {
@@ -646,9 +644,7 @@ export const fixerSettled = async (services: Services, settled: { readonly conve
  *  back. The id its attempts share (named for the run the streak began in, whose newest attempt the press continues),
  *  or undefined when the run is no part of a streak. */
 export const streakFixerFor = async (services: Services, run: Pick<PipelineRun, "repo" | "branch">): Promise<string | undefined> => {
-    if (!MAIN_BRANCHES.has(run.branch)) {
-        return undefined;
-    }
+    // A streak is only ever begun on a main-line branch (jobFailed), so having one is the branch's answer.
     const streak = (await services.ciStore.failures())[keyOf(run.repo, run.branch)];
     return streak === undefined ? undefined : ciFixConversationId(run.repo, streak.firstRunId);
 };
@@ -726,5 +722,4 @@ export const resumeMainFixer = async (services: Services, fetchFn: FetchFn = fet
 export const resetMainFixer = (): void => {
     locks.clear();
     fleetJobs.clear();
-    rerunOnce.clear();
 };

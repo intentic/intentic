@@ -277,3 +277,15 @@ test("restarting over a socket a dead daemon left behind still binds", async () 
     await second.close();
     await exec("true");
 });
+
+test("retiring an older registration preserves the replacement turn's gate", async () => {
+    const { service: hooks, dir } = await started();
+    const retire = hooks.register({ conversationId: "agent-1", gate: allowing(), push: () => {} });
+    const retireReplacement = hooks.register({ conversationId: "agent-1", gate: denying("Replacement gate"), push: () => {} });
+    retire();
+    expect(await askGate(dir, { command: "rm -rf build", conversation_id: "agent-1", cwd: "/work" })).toEqual({
+        permission: "deny", agent_message: "Replacement gate", user_message: "Replacement gate",
+    });
+    retireReplacement();
+    expect(await askGate(dir, { command: "rm -rf build", conversation_id: "agent-1", cwd: "/work" })).toEqual({ permission: "allow" });
+});

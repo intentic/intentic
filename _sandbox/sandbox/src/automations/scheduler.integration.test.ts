@@ -1,7 +1,7 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type AgentEvent, type AgentOrigin, type AgentTurn, type Automation, SandboxSettingsSchema } from "@intentic/sandbox-contract";
+import { type AgentEvent, type AgentOrigin, type AgentTurn, type Automation, SandboxSettingsSchema, UTC } from "@intentic/sandbox-contract";
 import { WORKSPACE_ROOT_EXCLUDE_ENV } from "@intentic/sandbox-contract/chores";
 import { unstubbed } from "@intentic/testing";
 import { SETTLES, waitFor } from "@intentic/testing/bun";
@@ -13,6 +13,7 @@ import type { Services } from "../composition.js";
 import { automationConfig } from "../harness/route-stores.testing.js";
 import { outboxStreamFor } from "../webchat/webchat-outbox.js";
 import { fileHeldWakesStore } from "./held-wakes-store.js";
+import { fileScheduleCoverageStore } from "./schedule-coverage.js";
 import { type AutomationRecord, fileAutomationsStore } from "./automations-store.js";
 import {
     automationIdle,
@@ -46,6 +47,7 @@ const fakeServices = (
             get: async () => SandboxSettingsSchema.parse(settings),
         }),
         heldWakes: fileHeldWakesStore(join(root, "approvals")),
+        scheduleCoverage: fileScheduleCoverageStore(join(root, "automation-schedule.json")),
         turnJournal: sqliteTurnJournal(openConversationsDb(conversationsDbPath(root))),
         activity: { append: async () => {}, list: async () => [] },
         transcripts: unstubbed<Services["transcripts"]>("transcripts", { read: async () => [], append: async () => {} }),
@@ -161,7 +163,7 @@ test("a one-time wake fires when its moment arrives and switches itself off, so 
 
 test("a moment that passed while the sandbox was down still fires, and the wake is told how late it is", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
-    // Six hours ago: no poll window covers it, which is the shape a cron loses outright.
+    // Six hours ago: no poll window covers it, so it is the poll that fires it rather than the start's catch-up.
     const at = inMinutes(-360);
     await services.automations.upsert(automationConfig("dentist", { trigger: { kind: "once", at } }));
     const prompts: string[] = [];
@@ -173,6 +175,107 @@ test("a moment that passed while the sandbox was down still fires, and the wake 
     expect(prompts[0]).toContain(`due at ${new Date(at).toISOString()}`);
     expect(prompts[0]).toContain("360 minutes late");
     expect((await services.automations.get("dentist"))?.enabled).toBe(false);
+});
+
+// A daily cron whose moment was `hoursAgo` ago, on UTC so the test reads no zone setting. Daily, so the poll windows a
+// test ticks through never meet another occurrence.
+const dailyAt = (hoursAgo: number): Automation["trigger"] => {
+    const at = new Date(Date.now() - hoursAgo * 3_600_000);
+    return { kind: "schedule", cron: `${at.getUTCMinutes()} ${at.getUTCHours()} * * *`, tz: UTC };
+};
+// The minute the daily cron above last came round, as an ISO instant: what the late note names.
+const lastOccurrence = (hoursAgo: number): string => {
+    const at = new Date(Date.now() - hoursAgo * 3_600_000);
+    at.setUTCSeconds(0, 0);
+    return at.toISOString();
+};
+
+test("a cron that came due while the daemon was down fires once at start, coalesced and saying how late it is", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
+    await services.automations.upsert(automationConfig("dreaming", { trigger: dailyAt(3) }));
+    // Last ran two and a bit days ago: two nightly moments (27h and 3h ago) fell while the machine was asleep.
+    await services.automations.recordRun("dreaming", { at: Date.now() - 50 * 3_600_000, outcome: "completed" });
+    const prompts: string[] = [];
+    const scheduler = createAutomationsScheduler(drivenBy(services, fakeWake(prompts)));
+    scheduler.start();
+    try {
+        await waitFor(async () => expect((await services.automations.get("dreaming"))?.runs).toHaveLength(2), SETTLES);
+    } finally {
+        scheduler.stop();
+    }
+    // One catch-up for both missed nights, told about the latest of them.
+    expect(prompts).toHaveLength(1);
+    expect(prompts[0]).toContain("wake:dreaming\n\n--- About this wake ---\n");
+    expect(prompts[0]).toContain(`due at ${lastOccurrence(3)}`);
+    expect(prompts[0]).toContain("the sandbox was not running when its moment came");
+    // The first poll after start has nothing left to fire: the catch-up accounted for it.
+    await automationIdle("dreaming");
+    await scheduler.tick(Date.now() + 1_000);
+    expect(prompts).toHaveLength(1);
+});
+
+// Starts a scheduler, lets its catch-up settle, and stops it again: what one boot does before its first poll.
+const boot = async (services: Services, prompts: string[]): Promise<ReturnType<typeof createAutomationsScheduler>> => {
+    const scheduler = createAutomationsScheduler(drivenBy(services, fakeWake(prompts)));
+    scheduler.start();
+    scheduler.stop();
+    // The catch-up's last act is its coverage write, so a mark at the scheduler's own start says it has run.
+    await waitFor(async () => expect(Object.keys(await services.scheduleCoverage.read())).not.toHaveLength(0), SETTLES);
+    return scheduler;
+};
+
+test("a schedule that never ran and was never seen armed owes nothing at its first boot: it is armed from then", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
+    // Created by hand while the daemon was down, its moment three hours ago: from before anybody asked for it.
+    await services.automations.upsert(automationConfig("fresh", { trigger: dailyAt(3) }));
+    const prompts: string[] = [];
+    const before = Date.now();
+    await boot(services, prompts);
+    const mark = (await services.scheduleCoverage.read())["fresh"];
+    expect(mark?.off).toBeUndefined();
+    expect(mark?.coveredUntil).toBeGreaterThanOrEqual(before);
+    await automationIdle("fresh");
+    expect(prompts).toEqual([]);
+    expect((await services.automations.get("fresh"))?.runs).toEqual([]);
+
+    // Armed, it is owed the moment it sleeps through next: the next boot, a day on, catches it up.
+    await services.scheduleCoverage.mark({ fresh: { coveredUntil: Date.now() - 26 * 3_600_000 } });
+    await boot(services, prompts);
+    await waitFor(async () => expect((await services.automations.get("fresh"))?.runs).toHaveLength(1), SETTLES);
+    expect(prompts[0]).toContain(`due at ${lastOccurrence(3)}`);
+});
+
+test("a schedule seen switched off owes nothing for the time it was off, even switched back on while the daemon was down", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
+    await services.automations.upsert(automationConfig("paused", { trigger: dailyAt(3), enabled: false }));
+    await services.automations.recordRun("paused", { at: Date.now() - 30 * DAY, outcome: "completed" });
+    const prompts: string[] = [];
+    const scheduler = createAutomationsScheduler(drivenBy(services, fakeWake(prompts)));
+    // A poll sees it off and says so.
+    await scheduler.tick(Date.now() + 1_000);
+    expect((await services.scheduleCoverage.read())["paused"]?.off).toBe(true);
+
+    // Switched back on by hand while nothing ran: its month-old run is not a reason to fire.
+    await services.automations.setEnabled("paused", true);
+    await boot(services, prompts);
+    await waitFor(async () => expect((await services.scheduleCoverage.read())["paused"]?.off).toBeUndefined(), SETTLES);
+    expect(prompts).toEqual([]);
+    expect((await services.automations.get("paused"))?.runs).toHaveLength(1);
+});
+
+test("a cron fired on a poll covers its clock up to that moment, so the next boot owes nothing for it", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
+    // Every minute, held for a person: the fire leaves no run, only a hold, and must still count as accounted for.
+    await services.automations.upsert(automationConfig("held", { requireApproval: true }));
+    const prompts: string[] = [];
+    const scheduler = createAutomationsScheduler(drivenBy(services, fakeWake(prompts)));
+    const now = pastDue();
+    await scheduler.tick(now);
+    await waitFor(async () => expect(await services.heldWakes.list()).toHaveLength(1), SETTLES);
+    const covered = (await services.scheduleCoverage.read())["held"]?.coveredUntil ?? 0;
+    expect(covered).toBeLessThanOrEqual(now);
+    expect(covered).toBeGreaterThan(now - 61_000);
+    expect(covered % 60_000).toBe(0);
 });
 
 test("a retired one-time wake still releases from the countdown queue: it was switched off by the fire waiting there", async () => {
@@ -203,7 +306,7 @@ test("the watchdog is told the soonest one-time wake and nothing else, since onl
     // A webhook waits on nobody's clock, so it can never be a reason to keep a machine awake.
     await services.automations.upsert(automationConfig("hook", { trigger: { kind: "event" } }));
     // Neither can a cron, however soon: the stock config's fires every minute, and a machine held awake for it would
-    // bill all month to keep a chore punctual. It misses a beat and catches the next one.
+    // bill all month to keep a chore punctual. A moment it sleeps through fires once when the daemon next starts.
     await services.automations.upsert(automationConfig("poll"));
     expect(await nextOneTimeWakeAt(services)).toBe(later);
 

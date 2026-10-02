@@ -432,7 +432,8 @@ const ENTRIES: readonly GuidanceEntry[] = [
             "(the `environment` skill has the steps). Reach this conversation's persona or area withholds: " +
             '`grants request capability|folder|shelf <what> --why "…"`. Ask as soon as you know the task needs it, before ' +
             "presenting a plan when you can, not when you reach the step. Each answers the same way: exit 0 means usable " +
-            "now; exit 1 means refused or declined, so carry on without it and say what it would have enabled; exit 3 means " +
+            "now; exit 1 means refused or declined, so carry on without it and say what it would have enabled; " +
+            "exit 2 means no verdict: read stdout and fix the command or daemon; exit 3 means " +
             "still waiting, so carry on with what does not need it. The answer continues this conversation by itself, so " +
             "never poll and never ask twice; `needs` lists what is still waiting.",
         lean:
@@ -440,7 +441,8 @@ const ENTRIES: readonly GuidanceEntry[] = [
             "request <entry>` (a connection, or a setting on one), `secrets ask NAME` (a secret nobody stored; " +
             "`secrets generate NAME` makes one the task can invent itself), " +
             '`environment propose <tool>` (a tool for the image), `grants request` (reach the persona withholds), each with ' +
-            '`--why "…"`, as early as you know. Exit 0: usable now. Exit 1: declined, so carry on without it. Exit 3: still ' +
+            '`--why "…"`, as early as you know. Exit 0: usable now. Exit 1: declined, so carry on without it. ' +
+            'Exit 2: no verdict: read stdout and fix the command or daemon. Exit 3: still ' +
             "waiting, so carry on; the answer continues this conversation by itself.",
     },
     {

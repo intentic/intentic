@@ -163,6 +163,31 @@ describe(`a terminal on a WebTransport stream`, () => {
         expect(log.filter((line) => line.startsWith(`closed`))).toHaveLength(1);
     });
 
+    it(`reads the authoritative grid and ignores unknown or malformed messages before continuing`, async () => {
+        const { opening, far } = streamPair();
+        const { log, events, closed } = recorded();
+        const received: unknown[] = [];
+        const channel = socketChannel(new StreamSocket(opening, REQUEST), { ...events, message: (message) => received.push(message) });
+        const { head } = await upgradeOf(far);
+        const messages = [
+            `null`,
+            `broken JSON`,
+            `{"type":"futureMessage","cols":80,"rows":24}`,
+            `{"type":"grid","cols":0,"rows":24}`,
+            `{"type":"grid","cols":80,"rows":1.5}`,
+            `{"type":"grid","cols":65536,"rows":24}`,
+            `{"type":"grid","cols":"80","rows":24}`,
+            `{"type":"grid","cols":80,"rows":24}`,
+            `{"type":"pong"}`,
+        ];
+        await far.answer.write(joined(await switching(head), ...messages.map((message) => serverFrame(1, utf8.encode(message)))));
+        await far.answer.write(closeFrame(1000, ``));
+        await closed;
+        expect(received).toEqual([{ type: `grid`, cols: 80, rows: 24 }, { type: `pong` }]);
+        expect(log).toEqual([`open`, `closed 1000 `]);
+        channel.close();
+    });
+
     it(`joins a message the front sent in fragments, and one past 125 bytes`, async () => {
         const { opening, far } = streamPair();
         const { log, events } = recorded();

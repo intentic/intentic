@@ -7,8 +7,9 @@ import { openDocument } from "../store/open-document.js";
 import { stateRelPath } from "../state-paths.js";
 
 // Daemon-recorded CI state in .intentic/secrets/ci.json: the webhook secret, each repo+branch's last terminal
-// conclusion (drives pipeline_fixed/pipeline_broken), the poller's already-announced run ids, and each main-line
-// branch failing now with the newest run of each workflow that passed on it. Carries a secret, so it's a
+// conclusion (drives pipeline_fixed/pipeline_broken), the poller's already-announced run ids, each main-line branch
+// failing now with the newest run of each workflow that passed on it, what the forge says of each repository (its id,
+// path and default branch), and the runs re-run for the fleet. Carries a secret, so it's a
 // LOCKED_STATE_ENTRIES file like capabilities.json. No 'seen' flag: only a passing commit clears the rail badge.
 
 // Caps stored conclusions; oldest-touched entries drop past this so the file doesn't grow forever.
@@ -16,6 +17,9 @@ const CONCLUSIONS_KEPT = 200;
 
 // Announced run ids kept per repo; only needs to outlast RUNS_PER_POLL by a margin.
 const ANNOUNCED_KEPT = 60;
+
+// Fleet re-runs kept per repo; a run older than these is long past being heard of again.
+const FLEET_RERUNS_KEPT = 50;
 
 const ConclusionSchema = z.object({ status: z.enum(["success", "failed"]), at: z.number() });
 
@@ -57,6 +61,20 @@ const CiFailureSchema = z.object({
     changed: z.boolean().default(false),
 });
 export type CiFailure = z.infer<typeof CiFailureSchema>;
+
+// What the forge itself says of a repository (main-line.ts), learned at the hook reconcile and from every delivery. The
+// id is its identity: a rename or a transfer keeps it, and changes only the path, which git and the API keep reaching
+// through redirects, so a delivery is matched on the id and the path is display data.
+const CiForgeSchema = z.object({
+    // The project path the workspace's remote named when this was learned: a remote pointed elsewhere since is another
+    // repository, and this says nothing of it.
+    remote: z.string(),
+    id: z.number().optional(),
+    // Where the forge says the repository lives now.
+    path: z.string().optional(),
+    defaultBranch: z.string().optional(),
+});
+export type CiForge = z.infer<typeof CiForgeSchema>;
 const CiStateSchema = z.object({
     secret: z.string().min(1),
     // Keyed "<repo>\n<branch>": \n can't appear in either half, so the key can't collide.
@@ -68,6 +86,11 @@ const CiStateSchema = z.object({
     // Keyed like `conclusions`: the newest run of each workflow that passed on a main-line branch, so a failure an older
     // run reports afterwards is not taken for main's word.
     passes: z.record(z.string(), z.record(z.string(), z.number())).optional(),
+    // Keyed by workspace repo.
+    forges: z.record(z.string(), CiForgeSchema).optional(),
+    // Keyed by workspace repo: the runs re-run because the CI fleet, not the code, failed them, newest first, so a run is
+    // re-run once however many restarts hear of it. Bounded.
+    fleetReruns: z.record(z.string(), z.array(z.number())).optional(),
 });
 type CiState = z.infer<typeof CiStateSchema>;
 
@@ -128,6 +151,13 @@ export interface CiStore {
     readonly passes: (repo: string, branch: string) => Promise<Readonly<Record<string, number>>>;
     // Records a pass, keeping the newest per workflow.
     readonly recordPass: (repo: string, branch: string, workflow: string, runId: number) => Promise<void>;
+    // What the forge said of each repository, keyed by workspace repo.
+    readonly forges: () => Promise<Readonly<Record<string, CiForge>>>;
+    // Merges what the forge said of a repository its remote names `remote`; a fact learned for another remote is
+    // replaced, not merged. Writes nothing when it says nothing new, since every delivery says it again.
+    readonly learnForge: (repo: string, remote: string, fact: Omit<CiForge, "remote">) => Promise<void>;
+    // Records a fleet re-run of the run, answering whether it is the first: false means it was re-run before.
+    readonly fleetRerun: (repo: string, runId: number) => Promise<boolean>;
 }
 
 const keyOf = (repo: string, branch: string): string => `${repo}\n${branch}`;
@@ -178,6 +208,32 @@ export const fileCiStore = (path: string): CiStore => {
                 }
                 return { ...minted(state), passes: { ...state.passes, [key]: { ...known, [workflow]: runId } } };
             });
+        },
+        forges: async () => (await file.read()).forges ?? {},
+        learnForge: async (repo, remote, fact) => {
+            const merged = (current: CiForge | undefined): CiForge => {
+                const kept: CiForge = current?.remote === remote ? current : { remote };
+                return { ...kept, ...Object.fromEntries(Object.entries(fact).filter(([, value]) => value !== undefined)), remote };
+            };
+            const same = (current: CiForge | undefined): boolean => JSON.stringify(merged(current)) === JSON.stringify(current);
+            if (same((await file.read()).forges?.[repo])) {
+                return;
+            }
+            await file.update((state) =>
+                same(state.forges?.[repo]) ? state : { ...minted(state), forges: { ...state.forges, [repo]: merged(state.forges?.[repo]) } },
+            );
+        },
+        fleetRerun: async (repo, runId) => {
+            let first = false;
+            await file.update((state) => {
+                const known = state.fleetReruns?.[repo] ?? [];
+                if (known.includes(runId)) {
+                    return state;
+                }
+                first = true;
+                return { ...minted(state), fleetReruns: { ...state.fleetReruns, [repo]: [runId, ...known].slice(0, FLEET_RERUNS_KEPT) } };
+            });
+            return first;
         },
         recordAnnounced: async (repo, runIds) => {
             await file.update((state) => ({

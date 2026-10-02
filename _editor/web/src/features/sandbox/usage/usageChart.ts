@@ -61,6 +61,8 @@ export const inWindow = (rows: readonly UsageRollupRow[], window: DayWindow): Us
 
 export interface UsageTotals {
     readonly costUsd: number;
+    // False once any row includes a turn its runtime did not price (UsageRollupRow.costKnown): the sum is then a floor.
+    readonly costKnown: boolean;
     readonly turns: number;
     readonly inputTokens: number;
     readonly outputTokens: number;
@@ -71,6 +73,7 @@ export interface UsageTotals {
 
 const EMPTY_TOTALS: UsageTotals = {
     costUsd: 0,
+    costKnown: true,
     turns: 0,
     inputTokens: 0,
     outputTokens: 0,
@@ -83,6 +86,7 @@ export const totalsOf = (rows: readonly UsageRollupRow[]): UsageTotals =>
     rows.reduce<UsageTotals>(
         (sum, row) => ({
             costUsd: sum.costUsd + row.costUsd,
+            costKnown: sum.costKnown && row.costKnown !== false,
             turns: sum.turns + row.turns,
             inputTokens: sum.inputTokens + row.inputTokens,
             outputTokens: sum.outputTokens + row.outputTokens,

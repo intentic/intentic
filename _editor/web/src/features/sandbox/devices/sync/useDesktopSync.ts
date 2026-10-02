@@ -1,3 +1,4 @@
+import { invalidatePushedQueries } from "../../../../lib/pushInvalidation";
 import { roleAtLeast, type SyncStatus, syncFolder } from "@intentic/sandbox-contract";
 import { useQueryClient } from "@tanstack/vue-query";
 import { computed, ref, watch } from "vue";
@@ -144,7 +145,7 @@ export function useDesktopSync() {
     watch(pairToken, (token) => {
         stop();
         if (token !== undefined) {
-            unsubscribe = onRuntimeChanged([`hosts`], () => void client.invalidateQueries({ queryKey: rpcKey(`system.devices`) }));
+            unsubscribe = onRuntimeChanged([`hosts`], () => void invalidatePushedQueries(client, { queryKey: rpcKey(`system.devices`) }));
         }
     });
     // One-shot read of whether sync is available; the Devices list above handles steady polling.

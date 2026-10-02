@@ -422,6 +422,103 @@ describe("the escalation ladder", () => {
         expect(listSubagentSessions(actors)[0]).toMatchObject({ status: "completed", summary: "Bound to 8080." });
     });
 
+    // A parent with no live turn and no wait parked hears of its child's question only by being woken: otherwise the
+    // child sits blocked, holding its seat, until a person happens to look.
+    describe("a parked question wakes a parent that is not waiting", () => {
+        const told: string[] = [];
+        beforeEach(() => {
+            told.length = 0;
+        });
+        // The parent idle: it has a record and a profile to continue, no live turn, and what reaches it is kept above.
+        const idleParent = (stream: TurnStarter["stream"]): Services => {
+            const driven = drivenBy(spawnServices({}, [], actors), stream);
+            return unstubbed<Services>("services", {
+                ...driven,
+                agents: unstubbed<Services["agents"]>("agents", { entry: (id: string) => (id === parent.conversationId ? conversationEntry({ id }) : undefined) }),
+                turns: {
+                    ...driven.turns,
+                    say: async (said) => {
+                        told.push(said.turn.prompt);
+                        return { delivered: "started", run: "run-parent" };
+                    },
+                },
+            });
+        };
+        // A child that parks on `card` and stays parked until `gate` opens.
+        const parksOn = (card: AgentEvent, gate: Promise<void>) =>
+            async function* (input: AgentTurn): AsyncGenerator<AgentEvent> {
+                void input;
+                yield card;
+                await gate;
+                yield { kind: "resolved", requestId: "requestId" in card ? card.requestId : "" };
+                yield { kind: "done" };
+            };
+        // Polls until `ready` holds or a bound passes, so an assertion never races the detached child turn.
+        const until = async (ready: () => boolean): Promise<void> => {
+            for (let attempt = 0; attempt < 200 && !ready(); attempt += 1) {
+                await new Promise((resolve) => setTimeout(resolve, 5));
+            }
+        };
+
+        it("is told the question and how to answer it, once: a later wait on any child does not hand the same move back", async () => {
+            const gate = Promise.withResolvers<void>();
+            const result = await spawnChild(idleParent(parksOn(questionFrame("q-1"), gate.promise)), parent, {
+                prompt: "go",
+                provider: "claude",
+                model: "claude-sonnet-4-6",
+            });
+            if (!result.ok) {
+                throw new Error(result.message);
+            }
+            await until(() => told.length > 0);
+            expect(told).toHaveLength(1);
+            expect(told[0]).toContain(`Your subagent \`${result.id}\``);
+            expect(told[0]).toContain("Which port should the server bind?");
+            expect(told[0]).toContain(`answer(child: "${result.id}"`);
+            // Reported by the wake, so a wait on "any" has nothing new to say about it.
+            await expect(waitForSubagent(actors, parent.conversationId, { until: ["blocked"], timeoutMs: 50 })).resolves.toMatchObject({ outcome: "timeout" });
+            gate.resolve();
+            await settled(result.id);
+        });
+
+        it("is not woken for a permission or plan card: those are the owner's to answer", async () => {
+            const consents: readonly AgentEvent[] = [
+                { kind: "permission", requestId: "p-1", toolName: "Bash", title: "Run rm -rf build" },
+                { kind: "plan", requestId: "plan-1", text: "do it" },
+            ];
+            for (const card of consents) {
+                const gate = Promise.withResolvers<void>();
+                const result = await spawnChild(idleParent(parksOn(card, gate.promise)), parent, { prompt: "go", provider: "claude", model: "claude-sonnet-4-6" });
+                if (!result.ok) {
+                    throw new Error(result.message);
+                }
+                await waitForSubagent(actors, parent.conversationId, { target: result.id, until: ["blocked"], timeoutMs: 5_000 });
+                gate.resolve();
+                await settled(result.id);
+            }
+            expect(told).toEqual([]);
+        });
+
+        it("is not woken when a wait it parked on that child already took the question", async () => {
+            const gate = Promise.withResolvers<void>();
+            const start = Promise.withResolvers<void>();
+            const body = async function* (input: AgentTurn): AsyncGenerator<AgentEvent> {
+                await start.promise;
+                yield* parksOn(questionFrame("q-2"), gate.promise)(input);
+            };
+            const result = await spawnChild(idleParent(body), parent, { prompt: "go", provider: "claude", model: "claude-sonnet-4-6" });
+            if (!result.ok) {
+                throw new Error(result.message);
+            }
+            const waited = waitForSubagent(actors, parent.conversationId, { target: result.id, until: ["blocked"], timeoutMs: 5_000 });
+            start.resolve();
+            await expect(waited).resolves.toMatchObject({ outcome: "blocked", matched: { summary: "Which port should the server bind?" } });
+            gate.resolve();
+            await settled(result.id);
+            expect(told).toEqual([]);
+        });
+    });
+
     it("refuses to answer a consent card, by kind, with the owner named", async () => {
         const gate = Promise.withResolvers<void>();
         const holdOnPermission = async function* (input: AgentTurn): AsyncGenerator<AgentEvent> {

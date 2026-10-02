@@ -14,6 +14,7 @@ import { controlTokensDocument } from "../auth/tokens/control-tokens.js";
 import { doorTokensDocument } from "../auth/tokens/door-tokens.js";
 import { automationRunsDocument, automationsDocument, automationsRelocationStep } from "../automations/automations-store.js";
 import { heldWakesDocument } from "../automations/held-wakes-store.js";
+import { scheduleCoverageDocument } from "../automations/schedule-coverage.js";
 import { sendersDocument } from "../automations/senders-store.js";
 import { browserPasskeysDocument } from "../browser/tools/passkeys.js";
 import { capabilitiesDocument } from "../capabilities/capabilities-store.js";
@@ -95,6 +96,7 @@ export const stateDocuments = (): readonly DocumentSpec[] => [
     automationRunsDocument,
     automationsDocument,
     heldWakesDocument,
+    scheduleCoverageDocument,
     sendersDocument,
     browserPasskeysDocument,
     capabilitiesDocument,

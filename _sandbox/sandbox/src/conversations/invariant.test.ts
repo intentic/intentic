@@ -6,6 +6,7 @@ import { checks } from "./invariant.js";
 import { unstubbed } from "@intentic/testing";
 import { conversationEntry, isolatedAgent } from "../testing.js";
 import type { PersistedAgent } from "./registry/agents-store.js";
+import { idleConversation } from "./actor/conversation-state.js";
 
 /* The failure the user sees: a card at rest on the fleet board while the turn behind it spends the owner's allowance. */
 
@@ -20,10 +21,18 @@ const registryOf = (running: Readonly<Record<string, boolean>>): AgentsRegistry 
         ids: () => Object.keys(running),
     }) as unknown as AgentsRegistry;
 
-// Runs the actors hold are read only where `live` is not handed in, which every check here hands in.
-const actorsOf = (running: Readonly<Record<string, boolean>>): Pick<ConversationActors, "running" | "holdings"> => ({
+// Runs the actors hold are read only where `live` is not handed in, which every check here hands in. A conversation
+// marked running entered that phase a minute before NOW unless `since` says otherwise.
+const actorsOf = (
+    running: Readonly<Record<string, boolean>>,
+    since: Readonly<Record<string, number>> = {},
+): Pick<ConversationActors, "running" | "holdings" | "state"> => ({
     holdings: unstubbed<ConversationActors>("conversations", {}).holdings,
     running: (id: string) => running[id] === true,
+    state: (id: string) =>
+        running[id] === true
+            ? { ...idleConversation(), phase: { kind: "running", startedAt: since[id] ?? NOW - 60_000, parked: [], stopping: undefined } }
+            : idleConversation(),
 });
 
 // Nothing strayed, for the checks that are not about checkouts.
@@ -41,10 +50,14 @@ const checkNamed = (name: string, deps: Parameters<typeof checks>[0]) => {
 
 // `async` on purpose: this check is synchronous today, so a bare `Promise.resolve(check.run(...))` would let its
 // throw escape the helper instead of rejecting, and would silently start passing if the check ever went async.
-const run = async (running: Readonly<Record<string, boolean>>, live: readonly { conversationId: string; startedAt: number }[]): Promise<void> => {
+const run = async (
+    running: Readonly<Record<string, boolean>>,
+    live: readonly { conversationId: string; startedAt: number }[],
+    since: Readonly<Record<string, number>> = {},
+): Promise<void> => {
     const check = checkNamed("live-turns-are-running-on-the-board", {
         agents: registryOf(running),
-        conversations: actorsOf(running),
+        conversations: actorsOf(running, since),
         agentWorktrees: SETTLED,
         live: () => live,
         now: () => NOW,
@@ -70,11 +83,13 @@ test("a turn younger than the grace is not yet due: begin may still be a tick aw
     await expect(run({}, [{ conversationId: "c1", startedAt: NOW - 1_000 }])).resolves.toBeUndefined();
 });
 
-test("a registry entry running with no live turn is deliberately not a finding here", async () => {
-    // The mirror direction needs a stamp the registry does not keep, so it cannot be told apart from a turn one
-    // tick from registering. Pinned so that a later change adding the stamp finds this waiting rather than
-    // discovering the omission was accidental.
-    await expect(run({ spinning: true }, [])).resolves.toBeUndefined();
+// The mirror: a phase stuck at running answers every `begin` busy, so the conversation's queue never drains.
+test("a conversation running on the board past the grace with no live turn behind it is named", async () => {
+    await expect(run({ spinning: true }, [])).rejects.toThrow(/running on the fleet board with no live turn behind.*spinning/);
+});
+
+test("a conversation that entered running within the grace is not yet due: its run may be a tick from registering", async () => {
+    await expect(run({ starting: true }, [], { starting: NOW - 1_000 })).resolves.toBeUndefined();
 });
 
 /* The second failure: work a turn committed on a branch of its own that its carry could not copy onto agent/<id>, the one

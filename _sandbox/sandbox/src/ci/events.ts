@@ -3,10 +3,15 @@ import { CI_PROVIDER } from "../automations/catalog.js";
 import { dispatchListenerMessage } from "../automations/listeners.js";
 import type { Services } from "../composition.js";
 import { runFinished } from "./main-fixer.js";
+import { isMainLine } from "./main-line.js";
+import type { CiProject } from "./projects.js";
 import type { FetchFn } from "./providers.js";
 
 // Turns a finished PipelineRun into `ci` listener messages for the webhook (ci/webhook.routes.ts) and the poller
-// (ci/poller.ts); the previous-conclusion memory is written only here. Canceled and skipped runs produce nothing.
+// (ci/poller.ts); the previous-conclusion memory is written only here. Canceled and skipped runs produce nothing. While
+// Repair is on, a repository's main line failing is its one fix agent's (main-fixer.ts), so its failure events reach no
+// automation listening on every branch: one failed main run starts one agent, and none is told to push its own fix to
+// main beside it.
 
 // pipeline_broken/pipeline_fixed fire only when the previous conclusion is known; an unknown one is never guessed as
 // the opposite verdict, so a cold start reports no edges.
@@ -72,26 +77,44 @@ export const rememberCiRun = async (services: Services, run: PipelineRun): Promi
     return previous;
 };
 
-// Records the run's conclusion and dispatches the matching listener messages; returns the dispatched event types, empty
-// if not a result. Conclusion is recorded before dispatch, so a wake cannot be replayed as the previous state by the
-// next run.
+// Whether the run's failure belongs to main's fix agent rather than to the `ci` automations.
+const fixersFailure = async (services: Services, project: CiProject, run: PipelineRun): Promise<boolean> =>
+    run.status === "failed" && (await services.sandboxSettings.get()).autoRepair && (await isMainLine(services, project, run.branch));
+
+export interface DispatchedRun {
+    // The event types the run produced, dispatched or not; empty if not a result.
+    readonly types: readonly string[];
+    // Main's fix agent done with the run: settles, never rejects, once whatever it keeps of it is on file.
+    readonly fixed: Promise<void>;
+}
+
+// Records the run's conclusion, dispatches the matching listener messages and hands the run to main's fix agent.
+// Conclusion is recorded before dispatch, so a wake cannot be replayed as the previous state by the next run. The fix
+// agent's reading is not awaited here: the webhook answers without it, and the poller awaits `fixed` before it records
+// the run as heard.
 export const dispatchCiRun = async (
     services: Services,
+    project: CiProject,
     run: PipelineRun,
     author: { id: string; name: string },
     fetchFn: FetchFn = fetch,
-): Promise<readonly string[]> => {
+): Promise<DispatchedRun> => {
     const result = ciResultOf(run);
     if (result === undefined) {
-        return [];
+        return { types: [], fixed: Promise.resolve() };
     }
     const types = typesFor(result, await rememberCiRun(services, run));
+    // An automation that names the branch asked for exactly these events (a notice when main fails), so it still hears
+    // them; one listening on every branch, as the "Fix failing CI" template does, would be a second agent on main.
+    const hears = (await fixersFailure(services, project, run))
+        ? (trigger: { readonly branch?: string | undefined }) => trigger.branch !== undefined
+        : undefined;
     for (const type of types) {
-        await dispatchListenerMessage(services, ciMessageOf(run, type, author));
+        await dispatchListenerMessage(services, ciMessageOf(run, type, author), undefined, undefined, hears);
     }
-    // Off the webhook's clock: main's fix agent reads the failed jobs and their logs (main-fixer.ts).
-    void runFinished(services, run, fetchFn).catch((error: unknown) =>
+    // Main's fix agent reads the failed jobs and their logs (main-fixer.ts), which takes a while.
+    const fixed = runFinished(services, run, fetchFn).catch((error: unknown) =>
         services.logger.warn({ err: error, runId: run.runId }, "ci repair: the finished run could not be read"),
     );
-    return types;
+    return { types, fixed };
 };

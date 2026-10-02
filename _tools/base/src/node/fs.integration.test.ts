@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileS
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { freePort, pathExists, queueOnFile, writeFileAtomic } from "./fs.js";
+import { freePort, pathExists, pathPresence, queueOnFile, writeFileAtomic } from "./fs.js";
 
 const dir = (): string => mkdtempSync(join(tmpdir(), "fs-"));
 
@@ -152,6 +152,18 @@ describe("pathExists", () => {
         expect(await pathExists(at)).toBe(true);
         expect(await pathExists(join(at, "missing"))).toBe(false);
         expect(await pathExists(join(at, "file", "child"))).toBe(false);
+    });
+});
+
+describe("pathPresence", () => {
+    // Below a file is ENOTDIR: pathExists reads it as gone, and a sweep acting on that would archive what it never saw.
+    it("answers absent for ENOENT alone, and unknown for a path it could not probe", async () => {
+        const at = dir();
+        writeFileSync(join(at, "file"), "");
+
+        expect(await pathPresence(join(at, "file"))).toBe("present");
+        expect(await pathPresence(join(at, "missing"))).toBe("absent");
+        expect(await pathPresence(join(at, "file", "child"))).toBe("unknown");
     });
 });
 

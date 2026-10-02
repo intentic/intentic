@@ -19,14 +19,24 @@ export interface CodexSubagents {
     // What each subagent said last, how many calls it has made, and what it has spent, by its spawn call.
     readonly said: Map<string, string>;
     readonly calls: Map<string, number>;
-    readonly spent: Map<string, { readonly input: number; readonly output: number }>;
+    readonly spent: Map<string, { readonly input: number; readonly output: number; readonly cacheRead: number; readonly cacheCreation: number }>;
 }
 
 export const codexSubagents = (): CodexSubagents => ({ spawnOf: new Map(), said: new Map(), calls: new Map(), spent: new Map() });
 
 /** What the turn's subagents have spent between them, which the account paid for as it paid for the turn. */
-export const subagentSpend = (subagents: CodexSubagents): { readonly input: number; readonly output: number } =>
-    [...subagents.spent.values()].reduce((sum, spent) => ({ input: sum.input + spent.input, output: sum.output + spent.output }), { input: 0, output: 0 });
+export const subagentSpend = (
+    subagents: CodexSubagents,
+): { readonly input: number; readonly output: number; readonly cacheRead: number; readonly cacheCreation: number } =>
+    [...subagents.spent.values()].reduce(
+        (sum, spent) => ({
+            input: sum.input + spent.input,
+            output: sum.output + spent.output,
+            cacheRead: sum.cacheRead + spent.cacheRead,
+            cacheCreation: sum.cacheCreation + spent.cacheCreation,
+        }),
+        { input: 0, output: 0, cacheRead: 0, cacheCreation: 0 },
+    );
 
 // Codex's standing for a subagent, in the roster's words; a standing Codex adds later reads as still at work.
 const COLLAB_STANDING = {
@@ -67,7 +77,10 @@ export const aboutSubagent = (event: CodexEvent): boolean => {
     if (event.type === "subagent.ended" || event.type === "subagent.usage") {
         return true;
     }
-    return (event.type === "item.started" || event.type === "item.updated" || event.type === "item.completed") && (event.parent !== undefined || event.item.type === "collab_agent_tool_call");
+    return (
+        (event.type === "item.started" || event.type === "item.updated" || event.type === "item.completed") &&
+        (event.parent !== undefined || event.item.type === "collab_agent_tool_call")
+    );
 };
 
 // A multi-agent call: its card, the subagent a spawn starts, and how each subagent it names now stands.
@@ -134,8 +147,13 @@ export async function* codexSubagentFrames(event: CodexEvent, subagents: CodexSu
         return;
     }
     if (event.type === "subagent.usage") {
-        subagents.spent.set(event.parent, { input: event.input, output: event.output });
-        yield { kind: "subagent_update", id: event.parent, tokens: event.input + event.output };
+        subagents.spent.set(event.parent, {
+            input: event.input,
+            output: event.output,
+            cacheRead: event.cacheRead ?? 0,
+            cacheCreation: event.cacheCreation ?? 0,
+        });
+        yield { kind: "subagent_update", id: event.parent, tokens: event.input + event.output + (event.cacheRead ?? 0) + (event.cacheCreation ?? 0) };
         return;
     }
     if (event.type !== "item.started" && event.type !== "item.updated" && event.type !== "item.completed") {

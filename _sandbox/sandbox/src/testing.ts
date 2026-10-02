@@ -1,3 +1,8 @@
+import { z } from "zod";
+import { EventEmitter } from "node:events";
+import { PassThrough } from "node:stream";
+import type { ChildProcessWithoutNullStreams } from "node:child_process";
+import type { Browser, BrowserContext, Page } from "playwright";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { IN_MEMORY } from "@intentic/base/sqlite";
@@ -20,7 +25,7 @@ import type { ConversationUnits } from "./store/conversation-units.js";
 import type { IsolationPlan, TurnIsolation } from "./conversations/worktrees/isolation.js";
 import { overlaysDir } from "./conversations/worktrees/isolation.js";
 import { sessionsDir } from "./sessions/session-store.js";
-import type { CodexEvent, CodexRunner, CodexTurn } from "./runtimes/codex/codex-app-server.js";
+import type { CodexEvent, CodexRunner, CodexTurn, JsonValue } from "./runtimes/codex/codex-app-server.js";
 import type { Config } from "./env.config.js";
 import type { Services } from "./composition.js";
 import type { Said, Steer, TurnInput, TurnStarter } from "./seams/turn-starter.js";
@@ -300,3 +305,79 @@ export const testTurnMounts = (): Pick<Services, "turnMounts" | "browserRouters"
     turnMounts: createTurnMounts({ baseUrl: () => `http://127.0.0.1:${testConfig.sandbox.port}${TURN_MOUNT_BASE}` }),
     browserRouters: () => unstubbed<BrowserRouter>("browserRouter", { close: () => undefined }),
 });
+
+// An in-memory stdio child: protocol tests exercise the connector without starting Codex.
+export const fakeCodexProcess = () => {
+    const events = new EventEmitter();
+    const stdin = new PassThrough();
+    const stdout = new PassThrough();
+    const stderr = new PassThrough();
+    let kills = 0;
+    const child: ChildProcessWithoutNullStreams = unstubbed<ChildProcessWithoutNullStreams>("codex child", {
+        stdin,
+        stdout,
+        stderr,
+        once: (event, listener) => {
+            events.once(event, listener);
+            return child;
+        },
+        killed: false,
+        kill: () => {
+            kills += 1;
+            return true;
+        },
+    });
+    const requests: { method: string; params: unknown }[] = [];
+    stdin.on("data", (chunk: Buffer) => {
+        const frame = z.object({ id: z.number().optional(), method: z.string(), params: z.unknown() }).parse(JSON.parse(chunk.toString()));
+        requests.push({ method: frame.method, params: frame.params });
+        if (frame.id !== undefined) {
+            stdout.write(`${JSON.stringify({ id: frame.id, result: {} })}\n`);
+        }
+    });
+    return {
+        child,
+        requests,
+        kills: () => kills,
+        notify: (method: string, params: JsonValue) => stdout.write(`${JSON.stringify({ method, params })}\n`),
+    };
+};
+
+// The session observer needs page lifecycle signals, without launching Chromium or a display.
+export const browserSessionFixture = () => {
+    const page = () => {
+        const events = new EventEmitter();
+        const value: Page = unstubbed<Page>("page", {
+            url: () => "about:blank",
+            title: async () => "",
+            on: (event, listener) => {
+                events.on(event, listener);
+                return value;
+            },
+            once: (event, listener) => {
+                events.once(event, listener);
+                return value;
+            },
+        });
+        return { value, events };
+    };
+    const first = page();
+    const second = page();
+    const contextEvents = new EventEmitter();
+    const context: BrowserContext = unstubbed<BrowserContext>("context", {
+        pages: () => [first.value, second.value],
+        on: (event, listener) => {
+            contextEvents.on(event, listener);
+            return context;
+        },
+        newCDPSession: async () => {
+            throw new Error("no CDP in session fixture");
+        },
+    });
+    const browser: Browser = unstubbed<Browser>("browser", {
+        contexts: () => [context],
+        on: () => browser,
+        close: async () => undefined,
+    });
+    return { browser, first, second };
+};

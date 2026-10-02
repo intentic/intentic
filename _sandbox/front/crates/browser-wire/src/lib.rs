@@ -129,6 +129,11 @@ pub enum TerminalClientMessage {
 #[serde(tag = "type", rename_all = "camelCase")]
 #[ts(export, export_to = "browser-wire.ts")]
 pub enum TerminalServerMessage {
+    /// The shared pane's grid. Viewport resize requests remain the viewer's own available size.
+    Grid {
+        cols: u16,
+        rows: u16,
+    },
     /// The session is over, and the browser must not reconnect; `reason` is tmux's own words when it had any.
     Exit {
         code: i32,
@@ -228,6 +233,10 @@ mod tests {
                 cols: 120,
                 rows: 40
             }
+        );
+        assert_eq!(
+            serde_json::to_string(&TerminalServerMessage::Grid { cols: 80, rows: 24 }).unwrap(),
+            r#"{"type":"grid","cols":80,"rows":24}"#
         );
         let ping: TerminalClientMessage = serde_json::from_str(r#"{"type":"ping"}"#).unwrap();
         assert_eq!(ping, TerminalClientMessage::Ping);

@@ -321,6 +321,16 @@ async fn pump<T, E>(
         tokio::time::interval_at(tokio::time::Instant::now() + LISTEN_EVERY, LISTEN_EVERY);
     loop {
         match outbox.take(FRAME_MAX) {
+            Taken::Grid(cols, rows) => {
+                if sink
+                    .send(text(&TerminalServerMessage::Grid { cols, rows }))
+                    .await
+                    .is_err()
+                {
+                    break;
+                }
+                continue;
+            }
             Taken::Bytes(bytes) => {
                 if sink.send(Message::Binary(bytes)).await.is_err() {
                     break;

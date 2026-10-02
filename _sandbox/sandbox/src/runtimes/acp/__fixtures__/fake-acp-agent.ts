@@ -5,6 +5,7 @@ import {
     type AgentCapabilities,
     client,
     methods,
+    RequestError,
     type RequestPermissionRequest,
     type SessionUpdate,
 } from "@agentclientprotocol/sdk";
@@ -25,15 +26,33 @@ const forcePush = (sessionId: string): RequestPermissionRequest => ({
 
 // The fixture's session/prompt behaviours, keyed by a keyword in the prompt text. `answered` hears how an ask the agent
 // left behind was finally answered, after its turn ended.
-export const fakeAcpAgentApp = (options: { readonly answered?: (outcome: string) => void } = {}): AgentApp => {
+export const fakeAcpAgentApp = (
+    options: {
+        readonly answered?: (outcome: string) => void;
+        readonly failure?: { readonly method: "load" | "new" | "prompt"; readonly code: number; readonly message: string };
+    } = {},
+): AgentApp => {
     let nextSession = 0;
+    const fail = (method: "load" | "new" | "prompt"): void => {
+        if (options.failure?.method === method) {
+            throw new RequestError(options.failure.code, options.failure.message);
+        }
+    };
     return agent({ name: "fake-acp" })
         .onRequest(methods.agent.initialize, () => ({
             protocolVersion: 1,
             agentCapabilities: { loadSession: false },
         }))
-        .onRequest(methods.agent.session.new, () => ({ sessionId: `fake-${(nextSession += 1)}` }))
+        .onRequest(methods.agent.session.load, () => {
+            fail("load");
+            return {};
+        })
+        .onRequest(methods.agent.session.new, () => {
+            fail("new");
+            return { sessionId: `fake-${(nextSession += 1)}` };
+        })
         .onRequest(methods.agent.session.prompt, async ({ params, client: ctx }) => {
+            fail("prompt");
             const text = params.prompt.map((block) => (block.type === "text" ? block.text : "")).join("");
             const push = (update: SessionUpdate): Promise<void> => ctx.notify(methods.client.session.update, { sessionId: params.sessionId, update });
             if (text.includes("refuse")) {
@@ -123,7 +142,11 @@ export const fakeAcpConnection = (app: AgentApp, capabilities: AgentCapabilities
         sessions: new Set<string>(),
         bindTurn: (sessionId, hooks) => {
             turns.set(sessionId, hooks);
-            return () => turns.delete(sessionId);
+            return () => {
+                if (turns.get(sessionId) === hooks) {
+                    turns.delete(sessionId);
+                }
+            };
         },
         kill: () => {
             dead = true;

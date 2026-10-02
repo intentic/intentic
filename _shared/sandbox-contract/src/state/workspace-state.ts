@@ -182,6 +182,15 @@ const STATE_FILES = [
         why: "Declared by the intentic.automations extension's contributes.files, `automations` is its query key, not core's.",
         portability: "carry",
     },
+    // How far the scheduler has accounted for each schedule's clock, so a boot fires the moments it slept through
+    // (automations/schedule-coverage.ts). `carry`: it travels with the automations it measures, or a restored sandbox
+    // would read every one as never armed.
+    {
+        path: ".intentic/records/automation-schedule.json",
+        invalidates: [],
+        why: "Scheduler bookkeeping nothing in the browser renders: what a catch-up fire produces reaches the run ledger, which carries the automations key.",
+        portability: "carry",
+    },
     {
         path: ".intentic/records/approvals/",
         invalidates: [],

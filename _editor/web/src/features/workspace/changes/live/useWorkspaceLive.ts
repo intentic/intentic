@@ -1,3 +1,4 @@
+import { invalidatePushedQueries } from "../../../../lib/pushInvalidation";
 import type { WorkspaceTree, WorkspaceTreeDelta } from "@intentic/sandbox-contract";
 import { parentDir } from "@intentic/ui/path";
 import { sandboxRef, sandboxValue } from "@intentic/extension-api";
@@ -23,7 +24,7 @@ const walkedTree = (data: unknown): boolean => (data as WorkspaceTree | undefine
 const refreshTree = throttleTrailing(() => {
     for (const query of queryClient.getQueryCache().findAll({ queryKey: rpcPrefix(`workspace.tree`) })) {
         if (walkedTree(query.state.data)) {
-            void queryClient.invalidateQueries({ queryKey: query.queryKey, exact: true });
+            void invalidatePushedQueries(queryClient, { queryKey: query.queryKey, exact: true });
         }
     }
 }, TREE_REFRESH_MS);
@@ -38,13 +39,13 @@ export const applyTreeChanged = (delta: WorkspaceTreeDelta): void => {
         }
         const patched = patchedTree(tree, delta);
         if (patched === undefined) {
-            void queryClient.invalidateQueries({ queryKey: query.queryKey, exact: true });
+            void invalidatePushedQueries(queryClient, { queryKey: query.queryKey, exact: true });
             continue;
         }
         queryClient.setQueryData(query.queryKey, patched);
     }
 };
-const refreshModules = throttleTrailing(() => void queryClient.invalidateQueries({ queryKey: rpcPrefix(`workspace.modules`) }), MODULES_REFRESH_MS);
+const refreshModules = throttleTrailing(() => void invalidatePushedQueries(queryClient, { queryKey: rpcPrefix(`workspace.modules`) }), MODULES_REFRESH_MS);
 
 // True only when a manifest could exist among the paths (or the batch is empty — the daemon's own "too many
 // paths to list" signal, sent for a scaffold, branch switch, drop or reconnect too).
@@ -124,12 +125,17 @@ export const isRecentlyChanged = (path: string): boolean => recentlyChanged.valu
    the watcher ignores, so `derivedChanged` is the only signal that one landed. Separate epochs from the ones above,
    since the two move independently — a file changing makes its text stale, its text landing does not change the file. */
 const derivedEpochs = sandboxRef(() => new Map<string, number>());
+const derivedWildcard = sandboxRef(() => 0);
 
 export const markDerivedChanged = (paths: readonly string[]): void => {
+    if (paths.length === 0) {
+        derivedWildcard.value = ++epoch;
+        return;
+    }
     for (const path of paths) {
         derivedEpochs.value.set(path, ++epoch);
     }
 };
 
 /** Bumps when this file's derived text was rewritten. */
-export const derivedEpochOf = (path: string): number => derivedEpochs.value.get(path) ?? 0;
+export const derivedEpochOf = (path: string): number => Math.max(derivedEpochs.value.get(path) ?? 0, derivedWildcard.value);

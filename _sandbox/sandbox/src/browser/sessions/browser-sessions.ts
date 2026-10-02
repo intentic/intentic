@@ -73,6 +73,7 @@ const prune = (now: number): void => {
     for (const [name, record] of sessions) {
         if (record.finishedAt !== undefined && record.finishedAt <= now - RETAIN_FINISHED_MS) {
             sessions.delete(name);
+            publishRuntimeChange("browsers");
         }
     }
 };
@@ -163,6 +164,7 @@ const watchPage = (record: BrowserSessionRecord, page: Page): void => {
         if (record.activePageId === entry.id) {
             record.activePageId = [...record.pages.values()].findLast((other) => !other.closed)?.id;
         }
+        publishRuntimeChange("browsers");
     });
 };
 
@@ -277,6 +279,7 @@ export const openBrowserSession = (input: {
     // Same port: same browser, just another call. Different port: a fresh per-turn Chromium; the record is replaced.
     if (existing !== undefined && existing.port === input.port && existing.finishedAt === undefined) {
         existing.activityAt = Date.now();
+        publishRuntimeChange("browsers");
         return name;
     }
     const record: BrowserSessionRecord = {

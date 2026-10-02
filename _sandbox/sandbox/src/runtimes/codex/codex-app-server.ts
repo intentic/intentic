@@ -45,6 +45,8 @@ export interface CodexTurn {
     // Each message here delivers to the running turn as turn/steer; per-turn, not shared, since plan emulation runs two
     // app-servers in sequence.
     readonly steering?: AsyncIterable<string>;
+    // Stops admission at a phase boundary, before terminal frames suspend the consumer.
+    readonly closeSteering?: () => void;
     readonly namespace?: CodexNamespace;
     // How deep the turn's conversation sits under the spawns above it: the app-server's OOM rank (workload-class.ts).
     readonly spawnDepth?: number;
@@ -141,7 +143,14 @@ export type CodexEvent =
     // A subagent's own turn ended, in its thread; `parent` is the spawn call that started it.
     | { readonly type: "subagent.ended"; readonly parent: string; readonly status: "completed" | "failed" | "killed"; readonly error?: string }
     // What a subagent has spent so far over its whole thread.
-    | { readonly type: "subagent.usage"; readonly parent: string; readonly input: number; readonly output: number }
+    | {
+          readonly type: "subagent.usage";
+          readonly parent: string;
+          readonly input: number;
+          readonly output: number;
+          readonly cacheRead?: number;
+          readonly cacheCreation?: number;
+      }
     | { readonly type: "commands"; readonly skills: readonly CodexSkill[] }
     // The one server-initiated request answered as an event, so the consumer raises a card, waits, and calls respond
     // while the loop stays parked (app-server is blocked too). respond takes one entry per question id; others are
@@ -427,7 +436,7 @@ type CodexSpawn = (binary: string, args: readonly string[], env: Record<string, 
 const spawnCodex: CodexSpawn = (binary, args, env, spawnDepth) =>
     spawnAs({ class: "agentRuntime", spawnDepth }, binary, args, { env, stdio: ["pipe", "pipe", "pipe"] });
 
-const stdioConnector =
+export const stdioConnector =
     (binaryPath: () => Promise<string | undefined> = codexBinary, spawnProcess: CodexSpawn = spawnCodex): CodexAppServerConnector =>
     async (turn) => {
         const binary = await binaryPath();
@@ -445,6 +454,53 @@ const stdioConnector =
         let requestId = 0;
         let closing = false;
         let stderr = "";
+        let ownThreadId: string | undefined;
+        let active: { threadId: string; turnId: string } | undefined;
+        let interrupted: string | undefined;
+        let abortTimer: ReturnType<typeof setTimeout> | undefined;
+        const kill = (): void => {
+            if (!child.killed) {
+                child.kill();
+            }
+        };
+        const request: CodexAppServerConnection["request"] = (method, params) => {
+            if (method === "turn/start" || method === "turn/steer") {
+                ownThreadId = string(object(params, `${method} params`), "threadId", `${method} params`);
+            }
+            requestId += 1;
+            const id = requestId;
+            return new Promise<unknown>((resolve, reject) => {
+                pending.set(id, { resolve, reject });
+                write({ method, id, params });
+            });
+        };
+        const interrupt = (): void => {
+            if (active !== undefined && interrupted !== active.turnId) {
+                interrupted = active.turnId;
+                // The bounded kill remains the escape hatch for a refusal or an unresponsive server.
+                void request("turn/interrupt", active).catch(() => undefined);
+            }
+        };
+
+        const observeTurn = (method: string, params: z.infer<typeof TurnScopeSchema>): void => {
+            if (params.threadId !== ownThreadId) {
+                return;
+            }
+            const turnId = params.turn.id;
+            if (method === "turn/started") {
+                active = { threadId: params.threadId, turnId };
+                if (turn.signal.aborted) {
+                    interrupt();
+                }
+                return;
+            }
+            if (active?.turnId === turnId) {
+                active = undefined;
+                if (abortTimer !== undefined) {
+                    clearTimeout(abortTimer);
+                }
+            }
+        };
 
         const fail = (error: unknown): void => {
             messages.fail(error);
@@ -471,6 +527,21 @@ const stdioConnector =
             child.stdin.write(`${JSON.stringify(message)}\n`);
         };
 
+        const answerPending = (id: number, message: JsonObject): void => {
+            const waiter = pending.get(id);
+            if (waiter === undefined) {
+                throw new Error(`Codex app-server answered unknown request ${id}`);
+            }
+            pending.delete(id);
+            if (message["error"] !== undefined) {
+                const error = object(message["error"], "JSON-RPC error");
+                waiter.reject(new Error(string(error, "message", "JSON-RPC error")));
+            } else {
+                waiter.resolve(message["result"]);
+            }
+            return;
+        };
+
         const lines = createInterface({ input: child.stdout });
         void (async () => {
             try {
@@ -495,20 +566,13 @@ const stdioConnector =
                         continue;
                     }
                     if (typeof id === "number") {
-                        const waiter = pending.get(id);
-                        if (waiter === undefined) {
-                            throw new Error(`Codex app-server answered unknown request ${id}`);
-                        }
-                        pending.delete(id);
-                        if (message["error"] !== undefined) {
-                            const error = object(message["error"], "JSON-RPC error");
-                            waiter.reject(new Error(string(error, "message", "JSON-RPC error")));
-                        } else {
-                            waiter.resolve(message["result"]);
-                        }
+                        answerPending(id, message);
                         continue;
                     }
                     if (typeof method === "string") {
+                        if (method === "turn/started" || method === "turn/completed") {
+                            observeTurn(method, TurnScopeSchema.parse(message["params"]));
+                        }
                         messages.push({ kind: "notification", method, params: message["params"] });
                     }
                 }
@@ -521,27 +585,22 @@ const stdioConnector =
         })();
 
         const abort = (): void => {
-            if (!child.killed) {
-                child.kill();
-            }
+            interrupt();
+            abortTimer = setTimeout(kill, 3_000);
         };
-        // binaryPath() is async; a turn stopped during it arrives here already aborted, so a bare listener never fires.
+        // binaryPath() is async; an already-stopped turn still gets a bounded shutdown.
         const unwatchAbort = whenAborted(turn.signal, abort);
 
         return {
-            request: (method, params) => {
-                requestId += 1;
-                const id = requestId;
-                return new Promise<unknown>((resolve, reject) => {
-                    pending.set(id, { resolve, reject });
-                    write({ method, id, params });
-                });
-            },
+            request,
             notify: (method, params) => write({ method, params }),
             messages,
             close: () => {
                 closing = true;
                 unwatchAbort();
+                if (abortTimer !== undefined) {
+                    clearTimeout(abortTimer);
+                }
                 child.stdin.end();
             },
         };
@@ -586,9 +645,19 @@ const CollabItemSchema = z.object({
     agentsStates: z.record(z.string(), z.object({ status: z.string(), message: z.string().nullish().catch(undefined) })).catch({}),
 });
 const CollabParamsSchema = z.object({ item: CollabItemSchema });
+const TurnScopeSchema = z.object({ threadId: z.string(), turn: z.object({ id: z.string() }) });
 const ThreadParamsSchema = z.object({ threadId: z.string() });
 const RequestScopeSchema = z.object({ turnId: z.string().optional().catch(undefined), threadId: z.string().optional().catch(undefined) });
-const UsageParamsSchema = z.object({ tokenUsage: z.object({ total: z.object({ inputTokens: z.number(), outputTokens: z.number() }) }) });
+const UsageParamsSchema = z.object({
+    tokenUsage: z.object({
+        total: z.object({
+            inputTokens: z.number(),
+            outputTokens: z.number(),
+            cachedInputTokens: z.number().default(0),
+            cacheWriteInputTokens: z.number().default(0),
+        }),
+    }),
+});
 const EndingParamsSchema = z.object({ turn: z.object({ status: z.string(), error: z.object({ message: z.string() }).nullish().catch(undefined) }) });
 
 // A multi-agent call's standing; an interrupted one ended without doing what it was asked, which reads as failed.
@@ -827,7 +896,20 @@ const subagentItems = (notification: AppServerNotification, spawn: string): Code
 // What a subagent has spent, and how its turn ended.
 const subagentSpend = (notification: AppServerNotification, spawn: string): CodexEvent[] => {
     const usage = UsageParamsSchema.safeParse(notification.params);
-    return usage.success ? [{ type: "subagent.usage", parent: spawn, input: usage.data.tokenUsage.total.inputTokens, output: usage.data.tokenUsage.total.outputTokens }] : [];
+    if (!usage.success) {
+        return [];
+    }
+    const total = usage.data.tokenUsage.total;
+    return [
+        {
+            type: "subagent.usage",
+            parent: spawn,
+            input: Math.max(0, total.inputTokens - total.cachedInputTokens - total.cacheWriteInputTokens),
+            output: total.outputTokens,
+            cacheRead: total.cachedInputTokens,
+            cacheCreation: total.cacheWriteInputTokens,
+        },
+    ];
 };
 const subagentEnded = (notification: AppServerNotification, spawn: string): CodexEvent[] => {
     const ended = EndingParamsSchema.safeParse(notification.params);
@@ -898,59 +980,166 @@ const ownEnding = (notification: AppServerNotification, turnId: string, usage: C
 // new turn would otherwise send later frames to a dead id.
 const steeredTurnId = (value: unknown): string => string(object(value, "turn/steer result"), "turnId", "turn/steer result");
 
+// Server requests render independently of the turn's steering and completion state.
+async function* requestEvents(
+    notification: Extract<AppServerMessage, { kind: "request" }>,
+    ours: ReturnType<typeof ownRequest>,
+    turnIds: Set<string>,
+): AsyncGenerator<CodexEvent> {
+    // accept/decline are the schema's words; decline lets the turn carry on, unlike cancel, which
+    // interrupts it.
+    if (notification.method === COMMAND_APPROVAL_REQUEST) {
+        yield* commandApprovalFrames(notification, ours);
+        return;
+    }
+    if (notification.method === FILE_CHANGE_APPROVAL_REQUEST) {
+        notification.respond({ decision: "accept" });
+        return;
+    }
+    if (notification.method === ELICITATION_REQUEST) {
+        notification.respond(elicitationAnswer(notification.params));
+        return;
+    }
+    if (notification.method === PERMISSIONS_APPROVAL_REQUEST) {
+        // Grants the profile Codex asked for; the container is the isolation boundary, so narrowing
+        // here protects nothing.
+        const params = object(notification.params, `${PERMISSIONS_APPROVAL_REQUEST} params`);
+        notification.respond({ permissions: (params["permissions"] ?? {}) as JsonValue });
+        return;
+    }
+    // The question request. A question for another turn is answered empty rather than shown.
+    const questions = questionsFrom(notification.params, turnIds);
+    if (questions === undefined) {
+        notification.respond({ answers: {} });
+        return;
+    }
+    yield {
+        type: "user_input.requested",
+        questions,
+        respond: (answers) =>
+            notification.respond({
+                answers: Object.fromEntries(Object.entries(answers).map(([id, picks]) => [id, { answers: [...picks] }])),
+            }),
+    };
+    return;
+}
+
+interface CodexNotificationScope {
+    readonly threads: CodexSubagentThreads<AppServerNotification>;
+    readonly turnIds: Set<string>;
+    readonly threadId: string;
+    readonly startedTurnId: string;
+}
+
+function* notificationEvents(notification: AppServerNotification, scope: CodexNotificationScope): Generator<CodexEvent> {
+    const { threads, turnIds, threadId, startedTurnId } = scope;
+    if (notification.method === "item/started" || notification.method === "item/completed") {
+        const event = itemEvent(notification.method, notification.params, turnIds);
+        if (event !== undefined) {
+            yield* namingSpawns([event], threads);
+        }
+        return;
+    }
+    if (notification.method === "turn/plan/updated") {
+        // Keyed by the started turn, not the current one, so a steer that opens a new turn keeps the same
+        // checklist.
+        const event = todoEvent(notification.params, startedTurnId, turnIds);
+        if (event !== undefined) {
+            yield event;
+        }
+        return;
+    }
+    if (notification.method === "account/rateLimits/updated") {
+        // Account-wide, not per turn, so there's no turn id to check here.
+        yield { type: "rate_limits", snapshot: object(notification.params, "account/rateLimits/updated params")["rateLimits"] };
+        return;
+    }
+    if (notification.method === "error") {
+        const params = object(notification.params, "error params");
+        if (turnIds.has(string(params, "turnId", "error params"))) {
+            yield { type: "error", message: string(object(params["error"], "error params.error"), "message", "error params.error") };
+        }
+        return;
+    }
+    if (notification.method === "warning") {
+        const params = object(notification.params, "warning params");
+        if (params["threadId"] === undefined || params["threadId"] === null || params["threadId"] === threadId) {
+            yield { type: "warning", message: string(params, "message", "warning params") };
+        }
+        return;
+    }
+}
+
+interface StartedCodexTurn {
+    readonly threadId: string;
+    readonly startedTurnId: string;
+    readonly startParams: {
+        readonly threadId: string;
+        readonly cwd: string;
+        readonly approvalPolicy: CodexThreadOptions["approvalPolicy"];
+        readonly sandboxPolicy: JsonValue;
+        readonly model?: string;
+        readonly effort?: CodexReasoningEffort;
+    };
+}
+
+async function* startCodexTurn(connection: CodexAppServerConnection, turn: CodexTurn): AsyncGenerator<CodexEvent, StartedCodexTurn> {
+    await connection.request("initialize", {
+        clientInfo: { name: "intentic", title: "Intentic", version: "1" },
+        capabilities: { experimentalApi: true, requestAttestation: false },
+    });
+    connection.notify("initialized", {});
+
+    const threadParams = {
+        ...(turn.options.model !== undefined ? { model: turn.options.model } : {}),
+        ...(turn.modelProvider !== undefined ? { modelProvider: turn.modelProvider } : {}),
+        cwd: turn.options.workingDirectory,
+        approvalPolicy: turn.options.approvalPolicy,
+        sandbox: turn.options.sandboxMode,
+        ...(turn.config !== undefined ? { config: turn.config } : {}),
+    };
+    const threadId =
+        turn.sessionId === undefined
+            ? threadIdFrom(await connection.request("thread/start", threadParams), "thread/start")
+            : threadIdFrom(await connection.request("thread/resume", { threadId: turn.sessionId, ...threadParams }), "thread/resume");
+    if (turn.sessionId === undefined) {
+        yield { type: "thread.started", thread_id: threadId };
+    }
+
+    // Read before the turn starts, since the prompt may name a skill; an empty popover is the cost of failure
+    // here.
+    const skills = await connection
+        .request("skills/list", { cwds: [turn.options.workingDirectory], forceReload: false })
+        .then(skillsFrom)
+        .catch(() => []);
+    if (skills.length > 0) {
+        yield { type: "commands", skills };
+    }
+
+    const command = skillInput(turn.prompt, skills);
+    const input = [
+        ...(command === undefined ? [] : [{ type: "skill", name: command.skill.name, path: command.skill.path }]),
+        { type: "text", text: command?.text ?? turn.prompt, text_elements: [] },
+        ...(turn.images ?? []).map((path) => ({ type: "localImage", path })),
+    ];
+    const startParams = {
+        threadId,
+        cwd: turn.options.workingDirectory,
+        approvalPolicy: turn.options.approvalPolicy,
+        sandboxPolicy: sandboxPolicy(turn.options.sandboxMode),
+        ...(turn.options.model !== undefined ? { model: turn.options.model } : {}),
+        ...(turn.options.modelReasoningEffort !== undefined ? { effort: turn.options.modelReasoningEffort } : {}),
+    };
+    const startedTurnId = turnIdFrom(await connection.request("turn/start", { ...startParams, input }));
+    return { threadId, startedTurnId, startParams };
+}
+
 export const createCodexAppServerRunner = (connect: CodexAppServerConnector = stdioConnector()): CodexRunner =>
     async function* runAppServerTurn(turn) {
         const connection = await connect(turn);
+        let stopSteering: (() => void) | undefined;
         try {
-            await connection.request("initialize", {
-                clientInfo: { name: "intentic", title: "Intentic", version: "1" },
-                capabilities: { experimentalApi: true, requestAttestation: false },
-            });
-            connection.notify("initialized", {});
-
-            const threadParams = {
-                ...(turn.options.model !== undefined ? { model: turn.options.model } : {}),
-                ...(turn.modelProvider !== undefined ? { modelProvider: turn.modelProvider } : {}),
-                cwd: turn.options.workingDirectory,
-                approvalPolicy: turn.options.approvalPolicy,
-                sandbox: turn.options.sandboxMode,
-                ...(turn.config !== undefined ? { config: turn.config } : {}),
-            };
-            const threadId =
-                turn.sessionId === undefined
-                    ? threadIdFrom(await connection.request("thread/start", threadParams), "thread/start")
-                    : threadIdFrom(await connection.request("thread/resume", { threadId: turn.sessionId, ...threadParams }), "thread/resume");
-            if (turn.sessionId === undefined) {
-                yield { type: "thread.started", thread_id: threadId };
-            }
-
-            // Read before the turn starts, since the prompt may name a skill; an empty popover is the cost of failure
-            // here.
-            const skills = await connection
-                .request("skills/list", { cwds: [turn.options.workingDirectory], forceReload: false })
-                .then(skillsFrom)
-                .catch(() => []);
-            if (skills.length > 0) {
-                yield { type: "commands", skills };
-            }
-
-            const command = skillInput(turn.prompt, skills);
-            const input = [
-                ...(command === undefined ? [] : [{ type: "skill", name: command.skill.name, path: command.skill.path }]),
-                { type: "text", text: command?.text ?? turn.prompt, text_elements: [] },
-                ...(turn.images ?? []).map((path) => ({ type: "localImage", path })),
-            ];
-            const startedTurnId = turnIdFrom(
-                await connection.request("turn/start", {
-                    threadId,
-                    input,
-                    cwd: turn.options.workingDirectory,
-                    approvalPolicy: turn.options.approvalPolicy,
-                    sandboxPolicy: sandboxPolicy(turn.options.sandboxMode),
-                    ...(turn.options.model !== undefined ? { model: turn.options.model } : {}),
-                    ...(turn.options.modelReasoningEffort !== undefined ? { effort: turn.options.modelReasoningEffort } : {}),
-                }),
-            );
+            const { threadId, startedTurnId, startParams } = yield* startCodexTurn(connection, turn);
             // Observe every turn id so a steer cannot let an old turn win.
             const turnIds = new Set([startedTurnId]);
             let turnId = startedTurnId;
@@ -958,120 +1147,94 @@ export const createCodexAppServerRunner = (connect: CodexAppServerConnector = st
             // The threads this turn's own subagents run in, each read as the spawn call that started it.
             const threads = codexSubagentThreads<AppServerNotification>(threadId);
 
-            // Best-effort: turn/steer can refuse on a race the user can't see; failing the turn loses more than a
-            // message.
-            const steering = turn.steering;
-            if (steering !== undefined) {
-                void (async () => {
-                    for await (const text of steering) {
-                        const steered = await connection
-                            .request("turn/steer", {
+            // A single consumer orders steering against notifications. Input can arrive before acknowledgement;
+            // refusals stay pending until completion, then become a follow-up on this same thread.
+            const messages = new AsyncQueue<AppServerMessage | { readonly kind: "steering" }>();
+            const waiting: string[] = [];
+            let active = false;
+            let refused = false;
+            let finished = false;
+            const inputPump = (async () => {
+                for await (const text of turn.steering ?? []) {
+                    if (finished) {
+                        return;
+                    }
+                    waiting.push(text);
+                    messages.push({ kind: "steering" });
+                }
+            })();
+            void inputPump.catch((error) => messages.fail(error));
+            void (async () => {
+                try {
+                    for await (const message of connection.messages) {
+                        messages.push(message);
+                    }
+                    messages.end();
+                } catch (error) {
+                    messages.fail(error);
+                }
+            })();
+            const steerWaiting = async (): Promise<void> => {
+                if (!active || refused) {
+                    return;
+                }
+                while (waiting.length > 0) {
+                    if (turn.signal.aborted) {
+                        return;
+                    }
+                    const text = waiting[0]!;
+                    try {
+                        const steered = steeredTurnId(
+                            await connection.request("turn/steer", {
                                 threadId,
                                 expectedTurnId: turnId,
                                 input: [{ type: "text", text, text_elements: [] }],
-                            })
-                            .then(steeredTurnId)
-                            .catch(() => undefined);
-                        if (steered !== undefined) {
-                            turnIds.add(steered);
-                            turnId = steered;
-                        }
+                            }),
+                        );
+                        waiting.shift();
+                        turnIds.add(steered);
+                        turnId = steered;
+                    } catch {
+                        refused = true;
+                        return;
                     }
-                })();
-            }
+                }
+            };
 
+            stopSteering = () => {
+                finished = true;
+                turn.closeSteering?.();
+            };
             let usage: CodexUsage | undefined;
-            for await (const notification of connection.messages) {
+            for await (const notification of messages) {
+                if (notification.kind === "steering") {
+                    await steerWaiting();
+                    continue;
+                }
                 const delegated = fromSubagent(threads, threadId, notification);
                 if (delegated !== undefined) {
                     yield* delegated;
                     continue;
                 }
                 if (notification.kind === "request") {
-                    // accept/decline are the schema's words; decline lets the turn carry on, unlike cancel, which
-                    // interrupts it.
-                    if (notification.method === COMMAND_APPROVAL_REQUEST) {
-                        yield* commandApprovalFrames(notification, ours);
-                        continue;
-                    }
-                    if (notification.method === FILE_CHANGE_APPROVAL_REQUEST) {
-                        notification.respond({ decision: "accept" });
-                        continue;
-                    }
-                    if (notification.method === ELICITATION_REQUEST) {
-                        notification.respond(elicitationAnswer(notification.params));
-                        continue;
-                    }
-                    if (notification.method === PERMISSIONS_APPROVAL_REQUEST) {
-                        // Grants the profile Codex asked for; the container is the isolation boundary, so narrowing
-                        // here protects nothing.
-                        const params = object(notification.params, `${PERMISSIONS_APPROVAL_REQUEST} params`);
-                        notification.respond({ permissions: (params["permissions"] ?? {}) as JsonValue });
-                        continue;
-                    }
-                    // The question request. A question for another turn is answered empty rather than shown.
-                    const questions = questionsFrom(notification.params, turnIds);
-                    if (questions === undefined) {
-                        notification.respond({ answers: {} });
-                        continue;
-                    }
-                    yield {
-                        type: "user_input.requested",
-                        questions,
-                        respond: (answers) =>
-                            notification.respond({
-                                answers: Object.fromEntries(Object.entries(answers).map(([id, picks]) => [id, { answers: [...picks] }])),
-                            }),
-                    };
+                    yield* requestEvents(notification, ours, turnIds);
                     continue;
                 }
                 if (notification.method === "turn/started") {
                     const params = object(notification.params, "turn/started params");
                     const startedTurn = object(params["turn"], "turn/started params.turn");
-                    if (turnIds.has(string(startedTurn, "id", "turn/started params.turn"))) {
+                    if (string(startedTurn, "id", "turn/started params.turn") === turnId) {
+                        active = true;
+                        refused = false;
+                        await steerWaiting();
                         yield { type: "turn.started" };
-                    }
-                    continue;
-                }
-                if (notification.method === "item/started" || notification.method === "item/completed") {
-                    const event = itemEvent(notification.method, notification.params, turnIds);
-                    if (event !== undefined) {
-                        yield* namingSpawns([event], threads);
-                    }
-                    continue;
-                }
-                if (notification.method === "turn/plan/updated") {
-                    // Keyed by the started turn, not the current one, so a steer that opens a new turn keeps the same
-                    // checklist.
-                    const event = todoEvent(notification.params, startedTurnId, turnIds);
-                    if (event !== undefined) {
-                        yield event;
                     }
                     continue;
                 }
                 if (notification.method === "thread/tokenUsage/updated") {
                     const params = object(notification.params, "thread/tokenUsage/updated params");
-                    if (turnIds.has(string(params, "turnId", "thread/tokenUsage/updated params"))) {
+                    if (string(params, "turnId", "thread/tokenUsage/updated params") === turnId) {
                         usage = usageFrom(params);
-                    }
-                    continue;
-                }
-                if (notification.method === "account/rateLimits/updated") {
-                    // Account-wide, not per turn, so there's no turn id to check here.
-                    yield { type: "rate_limits", snapshot: object(notification.params, "account/rateLimits/updated params")["rateLimits"] };
-                    continue;
-                }
-                if (notification.method === "error") {
-                    const params = object(notification.params, "error params");
-                    if (turnIds.has(string(params, "turnId", "error params"))) {
-                        yield { type: "error", message: string(object(params["error"], "error params.error"), "message", "error params.error") };
-                    }
-                    continue;
-                }
-                if (notification.method === "warning") {
-                    const params = object(notification.params, "warning params");
-                    if (params["threadId"] === undefined || params["threadId"] === null || params["threadId"] === threadId) {
-                        yield { type: "warning", message: string(params, "message", "warning params") };
                     }
                     continue;
                 }
@@ -1080,12 +1243,26 @@ export const createCodexAppServerRunner = (connect: CodexAppServerConnector = st
                     if (ending === undefined) {
                         continue;
                     }
+                    active = false;
+                    turn.closeSteering?.();
+                    if (turn.closeSteering !== undefined) {
+                        await inputPump;
+                    }
                     yield ending;
+                    if (waiting.length > 0 && !turn.signal.aborted) {
+                        const followupInput = waiting.splice(0).map((text) => ({ type: "text", text, text_elements: [] }));
+                        turnId = turnIdFrom(await connection.request("turn/start", { ...startParams, input: followupInput }));
+                        turnIds.add(turnId);
+                        usage = undefined;
+                        continue;
+                    }
                     return;
                 }
+                yield* notificationEvents(notification, { threads, turnIds, threadId, startedTurnId });
             }
             throw new Error("Codex app-server ended before turn/completed");
         } finally {
+            stopSteering?.();
             connection.close();
         }
     };

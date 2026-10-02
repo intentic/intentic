@@ -115,8 +115,9 @@ test("resuming a session the process doesn't know without loadSession self-heals
     expect(events.at(-1)).toEqual({ kind: "done" });
 });
 
-test("an agent that answers session/load with a refusal self-heals via session-not-found", async () => {
-    const agent = createAcpAgent(connectionsOf(fakeAcpConnection(fakeAcpAgentApp(), { loadSession: true })), TIMEOUTS);
+test("an agent that answers session/load with resource-not-found self-heals via session-not-found", async () => {
+    const connection = fakeAcpConnection(fakeAcpAgentApp({ failure: { method: "load", code: -32002, message: "Session missing" } }), { loadSession: true });
+    const agent = createAcpAgent(connectionsOf(connection), TIMEOUTS);
     const events = await collect(agent, request("hello", { spec: { sessionId: "stale-id" } }));
     expect(events).toContainEqual(expect.objectContaining({ kind: "error", code: "session-not-found" }));
 });
@@ -183,4 +184,24 @@ test("an ask the agent left unanswered is refused when its turn ends", async () 
     expect(events.at(-1)).toEqual({ kind: "done" });
     // A hang bound, not a timing: without the turn's end settling it, the card waits for ever.
     expect(await Promise.race([answered, new Promise((resolve) => setTimeout(() => resolve("never answered"), 5_000))])).toBe("deny");
+});
+
+for (const method of ["load", "new", "prompt"] as const) {
+    test(`auth_required on session/${method} surfaces a coded sign-in failure and preserves the session`, async () => {
+        const connection = fakeAcpConnection(fakeAcpAgentApp({ failure: { method, code: -32000, message: "Sign in to the agent" } }), { loadSession: true });
+        const events = await collect(
+            createAcpAgent(connectionsOf(connection), TIMEOUTS),
+            request("hello", { spec: method === "load" ? { sessionId: "live-id" } : {} }),
+        );
+        expect(events.filter((event) => event.kind !== "session")).toEqual([
+            { kind: "error", code: "acp-auth-required", message: "Sign in to the agent" },
+            { kind: "done" },
+        ]);
+    });
+}
+
+test("an internal session/load failure preserves the session and the agent's message", async () => {
+    const connection = fakeAcpConnection(fakeAcpAgentApp({ failure: { method: "load", code: -32603, message: "Replay failed" } }), { loadSession: true });
+    const events = await collect(createAcpAgent(connectionsOf(connection), TIMEOUTS), request("hello", { spec: { sessionId: "live-id" } }));
+    expect(events).toEqual([{ kind: "error", message: "Replay failed" }, { kind: "done" }]);
 });

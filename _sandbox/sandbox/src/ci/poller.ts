@@ -53,9 +53,12 @@ export const createCiPoller = (services: Services, fetchFn: FetchFn = fetch, int
                 announced.authorName !== undefined
                     ? { id: announced.authorName, name: announced.authorName }
                     : { id: project.account.provider, name: project.account.provider };
-            await dispatchCiRun(services, announced, author, fetchFn);
+            // Awaited, unlike the webhook: the run is recorded as heard below, and main's fix agent must have it on file
+            // first.
+            await (await dispatchCiRun(services, project, announced, author, fetchFn)).fixed;
         }
-        // Written after dispatch, so a crash mid-pass re-announces instead of silently dropping a run.
+        // Written after main's fix agent has each run on file, so a crash mid-pass re-announces instead of silently
+        // dropping a failure of main's. An automation's wake rides the listener batcher, which only this process holds.
         await services.ciStore.recordAnnounced(project.repo, [...ids, ...known]);
         // What a job webhook would have said: a job of a run still going failed. Each is heard once, however often a
         // pass lists it.

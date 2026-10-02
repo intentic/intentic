@@ -242,6 +242,8 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
                 // Codex ran the turn but warned about it (fallback model metadata); a notice, not a failure.
                 "codex-advisory",
                 "codex-reauth",
+                // An ACP capability requires its own loginCommand, not a native provider account reconnect.
+                "acp-auth-required",
                 // The Claude subscription credential is dead; only a reconnect fixes it, unlike no account connected.
                 "claude-reauth",
                 // The API refused this turn's token mid-flight, usually superseded by a rotation already re-minting.

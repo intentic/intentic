@@ -91,6 +91,33 @@
       "description": "What a terminal socket sends as JSON text; the pane's own bytes travel as binary messages.",
       "oneOf": [
         {
+          "description": "The shared pane's grid. Viewport resize requests remain the viewer's own available size.",
+          "properties": {
+            "cols": {
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "rows": {
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "type": {
+              "const": "grid",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "cols",
+            "rows"
+          ],
+          "type": "object"
+        },
+        {
           "description": "The session is over, and the browser must not reconnect; `reason` is tmux's own words when it had any.",
           "properties": {
             "code": {

@@ -17,6 +17,7 @@ import {
     gitlabHookRun,
     gitlabStatus,
 } from "./providers.js";
+import { forgeOf } from "./main-line.js";
 import { ciProjects, type CiProject } from "./projects.js";
 
 // Public webhook receiver, gated by the per-sandbox secret (github HMACs the body, gitlab echoes it as a token); one
@@ -28,7 +29,14 @@ interface GithubDelivery {
     readonly action?: string;
     readonly workflow_run?: GithubRun & { readonly actor?: { readonly login?: string } };
     readonly workflow_job?: GithubJob;
-    readonly repository?: { readonly full_name?: string };
+    readonly repository?: GithubRepository;
+}
+
+// Every delivery's repository: its stable id, its name now, and its default branch.
+interface GithubRepository {
+    readonly id?: number;
+    readonly full_name?: string;
+    readonly default_branch?: string | null;
 }
 
 // A `workflow_job` delivery's job, narrowed to what a failure needs.
@@ -55,8 +63,43 @@ interface GitlabJobHook {
     readonly ref: string;
     readonly tag?: boolean;
     readonly sha?: string;
-    readonly project: { readonly path_with_namespace: string; readonly web_url?: string };
+    readonly project: { readonly id?: number; readonly path_with_namespace: string; readonly web_url?: string; readonly default_branch?: string | null };
 }
+
+// What a delivery says of the repository it is about, whichever forge and event sent it.
+interface Sender {
+    readonly path: string;
+    readonly id?: number | undefined;
+    readonly defaultBranch?: string | undefined;
+}
+
+const githubSender = (repository: GithubRepository | undefined): Sender | undefined =>
+    repository?.full_name === undefined
+        ? undefined
+        : { path: repository.full_name, id: repository.id, defaultBranch: repository.default_branch ?? undefined };
+
+const gitlabSender = (project: { readonly id?: number; readonly path_with_namespace: string; readonly default_branch?: string | null }): Sender => ({
+    path: project.path_with_namespace,
+    id: project.id,
+    defaultBranch: project.default_branch ?? undefined,
+});
+
+// The workspace repo a delivery is about. The forge's id decides where the reconcile learned it (hooks.ts): a rename or a
+// transfer changes the path every delivery carries, while the remote and the API keep working through redirects, so a
+// match on the path alone would drop every delivery without a word. The path is the fallback for a repository whose id
+// is not known yet.
+const projectOf = async (services: Services, host: "github" | "gitlab", sender: Sender): Promise<CiProject | undefined> => {
+    const candidates = (await ciProjects(services)).filter((candidate) => candidate.account.provider === host);
+    if (sender.id !== undefined) {
+        const forges = await services.ciStore.forges();
+        const known = candidates.find((candidate) => forgeOf(forges, candidate)?.id === sender.id);
+        if (known !== undefined) {
+            return known;
+        }
+    }
+    const wanted = sender.path.toLowerCase();
+    return candidates.find((candidate) => candidate.project.toLowerCase() === wanted);
+};
 
 // A job that failed, as main's fix agent hears of it; undefined for any other phase or outcome, and for a GitLab job
 // allowed to fail, which fails nothing.
@@ -113,27 +156,27 @@ export const createCiWebhookRoute =
             return c.json({ error: "invalid payload" }, 400);
         }
 
-        // projectPath plus a run normalizer or a failed job; undefined for a ping, an in-progress phase, or an unconsumed
+        // The sender plus a run normalizer or a failed job; undefined for a ping, an in-progress phase, or an unconsumed
         // event.
-        let projectPath: string | undefined;
+        let sender: Sender | undefined;
         let author = { id: host, name: host };
         let toRun: ((project: { repo: string; project: string }) => PipelineRun) | undefined;
         let failedJob: FailedJob | undefined;
         if (host === "github") {
             const delivery = payload as GithubDelivery;
             if (c.req.header("x-github-event") === "workflow_job" && delivery.action === "completed" && delivery.workflow_job !== undefined) {
-                projectPath = delivery.repository?.full_name;
+                sender = githubSender(delivery.repository);
                 failedJob = githubFailedJob(delivery.workflow_job);
             } else if (c.req.header("x-github-event") === "workflow_run" && delivery.action === "completed" && delivery.workflow_run !== undefined) {
                 const run = delivery.workflow_run;
-                projectPath = delivery.repository?.full_name;
+                sender = githubSender(delivery.repository);
                 author = run.actor?.login !== undefined ? { id: run.actor.login, name: run.actor.login } : author;
                 toRun = (project) => githubRun(project, run);
             }
         } else if (c.req.header("x-gitlab-event") === "Job Hook") {
             const delivery = payload as Partial<GitlabJobHook>;
             if (delivery.project !== undefined && typeof delivery.build_id === "number" && typeof delivery.pipeline_id === "number") {
-                projectPath = delivery.project.path_with_namespace;
+                sender = gitlabSender(delivery.project);
                 failedJob = gitlabFailedJob(delivery as GitlabJobHook);
             }
         } else {
@@ -145,7 +188,7 @@ export const createCiWebhookRoute =
                 // Fires at every phase; gates on "not in flight", not "not running" since queued is neither.
                 !isPipelineInFlight(gitlabStatus(delivery.object_attributes.status))
             ) {
-                projectPath = delivery.project.path_with_namespace;
+                sender = gitlabSender(delivery.project);
                 const user = delivery.user;
                 author =
                     user?.name !== undefined || user?.username !== undefined
@@ -154,16 +197,20 @@ export const createCiWebhookRoute =
                 toRun = (project) => gitlabHookRun(project, delivery as GitlabPipelineHook);
             }
         }
-        if (projectPath === undefined || (toRun === undefined && failedJob === undefined)) {
+        if (sender === undefined || (toRun === undefined && failedJob === undefined)) {
             return c.json({ ok: true, ignored: true });
         }
 
-        const wanted = projectPath.toLowerCase();
-        const project: CiProject | undefined = (await ciProjects(services)).find(
-            (candidate) => candidate.account.provider === host && candidate.project.toLowerCase() === wanted,
-        );
+        const project = await projectOf(services, host, sender);
         if (project === undefined) {
             return c.json({ ok: true, ignored: true });
+        }
+        // Every delivery says it again, so a default branch changed on the forge reaches main's fix agent with the next
+        // one; written only when it says something new.
+        try {
+            await services.ciStore.learnForge(project.repo, project.project, { id: sender.id, path: sender.path, defaultBranch: sender.defaultBranch });
+        } catch (error) {
+            services.logger.warn({ err: error, repo: project.repo }, "ci: what the delivery said of its repository was not kept");
         }
         if (failedJob !== undefined) {
             // Off the delivery's clock: reading the job's log and starting or telling the fix agent takes a while.
@@ -188,6 +235,7 @@ export const createCiWebhookRoute =
         services.ciRuns.upsert(run);
         // The delivery is the only moment the daemon knows a run ended; without this an open board waits out its poll.
         publishRuntimeChange("ci");
-        await dispatchCiRun(services, run, author, fetchFn);
+        // Main's fix agent reads the run off the delivery's clock: `fixed` is left to settle by itself.
+        await dispatchCiRun(services, project, run, author, fetchFn);
         return c.json({ ok: true });
     };

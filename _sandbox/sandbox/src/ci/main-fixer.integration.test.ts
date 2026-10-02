@@ -441,3 +441,43 @@ test("a press on a run of a failing main-line branch continues the streak's agen
     expect(await streakFixerFor(services, run(42, "failed"))).toBe(FIXER);
     expect(await streakFixerFor(services, run(42, "failed", { branch: "agent/x" }))).toBeUndefined();
 });
+
+// Which branch is main is the repository's own word, not a name: a repo whose default is `develop` is fixed there.
+test("a repository whose default branch is not main or master has its fix agent there, and a press continues it", async () => {
+    const { services, fetchFn, project, started } = await harness();
+    // What a clone of such a repository records: origin/HEAD names its default.
+    await defaultGit(join(services.workspace.root, "web"), ["symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/develop"]);
+
+    expect(await jobFailed(services, project, job(41, 7, "verify-core", { branch: "develop" }), fetchFn)).toBe("code");
+    expect(started.map(({ conversationId }) => conversationId)).toEqual([FIXER]);
+    expect(Object.keys(await services.ciStore.failures())).toEqual(["web\ndevelop"]);
+    expect(await streakFixerFor(services, run(42, "failed", { branch: "develop" }))).toBe(FIXER);
+    // `main` is no main-line branch of this repository: somebody's work in progress.
+    expect(await jobFailed(services, project, job(43, 9, "verify-core", { branch: "main" }), fetchFn)).toBe("skipped");
+});
+
+// A restart forgets what only the process holds; a fleet run re-run before it is not re-run a second time after.
+test("a run only the fleet failed is re-run once, across a restart too", async () => {
+    const { services, fetchFn, forge, told, reruns } = await harness();
+    forge.jobs[41] = [{ id: 8, name: "verify-core", conclusion: "failure", steps: [{ name: "Set up job", conclusion: "failure" }] }];
+
+    await runFinished(services, run(41, "failed"), fetchFn);
+    resetMainFixer();
+    await runFinished(services, run(41, "failed"), fetchFn);
+
+    expect(reruns).toEqual(["https://api.github.com/repos/acme/web/actions/runs/41/rerun"]);
+    expect(told).toEqual(["ci.fleet_rerun", "ci.fleet_failed"]);
+});
+
+// The forge's word (the reconcile's repository read, every delivery) comes before what the clone recorded, and only for
+// the repository the remote still names.
+test("the default branch the forge said is main's line; one said of a repository the remote no longer names is not", async () => {
+    const { services, fetchFn, project, started } = await harness();
+    await services.ciStore.learnForge("web", "acme/elsewhere", { id: 5, path: "acme/elsewhere", defaultBranch: "trunk" });
+    expect(await jobFailed(services, project, job(40, 6, "verify-core", { branch: "trunk" }), fetchFn)).toBe("skipped");
+
+    await services.ciStore.learnForge("web", "acme/web", { id: 99, path: "acme/web", defaultBranch: "trunk" });
+    expect(await jobFailed(services, project, job(41, 7, "verify-core", { branch: "trunk" }), fetchFn)).toBe("code");
+    expect(started.map(({ conversationId }) => conversationId)).toEqual([FIXER]);
+    expect(await jobFailed(services, project, job(42, 8, "verify-core", { branch: "main" }), fetchFn)).toBe("skipped");
+});

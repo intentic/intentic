@@ -714,6 +714,8 @@ const journalServices = async (root: string, autoResumeOnRestart = true): Promis
         heldWakes: fileHeldWakesStore(join(root, "approvals")),
         activity: { append: async () => {}, list: async () => [] },
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
+        // The provider's session store holds nothing to recover, so an interrupted turn records from its prompt.
+        sessions: unstubbed<Services["sessions"]>("sessions", { readTail: async () => [] }),
     });
     const settings = await services.sandboxSettings.get();
     await services.sandboxSettings.set({ ...settings, autoResumeOnRestart });
@@ -747,6 +749,46 @@ test("an interrupted chat turn is re-run under the restart note, on the session 
     expect(prompts[0]).toMatch(/restarted/i);
     expect(prompts[0]).toContain("finish the report");
     expect(inputs[0]?.sessionId).toBe("s-partial");
+});
+
+// The cut turn never settled, so nothing recorded the user's message; the re-run's notice stands in for a bubble that
+// only exists if the boot writes it first.
+test("a resumed restart keeps the user's message on the record, under the re-run's notice and with no second bubble", async () => {
+    const root = mkdtempSync(join(tmpdir(), "restart-"));
+    const services = await journalServices(root);
+    await services.turnJournal.recordTurn(journalled("rs-kept", { sessionId: "s-partial" }));
+    await resumeInterruptedTurns(drivenBy(services, fakeWake([], [{ kind: "delta", text: "report done" }, { kind: "done" }])), BOOT_AT);
+    // The re-run's own rows land once it settles: the assistant's reply is the last thing written.
+    await waitFor(async () => expect((await fileTranscriptRecord(root).read("rs-kept")).at(-1)?.text).toBe("report done"), SETTLES);
+
+    const rows = await fileTranscriptRecord(root).read("rs-kept");
+    expect(rows.map(({ role, text }) => ({ role, text }))).toEqual([
+        { role: "user", text: "finish the report" },
+        { role: "notice", text: "The sandbox came back, this turn picked up where it left off." },
+        { role: "assistant", text: "report done" },
+    ]);
+    expect(rows[0]).toMatchObject({ sentAt: 10_000, messageId: "m-report" });
+});
+
+test("a resumed restart whose record write fails keeps the journal entry and runs nothing yet", async () => {
+    const root = mkdtempSync(join(tmpdir(), "restart-"));
+    const base = await journalServices(root);
+    const services = unstubbed<Services>("services", {
+        ...base,
+        transcripts: unstubbed<Services["transcripts"]>("transcripts", {
+            ...base.transcripts,
+            append: async () => {
+                throw new Error("disk unavailable");
+            },
+        }),
+    });
+    await services.turnJournal.recordTurn(journalled("rs-unwritten"));
+    const prompts: string[] = [];
+    await resumeInterruptedTurns(drivenBy(services, fakeWake(prompts)), BOOT_AT);
+
+    expect(prompts).toEqual([]);
+    // Untouched, attempt unspent: the next boot gets the same choice this one had.
+    expect(await services.turnJournal.list()).toEqual([expect.objectContaining({ kind: "turn", attempts: 0 })]);
 });
 
 test("the attempt is spent on disk BEFORE the turn restarts, so a turn that kills the daemon cannot loop the boot", async () => {
@@ -868,6 +910,34 @@ test("an interrupted turn is recorded from the work it did, not from its prompt 
             text: "The sandbox restarted before this turn finished. Continue picks it up from the saved worktree.",
             noticeCode: { code: "restartInterrupted" },
         },
+    ]);
+});
+
+// A re-run journals its own prompt, which opens with the resume note; cut again, the session's first user row is that
+// note and the repeated request, which is no new message from anyone.
+test("a re-run cut by a second restart records its notice, not its repeated prompt as a user bubble", async () => {
+    const root = mkdtempSync(join(tmpdir(), "restart-"));
+    const base = await journalServices(root, false);
+    const prompt = withResumeNote("finish the report", RESUME_NOTES.restart);
+    const services = unstubbed<Services>("services", {
+        ...base,
+        sessions: unstubbed<Services["sessions"]>("sessions", {
+            readTail: async () => [
+                { role: "user", text: prompt },
+                { role: "assistant", text: "chapter three" },
+            ],
+        }),
+    });
+    await services.turnJournal.recordTurn(
+        journalled("rs-again", { sessionId: "s-partial", attempts: 1, turn: { prompt, messageId: "m-report", conversationId: "rs-again", isolated: true } }),
+    );
+
+    await resumeInterruptedTurns(drivenBy(services, fakeWake([])), BOOT_AT);
+
+    expect((await fileTranscriptRecord(root).read("rs-again")).map(({ role, text }) => ({ role, text }))).toEqual([
+        { role: "notice", text: "The sandbox came back, this turn picked up where it left off." },
+        { role: "assistant", text: "chapter three" },
+        { role: "notice", text: "The sandbox restarted before this turn finished. Continue picks it up from the saved worktree." },
     ]);
 });
 

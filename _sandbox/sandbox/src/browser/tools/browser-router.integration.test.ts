@@ -13,10 +13,57 @@ import { type BrowserRouter, createBrowserRouter, createSchemaCache, type Prepar
 // 4. a prepare that refuses an owner turns into a tool error, not a dead call.
 // 5. a sole-owner manifest serves tools with no `account` at all and routes everything to that owner.
 // 6. closing the router (the turn ending) kills the backends.
+// 7. a network tool's answer comes back with the credentials a site issued redacted, and its debugging facts intact.
 // The backend is a canary standing in for @playwright/mcp; it writes a marker file on spawn and echoes call arguments
 // back.
 
+// What @playwright/mcp's browser_network_request answers for a token-exchange fetch, captured from the real server
+// (playwright-core renderRequestDetails / renderRequestPart) with the values swapped for fixtures. Each credential is
+// one a site issues, never a stored secret, so the exact-value masking in agent-redaction.ts cannot know it.
+const BEARER = "fixtureBearer0123456789abcdef";
+const OAUTH_CODE = "fixtureOauthCode987654";
+const QUERY_TOKEN = "fixtureQueryToken123456";
+const API_KEY = "fixtureApiKey7890xyzabc";
+const CSRF = "fixtureCsrf4567890qwerty";
+const JWT = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJmaXh0dXJlIn0.c2lnbmF0dXJlZml4dHVyZQ";
+const REFRESH = "fixtureRefresh0987654321";
+const PASSWORD = "fixturePassword112233";
+const URL = `https://app.example.com/oauth/token?code=${OAUTH_CODE}&access_token=${QUERY_TOKEN}&page=2#id_token=${JWT}`;
+const REQUEST_HEADERS = [
+    `authorization: Bearer ${BEARER}`,
+    "referer: https://app.example.com/login",
+    `x-api-key: ${API_KEY}`,
+    `x-csrf-token: ${CSRF}`,
+    "content-type: application/json",
+];
+const RESPONSE_HEADERS = ["content-length: 121", "content-type: application/json; charset=utf-8", `location: ${URL}`];
+const NETWORK_ANSWERS = {
+    list: `### Result\n2. [POST] ${URL} => [200] OK`,
+    details: [
+        `### Result\n#2 [POST] ${URL}`,
+        "",
+        "  General",
+        "    status:    [200] OK",
+        "    duration:  3ms",
+        "    type:      fetch",
+        "    mimeType:  application/json",
+        "",
+        "  Request headers",
+        ...REQUEST_HEADERS.map((line) => `    ${line}`),
+        "",
+        "  Response headers",
+        ...RESPONSE_HEADERS.map((line) => `    ${line}`),
+        "",
+        'Call browser_network_request with part="request-body" to read the request body.',
+    ].join("\n"),
+    "request-headers": `### Result\n${REQUEST_HEADERS.join("\n")}`,
+    "request-body": `### Result\n{"password":"${PASSWORD}","grant_type":"authorization_code"}`,
+    "response-body": `### Result\n{"access_token":"${JWT}","refresh_token":"${REFRESH}","user":"ok"}`,
+} satisfies Record<string, string>;
+const CREDENTIALS = [BEARER, OAUTH_CODE, QUERY_TOKEN, API_KEY, CSRF, JWT, REFRESH, PASSWORD];
+
 const CANARY = `
+const NETWORK = ${JSON.stringify(NETWORK_ANSWERS)};
 const fs = require("fs");
 const marker = process.argv[2];
 fs.writeFileSync(marker, String(process.pid));
@@ -34,6 +81,8 @@ process.stdin.on("data", (chunk) => {
         const reply = (result) => process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id: msg.id, result }) + "\\n");
         if (msg.method === "initialize") reply({ protocolVersion: msg.params?.protocolVersion ?? "2025-06-18", capabilities: { tools: {} }, serverInfo: { name: "canary", version: "1.0.0" } });
         else if (msg.method === "tools/list") reply({ tools: [{ name: "browser_probe", description: "canary tool", inputSchema: { type: "object", properties: {} } }] });
+        else if (msg.method === "tools/call" && msg.params?.name === "browser_network_requests") reply({ content: [{ type: "text", text: NETWORK.list }] });
+        else if (msg.method === "tools/call" && msg.params?.name === "browser_network_request") reply({ content: [{ type: "text", text: NETWORK[msg.params.arguments?.part ?? "details"] ?? "### Result\\n" + JSON.stringify(msg.params.arguments) }] });
         else if (msg.method === "tools/call") reply({ content: [{ type: "text", text: "echo:" + marker + ":" + JSON.stringify(msg.params?.arguments ?? {}) }] });
         else if (msg.id !== undefined) reply({});
     }
@@ -294,4 +343,50 @@ test("a sole-owner router declares no account parameter and routes every call to
     expect((call["result"] as ToolResult).content[0]?.text).toContain('{"url":"https://example.com"}');
     expect(harness.prepares).toEqual(["web"]);
     expect(await exists(harness.markers["web"] as string)).toBe(true);
+});
+
+const networkCall = async (harness: Harness, id: number, name: string, args: Record<string, unknown>): Promise<ToolResult> =>
+    // SAFETY: every tools/call the router answers is a tool result (a refusal is one too), never a JSON-RPC error here.
+    (await rpc(harness.router, { jsonrpc: "2.0", id, method: "tools/call", params: { name, arguments: args } }))["result"] as ToolResult;
+
+// The transcript and the model provider see whatever this returns, so a bearer token a signed-in site issued is as
+// exposed here as a stored secret would be, and nothing downstream knows its value to mask it.
+test.each([
+    ["a signed-in account", undefined, { account: "born-acct" }],
+    ["the anonymous browser", "web", {}],
+] as const)("%s's network answers redact issued credentials and keep method, status, path and content-type", async (_label, soleOwner, routing) => {
+    const harness = await startRouter(soleOwner);
+    await handshake(harness);
+    const answers = await Promise.all([
+        networkCall(harness, 20, "browser_network_requests", routing),
+        networkCall(harness, 21, "browser_network_request", { ...routing, index: 2 }),
+        networkCall(harness, 22, "browser_network_request", { ...routing, index: 2, part: "request-headers" }),
+        networkCall(harness, 23, "browser_network_request", { ...routing, index: 2, part: "request-body" }),
+        networkCall(harness, 24, "browser_network_request", { ...routing, index: 2, part: "response-body" }),
+    ]);
+    const texts = answers.map((answer) => answer.content.map((block) => block.text).join("\n"));
+    const leaked = CREDENTIALS.filter((credential) => texts.some((text) => text.includes(credential)));
+    expect(leaked).toEqual([]);
+    const [list, details, headers, requestBody, responseBody] = texts;
+    expect(list).toBe("### Result\n2. [POST] https://app.example.com/oauth/token?code=***&access_token=***&page=*** => [200] OK");
+    expect(details).toContain("#2 [POST] https://app.example.com/oauth/token?code=***&access_token=***&page=***\n");
+    expect(details).toContain("    status:    [200] OK\n    duration:  3ms\n    type:      fetch\n    mimeType:  application/json\n");
+    expect(details).toContain("    authorization: ***\n    referer: https://app.example.com/login\n    x-api-key: ***\n    x-csrf-token: ***\n");
+    expect(details).toContain("    content-type: application/json; charset=utf-8\n    location: https://app.example.com/oauth/token?code=***&access_token=***&page=***\n");
+    expect(headers).toBe(
+        "### Result\nauthorization: ***\nreferer: https://app.example.com/login\nx-api-key: ***\nx-csrf-token: ***\ncontent-type: application/json",
+    );
+    expect(requestBody).toBe('### Result\n{"password":"***","grant_type":"authorization_code"}');
+    expect(responseBody).toBe('### Result\n{"access_token":"***","refresh_token":"***","user":"ok"}');
+});
+
+// `filename` has the backend write the full answer to its output directory, where the router never sees it and any
+// shell in the sandbox can read it, so the redaction above would be one argument away from bypassed.
+test("a network call that asks for a file instead of an answer is refused before it reaches the backend", async () => {
+    const harness = await startRouter();
+    await handshake(harness);
+    const refused = await networkCall(harness, 25, "browser_network_request", { account: "identity-1", index: 2, filename: "leak.txt" });
+    expect(refused.isError).toBe(true);
+    expect(refused.content[0]?.text).toContain("filename");
+    expect(harness.prepares).toEqual([]);
 });

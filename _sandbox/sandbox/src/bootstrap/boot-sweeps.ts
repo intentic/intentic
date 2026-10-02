@@ -1,4 +1,5 @@
 import { sweepAgedAgents } from "../conversations/registry/archive.js";
+import { archiveVanishedWorktrees } from "../conversations/registry/vanished-worktrees.js";
 import { capabilityCtx } from "../capabilities/capability.js";
 import { unloadIdleLocalModels } from "../capabilities/handlers/localmodel.handler.js";
 import { LOCAL_MODEL_IDLE_MS, LOCAL_MODEL_IDLE_SWEEP_MS } from "../endpoints/local-model-idle.js";
@@ -16,24 +17,9 @@ import type { BootPhase } from "./boot-phase.js";
 const HOURLY_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOURLY_MS;
 
-// Reads the registry through callbacks and takes per-repo locks, so a turn starting mid-walk is safe.
-const sweepVanishedWorktrees = async ({ logger, services }: BootPhase): Promise<void> => {
-    const vanished: string[] = [];
-    for (const id of services.agents.ids()) {
-        const entry = services.agents.entry(id);
-        // Workspace conversations own no checkout; an archived entry is held by its commits, not a worktree.
-        if (entry?.placement.kind !== "worktree" || entry.archivedAt !== undefined) {
-            continue;
-        }
-        if (!(await services.agentWorktrees.exists(id))) {
-            vanished.push(id);
-        }
-    }
-    // Archived, never deleted: deletion stays where the user can see it.
-    if (vanished.length > 0) {
-        await services.agents.setArchived(vanished, Date.now());
-        logger.info({ count: vanished.length }, "agents: archived entries whose worktree vanished");
-    }
+// Archives what lost its checkout for good, then prunes worktree admin and parks off-board branches.
+const sweepVanishedWorktrees = async ({ services }: BootPhase): Promise<void> => {
+    await archiveVanishedWorktrees(services, Date.now());
     // Membership is re-read per decision inside prune.
     const isolated = (id: string): boolean => services.agents.entry(id)?.placement.kind === "worktree";
     await services.agentWorktrees.prune(

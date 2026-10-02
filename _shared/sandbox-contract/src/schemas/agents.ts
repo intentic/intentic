@@ -357,7 +357,7 @@ export const AgentSummarySchema = z.object({
     // Root repo's short base sha; per-repo bases stay daemon-internal.
     base: z.string().optional().describe("The commit its private copy started from, shortened."),
     costUsd: z.number().optional().describe("What it has cost so far, in dollars. A subagent's spend is its own and is not folded in here."),
-    inputTokens: z.number().optional().describe("Tokens sent."),
+    inputTokens: z.number().optional().describe("Uncached input tokens, excluding cache reads and cache writes."),
     outputTokens: z.number().optional().describe("Tokens received."),
     contextTokens: z.number().optional().describe("How much of the window the conversation currently fills."),
     contextWindow: z.number().optional().describe("How large that window is."),

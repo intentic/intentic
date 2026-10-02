@@ -83,7 +83,7 @@ test("a turn maps thread events onto session, deltas, thinking, tools, todos, us
         { kind: "delta", text: "Added the route." },
         // Codex only reports a completed agent_message, so every delta is a whole prose block and closes one.
         { kind: "text_end" },
-        { kind: "usage", inputTokens: 10, outputTokens: 5, cacheReadTokens: 3, cacheCreationTokens: 1 },
+        { kind: "usage", inputTokens: 6, outputTokens: 5, cacheReadTokens: 3, cacheCreationTokens: 1 },
         { kind: "done" },
     ]);
 });
@@ -131,7 +131,7 @@ test("a Codex subagent sits on its spawn call's card, its work under it, its rep
         { kind: "tool_call", id: "wait-1", name: "Wait for agents", category: "other", status: "in_progress" },
         { kind: "tool_call_update", id: "wait-1", status: "completed" },
         { kind: "subagent_update", id: "spawn-1", status: "completed", summary: "Ported." },
-        { kind: "usage", inputTokens: 510, outputTokens: 55, cacheReadTokens: 3, cacheCreationTokens: 1 },
+        { kind: "usage", inputTokens: 506, outputTokens: 55, cacheReadTokens: 3, cacheCreationTokens: 1 },
         { kind: "done" },
     ]);
 });
@@ -1085,4 +1085,50 @@ test("an unattended turn raises the card and waits for it, rather than refusing"
 
     expect(events.some((event) => event.kind === "permission")).toBe(true);
     expect(decisions).toEqual([true]);
+});
+
+test("Codex cached input is subtracted and uncached input is clamped at zero", async () => {
+    const { runner } = fakeCodexRunner([
+        {
+            type: "turn.completed",
+            usage: {
+                input_tokens: 2,
+                cached_input_tokens: 3,
+                cache_write_input_tokens: 1,
+                output_tokens: 5,
+                reasoning_output_tokens: 0,
+            },
+        },
+    ]);
+    const events = await collect(createTestAgent(runner), request);
+    expect(events).toEqual([{ kind: "usage", inputTokens: 0, outputTokens: 5, cacheReadTokens: 3, cacheCreationTokens: 1 }, { kind: "done" }]);
+});
+
+test("delegated cache tokens remain separate in the turn's usage and count toward subagent totals", async () => {
+    const { runner } = fakeCodexRunner([
+        { type: "subagent.usage", parent: "spawn-1", input: 100, output: 50, cacheRead: 300, cacheCreation: 100 },
+        {
+            type: "turn.completed",
+            usage: { input_tokens: 10, cached_input_tokens: 3, cache_write_input_tokens: 1, output_tokens: 5, reasoning_output_tokens: 0 },
+        },
+    ]);
+    expect(await collect(createTestAgent(runner), request)).toEqual([
+        { kind: "subagent_update", id: "spawn-1", tokens: 550 },
+        { kind: "usage", inputTokens: 106, outputTokens: 55, cacheReadTokens: 303, cacheCreationTokens: 101 },
+        { kind: "done" },
+    ]);
+});
+
+test("a steering follow-up counts each subagent's cumulative spend once", async () => {
+    const usage = { input_tokens: 10, cached_input_tokens: 3, cache_write_input_tokens: 1, output_tokens: 5, reasoning_output_tokens: 0 };
+    const { runner } = fakeCodexRunner([
+        { type: "subagent.usage", parent: "spawn-1", input: 100, output: 50, cacheRead: 300, cacheCreation: 100 },
+        { type: "turn.completed", usage },
+        { type: "turn.completed", usage },
+    ]);
+    const events = await collect(createTestAgent(runner), request);
+    expect(events.filter((event) => event.kind === "usage")).toEqual([
+        { kind: "usage", inputTokens: 106, outputTokens: 55, cacheReadTokens: 303, cacheCreationTokens: 101 },
+        { kind: "usage", inputTokens: 6, outputTokens: 5, cacheReadTokens: 3, cacheCreationTokens: 1 },
+    ]);
 });

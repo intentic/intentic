@@ -18,6 +18,7 @@ import { StreamSocket } from "./channel/streamSocket";
 import { editKeyBytes } from "./terminalEditKeys";
 import { registerFilePathLinks } from "./terminalFileLinks";
 import { registerUrlLinks } from "./terminalUrlLinks";
+import { applyTerminalGrid, requestTerminalGrid, resetTerminalGrid, type TerminalSizing } from "./terminalSizing";
 import { terminalPaint } from "./terminalTheme";
 import { openLoopbackPreview } from "./portPreview";
 import "@xterm/xterm/css/xterm.css";
@@ -30,7 +31,7 @@ import "@xterm/xterm/css/xterm.css";
 const PING_MS = 30_000;
 const RETRY_MS = 1000;
 const MAX_RETRY_MS = 30_000;
-// Debounces resize sends during a panel drag; xterm itself reflows every frame regardless.
+// Debounces viewport size requests during a panel drag.
 const RESIZE_SETTLE_MS = 120;
 // A connection alive this long resets the backoff on drop; shorter lives keep doubling the retry delay.
 const STABLE_MS = 5000;
@@ -40,7 +41,7 @@ const STALE_MS = 90_000;
 const { usingLocal } = useEndpoint();
 const { active } = useSandbox();
 
-export type TerminalSession = {
+export type TerminalSession = TerminalSizing & {
     // Single-member on purpose: the agent's browser view is a separate, simpler kind of cache entry.
     readonly kind: `terminal`;
     readonly name: string;
@@ -114,8 +115,8 @@ const attachRenderer = (s: TerminalSession): void => {
 // What the daemon plans the attach from: the session, its grid and its directory.
 const terminalParams = (s: TerminalSession): Record<string, string> => ({
     session: s.name,
-    cols: String(s.term.cols),
-    rows: String(s.term.rows),
+    cols: String(s.requestedGrid.cols),
+    rows: String(s.requestedGrid.rows),
     ...(s.cwd === undefined ? {} : { cwd: s.cwd }),
 });
 
@@ -191,11 +192,12 @@ const connectSocket = async (s: TerminalSession): Promise<void> => {
                 mine.channel?.close();
                 return;
             }
+            resetTerminalGrid(s);
             s.down = false;
             openedAt = Date.now();
             lastFrameAt = openedAt;
-            // send() drops messages until open; push the live grid now so a mid-handshake resize isn't lost.
-            send(s, { type: `resize`, cols: s.term.cols, rows: s.term.rows });
+            // send() drops messages until open; report the viewport now so a mid-handshake resize is not lost.
+            send(s, { type: `resize`, ...s.requestedGrid });
             ping = window.setInterval(() => {
                 if (Date.now() - lastFrameAt > STALE_MS) {
                     mine.channel?.close();
@@ -211,6 +213,12 @@ const connectSocket = async (s: TerminalSession): Promise<void> => {
         // Raw pane bytes; xterm decodes them, keeping a UTF-8 char split across frames whole.
         pane: (bytes) => s.term.write(bytes),
         message: (message: TerminalServerMessage) => {
+            if (s.channel !== mine.channel || s.closing) {
+                return;
+            }
+            if (message.type === `grid`) {
+                applyTerminalGrid(s, message);
+            }
             if (message.type === `exit`) {
                 // Session ended; never reconnects, since `-A` would recreate it and a missing session would fail-loop.
                 s.closing = true;
@@ -258,17 +266,17 @@ const fitSession = (s: TerminalSession): void => {
     }
     const cols = Math.max(2, Math.floor((s.host.clientWidth - SCROLLBAR_PX) / cell.width));
     const rows = Math.max(1, Math.floor(s.host.clientHeight / cell.height));
-    if (cols !== s.term.cols || rows !== s.term.rows) {
-        s.term.resize(cols, rows);
+    if (requestTerminalGrid(s, { cols, rows })) {
+        scheduleResizeFrame(s);
     }
 };
 
-// Debounces the resize send to the pane; xterm itself reflows immediately on every frame.
+// Debounces viewport requests; authoritative grid changes never send a resize back.
 const scheduleResizeFrame = (s: TerminalSession): void => {
     window.clearTimeout(s.resizeSettle);
     s.resizeSettle = window.setTimeout(() => {
         s.resizeSettle = undefined;
-        send(s, { type: `resize`, cols: s.term.cols, rows: s.term.rows });
+        send(s, { type: `resize`, ...s.requestedGrid });
     }, RESIZE_SETTLE_MS);
 };
 
@@ -433,6 +441,7 @@ export const createTerminalSession = (
         name,
         ...(cwd === undefined ? {} : { cwd }),
         term,
+        requestedGrid: { cols: term.cols, rows: term.rows },
         search,
         host,
         mountedDocument: document,
@@ -446,7 +455,6 @@ export const createTerminalSession = (
     if (!readOnly) {
         term.onData((data) => send(s, { type: `input`, data }));
     }
-    term.onResize(() => scheduleResizeFrame(s));
     // Copies on mouseup after a selection gesture; onSelectionChange also fires when output re-lays one.
     host.addEventListener(
         `mousedown`,
@@ -488,12 +496,12 @@ export const mountTerminalSession = (s: TerminalSession, container: HTMLElement,
         s.host.ownerDocument.defaultView?.requestAnimationFrame(() => {
             if (s.host.clientWidth !== 0 && s.host.clientHeight !== 0) {
                 fitSession(s);
-                send(s, { type: `resize`, cols: s.term.cols, rows: s.term.rows });
+                send(s, { type: `resize`, ...s.requestedGrid });
             }
         });
     }
-    // Unconditional resync: onResize fires only on a dimension change, so a hidden pane's drift needs telling.
-    send(s, { type: `resize`, cols: s.term.cols, rows: s.term.rows });
+    // A remounted viewport reports its capacity even if its measured size has not changed.
+    send(s, { type: `resize`, ...s.requestedGrid });
     if (focus) {
         s.term.focus();
     }

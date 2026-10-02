@@ -269,7 +269,8 @@ const hasSpend = computed(() => current.value.length > 0);
                     <Card class="@container col-span-2 flex min-w-0 flex-col @lg:col-span-1">
                         <div class="text-xs text-muted">{{ t(`sandbox.sandboxUsage.spend`) }}</div>
                         <div class="mt-1 truncate text-[clamp(1.5rem,13cqi,3rem)] font-semibold leading-none tabular-nums text-content">
-                            {{ formatUsdHero(totals.costUsd) }}
+                            <!-- A floor, not a total, once a runtime that reports no cost is in the window. -->
+                            {{ totals.costKnown ? `` : `≥ ` }}{{ formatUsdHero(totals.costUsd) }}
                         </div>
                         <div class="mt-auto flex flex-wrap items-baseline gap-x-1.5 pt-2 text-2xs" :class="deltaTone(spendDelta)">
                             <template v-if="formatDelta(spendDelta) !== undefined">
@@ -435,7 +436,7 @@ const hasSpend = computed(() => current.value.length > 0);
                                     <td class="py-1.5 pr-3 text-right">{{ formatCompact(row.inputTokens) }}</td>
                                     <td class="py-1.5 pr-3 text-right">{{ formatCompact(row.outputTokens) }}</td>
                                     <td class="py-1.5 pr-3 text-right">{{ formatCompact(row.cacheReadTokens) }}</td>
-                                    <td class="py-1.5 text-right text-content">{{ formatUsd(row.costUsd) }}</td>
+                                    <td class="py-1.5 text-right text-content">{{ row.costKnown === false ? `≥ ` : `` }}{{ formatUsd(row.costUsd) }}</td>
                                 </tr>
                             </tbody>
                         </table>

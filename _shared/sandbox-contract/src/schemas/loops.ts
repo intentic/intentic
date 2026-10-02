@@ -186,7 +186,8 @@ export type LoopIteration = z.infer<typeof LoopIterationSchema>;
 // overspent: maxSpendUsd reached.
 // stopped: the user pressed Stop.
 // error: the loop itself failed, not a turn inside it (see `LoopIteration.outcome`).
-export const LoopStateSchema = z.enum(["running", "done", "exhausted", "stalled", "overspent", "stopped", "error"]);
+// unpriced: a spend ceiling was set but the runtime does not report cost, so the ceiling cannot be enforced.
+export const LoopStateSchema = z.enum(["running", "done", "exhausted", "stalled", "overspent", "stopped", "error", "unpriced"]);
 export type LoopState = z.infer<typeof LoopStateSchema>;
 export const LoopRecordSchema = LoopSchema.extend({
     state: LoopStateSchema.describe(

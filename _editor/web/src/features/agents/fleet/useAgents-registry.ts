@@ -1,8 +1,9 @@
+import { invalidatePushedQueries } from "../../../lib/pushInvalidation";
 import type { AgentSummary, AutomationApproval } from "@intentic/sandbox-contract";
 import { sandboxRef, sandboxScopeGuard, sandboxShallowRef, sandboxValue } from "@intentic/extension-api";
 import { errorMessage } from "@intentic/ui/async";
 import { computed, watch } from "vue";
-import { invalidateAgentTranscript } from "../../chat/transcript/agentTranscript";
+import { agentTranscriptKey } from "../../chat/transcript/agentTranscript";
 import { useChat } from "../../chat/run/useChat";
 import { reportClient } from "../../../app/clientDiagnostics";
 import { buildId } from "../../../app/buildEpoch";
@@ -246,10 +247,10 @@ const invalidateStaleWork = (agents: readonly AgentSummary[]): void => {
     for (const agent of agents) {
         if (held.get(agent.id) !== agent.status) {
             for (const queryKey of agentReviewKeys(agent.id)) {
-                void queryClient.invalidateQueries({ queryKey });
+                void invalidatePushedQueries(queryClient, { queryKey });
             }
             // Same signal invalidates the transcript too: the daemon writes a turn's record only once it settles.
-            invalidateAgentTranscript(agent.id);
+            void invalidatePushedQueries(queryClient, { queryKey: agentTranscriptKey(agent.id) });
         }
     }
 };

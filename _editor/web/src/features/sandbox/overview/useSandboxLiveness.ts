@@ -4,7 +4,6 @@ import { desyncAgents } from "../../agents/fleet/useAgents";
 import { reloadOnHotUpdate } from "../../../app/hotReload";
 import { queryClient } from "../../../lib/queryPersistence";
 import { clearPresence, presenceStreamOpened } from "../../../shell/presence/usePresence";
-import { markWorkspaceChanged } from "../../workspace/changes/live/useWorkspaceLive";
 import { classifyFailure, type ConnectionFailure, watchdogRecoveryDelay } from "../live/connection";
 import { forgetEdgeVerdict, lastEdgeVerdict } from "../client/edgeVerdict";
 import { SandboxUnaddressedError } from "../client/sandboxAuthFetch";
@@ -121,8 +120,6 @@ const stream = async (sandboxId: string): Promise<void> => {
         armWatchdog();
         // The daemon just registered this connection's blank roster entry; announce this tab's current activity.
         presenceStreamOpened(clientId);
-        // Refetch the tree after reconnect because file-change frames may be lost.
-        markWorkspaceChanged([]);
         for await (const frame of frames) {
             // Stamps, not just counts, each run of frames so a later break can be told from a daemon that never holds a
             // stream up (connection.ts); only the first frame of a run matters.

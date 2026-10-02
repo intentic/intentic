@@ -98,6 +98,7 @@ export const fileUsageStore = (path: string, now: () => number = Date.now): Usag
                         cacheReadTokens: turn.cacheReadTokens,
                         cacheCreationTokens: turn.cacheCreationTokens,
                         costUsd: turn.costUsd,
+                        ...(turn.costKnown === false ? { costKnown: false } : {}),
                         durationMs: turn.durationMs,
                     });
                     continue;
@@ -110,6 +111,8 @@ export const fileUsageStore = (path: string, now: () => number = Date.now): Usag
                     cacheReadTokens: current.cacheReadTokens + turn.cacheReadTokens,
                     cacheCreationTokens: current.cacheCreationTokens + turn.cacheCreationTokens,
                     costUsd: current.costUsd + turn.costUsd,
+                    // One unpriced turn in a group makes the whole group's cost a lower bound.
+                    ...(current.costKnown === false || turn.costKnown === false ? { costKnown: false } : {}),
                     durationMs: current.durationMs + turn.durationMs,
                 });
             }

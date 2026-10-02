@@ -23,6 +23,9 @@ export interface PushSender {
     readonly notify: (notification: PushNotification) => Promise<PushDelivery>;
     // Skips the devices of whoever is watching a screen; `notify` remains for the settings page's explicit test send.
     readonly notifyIfAway: (notification: PushNotification) => Promise<PushDelivery>;
+    // Replaces an ask that stopped waiting (answered here or elsewhere, stopped) under its tag, on exactly the devices
+    // its persistent notification reached: none at all when it never showed, so a settled ask never pushes on its own.
+    readonly withdraw: (replacement: PushNotification & { readonly tag: string }) => Promise<PushDelivery>;
 }
 
 const NOTHING_SENT: PushDelivery = { delivered: 0, failed: 0 };
@@ -53,6 +56,10 @@ export const createPushSender = (store: PushStore, logger: Logger, redact?: Push
             return { ...notification, title: "Intentic", body: "" };
         }
     };
+    // Which devices each persistent ask (`requireInteraction`) reached, by tag: the only notifications that stay on a lock
+    // screen until tapped, so the only ones a withdrawal has to replace. Kept in memory: an ask pushed before a restart
+    // stays until it is tapped, which is how every ask behaved before withdrawal existed.
+    const shown = new Map<string, Set<string>>();
     // Sends to every registered device `wanted` keeps.
     const send = async (notification: PushNotification, wanted: (channel: StoredChannel) => boolean): Promise<PushDelivery> => {
         const [keys, registered] = await Promise.all([store.keys(), store.list()]);
@@ -80,6 +87,9 @@ export const createPushSender = (store: PushStore, logger: Logger, redact?: Push
                 if (outcome.dead !== true && outcome.error !== undefined) {
                     logger.warn({ err: outcome.error, id, kind: channel.kind }, "push: send failed");
                 }
+                if (outcome.delivered && notification.requireInteraction === true && notification.tag !== undefined) {
+                    shown.set(notification.tag, (shown.get(notification.tag) ?? new Set()).add(id));
+                }
                 return outcome.delivered;
             }),
         );
@@ -91,5 +101,14 @@ export const createPushSender = (store: PushStore, logger: Logger, redact?: Push
         notify: (notification) => send(notification, () => true),
         // Presence is read as the notification is asked for, not once the store answers.
         notifyIfAway: (notification) => send(notification, awayNow()),
+        withdraw: async (replacement) => {
+            const reached = shown.get(replacement.tag);
+            if (reached === undefined) {
+                return NOTHING_SENT;
+            }
+            shown.delete(replacement.tag);
+            // Never persistent itself, whatever the caller built: a withdrawal that stayed would be the stale ask again.
+            return send({ ...replacement, requireInteraction: false }, (channel) => reached.has(channelId(channel)));
+        },
     };
 };

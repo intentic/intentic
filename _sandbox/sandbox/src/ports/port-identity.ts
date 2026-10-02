@@ -43,6 +43,16 @@ const binaryOf = (command: string | undefined): string => {
     return argv0.slice(argv0.lastIndexOf("/") + 1);
 };
 
+// A Chromium listens only for DevTools, and DevTools asks for no credential: whoever reaches the port reads the
+// profile's cookies and drives its tabs. Judged by the flag as well as the binary, so a renamed or repo-local build
+// with the flag is caught too.
+const CHROMIUM_BINARIES = new Set(["chrome", "chromium", "headless_shell"]);
+const isDevToolsCommand = (command: string, binary: string): boolean => CHROMIUM_BINARIES.has(binary) || /(?:^|\s)--remote-debugging-port=/.test(command);
+
+// Never forwarded (ports.routes.ts): a forward is public, and this port is the signed-in browser itself.
+export const isDevToolsPort = (listener: Pick<ListeningPort, "command">): boolean =>
+    listener.command !== undefined && isDevToolsCommand(listener.command, binaryOf(listener.command));
+
 // Ordered most specific first: the extension backend host is also under the install dir, so it must be matched before
 // the catch-all.
 const SANDBOX_SERVICES: readonly { readonly match: (command: string, binary: string) => boolean; readonly identity: Omit<PortIdentity, "kind"> }[] = [
@@ -112,7 +122,7 @@ const SANDBOX_SERVICES: readonly { readonly match: (command: string, binary: str
         },
     },
     {
-        match: (_command, binary) => binary === "chrome" || binary === "chromium" || binary === "headless_shell",
+        match: (command, binary) => isDevToolsCommand(command, binary),
         identity: {
             title: "Agent browser",
             purpose: "The browser your agents drive, this port is how they steer it.",

@@ -142,7 +142,8 @@ reads them and approves or declines. The command answers like every ask: exit 0 
 already has the approved steps, exit 1 when refused or declined, and exit 3 while it waits, which is the usual
 case, since approving is followed by a rebuild. Once the container runs the approved image, the sandbox
 continues this conversation by itself: do not poll, and do not propose the same tool twice (`needs` lists what
-is still waiting).
+is still waiting). Exit 2 means no verdict was reached: read the error on stdout and correct the command or
+restore the daemon before retrying.
 
 The owner can also take a tool out again (**Remove from environment** on the Environment card). A draft the owner
 already answered (approved, removed or declined) is not proposed again when a copy of it lands with your work, so

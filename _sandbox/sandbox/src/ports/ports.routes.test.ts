@@ -147,3 +147,28 @@ test("ports.list names the conversation's job on a port an agent's turn left run
         rmSync(job.dir, { recursive: true, force: true });
     }
 });
+
+// A DevTools port is the whole browser: anyone who reaches it reads every cookie and drives every tab of whichever
+// account that Chromium is signed into, with no credential asked. Forwarding is what makes a port public, so the Ports
+// panel listing one must never be a click away from handing a signed-in session to the internet.
+test("ports.forward refuses a Chromium DevTools port, wherever its process runs and whatever it is called", async () => {
+    const chromium = "/opt/chromium/chrome --no-sandbox --user-data-dir=/work/.intentic/local/browser/identity --remote-debugging-port=41234";
+    const portForwards = createPortForwards(portSlotsFromToken("tok"), async () => "http");
+    const client = routesClient(
+        portsContract,
+        createPortsRoutes(
+            portsDeps({
+                portForwards,
+                scanPorts: async () => [
+                    { port: 41_234, host: "127.0.0.1", forwardable: true, pid: 9, command: chromium },
+                    // The same flag on a Chromium a repo's own test runner started still opens the same door.
+                    { port: 41_235, host: "127.0.0.1", forwardable: true, pid: 10, command: "/usr/lib/chromium/chromium --remote-debugging-port=41235", cwd: `${WORKSPACE_ROOT}/app` },
+                ],
+            }),
+        ),
+    );
+    expect(await errorCode(client.forward({ port: 41_234 }))).toBe("BAD_REQUEST");
+    expect(await errorCode(client.forward({ port: 41_235 }))).toBe("BAD_REQUEST");
+    expect(portForwards.slotOf(41_234)).toBeUndefined();
+    expect(portForwards.slotOf(41_235)).toBeUndefined();
+});

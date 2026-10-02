@@ -18,6 +18,7 @@ import type { WorkspaceScopeDeps } from "../workspace/layout/workspace-scope.js"
 import type { WorkspacePaths } from "../workspace/workspace.js";
 import type { ConversationActors } from "./actor/conversation-actors.js";
 import { type ParkedCards, parkedCards } from "./actor/parked-cards.js";
+import { awaitingResolved } from "../push/notifications.js";
 import { createLandedPresences } from "./land/landed-presence.js";
 import { type AgentOrigins, createAgentOrigins } from "./land/origins.js";
 import { createLandStandings } from "./land/standing.js";
@@ -125,12 +126,21 @@ export const createConversationsSlice = ({ historyRoot, workspace, logger, perf,
                     : inLogContext({ conversationId: input.conversationId }, streamAgent(whole(), input, signal)),
             ),
             conversations,
-            // The conversation-wide yes answered on any permission card, read from the grant store as each card parks.
-            cards: parkedCards(conversations, {
-                allowed: (conversationId) => whole().conversationGrants.everythingAllowed(conversationId),
-                allow: (conversationId, by) => whole().conversationGrants.allowEverything(conversationId, by),
-                failed: (cause) => logger.warn({ err: cause }, "conversation grants: allow everything could not be read or kept"),
-            }),
+            // The conversation-wide yes answered on any permission card, read from the grant store as each card parks; and
+            // a settled card's "waiting on you" push replaced wherever it showed (push.ts `withdraw`).
+            cards: parkedCards(
+                conversations,
+                {
+                    allowed: (conversationId) => whole().conversationGrants.everythingAllowed(conversationId),
+                    allow: (conversationId, by) => whole().conversationGrants.allowEverything(conversationId, by),
+                    failed: (cause) => logger.warn({ err: cause }, "conversation grants: allow everything could not be read or kept"),
+                },
+                (requestId, conversationId) => {
+                    if (conversationId !== undefined) {
+                        void whole().pushSender.withdraw(awaitingResolved(conversationId, `awaiting-${requestId}`));
+                    }
+                },
+            ),
             agentWorktrees,
             turnJournal: sqliteTurnJournal(conversationsDb),
             // Beside the turn journal, for the same reason: it must outlive a container recreate.

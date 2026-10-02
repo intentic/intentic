@@ -9,10 +9,10 @@ import { ZoneSchema } from "../time/zone.js";
 // (non-zero exit skips the wake), then runs one turn with the prompt. The manifest is user config; run history is
 // daemon-recorded.
 
-// schedule: fires on its cron
-// once: fires a single time at `at`, then retires itself (the daemon switches it off as it fires). Unlike a cron, a
-// fire missed while the sandbox was down still lands, late, on the next poll: a recurring wake that skips a beat has
-// another one coming, a one-time wake has nothing behind it
+// schedule: fires on its cron. Moments missed while the sandbox was down fire once, late, as the daemon starts, however
+// many there were: a recurring wake is owed its work, not a backlog
+// once: fires a single time at `at`, then retires itself (the daemon switches it off as it fires). A fire missed while
+// the sandbox was down still lands, late, on the next poll
 // event: fires when an external system POSTs /automations/{id}/fire; its auth token lives outside the manifest
 // (.intentic/secrets/doors.json), never in this versioned, widely-readable file
 // listener: fires from a realtime source's own connection (an extension's gateway), no cron, no token, never reachable

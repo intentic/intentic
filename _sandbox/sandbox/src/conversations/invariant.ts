@@ -7,15 +7,16 @@ import type { AgentWorktrees } from "./worktrees/worktrees.js";
 import { type StrayStanding, strayStandings } from "./worktrees/stray-work.js";
 
 // Two independent records of whether a conversation is running (the run each actor holds, the conversation actors'
-// own phase) that must agree. Checks only registry-idle-while-turn-live, the direction a live run's own start time
-// can verify.
+// own phase) that must agree, checked both ways: a live run on an idle card, and a running phase with no live run
+// behind it. Each side is aged by its own start stamp (the run's, the phase's `startedAt`), so neither fires on a turn
+// one tick from registering. An alert, never a heal: settling a phase by hand could free a turn that is in fact alive.
 
 // Long enough that no ordinary begin is still in flight; short enough to catch a stuck card within one sweep.
 const REGISTRY_GRACE_MS = 10_000;
 
 export interface FleetRegistryDeps {
     readonly agents: AgentsRegistry;
-    readonly conversations: Pick<ConversationActors, "running" | "holdings">;
+    readonly conversations: Pick<ConversationActors, "running" | "holdings" | "state">;
     readonly agentWorktrees: AgentWorktrees;
     readonly live?: () => readonly { readonly conversationId: string; readonly startedAt: number }[];
     readonly now?: () => number;
@@ -69,7 +70,8 @@ export const checks = ({
         name: "live-turns-are-running-on-the-board",
         on: ["sweep", "turn-settled"],
         run: ({ fail }) => {
-            const due = live().filter((run) => now() - run.startedAt > REGISTRY_GRACE_MS);
+            const runs = live();
+            const due = runs.filter((run) => now() - run.startedAt > REGISTRY_GRACE_MS);
             const known = new Set(agents.ids());
             const unknown = due.filter((run) => !known.has(run.conversationId)).map((run) => run.conversationId);
             if (unknown.length > 0) {
@@ -77,13 +79,21 @@ export const checks = ({
             }
             const idle = due.filter((run) => !conversations.running(run.conversationId)).map((run) => run.conversationId);
             if (idle.length > 0) {
-                fail(
+                return fail(
                     `${idle.length} live turn(s) read as not running on the fleet board, the card shows idle while the turn spends: ${idle.join(", ")}`,
+                );
+            }
+            // The mirror: a phase stuck at running answers every `begin` busy, so the conversation's queue never drains.
+            const alive = new Set(runs.map((run) => run.conversationId));
+            const stuck = [...known].filter((id) => {
+                const phase = conversations.state(id)?.phase;
+                return phase?.kind === "running" && now() - phase.startedAt > REGISTRY_GRACE_MS && !alive.has(id);
+            });
+            if (stuck.length > 0) {
+                fail(
+                    `${stuck.length} conversation(s) read as running on the fleet board with no live turn behind them, so every new message queues behind nothing: ${stuck.join(", ")}`,
                 );
             }
         },
     },
 ];
-
-// Deferred: the mirror direction, a registry `running` with no live turn, isn't checked, since the registry keeps no
-// timestamp of when it started, so a mismatch can't be told from a turn one tick from registering.

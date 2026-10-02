@@ -1,5 +1,5 @@
 import { portsContract, portUrl } from "@intentic/sandbox-contract";
-import { identifyPort } from "./port-identity.js";
+import { identifyPort, isDevToolsPort } from "./port-identity.js";
 import { extensionProcessIndex } from "../extensions/extension-processes.js";
 import type { ExtensionHost } from "../extensions/installed-extensions.js";
 import { implement, ORPCError } from "@orpc/server";
@@ -60,6 +60,13 @@ export const createPortsRoutes = (services: PortsRoutesDeps) => {
             const listener = (await services.scanPorts()).find(({ port }) => port === input.port);
             if (listener === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: `nothing is listening on port ${input.port}` });
+            }
+            // Refused outright, not left to the person's judgement: the row reads "Agent browser", which says nothing
+            // about the forward handing every cookie of a signed-in account to whoever has the URL.
+            if (isDevToolsPort(listener)) {
+                throw new ORPCError("BAD_REQUEST", {
+                    message: `port ${input.port} is a browser's DevTools port: it drives that browser and its signed-in sessions, so it is never forwarded`,
+                });
             }
             if (!listener.forwardable) {
                 throw new ORPCError("BAD_REQUEST", { message: `port ${input.port} is bound to a loopback address the preview proxy can't reach` });

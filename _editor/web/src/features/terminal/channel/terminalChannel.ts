@@ -1,4 +1,5 @@
 import type { TerminalClientMessage, TerminalServerMessage } from "@intentic/sandbox-contract/browser-wire";
+import { z } from "zod";
 import type { SocketLike } from "./streamSocket";
 
 // A terminal's socket, a WebSocket whichever way it rides: the browser's own over TCP, or one spoken on a stream of the
@@ -22,9 +23,17 @@ export interface TerminalChannel {
 // A socket's readyState once it may be written to, as WebSocket.OPEN names it.
 const OPEN = 1;
 
+// Validate at the socket boundary so newer message kinds and malformed grids cannot disturb xterm.
+const cells = z.number().int().min(1).max(65_535);
+const ServerMessageSchema: z.ZodType<TerminalServerMessage> = z.discriminatedUnion(`type`, [
+    z.object({ type: z.literal(`pong`) }),
+    z.object({ type: z.literal(`exit`), code: z.number().int(), reason: z.string().optional() }),
+    z.object({ type: z.literal(`grid`), cols: cells, rows: cells }),
+]);
+
 const parse = (text: string): TerminalServerMessage | undefined => {
     try {
-        return JSON.parse(text) as TerminalServerMessage;
+        return ServerMessageSchema.safeParse(JSON.parse(text)).data;
     } catch {
         // allow(silent-catch): a message that is not JSON is no message; the channel reads on.
         return undefined;

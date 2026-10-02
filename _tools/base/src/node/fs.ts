@@ -2,6 +2,7 @@ import { access, chmod, mkdir, open, rename, rm, writeFile } from "node:fs/promi
 import { createServer } from "node:net";
 import { basename, dirname, join, resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
+import { errnoCode } from "../errors.js";
 
 // Reachability, not shape: `access`, so a path this process cannot reach answers false, the same as a missing one.
 export const pathExists = async (path: string): Promise<boolean> =>
@@ -9,6 +10,18 @@ export const pathExists = async (path: string): Promise<boolean> =>
         () => true,
         () => false,
     );
+
+// Three answers where pathExists gives two: only ENOENT says the path is gone. Any other failure (EACCES, EIO, a mount
+// not up yet, and ENOTDIR too, unlike isMissing: a file standing where a directory belongs is damage, not an absence)
+// says nothing about it, so a caller that archives or reaps on "absent" must read it as unknown.
+export const pathPresence = async (path: string): Promise<"present" | "absent" | "unknown"> => {
+    try {
+        await access(path);
+        return "present";
+    } catch (error) {
+        return errnoCode(error) === "ENOENT" ? "absent" : "unknown";
+    }
+};
 
 // Keyed by resolved path, so two handles on one file share one queue; holds only paths with work queued.
 const queues = new Map<string, Promise<void>>();

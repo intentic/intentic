@@ -37,6 +37,10 @@ flowchart LR
   the install lane. The command gate every runtime consults decides it (`guard/command-guard.ts`,
   `agent/providers/project-installs.ts`), from what `agent/run/turn/turn-safety.ts` set on the turn.
   When main's CI fails, `ci/main-fixer.ts` gives the failing streak one fix agent and sends it every later failure.
+- Codex sends steering after `turn/started` acknowledges the active turn. A refused message becomes a follow-up
+  on the same thread once that turn settles; this preserves accepted input even when completion wins the race
+  (2026-10-01). Final completion closes steering admission before yielding terminal frames, while planning keeps
+  the queue for execution. Stop sends `turn/interrupt`, with a process kill after three seconds if it does not settle.
 - Archive is sticky: only a person's message un-archives a conversation. A turn the daemon starts itself (a retry,
   a nudge, an automation's thread) is refused on an archived one (`conversations/actor/conversation-decide.ts`), and a
   thread whose conversation was archived opens a fresh one instead.
@@ -178,6 +182,10 @@ Main groups under `src/`:
 | Test support | `harness/` `fences/` `e2e/` |
 
 A slice's test fake sits beside its slice as `<slice>.testing.ts` (for example `auth/auth-slice.testing.ts`), along with the in-memory stores it holds. `harness/route-services.testing.ts` spreads those fakes into one `Services`, so a new service gets its fake in the slice it joins.
+
+The asking CLIs (`capabilities`, `secrets`, `environment`, `grants`, `needs`) write errors to stdout.
+A need verdict exits 0 when met, 1 when refused, or 3 while open; misuse, HTTP/transport failures,
+unreadable answers and crashes exit 2 because no verdict was reached.
 
 ## Commands
 

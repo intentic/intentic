@@ -183,26 +183,36 @@ const interruptedTurnRows = async (
         return [] as TranscriptRow[];
     });
     const [opening, ...rest] = rows;
-    return opening === undefined ? [] : [opening.role === "user" ? { ...opening, sentAt, messageId: messageIdOf(turn) } : opening, ...rest];
+    if (opening === undefined) {
+        return [];
+    }
+    if (opening.role !== "user") {
+        return rows;
+    }
+    // A re-run's session opens on its resume note and the repeated request, which is nobody's new message: its notice
+    // stands in, as when it settles (openingRows).
+    const resume = parseQueuedPrompt(turn.prompt).resume;
+    return [resume?.kind === "notice" ? resumeNoticeRow(resume) : { ...opening, sentAt, messageId: messageIdOf(turn) }, ...rest];
 };
 
 // Writes a turn the daemon died under, at the boot that still finds its journal entry (turn-resume.ts); prefers
 // recovered session rows over the prompt-alone fallback used when nothing is recoverable. Never throws; a failed write
-// keeps the journal entry for the next boot.
+// keeps the journal entry for the next boot. `resuming`: the boot re-runs it next, whose own `restart` notice says what
+// happened, so the interruption's notice would only contradict it; the turn's rows are still owed, since the re-run's
+// prompt carries a resume note and records no user bubble of its own (openingRows).
 export const recordInterruptedTurn = async (
     services: Pick<Services, "transcripts" | "sessions" | "workspace" | "logger">,
     turn: AgentTurn & { readonly conversationId: string },
     // Session the dead turn last reported, off its journal entry; the registry entry may never have gotten it.
     sessionId: string | undefined,
     sentAt: number,
+    resuming = false,
 ): Promise<boolean> => {
     const recovered = await interruptedTurnRows(services, turn, sessionId, sentAt);
     const written = recovered.length > 0 ? recovered : openingRows(turn, services.workspace.root, sentAt);
+    const closing: TranscriptRow[] = resuming ? [] : [{ role: "notice", text: RESTART_INTERRUPTED, noticeCode: noticeCode({ code: "restartInterrupted" }) }];
     try {
-        await services.transcripts.append(transcriptAgentOf(turn), [
-            ...written,
-            { role: "notice", text: RESTART_INTERRUPTED, noticeCode: noticeCode({ code: "restartInterrupted" }) },
-        ]);
+        await services.transcripts.append(transcriptAgentOf(turn), [...written, ...closing]);
         return true;
     } catch (error) {
         services.logger.warn({ err: error, conversationId: turn.conversationId }, "interrupted turn: transcript append failed");

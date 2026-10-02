@@ -42,11 +42,16 @@ export const UsageTurnSchema = z.object({
     turns: z
         .number()
         .describe("The provider's own count for the request, since one exchange can be several under the hood. One when it reported none."),
-    inputTokens: z.number().describe("Tokens sent."),
+    inputTokens: z.number().describe("Uncached input tokens, excluding cache reads and cache writes."),
     outputTokens: z.number().describe("Tokens received."),
     cacheReadTokens: z.number().describe("Tokens served from cache, which cost less."),
     cacheCreationTokens: z.number().describe("Tokens written to cache, which cost more up front and less afterwards."),
     costUsd: z.number().describe("What it cost, in dollars."),
+    // Whether `costUsd` was reported by the vendor (true or absent) or is zero only because the vendor does not price
+    // its calls (false). Old rows before this field was added carry no marker, which readers treat as known: they
+    // already recorded a real number. Runtimes like Codex and Cursor report tokens but no cost, so their turns land
+    // with `costUsd: 0, costKnown: false` rather than silently claiming they were free.
+    costKnown: z.boolean().optional().describe("False when the vendor did not report a cost and the recorded zero is a placeholder, not a price. Absent or true means the cost is real."),
     durationMs: z.number().describe("How long it took, in milliseconds."),
     // Arm of the search-teaching experiment; stable per conversation. Absent means unmeasured.
     iqSearchArm: z.boolean().optional(),
@@ -126,11 +131,14 @@ export const UsageRollupRowSchema = z.object({
     harness: z.string().describe("Which agentic loop."),
     conversationId: z.string().optional().describe("Which conversation."),
     turns: z.number().describe("Turns in this group."),
-    inputTokens: z.number().describe("Tokens sent."),
+    inputTokens: z.number().describe("Uncached input tokens, excluding cache reads and cache writes."),
     outputTokens: z.number().describe("Tokens received."),
     cacheReadTokens: z.number().describe("Tokens served from cache."),
     cacheCreationTokens: z.number().describe("Tokens written to cache."),
     costUsd: z.number().describe("What the group cost, in dollars."),
+    // True when every turn in the group reported its cost; false when at least one did not, making `costUsd` a
+    // lower bound rather than the true total. Absent on rollups from before this field existed.
+    costKnown: z.boolean().optional().describe("False when the cost includes unpriced turns and is a lower bound rather than the true total."),
     durationMs: z.number().describe("Time spent, in milliseconds."),
 });
 export type UsageRollupRow = z.infer<typeof UsageRollupRowSchema>;

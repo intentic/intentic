@@ -23,7 +23,9 @@ jest.mock("../client/sandboxClient", () => ({
 
 import { queryClient } from "../../../lib/queryPersistence";
 import { viewsOnScreen } from "../../../testing/viewsOnScreen";
-import { onReposChanged } from "../../../extension-host/repoEvents";
+import { onRefsChanged, onReposChanged } from "../../../extension-host/repoEvents";
+import { onRuntimeChanged } from "./runtimeEvents";
+import { derivedEpochOf, workspaceChangeMark } from "../../workspace/changes/live/useWorkspaceLive";
 import { applySystemEvent } from "./systemEvents";
 
 // These views hold no timer of their own, so this frame is their entire live feed; right views refresh, wrong ones are
@@ -106,5 +108,29 @@ it(`re-asks every runtime-bound view on a new connection, once each`, async () =
         expect(keys.map((key) => [key[0], views.reads(key)])).toEqual(keys.map((key) => [key[0], 1]));
     } finally {
         views.unmount();
+    }
+});
+
+
+it(`reannounces every push-only channel after a disconnected gap`, () => {
+    const runtime = jest.fn();
+    const stopRuntime = onRuntimeChanged([`hosts`, `future-domain`], runtime);
+    const refs = jest.fn();
+    const repos = jest.fn();
+    const stopRefs = onRefsChanged(refs);
+    const stopRepos = onReposChanged(repos);
+    const before = derivedEpochOf(`rendered.pdf`);
+    const mark = workspaceChangeMark();
+    try {
+        applySystemEvent({ kind: `hello`, workspaceId: `ws-a`, routes: [], build: `0.0.0:1`, boot: undefined }, SANDBOX);
+        expect(runtime).toHaveBeenCalledTimes(1);
+        expect(refs).toHaveBeenCalledWith([]);
+        expect(repos).toHaveBeenCalledWith([]);
+        expect(derivedEpochOf(`rendered.pdf`)).toBeGreaterThan(before);
+        expect(workspaceChangeMark()).toBe(mark + 1);
+    } finally {
+        stopRuntime();
+        stopRefs.dispose();
+        stopRepos.dispose();
     }
 });

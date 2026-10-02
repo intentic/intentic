@@ -126,13 +126,20 @@ export const dispatchListenerMessage = async (
     debounceMs = DEBOUNCE_MS,
     // Builds a live reply sink per matched automation; undefined or no return means the agent replies normally.
     makeStream?: (automationId: string) => TurnStream | undefined,
+    // The sender's own say over which automations may hear it, asked after the trigger's filters admit the message.
+    hears: (trigger: Extract<Trigger, { kind: "listener" }>) => boolean = () => true,
 ): Promise<string[]> => {
     const line = JSON.stringify(message);
     const matched: string[] = [];
     // Whether the message reached any automation's filters, admitted or not: the roster records who tried, once.
     let reached = false;
     for (const automation of await services.automations.list()) {
-        if (!automation.enabled || automation.trigger.kind !== "listener" || !triggerAdmits(automation.trigger, message)) {
+        if (
+            !automation.enabled ||
+            automation.trigger.kind !== "listener" ||
+            !triggerAdmits(automation.trigger, message) ||
+            !hears(automation.trigger)
+        ) {
             continue;
         }
         reached = true;

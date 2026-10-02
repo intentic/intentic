@@ -1,3 +1,4 @@
+import { invalidatePushedQueries } from "../../../lib/pushInvalidation";
 import { resetSandboxScope } from "@intentic/extension-api";
 import { fileBoundQueryKeys, staleQueryKeys, staleRuntimeQueryKeys, type SystemEvent } from "@intentic/sandbox-contract";
 import { adoptProjectScope } from "../../../app/projectScope";
@@ -35,17 +36,35 @@ const refreshChanges = throttleTrailing(() => {
         return;
     }
     for (const key of pushedKeys([`git`, `changes`])) {
-        void queryClient.invalidateQueries({ queryKey: key });
+        void invalidatePushedQueries(queryClient, { queryKey: key });
     }
     // A review compares the agent's branch against this tree, not just its own commits, so tree changes invalidate it
     // too, whole.
     for (const key of agentReviewPrefixes) {
-        void queryClient.invalidateQueries({ queryKey: key });
+        void invalidatePushedQueries(queryClient, { queryKey: key });
     }
 }, CHANGES_REFRESH_MS);
 
 // Whether a replaced workspace is the one in view, whose scope starts over; the storage sweep runs for any sandbox.
 const { activeSandboxId } = useSandbox();
+
+// Every frame kind must decide whether a missed frame needs an announcement beyond query invalidation. Snapshot
+// channels reconcile through the connection's snapshots and reads; these channels hold plain refs or extension-owned state.
+const reconnectChannels = {
+    hello: undefined,
+    heartbeat: undefined,
+    boot: undefined,
+    presence: undefined,
+    accountUsage: undefined,
+    providerRefusal: undefined,
+    agents: undefined,
+    runtimeChanged: () => emitRuntimeChanged([]),
+    reposChanged: () => emitReposChanged([]),
+    refsChanged: () => emitRefsChanged([]),
+    derivedChanged: () => markDerivedChanged([]),
+    workspaceChanged: () => emitFilesChanged([]),
+    treeChanged: () => markWorkspaceChanged([]),
+} satisfies Record<SystemEvent["kind"], (() => void) | undefined>;
 
 // A (re)connection, which is the one frame that reconciles rather than invalidates: everything pushed-only has to be
 // refetched here, since frames that landed while this browser was away are simply gone.
@@ -78,18 +97,18 @@ const applyHello = (event: Extract<SystemEvent, { kind: `hello` }>, sandboxId: s
     // Between events a cached read is taken as true (staleTime, queryPersistence), which makes a (re)connect the one
     // moment that has to distrust every one of them: frames that landed while this browser was away are gone, and a
     // cache hydrated from disk can be hours old. What is on screen refetches now; the rest is marked for its next
-    // mount. This covers every pushed-only (file- and runtime-bound) key too; naming one again would cancel its read
-    // in flight and start another, which the daemon answers twice. Ahead of the reset below, so a replaced workspace
-    // still gets the stronger treatment.
-    void queryClient.invalidateQueries({ refetchType: `active` });
+    // mount. This covers file- and runtime-bound keys too; the announcements below reconcile state outside this
+    // cache. Ahead of the reset below, so a replaced workspace still gets the stronger treatment.
+    void invalidatePushedQueries(queryClient, { refetchType: `active` });
     // A rebuild leaves the scope alone, since `/work` is unchanged; either way the cached reads go.
     if (replaced || rebuilt) {
         // Reset, not remove, so active observers refetch rather than render empty.
         void queryClient.resetQueries({ predicate: sandboxQueryPredicate(sandboxId) });
     }
-    // Catches views an invalidation can't reach (nothing mounted); an empty batch is this channel's "something changed,
-    // unspecified" (fileEvents.ts).
-    emitFilesChanged([]);
+    // An empty batch means "something changed, unspecified" through each channel's normal announcement path.
+    for (const announce of Object.values(reconnectChannels)) {
+        announce?.();
+    }
 };
 
 // Paths the daemon saw change on disk, or the unnamed batch that stands for "something moved and I cannot say what".
@@ -99,7 +118,7 @@ const applyWorkspaceChanged = (event: Extract<SystemEvent, { kind: `workspaceCha
     // An empty path list means the daemon truncated the batch, so it invalidates every file-bound key, not none.
     const stale = event.paths.length === 0 ? fileBoundQueryKeys(contributedFileBindings()) : staleQueryKeys(event.paths, contributedFileBindings());
     for (const key of stale.flatMap((name) => pushedKeys([name]))) {
-        void queryClient.invalidateQueries({ queryKey: key });
+        void invalidatePushedQueries(queryClient, { queryKey: key });
     }
     // Same frame, announced for rail badges with no mounted query; sent even for an empty batch, the largest change
     // there is.
@@ -152,7 +171,7 @@ export const applySystemEvent = (event: SystemEvent, sandboxId: string): void =>
             // No roster in the frame: invalidation only reaches queries someone is observing, so an idle tab pays
             // nothing.
             for (const key of staleRuntimeQueryKeys(event.domains).flatMap(pushedKeys)) {
-                void queryClient.invalidateQueries({ queryKey: key });
+                void invalidatePushedQueries(queryClient, { queryKey: key });
             }
             // Same frame, announced for readers that hold plain refs instead of queries (pairing cards), so they need
             // no poll.
@@ -161,7 +180,7 @@ export const applySystemEvent = (event: SystemEvent, sandboxId: string): void =>
         case `reposChanged`:
             // Watcher never sees `.git` paths, so no workspaceChanged batch covers this; the daemon diffs its own repo
             // discovery.
-            void queryClient.invalidateQueries({ queryKey: rpcPrefix(`panels.list`) });
+            void invalidatePushedQueries(queryClient, { queryKey: rpcPrefix(`panels.list`) });
             // Extensions own their own caches; this only announces the new set (see extension-host/repoEvents).
             emitReposChanged(event.repos);
             return;
@@ -171,7 +190,7 @@ export const applySystemEvent = (event: SystemEvent, sandboxId: string): void =>
             // - the Checkpoints timeline
             // - open editor buffers, only if the worktree itself moved
             refreshChanges();
-            void queryClient.invalidateQueries({ queryKey: rpcPrefix(`history.list`) });
+            void invalidatePushedQueries(queryClient, { queryKey: rpcPrefix(`history.list`) });
             if (worktreeMovedRecently()) {
                 dropEditBuffers();
             }

@@ -1,5 +1,5 @@
 import type { GitHost } from "../capabilities/cli/git-access.js";
-import { ciClientFor, type FetchFn, githubRun, githubStatus, gitlabHookRun, gitlabRun, gitlabStatus } from "./providers.js";
+import { ciClientFor, CiRateLimited, type FetchFn, githubRun, githubStatus, gitlabHookRun, gitlabRun, gitlabStatus } from "./providers.js";
 import type { CiProject } from "./projects.js";
 
 const githubProject: CiProject = {
@@ -563,4 +563,68 @@ test("a gitlab fix reads its failed jobs once for all three readings, and never 
 
     await client.failedSteps(gitlabProject, 84);
     expect(listCalls(calls)).toBe(2);
+});
+
+// The rate-limit refusal a call ended in; anything else fails the test with what it was.
+const limitedBy = async (call: Promise<unknown>): Promise<CiRateLimited> => {
+    try {
+        await call;
+    } catch (error) {
+        if (error instanceof CiRateLimited) {
+            return error;
+        }
+        throw error;
+    }
+    throw new Error("the call was not refused");
+};
+
+// GitHub answers a spent limit with the 403 a token without rights gets too; only its headers tell them apart.
+test("a spent rate limit is a typed refusal carrying when it lifts, and the account is not asked again until then", async () => {
+    const lifts = Date.now() + 3_600_000;
+    let asked = 0;
+    // SAFETY: the client calls its transport with (url, init) only, which this answers whatever they are.
+    const limited = (async () => {
+        asked += 1;
+        return new Response(`{"message":"API rate limit exceeded"}`, {
+            status: 403,
+            headers: { "x-ratelimit-remaining": "0", "x-ratelimit-reset": String(Math.floor(lifts / 1000)) },
+        });
+    }) as FetchFn;
+    const client = ciClientFor("github", limited);
+    expect((await limitedBy(client.listRuns(githubProject, 5))).until).toBe(Math.floor(lifts / 1000) * 1000);
+    // The poller, the hook reconcile and the board's backfill all go through this client: none of them asks.
+    await expect(ciClientFor("github", limited).ensureHook(githubProject, { url: "https://x/ci/webhook/github", secret: "s" })).rejects.toBeInstanceOf(
+        CiRateLimited,
+    );
+    expect(asked).toBe(1);
+});
+
+test("a 403 that is not a rate limit stays a refusal, and a 429's Retry-After is when the limit lifts", async () => {
+    // SAFETY: as above, the transport is called with (url, init) only.
+    const forbidden = (async () => new Response(`{"message":"Resource not accessible"}`, { status: 403 })) as FetchFn;
+    await expect(ciClientFor("github", forbidden).listRuns(githubProject, 5)).rejects.toThrow("github runs list failed (403)");
+    await expect(ciClientFor("github", forbidden).listRuns(githubProject, 5)).rejects.not.toBeInstanceOf(CiRateLimited);
+
+    const before = Date.now();
+    // SAFETY: as above.
+    const busy = (async () => new Response("Retry later", { status: 429, headers: { "retry-after": "120" } })) as FetchFn;
+    const { until } = await limitedBy(ciClientFor("gitlab", busy).listRuns(gitlabProject, 5));
+    // Bounded by the two clock reads around the call: the 120 s is counted from when the answer came.
+    expect(until).toBeGreaterThanOrEqual(before + 120_000);
+    expect(until).toBeLessThanOrEqual(Date.now() + 120_000);
+});
+
+test("a repository's id, path and default branch are the forge's own word, on both forges", async () => {
+    const calls: { method: string; url: string }[] = [];
+    const github = ciClientFor(
+        "github",
+        scriptedFetch({ "GET /repos/acme/web": { id: 99, full_name: "acme/web-next", default_branch: "develop" } }, calls),
+    );
+    expect(await github.repository(githubProject)).toEqual({ id: 99, path: "acme/web-next", defaultBranch: "develop" });
+    const gitlab = ciClientFor(
+        "gitlab",
+        scriptedFetch({ "GET /projects/group%2Fapp": { id: 7, path_with_namespace: "group/app", default_branch: null } }, calls),
+    );
+    expect(await gitlab.repository(gitlabProject)).toEqual({ id: 7, path: "group/app", defaultBranch: undefined });
+    expect(calls.map(({ url }) => url)).toEqual(["https://api.github.com/repos/acme/web", "https://gitlab.example.com/api/v4/projects/group%2Fapp"]);
 });
