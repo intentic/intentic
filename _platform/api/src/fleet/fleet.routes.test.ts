@@ -2,7 +2,9 @@ import { createHash } from "node:crypto";
 import type { PrismaClient } from "@intentic/prisma";
 import { Hono } from "hono";
 import type { Logger } from "pino";
+import { z } from "zod";
 import { type Config, configSchema } from "../config.js";
+import { decryptSecret } from "../crypto.js";
 import { testIngressConfig } from "../testing.js";
 import { fleetHttpRoutes } from "./fleet.routes.js";
 
@@ -154,6 +156,9 @@ it(`provisions a row and a claim, seeding the definition it was handed`, async (
     // The claim carries the code and an encrypted payload; the definition rides inside that payload, never in the clear.
     expect(updates[0]).toMatchObject({ setupCode: body.setupCode, setupCodeClaimedAt: null });
     expect(JSON.stringify(updates[0])).not.toContain(`git@x:y.git`);
+    // The daemon base64-decodes its seed, so raw TOML here would boot a sandbox that cannot read its own definition.
+    const payload = z.record(z.string(), z.string()).parse(JSON.parse(decryptSecret(config, z.string().parse(updates[0]?.[`setupPayload`]))));
+    expect(Buffer.from(payload[`SANDBOX_DEFINITION_SEED`] ?? ``, `base64`).toString(`utf8`)).toBe(`[workspace]\nremote = "git@x:y.git"\n`);
 });
 
 it(`refuses an eleventh sandbox in an hour rather than letting a loop fill the account`, async () => {

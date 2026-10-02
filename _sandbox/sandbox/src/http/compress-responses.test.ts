@@ -13,6 +13,7 @@ app.get("/big", (c) => c.json(big));
 app.get("/small", (c) => c.json({ ok: true }));
 app.get("/events", (c) => c.body("data: one\n\n".repeat(200), 200, { "content-type": "text/event-stream" }));
 app.get("/raw", (c) => c.body("plain text ".repeat(500), 200, { "content-type": "text/plain" }));
+app.get("/held", (c) => c.body(JSON.stringify(big), 200, { "content-type": "application/json", "cache-control": "no-store, no-transform" }));
 
 const get = async (path: string, acceptEncoding?: string): Promise<Response> =>
     app.request(path, acceptEncoding === undefined ? {} : { headers: { "accept-encoding": acceptEncoding } });
@@ -61,5 +62,12 @@ describe("compressResponses", () => {
     test("an event stream and file bytes are never encoded, however large", async () => {
         expect((await get("/events", "zstd")).headers.get("content-encoding")).toBeNull();
         expect((await get("/raw", "zstd")).headers.get("content-encoding")).toBeNull();
+    });
+
+    test("a JSON answer marked no-transform leaves as written, since reading it whole would hold a streamed verdict", async () => {
+        const held = await get("/held", "gzip, br");
+        expect(held.headers.get("content-encoding")).toBeNull();
+        expect(held.headers.get("vary")).toBeNull();
+        expect(await held.json()).toEqual(big);
     });
 });

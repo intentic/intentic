@@ -58,7 +58,9 @@ const verdictStream = (verdict: Promise<GateVerdict>, hangUp: () => void, heartb
             hangUp();
         },
     });
-    return new Response(body, { status: 200, headers: { "content-type": "application/json; charset=UTF-8" } });
+    // no-transform: compressing means reading the body whole, which would hold the headers and every heartbeat until the
+    // verdict, here (compress-responses.ts) and at an edge proxy alike.
+    return new Response(body, { status: 200, headers: { "content-type": "application/json; charset=UTF-8", "cache-control": "no-store, no-transform" } });
 };
 
 export const createGateRoute =

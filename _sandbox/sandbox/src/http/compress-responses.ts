@@ -4,7 +4,9 @@ import type { MiddlewareHandler } from "hono";
 
 // Compresses the daemon's JSON answers for the browser, which otherwise cross the tunnel at full size with every byte
 // waiting on its flow-control window. JSON only: file bytes keep their Content-Length for progress, and an event stream
-// must reach the browser frame by frame.
+// must reach the browser frame by frame. A JSON answer marked `Cache-Control: no-transform` is a stream too (the release
+// gate holds its verdict open with heartbeat spaces), so it leaves as written: reading it whole would hold its headers
+// until the verdict, and an edge proxy gives up on an origin silent that long (Cloudflare's 524 at ~100 s).
 
 // Below this an answer fits a packet or two either way, and encoding costs more than it saves.
 export const MIN_COMPRESSED_BYTES = 1024;
@@ -35,10 +37,18 @@ export const codingFor = (acceptEncoding: string | undefined): Coding | undefine
 
 const isJson = (contentType: string | null): boolean => contentType !== null && /^application\/([\w.+-]*\+)?json\b/iu.test(contentType);
 
+const forbidsTransform = (cacheControl: string | null): boolean => cacheControl !== null && /(^|,)\s*no-transform\s*(,|$)/iu.test(cacheControl);
+
 export const compressResponses = (): MiddlewareHandler => async (c, next) => {
     await next();
     const response = c.res;
-    if (c.req.method === "HEAD" || response.body === null || response.headers.has("content-encoding") || !isJson(response.headers.get("content-type"))) {
+    if (
+        c.req.method === "HEAD" ||
+        response.body === null ||
+        response.headers.has("content-encoding") ||
+        !isJson(response.headers.get("content-type")) ||
+        forbidsTransform(response.headers.get("cache-control"))
+    ) {
         return;
     }
     const coding = codingFor(c.req.header("accept-encoding"));

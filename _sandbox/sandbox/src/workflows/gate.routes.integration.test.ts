@@ -7,6 +7,7 @@ import { unstubbed } from "@intentic/testing";
 import { Hono } from "hono";
 import { memoryDoorTokens } from "../auth/tokens/door-tokens.js";
 import type { Services } from "../composition.js";
+import { compressResponses } from "../http/compress-responses.js";
 import { fileLoopsStore } from "../loops/loops-store.js";
 import { createGateRoute } from "./gate.routes.js";
 import { fileWorkflowRunsStore, fileWorkflowsStore } from "./workflows-store.js";
@@ -194,6 +195,32 @@ test("headers leave before the verdict and spaces keep a long hold talking, and 
 
     expect(response.status).toBe(200);
     expect(headersAfter).toBeLessThan(300);
+    expect(text).toMatch(/^ +\{/);
+    expect(JSON.parse(text).outcome).toBe("pass");
+});
+
+// Cloudflare asks every origin for a compressed answer, and the daemon's compressor reads a JSON body whole; behind it a
+// verdict held for minutes left no byte for the edge to see, which gave up with a 524 on every audit past ~100 s.
+test("behind the daemon's compressor, with a caller that accepts gzip, headers still leave before the verdict", async () => {
+    const root = tempRoot();
+    const services = fakeServices(root);
+    await services.workflows.save(gated("wf-compressed"), true);
+    const app = new Hono()
+        .use("*", compressResponses())
+        .post("/workflows/:id/gate", createGateRoute(drivenBy(services, judgingAfter(root, "pass", 400)), 20));
+
+    const startedAt = Date.now();
+    const response = await app.request(`/workflows/wf-compressed/gate`, {
+        method: "POST",
+        body: "",
+        headers: { authorization: `Bearer ${await token("wf-compressed")}`, "accept-encoding": "gzip, br" },
+    });
+    const headersAfter = Date.now() - startedAt;
+    const text = await response.text();
+
+    expect(headersAfter).toBeLessThan(300);
+    expect(response.headers.get("content-encoding")).toBeNull();
+    expect(response.headers.get("cache-control")).toBe("no-store, no-transform");
     expect(text).toMatch(/^ +\{/);
     expect(JSON.parse(text).outcome).toBe("pass");
 });

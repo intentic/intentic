@@ -96,7 +96,10 @@ export const fleetHttpRoutes = ({ config, prisma, now = () => new Date() }: Flee
         }
         const { sandbox } = await mintSandbox(prisma, config, { name: parsed.data.name, ownerId: caller.userId });
         try {
-            const minted = await mintSetupCodeFor(prisma, config, sandbox, { ownerEmail: caller.email, definitionSeed: parsed.data.definition });
+            // The body carries TOML; the seed is base64, the encoding the daemon decodes and every profile seed uses.
+            const { definition } = parsed.data;
+            const definitionSeed = definition === undefined ? undefined : Buffer.from(definition, `utf8`).toString(`base64`);
+            const minted = await mintSetupCodeFor(prisma, config, sandbox, { ownerEmail: caller.email, definitionSeed });
             return c.json({ sandboxId: sandbox.id, name: sandbox.name, hostname: minted.hostname, setupCode: minted.code, expiresAt: minted.expiresAt });
         } catch (error) {
             // The row exists and cannot be claimed, which is worse than never having made it: take it back out rather
