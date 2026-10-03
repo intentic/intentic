@@ -46,8 +46,18 @@ export const renderMermaid = (code: string, scheme: "light" | "dark", font: stri
             },
         ]);
         mermaid.initialize({ startOnLoad: false, securityLevel: `strict`, suppressErrorRendering: true, ...mermaidTheme(scheme, font) });
-        const { svg } = await mermaid.render(`md-mermaid-${(ids += 1)}`, code);
-        return svg;
+        // Renders into a clipped offscreen container so mermaid measuring doesn't attach to body and cause viewport scrollbar flicker.
+        const offscreen = typeof document !== `undefined` ? document.createElement(`div`) : undefined;
+        if (offscreen !== undefined) {
+            offscreen.style.cssText = `position:fixed;top:-9999px;left:-9999px;width:0;height:0;overflow:hidden;contain:strict;pointer-events:none;`;
+            document.body.appendChild(offscreen);
+        }
+        try {
+            const { svg } = await mermaid.render(`md-mermaid-${(ids += 1)}`, code, offscreen);
+            return svg;
+        } finally {
+            offscreen?.remove();
+        }
     };
     const start = (): Promise<string> => bounded(work());
     // Both arms run `start`: one diagram's refusal must not stop the next one from being drawn.
