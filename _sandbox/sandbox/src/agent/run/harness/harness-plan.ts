@@ -3,6 +3,7 @@ import { browserFields } from "../../../browser/tools/browser-fields.js";
 import type { Services } from "../../../composition.js";
 import { withSettingsHookGate } from "./settings-hook-gate.js";
 import { type TurnPersona, turnPersona } from "../../../personas/personas.js";
+import { declaredChecks } from "../../../rules/repo-checks.js";
 import { standing } from "../../../rules/rules.js";
 import { offloadRunEnabled } from "../../../offload/offload-prefix.js";
 import { armPlan, type TurnArmPlan, type TurnContext } from "../../providers/adapter.js";
@@ -202,7 +203,9 @@ export const planHarnessTurn = async (
             tools,
             credential,
             hooks: {
-                ...harnessHooks(deps, context, standing(settings.rules, "file.edited")),
+                // At `turn.ending` only what a repository declared runs: an owner's rule left standing there from before
+                // the moment came back stays inert (repo-checks.ts's declaredChecks).
+                ...harnessHooks(deps, context, standing(settings.rules, "file.edited"), declaredChecks(standing(settings.rules, "turn.ending"))),
                 // A `run_in_background` job outlives this turn, so its completion is delivered to a conversation rather
                 // than to the process that started it; the same profile the watch takes, for the same reason.
                 ...(input.conversationId === undefined

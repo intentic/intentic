@@ -19,6 +19,7 @@ flowchart LR
 - Nothing inside a container can see that six jobs share the box, so `CI_HOST_JOBS: "6"` in `ci.yml`, `verify.yml` and `nightly.yml` tells [`test-workers.mjs`](../../_tools/scripts/verify/test-workers.mjs) to divide memory by it. Change all three with the fleet.
 - The host's Docker Desktop also runs the owner's sandboxes, so nothing here prunes a tagged image or a volume.
 - Off the fleet: CodeQL, Scorecard, npm publish (provenance needs a GitHub-hosted builder), the arm64 sandbox image, the mobile builds and the engines bump.
+- A failing commit still costs a whole pipeline. Every verification job in `ci.yml` runs whatever preflight concluded, so one run reports everything wrong with a commit, and only the jobs that push or deploy wait on proofs. When a gate in front of `images` fails, `images-dry` builds the amd64 sandbox image into the host's docker store and boots it, holding a read-only token. That is one more image build per failing main push that changes the image.
 
 ## The fork boundary
 
@@ -46,6 +47,7 @@ Runners are not ephemeral. Fleet checkouts use `clean: false` to keep `node_modu
 | `/ci-cache/pnpm-store`, `/ci-cache/cargo` | the janitor, above 20 GB |
 | any other `/ci-cache` entry (`xwin`, `ms-playwright`, ...) | the janitor, above 15 GB |
 | buildx builder `intentic-cache` | age sweep in `publish-images.sh`; the janitor keeps 25 GB |
+| `sandbox:dry-*` images `images-dry` loads | the job itself: `SMOKE_RMI=1` after each boot, and a final `docker image rm` that runs whatever happened |
 | dangling images | `docker image prune` in `nightly.yml` |
 | host disk | the fleet task prunes build cache under `-LowDiskGb` |
 

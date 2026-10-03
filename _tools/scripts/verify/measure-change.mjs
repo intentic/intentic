@@ -1,5 +1,6 @@
-// ONE READING OF WHAT A RANGE BROUGHT IN, for the push check (verify-push.mjs): the linter's findings, one per line it
-// printed, and the tidy checks the tree fails judged against the commit the range is built on.
+// ONE READING OF WHAT A CHANGE BROUGHT IN, for the push check (verify-push.mjs) and the turn check (verify-turn.mjs): the
+// linter's findings, one per line it printed, and the checks the tree fails judged against the commit the change is
+// built on.
 import { spawnSync } from "node:child_process";
 import { allowedInRange } from "../../checks/lib/allow.mjs";
 import { reportsAt } from "./check-snapshot.mjs";
@@ -42,29 +43,26 @@ export const runLint = (root, files) => {
 };
 
 /**
- * The tidy checks the tree fails, judged against `base` (turn-findings.mjs) with the range's `Allow:` trailers applied
- * (lib/allow.mjs): `mine` (what the change added and nothing excuses), `excused` (added, and a trailer in the range
- * accepts it, with its reasons), `unsure` (lines `base` could not be asked about, charged to nobody) and `theirs`
- * (already failing at `base`, no worse for the change).
+ * What judged verdicts (turn-findings.mjs's judgeAgainstBase) charge the change with once the range's `Allow:` trailers
+ * are read (lib/allow.mjs): `mine` (what the change added and nothing excuses), `excused` (added, and a trailer in the
+ * range accepts it, with its reasons), `unsure` (lines `base` could not be asked about, charged to nobody) and `theirs`
+ * (already failing at `base`, no worse for the change). A trailer answers for a `tidy` check alone: a `code` check names
+ * a tree that does not work, which no declaration excuses, so what a change adds to one is always `mine`.
  */
-export const judgeTidy = (root, base, untidy) => {
-    if (untidy.length === 0) {
+export const sortJudged = (root, base, judged) => {
+    if (judged.length === 0) {
         return { mine: [], excused: [], unsure: [], theirs: [] };
     }
-    const judged = judgeAgainstBase(
-        untidy,
-        reportsAt(
-            root,
-            base,
-            untidy.map(({ id }) => id),
-        ),
-        root,
-    );
     const allowed = allowedInRange(root, base);
+    const excuses = ({ verdict }) => verdict.gate === "tidy" && allowed.has(verdict.id);
     return {
-        mine: judged.filter(({ verdict, added }) => added.length > 0 && !allowed.has(verdict.id)),
-        excused: judged.filter(({ verdict, added }) => added.length > 0 && allowed.has(verdict.id)).map((each) => ({ ...each, reasons: allowed.get(each.verdict.id) })),
+        mine: judged.filter((each) => each.added.length > 0 && !excuses(each)),
+        excused: judged.filter((each) => each.added.length > 0 && excuses(each)).map((each) => ({ ...each, reasons: allowed.get(each.verdict.id) })),
         unsure: judged.filter(({ added, unsure }) => added.length === 0 && unsure.length > 0),
         theirs: judged.filter(({ added, unsure }) => added.length === 0 && unsure.length === 0),
     };
 };
+
+/** The tidy checks the tree fails, judged against `base` and sorted by what the change is charged with (sortJudged). */
+export const judgeTidy = (root, base, untidy) =>
+    sortJudged(root, base, untidy.length === 0 ? [] : judgeAgainstBase(untidy, reportsAt(root, base, untidy.map(({ id }) => id)), root));

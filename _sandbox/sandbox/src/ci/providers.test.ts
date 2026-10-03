@@ -312,7 +312,7 @@ test("a failed job names its id, the step that failed it, and gitlab's own reaso
             [],
         ),
     ).failedSteps(githubProject, 41);
-    expect(github).toEqual([{ job: "verify-core", id: 7, step: "Run tests" }]);
+    expect(github).toEqual([{ job: "verify-core", id: 7, step: "Run tests", steps: ["Run tests"] }]);
 
     const gitlab = await ciClientFor(
         "gitlab",
@@ -481,13 +481,14 @@ const logsFetch = (log: string): FetchFn =>
         return new Response(log, { status: 200 });
     }) as FetchFn;
 
-test("a failed job's log tail is plain text, not the runner's own bytes", async () => {
+test("a failed job's log is plain text, not the runner's own bytes, and read whole unless asked for its end", async () => {
     const esc = String.fromCodePoint(0x1b);
     const log = `${esc}[31mFAIL${esc}[0m src/a.test.ts\ninstalling 1/2\rinstalling 2/2\n`;
     for (const provider of ["github", "gitlab"] as const) {
         const project = provider === "github" ? githubProject : gitlabProject;
-        const logs = await ciClientFor(provider, logsFetch(log)).failedJobLogs(project, 7, 24_000);
-        expect(logs).toBe("--- job: verify (log tail) ---\nFAIL src/a.test.ts\ninstalling 2/2\n");
+        const client = ciClientFor(provider, logsFetch(log));
+        expect(await client.jobLog(project, 11, Number.POSITIVE_INFINITY)).toBe("FAIL src/a.test.ts\ninstalling 2/2\n");
+        expect(await client.jobLog(project, 11, 15)).toBe("installing 2/2\n");
     }
 });
 
@@ -511,16 +512,11 @@ test("a fix takes the settled job list the board's row just read, in one request
     const client = ciClientFor("github", scriptedFetch(githubSettledJobs("completed"), calls));
     await client.allJobs(githubProject, 81);
 
-    const [jobs, steps, logs] = await Promise.all([
-        client.failedJobs(githubProject, 81),
-        client.failedSteps(githubProject, 81),
-        client.failedJobLogs(githubProject, 81, 24_000),
-    ]);
+    const [jobs, steps] = await Promise.all([client.failedJobs(githubProject, 81), client.failedSteps(githubProject, 81)]);
 
-    expect({ jobs, steps, logs }).toEqual({
+    expect({ jobs, steps }).toEqual({
         jobs: ["verify-core"],
-        steps: [{ job: "verify-core", id: 7, step: "Run tests" }],
-        logs: `--- job: verify-core (log tail) ---\n"FAIL src/a.test.ts"`,
+        steps: [{ job: "verify-core", id: 7, step: "Run tests", steps: ["Run tests"] }],
     });
     expect(listCalls(calls)).toBe(1);
     // The board's own read is never the kept copy: its graph is always the vendor's word.
@@ -554,11 +550,7 @@ test("a gitlab fix reads its failed jobs once for all three readings, and never 
         "gitlab",
         scriptedFetch({ "GET /pipelines/84/jobs": [{ id: 3, name: "test", failure_reason: "script_failure" }], "GET /jobs/3/trace": "FAIL" }, calls),
     );
-    await Promise.all([
-        client.failedJobs(gitlabProject, 84),
-        client.failedSteps(gitlabProject, 84),
-        client.failedJobLogs(gitlabProject, 84, 24_000),
-    ]);
+    await Promise.all([client.failedJobs(gitlabProject, 84), client.failedSteps(gitlabProject, 84)]);
     expect(listCalls(calls)).toBe(1);
 
     await client.failedSteps(gitlabProject, 84);

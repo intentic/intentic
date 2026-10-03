@@ -21,8 +21,8 @@ import {
 import { agentCard, pipelineRun } from "../testing";
 
 // A failing main line as the board says it above a repository's runs. The fixer is joined by the id the daemon names,
-// never by a run's derived id: it was started at the first failed job, and every later failed run on main derives an id
-// of its own.
+// never by a run's derived id: it was started with the first failed run, and every later failed run on main derives an
+// id of its own.
 
 const NOW = 1_700_000_000_000;
 const MINUTE = 60_000;

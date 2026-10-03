@@ -1,6 +1,6 @@
 // Pins how a change's findings are read: oxlint's lines, one finding each with the file it names, the range's `Allow:`
-// trailers, what an edit added to a rule with a backlog (_tools/oxlint/added.mjs), and git's own error when a range
-// cannot be listed.
+// trailers and which checks they answer for, what an edit added to a rule with a backlog (_tools/oxlint/added.mjs), and
+// git's own error when a range cannot be listed.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -11,7 +11,7 @@ import { allowedInRange } from "../../checks/lib/allow.mjs";
 import { repoRoot } from "../../constants/src/node.mjs";
 import { introduced } from "../../oxlint/added.mjs";
 import { changesSince } from "../lib/git.mjs";
-import { lintFindings } from "./measure-change.mjs";
+import { lintFindings, sortJudged } from "./measure-change.mjs";
 
 const repo = () => {
     const root = mkdtempSync(join(tmpdir(), "measure-change-"));
@@ -71,6 +71,31 @@ test("an Allow: trailer in the range excuses its check, with the reason, and not
         );
         assert.deepEqual([...allowedInRange(root, base)], [["layout", ["the set is one module"]]]);
         assert.deepEqual([...allowedInRange(root, "no-such-rev")], []);
+    } finally {
+        rmSync(root, { recursive: true, force: true });
+    }
+});
+
+// The turn check judges `code` checks by what a change added too (verify-turn.mjs), so the one place the two gates
+// differ has to hold: a trailer is a reason a tidy finding stands, never a licence for a tree that does not work.
+test("a trailer excuses what a change adds to a tidy check, and never what it adds to a code check", () => {
+    const { root, head: base } = repo();
+    const run = (...args) => execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim();
+    try {
+        run("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "feat: grow\n\nAllow: layout — one module\nAllow: i18n-keys — later");
+        const judged = (id, gate, added, unsure = []) => ({ verdict: { id, gate }, added, unsure });
+        const sorted = sortJudged(root, base, [
+            judged("layout", "tidy", ["  - a/: 31 files"]),
+            judged("i18n-keys", "code", ["  - a.vue: x.y"]),
+            judged("paths", "tidy", [], ["  - b.ts:1  spells a root"]),
+            judged("silent-catch", "tidy", []),
+        ]);
+        assert.deepEqual(
+            Object.fromEntries(Object.entries(sorted).map(([share, group]) => [share, group.map(({ verdict }) => verdict.id)])),
+            { mine: ["i18n-keys"], excused: ["layout"], unsure: ["paths"], theirs: ["silent-catch"] },
+        );
+        assert.deepEqual(sorted.excused[0].reasons, ["one module"]);
+        assert.deepEqual(sortJudged(root, base, []), { mine: [], excused: [], unsure: [], theirs: [] });
     } finally {
         rmSync(root, { recursive: true, force: true });
     }

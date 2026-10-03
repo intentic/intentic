@@ -8,6 +8,19 @@
 name: pnpm setup
 description: Install the workspace against the shared pnpm store and prune the turbo cache.
 
+inputs:
+  # WHAT A STALE LOCKFILE DOES TO THIS JOB. `fail` (the default, and what every job that builds something to publish
+  # keeps) stops at the frozen install, as it always has. `measure` is for the jobs that only measure the tree: a
+  # lockfile that no longer matches the manifests used to fail every one of their installs, so one stale line hid
+  # every type error and broken test in the pipeline until the next push. With `measure` the install retries without
+  # the frozen lockfile, the job measures the tree as the manifests describe it, and pnpm-lock.yaml goes back to the
+  # commit's bytes afterwards, so every later reader (the push check's lockfile check, turbo's hash) still sees the
+  # drift. Preflight's `lockfile` check fails the run on it, and nothing that publishes runs without preflight.
+  lockfile-drift:
+    description: "`fail` stops on a pnpm-lock.yaml that no longer matches the manifests; `measure` installs without it and keeps going."
+    required: false
+    default: fail
+
 runs:
   using: composite
   steps:
@@ -38,11 +51,12 @@ runs:
         # in every `ls`, still guessed at — which is exactly what the layout check's first rule fails on.
         #
         # AND NO COMMIT COULD FIX IT. The check passed on a fresh clone and failed on the fleet, naming
-        # directories that do not exist in git; `pnpm prepass` runs it in preflight, in verify-core and in
-        # verify-platform, so one stale runner made three jobs fail at once and a re-run reproduced it exactly
-        # (run 34046947138). The prune belongs HERE, beside the Playwright and pnpm-state cleanups
-        # above, for the same reason they are here: it is the persistent workspace being repaired, so it has to
-        # happen in the step every job on that workspace shares rather than in whichever job noticed last.
+        # directories that do not exist in git; `pnpm prepass` ran it in preflight, in verify-core and in
+        # verify-platform then, so one stale runner made three jobs fail at once and a re-run reproduced it exactly
+        # (run 34046947138), and `quick`'s push check still runs it after this step. The prune belongs HERE,
+        # beside the Playwright and pnpm-state cleanups above, for the same reason they are here: it is the
+        # persistent workspace being repaired, so it has to happen in the step every job on that workspace shares
+        # rather than in whichever job noticed last.
         #
         # --prune deletes exactly the directories the check would have named, and nothing else: a ghost whose
         # remaining content is a live mount is left alone (that is an agent worktree, not a runner).
@@ -72,6 +86,8 @@ runs:
 
     - name: Install
       shell: bash
+      env:
+        LOCKFILE_DRIFT: ${{ inputs.lockfile-drift }}
       run: |
         # DROP PNPM'S "nothing changed" SHORTCUT FIRST, because on these runners it is wrong in a way that
         # cannot be recovered from. The workspace is `injectWorkspacePackages: true`, so an in-repo package is
@@ -94,7 +110,20 @@ runs:
         # is what makes a fresh checkout produce a node_modules that matches it. The persistent workspace
         # (`clean: false`, which is worth minutes elsewhere) is precisely why this cannot be left to chance.
         rm -f node_modules/.pnpm-workspace-state-v1.json
-        pnpm install --frozen-lockfile --store-dir "$PNPM_STORE"
+        # The frozen install's own words decide the fallback, not its exit code: only a lockfile that disagrees with
+        # the manifests (pnpm's OUTDATED_LOCKFILE and its two kin) is drift. A registry that drops the connection is
+        # not, and would only fail again a second time slower.
+        log="$(mktemp)"
+        if pnpm install --frozen-lockfile --store-dir "$PNPM_STORE" 2>&1 | tee "$log"; then
+          exit 0
+        fi
+        if [ "$LOCKFILE_DRIFT" = measure ] && grep -qE 'ERR_PNPM_(OUTDATED_LOCKFILE|FROZEN_LOCKFILE_WITH_OUTDATED_LOCKFILE|LOCKFILE_CONFIG_MISMATCH)' "$log"; then
+          echo "::warning title=pnpm-lock.yaml is stale::It no longer matches the manifests. Installed without it so this job still measures the tree; preflight's lockfile check fails the run, and nothing publishes."
+          pnpm install --no-frozen-lockfile --store-dir "$PNPM_STORE"
+          git checkout -- pnpm-lock.yaml
+          exit 0
+        fi
+        exit 1
 
     # Bound the shared turbo cache: drop entries untouched for 14 days (rebuilt + re-cached if needed). The
     # directory outlives the job, so nothing else evicts from it — this line is load-bearing, not hygiene.

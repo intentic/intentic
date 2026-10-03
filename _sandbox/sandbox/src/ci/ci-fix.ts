@@ -5,14 +5,18 @@ import type { Services } from "../composition.js";
 import type { TurnInput } from "../seams/turn-starter.js";
 import { AttemptRefused, daemonFixAttemptDeps, type FixAttemptOutcome, startFixAttempt } from "../conversations/fix/fix-attempts.js";
 import { NO_PROVIDER_CONNECTED, runRoleModel, unpinnedRunProvider } from "../agent/models/run-role-model.js";
+import { digestOf, excerptOf } from "./failure-digest.js";
 import type { CiProject } from "./projects.js";
 import { ciClientFor, type FailedStep, type FetchFn } from "./providers.js";
 
-// One way to put an agent on a failed run, whoever asks: the Pipelines board's Fix press, or main's one fix agent at the
-// first job that fails on a main-line branch (main-fixer.ts).
+// One way to put an agent on a failed run, whoever asks: the Pipelines board's Fix press, or main's one fix agent with
+// the first run that fails on a main-line branch (main-fixer.ts).
 
-// Failed-job log tail seeded into a fix conversation: enough to see the error, not to flood the context.
+// How much of a failed job's log end is read for the fleet's signs (infraLog): the runner's death is said last.
 export const FIX_LOG_BYTES = 24_000;
+// A failed job's log is read whole, since its errors can sit anywhere in it (a typecheck's above a test run's megabytes),
+// and only its digest (failure-digest.ts) reaches a conversation. Both forges hand the whole log over either way.
+export const WHOLE_LOG = Number.POSITIVE_INFINITY;
 const TITLE_MAX = 80;
 const RUNS_PER_PROJECT = 15;
 
@@ -32,6 +36,8 @@ export const infraLog = (logs: string): boolean => INFRA_LOG.some((sign) => sign
 
 export interface CiFailureEvidence {
     readonly failedJobs: readonly string[];
+    // What failed, read out of the failed jobs' logs (failure-digest.ts): every error once with the jobs that printed it,
+    // then each failed step's last lines.
     readonly logs: string;
     // Every failure died in a runner-owned step, or its log names the fleet: nothing an agent on the code can fix.
     readonly infra: boolean;
@@ -49,16 +55,19 @@ export const ciFailureEvidence = async (project: CiProject, runId: number, logge
             logger.warn({ err: error, repo: project.repo, runId }, `ci fix: the run's ${what} could not be read`);
             return empty;
         };
-    const [failedJobs, failedSteps, logs] = await Promise.all([
-        client.failedJobs(project, runId).catch(missing<readonly string[]>("failed jobs", [])),
-        client.failedSteps(project, runId).catch(missing<readonly FailedStep[]>("failed steps", [])),
-        client.failedJobLogs(project, runId, FIX_LOG_BYTES).catch(missing("failed job logs", "")),
-    ]);
+    const failedSteps = await client.failedSteps(project, runId).catch(missing<readonly FailedStep[]>("failed steps", []));
+    // Every failed job's log, whole and side by side; one that cannot be read is left out, and only its end is asked
+    // whether the fleet died.
+    const logs = await Promise.all(failedSteps.map((failed) => client.jobLog(project, failed.id, WHOLE_LOG).catch(missing(`log of ${failed.job}`, ""))));
     const stepsOnly = failedSteps.length > 0 && failedSteps.every(({ step }) => step !== undefined && isInfraStep(step));
     return {
-        failedJobs,
-        logs,
-        infra: stepsOnly || infraLog(logs),
+        failedJobs: failedSteps.map(({ job }) => job),
+        logs: digestOf(
+            failedSteps.map((failed, index) =>
+                excerptOf({ name: failed.job, steps: failed.steps ?? (failed.step === undefined ? [] : [failed.step]), log: logs[index] ?? "" }),
+            ),
+        ),
+        infra: stepsOnly || logs.some((log) => infraLog(log.slice(-FIX_LOG_BYTES))),
         infraSteps: [...new Set(failedSteps.flatMap(({ step }) => (step === undefined ? [] : [step])))],
     };
 };
@@ -92,11 +101,11 @@ const promptOf = (request: CiFixRequest, where: string): string =>
         ...(request.preface === undefined ? [] : [request.preface]),
         `The CI pipeline for the workspace repo "${request.project.repo}" failed ${where}. Investigate and fix it.`,
         ...(request.evidence.failedJobs.length > 0 ? [`Failed jobs: ${request.evidence.failedJobs.join(", ")}.`] : []),
-        `The logs below are the evidence — read them first; they are usually enough to name the cause.`,
+        `What failed is below, read out of the failed jobs' logs: every error once, with every job that printed it (one cause often fails several jobs), then each failed step's last lines. Read it first; it is usually enough to name each cause. Fix every cause in it, not only the first.`,
         `REPRODUCE LOCALLY ONLY IF THIS SANDBOX CAN, AND ONLY WHAT FAILED. Re-run the failing job's own step for the package it names (that package's tests or typecheck, the failing test files alone), never the whole repository's suite: this sandbox is shared with other conversations, and a repository-wide run takes the memory they need. Jobs that need Docker, a fresh CI image, a desktop runner, a GPU, Windows or Xcode DO NOT: this sandbox has none of them, and an hour spent standing one up is an hour that ends in a guess anyway.`,
-        `For a job you cannot run here: make the change from the logs, then verify it in the place the constraints exist by dispatching the workflow on your own branch and reading the run it starts. NO \`gh\` OR \`glab\` IS INSTALLED IN THIS SANDBOX — the ${request.project.account.provider} REST API is how you reach the run, and the \`${request.project.account.provider}\` skill carries the connected token and the curl form for it. The same API serves a failed job's full log, which is worth fetching when the tail below cuts off the cause. Say plainly in your summary if you could not verify it and what would.`,
+        `For a job you cannot run here: make the change from the logs, then verify it in the place the constraints exist by dispatching the workflow on your own branch and reading the run it starts. NO \`gh\` OR \`glab\` IS INSTALLED IN THIS SANDBOX — the ${request.project.account.provider} REST API is how you reach the run, and the \`${request.project.account.provider}\` skill carries the connected token and the curl form for it. The same API serves a failed job's full log, which is worth fetching when what is below cuts off the cause. Say plainly in your summary if you could not verify it and what would.`,
         `You are in an isolated worktree: commit your fix and it goes through review.`,
-        ...(request.evidence.logs !== "" ? [`--- failed job logs (tails) ---\n${request.evidence.logs}`] : []),
+        ...(request.evidence.logs !== "" ? [`--- what failed ---\n${request.evidence.logs}`] : []),
     ].join("\n\n");
 
 // One run of a project: usually already in the cache, from the view a click came from; a cold daemon re-lists instead.

@@ -39,7 +39,7 @@
             "proving": "Poprawka jest scalona. Nowy przebieg na {branch} właśnie ją sprawdza.",
             "ready": "Poprawka czeka na gałęzi agenta. Otwórz go, żeby ją przejrzeć i scalić.",
             "reported": "Auto-naprawa jest wyłączona, więc nie wysłano agenta. Uruchom go albo napraw ręcznie.",
-            "unassigned": "Auto-naprawa czyta logi nieudanego zadania, zanim wyśle agenta. Uruchom go teraz, żeby nie czekać.",
+            "unassigned": "Auto-naprawa czeka, aż przebieg się skończy, żeby jej agent dostał wszystkie błędy naraz. Uruchom go teraz, żeby nie czekać.",
             "waiting": "Agent auto-naprawy czeka, aż wróci jego limit.",
             "waits": "{reason}: agent auto-naprawy oddał to Tobie. Kontynuuj da mu kolejne tury.",
             "working": "Agent auto-naprawy się tym zajmuje. Każdy nowy błąd na {branch} trafia do tego samego agenta, aż przebieg przejdzie."

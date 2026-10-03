@@ -5,6 +5,12 @@
 # blocks nothing of anyone else's. That split is the whole reason this is one workflow rather than several:
 # `needs` edges only exist inside a workflow, and those edges are what the split buys.
 #
+# MEASUREMENT IS NEVER GATED, ONLY PUBLISHING IS. No verification job waits on another's success: each runs whatever
+# preflight concluded, and inside a job each step needs only what it reads, so one run says everything that is wrong
+# with a commit rather than the first thing, and main's fix agent gets that whole list at once. The jobs that push or
+# deploy (`images`, `images-arm64`, `images-platform`, `release`) name every proof they need, preflight included, and
+# when one of those gates fails `images-dry` still builds and boots the image without pushing it.
+#
 # Node + pnpm are pinned by package.json engines/packageManager and baked into ci-base, so no version appears
 # here. The runner requirements — six instances, a shared /ci-cache on the same filesystem as the work dir,
 # and the host Docker socket — are in docs/ops/ci-runner.md.
@@ -228,15 +234,20 @@ jobs:
           echo "ci-base=$(any "$changed_ci_base" "$(missing ghcr.io/intentic/ci-base:latest)")" >> "$GITHUB_OUTPUT"
           echo "ci-desktop=$(any "$changed_ci_desktop" "$(missing ghcr.io/intentic/ci-desktop:latest)")" >> "$GITHUB_OUTPUT"
 
-  # The checks that read the checkout and nothing else, ahead of the install every other job starts with.
+  # The checks that read the checkout and nothing else, run once, side by side, with no install.
   #
   # `_tools/checks/run.mjs` is the checkout half of `pnpm verify`: every test file sits in a type-check program,
   # every machine-touching suite is named as one, and every package.json specifier is the one pnpm-lock.yaml
   # recorded, among nineteen others. No node_modules, seconds of actual work.
   #
-  # The measurement that put it first: across 40 main pipelines, 22 verify jobs failed and 10 died on one of
-  # three of these invariants — and every one of those failed AFTER a 0.6-2.0 minute frozen-lockfile install, in
-  # each of the six jobs that opens with one. Seconds here replace six of those.
+  # IT GATES WHAT PUBLISHES, NOT WHAT IS MEASURED. Every verification job below runs whatever this job concluded
+  # (`needs.preflight.result != 'skipped'`; a skip is the fork boundary's, see `changes`), and every job that publishes
+  # names `needs.preflight.result == 'success'` itself. This job used to be the root every verify group waited on to
+  # SUCCEED, so that a checkout invariant failing in seconds would not cost six frozen-lockfile installs. That bought
+  # minutes and cost rounds: across 300 main pipelines in September 2026 it failed 40 times, in 19 streaks, and 17 of
+  # the 18 streaks that had a run after them were followed by a run failing somewhere this job had hidden (a type
+  # error, broken tests, a desktop build), up to 21.7 hours later. A failure here now reports beside everything else
+  # in the same run, and main's fix agent is handed the run's whole list at once (_sandbox/sandbox/src/ci/main-fixer.ts).
   #
   # THE WORKFLOW LINT RUNS HERE TOO, and it is the one thing in this job that touches the network — two pinned
   # binaries into /ci-cache, once per runner per version, ~1s warm. It sits in this job rather than in one of
@@ -245,7 +256,7 @@ jobs:
   # class of bug this pipeline keeps producing — a workflow that stops doing something and reports success.
   preflight:
     # The second DAG root — see the fork boundary on `changes`. The verify groups and `e2e-hermetic` hang off
-    # this one, so it carries the same guard rather than inheriting one.
+    # this one (they wait for it, and its skip skips them), so it carries the same guard rather than inheriting one.
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, intentic]
     timeout-minutes: 15
@@ -259,8 +270,13 @@ jobs:
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
+    # EVERY STEP AFTER THE CHECKOUT RUNS WHATEVER THE ONE BEFORE IT SAID. They are four separate questions about the
+    # same checkout, and a failed step used to skip the rest: across September 2026 the checks failing hid the
+    # workflow lint and the scripts' own suites 31 times. Each now needs the checkout and nothing else, so one run
+    # names every failure here and the job still fails on any of them.
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - id: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           # Same reason as the `changes` job: this one also runs in every pipeline, and a clean checkout here
@@ -273,9 +289,10 @@ jobs:
       # directories the check would have named.
       #
       # INLINE HERE AND ONLY HERE: the prune's real home is the pnpm-setup composite, beside the other repairs
-      # the persistent workspace needs, which is what covers verify-core and verify-platform — they run this
-      # same check through `pnpm prepass` and failed on it (run 34046947138). This job is the one that
-      # deliberately uses no composite (checkout only, no node_modules, no network), so it carries its own.
+      # the persistent workspace needs, which is what covers every job that installs — `quick`'s push check runs
+      # this same check after it, and the verify groups used to run it too and failed on it (run 34046947138). This
+      # job is the one that deliberately uses no composite (checkout only, no node_modules, no network), so it
+      # carries its own.
       - run: node _tools/checks/layout.mjs --prune
       # EVERY CHECK THE MANIFEST LISTS, side by side (_tools/checks/manifest.mjs says what each is for): the
       # lockfile against the manifests, every test file in a type-check program and under a budget, the workflow
@@ -285,19 +302,20 @@ jobs:
       # and unrun: five of these had been failing for weeks inside a `pnpm check` chain that no job and no hook ran. Checkout
       # only, no node_modules, no network, under two seconds.
       #
-      # `--tidy=warn` BECAUSE THIS JOB IS A DAG ROOT. Every verify group and e2e-hermetic hangs off it, so a
-      # failure here does not report one problem, it HIDES the rest of the pipeline: the day this flag was added,
-      # a run failed on ghost directories, and the type error and the two broken tests underneath it were not
-      # discovered until the third round of fixes. The manifest's `gate` field says which failures are worth that
-      # (`code`: the tree does not work or cannot be built) and which are not (`tidy`: the tree costs its readers
-      # more than it should). Tidy failures print here as warnings and are REFUSED by nightly.yml's `tidy` job,
-      # which reads one commit on a GitHub-hosted runner and gates nothing at all.
-      - run: node _tools/checks/run.mjs --tidy=warn
+      # `--tidy=warn` because a tidy finding is a cost to readers, not a break. The manifest's `gate` field says which
+      # is which (`code`: the tree does not work or cannot be built; `tidy`: the tree costs its readers more than it
+      # should). Tidy failures print here as warnings; `quick`'s push check refuses the ones a push added, and
+      # nightly.yml's `tidy` job, which reads one commit on a GitHub-hosted runner and gates nothing, refuses the rest.
+      # The flag was added when a run failed here on ghost directories while this job still gated the verify groups,
+      # and the type error and two broken tests underneath it took two more rounds of fixes to find.
+      - if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        run: node _tools/checks/run.mjs --tidy=warn
       # actionlint + zizmor over .github/ — the workflows checked by tools that parse them, rather than by the
       # line scanners the checkout gate was growing to approximate a fraction of the same ground. The script says what
       # each tool is for, why they are pinned by sha256 rather than baked into ci-base, and which findings this
       # repository suppresses on purpose (.github/zizmor.yml, each with its reason and what would retire it).
-      - shell: bash
+      - if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        shell: bash
         run: bash _tools/scripts/verify/lint-workflows.sh
       # THE CHECKS' OWN SUITES, and the scripts': the node:test files under _tools/checks and _tools/scripts, which
       # pin what each check refuses (a template-joined route, an extension's manifest, an editor import cycle) and
@@ -306,28 +324,30 @@ jobs:
       # (_tools/scripts/verify/verify.mjs). Node's own runner with node's builtins, git and bash: no node_modules,
       # under two seconds. The globs are quoted for node to expand: the shell reads `**` as `*` and would skip the
       # suites at the top of _tools/checks.
-      - run: node --test "_tools/scripts/**/*.test.mjs" "_tools/checks/**/*.test.mjs"
+      - if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        run: node --test "_tools/scripts/**/*.test.mjs" "_tools/checks/**/*.test.mjs"
 
   # THE FIRST ANSWER A PUSH GETS, a few minutes after it: the packages it changed type-checked, then the push check.
-  # Nothing checks a land, a commit or a push on the way out, so this is where what a push broke is first said. The
-  # sandbox gives main's CI one fix agent, started on the first job that fails rather than on the finished run
-  # (_sandbox/sandbox/src/ci/main-fixer.ts), so what this finds starts the repair while the verify groups are still
-  # building. It gates nothing and no job needs it: the verify groups still type-check and test each whole closure,
-  # dependents included.
+  # Nothing checks a land, a commit or a push on the way out, so this is where what a push broke is first said: on the
+  # run's page, while the verify groups are still building. It gates nothing and no job needs it: the verify groups
+  # still type-check and test each whole closure, dependents included. Main's fix agent hears this job with the rest
+  # of the run, once the run has finished measuring (_sandbox/sandbox/src/ci/main-fixer.ts).
   #
   # The range is the one `changes` reads, from the same event fields. `[<base>...HEAD]` selects the packages with a
   # file changed between the two commits and reads nothing of the working tree, and `--only` leaves their
-  # dependencies' typecheck out: the declarations those read come from the emit, the same one verify.yml's prepass
-  # runs. The push check (_tools/scripts/verify/verify-push.mjs, `pnpm verify:push` by hand) asks the same range what
-  # only a range can answer: every check the manifest lists with a `tidy` finding counted only when the range added
-  # it (preflight merely warns about tidiness, and the nightly tidy job reads it a day later with no author attached),
-  # the assertion ratchet over the range's test files, and `pnpm lint` over the files it changed.
+  # dependencies' typecheck out: the declarations those read come from the emit, the same one verify.yml runs. The
+  # push check (_tools/scripts/verify/verify-push.mjs, `pnpm verify:push` by hand) asks the same range what only a
+  # range can answer: every check the manifest lists with a `tidy` finding counted only when the range added it
+  # (preflight merely warns about tidiness, and the nightly tidy job reads it a day later with no author attached),
+  # the assertion ratchet over the range's test files, and `pnpm lint` over the files it changed. It is also where the
+  # checks that want an install (`needs: node_modules` in the manifest) run against a fresh one.
   #
-  # The typecheck runs before the push check so that a failure stays in the log's tail, which is what the fix agent
-  # is handed: a push check that passes prints a few lines, and turbo's output is cut to the tasks that failed.
+  # The typecheck runs before the push check so that a failure stays in the log's tail, which is where a reader of the
+  # job's page looks first: a push check that passes prints a few lines, and turbo's output is cut to the tasks that
+  # failed.
   quick:
     needs: [changes, preflight]
-    if: ${{ !cancelled() && needs.preflight.result == 'success' }}
+    if: ${{ !cancelled() && needs.preflight.result != 'skipped' }}
     runs-on: [self-hosted, intentic]
     timeout-minutes: 20
     container:
@@ -380,6 +400,8 @@ jobs:
       - id: setup
         if: steps.base.outputs.sha != ''
         uses: ./.github/actions/pnpm-setup
+        with:
+          lockfile-drift: measure
       - id: declarations
         if: steps.base.outputs.sha != ''
         run: node _tools/scripts/build/emit-declarations.mjs
@@ -426,7 +448,7 @@ jobs:
   # only thing here that can put a database and a job on the same network, and `services` is how it is asked.
   migrations:
     needs: [changes, preflight]
-    if: ${{ !cancelled() && needs.changes.outputs.platform == 'true' && needs.preflight.result == 'success' }}
+    if: ${{ !cancelled() && needs.changes.outputs.platform == 'true' && needs.preflight.result != 'skipped' }}
     runs-on: [self-hosted, intentic]
     timeout-minutes: 15
     container:
@@ -478,6 +500,8 @@ jobs:
           fetch-depth: 0
           clean: false
       - uses: ./.github/actions/pnpm-setup
+        with:
+          lockfile-drift: measure
       # THE PREDECESSOR COMMIT, spelled out, because work lands on main by direct push here and not only through
       # pull requests. Left to its own default the script would compare against `origin/main` — which on a push
       # to main IS the commit being pushed, so every migration would be diffed against itself and the check
@@ -660,7 +684,7 @@ jobs:
   # measure). The wait is `changes` plus a skip on an ordinary push, which runs beside preflight.
   verify-core:
     needs: [preflight, ci-base]
-    if: ${{ !cancelled() && needs.preflight.result == 'success' }}
+    if: ${{ !cancelled() && needs.preflight.result != 'skipped' }}
     uses: ./.github/workflows/verify.yml
     with:
       filters: "--filter=@intentic/*... --filter=!@intentic/desktop-app --filter=!@intentic/desktop-smoke --filter=!@intentic/web"
@@ -671,6 +695,7 @@ jobs:
   # in. Gates images-platform, and is the only thing that does: this job alone decides whether production rolls.
   verify-platform:
     needs: preflight
+    if: ${{ !cancelled() && needs.preflight.result != 'skipped' }}
     uses: ./.github/workflows/verify.yml
     with:
       # @intentic/ingress rides this gate rather than only verify-core's, because this job is the one thing
@@ -693,7 +718,7 @@ jobs:
   # the principle that a release gate which skips itself is not a gate.
   verify-providers:
     needs: preflight
-    if: ${{ !cancelled() && needs.preflight.result == 'success' }}
+    if: ${{ !cancelled() && needs.preflight.result != 'skipped' }}
     runs-on: [self-hosted, intentic]
     timeout-minutes: 30
     container:
@@ -716,6 +741,8 @@ jobs:
           persist-credentials: false
           clean: false
       - uses: ./.github/actions/pnpm-setup
+        with:
+          lockfile-drift: measure
       # At the PACK's pins, never `@latest`: the tier's claim is that it exercises the shipped article, and the
       # newest CLI is by definition not what the image runs. The canary that does ask for latest is nightly.
       - run: bash _tools/scripts/ci/install-provider-clis.sh
@@ -740,7 +767,7 @@ jobs:
   verify-clocks:
     # After ci-base for verify-core's reason: @intentic/sandbox's suites need the tools the image carries.
     needs: [preflight, ci-base]
-    if: ${{ !cancelled() && needs.preflight.result == 'success' }}
+    if: ${{ !cancelled() && needs.preflight.result != 'skipped' }}
     runs-on: [self-hosted, intentic]
     timeout-minutes: 20
     strategy:
@@ -770,6 +797,8 @@ jobs:
           persist-credentials: false
           clean: false
       - uses: ./.github/actions/pnpm-setup
+        with:
+          lockfile-drift: measure
       # Proves the zone actually took before anything is judged by it: a container without tzdata silently reports
       # UTC, and this whole job would then be a slower copy of one that already ran.
       - name: The runner is on the zone it claims
@@ -813,7 +842,7 @@ jobs:
   # for verify-core's reason. A required success for `images` and the release, like verify-core.
   verify-machine:
     needs: [preflight, ci-base]
-    if: ${{ !cancelled() && needs.preflight.result == 'success' }}
+    if: ${{ !cancelled() && needs.preflight.result != 'skipped' }}
     runs-on: [self-hosted, intentic]
     timeout-minutes: 30
     container:
@@ -842,6 +871,8 @@ jobs:
           persist-credentials: false
           clean: false
       - uses: ./.github/actions/pnpm-setup
+        with:
+          lockfile-drift: measure
       # The same key and paths as `images`, so each fills the cache for the other.
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -894,7 +925,7 @@ jobs:
   # Instructions executed by the daemon's pure-JS hot paths, under Valgrind with node --predictable.
   perf-instr:
     needs: [changes, preflight]
-    if: ${{ !cancelled() && needs.changes.outputs.perf-instr == 'true' && needs.preflight.result == 'success' }}
+    if: ${{ !cancelled() && needs.changes.outputs.perf-instr == 'true' && needs.preflight.result != 'skipped' }}
     runs-on: [self-hosted, intentic]
     timeout-minutes: 30
     container:
@@ -914,6 +945,8 @@ jobs:
           persist-credentials: false
           clean: false
       - uses: ./.github/actions/pnpm-setup
+        with:
+          lockfile-drift: measure
       # This job is Valgrind's only user, so it installs it rather than ci-base carrying it for every job.
       - run: apt-get update && apt-get install -y --no-install-recommends valgrind
       # Four at a time: the host runs six runner processes, and the counts do not depend on the parallelism.
@@ -922,7 +955,7 @@ jobs:
   # Vue renders, V8 calls, layouts, style recalcs and DOM mutations per interaction, in the real editor (_site/demo).
   perf-browser:
     needs: [changes, preflight]
-    if: ${{ !cancelled() && needs.changes.outputs.perf-browser == 'true' && needs.preflight.result == 'success' }}
+    if: ${{ !cancelled() && needs.changes.outputs.perf-browser == 'true' && needs.preflight.result != 'skipped' }}
     runs-on: [self-hosted, intentic]
     timeout-minutes: 30
     container:
@@ -944,6 +977,8 @@ jobs:
           persist-credentials: false
           clean: false
       - uses: ./.github/actions/pnpm-setup
+        with:
+          lockfile-drift: measure
       - run: pnpm --filter @intentic/perf exec playwright install --with-deps chromium
       - run: pnpm perf:browser
 
@@ -954,7 +989,7 @@ jobs:
   # face is built from: the editor, the UI kit, the sidecar and the sandbox contract; and the tier's own files.
   local-face:
     needs: [changes, preflight]
-    if: ${{ !cancelled() && needs.changes.outputs.local-face == 'true' && needs.preflight.result == 'success' }}
+    if: ${{ !cancelled() && needs.changes.outputs.local-face == 'true' && needs.preflight.result != 'skipped' }}
     runs-on: [self-hosted, intentic]
     timeout-minutes: 20
     container:
@@ -976,6 +1011,8 @@ jobs:
           persist-credentials: false
           clean: false
       - uses: ./.github/actions/pnpm-setup
+        with:
+          lockfile-drift: measure
       - run: pnpm --filter @intentic/e2e exec playwright install --with-deps chromium
       - run: pnpm e2e:local
       - uses: ./.github/actions/upload-artifact-retry
@@ -990,6 +1027,7 @@ jobs:
   # this the pull-request gate and the `needs` a future site-deploy job would hang off.
   verify-site:
     needs: preflight
+    if: ${{ !cancelled() && needs.preflight.result != 'skipped' }}
     uses: ./.github/workflows/verify.yml
     with:
       filters: "--filter=./_site/*..."
@@ -1001,7 +1039,7 @@ jobs:
   # covered by that release cross-build.
   desktop-check:
     needs: [changes, preflight, ci-base, ci-desktop]
-    if: ${{ !cancelled() && needs.changes.outputs.desktop == 'true' && needs.preflight.result == 'success' && needs.ci-base.result != 'failure' && needs.ci-desktop.result != 'failure' }}
+    if: ${{ !cancelled() && needs.changes.outputs.desktop == 'true' && needs.preflight.result != 'skipped' && needs.ci-base.result != 'failure' && needs.ci-desktop.result != 'failure' }}
     runs-on: [self-hosted, intentic, desktop]
     container:
       image: ghcr.io/intentic/ci-desktop:latest
@@ -1023,28 +1061,44 @@ jobs:
       # other. And a build's fingerprint includes the stamped version, so jobs sharing a directory invalidate
       # each other's leaf crate and each pays a fresh LTO.
       CARGO_TARGET_DIR: /ci-cache/desktop-check-target
+    # EACH STEP NEEDS WHAT IT READS AND NOTHING ELSE, so a failure in one does not hide the next. The launcher UI's
+    # turbo step failing used to skip every cargo step after it: 21 runs in September 2026 never ran the crate's fmt,
+    # clippy or tests at all, and what those would have said waited for the next push.
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - id: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           clean: false
-      - uses: ./.github/actions/pnpm-setup
+      - id: setup
+        uses: ./.github/actions/pnpm-setup
+        with:
+          lockfile-drift: measure
 
-      # The launcher UI first: `tauri build` would run it anyway, and a Vue error is worth failing on in
-      # seconds rather than after a cargo build. Through turbo rather than a bare `pnpm --filter … build`
-      # because this job OWNS the desktop packages — the verify matrix subtracts them, so their build happens
-      # HERE or nowhere. No separate typecheck: desktop-app's build IS `vue-tsc --noEmit && vite build`.
+      # The launcher UI first: `tauri build` would run it anyway, and a Vue error is said in seconds rather than
+      # after a cargo build. Through turbo rather than a bare `pnpm --filter … build` because this job OWNS the
+      # desktop packages — the verify matrix subtracts them, so their build happens HERE or nowhere. No separate
+      # typecheck: desktop-app's build IS `vue-tsc --noEmit && vite build`.
       - run: pnpm turbo run build test --filter=@intentic/desktop-app... --filter=@intentic/desktop-smoke... --continue=dependencies-successful
       # The launcher scripts, staged out of the commit (stage-desktop-scripts.sh). tauri-build resolves the
-      # resource glob while CARGO builds, so the three bare cargo steps below need it as much as a bundle does
-      # — and the desktop-app `build` above, which stages on its own, is a turbo task that a cache hit skips.
-      - run: bash _tools/scripts/desktop/stage-desktop-scripts.sh
+      # resource glob while CARGO builds, so clippy and test below need it as much as a bundle does — and the
+      # desktop-app `build` above, which stages on its own, is a turbo task that a cache hit skips. `git archive`
+      # of the checkout is all it reads.
+      - id: stage-scripts
+        if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        run: bash _tools/scripts/desktop/stage-desktop-scripts.sh
       # The intentic-files sidecar and the ONLYOFFICE editor page, for the same reason: tauri-build refuses an
-      # `externalBin` that isn't there and checks the resource glob, on clippy and test as on a bundle.
-      - run: bash _tools/scripts/desktop/stage-local-files.sh
-      - run: cargo fmt --manifest-path _editor/desktop-app/src-tauri/Cargo.toml --all --check
-      - run: cargo clippy --manifest-path _editor/desktop-app/src-tauri/Cargo.toml --all-targets -- -D warnings
-      - run: cargo test --manifest-path _editor/desktop-app/src-tauri/Cargo.toml
+      # `externalBin` that isn't there and checks the resource glob, on clippy and test as on a bundle. It builds
+      # what it stages with the install, not with the turbo step above.
+      - id: stage-files
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: bash _tools/scripts/desktop/stage-local-files.sh
+      - if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        run: cargo fmt --manifest-path _editor/desktop-app/src-tauri/Cargo.toml --all --check
+      - if: ${{ !cancelled() && steps.stage-scripts.outcome == 'success' && steps.stage-files.outcome == 'success' }}
+        run: cargo clippy --manifest-path _editor/desktop-app/src-tauri/Cargo.toml --all-targets -- -D warnings
+      - if: ${{ !cancelled() && steps.stage-scripts.outcome == 'success' && steps.stage-files.outcome == 'success' }}
+        run: cargo test --manifest-path _editor/desktop-app/src-tauri/Cargo.toml
 
   # The two shipped Rust crates that are not the desktop app: the ic host-side CLI (_sandbox/ic), the binary
   # behind the connect/recreate/connect-host bootstrap shims, and the Windows launcher stub
@@ -1053,7 +1107,7 @@ jobs:
   # either, so both are seconds off a warm registry.
   ic-check:
     needs: [changes, preflight, ci-base, ci-desktop]
-    if: ${{ !cancelled() && needs.changes.outputs.ic == 'true' && needs.preflight.result == 'success' && needs.ci-base.result != 'failure' && needs.ci-desktop.result != 'failure' }}
+    if: ${{ !cancelled() && needs.changes.outputs.ic == 'true' && needs.preflight.result != 'skipped' && needs.ci-base.result != 'failure' && needs.ci-desktop.result != 'failure' }}
     runs-on: [self-hosted, intentic, desktop]
     container:
       image: ghcr.io/intentic/ci-desktop:latest
@@ -1069,13 +1123,18 @@ jobs:
       CARGO_TARGET_DIR: /ci-cache/ic-check-target
       # For the Windows half below (cargo-xwin) — the same shared MSVC splat every other cross-build uses.
       XWIN_CACHE_DIR: /ci-cache/xwin
+    # Every cargo step needs the checkout and nothing else (each compiles what it reads), so each runs whatever the
+    # one before it said: a clippy finding in ic used to skip the Windows check, ic's tests and all of win-launcher.
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - id: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           clean: false
-      - run: cargo fmt --manifest-path _sandbox/ic/Cargo.toml --all --check
-      - run: cargo clippy --manifest-path _sandbox/ic/Cargo.toml --all-targets -- -D warnings
+      - if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        run: cargo fmt --manifest-path _sandbox/ic/Cargo.toml --all --check
+      - if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        run: cargo clippy --manifest-path _sandbox/ic/Cargo.toml --all-targets -- -D warnings
       # THE WINDOWS TARGET, because half of what this crate does for Windows is not compiled on Linux at all.
       # `prepare/` — the WSL2 + Docker Desktop setup, the largest single thing ic does on the platform it does
       # the most for — is one `#[cfg(windows)]` block, so the three steps above type-check straight past it. On
@@ -1088,16 +1147,22 @@ jobs:
       # dead on Windows and live on unix, and vice versa), and silencing each with a cfg attribute would be a
       # steady tax for no defect caught. The compile error is what this is here for, and check catches it in
       # about the time clippy took.
-      - run: cargo xwin check --manifest-path _sandbox/ic/Cargo.toml --target x86_64-pc-windows-msvc
-      - run: cargo test --manifest-path _sandbox/ic/Cargo.toml
+      - if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        run: cargo xwin check --manifest-path _sandbox/ic/Cargo.toml --target x86_64-pc-windows-msvc
+      - if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        run: cargo test --manifest-path _sandbox/ic/Cargo.toml
       # The launcher stub. The Windows target is not an extra here, it is the ONLY target the shipped binary is
       # ever built for: everything this crate does past argument parsing sits behind `#[cfg(windows)]`, so the
       # Linux fmt/clippy/test steps see the parser and nothing else. `clippy -D warnings` on the Linux side
       # (the crate is small enough to be clean there) and `xwin check` on the side that ships.
-      - run: cargo fmt --manifest-path _devices/win-launcher/Cargo.toml --all --check
-      - run: cargo clippy --manifest-path _devices/win-launcher/Cargo.toml --all-targets -- -D warnings
-      - run: cargo xwin check --manifest-path _devices/win-launcher/Cargo.toml --target x86_64-pc-windows-msvc
-      - run: cargo test --manifest-path _devices/win-launcher/Cargo.toml
+      - if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        run: cargo fmt --manifest-path _devices/win-launcher/Cargo.toml --all --check
+      - if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        run: cargo clippy --manifest-path _devices/win-launcher/Cargo.toml --all-targets -- -D warnings
+      - if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        run: cargo xwin check --manifest-path _devices/win-launcher/Cargo.toml --target x86_64-pc-windows-msvc
+      - if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        run: cargo test --manifest-path _devices/win-launcher/Cargo.toml
 
   # The tunnel's two Rust ends. The sandbox's front (_sandbox/front) owns every port and the ingress tunnel and
   # supervises the daemon; the edge (_platform/ingress) holds the tunnels and routes browsers down them, building the
@@ -1110,7 +1175,7 @@ jobs:
   # image and the release wait on it too, and why `front` also fires on the daemon's end of the socket (affected.mjs).
   front-check:
     needs: [changes, preflight, ci-base, ci-desktop]
-    if: ${{ !cancelled() && needs.changes.outputs.front == 'true' && needs.preflight.result == 'success' && needs.ci-base.result != 'failure' && needs.ci-desktop.result != 'failure' }}
+    if: ${{ !cancelled() && needs.changes.outputs.front == 'true' && needs.preflight.result != 'skipped' && needs.ci-base.result != 'failure' && needs.ci-desktop.result != 'failure' }}
     runs-on: [self-hosted, intentic, desktop]
     container:
       image: ghcr.io/intentic/ci-desktop:latest
@@ -1127,33 +1192,57 @@ jobs:
       run:
         working-directory: _sandbox/front
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - id: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           clean: false
-      - run: cargo fmt --all --check
-      - run: cargo clippy --all-targets --locked -- -D warnings
-      - run: cargo test --locked
-      - run: git diff --exit-code -- ../../_shared/sandbox-contract/src/front/generated
-      - run: cargo fmt --all --check
+      # EACH STEP NEEDS WHAT IT READS AND NOTHING ELSE: three crates are three separate questions, and a clippy finding
+      # in the front used to skip the edge's and the relay's whole gate behind it. Every cargo step needs only the
+      # checkout; the two below that read another step's output say which.
+      - if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        run: cargo fmt --all --check
+      - if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        run: cargo clippy --all-targets --locked -- -D warnings
+      - id: front-test
+        if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        run: cargo test --locked
+      # ts-rs writes the TypeScript while `cargo test` runs, so the diff reads that step's output: it runs whenever the
+      # tests ran at all (a failing test elsewhere still exported every binding), and not when they never started.
+      - if: ${{ !cancelled() && steps.front-test.outcome != 'skipped' }}
+        run: git diff --exit-code -- ../../_shared/sandbox-contract/src/front/generated
+      - if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        run: cargo fmt --all --check
         working-directory: _platform/ingress
-      - run: cargo clippy --all-targets --locked -- -D warnings
+      - if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        run: cargo clippy --all-targets --locked -- -D warnings
         working-directory: _platform/ingress
-      - run: cargo test --locked
+      - if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        run: cargo test --locked
         working-directory: _platform/ingress
-      - run: cargo fmt --all --check
+      - if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        run: cargo fmt --all --check
         working-directory: _shared/relay
-      - run: cargo clippy --all-targets --locked -- -D warnings
+      - if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        run: cargo clippy --all-targets --locked -- -D warnings
         working-directory: _shared/relay
-      - run: cargo test --locked
+      - if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        run: cargo test --locked
         working-directory: _shared/relay
       # THE DAEMON'S END OF THE FRONT'S SOCKET, against the binary this job builds: checkout-feed-front is the one Node
       # suite that needs the front, and this is the one job that has it, so it runs here as the `front` lane
       # (requires(…, { lane: "front" }) fails here without the binary and stands down in every other job). The debug
       # bin links against what `cargo test` above already compiled; the install is the warm store every job uses.
-      - run: cargo build --locked -p intentic-front
-      - uses: ./.github/actions/pnpm-setup
-      - run: pnpm --filter @intentic/sandbox exec suites src/git/feed/checkout-feed-front.integration.test.ts
+      - id: front-build
+        if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        run: cargo build --locked -p intentic-front
+      - id: setup
+        if: ${{ !cancelled() && steps.front-build.outcome == 'success' }}
+        uses: ./.github/actions/pnpm-setup
+        with:
+          lockfile-drift: measure
+      - if: ${{ !cancelled() && steps.front-build.outcome == 'success' && steps.setup.outcome == 'success' }}
+        run: pnpm --filter @intentic/sandbox exec suites src/git/feed/checkout-feed-front.integration.test.ts
         working-directory: .
         env:
           INTENTIC_CI_LANE: front
@@ -1185,7 +1274,7 @@ jobs:
   # also runs this job on a branch, to check a CI-only fix on the same desktop runner before it reaches main.
   desktop-verify:
     needs: [changes, preflight, ci-base, ci-desktop, release]
-    if: ${{ !cancelled() && ((github.ref == 'refs/heads/main' && needs.changes.outputs.desktop == 'true' && needs.release.outputs.version == '' && needs.preflight.result == 'success' && needs.ci-base.result != 'failure' && needs.ci-desktop.result != 'failure') || (github.event_name == 'workflow_dispatch' && inputs.desktop_smoke)) }}
+    if: ${{ !cancelled() && ((github.ref == 'refs/heads/main' && needs.changes.outputs.desktop == 'true' && needs.release.outputs.version == '' && needs.preflight.result != 'skipped' && needs.ci-base.result != 'failure' && needs.ci-desktop.result != 'failure') || (github.event_name == 'workflow_dispatch' && inputs.desktop_smoke)) }}
     runs-on: [self-hosted, intentic, desktop]
     container:
       image: ghcr.io/intentic/ci-desktop:latest
@@ -1211,6 +1300,8 @@ jobs:
           clean: false
       - uses: ./.github/actions/prepare-workspace
       - uses: ./.github/actions/pnpm-setup
+        with:
+          lockfile-drift: measure
       # A fixed 0.0.0: nothing here is published, and the version only names the bundle files.
       - run: bash _tools/scripts/desktop/build-desktop.sh 0.0.0 --linux-only
       - run: bash _tools/scripts/desktop/verify-desktop-install.sh
@@ -1231,7 +1322,7 @@ jobs:
   # install/uninstall cycle sitting AHEAD of the release's in that machine's queue.
   desktop-windows-build:
     needs: [changes, preflight, ci-base, ci-desktop, release]
-    if: ${{ !cancelled() && github.ref == 'refs/heads/main' && needs.changes.outputs.desktop == 'true' && needs.release.outputs.version == '' && needs.preflight.result == 'success' && needs.ci-base.result != 'failure' && needs.ci-desktop.result != 'failure' }}
+    if: ${{ !cancelled() && github.ref == 'refs/heads/main' && needs.changes.outputs.desktop == 'true' && needs.release.outputs.version == '' && needs.preflight.result != 'skipped' && needs.ci-base.result != 'failure' && needs.ci-desktop.result != 'failure' }}
     runs-on: [self-hosted, intentic, desktop]
     container:
       image: ghcr.io/intentic/ci-desktop:latest
@@ -1255,6 +1346,8 @@ jobs:
           clean: false
       - uses: ./.github/actions/prepare-workspace
       - uses: ./.github/actions/pnpm-setup
+        with:
+          lockfile-drift: measure
       - run: bash _tools/scripts/desktop/build-desktop.sh 0.0.0 --windows-only
       - run: bash _tools/scripts/build/build-ic.sh windows-x64
       # Staged into one directory rather than uploaded as two paths, because an upload of several paths is
@@ -1322,7 +1415,7 @@ jobs:
   # rather than from a guard this job restates.
   e2e-billing:
     needs: [changes, preflight]
-    if: ${{ !cancelled() && needs.changes.outputs.platform == 'true' && needs.preflight.result == 'success' }}
+    if: ${{ !cancelled() && needs.changes.outputs.platform == 'true' && needs.preflight.result != 'skipped' }}
     runs-on: [self-hosted, intentic]
     container:
       image: ghcr.io/intentic/ci-base:latest
@@ -1340,6 +1433,8 @@ jobs:
           persist-credentials: false
           clean: false
       - uses: ./.github/actions/pnpm-setup
+        with:
+          lockfile-drift: measure
       - run: pnpm turbo run e2e:hermetic --filter=@intentic/api
 
   # THE SIGN-IN GATE, and the second suite `images-platform` waits on. A person with no session signs in, on the web and
@@ -1362,7 +1457,7 @@ jobs:
   # would read as a failure to the gate.
   e2e-signin:
     needs: [changes, preflight]
-    if: ${{ !cancelled() && (needs.changes.outputs.platform == 'true' || needs.changes.outputs.signin == 'true') && needs.preflight.result == 'success' }}
+    if: ${{ !cancelled() && (needs.changes.outputs.platform == 'true' || needs.changes.outputs.signin == 'true') && needs.preflight.result != 'skipped' }}
     runs-on: [self-hosted, intentic]
     timeout-minutes: 25
     container:
@@ -1386,6 +1481,8 @@ jobs:
           persist-credentials: false
           clean: false
       - uses: ./.github/actions/pnpm-setup
+        with:
+          lockfile-drift: measure
       - run: pnpm --filter @intentic/e2e exec playwright install --with-deps chromium
       # Builds the web first (turbo.json `e2e:signin` depends on `@intentic/web#build`), so the tier serves this commit.
       - run: pnpm e2e:signin
@@ -1403,9 +1500,10 @@ jobs:
   # external services and no secrets. Needing nothing at all is what earns it a run per pull request.
   e2e-hermetic:
     needs: preflight
-    # The fork boundary again — see `changes`. Alone among the pull-request jobs this one's condition names no
-    # `needs` output, so a skipped root does not reach it through the data; it has to say so itself.
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    # The fork boundary again — see `changes`. Alone among the pull-request jobs this one names no `changes` output, so
+    # a skipped root does not reach it through the data; it says so itself. It runs whatever preflight concluded, like
+    # every verification job here (see preflight's comment).
+    if: ${{ !cancelled() && needs.preflight.result != 'skipped' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: [self-hosted, intentic]
     container:
       image: ghcr.io/intentic/ci-base:latest
@@ -1427,6 +1525,8 @@ jobs:
           persist-credentials: false
           clean: false
       - uses: ./.github/actions/pnpm-setup
+        with:
+          lockfile-drift: measure
       # The CLI tier alone: the api's billing tier is `e2e-billing`, which gates. The root script runs both.
       - run: pnpm turbo run e2e:hermetic --filter=@intentic/cli
       - uses: ./.github/actions/upload-artifact-retry
@@ -1444,6 +1544,10 @@ jobs:
   # stop the images and the platform deploy for a reason neither has anything to do with. Both happened
   # before the edges were narrowed.
   #
+  # AND PREFLIGHT, BY NAME. No verification job hands preflight's verdict down any more (they all run whatever it
+  # concluded, so one run reports everything), which means verify-core can pass on a commit preflight refused. Every
+  # job that publishes therefore names preflight itself; leave it out and a commit with a failing check ships.
+  #
   # AND NOT WHEN THE RELEASE BUILDS THE SAME IMAGE. On a releasing push the release's `images-amd64` and
   # `sandbox-arm64` build this same tree at the real version, and release-images.sh then moves `latest` onto
   # that build; this job and its arm64 twin were a second 46-minute build of the same bytes at 0.0.0, started a
@@ -1451,10 +1555,11 @@ jobs:
   # uses: wait for the release call, run only when it released nothing. On a non-releasing push that wait is
   # the release's one-minute `plan`; a release that failed leaves `latest` to this job, as before.
   images:
-    needs: [changes, verify-core, verify-machine, front-check, release]
+    needs: [changes, preflight, verify-core, verify-machine, front-check, release]
     if: |
       !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main'
       && needs.changes.outputs.images == 'true'
+      && needs.preflight.result == 'success'
       && needs.verify-core.result == 'success'
       && needs.verify-machine.result == 'success'
       && needs.front-check.result != 'failure'
@@ -1529,6 +1634,77 @@ jobs:
       - run: TAGS="sha-${GITHUB_SHA::8}" IMAGES=dind-host bash _tools/scripts/image/publish-images.sh
         shell: bash
 
+  # THE IMAGE `images` WOULD HAVE SHIPPED, BUILT AND BOOTED, WHEN A GATE IN FRONT OF IT FAILED. Publishing rightly
+  # waits on preflight and the verify groups, but the proof that rides with it — the prod-pruned tree builds, and the
+  # daemon in it boots and converges (smoke-image.sh) — is nobody else's, so a commit failing a gate used to learn
+  # about its broken image only after the gate was fixed: one more round. This job runs exactly when `images` would
+  # have run but for a failed gate (its condition is the complement of that one gate clause, with every other clause
+  # the same), builds the amd64 half of both profiles into this runner's docker store, boots them, and removes them.
+  #
+  # DRY BY ITS TOKEN, NOT BY A FLAG. `packages: read` is all it holds, so even a script that ignored PUSH=0 could not
+  # move a tag; PUSH=0 is what makes the build `--load` instead of `--push`, and SMOKE_PULL=0 what boots the loaded
+  # image instead of pulling a tag that does not exist. dind-host and the arm64 half are left to `images`: neither has
+  # a boot proof of its own to run here, and the arm64 half is a GitHub-hosted runner's hour.
+  #
+  # The cost, said plainly: one more amd64 image build, on the fleet, for each failing main push that changes the image.
+  images-dry:
+    needs: [changes, preflight, verify-core, verify-machine, front-check, release]
+    if: |
+      !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+      && needs.changes.outputs.images == 'true'
+      && (needs.release.outputs.version == '' || needs.release.result != 'success')
+      && !(needs.preflight.result == 'success'
+        && needs.verify-core.result == 'success'
+        && needs.verify-machine.result == 'success'
+        && needs.front-check.result != 'failure')
+    runs-on: [self-hosted, intentic]
+    container:
+      image: ghcr.io/intentic/ci-base:latest
+      volumes:
+        - /ci-cache:/ci-cache
+        - /var/run/docker.sock:/var/run/docker.sock
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: read
+    env:
+      REGISTRIES: ghcr.io/intentic
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          clean: false
+      # `fail` on a stale lockfile, as `images` does: the image is built from the lockfile, so one that no longer
+      # matches the manifests cannot be built faithfully, and preflight already says so.
+      - uses: ./.github/actions/pnpm-setup
+      # Read-only, for the --cache-from reads that keep this build warm.
+      - uses: ./.github/actions/ghcr-login
+        with:
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # The same key and paths as `images`, so each fills the cache for the other.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            .image-out/iq-models
+            .image-out/.iq-models-complete
+          key: iq-models-${{ hashFiles('_search/iq-engine/scripts/fetch-model.mjs') }}
+      - run: bash _tools/scripts/image/prepare-image-trees.sh
+      - run: PUSH=0 TAGS="dry-${GITHUB_SHA::8}" ARCH_SUFFIX=-amd64 IMAGES=sandbox bash _tools/scripts/image/publish-images.sh
+        shell: bash
+      # SMOKE_RMI=1 drops each image from the store once it has been judged: on the fleet a dry image is nobody's warm
+      # parent (the registry's `latest` is), and two ~5 GB images per failing push are how a runner's disk fills.
+      - run: SMOKE_PULL=0 SMOKE_RMI=1 bash _tools/scripts/image/smoke-image.sh "ghcr.io/intentic/sandbox:dry-${GITHUB_SHA::8}-amd64" "ghcr.io/intentic/sandbox:core-dry-${GITHUB_SHA::8}-amd64"
+        shell: bash
+      # Whatever happened above, including a build that loaded one profile and failed the other, or a cancel.
+      - name: Remove the dry images
+        if: always()
+        shell: bash
+        run: docker image rm "ghcr.io/intentic/sandbox:dry-${GITHUB_SHA::8}-amd64" "ghcr.io/intentic/sandbox:core-dry-${GITHUB_SHA::8}-amd64" >/dev/null 2>&1 || true
+
   # The sandbox image's arm64 half, natively built — GitHub's hosted arm runners rather than the x86 fleet,
   # because the trees payload must be prepared on the arch it ships for (pnpm deploy fetches the HOST arch's
   # native prebuilds; publish-images.sh says the rest). Cold caches by construction (no /ci-cache off the
@@ -1536,11 +1712,13 @@ jobs:
   # registry's own arm64 tags. The release does NOT reuse these sha tags — its arm64 half is version-stamped
   # inside release.yml (sandbox-arm64 there) so a released manifest's halves never skew.
   images-arm64:
-    needs: [changes, verify-core, verify-machine, front-check, release]
-    # Gated on the release the way `images` is: the release's sandbox-arm64 builds this half on a releasing push.
+    needs: [changes, preflight, verify-core, verify-machine, front-check, release]
+    # Gated on preflight and the release the way `images` is: the release's sandbox-arm64 builds this half on a
+    # releasing push.
     if: |
       !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main'
       && needs.changes.outputs.images == 'true'
+      && needs.preflight.result == 'success'
       && needs.verify-core.result == 'success'
       && needs.verify-machine.result == 'success'
       && needs.front-check.result != 'failure'
@@ -1647,11 +1825,20 @@ jobs:
   # `e2e-signin` gates here for the same reason at the front door: this job is also what ships the web, and 1.318.0
   # went out with every piece of the desktop sign-in passing its own tests and no one able to finish it. It runs on
   # `platform` too, so it has always run when this job does.
+  #
+  # `migrations` gates here because this job is what puts a migration in front of the live database. The history it
+  # refuses (an edited applied migration, an ADD COLUMN NOT NULL with no default) is exactly what P3009'd every deploy
+  # until it was fixed forward by hand, so a deploy that went ahead of a failed migrations job would be the failure,
+  # not the warning. It runs on `platform` like this job, so a success is always there to require.
+  #
+  # And preflight, by name, for the reason `images` spells out.
   images-platform:
-    needs: [changes, verify-platform, e2e-billing, e2e-signin, front-check]
+    needs: [changes, preflight, migrations, verify-platform, e2e-billing, e2e-signin, front-check]
     if: |
       !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main'
       && needs.changes.outputs.platform == 'true'
+      && needs.preflight.result == 'success'
+      && needs.migrations.result == 'success'
       && needs.verify-platform.result == 'success'
       && needs.e2e-billing.result == 'success'
       && needs.e2e-signin.result == 'success'
@@ -1746,10 +1933,12 @@ jobs:
   # gate that a skip satisfies is a gate that disappears exactly when someone disables it.
   # verify-machine is required the same way, since it runs every pipeline. front-check runs only when the front or
   # the daemon's end of its socket moved, so it is held to `!= 'failure'`, as images-platform holds it.
+  # Preflight is required by name, for the reason `images` spells out: the verify groups no longer carry its verdict.
   release:
-    needs: [verify-core, verify-providers, verify-machine, front-check, ci-base, ci-desktop]
+    needs: [preflight, verify-core, verify-providers, verify-machine, front-check, ci-base, ci-desktop]
     if: |
       !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+      && needs.preflight.result == 'success'
       && needs.verify-core.result == 'success'
       && needs.verify-providers.result == 'success'
       && needs.verify-machine.result == 'success'

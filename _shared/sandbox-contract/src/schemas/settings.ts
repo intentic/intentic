@@ -20,13 +20,15 @@ export const SYSTEM_PROMPT_MAX = 20_000;
 export const AUTO_MODEL_GUIDANCE_MAX = 2000;
 // Rules: "at this moment, if this is true, do this". The owner's rules decide (land, hold, version); every command a
 // moment runs is a repository's own check (`<repo>/.intentic/checks.json`), compiled into this same table by the daemon,
-// so no command lives in settings. Nothing verifies inside a turn, after a land or on the way to a push: CI checks what
-// the owner pushes, and nothing here holds anything (schemas/ci.ts).
+// so no command lives in settings. Nothing verifies after a land or on the way to a push, and nothing here holds
+// anything: what a check finds inside a turn is said back to the model, and CI checks what the owner pushes
+// (schemas/ci.ts).
 export const RuleMomentSchema = z.enum([
     // A command here runs on the just-written file (`{file}` is its path); the cheapest moment to catch a defect.
     "file.edited",
-    // Retired: the assistant stopping. Nothing runs here any more and nothing sends a turn back to work; the value stays
-    // so settings written before it went still read, and a rule standing here is inert.
+    // An isolated turn about to stop: a repository's own `turn` check runs here once, on what the turn changed, and what
+    // it finds is said back to the model, which may fix it or say why not. It holds and refuses nothing. Only what a
+    // repository declares stands here; an owner's rule left here from before is inert, and no save stands a new one.
     "turn.ending",
     // An agent's turn is over and its delta is sitting on its branch. A rule here decides whether it lands.
     "agent.finished",
@@ -55,8 +57,8 @@ export const RuleActionSchema = z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("builtin"), name: RuleBuiltinSchema }),
 ]);
 export type RuleAction = z.infer<typeof RuleActionSchema>;
-// `checks-failed` was a clean turn whose `turn.ending` check failed. Nothing produces it now that no check runs inside a
-// turn, and a check never holds work; it stays so older rules naming it still read.
+// `checks-failed` was a clean turn whose `turn.ending` check failed. Nothing produces it now: a `turn` check's findings
+// are said back to the model and never decide whether its work lands. It stays so older rules naming it still read.
 export const RuleOutcomeSchema = z.enum(["clean", "error", "conflict", "checks-failed"]);
 export type RuleOutcome = z.infer<typeof RuleOutcomeSchema>;
 // Every key absent means the rule always matches.
@@ -68,7 +70,8 @@ export const RuleConditionSchema = z.object({
     // How the turn ended. Absent/empty ⇒ any.
     outcome: z.array(RuleOutcomeSchema).optional(),
     // The fraction of occasions a rule fires on, at a moment that draws one; absent ⇒ every occasion. No moment draws
-    // now that `turn.ending` is retired, so a sampled rule fires every time.
+    // one any more (`turn.ending` did, before it held only the checks a repository declares), so a sampled rule fires
+    // every time.
     sample: z.number().gt(0).lt(1).optional(),
 });
 export type RuleCondition = z.infer<typeof RuleConditionSchema>;
@@ -103,7 +106,8 @@ export const RuleSchema = z
         path: ["action"],
     });
 export type Rule = z.infer<typeof RuleSchema>;
-// A rule at a retired moment or with a retired built-in: read, so an older file parses, but never written again.
+// A rule the owner's settings no longer take: one at `turn.ending`, where only a repository's own checks stand, or one
+// with the retired `verify-ui-edits` built-in. Read, so an older file parses, but never written again.
 export const isRetiredMomentRule = (rule: Pick<Rule, "moment" | "action">): boolean =>
     rule.moment === "turn.ending" || (rule.action.kind === "builtin" && rule.action.name === "verify-ui-edits");
 // Kept out of the settings object on purpose: a firing is not an edit, and writing config on every push would make
@@ -557,10 +561,11 @@ export const SandboxSettingsSchema = z.object({
         .describe("How many levels deep the delegation may go, since a subagent can start subagents of its own."),
 });
 export type SandboxSettings = z.infer<typeof SandboxSettingsSchema>;
-// What a save takes: the settings as read, less what is only read. `turn.ending` (and its `verify-ui-edits` built-in) is
-// retired; a file written before still parses (and its conversion drops such rules), but no save may stand a new one.
+// What a save takes: the settings as read, less what is only read. `turn.ending` holds only the checks a repository
+// declares, which the daemon adds to a turn's rules and never saves, and the `verify-ui-edits` built-in is retired; a
+// file written before still parses (and its conversion drops such rules), but no save may stand a new one.
 export const SandboxSettingsWriteSchema = SandboxSettingsSchema.refine((settings) => !settings.rules.some(isRetiredMomentRule), {
-    message: "turn.ending is retired: nothing runs when a turn ends any more, so a rule cannot stand there",
+    message: "turn.ending runs only the checks a repository declares in its own .intentic/checks.json, so a rule cannot stand there",
     path: ["rules"],
 });
 
@@ -712,17 +717,18 @@ export type SavingsReport = z.infer<typeof SavingsReportSchema>;
 // spelling for the daemon that reads it, the screen that names it and the demo that mimics it.
 export const REPO_CHECKS_FILE = `${STATE_DIR}/checks.json`;
 
-// Named for the occasion as a repository would say it: `edit` is `file.edited` (rules/repo-checks.ts maps it). `turn`
-// and `land` are retired: nothing runs when a turn ends or after work lands any more (CI checks what the owner pushes),
-// and a declaration naming either still reads but runs nothing. No check refuses a land, a commit or a push.
-// `edit` runs on one file (`{file}`) and its output rides back in the edit's own response, so a command declared there is
-// paid per edit and has to take the file.
+// Named for the occasion as a repository would say it: `edit` is `file.edited` and `turn` is `turn.ending`
+// (rules/repo-checks.ts maps them). `edit` runs on one file (`{file}`) and its output rides back in the edit's own
+// response, so a command declared there is paid per edit and has to take the file. `turn` runs once when an isolated
+// turn is about to stop, on the whole tree, and what it prints when it fails is said back to the model once, which may
+// fix it or say why not. `land` is retired: nothing runs after work lands any more (CI checks what the owner pushes), and
+// a declaration naming it still reads but runs nothing. No check refuses a land, a commit or a push.
 export const RepoCheckMomentSchema = z.enum(["edit", "turn", "land"]);
 export type RepoCheckMoment = z.infer<typeof RepoCheckMomentSchema>;
 
 export const RepoCheckSchema = z.object({
     when: RepoCheckMomentSchema.describe(
-        "When to run it: `edit` on each file as it is written (`{file}` is its path). `turn` and `land` are retired and run nothing: checks no longer run while a conversation works or after its work lands, since CI checks what is pushed.",
+        "When to run it: `edit` on each file as it is written (`{file}` is its path); `turn` once when an isolated turn is about to stop, for at most three minutes, with what it prints on failure said back to the model once. Neither holds or refuses anything. `land` is retired and runs nothing, since CI checks what is pushed.",
     ),
     run: z.string().min(1).max(500).describe("The command, run in this repository's own directory, so it reads as it would in a terminal there."),
     label: z.string().min(1).max(80).optional().describe("What to call it on screen. Absent names it after the command."),

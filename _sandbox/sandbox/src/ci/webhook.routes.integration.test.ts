@@ -293,6 +293,7 @@ test("a failed job's own delivery reaches main's fix agent at once, with the ste
         sha: "abc1234def",
         url: "https://github.com/acme/web/actions/runs/7/job/70",
         step: "Run tests",
+        steps: ["Run tests"],
     });
     // A job is no run: nothing is announced to automations until the run itself ends.
     expect(await services.ciStore.lastConclusion("web", "main")).toBeUndefined();

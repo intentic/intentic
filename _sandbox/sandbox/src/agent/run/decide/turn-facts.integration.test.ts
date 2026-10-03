@@ -277,13 +277,14 @@ test.each([
     expect(facts.landingChecksNote?.title).toBe(sent ? LANDING_CHECKS_NOTE_TITLE : undefined);
 });
 
-// Codex and OpenCode run no check at their end any more than the Claude Code loop does, so none is told differently.
+// Only an isolated turn of the Claude Code loop meets a repository's end-of-turn checks, and the note says they "may" run,
+// so every runtime is read the same one.
 test.each(["claude", "codex", "grok"] as const)("%s is read the note on its opening message like every other runtime", async (agent) => {
     const services = servicesWith({ agents: unstubbed<Services["agents"]>("agents", { entry: () => undefined }) });
 
     const facts = admitted(await gatherTurnFacts(services, turn({ agent, conversationId: `c-${agent}` }), context));
 
-    expect(facts.landingChecksNote?.text).toContain("Nothing checks your work when you finish");
+    expect(facts.landingChecksNote?.text).toContain("Nothing else checks your work when you finish");
 });
 
 // The brief is daemon-kept config that git does not track, so an isolated turn's worktree never has a copy: read from the

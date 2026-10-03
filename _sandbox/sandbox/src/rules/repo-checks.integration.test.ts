@@ -65,9 +65,9 @@ test("a declaration that exists but cannot be read is that repository's error ro
     ]);
 });
 
-// `turn` was the check a conversation ran before it finished. Nothing runs inside a conversation now, so a repository
-// that still declares one keeps reading as written, keeps its adoption, and runs only the checks that still have a moment.
-test("a declaration still naming the retired turn moment reads as written, and once adopted stands as its edit check alone", async () => {
+// `land` ran after work landed, and nothing does now; `turn` runs once as an isolated turn is about to stop and says
+// what it found back to the model. A file naming all three reads as written and, once adopted, stands as the two that run.
+test("a declaration read from disk, once adopted, stands as its edit and turn checks, its retired land check aside", async () => {
     const root = setup();
     mkdirSync(join(root, "intentic", ".git"), { recursive: true });
     const checks = [
@@ -88,5 +88,6 @@ test("a declaration still naming the retired turn moment reads as written, and o
     });
     expect(rules.map(({ moment, when, action }) => ({ moment, when, action }))).toEqual([
         { moment: "file.edited", when: { repo: "intentic" }, action: { kind: "command", command: "pnpm lint {file}", timeoutMs: 900_000 } },
+        { moment: "turn.ending", when: { repo: "intentic" }, action: { kind: "command", command: "pnpm verify:turn", timeoutMs: 900_000 } },
     ]);
 });

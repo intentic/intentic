@@ -15,7 +15,8 @@ import { blindAtBase, findingCounts, problemLines } from "./turn-findings.mjs";
 // measured by its own runner (`${at}/_tools/checks/run.mjs`), since a check finds the repository by walking up from
 // itself; this also means a change to a check is compared against the check as it was, so a rule it tightened is its own
 // to answer for. `undefined` when the runner couldn't run or answer in JSON; the caller treats that as "cannot say".
-export const checkVerdicts = (at, only) => {
+// `env` is the checks' environment, for a caller that points their git at an index of its own (verify-turn.mjs).
+export const checkVerdicts = (at, only, env = process.env) => {
     const runner = join(at, "_tools/checks/run.mjs");
     if (!existsSync(runner)) {
         return undefined;
@@ -24,6 +25,7 @@ export const checkVerdicts = (at, only) => {
         cwd: at,
         encoding: "utf8",
         maxBuffer: 64 * 1024 * 1024,
+        env,
     });
     try {
         return JSON.parse(result.stdout);

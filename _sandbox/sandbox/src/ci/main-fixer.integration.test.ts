@@ -26,8 +26,8 @@ import { ciProjects } from "./projects.js";
 import type { FetchFn } from "./providers.js";
 import { createRunsCache } from "./runs-cache.js";
 
-/* Main's CI has one fix agent: started at the first failed job, told every later one, and handing main's failure to the
-   owner when it can do no more. */
+/* Main's CI has one fix agent: started with every job its first failed run failed, told each later run's failures as one
+   message, and handing main's failure to the owner when it can do no more. */
 
 // Dropped rather than fed to a live /events feed, whose subscription would start the runtime sampler.
 jest.mock("../seams/runtime-feed.js", () => ({ publishRuntimeChange: () => {} }));
@@ -185,6 +185,17 @@ const harness = async (autoRepair = true) => {
         throw new Error("the web repo should map to its GitHub project");
     }
     const failure = async () => (await services.ciStore.failures())["web\nmain"];
+    // A run finishing failed, as its webhook says it: the forge lists the jobs it failed (one per name, ids from the run's
+    // own), and the finished run hands them over.
+    const failRun = async (runId: number, names: readonly string[] = ["verify-core"], over: Partial<PipelineRun> = {}): Promise<void> => {
+        forge.jobs[runId] = names.map((name, index) => ({
+            id: runId * 10 + index,
+            name,
+            conclusion: "failure",
+            steps: [{ name: "Run pnpm turbo run test", conclusion: "failure" }],
+        }));
+        await runFinished(services, run(runId, "failed", over), fetchFn);
+    };
     return {
         services,
         fetchFn,
@@ -203,63 +214,113 @@ const harness = async (autoRepair = true) => {
         settings,
         settle,
         failure,
+        failRun,
     };
 };
 
-beforeEach(resetMainFixer);
+// Until a condition holds, polled; the bound is a hang guard, never a measure of how long the handover takes.
+const until = async (holds: () => boolean): Promise<void> => {
+    for (let polls = 0; polls < 500 && !holds(); polls += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+};
 
-test("the first failed job starts one fix agent, named for its run, with that job's log, while the run goes on", async () => {
-    const { services, fetchFn, project, started, told, failure } = await harness();
+beforeEach(() => resetMainFixer());
 
-    expect(await jobFailed(services, project, job(41, 7), fetchFn)).toBe("code");
+test("a run's failed jobs are parked while it goes on, and its finish starts one fix agent with all of them", async () => {
+    const { services, fetchFn, project, started, told, failure, failRun } = await harness();
+
+    expect(await jobFailed(services, project, job(41, 410), fetchFn)).toBe("code");
+    expect(await jobFailed(services, project, job(41, 411, "lint"), fetchFn)).toBe("code");
+    expect(started).toEqual([]);
+    // The banner reads the failure as it grows; nobody is on it yet, and nothing is heard until it is handed over.
+    expect(await failure()).toMatchObject({ firstRunId: 41, runId: 41, count: 1, turns: 0, workflows: { CI: 41 }, heard: [] });
+    expect((await mainFailures(services))[0]).toMatchObject({ jobs: ["verify-core", "lint"] });
+
+    await failRun(41, ["verify-core", "lint"]);
 
     expect(started.map(({ conversationId }) => conversationId)).toEqual([FIXER]);
-    expect(started[0]!.prompt).toContain(`the job "verify-core" in run 41`);
-    expect(started[0]!.prompt).toContain("the run may still be going");
-    expect(started[0]!.prompt).toContain("FAIL src/a.test.ts > adds");
+    expect(started[0]!.prompt).toContain(`run 41 failed 2 jobs: "verify-core", "lint", on main of "web"`);
+    expect(started[0]!.prompt).toContain("so this is the whole list of what it found wrong");
+    expect(started[0]!.prompt).toContain("- [verify-core, lint] FAIL src/a.test.ts > adds");
     expect(started[0]!.errand).toBe("ci-fix");
     expect(told).toEqual(["ci.repair_started"]);
-    expect(await failure()).toMatchObject({ firstRunId: 41, runId: 41, count: 1, turns: 1, workflows: { CI: 41 }, heard: ["41/7"] });
+    expect(await failure()).toMatchObject({ count: 1, turns: 1, heard: ["41/410", "41/411"] });
     expect(await mainFailures(services)).toEqual([
         {
             repo: "web",
             branch: "main",
             since: expect.any(Number),
             runId: 41,
-            jobs: ["verify-core"],
+            jobs: ["verify-core", "lint"],
             fixer: FIXER,
             decision: expect.objectContaining({ kind: "fix-up", conversationId: FIXER }),
         },
     ]);
 });
 
-test("every later failure goes to the same agent: said into its live turn for free, a turn of its own when idle", async () => {
-    const { services, fetchFn, project, running, started, said, failure } = await harness();
-    await jobFailed(services, project, job(41, 7), fetchFn);
+test("a run still going when its clock runs out hands over what failed so far, and the rest follows when it finishes", async () => {
+    resetMainFixer({ settleCapMs: 20 });
+    const { services, fetchFn, project, running, started, said, failure, failRun } = await harness();
 
-    await jobFailed(services, project, job(41, 8, "lint"), fetchFn);
+    await jobFailed(services, project, job(41, 410), fetchFn);
+    await until(() => started.length === 1);
+    expect(started[0]!.prompt).toContain(`run 41 failed 1 job: "verify-core"`);
+    expect(started[0]!.prompt).toContain("so these are the jobs that had failed by then; any that fails later in it is sent to you when it finishes");
+
+    running.delete(FIXER);
+    await failRun(41, ["verify-core", "lint"]);
+    expect(said.map((words) => words.turn.conversationId)).toEqual([FIXER]);
+    expect(said[0]!.turn.prompt).toContain(`run 41 failed 1 job: "lint"`);
+    expect(said[0]!.turn.prompt).toContain("It is the run this failure began in.");
+    expect(said[0]!.turn.prompt).toContain("so this is the whole list of what it found wrong");
+    expect(await failure()).toMatchObject({ turns: 2, heard: ["41/410", "41/411"] });
+});
+
+test("each later run's failures go to the same agent as one message: into its live turn for free, a turn of its own when idle", async () => {
+    const { services, running, started, said, failure, failRun } = await harness();
+    await failRun(41);
+
+    await failRun(42, ["verify-core", "lint"]);
     expect(said.map((words) => [words.turn.conversationId, words.turn.errand, words.voice])).toEqual([[FIXER, "ci-fix-nudge", "sandbox"]]);
-    expect(said[0]!.turn.prompt).toContain(`"lint" in run 41`);
-    expect(said[0]!.turn.prompt).toContain("It is in the run this failure began in.");
+    expect(said[0]!.turn.prompt).toContain(`run 42 failed 2 jobs: "verify-core", "lint"`);
+    expect(said[0]!.turn.prompt).toContain("It is a later run, at commit sha42.");
+    expect(said[0]!.turn.prompt).toContain("--- what failed ---\n2 failed jobs:");
     expect((await failure())?.turns).toBe(1);
 
     running.delete(FIXER);
-    await jobFailed(services, project, job(42, 9), fetchFn);
-    expect(said[1]!.turn.prompt).toContain("It is from a later run, at commit sha42.");
+    await failRun(43);
+    expect(said).toHaveLength(2);
     expect(started).toHaveLength(1);
-    expect(await failure()).toMatchObject({ runId: 42, count: 2, turns: 2, workflows: { CI: 42 } });
-    expect((await failure())?.findings.map(({ text }) => text)).toEqual(["verify-core", "lint"]);
+    expect(await failure()).toMatchObject({ runId: 43, count: 3, turns: 2, workflows: { CI: 43 } });
+    // The jobs failing now are the newest finished run's word: lint passed in run 43.
+    expect((await failure())?.findings.map(({ text }) => text)).toEqual(["verify-core"]);
+    expect(services.agents.list().map(({ id }) => id)).toEqual([FIXER]);
 });
 
-test("a job heard twice, by its own webhook and by its finished run, is handled once", async () => {
-    const { services, fetchFn, project, forge, started, said } = await harness();
-    forge.jobs[41] = [{ id: 7, name: "verify-core", conclusion: "failure", steps: [{ name: "Run pnpm turbo run test", conclusion: "failure" }] }];
+test("a job heard twice, by its own webhook and by its finished run, is handed over once", async () => {
+    const { services, fetchFn, project, started, said, failRun } = await harness();
 
-    await jobFailed(services, project, job(41, 7), fetchFn);
-    await runFinished(services, run(41, "failed"), fetchFn);
+    await jobFailed(services, project, job(41, 410), fetchFn);
+    await failRun(41);
+    await failRun(41);
 
     expect(started).toHaveLength(1);
     expect(said).toEqual([]);
+});
+
+// What the process held of a run that had not finished is gone after a restart; the forge's own list of the run's
+// failed jobs, read when it finishes, is enough to hand it over whole.
+test("a restart between a job failing and its run finishing loses nothing", async () => {
+    const { services, fetchFn, project, started, failure, failRun } = await harness();
+    await jobFailed(services, project, job(41, 410), fetchFn);
+
+    resetMainFixer();
+    await failRun(41);
+
+    expect(started.map(({ conversationId }) => conversationId)).toEqual([FIXER]);
+    expect(started[0]!.prompt).toContain(`run 41 failed 1 job: "verify-core"`);
+    expect((await failure())?.heard).toEqual(["41/410"]);
 });
 
 test("a job of another branch is no failure of main's", async () => {
@@ -284,9 +345,9 @@ test("the fleet's failure is never the agent's: a run only the fleet failed is r
 });
 
 test("a later pass of every workflow that failed ends the streak, and another workflow's pass does not", async () => {
-    const { services, fetchFn, project, running, steered, told, logged, failure } = await harness();
-    await jobFailed(services, project, job(41, 7), fetchFn);
-    await jobFailed(services, project, job(43, 11, "analyze", { workflow: "CodeQL" }), fetchFn);
+    const { services, fetchFn, running, steered, told, logged, failure, failRun } = await harness();
+    await failRun(41);
+    await failRun(43, ["analyze"], { workflow: "CodeQL" });
 
     await runFinished(services, run(44, "success", { workflow: "Scorecard" }), fetchFn);
     expect(Object.keys((await failure())?.workflows ?? {})).toEqual(["CI", "CodeQL"]);
@@ -312,11 +373,11 @@ test("a failure older than main's newest pass of its workflow is not main's word
 });
 
 test(`past its ${TURNS_PER_STREAK} turns the failure waits for the owner, and nothing more is sent`, async () => {
-    const { services, fetchFn, project, running, said, told, sentences, failure } = await harness();
-    await jobFailed(services, project, job(41, 7), fetchFn);
+    const { running, said, told, sentences, failure, failRun } = await harness();
+    await failRun(41);
     for (let runId = 42; runId <= 42 + TURNS_PER_STREAK; runId += 1) {
         running.delete(FIXER);
-        await jobFailed(services, project, job(runId, runId * 10), fetchFn);
+        await failRun(runId);
     }
     expect(said).toHaveLength(TURNS_PER_STREAK - 1);
     expect((await failure())?.decisions.at(-1)).toMatchObject({
@@ -327,18 +388,18 @@ test(`past its ${TURNS_PER_STREAK} turns the failure waits for the owner, and no
     });
     expect(told).toEqual(["ci.repair_started", "ci.repair_needs_you"]);
     expect(sentences).toEqual([
-        "main of web started failing at verify-core: a fix agent is on it, and every later failure goes to it.",
+        "main of web started failing in run 41, at verify-core: a fix agent is on it with all of them, and every later failure goes to it.",
         `main of web still fails and waits for you: its fix agent had its ${TURNS_PER_STREAK} turns and main still fails.`,
     ]);
 
     running.delete(FIXER);
-    await jobFailed(services, project, job(50, 500), fetchFn);
+    await failRun(50);
     expect(said).toHaveLength(TURNS_PER_STREAK - 1);
 });
 
 test("an agent that finished without changing anything hands the failure over; one that changed something already does not", async () => {
-    const { services, fetchFn, project, running, said, told, settle, failure } = await harness();
-    await jobFailed(services, project, job(41, 7), fetchFn);
+    const { services, running, said, told, settle, failure, failRun } = await harness();
+    await failRun(41);
     await settle(FIXER, { status: "idle" });
     expect((await failure())?.decisions.at(-1)).toMatchObject({
         kind: "spent",
@@ -347,7 +408,7 @@ test("an agent that finished without changing anything hands the failure over; o
         detail: "Its fix agent finished without changing anything.",
     });
     expect(told).toEqual(["ci.repair_started", "ci.repair_needs_you"]);
-    await jobFailed(services, project, job(42, 9), fetchFn);
+    await failRun(42);
     expect(said).toEqual([]);
 
     // A person's press gives it the streak back, with its turns.
@@ -357,15 +418,15 @@ test("an agent that finished without changing anything hands the failure over; o
     await settle(FIXER, { status: "landed" });
     expect((await failure())?.changed).toBe(true);
     running.delete(FIXER);
-    await jobFailed(services, project, job(43, 10), fetchFn);
+    await failRun(43);
     expect(said).toHaveLength(1);
     await settle(FIXER, { status: "idle" });
     expect((await failure())?.decisions.at(-1)?.kind).toBe("fix-up");
 });
 
 test("an agent whose turn failed hands the failure over, and a turn the sandbox runs again by itself is not over yet", async () => {
-    const { services, fetchFn, project, agents, failure } = await harness();
-    await jobFailed(services, project, job(41, 7), fetchFn);
+    const { services, agents, failure, failRun } = await harness();
+    await failRun(41);
     agents.set(FIXER, summary(FIXER, { status: "error", failure: "the harness crashed" }));
     await fixerSettled(services, { conversationId: FIXER, rerun: {} });
     expect((await failure())?.decisions.at(-1)?.kind).toBe("fix-up");
@@ -375,8 +436,8 @@ test("an agent whose turn failed hands the failure over, and a turn the sandbox 
 
 // The turn's own error is the log's: the owner reads one short sentence, and the reason is a word a screen phrases itself.
 test("a failed turn hands the failure over with its reason, and the agent's own error reaches only the log", async () => {
-    const { services, fetchFn, project, settle, sentences, logFields, failure } = await harness();
-    await jobFailed(services, project, job(41, 7), fetchFn);
+    const { services, settle, sentences, logFields, failure, failRun } = await harness();
+    await failRun(41);
     const error = "Sandbox memory is low: 11.1 GiB resident + 5.0 GiB swapped, against 18.0 GiB";
 
     await settle(FIXER, { status: "error", failure: error });
@@ -395,8 +456,8 @@ test("a failed turn hands the failure over with its reason, and the agent's own 
 });
 
 test("an archived fix agent hands the failure over as gone, in its own words", async () => {
-    const { services, fetchFn, project, agents, failure } = await harness();
-    await jobFailed(services, project, job(41, 7), fetchFn);
+    const { services, agents, failure, failRun } = await harness();
+    await failRun(41);
     agents.set(FIXER, summary(FIXER, { status: "idle", archivedAt: 2_000 }));
 
     await fixerSettled(services, { conversationId: FIXER });
@@ -410,9 +471,9 @@ test("an archived fix agent hands the failure over as gone, in its own words", a
 });
 
 test("with repairs switched off, a failing main is only reported", async () => {
-    const { services, fetchFn, project, started, failure } = await harness(false);
-    await jobFailed(services, project, job(41, 7), fetchFn);
-    await jobFailed(services, project, job(41, 8, "lint"), fetchFn);
+    const { services, fetchFn, project, started, failure, failRun } = await harness(false);
+    await jobFailed(services, project, job(41, 410), fetchFn);
+    await failRun(41, ["verify-core", "lint"]);
     expect(started).toEqual([]);
     expect((await failure())?.decisions.map(({ kind }) => kind)).toEqual(["reported"]);
     expect((await mainFailures(services))[0]).toMatchObject({
@@ -424,12 +485,12 @@ test("with repairs switched off, a failing main is only reported", async () => {
 
 // The streak is kept with the CI store, not in memory: a restart keeps it, and the agent on it stays its only one.
 test("a restart keeps the streak: the next failure goes to the agent already on it, never a second", async () => {
-    const { services, fetchFn, project, running, started, said } = await harness();
-    await jobFailed(services, project, job(41, 7), fetchFn);
+    const { running, started, said, failRun } = await harness();
+    await failRun(41);
 
     resetMainFixer();
     running.delete(FIXER);
-    await jobFailed(services, project, job(42, 9), fetchFn);
+    await failRun(42);
     expect(started).toHaveLength(1);
     expect(said.map((words) => words.turn.conversationId)).toEqual([FIXER]);
 });
@@ -444,11 +505,12 @@ test("a press on a run of a failing main-line branch continues the streak's agen
 
 // Which branch is main is the repository's own word, not a name: a repo whose default is `develop` is fixed there.
 test("a repository whose default branch is not main or master has its fix agent there, and a press continues it", async () => {
-    const { services, fetchFn, project, started } = await harness();
+    const { services, fetchFn, project, started, failRun } = await harness();
     // What a clone of such a repository records: origin/HEAD names its default.
     await defaultGit(join(services.workspace.root, "web"), ["symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/develop"]);
 
-    expect(await jobFailed(services, project, job(41, 7, "verify-core", { branch: "develop" }), fetchFn)).toBe("code");
+    expect(await jobFailed(services, project, job(41, 410, "verify-core", { branch: "develop" }), fetchFn)).toBe("code");
+    await failRun(41, ["verify-core"], { branch: "develop" });
     expect(started.map(({ conversationId }) => conversationId)).toEqual([FIXER]);
     expect(Object.keys(await services.ciStore.failures())).toEqual(["web\ndevelop"]);
     expect(await streakFixerFor(services, run(42, "failed", { branch: "develop" }))).toBe(FIXER);
@@ -472,12 +534,13 @@ test("a run only the fleet failed is re-run once, across a restart too", async (
 // The forge's word (the reconcile's repository read, every delivery) comes before what the clone recorded, and only for
 // the repository the remote still names.
 test("the default branch the forge said is main's line; one said of a repository the remote no longer names is not", async () => {
-    const { services, fetchFn, project, started } = await harness();
+    const { services, fetchFn, project, started, failRun } = await harness();
     await services.ciStore.learnForge("web", "acme/elsewhere", { id: 5, path: "acme/elsewhere", defaultBranch: "trunk" });
     expect(await jobFailed(services, project, job(40, 6, "verify-core", { branch: "trunk" }), fetchFn)).toBe("skipped");
 
     await services.ciStore.learnForge("web", "acme/web", { id: 99, path: "acme/web", defaultBranch: "trunk" });
-    expect(await jobFailed(services, project, job(41, 7, "verify-core", { branch: "trunk" }), fetchFn)).toBe("code");
+    expect(await jobFailed(services, project, job(41, 410, "verify-core", { branch: "trunk" }), fetchFn)).toBe("code");
+    await failRun(41, ["verify-core"], { branch: "trunk" });
     expect(started.map(({ conversationId }) => conversationId)).toEqual([FIXER]);
     expect(await jobFailed(services, project, job(42, 8, "verify-core", { branch: "main" }), fetchFn)).toBe("skipped");
 });

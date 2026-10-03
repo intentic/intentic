@@ -4,10 +4,10 @@ import type { Services } from "../composition.js";
 import { plainText } from "@intentic/base/plain-text";
 import { markCheckRunning } from "../workspace/deps/checks-in-flight.js";
 
-// Engine under the push run (git/ops/push-run.ts), the one command the daemon runs in a watched terminal now that nothing
-// runs when a turn ends or after it lands (an edit check runs in file-edited.ts): a real tmux terminal, a
-// ceiling that times out to `failed` rather than silence, a kill that tags itself timeout or cancel while the difference
-// is visible, and a plain-text tail with escape codes resolved before the cap.
+// Engine under the push run (git/ops/push-run.ts), the one command the daemon runs in a watched terminal: an edit check
+// (file-edited.ts) and a turn check (agent/run/turn-checks.ts) run as plain children, and nothing runs after work lands.
+// A real tmux terminal, a ceiling that times out to `failed` rather than silence, a kill that tags itself timeout or
+// cancel while the difference is visible, and a plain-text tail with escape codes resolved before the cap.
 
 // `passed`/`failed` are verdicts about the work; `error` means the command never ran, so nobody should be sent to fix
 // anything.

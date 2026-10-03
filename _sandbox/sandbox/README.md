@@ -31,10 +31,12 @@ flowchart LR
   ten minutes and wait for a restart, which nobody knew to do while the platform said the sandbox did not exist.
 - One turn: `agent/run/turn/turn-admission.ts` admits it, `turn-plan.ts` picks a runtime, it runs in the
   conversation's worktree (or the main tree, or a remote runner), and `conversations/land/land.ts` lands the result as
-  uncommitted changes. Nothing checks the turn when it ends or its work after it lands: the dependency reconciler
-  (`workspace/deps/reconcile-deps.ts`) installs when a land moved a manifest or brought a new project, and CI checks
-  what the owner pushes. An agent may install inside its turn: an isolated one into its own copy, a main-tree one in
-  the install lane. The command gate every runtime consults decides it (`guard/command-guard.ts`,
+  uncommitted changes. When an isolated Claude Code turn is about to stop, each repository's own `turn` checks run
+  once on what it changed, and what they find is said back to the model, which fixes it or says why not
+  (`agent/run/turn-checks.ts`); nothing holds the turn or its land. Nothing checks the work after it lands: the
+  dependency reconciler (`workspace/deps/reconcile-deps.ts`) installs when a land moved a manifest or brought a new
+  project, and CI checks what the owner pushes. An agent may install inside its turn: an isolated one into its own
+  copy, a main-tree one in the install lane. The command gate every runtime consults decides it (`guard/command-guard.ts`,
   `agent/providers/project-installs.ts`), from what `agent/run/turn/turn-safety.ts` set on the turn.
   When main's CI fails, `ci/main-fixer.ts` gives the failing streak one fix agent and sends it every later failure.
 - Codex sends steering after `turn/started` acknowledges the active turn. A refused message becomes a follow-up

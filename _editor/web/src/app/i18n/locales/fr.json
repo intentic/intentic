@@ -1941,7 +1941,7 @@
         },
         "agentChecks": {
             "repairMainCi": "Réparer main quand sa CI échoue",
-            "repairMainCiNote": "Le premier job qui échoue sur main lance un agent de correction, et chaque échec suivant lui est confié jusqu'à ce que main réussisse à nouveau. Quand ses tours sont épuisés, ou s'il ne change rien, il vous passe la main. Une exécution qui a échoué à cause des machines de CI elles-mêmes est relancée une fois à la place.",
+            "repairMainCiNote": "La première exécution qui échoue sur main lance, une fois terminée, un agent de correction avec tous les jobs en échec, et les échecs de chaque exécution suivante lui sont confiés en un seul message jusqu'à ce que main réussisse à nouveau. Quand ses tours sont épuisés, ou s'il ne change rien, il vous passe la main. Une exécution qui a échoué à cause des machines de CI elles-mêmes est relancée une fois à la place.",
             "mainCi": "CI de main"
         },
         "agentClock": {
@@ -2087,7 +2087,7 @@
             "readingWhatWorkspacesRepositories": "Lecture de ce que déclarent les dépôts de cet espace de travail…",
             "repositoriesWaitingOnUntil": "{waiting} dépôts vous attendent. Tant que vous ne les activez pas, leurs propres vérifications ne tournent pas.",
             "checksAfterEdits": "Vérifications après modification",
-            "repositoryDeclaresOwnChecks": "Un dépôt déclare dans .intentic/checks.json ce qui tourne sur son propre code après chaque modification. Rien de ce qu'il déclare ne bloque jamais une intégration, un commit ou un push."
+            "repositoryDeclaresOwnChecks": "Un dépôt déclare dans .intentic/checks.json ce qui tourne sur son propre code après chaque modification, et une fois à la fin d'un tour. Rien de ce qu'il déclare ne bloque jamais une intégration, un commit ou un push."
         },
         "agentSafetyJudge": {
             "changeInModels": "Changer dans Modèles",
@@ -3018,7 +3018,7 @@
             "runChecksDeclares": "Lancer les vérifications que {name} déclare",
             "afterEachEdit": "Après chaque modification",
             "landRetired": "Après son intégration — ne tourne plus ; la CI vérifie ce qui est poussé",
-            "turnRetired": "Avant la fin d'un tour — ne tourne plus ; la CI vérifie ce qui est poussé",
+            "whenTurnEnds": "À la fin d'un tour — signalé une fois à l'agent, ne bloque jamais",
             "lastFlagged": "dernier signalement {ago}",
             "neverFlagged": "jamais rien signalé",
             "running": "En cours"
@@ -4786,7 +4786,7 @@
             "declaredIn": "Déclarées dans {path}, elles voyagent donc avec le dépôt.",
             "repositoryDoesntDeclareAny": "Ce dépôt ne déclare aucune vérification propre. Placez un fichier à",
             "runTheseChecks": "Lancer ces vérifications",
-            "whenIsEditOrLand": "{when} vaut {edit} ou {land}, et la commande s'exécute dans ce dossier : écrivez-la donc comme vous le feriez dans un terminal ici."
+            "whenIsEditOrTurn": "{when} vaut {edit} ou {turn}, et la commande s'exécute dans ce dossier : écrivez-la donc comme vous le feriez dans un terminal ici."
         },
         "directoryPersonas": {
             "addNewOneInstead": "En ajouter un nouveau à la place",

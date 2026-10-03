@@ -31,14 +31,14 @@ const name = computed((): string => (entry.repo === `root` ? `This workspace` : 
 
 const MOMENTS: readonly RepoCheckMoment[] = [`edit`, `turn`, `land`];
 
-// `turn` and `land` are retired: nothing runs when a turn ends or after work lands any more (CI checks what is pushed),
-// and a declaration naming either still reads but runs nothing, so its label says so rather than promising a check that
-// never comes.
+// A `turn` check runs once as an isolated turn ends, and what it finds is said back to the agent, so its label says it
+// never blocks. `land` is retired: nothing runs after work lands any more (CI checks what is pushed), and a declaration
+// naming it still reads but runs nothing, so its label says so rather than promising a check that never comes.
 const momentWords = (when: RepoCheckMoment): string =>
     when === `edit`
         ? t(`sandbox.repoCheckRow.afterEachEdit`)
         : when === `turn`
-          ? t(`sandbox.repoCheckRow.turnRetired`)
+          ? t(`sandbox.repoCheckRow.whenTurnEnds`)
           : t(`sandbox.repoCheckRow.landRetired`);
 
 // When a check last flagged something; one that never has is either healthy or aimed at nothing, and worth a look.
@@ -59,10 +59,11 @@ const lines = computed((): Line[] =>
                 when: check.when,
                 run: check.run,
                 paths: check.paths ?? [],
-                // Only an edit check stamps a firing; a retired one has nothing left to have flagged.
-                note: check.when === `edit` && entry.adopted ? firedWords(entry.fired[index]) : undefined,
+                // An edit or turn check stamps a firing when it reports something; a retired one has nothing left to have
+                // flagged.
+                note: check.when !== `land` && entry.adopted ? firedWords(entry.fired[index]) : undefined,
                 // A retired check reads as inert as one nobody switched on: neither runs.
-                dim: idle.value || check.when !== `edit`,
+                dim: idle.value || check.when === `land`,
             }),
         )
         .toSorted((a, b) => MOMENTS.indexOf(a.when) - MOMENTS.indexOf(b.when)),

@@ -1,10 +1,11 @@
 # checks
 
-The repository's invariant checks: one Node script per rule, listed once in `manifest.mjs` and run by `run.mjs` after each edit and in CI.
+The repository's invariant checks: one Node script per rule, listed once in `manifest.mjs` and run by `run.mjs` after each edit, as an agent's turn ends and in CI.
 
 ```mermaid
 flowchart LR
     edit["Each edited file<br/>.intentic/checks.json"] -->|"--paths"| run(["run.mjs"])
+    turn["An agent's turn ending<br/>verify-turn.mjs"] --> run
     verify["By hand<br/>pnpm verify"] --> run
     ci["CI and nightly<br/>ci.yml · nightly.yml"] --> run
     push["CI's push check<br/>verify-push.mjs"] --> run
@@ -24,10 +25,13 @@ flowchart LR
   tree. A check that can repair the tree itself (`lockfile`, `i18n`) says so in its failure, with the `--fix` that
   does it.
 - After each edit, `.intentic/checks.json` runs `run.mjs --paths {file}`: scoped checks only, silent unless one
-  fails. What it prints returns with the edit and never stops the turn. Nothing runs them at a push. CI's preflight
-  runs them all with `--tidy=warn`, and its `quick` job's push check (`_tools/scripts/verify/verify-push.mjs`) runs
-  them again and fails on the tidy lines the pushed range added. `pnpm verify` runs them all when asked, and the
-  nightly with `--gate=tidy`.
+  fails. What it prints returns with the edit and never stops the turn. As an isolated agent turn ends, its `turn`
+  entry runs `_tools/scripts/verify/verify-turn.mjs`: every check on the turn's tree, new files included, and only
+  what the change added against where it left `main` is said back to the agent, once. Nothing runs them at a push.
+  CI's preflight runs them all with `--tidy=warn`, and its `quick` job's push check
+  (`_tools/scripts/verify/verify-push.mjs`) runs them again and fails on the tidy lines the pushed range added. The
+  turn check and the push check judge a change the same way (`measure-change.mjs`), so what one charges the other
+  does. `pnpm verify` runs them all when asked, and the nightly with `--gate=tidy`.
 - Ratcheted checks (`ratchet: true`) keep their standing backlog in `baselines/` (`lib/ratchet.mjs`), which may
   shrink and never grow unasked. A check run never writes one: it fails on growth and only says where the tree beats
   it. Before a conversation's work lands, the fixers in its worktree (`_tools/scripts/verify/fixers.mjs`) run each

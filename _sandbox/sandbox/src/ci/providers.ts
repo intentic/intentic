@@ -23,8 +23,11 @@ export interface FailedStep {
     readonly job: string;
     // The job's own id, which its log is read by (jobLog).
     readonly id: number;
-    // Absent where the forge has no steps (GitLab), which reads as the code's own failure.
+    // The first step that failed it. Absent where the forge has no steps (GitLab), which reads as the code's own failure.
     readonly step?: string;
+    // Every step that failed it, in order: a job whose steps each run whatever the one before concluded can fail
+    // several. Absent where the forge has no steps.
+    readonly steps?: readonly string[];
     // GitLab's word for why the job failed (`script_failure`, `runner_system_failure`, …), where it gives one.
     readonly reason?: string;
 }
@@ -40,9 +43,8 @@ export interface CiClient {
     readonly failedSteps: (project: CiProject, runId: number) => Promise<FailedStep[]>;
     // All jobs in a run with their individual statuses, the expanded-row enrichment for the view.
     readonly allJobs: (project: CiProject, runId: number) => Promise<PipelineJob[]>;
-    // Failed jobs' log tails, concatenated and capped; each is reduced to plain text (plain-text.ts) first.
-    readonly failedJobLogs: (project: CiProject, runId: number, maxBytes: number) => Promise<string>;
-    // One job's log tail, reduced to plain text and capped; an expired or unreadable log says so in its place.
+    // One job's log, reduced to plain text (plain-text.ts) and cut to its last `maxBytes` (Infinity reads it whole); an
+    // expired or unreadable log says so in its place.
     readonly jobLog: (project: CiProject, jobId: number, maxBytes: number) => Promise<string>;
     readonly rerun: (project: CiProject, runId: number) => Promise<void>;
     readonly cancel: (project: CiProject, runId: number) => Promise<void>;
@@ -302,25 +304,6 @@ const githubJobLists = jobLists<GithubJob>((jobs) => jobs.length > 0 && jobs.eve
 // the moment its job fails rather than when the whole run does.
 const GITHUB_HOOK_EVENTS = ["workflow_run", "workflow_job"];
 
-// Failed jobs' log tails in order, until the budget is spent: each under a header naming its job.
-const logTails = async (
-    jobs: readonly { readonly id: number; readonly name: string }[],
-    maxBytes: number,
-    logOf: (jobId: number, budget: number) => Promise<string>,
-): Promise<string> => {
-    const parts: string[] = [];
-    let budget = maxBytes;
-    for (const job of jobs) {
-        if (budget <= 0) {
-            break;
-        }
-        const tail = await logOf(job.id, budget);
-        budget -= tail.length;
-        parts.push(`--- job: ${job.name} (log tail) ---\n${tail}`);
-    }
-    return parts.join("\n\n");
-};
-
 const githubClient = (fetchFn: FetchFn): CiClient => {
     // Resolves the run's workflow file at its exact sha, not HEAD, so an old run isn't drawn with the wrong graph.
     // Undefined, never a throw, for any legitimate empty case; the graph is enrichment only.
@@ -409,8 +392,9 @@ const githubClient = (fetchFn: FetchFn): CiClient => {
         failedJobs: async (project, runId) => (await jobsOf(project, runId)).map((job) => job.name),
         failedSteps: async (project, runId) =>
             (await jobsOf(project, runId)).map((job) => {
-                const step = job.steps?.find((candidate) => candidate.conclusion === "failure")?.name;
-                return step === undefined ? { job: job.name, id: job.id } : { job: job.name, id: job.id, step };
+                const steps = (job.steps ?? []).filter((candidate) => candidate.conclusion === "failure").map((candidate) => candidate.name);
+                const step = steps[0];
+                return step === undefined ? { job: job.name, id: job.id } : { job: job.name, id: job.id, step, steps };
             }),
         // No `stage`: Actions has no such concept. `needs` is filled only when the run's workflow file can be read,
         // fetched alongside the job list, not after; unreadable, jobs go out as before.
@@ -452,8 +436,6 @@ const githubClient = (fetchFn: FetchFn): CiClient => {
                 return result;
             });
         },
-        failedJobLogs: async (project, runId, maxBytes) =>
-            logTails(await jobsOf(project, runId), maxBytes, (jobId, budget) => logOf(project, jobId, budget)),
         jobLog: (project, jobId, maxBytes) => logOf(project, jobId, maxBytes),
         // A re-run makes the run's jobs anew, so the list kept for it no longer describes it.
         rerun: (project, runId) => {
@@ -781,8 +763,6 @@ const gitlabClient = (fetchFn: FetchFn): CiClient => {
                 return result;
             });
         },
-        failedJobLogs: async (project, runId, maxBytes) =>
-            logTails(await failedJobsOf(project, runId), maxBytes, (jobId, budget) => traceOf(project, jobId, budget)),
         jobLog: (project, jobId, maxBytes) => traceOf(project, jobId, maxBytes),
         rerun: (project, runId) => post(project, `/pipelines/${runId}/retry`, "gitlab retry"),
         cancel: (project, runId) => post(project, `/pipelines/${runId}/cancel`, "gitlab cancel"),
@@ -880,7 +860,6 @@ const cooled = (client: CiClient, fetchFn: FetchFn): CiClient => {
         failedJobs: guard(client.failedJobs),
         failedSteps: guard(client.failedSteps),
         allJobs: guard(client.allJobs),
-        failedJobLogs: guard(client.failedJobLogs),
         jobLog: guard(client.jobLog),
         rerun: guard(client.rerun),
         cancel: guard(client.cancel),

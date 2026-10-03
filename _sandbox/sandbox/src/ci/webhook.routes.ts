@@ -107,6 +107,7 @@ const githubFailedJob = (job: GithubJob): FailedJob | undefined => {
     if (job.conclusion === undefined || job.conclusion === null || githubStatus("completed", job.conclusion) !== "failed") {
         return undefined;
     }
+    const steps = (job.steps ?? []).filter((step) => step.conclusion === "failure").map((step) => step.name);
     return {
         runId: job.run_id,
         jobId: job.id,
@@ -115,7 +116,8 @@ const githubFailedJob = (job: GithubJob): FailedJob | undefined => {
         workflow: job.workflow_name ?? undefined,
         sha: job.head_sha,
         url: job.html_url ?? undefined,
-        step: job.steps?.find((step) => step.conclusion === "failure")?.name,
+        step: steps[0],
+        steps,
     };
 };
 

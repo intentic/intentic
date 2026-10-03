@@ -6,6 +6,7 @@ The rules the repository's own checks and linter hold every change to, grouped b
 flowchart LR
     list(["_tools/checks/manifest.mjs<br/>one list of checks"]) --> edit["each edit<br/>scoped checks · lint-edit"]
     list --> ci["CI preflight<br/>and nightly tidy"]
+    list --> turn["an agent's turn ending<br/>verify-turn, what its change added"]
     list --> push["CI's push check<br/>verify-push, the pushed range"]
 ```
 
@@ -13,6 +14,7 @@ flowchart LR
 
 - [`manifest.mjs`](../../_tools/checks/manifest.mjs) lists every check once and [`run.mjs`](../../_tools/checks/run.mjs) runs them, with node and git only. A `code` check means the tree is broken: it fails CI's preflight and `pnpm verify`. A `tidy` check is a cost to readers: it fails CI's nightly tidy job, and CI's push check fails only the lines the pushed range added. Nothing runs them at a push itself.
 - A `scoped` check can judge one file, so [`.intentic/checks.json`](../../.intentic/checks.json) runs it the moment an agent writes that file, together with the linter. What they find returns with the edit and never stops the turn.
+- As an agent's turn ends in a checkout of its own, the same file's `turn` entry runs [`verify-turn.mjs`](../../_tools/scripts/verify/verify-turn.mjs): every check on the turn's tree, judged the way the push check judges a pushed range, so only what the change added is said back to the agent, once. A failure main already carries is charged to no conversation, and nothing is refused.
 - Ratcheted checks keep their standing backlog in [`_tools/checks/baselines`](../../_tools/checks/baselines), which may only shrink.
 
 ## Layout

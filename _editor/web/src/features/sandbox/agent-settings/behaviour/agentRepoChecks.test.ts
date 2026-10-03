@@ -71,12 +71,14 @@ test(`each check is named by the moment it runs at`, () => {
     const lines = [...mount().querySelectorAll(`li`)].map((line) => line.textContent ?? ``);
     expect(lines).toHaveLength(3);
     expect(lines.find((line) => line.includes(`eslint`))).toContain(`After each edit`);
+    expect(lines.find((line) => line.includes(`pnpm lint`))).toContain(`When a turn ends — said back to the agent once, never blocks`);
     expect(lines.find((line) => line.includes(`pnpm test`))).toContain(`After it lands — no longer runs; CI checks what is pushed`);
 });
 
-// Nothing runs when a turn ends or after work lands any more: a declaration still naming either moment reads, but says it
-// runs nothing, and looks as inert as a check nobody switched on.
-test(`a declared turn or land check says it no longer runs, and what checks the work instead`, () => {
+// A turn check runs once as an isolated turn ends and says what it found back to the agent; nothing runs after work
+// lands any more, so a declaration still naming that moment reads, says it runs nothing, and looks as inert as a check
+// nobody switched on.
+test(`a turn check runs and says when it last flagged something, and a declared land check says it no longer runs`, () => {
     repos.value = [
         declaring({
             checks: [
@@ -88,10 +90,10 @@ test(`a declared turn or land check says it no longer runs, and what checks the 
     ];
     const [turn, land] = [...mount().querySelectorAll<HTMLElement>(`li`)];
     expect([turn?.textContent, land?.textContent]).toEqual([
-        `Before a turn ends — no longer runs; CI checks what is pushedpnpm lint`,
+        `When a turn ends — said back to the agent once, never blockspnpm lintlast flagged ${timeAgo(FIVE_DAYS_AGO, { days: true })}`,
         `After it lands — no longer runs; CI checks what is pushedpnpm verify`,
     ]);
-    expect([turn?.classList.contains(`opacity-60`), land?.classList.contains(`opacity-60`)]).toEqual([true, true]);
+    expect([turn?.classList.contains(`opacity-60`), land?.classList.contains(`opacity-60`)]).toEqual([false, true]);
 });
 
 const FIVE_DAYS_AGO = Date.now() - 5 * 86_400_000;

@@ -26,7 +26,7 @@
             "proving": "Die Lösung ist drin. Ein neuer Lauf auf {branch} prüft sie gerade.",
             "ready": "Eine Lösung liegt auf dem Branch des Agenten bereit. Öffnen Sie ihn, um sie zu prüfen und zu übernehmen.",
             "reported": "Die Auto-Reparatur ist aus, daher wurde kein Agent geschickt. Starten Sie einen oder reparieren Sie es von Hand.",
-            "unassigned": "Die Auto-Reparatur liest die Logs des fehlgeschlagenen Jobs, bevor sie einen Agenten schickt. Starten Sie jetzt einen, um nicht zu warten.",
+            "unassigned": "Die Auto-Reparatur wartet, bis der Lauf fertig ist, damit ihr Agent alle Fehler auf einmal bekommt. Starten Sie jetzt einen, um nicht zu warten.",
             "waiting": "Der Auto-Reparatur-Agent pausiert, bis sein Kontingent zurück ist.",
             "waits": "{reason}: Der Auto-Reparatur-Agent hat das zurückgegeben. Fortsetzen gibt ihm weitere Runden.",
             "working": "Der Auto-Reparatur-Agent ist dran. Jeder neue Fehler auf {branch} geht an denselben Agenten, bis ein Lauf grün ist."

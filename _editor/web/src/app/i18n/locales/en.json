@@ -2874,7 +2874,7 @@
         },
         "agentChecks": {
             "repairMainCi": "Repair main when its CI fails",
-            "repairMainCiNote": "The first job that fails on main starts one fix agent, and every later failure goes to it until main passes again. When its turns run out, or it changes nothing, it hands over to you. A run that failed on the CI machines themselves is re-run once instead.",
+            "repairMainCiNote": "The first run that fails on main starts one fix agent once it has finished, with every job it failed, and each later run's failures go to it as one message until main passes again. When its turns run out, or it changes nothing, it hands over to you. A run that failed on the CI machines themselves is re-run once instead.",
             "mainCi": "Main's CI"
         },
         "agentClock": {
@@ -3055,7 +3055,7 @@
             "readingWhatWorkspacesRepositories": "Reading what this workspace's repositories declare…",
             "repositoriesWaitingOnUntil": "{waiting} repositories are waiting on you. Until you switch them on, their own checks do not run.",
             "checksAfterEdits": "Checks after edits",
-            "repositoryDeclaresOwnChecks": "A repository declares in .intentic/checks.json what runs on its own code after each edit. Nothing it declares ever blocks a land, a commit or a push."
+            "repositoryDeclaresOwnChecks": "A repository declares in .intentic/checks.json what runs on its own code after each edit, and once as a turn ends. Nothing it declares ever blocks a land, a commit or a push."
         },
         "agentSafetyJudge": {
             "changeInModels": "Change in Models",
@@ -4205,7 +4205,7 @@
             "runChecksDeclares": "Run the checks {name} declares",
             "afterEachEdit": "After each edit",
             "landRetired": "After it lands — no longer runs; CI checks what is pushed",
-            "turnRetired": "Before a turn ends — no longer runs; CI checks what is pushed",
+            "whenTurnEnds": "When a turn ends — said back to the agent once, never blocks",
             "lastFlagged": "last flagged {ago}",
             "neverFlagged": "never flagged",
             "running": "Running"
@@ -6597,7 +6597,7 @@
             "declaredIn": "Declared in {path}, so they travel with the repository.",
             "repositoryDoesntDeclareAny": "This repository doesn't declare any checks of its own. Put a file at",
             "runTheseChecks": "Run these checks",
-            "whenIsEditOrLand": "{when} is {edit} or {land}, and the command runs in this folder, so write it as you would in a terminal here."
+            "whenIsEditOrTurn": "{when} is {edit} or {turn}, and the command runs in this folder, so write it as you would in a terminal here."
         },
         "directoryPersonas": {
             "addNewOneInstead": "Add a new one instead",

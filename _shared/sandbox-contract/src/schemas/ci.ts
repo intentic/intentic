@@ -113,7 +113,7 @@ export type CiRepo = z.infer<typeof CiRepoSchema>;
 export const CI_POLL_INTERVAL_MS = 2 * 60_000;
 // What was decided about a main-line branch while its CI fails, in the order it was decided (ci/main-fixer.ts).
 export const MainFailureDecisionKindSchema = z.enum([
-    // Its one fix agent was put on it: by the sandbox at the first job that failed, or by a person's Fix press, which
+    // Its one fix agent was put on it: by the sandbox with the first run that failed, or by a person's Fix press, which
     // gives the agent its turns back.
     "fix-up",
     // Nobody was sent: repairs are switched off, or nothing could take it.

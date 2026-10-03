@@ -28,6 +28,7 @@ import type { DirtyFiles } from "../tools/agent-shell-edits.js";
 import type { AgentTool } from "../tools/agent-tools.js";
 import type { BackgroundJobSeed } from "../tools/jobs/background-jobs.js";
 import type { EditReviewer } from "../verification/agent-diagnostics.js";
+import type { TurnChecks } from "../run/turn-checks.js";
 import type { TurnAllowance } from "./harness-credentials.js";
 import type { ParkedCards } from "../../conversations/actor/parked-cards.js";
 
@@ -199,9 +200,10 @@ export type HarnessCredential = Extract<TurnCredential, { readonly kind: "contai
 export type CodexCredential = Extract<TurnCredential, { readonly kind: "container" | "codex-endpoint" }>;
 export type CursorCredential = Extract<TurnCredential, { readonly kind: "cursor-key" }>;
 
-// What the daemon answers while the turn runs: attendance and restored grants, the per-edit reviewers, the safety judge
-// and its log, and the child-agent and background-job seams. No check runs at the Stop; the harness's own checklist note
-// (run/checklist-close.ts) is the one thing said there.
+// What the daemon answers while the turn runs: attendance and restored grants, the per-edit reviewers, the repositories'
+// `turn` checks, the safety judge and its log, and the child-agent and background-job seams. Two things are said at the
+// Stop, each once and neither holding the turn: the harness's own checklist note (run/checklist-close.ts) and what those
+// `turn` checks found (run/turn-checks.ts).
 export interface TurnHooks {
     // Where the turn parks a card a person answers (a question, a plan, a permission), so a reply finds it.
     readonly cards: ParkedCards;
@@ -215,6 +217,10 @@ export interface TurnHooks {
     readonly dirtyFiles?: DirtyFiles;
     // Owner's file.edited rules bound to this turn's placement, run on every file an edit tool or shell writes.
     readonly editReviewers?: readonly EditReviewer[];
+    // The repositories' own `turn` checks bound to this turn's tree, run once when it is about to stop. Absent for a
+    // turn in the shared tree, one no adopted repository declares a `turn` check for, and every runtime but the Claude
+    // Code loop, which alone has a Stop the daemon can answer.
+    readonly turnChecks?: TurnChecks;
     // Every classified image-scoped install this turn attempts, for the install ledger; nothing reaches the model.
     readonly onImageInstall?: (installs: readonly ClassifiedInstall[], command: string) => void;
     // The turn's project-install rule, built once above the provider split (run/turn/turn-safety.ts) and handed to the

@@ -8,8 +8,8 @@ import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
 
-/* What each repository runs on its own code, as it declares it: on each file as it is written. None of it holds a land,
-   a commit or a push. */
+/* What each repository runs on its own code, as it declares it: on each file as it is written, and once as an isolated
+   turn ends. None of it holds a turn, a land, a commit or a push. */
 
 const { repos, pending, error, adopt } = useRepoChecks();
 const outline = useSandboxOutline(computed(() => repos.value === undefined));

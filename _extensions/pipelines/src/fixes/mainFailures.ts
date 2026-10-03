@@ -23,7 +23,8 @@ export type MainFailureState =
     | `waits`
     // Repairs are switched off, so nobody was sent: the owner's from the start.
     | `reported`
-    // Nobody is on it yet: the sandbox has not decided, which lasts until it has read the first failed job.
+    // Nobody is on it yet: the sandbox hands a run's failures over once the run has finished measuring (or has gone on
+    // past its clock), so this lasts until the first failed run is done.
     | `unassigned`;
 
 export interface MainFailureView {

@@ -26,7 +26,7 @@
             "proving": "El arreglo está dentro. Una nueva ejecución en {branch} lo está comprobando.",
             "ready": "Hay un arreglo listo en la rama del agente. Ábrelo para revisarlo e integrarlo.",
             "reported": "El arreglo automático está desactivado, así que no se envió ningún agente. Inicia uno o arréglalo a mano.",
-            "unassigned": "El arreglo automático está leyendo los logs de la tarea fallida antes de enviar un agente. Inicia uno ahora para no esperar.",
+            "unassigned": "El arreglo automático espera a que termine la ejecución, para que su agente reciba todos los fallos a la vez. Inicia uno ahora para no esperar.",
             "waiting": "El agente de arreglo automático está en pausa hasta que vuelva su cuota.",
             "waits": "{reason}: el agente de arreglo automático lo devolvió. Continuar le da más turnos.",
             "working": "El agente de arreglo automático está en ello. Cada nuevo fallo en {branch} va al mismo agente hasta que pase una ejecución."

@@ -1950,7 +1950,7 @@
         },
         "agentChecks": {
             "repairMainCi": "Reparar main cuando falle su CI",
-            "repairMainCiNote": "El primer job que falla en main arranca un agente de corrección, y cada fallo posterior va a él hasta que main vuelva a pasar. Cuando se le acaben los turnos, o no cambie nada, te lo deja a ti. Una ejecución que falló por las propias máquinas de CI se relanza una vez en su lugar.",
+            "repairMainCiNote": "La primera ejecución que falla en main arranca, al terminar, un agente de corrección con todos los jobs que fallaron, y los fallos de cada ejecución posterior le llegan en un solo mensaje hasta que main vuelva a pasar. Cuando se le acaben los turnos, o no cambie nada, te lo deja a ti. Una ejecución que falló por las propias máquinas de CI se relanza una vez en su lugar.",
             "mainCi": "CI de main"
         },
         "agentClock": {
@@ -2097,7 +2097,7 @@
             "readingWhatWorkspacesRepositories": "Leyendo qué declaran los repositorios de este espacio de trabajo…",
             "repositoriesWaitingOnUntil": "{waiting} repositorios te están esperando. Hasta que los actives, sus propias comprobaciones no se ejecutan.",
             "checksAfterEdits": "Comprobaciones tras editar",
-            "repositoryDeclaresOwnChecks": "Un repositorio declara en .intentic/checks.json qué se ejecuta sobre su propio código tras cada edición. Nada de lo que declara bloquea nunca una integración, un commit ni un push."
+            "repositoryDeclaresOwnChecks": "Un repositorio declara en .intentic/checks.json qué se ejecuta sobre su propio código tras cada edición y una vez al acabar un turno. Nada de lo que declara bloquea nunca una integración, un commit ni un push."
         },
         "agentSafetyJudge": {
             "changeInModels": "Cambiar en Modelos",
@@ -3029,7 +3029,7 @@
             "runChecksDeclares": "Ejecutar las comprobaciones que declara {name}",
             "afterEachEdit": "Tras cada edición",
             "landRetired": "Tras integrarse — ya no se ejecuta; la CI comprueba lo que se envía",
-            "turnRetired": "Antes de que acabe un turno — ya no se ejecuta; la CI comprueba lo que se envía",
+            "whenTurnEnds": "Cuando acaba un turno — se le comunica al agente una vez, nunca bloquea",
             "lastFlagged": "último aviso {ago}",
             "neverFlagged": "nunca avisó",
             "running": "En marcha"
@@ -4863,7 +4863,7 @@
             "declaredIn": "Declaradas en {path}, así que viajan con el repositorio.",
             "repositoryDoesntDeclareAny": "Este repositorio no declara comprobaciones propias. Pon un archivo en",
             "runTheseChecks": "Ejecutar estas comprobaciones",
-            "whenIsEditOrLand": "{when} es {edit} o {land}, y el comando se ejecuta en esta carpeta, así que escríbelo como lo harías en un terminal aquí."
+            "whenIsEditOrTurn": "{when} es {edit} o {turn}, y el comando se ejecuta en esta carpeta, así que escríbelo como lo harías en un terminal aquí."
         },
         "directoryPersonas": {
             "addNewOneInstead": "Añadir una nueva en su lugar",

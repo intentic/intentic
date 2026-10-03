@@ -1372,7 +1372,7 @@ const DEMO_SYSTEM_PROMPT: ConversationPrompt = {
     },
 };
 
-/* The checks each repository declares for itself (`<repo>/.intentic/checks.json`), one repository per state the group can be in: `web` running, `api` waiting on the owner, the workspace held since its file changed. Every one is an `edit` check: nothing runs when a turn ends or after work lands any more, CI checks what is pushed. */
+/* The checks each repository declares for itself (`<repo>/.intentic/checks.json`), one repository per state the group can be in: `web` running, `api` waiting on the owner, the workspace held since its file changed. Every one is an `edit` check, which is what most repositories declare; a `turn` check runs once as an isolated turn ends and says what it found back to the agent, and nothing runs after work lands any more, since CI checks what is pushed. */
 const DEMO_REPO_CHECKS: RepoChecksList = {
     repos: [
         {

@@ -59,22 +59,28 @@ jobs:
           # install reconcile what is there instead is worth minutes in every one of these jobs.
           clean: false
       - uses: ./.github/actions/pnpm-setup
+        with:
+          lockfile-drift: measure
 
       # `typecheck` is the one that reads the TEST files. `build` cannot: an emitting package excludes *.test.ts
       # so test code stays out of dist, which left the tests unchecked by anything but their own execution —
       # hand-built fakes drifted out of shape with the seams they stand in for, and only ever said so as an
       # opaque 500 in some unrelated suite.
       #
-      # It needs nothing from the build graph: the prepass emits its own declarations, which is what makes the
+      # It needs nothing from the build graph: the emit below writes its own declarations, which is what makes the
       # same check runnable in an agent worktree — it used to depend on `^build`, and a pnpm `build` dies EXDEV
       # in a worktree, so the check that decided main's health was the one check nobody could run locally.
       #
-      # The prepass is invoked directly rather than through `pnpm typecheck`, because the root script cannot
-      # take a filter. It is repo-wide and unfilterable either way (~45 packages of `tsgo -b`), so each of the
-      # three groups pays it — the standing cost of the split, against a platform deploy that no longer waits
-      # on the marketing site.
-      - run: pnpm prepass
-        id: prepass
+      # THE DECLARATIONS ALONE, NOT `pnpm prepass`. The root script is the checks manifest and then this emit, and
+      # the manifest is preflight's to run (from the checkout) and `quick`'s (after a fresh install). Run here too,
+      # a failing check skipped this group's typecheck and every test behind it — which would hide them again now
+      # that the groups run whatever preflight concluded. The emit is the one real dependency the steps below have.
+      #
+      # Invoked directly rather than through `pnpm typecheck`, because the root script cannot take a filter. It is
+      # repo-wide and unfilterable either way (~45 packages of `tsgo -b`), so each of the three groups pays it — the
+      # standing cost of the split, against a platform deploy that no longer waits on the marketing site.
+      - id: declarations
+        run: node _tools/scripts/build/emit-declarations.mjs
       # THROUGH THE ENVIRONMENT, not interpolated into the script. `${{ }}` inside a `run:` block is textual
       # substitution BEFORE the shell sees the line, so the value becomes script rather than an argument to it
       # — the shape zizmor calls template-injection and the one every Actions exploit writeup starts from. The
@@ -104,8 +110,8 @@ jobs:
       # next push finds the next one", written in YAML instead of in turbo's scheduler.
       #
       # `!cancelled()` rather than `always()`: a cancelled run has been asked to stop and must not spend a
-      # runner finishing this. `steps.prepass.outcome == 'success'` is the one real dependency in the chain —
-      # the declarations this reads are what prepass emits, so without them the failures here would be missing
+      # runner finishing this. `steps.declarations.outcome == 'success'` is the one real dependency in the chain —
+      # the declarations this reads are what that step emits, so without them the failures here would be missing
       # modules rather than anything about the tree. A failed typecheck still fails the JOB; it just no longer
       # decides how much of the tree gets measured.
       #
@@ -114,6 +120,6 @@ jobs:
       # sizing for a run that is ALONE on the machine — and six of these jobs are not, which is how a passing pipeline
       # became six runners losing contact with the server mid-test.
       - run: TEST_WORKERS=$(node _tools/scripts/verify/test-workers.mjs) pnpm turbo run build test $FILTERS --continue=dependencies-successful
-        if: ${{ !cancelled() && steps.prepass.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.declarations.outcome == 'success' }}
         env:
           FILTERS: ${{ inputs.filters }}

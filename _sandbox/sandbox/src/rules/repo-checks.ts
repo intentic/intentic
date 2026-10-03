@@ -19,22 +19,24 @@ import { discoverRepos } from "../workspace/layout/repo-discovery.js";
 // Same ceiling a rule's own command gets when the form leaves it unsaid.
 const DEFAULT_TIMEOUT_MS = 900_000;
 
-// The occasions that are rule moments. `turn` and `land` run nothing any more: no check runs inside a conversation or
-// after its work lands (CI checks what the owner pushes), so a declaration naming either still reads and is shown, but
-// becomes no rule and is no part of what the owner adopts.
-const MOMENT: Record<Exclude<RepoCheckMoment, "land" | "turn">, Rule["moment"]> = {
+// The occasions that are rule moments. `turn` runs once when an isolated turn is about to stop, and what it finds is
+// said back to the model, which may fix it or say why not (agent/run/turn-checks.ts); it holds and refuses nothing.
+// `land` runs nothing any more: no check runs after work lands (CI checks what the owner pushes), so a declaration
+// naming it still reads and is shown, but becomes no rule and is no part of what the owner adopts.
+const MOMENT: Record<Exclude<RepoCheckMoment, "land">, Rule["moment"]> = {
     edit: "file.edited",
+    turn: "turn.ending",
 };
 
 /** One repository's declaration as it stands on disk, with the fingerprint adoption is measured against. */
 export interface RepoDeclaration {
     readonly repo: string;
     readonly checks: readonly RepoCheck[];
-    // Of the checks that can run, so re-indenting the file is not a change, rewriting a command is, and a retired `turn`
-    // or `land` check is neither.
+    // Of the checks that can run, so re-indenting the file is not a change, rewriting a command is, and a retired `land`
+    // check is neither.
     readonly fingerprint: string;
-    // What adoption was measured against before `turn` stopped counting, and before `land` did, for a file that still
-    // names one: an owner who adopted it then keeps it adopted.
+    // What adoption was measured against before `land` stopped counting, for a file that still names one and names no
+    // `turn` check: an owner who adopted it then keeps it adopted.
     readonly formerFingerprints?: readonly string[];
     // Present when the file exists but could not be read; `checks` is then empty, so a broken file runs nothing rather
     // than half of something.
@@ -52,15 +54,20 @@ export const fingerprintOf = (checks: readonly RepoCheck[]): string =>
         .digest("hex")
         .slice(0, 16);
 
-// The checks that can run: every one but a retired `turn` or `land` check.
-const standing = (checks: readonly RepoCheck[]): RepoCheck[] => checks.filter((check) => check.when !== "turn" && check.when !== "land");
+// The checks that can run: every one but a retired `land` check.
+const standing = (checks: readonly RepoCheck[]): RepoCheck[] => checks.filter((check) => check.when !== "land");
 
 /** A repository's checks as a declaration, with what adoption is measured against. */
 export const declarationOf = (repo: string, checks: readonly RepoCheck[]): RepoDeclaration => {
     const fingerprint = fingerprintOf(standing(checks));
-    // Adoption was measured over every check until `turn` retired, then over all but `turn` until `land` did.
-    const former = [fingerprintOf(checks), fingerprintOf(checks.filter((check) => check.when !== "turn"))].filter((earlier) => earlier !== fingerprint);
-    return { repo, checks, fingerprint, ...(former.length === 0 ? {} : { formerFingerprints: [...new Set(former)] }) };
+    // Adoption was measured over every check until `turn` retired (2026-09-25), then over all but `turn` until `land`
+    // did, then over the `edit` checks alone until `turn` came back as a check said back to the model. A file with a
+    // `turn` check keeps none of those answers: an owner who said yes while that check ran nothing, or while it did
+    // something else, never agreed to run its command at the end of every turn now, so the file waits for a new yes,
+    // its `edit` checks with it. A file with no `turn` check keeps its answer, since what runs now is part of what was
+    // agreed to: of its earlier fingerprints, only the one over all its checks differs from today's.
+    const former = checks.some((check) => check.when === "turn") ? [] : [fingerprintOf(checks)].filter((earlier) => earlier !== fingerprint);
+    return { repo, checks, fingerprint, ...(former.length === 0 ? {} : { formerFingerprints: former }) };
 };
 
 /** Reads one repository's declaration. Absent file ⇒ undefined: a repository that declares nothing is not a row. A
@@ -105,7 +112,15 @@ export const isAdopted = (adopted: Readonly<Record<string, string>>, declaration
 
 // A rule id is lowercase alphanumerics and dashes, so a repo id's slashes and dots become dashes. Prefixed, so a
 // synthesized rule is recognisable in a log line and can never be mistaken for one the owner wrote.
-const ruleId = (repo: string, index: number): string => `repo-check-${repo.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${index + 1}`;
+const RULE_ID_PREFIX = "repo-check-";
+const ruleId = (repo: string, index: number): string => `${RULE_ID_PREFIX}${repo.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${index + 1}`;
+
+/** Of `rules`, the commands a repository declared, never a rule the owner wrote: what may run at `turn.ending`, where an
+ *  owner's rule left standing from before the moment came back (the retired `verify-ui-edits` built-in among them) stays
+ *  inert. The id is the mark, and it holds: a declared rule never takes an id the owner used (withRepoChecks), and no
+ *  save stands an owner's rule at `turn.ending` (the contract's SandboxSettingsWriteSchema). */
+export const declaredChecks = (rules: readonly Rule[]): Rule[] =>
+    rules.filter((rule) => rule.id.startsWith(RULE_ID_PREFIX) && rule.action.kind === "command");
 
 // Clipped to the daemon's own label ceiling, on a word boundary where there is one.
 const labelOf = (check: RepoCheck): string => {
@@ -124,12 +139,12 @@ const globsOf = (repo: string, check: RepoCheck): string[] | undefined =>
         ? undefined
         : check.paths.map((glob) => (repo === "root" ? glob : `${repo}/${glob.replace(/^\.?\//, "")}`));
 
-/** One declaration as rules, any retired turn or land check aside. Pure, so what a repository's file means can be tested
+/** One declaration as rules, any retired land check aside. Pure, so what a repository's file means can be tested
  *  without a workspace. Ids count every check in the file, so a retired check left in it shifts no other check's
  *  history. */
 export const rulesOf = (declaration: RepoDeclaration): Rule[] =>
     declaration.checks.flatMap((check, index) => {
-        if (check.when === "land" || check.when === "turn") {
+        if (check.when === "land") {
             return [];
         }
         const paths = globsOf(declaration.repo, check);
@@ -159,9 +174,7 @@ export const summariesOf = (declarations: readonly RepoDeclaration[], adopted: R
                 repo: declaration.repo,
                 path: repoChecksPath(declaration.repo),
                 checks: [...declaration.checks],
-                fired: declaration.checks.map((check, index) =>
-                    check.when === "land" || check.when === "turn" ? null : (firings[ruleId(declaration.repo, index)] ?? null),
-                ),
+                fired: declaration.checks.map((check, index) => (check.when === "land" ? null : (firings[ruleId(declaration.repo, index)] ?? null))),
                 adopted: isAdopted(adopted, declaration),
                 // Only a repository adopted before can have changed; a first sighting is simply not adopted yet.
                 changed: adopted[declaration.repo] !== undefined && !answers(adopted, declaration),

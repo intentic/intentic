@@ -89,12 +89,14 @@ export const UnfinishedWorkSchema = z.object({
         })
         .optional()
         .describe("The agent's own checklist where that turn left it. Absent for a conversation that kept no list."),
-    // Name of the `turn.ending` check still failing when the turn ended. Retired with that check: nothing writes it now, and
-    // it stays so entries written before still read.
+    // Name of the `turn.ending` check still failing when the turn ended, from when a failing one left the work unfinished.
+    // Nothing writes it now, and it stays so entries written before still read.
     check: z
         .string()
         .optional()
-        .describe("The end-of-turn check that was still failing when the turn ended, by name. No longer written: nothing checks inside a turn."),
+        .describe(
+            "The end-of-turn check that was still failing when the turn ended, by name. No longer written: what a check finds as a turn ends is said back to the model and never leaves its work unfinished.",
+        ),
 });
 export type UnfinishedWork = z.infer<typeof UnfinishedWorkSchema>;
 // What the last turn showed of its own work, read off its tool calls and never asked of the model: the record a card

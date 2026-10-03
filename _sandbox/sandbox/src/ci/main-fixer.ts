@@ -18,17 +18,26 @@ import { conversationProfile } from "../conversations/registry/agents-store.js";
 import { opt } from "../opt.js";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
 import type { CiFailure, CiFinding } from "./ci-store.js";
-import { FIX_LOG_BYTES, infraLog, startCiFix } from "./ci-fix.js";
+import { FIX_LOG_BYTES, infraLog, startCiFix, WHOLE_LOG } from "./ci-fix.js";
+import { digestOf, excerptOf, type JobExcerpt } from "./failure-digest.js";
 import { isMainLine } from "./main-line.js";
 import { ciProjects, type CiProject } from "./projects.js";
 import { ciClientFor, type FailedStep, type FetchFn } from "./providers.js";
 
-/* MAIN'S CI HAS ONE FIX AGENT. The first job that fails on a repository's main line (its default branch, main-line.ts)
-   starts it, with that job's log, while the
-   rest of the run goes on. Every later failure on the branch, in that run or a later one, is said to the same
-   conversation: into its live turn, as a turn of its own when it is idle, queued otherwise. So it never watches a run
-   itself, and nobody decides who broke what. The streak ends when a later run of every workflow that failed on it
-   passes.
+/* MAIN'S CI HAS ONE FIX AGENT, AND IT HEARS EACH RUN ONCE, WHOLE. A run's failed jobs on a repository's main line (its
+   default branch, main-line.ts) are parked as they fail, and handed over together when the run finishes, or when it is
+   still going RUN_SETTLE_CAP_MS after its first failure (anything failing after that follows at the run's end). The
+   first run to fail starts the agent with every job it failed; each later run's failures are said to the same
+   conversation as one message: into its live turn, as a turn of its own when it is idle, queued otherwise. So it never
+   watches a run itself, nobody decides who broke what, and one cause failing six jobs costs one turn rather than six.
+   The streak ends when a later run of every workflow that failed on it passes.
+
+   (2026-10-02: per run rather than per job. Started at the first failed job, the agent was handed preflight's two
+   minutes of checks while the verify groups were still building, ended its turn, and was then woken once per job that
+   failed after: since 2026-09-30 it spent its three turns that way five times. Waiting costs ~7 minutes at the median,
+   the time between a run's first failed job and its last. This is not the retired 09-23 repair gate's quiet window,
+   which waited for pushes to stop and so could hold the agent back for as long as main kept moving: this waits for one
+   run, and never past the cap.)
 
    It gets a few turns, and hands the failure to the owner when they are spent, or when its turn ends without it having
    changed anything (a failure that is not in the code: the runner's environment, a tool's version, a secret) or ends
@@ -36,8 +45,13 @@ import { ciClientFor, type FailedStep, type FetchFn } from "./providers.js";
    fleet's is re-run once, which the CI store keeps too. The streak is kept in the CI store (ci-store.ts), so a restart neither forgets it nor starts a
    second agent on it; the Agent tab's Repair switch (`autoRepair`) off, a failing main is only reported. */
 
-// Turns the sandbox starts for the fix agent in one streak; words said into its live turn are none.
+// Turns the sandbox starts for the fix agent in one streak; words said into its live turn are none. One run's failures
+// are one message, so this is three runs' worth.
 export const TURNS_PER_STREAK = 3;
+// How long a run still going after its first failure is waited on before what failed so far is handed over: past the
+// end of measuring for nearly every run (verification was done by 41 minutes from the start at p90 across September
+// 2026), and short of a release that a failed clock or perf job does not stop.
+export const RUN_SETTLE_CAP_MS = 45 * 60_000;
 // Failed jobs one streak remembers having heard of.
 const HEARD_KEPT = 200;
 // The workflow of a run whose forge runs one pipeline per commit (GitLab), or that named none.
@@ -64,8 +78,10 @@ export interface FailedJob {
     readonly sha?: string | undefined;
     // The job's page, else its run's.
     readonly url?: string | undefined;
-    // The step it failed in, where the forge names steps (GitHub).
+    // The first step it failed in, where the forge names steps (GitHub).
     readonly step?: string | undefined;
+    // Every step it failed in, in order, where the forge names steps.
+    readonly steps?: readonly string[] | undefined;
     // Why it failed, in the forge's own word, where it says (GitLab's `failure_reason`).
     readonly reason?: string | undefined;
 }
@@ -73,12 +89,32 @@ export interface FailedJob {
 // What became of one failed job: somebody's (sent, recorded, or not main's), or the fleet's.
 type Verdict = "code" | "fleet" | "skipped";
 
-// What only this process holds: a lock per branch, so one branch's news is decided in the order it arrived; and the
-// fleet failures already judged, so a job's log is not read twice for them. Losing either to a restart costs a read.
+// One failed job parked for its run's handover, with what is kept of its log.
+interface Parked {
+    readonly job: FailedJob;
+    readonly excerpt: JobExcerpt;
+}
+
+// A run's failed jobs heard and not yet handed over, by job id, and the clock that hands them over if the run goes on.
+interface Batch {
+    readonly jobs: Map<number, Parked>;
+    readonly timer: ReturnType<typeof setTimeout>;
+}
+
+// Why a run's failures are handed over now: the run finished, or it was still going when its clock ran out.
+type HandOverReason = "finished" | "capped";
+
+// What only this process holds: a lock per branch, so one branch's news is decided in the order it arrived; the fleet
+// failures already judged, so a job's log is not read twice for them; and each run's failed jobs not yet handed over.
+// Losing them to a restart costs a read: `heard` is written only at a handover, so the boot's replay of the runs since
+// the streak began (resumeMainFixer) parks and hands over again whatever this process held.
 const locks = new Map<string, ReturnType<typeof serialLock>>();
 const fleetJobs = new Set<string>();
+const batches = new Map<string, Batch>();
+let settleCapMs = RUN_SETTLE_CAP_MS;
 
 const keyOf = (repo: string, branch: string): string => `${repo}\n${branch}`;
+const batchKeyOf = (repo: string, runId: number): string => `${repo}\n${runId}`;
 const heardOf = (job: Pick<FailedJob, "runId" | "jobId">): string => `${job.runId}/${job.jobId}`;
 const workflowOf = (workflow: string | undefined): string => (workflow === undefined || workflow === "" ? ONE_PIPELINE : workflow);
 const findingOf = (workflow: string, job: string): CiFinding => ({
@@ -193,36 +229,55 @@ const endedHandBack = (agent: AgentSummary, streak: CiFailure): HandBack | undef
     }
 };
 
-// The job, in the words a turn reads it by.
-const where = (job: FailedJob): string =>
-    `"${job.name}" in run ${job.runId}${job.step === undefined ? "" : `, at its step "${job.step}"`}${job.url === undefined ? "" : ` (${job.url})`}`;
+// A run's failed jobs, in the words a turn reads them by.
+const jobsFailed = (runId: number, parked: readonly Parked[]): string =>
+    `run ${runId} failed ${parked.length === 1 ? "1 job" : `${parked.length} jobs`}: ${parked.map(({ job }) => `"${job.name}"`).join(", ")}`;
 
-const logBlock = (job: FailedJob, log: string): string => (log === "" ? "" : `\n\n--- job: ${job.name} (log tail) ---\n${log}`);
+// What the list is: the run's whole word, or what had failed by the time its clock ran out.
+const completeness = (reason: HandOverReason): string =>
+    reason === "finished"
+        ? `The run has finished, and every verification job in it ran whatever the others concluded, so this is the whole list of what it found wrong.`
+        : `The run was still going ${Math.round(settleCapMs / 60_000)} minutes after its first failure, so these are the jobs that had failed by then; any that fails later in it is sent to you when it finishes.`;
 
 // What the fix agent is told first, ahead of the failure's evidence.
-const openingPreface = (project: CiProject, job: FailedJob): string =>
+const openingPreface = (project: CiProject, branch: string, runId: number, parked: readonly Parked[], reason: HandOverReason): string =>
     [
-        `Main's CI is failing: the job ${where(job)} failed on ${job.branch} of "${project.repo}", and the run may still be going.`,
-        `You are the one fix agent for this failure. Every later failure on ${job.branch}, in this run or a later one, is sent to this conversation until ${job.branch} passes again, so do not wait on the run or watch it: fix what failed, then end your turn.`,
-        `Your work lands in the main tree like any conversation's; the owner commits and pushes it, and the next run on ${job.branch} measures it.`,
+        `Main's CI is failing: ${jobsFailed(runId, parked)}, on ${branch} of "${project.repo}".`,
+        completeness(reason),
+        `One cause often fails several jobs (a type error fails every group that compiles it), so group what is below by cause and fix every cause in this turn, not only the first.`,
+        `You are the one fix agent for this failure. Every later failure on ${branch} is sent to this conversation until ${branch} passes again, so do not wait on runs or watch them: fix what failed, then end your turn.`,
+        `Your work lands in the main tree like any conversation's; the owner commits and pushes it, and the next run on ${branch} measures it.`,
     ].join(" ");
 
-// What a later failure says to the fix agent already on the streak.
-const followUp = (project: CiProject, streak: CiFailure, job: FailedJob, log: string): string =>
-    [
-        `Another job failed on ${job.branch} of "${project.repo}": ${where(job)}.`,
-        job.runId === streak.firstRunId
-            ? `It is in the run this failure began in.`
-            : `It is from a later run${job.sha === undefined ? "" : `, at commit ${job.sha.slice(0, 7)}`}.`,
-        `If what you already changed covers it (the run's commit predates your change), say so and change nothing; otherwise fix it too, then end your turn.`,
-    ].join(" ") + logBlock(job, log);
+// What a later run's failures say to the fix agent already on the streak.
+const followUp = (project: CiProject, streak: CiFailure, branch: string, runId: number, parked: readonly Parked[], reason: HandOverReason): string => {
+    const sha = parked[0]?.job.sha;
+    return [
+        [
+            `More of main's CI failed: ${jobsFailed(runId, parked)}, on ${branch} of "${project.repo}".`,
+            runId === streak.firstRunId
+                ? `It is the run this failure began in.`
+                : `It is a later run${sha === undefined ? "" : `, at commit ${sha.slice(0, 7)}`}.`,
+            completeness(reason),
+            `If what you already changed covers them (the run's commit predates your change), say so and change nothing; otherwise fix them too, every cause, then end your turn.`,
+        ].join(" "),
+        `--- what failed ---\n${digestOf(parked.map(({ excerpt }) => excerpt))}`,
+    ].join("\n\n");
+};
 
 // Whether the fleet failed the job rather than the code: a runner-owned step, the forge's own reason, or a log naming
 // the fleet. Missing evidence never reads as the fleet's.
 const fleetFailed = (job: FailedJob, log: string): boolean =>
     (job.step !== undefined && isInfraStep(job.step)) || (job.reason !== undefined && GITLAB_FLEET_REASONS.has(job.reason)) || infraLog(log);
 
-// The streak after one more failed job: begun at it when there was none.
+// The streak once a run's jobs are handed over: heard, so no later news of them is handed over again.
+const withHeard = (current: CiFailure, jobs: readonly FailedJob[]): CiFailure => ({
+    ...current,
+    heard: [...current.heard, ...jobs.map(heardOf)].slice(-HEARD_KEPT),
+});
+
+// The streak after one more failed job: begun at it when there was none. What the banner shows moves now; the job is
+// heard only once it is handed over (withHeard).
 const withJob = (current: CiFailure | undefined, job: FailedJob, now: number): CiFailure => {
     const workflow = workflowOf(job.workflow);
     const streak: CiFailure = current ?? {
@@ -245,45 +300,43 @@ const withJob = (current: CiFailure | undefined, job: FailedJob, now: number): C
         count: streak.count + (newest === undefined || job.runId > newest ? 1 : 0),
         workflows: { ...streak.workflows, [workflow]: Math.max(newest ?? 0, job.runId) },
         findings: streak.findings.some((owed) => owed.id === finding.id) ? streak.findings : [...streak.findings, finding],
-        heard: [...streak.heard, heardOf(job)].slice(-HEARD_KEPT),
     };
 };
 
-// Puts the streak's fix agent on it: a fresh conversation named for the run the streak began in.
+// Puts the streak's fix agent on it, with every job its first failed run failed: a fresh conversation named for the run
+// the streak began in. Whether the run's jobs reached it, so they are heard.
 const startFixer = async (
     services: Services,
     project: CiProject,
     streak: CiFailure,
-    job: FailedJob,
-    log: string,
+    branch: string,
+    runId: number,
+    parked: readonly Parked[],
+    reason: HandOverReason,
     fetchFn: FetchFn,
-): Promise<void> => {
+): Promise<boolean> => {
+    const names = parked.map(({ job }) => job.name);
     const outcome = await orElse(
         services,
         startCiFix(
             services,
             {
                 project,
-                runId: job.runId,
+                runId,
                 base: ciFixConversationId(project.repo, streak.firstRunId),
-                evidence: {
-                    failedJobs: [job.name],
-                    logs: log === "" ? "" : `--- job: ${job.name} (log tail) ---\n${log}`,
-                    infra: false,
-                    infraSteps: [],
-                },
-                preface: openingPreface(project, job),
+                evidence: { failedJobs: names, logs: digestOf(parked.map(({ excerpt }) => excerpt)), infra: false, infraSteps: [] },
+                preface: openingPreface(project, branch, runId, parked, reason),
             },
             fetchFn,
         ),
         undefined,
         "ci repair: the fix agent did not start",
-        { repo: project.repo, runId: job.runId },
+        { repo: project.repo, runId },
     );
     if (outcome === undefined) {
-        return;
+        return false;
     }
-    await services.ciStore.failure(project.repo, job.branch, (current) =>
+    await services.ciStore.failure(project.repo, branch, (current) =>
         current === undefined
             ? current
             : {
@@ -295,7 +348,7 @@ const startFixer = async (
                           kind: "fix-up",
                           conversationId: outcome.conversationId,
                           at: Date.now(),
-                          detail: `Its first failed job, ${job.name}, put a fix agent on it; every later failure goes to the same one.`,
+                          detail: `Run ${runId} failed ${names.join(", ")}, and put a fix agent on it with all of them; every later run's failures go to the same one.`,
                       },
                   ],
               },
@@ -305,38 +358,45 @@ const startFixer = async (
         tell(
             services,
             "ci.repair_started",
-            `${job.branch} of ${project.repo} started failing at ${job.name}: a fix agent is on it, and every later failure goes to it.`,
+            `${branch} of ${project.repo} started failing in run ${runId}, at ${names.join(", ")}: a fix agent is on it with all of them, and every later failure goes to it.`,
             "ok",
             outcome.conversationId,
         );
-        return;
+        return true;
     }
     // An attempt at this streak's id was already in play (a person's press got there first): it is the fix agent, and
-    // hears this failure like any later one.
-    const current = (await services.ciStore.failures())[keyOf(project.repo, job.branch)];
-    if (current !== undefined) {
-        await sendOn(services, project, current, job, log);
-    }
+    // hears this run like any later one.
+    const current = (await services.ciStore.failures())[keyOf(project.repo, branch)];
+    return current === undefined ? false : sendOn(services, project, current, branch, runId, parked, reason);
 };
 
-// Says a later failure to the streak's fix agent, or hands the failure over when it can take no more.
-const sendOn = async (services: Services, project: CiProject, streak: CiFailure, job: FailedJob, log: string): Promise<void> => {
+// Says a run's failures to the streak's fix agent as one message, or hands the failure over when it can take no more.
+// Whether they reached it, so they are heard.
+const sendOn = async (
+    services: Services,
+    project: CiProject,
+    streak: CiFailure,
+    branch: string,
+    runId: number,
+    parked: readonly Parked[],
+    reason: HandOverReason,
+): Promise<boolean> => {
     const fixer = fixerOf(streak);
     const agent = fixer === undefined ? undefined : services.agents.get(fixer);
     const entry = fixer === undefined ? undefined : services.agents.entry(fixer);
     if (fixer === undefined || agent === undefined || entry === undefined || agent.archivedAt !== undefined) {
-        await handOver(services, project.repo, job.branch, fixer, agent?.archivedAt === undefined ? { reason: "gone" } : ARCHIVED);
-        return;
+        await handOver(services, project.repo, branch, fixer, agent?.archivedAt === undefined ? { reason: "gone" } : ARCHIVED);
+        return false;
     }
     const ended = endedHandBack(agent, streak);
     if (ended !== undefined) {
-        await handOver(services, project.repo, job.branch, fixer, ended);
-        return;
+        await handOver(services, project.repo, branch, fixer, ended);
+        return false;
     }
     // Only a turn the sandbox starts is counted: words said into the live one cost it none.
     if (!services.conversations.running(fixer) && streak.turns >= TURNS_PER_STREAK) {
-        await handOver(services, project.repo, job.branch, fixer, { reason: "turns" });
-        return;
+        await handOver(services, project.repo, branch, fixer, { reason: "turns" });
+        return false;
     }
     const receipt = await orElse(
         services,
@@ -344,7 +404,7 @@ const sendOn = async (services: Services, project: CiProject, streak: CiFailure,
             { turns: services.turns, sessionIdOf: (conversationId) => services.conversations.sessionIdOf(conversationId) },
             {
                 conversationId: fixer,
-                prompt: followUp(project, streak, job, log),
+                prompt: followUp(project, streak, branch, runId, parked, reason),
                 voice: "sandbox",
                 errand: "ci-fix-nudge",
                 source: "ci",
@@ -356,22 +416,70 @@ const sendOn = async (services: Services, project: CiProject, streak: CiFailure,
         { fixer },
     );
     if (receipt === undefined) {
-        return;
+        return false;
     }
     if ("why" in receipt || "invalid" in receipt) {
-        await handOver(services, project.repo, job.branch, fixer, { reason: "refused", cause: "why" in receipt ? receipt.why : receipt.invalid });
-        return;
+        await handOver(services, project.repo, branch, fixer, { reason: "refused", cause: "why" in receipt ? receipt.why : receipt.invalid });
+        return false;
     }
     if (receipt.delivered !== "steered") {
-        await services.ciStore.failure(project.repo, job.branch, (current) =>
-            current === undefined ? current : { ...current, turns: current.turns + 1 },
-        );
+        await services.ciStore.failure(project.repo, branch, (current) => (current === undefined ? current : { ...current, turns: current.turns + 1 }));
     }
+    return true;
 };
 
-/** One failed job of a main-line branch: begins the branch's streak, or goes to the fix agent already on it. Each job is
- *  handled once however many ways it arrives; a fleet failure, and a failure older than main's newest pass, are not the
- *  agent's. */
+// Hands a run's parked jobs over as one: to a fix agent started for them, or to the one already on the streak. Nobody is
+// told when a later pass ended the failure, it waits for the owner, or repairs were switched off meanwhile.
+const handOverRun = (services: Services, project: CiProject, branch: string, runId: number, reason: HandOverReason, fetchFn: FetchFn): Promise<void> =>
+    serially(keyOf(project.repo, branch), async () => {
+        const key = batchKeyOf(project.repo, runId);
+        const batch = batches.get(key);
+        if (batch === undefined) {
+            return;
+        }
+        batches.delete(key);
+        clearTimeout(batch.timer);
+        const parked = [...batch.jobs.values()];
+        const streak = (await services.ciStore.failures())[keyOf(project.repo, branch)];
+        if (parked.length === 0 || streak === undefined || waitsForOwner(streak) || !(await services.sandboxSettings.get()).autoRepair) {
+            return;
+        }
+        const reached =
+            fixerOf(streak) === undefined
+                ? await startFixer(services, project, streak, branch, runId, parked, reason, fetchFn)
+                : await sendOn(services, project, streak, branch, runId, parked, reason);
+        if (reached) {
+            await services.ciStore.failure(project.repo, branch, (current) =>
+                current === undefined ? current : withHeard(current, parked.map(({ job }) => job)),
+            );
+        }
+    });
+
+// Parks a failed job for its run's handover, and starts the run's clock when it is the run's first.
+const park = (services: Services, project: CiProject, job: FailedJob, log: string, fetchFn: FetchFn): void => {
+    const key = batchKeyOf(project.repo, job.runId);
+    const batch: Batch = batches.get(key) ?? {
+        jobs: new Map(),
+        timer: setTimeout(() => {
+            void orElse(
+                services,
+                handOverRun(services, project, job.branch, job.runId, "capped", fetchFn),
+                undefined,
+                "ci repair: a run's failures could not be handed over",
+                { repo: project.repo, runId: job.runId },
+            );
+        }, settleCapMs),
+    };
+    // The clock must not keep a stopping daemon alive; a restart hands the run over from the forge's own word instead.
+    batch.timer.unref?.();
+    const steps = job.steps ?? (job.step === undefined ? [] : [job.step]);
+    batch.jobs.set(job.jobId, { job, excerpt: excerptOf({ name: job.name, url: job.url, steps, log }) });
+    batches.set(key, batch);
+};
+
+/** One failed job of a main-line branch: begins the branch's streak, and is parked until its run is handed over to the
+ *  fix agent (handOverRun). Each job is handled once however many ways it arrives; a fleet failure, and a failure older
+ *  than main's newest pass, are not the agent's. */
 export const jobFailed = async (services: Services, project: CiProject, job: FailedJob, fetchFn: FetchFn = fetch): Promise<Verdict> => {
     if (!(await isMainLine(services, project, job.branch))) {
         return "skipped";
@@ -383,21 +491,22 @@ export const jobFailed = async (services: Services, project: CiProject, job: Fai
             return "fleet";
         }
         const current = (await services.ciStore.failures())[key];
-        if (current?.heard.includes(heard) === true) {
+        if (current?.heard.includes(heard) === true || batches.get(batchKeyOf(project.repo, job.runId))?.jobs.has(job.jobId) === true) {
             return "code";
         }
         // A later run of its workflow already passed: older news than main's own.
         if (((await services.ciStore.passes(project.repo, job.branch))[workflowOf(job.workflow)] ?? 0) > job.runId) {
             return "skipped";
         }
+        // Whole, for the digest; only its end is asked whether the fleet died, as the runner says that last.
         const log = await orElse(
             services,
-            ciClientFor(project.account.provider, fetchFn).jobLog(project, job.jobId, FIX_LOG_BYTES),
+            ciClientFor(project.account.provider, fetchFn).jobLog(project, job.jobId, WHOLE_LOG),
             "",
             "ci repair: the failed job's log could not be read",
             { repo: project.repo, jobId: job.jobId },
         );
-        if (fleetFailed(job, log)) {
+        if (fleetFailed(job, log.slice(-FIX_LOG_BYTES))) {
             fleetJobs.add(`${project.repo}/${heard}`);
             return "fleet";
         }
@@ -416,11 +525,7 @@ export const jobFailed = async (services: Services, project: CiProject, job: Fai
             }
             return "code";
         }
-        if (fixerOf(streak) === undefined) {
-            await startFixer(services, project, streak, job, log, fetchFn);
-        } else {
-            await sendOn(services, project, streak, job, log);
-        }
+        park(services, project, job, log, fetchFn);
         return "code";
     });
 };
@@ -434,6 +539,7 @@ const jobOf = (run: PipelineRun, step: FailedStep): FailedJob => ({
     sha: run.sha,
     url: run.url,
     step: step.step,
+    steps: step.steps,
     reason: step.reason,
 });
 
@@ -565,7 +671,7 @@ const failedRun = async (services: Services, project: CiProject, run: PipelineRu
 };
 
 /** A finished run, from its webhook or the poller: a pass takes its workflow off main's failure, and a failure hands every
- *  failed job not yet heard of to the fixer, re-running a run only the fleet failed. */
+ *  failed job not yet heard of to the fixer at once, re-running a run only the fleet failed. */
 export const runFinished = async (services: Services, run: PipelineRun, fetchFn: FetchFn = fetch): Promise<void> => {
     if (run.status !== "success" && run.status !== "failed") {
         return;
@@ -591,9 +697,11 @@ export const runFinished = async (services: Services, run: PipelineRun, fetchFn:
     if (failing.length > 0) {
         await failedRun(services, project, run, failing);
     }
+    await handOverRun(services, project, run.branch, run.runId, "finished", fetchFn);
 };
 
-/** A run still going, from the poller where no webhook is live: every job that already failed goes to the fixer. */
+/** A run still going, from the poller where no webhook is live: every job that already failed is parked for the run's
+ *  handover. */
 export const runInFlight = async (services: Services, project: CiProject, run: PipelineRun, fetchFn: FetchFn = fetch): Promise<void> => {
     if (!(await isMainLine(services, project, run.branch))) {
         return;
@@ -719,7 +827,12 @@ export const resumeMainFixer = async (services: Services, fetchFn: FetchFn = fet
 };
 
 /** Test seam: forget what only this process holds, as a restart does; the failures on file stay. */
-export const resetMainFixer = (): void => {
+export const resetMainFixer = (options: { readonly settleCapMs?: number } = {}): void => {
     locks.clear();
     fleetJobs.clear();
+    for (const batch of batches.values()) {
+        clearTimeout(batch.timer);
+    }
+    batches.clear();
+    settleCapMs = options.settleCapMs ?? RUN_SETTLE_CAP_MS;
 };

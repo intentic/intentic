@@ -1942,7 +1942,7 @@
         },
         "agentChecks": {
             "repairMainCi": "Main reparieren, wenn das CI fehlschlägt",
-            "repairMainCiNote": "Der erste Job, der auf main fehlschlägt, startet einen Reparatur-Agenten, und jeder weitere Fehlschlag geht an ihn, bis main wieder erfolgreich durchläuft. Sind seine Züge aufgebraucht oder ändert er nichts, übergibt er an Sie. Ein Lauf, der an den CI-Maschinen selbst scheiterte, wird stattdessen einmal neu gestartet.",
+            "repairMainCiNote": "Der erste Lauf, der auf main fehlschlägt, startet nach seinem Ende einen Reparatur-Agenten mit allen fehlgeschlagenen Jobs, und die Fehlschläge jedes weiteren Laufs gehen als eine Nachricht an ihn, bis main wieder erfolgreich durchläuft. Sind seine Züge aufgebraucht oder ändert er nichts, übergibt er an Sie. Ein Lauf, der an den CI-Maschinen selbst scheiterte, wird stattdessen einmal neu gestartet.",
             "mainCi": "Main-CI"
         },
         "agentClock": {
@@ -2089,7 +2089,7 @@
             "readingWhatWorkspacesRepositories": "Es wird gelesen, was die Repositorys dieses Workspace deklarieren…",
             "repositoriesWaitingOnUntil": "{waiting} Repositorys warten auf Sie. Bis Sie sie einschalten, laufen ihre eigenen Prüfungen nicht.",
             "checksAfterEdits": "Prüfungen nach Änderungen",
-            "repositoryDeclaresOwnChecks": "Ein Repository deklariert in .intentic/checks.json, was nach jeder Änderung auf seinem eigenen Code läuft. Nichts, was es deklariert, blockiert je ein Landen, einen Commit oder einen Push."
+            "repositoryDeclaresOwnChecks": "Ein Repository deklariert in .intentic/checks.json, was nach jeder Änderung und einmal am Ende eines Zuges auf seinem eigenen Code läuft. Nichts, was es deklariert, blockiert je ein Landen, einen Commit oder einen Push."
         },
         "agentSafetyJudge": {
             "changeInModels": "In „Modelle“ ändern",
@@ -3017,7 +3017,7 @@
             "runChecksDeclares": "Die Prüfungen ausführen, die {name} deklariert",
             "afterEachEdit": "Nach jeder Änderung",
             "landRetired": "Nachdem es gelandet ist — läuft nicht mehr; das CI prüft, was gepusht wird",
-            "turnRetired": "Bevor ein Zug endet — läuft nicht mehr; das CI prüft, was gepusht wird",
+            "whenTurnEnds": "Wenn ein Zug endet — einmal an den Agenten zurückgemeldet, blockiert nie",
             "lastFlagged": "zuletzt gemeldet {ago}",
             "neverFlagged": "nie etwas gemeldet",
             "running": "Läuft"
@@ -4835,7 +4835,7 @@
             "declaredIn": "Deklariert in {path}, damit sie mit dem Repository reisen.",
             "repositoryDoesntDeclareAny": "Dieses Repository deklariert keine eigenen Prüfungen. Legen Sie eine Datei ab unter",
             "runTheseChecks": "Diese Prüfungen ausführen",
-            "whenIsEditOrLand": "{when} ist {edit} oder {land}, und der Befehl läuft in diesem Ordner, schreiben Sie ihn also so, wie Sie es hier in einem Terminal täten."
+            "whenIsEditOrTurn": "{when} ist {edit} oder {turn}, und der Befehl läuft in diesem Ordner, schreiben Sie ihn also so, wie Sie es hier in einem Terminal täten."
         },
         "directoryPersonas": {
             "addNewOneInstead": "Stattdessen eine neue hinzufügen",

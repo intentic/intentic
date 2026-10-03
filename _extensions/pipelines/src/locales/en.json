@@ -39,7 +39,7 @@
             "proving": "The fix is in. A new run on {branch} is checking it now.",
             "ready": "A fix is ready on the agent's branch. Open it to review and land it.",
             "reported": "Auto-fix is off, so no agent was sent. Start one, or fix it by hand.",
-            "unassigned": "Auto-fix is reading the failed job's logs before it sends an agent. Start one now to skip the wait.",
+            "unassigned": "Auto-fix waits for the run to finish, so its agent gets every failure at once. Start one now to skip the wait.",
             "waiting": "The auto-fix agent is paused until its allowance comes back.",
             "waits": "{reason}: the auto-fix agent handed this back. Continue gives it more turns.",
             "working": "The auto-fix agent is on it. Every new failure on {branch} goes to the same agent until a run passes."

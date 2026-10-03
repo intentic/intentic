@@ -29,8 +29,9 @@ export const checklistCloseNote = (open: readonly StoredTask[]): string => {
     ].join("\n");
 };
 
-// The one Stop matcher (agent.ts mergeHooks): the harness's own bookkeeping about the model's own list, never a check.
-// Nothing verifies at the Stop; this only says back once that a list the model wrote is still open.
+// A Stop matcher (agent.ts mergeHooks): the harness's own bookkeeping about the model's own list, never a check; what a
+// repository's `turn` checks found is said beside it (turn-checks.ts). This only says back once that a list the model
+// wrote is still open.
 export const checklistCloseHooks = (deps: ChecklistCloseDeps): Partial<Record<HookEvent, HookCallbackMatcher[]>> => {
     const store = deps.sessionStore;
     if (store === undefined) {

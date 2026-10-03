@@ -1,27 +1,30 @@
 import { isAbsolute, join } from "node:path";
 import type { Rule } from "@intentic/sandbox-contract";
 import { shellQuote } from "@intentic/sandbox-run/quote";
+import { landingPaths } from "../../../conversations/land/landing-paths.js";
+import { isIsolated } from "../../../conversations/registry/agents-store.js";
 import { fromWorktree, inWorktree, type IsolationAnchor, nsenterPrefix } from "../../../conversations/worktrees/isolation.js";
 import type { Services } from "../../../composition.js";
 import { editBytesReviewer } from "../../../rules/edit-bytes.js";
 import { fileEditedReviewer, spawnEditCommand } from "../../../rules/file-edited.js";
 import { repoCwd } from "../../../rules/rule-cwd.js";
+import { reposOf } from "../../../rules/rules.js";
 import { workspaceRelative } from "../../../rules/workspace-relative.js";
 import { discoverRepos } from "../../../workspace/layout/repo-discovery.js";
 import type { TurnContext } from "../../providers/adapter.js";
 import { checkoutDirtyPaths } from "../../tools/agent-shell-edits.js";
 import type { TurnHooks } from "../../providers/agent-request.js";
+import type { TurnChange } from "../turn-checks.js";
 import { opt } from "../../../opt.js";
 
-// What the daemon answers while a Claude Code turn runs: the checks at every edit and the ledgers they stamp. The safety
-// judge, its log and the install rule are every runtime's (run/turn/turn-safety.ts). Nothing runs when the turn ends: the model decides when it is done, and CI checks what the owner pushes.
-// Every write here is best-effort, since the turn must settle regardless.
+// What the daemon answers while a Claude Code turn runs: the checks at every edit, the repositories' `turn` checks once
+// as an isolated turn is about to stop (run/turn-checks.ts), and the ledgers they stamp. The safety judge, its log and
+// the install rule are every runtime's (run/turn/turn-safety.ts). No check holds the turn: the model decides when it is
+// done, and CI checks what the owner pushes. Every write here is best-effort, since the turn must settle regardless.
 
-// What the harness's hooks reach for: the per-edit reviewers' deps and the ledgers they stamp.
-export type HarnessHooksDeps = Pick<
-    Services,
-    "workspace" | "logger" | "ruleFirings"
->;
+// What the harness's hooks reach for: the reviewers' deps, the conversation's checkout for what its work changed, and
+// the ledgers they stamp.
+export type HarnessHooksDeps = Pick<Services, "workspace" | "logger" | "ruleFirings" | "agents" | "agentWorktrees">;
 
 // A rule's command inside the turn's own namespace via nsenter, since the daemon-side worktree has empty dependency
 // directories; `repo` is carried this far because inside the namespace `--wdns`, not the cwd, decides where it runs.
@@ -64,6 +67,46 @@ const editReviewersOf = (deps: HarnessHooksDeps, context: TurnContext, rules: re
     return { editReviewers: [bytes, commands].filter((each) => each !== undefined) };
 };
 
+// What the conversation's work changed and has not landed in the repositories `named`, workspace-relative, and the
+// repositories that holds: the same reading its land takes (landing-paths.ts), so a file the turn committed in its
+// worktree counts as one it left uncommitted, and scratch no land carries counts as neither. Only the repositories a
+// check names are read, since a change anywhere else matches no check.
+const turnChangeOf = async (deps: HarnessHooksDeps, conversationId: string, named: ReadonlySet<string>): Promise<TurnChange> => {
+    const entry = deps.agents.entry(conversationId);
+    if (entry === undefined || !isIsolated(entry)) {
+        return { paths: [], repos: [] };
+    }
+    const paths = await landingPaths(
+        deps,
+        entry,
+        entry.placement.repos.filter(({ repo }) => named.has(repo)),
+    );
+    const nested = entry.placement.repos.map(({ repo }) => repo).filter((repo) => repo !== "root");
+    return { paths, repos: reposOf(paths, nested) };
+};
+
+// The `turn.ending` moment: each repository's own `turn` checks, run once as an isolated turn is about to stop, in the
+// repository they name in the turn's own tree and through its namespace, as the edit checks are. Isolated turns only: a
+// main-tree turn's working tree carries everyone's uncommitted work, and a check of it would charge the turn with theirs.
+const turnChecksOf = (deps: HarnessHooksDeps, context: TurnContext, rules: readonly Rule[]): Pick<TurnHooks, "turnChecks"> => {
+    const isolation = context.base.spec.isolation;
+    const conversationId = context.base.spec.conversationId;
+    if (rules.length === 0 || isolation === undefined || conversationId === undefined) {
+        return {};
+    }
+    const named = new Set(rules.flatMap((rule) => (rule.when?.repo === undefined ? [] : [rule.when.repo])));
+    return {
+        turnChecks: {
+            rules,
+            change: () => turnChangeOf(deps, conversationId, named),
+            run: (command, timeoutMs, repo) => spawnEditCommand(repoCwd(context.localCwd, repo))(ruleCommandIn(command, isolation.anchor, repo), timeoutMs),
+            // A firing date on the settings list, as an edit check's; a feed row per turn would be noise.
+            onFired: (rule) => stampFiring(deps, rule),
+            logger: deps.logger.child({ conversationId }),
+        },
+    };
+};
+
 // The turn's dirty files for shell-edit attribution, by both names (checkoutDirtyPaths reuses the repo list).
 const dirtyFilesOf = (context: TurnContext): (() => Promise<readonly { readonly onDisk: string; readonly path: string }[]>) => {
     const dirty = checkoutDirtyPaths(context.localCwd);
@@ -75,12 +118,13 @@ const dirtyFilesOf = (context: TurnContext): (() => Promise<readonly { readonly 
 };
 
 // Every hook a harness turn is planned with, on top of the ones the route and the planner already bound.
-export const harnessHooks = (deps: HarnessHooksDeps, context: TurnContext, fileEdited: readonly Rule[]): TurnHooks => ({
+export const harnessHooks = (deps: HarnessHooksDeps, context: TurnContext, fileEdited: readonly Rule[], turnEnding: readonly Rule[]): TurnHooks => ({
     ...context.base.hooks,
     // Which files the tree says are dirty, both names, for a shell command's edit diagnostics. Read on every turn: the
     // main checkout's standing dirty set is everyone's landed work and a baseline, not a finding, there.
     dirtyFiles: dirtyFilesOf(context),
     ...editReviewersOf(deps, context, fileEdited),
+    ...turnChecksOf(deps, context, turnEnding),
     // The rebase the cards take back while the user is answering them; isolated turns only.
     ...opt("resync", context.resync),
 });

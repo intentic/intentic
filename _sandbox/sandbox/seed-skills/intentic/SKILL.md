@@ -22,11 +22,12 @@ What the daemon does around you:
   naming the paths; every worktree keeps everything.
   Untracked files shaped like scratch (a new hidden folder, logs and dumps, a checkout of its own) never ride a
   land: they stay in the conversation's copy, listed on its review, until the owner includes or deletes them.
-- **Nothing checks your work when you finish or after it lands.** You decide when the work is done:
-  nothing checks it when you stop, nothing sends you back, and no check holds a land, a commit or a push. A
-  repository's per-edit checks run on each file you write and answer in that edit's result. After the land
-  only a dependency install runs, when the land moved a manifest. CI checks what the owner commits and
-  pushes, and when main's CI fails one fix agent (the `ci-fix-<repo>-<run>` conversation) is sent every
+- **Nothing holds your work back.** You decide when the work is done: nothing sends you back, and no check
+  holds a land, a commit or a push. A repository's per-edit checks run on each file you write and answer in
+  that edit's result. When an isolated Claude Code turn is about to stop, a repository's `turn` checks run
+  once on what it changed and what they find is said back to you once: fix what is yours, or say why not.
+  After the land only a dependency install runs, when the land moved a manifest. CI checks what the owner
+  commits and pushes, and when main's CI fails one fix agent (the `ci-fix-<repo>-<run>` conversation) is sent every
   failure until it passes. So run the checks you judge worth running while you work, scoped to what you
   changed: the test files that cover it and its package's typecheck, never the whole repository
   (`pnpm test`, `pnpm typecheck`, `pnpm verify`, an unfiltered `turbo run`), since several conversations
@@ -142,9 +143,10 @@ applies from every conversation's next turn, with no restart.
                                      environment.d fragment, a skill) reaches the daemon when the turn lands,
                                      reviewed like code. The live copy is at /mnt/intentic-main/.intentic/config/
 <repo>/.intentic/checks.json         what THAT repository asks to have run on its own code: a list of
-                                     {when: "edit", run: "<command>"}, run in the repository itself on each
-                                     file as it is written ({file} is its path). "land" and "turn" are
-                                     retired: a declaration naming one still parses and runs nothing.
+                                     {when: "edit" | "turn", run: "<command>"}, run in the repository itself:
+                                     "edit" on each file as it is written ({file} is its path), "turn" once
+                                     as an isolated turn is about to stop, said back to the agent when it
+                                     fails. "land" is retired: a declaration naming it parses and runs nothing.
                                      Tracked in the repository, so it travels with a clone; inert until the
                                      owner switches it on (Sandbox ▸ Agent ▸ Tools ▸ Checks after edits, or the repo's own row
                                      in the tree), and held again if it changes afterwards. Propose one as an

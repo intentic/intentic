@@ -33,9 +33,9 @@ described, changing an implementation detail it deliberately does not mention.
 
 ## What reads your edit, and when
 
-Nothing checks your work when your turn ends or after it lands, nothing sends you back to it, and no check refuses a
-land, a commit or a push. You decide when the work is done. One reader runs without being asked, after each file you
-write, and CI checks what the owner pushes.
+No check sends you back to your work or refuses a land, a commit or a push: you decide when the work is done. Two
+readers run without being asked, one after each file you write and one once as your turn ends, and CI checks what the
+owner pushes.
 
 **After each file you write**: the `edit` checks in `.intentic/checks.json`: every check that can judge one file
 on its own (`node _tools/checks/run.mjs --paths {file}`), and the linter (`node _tools/oxlint/lint-edit.mjs {file}`,
@@ -45,7 +45,14 @@ edit and never stops the turn. Fix it there. A finding that is right where it st
 `// allow(<check>): <reason>` at the site, or an `Allow: <check> — <reason>` commit trailer for a whole change
 (`_tools/checks/README.md`); `Test-Note:` and `Breaking-Note:` below are declarations, not check exceptions.
 
-**When the turn ends**: nothing runs. Your conversation's card records what the turn showed of its own work
+**When the turn ends**, in a checkout of your own: the `turn` check in `.intentic/checks.json`
+(`node _tools/scripts/verify/verify-turn.mjs`) runs once, if the turn changed this repository. It runs every check the
+manifest lists on your tree, files not yet added to git included, and says back only what your change added against
+where your branch left `main`, so a failure main already carries is charged to no conversation. Its findings arrive as
+you stop: fix the ones that are yours, or say why one is not. A tidy finding that is right where it stands is declared
+by an `Allow: <check> — <reason>` line ending your final message, which the land copies into its commit. It is said
+once and holds nothing. Only a Claude Code turn meets it, and never a turn on the main tree, whose working tree holds
+everyone's uncommitted work. Your conversation's card records what the turn showed of its own work
 (`proof`: verified, unproven, failing or no-code, read off the checks you chose to run after your last edit, and how
 many rendered interface files you changed without looking at them), and the editor badges it.
 
@@ -59,7 +66,8 @@ memory. CI runs all of it on what the owner pushes.
 **After the land**: the dependency reconciler installs when the land moved a manifest or the lockfile, or brought a
 project the main tree never installed (`_sandbox/sandbox/src/workspace/deps/reconcile-deps.ts`), and nothing else runs. The owner commits and pushes, and CI
 checks the commit (`.github/workflows/ci.yml`: its `quick` job type-checks the packages a push changed and runs the
-push check within minutes, and the verify groups build and test the rest). When main's CI fails, one fix agent takes it
+push check within minutes, and the verify groups build and test the rest; every one of them runs whatever preflight
+concluded, and only the jobs that publish wait on the others passing). When main's CI fails, one fix agent takes it
 (below). The "Checks after landing" note every conversation gets says so too, and that a failure in code you
 did not touch may be main's own: not yours to chase unless your task is about it.
 
@@ -85,15 +93,18 @@ files the range changed. `pnpm verify:push` runs the same check by hand, the bra
 the manifest/lockfile lockstep and `cargo fmt --check` on the crates the range touched. It exits non-zero on a finding
 and never runs typecheck, build or test (`pnpm verify` does, by hand).
 
-When main's CI fails, one fix agent takes it (`_sandbox/sandbox/src/ci/main-fixer.ts`). The sandbox watches `main`
-and `master` of every workspace repository mapped to a connected GitHub or GitLab account, and acts on the first job
-that fails rather than on the finished run: a failure streak begins there and ends once a later run of every workflow
-that failed on it passes. The
-agent, `ci-fix-<repo>-<runId>`, starts with that job's log tail, and every later failed job on the branch goes to the
-same conversation, each job once. It gets at most three turns the sandbox starts per streak. Once they are spent, or
-it finished without changing anything, failed or was stopped, the failure waits for the owner. A failure in the runners
-rather than the code never reaches it, and a run whose every failure is the fleet's is re-run once. With the Agent
-tab's Repair switch (`autoRepair`) off, main's failure is only reported. `docs/architecture/sandbox.md` has the rest.
+When main's CI fails, one fix agent takes it (`_sandbox/sandbox/src/ci/main-fixer.ts`). The sandbox watches the default
+branch of every workspace repository mapped to a connected GitHub or GitLab account. A failure streak begins at the
+first job that fails and ends once a later run of every workflow that failed on it passes. No verification job in
+`ci.yml` waits on another's success, so one run reports everything wrong with a commit, and the sandbox hands a run's
+failed jobs over together: when the run finishes, or 45 minutes after its first failure if it is still going (what fails
+after that follows at its end). The agent, `ci-fix-<repo>-<runId>`, starts with the first failed run's digest
+(`_sandbox/sandbox/src/ci/failure-digest.ts`: every error once, with every job that printed it, then each failed step's
+last lines), and each later run's failures go to the same conversation as one message. It gets at most three turns the
+sandbox starts per streak. Once they are spent, or it finished without changing anything, failed or was stopped, the
+failure waits for the owner. A failure in the runners rather than the code never reaches it, and a run whose every
+failure is the fleet's is re-run once. With the Agent tab's Repair switch (`autoRepair`) off, main's failure is only
+reported. `docs/architecture/sandbox.md` has the rest.
 
 ## Stored data
 

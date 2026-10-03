@@ -48,7 +48,7 @@ describe(`where a command lives`, () => {
         expect(file([{ when: `push`, run: `pnpm verify:push` }])).toBe(false);
     });
 
-    // `land` is retired like `turn`: it runs nothing, so a file written while it ran reads however it spelled one.
+    // `land` is retired: it runs nothing, so a file written while it ran reads however it spelled one.
     test(`a retired land check still reads, however many a file names and whatever paths it gives`, () => {
         const file = (checks: unknown[]) => RepoChecksFileSchema.safeParse({ checks }).success;
         expect(
@@ -61,9 +61,9 @@ describe(`where a command lives`, () => {
     });
 });
 
-// Nothing runs when a turn ends any more. A file written before still reads, its conversion drops the inert rule, and no
-// save may stand a new one there.
-describe(`the retired turn.ending moment`, () => {
+// Only the checks a repository declares run when a turn ends, and the daemon adds them to a turn's rules without saving
+// them. An owner's rule there from before still reads, its conversion drops it, and no save may stand a new one there.
+describe(`an owner's rule at the turn.ending moment`, () => {
     const look = { id: `verify-ui-edits`, label: `Look at what changed`, moment: `turn.ending`, action: { kind: `builtin`, name: `verify-ui-edits` } };
     const land = { id: `auto-land`, label: `land`, moment: `agent.finished`, action: { kind: `verdict`, verdict: `allow` } };
 
@@ -74,7 +74,7 @@ describe(`the retired turn.ending moment`, () => {
     test(`is refused on a save`, () => {
         const saved = SandboxSettingsWriteSchema.safeParse(SandboxSettingsSchema.parse({ rules: [look, land] }));
         expect(saved.error?.issues.map(({ message, path }) => ({ message, path }))).toEqual([
-            { message: `turn.ending is retired: nothing runs when a turn ends any more, so a rule cannot stand there`, path: [`rules`] },
+            { message: `turn.ending runs only the checks a repository declares in its own .intentic/checks.json, so a rule cannot stand there`, path: [`rules`] },
         ]);
         expect(SandboxSettingsWriteSchema.safeParse(SandboxSettingsSchema.parse({ rules: [land] })).success).toBe(true);
     });

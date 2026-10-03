@@ -481,7 +481,7 @@ test("what checks the work is named on a conversation's opening message", async 
     const plan = await planTurn(harnessServices(), turn(), context);
 
     expect(wire(plan)).toContain(LANDING_CHECKS_NOTE_HEADER);
-    expect(wire(plan)).toContain("Nothing checks your work when you finish or after it lands, and nothing holds it back");
+    expect(wire(plan)).toContain("Nothing holds your work back: you decide when it is done. When you finish in a checkout of your own");
 });
 
 test("a follow-up is not charged for it again: the note stands in the session's own history", async () => {

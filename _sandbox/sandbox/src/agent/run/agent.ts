@@ -62,6 +62,7 @@ import { readClaudeUsage } from "../../usage/claude-usage.js";
 import { routedEndpointOf } from "../providers/routed-refusal.js";
 import { defaultQuery, promptInput, type QueryFn, streamSdk, type TurnPosture } from "./sdk-stream.js";
 import { checklistCloseHooks } from "./checklist-close.js";
+import { turnCheckHooks } from "./turn-checks.js";
 import { settingsHookChangeHooks } from "./harness/settings-hook-gate.js";
 import { checklistSeedOf } from "./task-store.js";
 import { carriedCostOf } from "./carried-cost.js";
@@ -425,6 +426,9 @@ const baseOptions = (
             // The harness's own ask: a checklist about to be left open is said back once, since
             // the board reads that list to tell a finished session from one that stopped short.
             checklistCloseHooks({ sessionStore: request.spec.sessionStore }),
+            // The repositories' own `turn` checks, once, as an isolated turn is about to stop: what they found in its
+            // change is said back, and the model fixes it or says why not. Nothing waits on them.
+            turnCheckHooks(request.hooks.turnChecks, request.spec.isolation !== undefined),
             // Refuses a mid-turn edit that would change which settings or skill hooks run, which the CLI applies live.
             settingsHookChangeHooks(request),
             // Apply worktree redirection only when no anchor already resolves paths.

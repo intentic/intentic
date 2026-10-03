@@ -23,9 +23,9 @@ const isRetiredRule = (rule: unknown): boolean => {
 
 const holdsRetiredRule = (value: unknown): value is readonly unknown[] => Array.isArray(value) && value.some(isRetiredRule);
 
-// A rule at the `turn.ending` moment reads and runs nothing since nothing checks inside a turn (its moment and the
-// `verify-ui-edits` built-in stay in the read schema so a file written before reads); dropped, so it stops showing as a
-// rule the owner has and stops travelling with the settings.
+// An owner's rule at the `turn.ending` moment reads and runs nothing, since only the checks a repository declares run
+// there (its moment and the `verify-ui-edits` built-in stay in the read schema so a file written before reads); dropped,
+// so it stops showing as a rule the owner has and stops travelling with the settings.
 const isInertRule = (rule: unknown): boolean =>
     isJsonObject(rule) &&
     (rule["moment"] === "turn.ending" || (isJsonObject(rule["action"]) && rule["action"]["kind"] === "builtin" && rule["action"]["name"] === "verify-ui-edits"));

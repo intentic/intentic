@@ -36,6 +36,12 @@ ARCH_SUFFIX="${ARCH_SUFFIX:-}"
 # private, and a private sandbox image means every `curl https://intentic.dev/sync | sh` fails at the pull.
 # Each package must be set to public once, by hand, at github.com/orgs/intentic/packages.
 REGISTRIES="${REGISTRIES:-ghcr.io/intentic}"
+# PUSH=0 BUILDS AND PUBLISHES NOTHING: the image lands in this machine's docker store (`--load`) under the tags asked
+# for, to be booted by smoke-image.sh with SMOKE_PULL=0. It is ci.yml's `images-dry`, which proves the image a commit
+# would ship when a gate in front of `images` failed, so the build and boot failures underneath are said in the same
+# run rather than after the gate is fixed. The registry is still READ (every --cache-from below), which is what keeps
+# a dry build warm; the job that sets this holds a read-only token as well, so a push could not succeed regardless.
+PUSH="${PUSH:-1}"
 # Monorepo root (_tools/scripts -> up two). The sandbox image's build context is the whole monorepo so
 # `pnpm install --frozen-lockfile` resolves the root lockfile; `pnpm deploy` prunes the final image to core.
 root="$(repo_root)"
@@ -129,9 +135,13 @@ publish() {
             fi
         done
     done
+    local output=--push
+    if [ "$PUSH" = "0" ]; then
+        output=--load
+    fi
     registry_retry docker buildx build -f "$dockerfile" "${tag_args[@]}" "${cache_args[@]}" \
         --cache-to "type=inline" \
-        "$@" --push "$context"
+        "$@" "$output" "$context"
 }
 
 case " $IMAGES " in

@@ -69,6 +69,11 @@ TIMEOUT="${SMOKE_TIMEOUT:-240}"
 # disk is the one place that matters.
 RMI="${SMOKE_RMI:-0}"
 
+# SMOKE_PULL=0 boots what this machine's docker store already holds and fetches nothing: the image was built here
+# with `--load` and was never pushed (publish-images.sh's PUSH=0, ci.yml's `images-dry`), so the registry has no such
+# tag to give. A ref the store does not hold is then a failed build, said as one, rather than a pull error.
+PULL="${SMOKE_PULL:-1}"
+
 # Every container this run started, so a cancelled job (the one exit path the per-verdict cleanup below cannot
 # reach) does not leave a 5 GB box running on a shared runner. Names never contain spaces, so the split is safe.
 STARTED=""
@@ -165,7 +170,12 @@ smoke() { # <image-ref>
     # never came up" — and then dumps logs that say "No such container". Every word of that points at the image
     # under test, and none of it was true. Pulling here names the registry as the registry — and, since
     # 1.285.0 died on the unpack rather than the download, names this runner's image store as itself.
-    if ! image_pull "$image"; then
+    if [ "$PULL" = "0" ]; then
+        if ! docker image inspect "$image" >/dev/null 2>&1; then
+            echo "  ✗ $image is not in this machine's docker store, and SMOKE_PULL=0 fetches nothing: the build that should have loaded it did not" >&2
+            return 1
+        fi
+    elif ! image_pull "$image"; then
         return 1
     fi
 

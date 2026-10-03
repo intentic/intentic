@@ -2649,7 +2649,7 @@
         },
         "agentChecks": {
             "repairMainCi": "Naprawiaj main, gdy jego CI zawiedzie",
-            "repairMainCiNote": "Pierwsze zadanie, które nie powiedzie się na main, uruchamia jednego agenta naprawczego, a każdy kolejny błąd trafia do niego, aż main znów zacznie przechodzić. Gdy wyczerpie swoje tury albo niczego nie zmieni, przekazuje sprawę Tobie. Przebieg, który zawiódł przez same maszyny CI, jest zamiast tego raz ponawiany.",
+            "repairMainCiNote": "Pierwszy przebieg, który nie powiedzie się na main, po zakończeniu uruchamia jednego agenta naprawczego ze wszystkimi nieudanymi zadaniami, a błędy każdego kolejnego przebiegu trafiają do niego jedną wiadomością, aż main znów zacznie przechodzić. Gdy wyczerpie swoje tury albo niczego nie zmieni, przekazuje sprawę Tobie. Przebieg, który zawiódł przez same maszyny CI, jest zamiast tego raz ponawiany.",
             "mainCi": "CI na main"
         },
         "agentClock": {
@@ -2830,7 +2830,7 @@
             "readingWhatWorkspacesRepositories": "Odczytywanie, co deklarują repozytoria tej przestrzeni roboczej…",
             "repositoriesWaitingOnUntil": "{waiting} repozytoria czekają na Ciebie. Dopóki ich nie włączysz, ich własne sprawdzenia nie działają.",
             "checksAfterEdits": "Sprawdzenia po zmianach",
-            "repositoryDeclaresOwnChecks": "Repozytorium deklaruje w .intentic/checks.json, co działa na jego własnym kodzie po każdej zmianie. Nic, co deklaruje, nigdy nie blokuje scalenia, commita ani pusha."
+            "repositoryDeclaresOwnChecks": "Repozytorium deklaruje w .intentic/checks.json, co działa na jego własnym kodzie po każdej zmianie i raz pod koniec tury. Nic, co deklaruje, nigdy nie blokuje scalenia, commita ani pusha."
         },
         "agentSafetyJudge": {
             "changeInModels": "Zmień w Modelach",
@@ -3972,7 +3972,7 @@
             "runChecksDeclares": "Uruchom sprawdzenia, które deklaruje {name}",
             "afterEachEdit": "Po każdej zmianie",
             "landRetired": "Po scaleniu — już nie działa; CI sprawdza to, co zostało wypchnięte",
-            "turnRetired": "Zanim tura się skończy — już nie działa; CI sprawdza to, co zostało wypchnięte",
+            "whenTurnEnds": "Gdy tura się kończy — przekazane agentowi raz, nigdy nie blokuje",
             "lastFlagged": "ostatnio zgłosił {ago}",
             "neverFlagged": "nigdy nic nie zgłosił",
             "running": "Działa"
@@ -6319,7 +6319,7 @@
             "declaredIn": "Zadeklarowane w {path}, więc jadą razem z repozytorium.",
             "repositoryDoesntDeclareAny": "To repozytorium nie deklaruje własnych sprawdzeń. Umieść plik w",
             "runTheseChecks": "Uruchamiaj te sprawdzenia",
-            "whenIsEditOrLand": "{when} to {edit} albo {land}, a polecenie wykonuje się w tym folderze, więc napisz je tak, jak zrobiłbyś to tutaj w terminalu."
+            "whenIsEditOrTurn": "{when} to {edit} albo {turn}, a polecenie wykonuje się w tym folderze, więc napisz je tak, jak zrobiłbyś to tutaj w terminalu."
         },
         "directoryPersonas": {
             "addNewOneInstead": "Dodaj zamiast tego nową",
