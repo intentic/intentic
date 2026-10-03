@@ -6,7 +6,7 @@ import type { SandboxRpc } from "../../sandbox/client/sandboxRpc";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 import type { PendingAttachment } from "../drafts/useChatAttachments";
 import type { SessionRef } from "../run/turnRequest";
-import type { ChatMessage } from "../transcript/transcript";
+import { type ChatMessage, turnsOf } from "../transcript/transcript";
 
 // Pins the transcript's own ways back: a rewind by the daemon's index that truncates by the bubble's, an edit that
 // borrows the composer and hands it back, a fork's cut, and the in-place rewording of this window's own lines.
@@ -198,6 +198,42 @@ describe(`the transcript's own lines`, () => {
 
         expect(view.messages.value.at(-1)?.permission).toEqual({ requestId: `p1`, toolName: `Bash`, status: `cancelled` });
         expect(view.awaitingDecision.value).toBe(false);
+    });
+
+    it(`keeps a recovering turn's key while refreshing its prompt's rewind point and notices`, () => {
+        const prompt: TranscriptRow = { role: `user`, text: `refactor the store`, messageId: `prompt-1`, run: `run-1` };
+        const reply: TranscriptRow = { role: `assistant`, text: `Got as far as the reducer.`, run: `run-1` };
+        const synced: TranscriptRow = {
+            role: `notice`,
+            text: `Your workspace moved on while this agent waited, its branch was rebased onto your latest 2 commits.`,
+            noticeCode: { code: `synced`, params: { commits: 2 } },
+        };
+        const renewing: TranscriptRow = {
+            role: `notice`,
+            text: `The credential is being renewed and this turn continues automatically.`,
+            noticeWait: `credentialRenewal`,
+        };
+        const resumed: TranscriptRow = {
+            role: `notice`,
+            text: `Claude sign-in renewed, this turn picked up where it left off.`,
+            noticeCode: { code: `resumed`, params: { reason: `auth` } },
+        };
+        const { view, row } = viewOf([{ ...prompt, id: 41 }, { ...reply, id: 42 }]);
+        const answer = row(42);
+
+        view.restoreMessages([{ ...prompt, checkpointId: `cp-1`, rewindIndex: 0 }, reply, synced, renewing]);
+        expect(view.messages.value.map((message) => message.id)).toEqual([41, 42, 43, 44]);
+        expect(turnsOf(view.messages.value).map((turn) => turn.id)).toEqual([41]);
+        expect(row(41)).toEqual({ ...prompt, checkpointId: `cp-1`, rewindIndex: 0, id: 41 });
+        expect(row(42)).toBe(answer);
+
+        view.beginEdit(row(41));
+        view.restoreMessages([{ ...prompt, checkpointId: `cp-2`, rewindIndex: 4 }, reply, synced, renewing, resumed]);
+        expect(view.messages.value.map((message) => message.id)).toEqual([41, 42, 43, 44, 45]);
+        expect(turnsOf(view.messages.value).map((turn) => turn.id)).toEqual([41]);
+        expect(row(41)).toEqual({ ...prompt, checkpointId: `cp-2`, rewindIndex: 4, id: 41 });
+        expect(row(42)).toBe(answer);
+        expect(view.editing.value).toBeUndefined();
     });
 
     it(`redraws a replayed record with its page cursor, and disarms an edit aimed at the old ids`, () => {

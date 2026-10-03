@@ -38,10 +38,13 @@ export const appendMessage = (state: TranscriptState, message: Omit<ChatMessage,
 // replaces it, and replay after a reconnect or a Retry does the same: with every row a fresh object, every row's markdown
 // was parsed, sanitised and laid out again for words that had not changed — on a phone, seconds of a frozen chat to
 // redraw what was on screen. A message already standing whose content equals a row of the record is kept, id and all
-// (the list's key and its memo both hold); anything new or changed is allocated above every id standing, as a rebuild
-// from nothing would. Equal means equal once the id is set aside; a row the mirror spelled differently is simply drawn
-// anew, which is what every row was before.
+// (the list's key and its memo both hold). A named prompt keeps its id even when its checkpoint metadata changes: that
+// id keys the whole turn, so remounting it discards every reply's remembered layout and jumps the reader on recovery.
+// Its incoming contents still win, including a rewind point withdrawn by the daemon. Unnamed rows match by content;
+// anything unmatched is allocated above every id standing.
 const contentKey = (message: Omit<ChatMessage, "id">): string => JSON.stringify(message);
+const rowKey = (message: Omit<ChatMessage, "id">): string =>
+    message.role === `user` && message.messageId !== undefined ? JSON.stringify([`user`, message.messageId]) : contentKey(message);
 
 export const rebuildKeeping = (standing: readonly ChatMessage[], rows: readonly Omit<ChatMessage, "id">[]): TranscriptState => {
     const kept = new Map<string, ChatMessage[]>();
@@ -49,7 +52,7 @@ export const rebuildKeeping = (standing: readonly ChatMessage[], rows: readonly 
     for (const message of standing) {
         const { id, ...content } = message;
         nextId = Math.max(nextId, id + 1);
-        const key = contentKey(content);
+        const key = rowKey(content);
         const same = kept.get(key);
         if (same === undefined) {
             kept.set(key, [message]);
@@ -57,7 +60,18 @@ export const rebuildKeeping = (standing: readonly ChatMessage[], rows: readonly 
             same.push(message);
         }
     }
-    const messages = rows.map((row): ChatMessage => kept.get(contentKey(row))?.shift() ?? { ...row, id: nextId++ });
+    const messages = rows.map((row): ChatMessage => {
+        const same = kept.get(rowKey(row))?.shift();
+        if (same === undefined) {
+            return { ...row, id: nextId++ };
+        }
+        // An unnamed match already proves equal contents; don't serialise a long reply a second time.
+        if (row.role !== `user` || row.messageId === undefined) {
+            return same;
+        }
+        const { id, ...content } = same;
+        return contentKey(content) === contentKey(row) ? same : { ...row, id };
+    });
     return { ...emptyTranscriptState, messages, nextId };
 };
 

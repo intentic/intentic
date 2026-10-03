@@ -200,8 +200,8 @@ export class TranscriptClock {
     }
 
     // Replaces the transcript with rows that carry no ids of their own (a branch's inherited turns, the daemon's
-    // record), keeping the objects of messages already drawn with the same content (rebuildKeeping) and allocating fresh
-    // ids for the rest. Nothing stays attached afterward.
+    // record), keeping unchanged objects and the ids of named prompts whose contents were refreshed (rebuildKeeping).
+    // Unmatched rows get fresh ids. Nothing stays attached afterward.
     rebuild(rows: readonly TranscriptRow[]): void {
         this.state.value = rebuildKeeping(this.state.value.messages, rows);
     }
