@@ -26,14 +26,14 @@ flowchart LR
 
 ## Wallpapers
 
-A wallpaper is a picture behind the agents board and the card or grouped-row pages named in `WALLPAPERED_EXTENSIONS`
+A wallpaper is a picture behind the agents board, the popped-out chat window (`.chat-floating-root`), and the card or grouped-row pages named in `WALLPAPERED_EXTENSIONS`
 (`/ext/workflows`, `/ext/automations`, `/ext/projects`, `/ext/pipelines`, `/ext/approvals`), picked on its own row in Appearance and worn under any of
 the four looks. `useWallpaper.ts` stores it under `ui-wallpaper` (`none` or `mist`, `none` by default) and writes it as
-`data-wallpaper` on `<html>`; `wallpapers.css` draws it as the backgrounds of `.agents-board`, and of the shell's
+`data-wallpaper` on `<html>`; `wallpapers.css` draws it as the backgrounds of `.agents-board`, `.chat-floating-root`, and of the shell's
 main scroller (`.wallpaper-surface`, set by `useWallpaperedRoute`) on those pages, so the picture stays put while the
 page scrolls. The scheme picks each picture's dark or light version and its scrims, and every picture is toned the
 same way: dimmed by a veil that keeps its own hue (warm paper by day, dark by night), never desaturated, which read as grey. While one is worn the board's lane headers drop their
-canvas band and stop pinning, since a pinned header with nothing behind it would slide over the cards under it.
+canvas band and stop pinning, since a pinned header with nothing behind it would slide over the cards under it. In the popped-out chat, the chat panel is made transparent and the pinned prompt drops its opaque card wash for a frosted floating surface.
 
 - A picture's masters are `src/assets/wallpaper/<name>-dark.png` and `<name>-light.png`, 16:9;
   `pnpm --filter @intentic/web wallpaper:art` encodes every master into the AVIF rungs under

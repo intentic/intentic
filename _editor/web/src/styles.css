@@ -24,7 +24,7 @@
 
 /* SKINS — whole-interface looks, each scoped to a `data-skin` attribute on <html> and therefore inert until one is selected in Appearance. */
 @import "./skins/sanctum.css";
-/* WALLPAPERS — a picture behind the agents board, scoped to `data-wallpaper` on <html>; inert until one is picked. */
+/* WALLPAPERS — a picture behind the agents board and popped-out chat, scoped to `data-wallpaper` on <html>; inert until one is picked. */
 @import "./skins/wallpapers.css";
 
 /* THE ENTRY SKIN — the site's metals, ground, frame kit and two button plaques, worn by /login, /setup and the launcher window. */

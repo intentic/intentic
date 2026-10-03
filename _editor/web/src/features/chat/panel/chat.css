@@ -35,6 +35,16 @@
 .chat-prompt-pinned .chat-surface {
     box-shadow: var(--shadow-sm);
 }
+/* Over wallpaper in a popped-out chat, drop the flat opaque card wash and lift the bubble with a frosted surface. */
+[data-wallpaper] .chat-floating-root .chat-prompt-pinned {
+    background-image: none;
+}
+[data-wallpaper] .chat-floating-root .chat-prompt-pinned .chat-surface {
+    background-color: color-mix(in srgb, var(--color-card) 90%, transparent);
+    -webkit-backdrop-filter: blur(16px);
+    backdrop-filter: blur(16px);
+    box-shadow: var(--wallpaper-card-drop);
+}
 /* Doomed edits include the prompt and all following content. */
 .chat-doomed {
     opacity: 0.55;
