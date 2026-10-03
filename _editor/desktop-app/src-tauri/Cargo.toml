@@ -43,6 +43,12 @@ sha2 = "0.11"
 # runtime IS tokio, so this names what is already in the graph instead of adding to it — and the alternative,
 # `spawn_blocking` around `thread::sleep`, would park a pooled worker for six hours at a time.
 tokio = { version = "1", features = ["time"] }
+# The one HTTP call this app makes for a page: a local window's account menu and Settings, sent with the session the
+# workspace signed in with (src/account.rs), since that page cannot hold it. The updater's client, at the updater's
+# features (rustls with no provider of its own, ring installed by whichever runs first), so this names what is already
+# compiled into the graph rather than adding a second HTTP or TLS stack.
+reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider"] }
+rustls = { version = "0.23", default-features = false, features = ["ring"] }
 # The time-limited child every short read here goes through, shared with `ic` so a fix to it reaches both.
 intentic-bounded = { path = "../../../_sandbox/ic/bounded" }
 # A delete in a local window goes to the Recycle Bin or the Trash, never straight off the disk (local.rs): the one

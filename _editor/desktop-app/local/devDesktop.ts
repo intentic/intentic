@@ -1,7 +1,8 @@
 import type { InvokeArgs } from "@tauri-apps/api/core";
 import { emit } from "@tauri-apps/api/event";
 import { mockIPC } from "@tauri-apps/api/mocks";
-import type { DesktopInfo, HomeFacts, LocalRecent, LocalRoster, LocalSandbox, SandboxStatus, SetupArgs, UpdateStage } from "../src/desktop";
+import type { ApiToken, HostedPlanState, User } from "@intentic/api-contract";
+import type { AccountAnswer, AccountAsk, DesktopInfo, HomeFacts, LocalRecent, LocalRoster, LocalSandbox, SandboxStatus, SetupArgs, UpdateStage } from "../src/desktop";
 
 // THE APP, STOOD IN FOR ON A DEV SERVER. The local face in a plain browser (`pnpm dev:local`) has no Tauri behind it, so
 // every command the shell and This device call would throw. This answers them from a few fixed machines, through Tauri's
@@ -16,12 +17,16 @@ import type { DesktopInfo, HomeFacts, LocalRecent, LocalRoster, LocalSandbox, Sa
 type Machine = `fresh` | `host` | `setup`;
 const MACHINES: readonly Machine[] = [`fresh`, `host`, `setup`];
 const MACHINE_KEY = `intentic.local.devMachine`;
+// Set once the account signs out here (the account menu's Sign out), kept for the tab's reloads.
+const SIGNED_OUT_KEY = `intentic.local.devSignedOut`;
 
 const machineOf = (): Machine => {
     const asked = new URL(window.location.href).searchParams.get(`machine`);
     const known = MACHINES.find((machine) => machine === asked);
     if (known !== undefined) {
         sessionStorage.setItem(MACHINE_KEY, known);
+        // A machine asked for by name starts signed in again, as it was set up.
+        sessionStorage.removeItem(SIGNED_OUT_KEY);
         return known;
     }
     return MACHINES.find((machine) => machine === sessionStorage.getItem(MACHINE_KEY)) ?? `fresh`;
@@ -102,7 +107,7 @@ const runSetup = async (): Promise<void> => {
 };
 
 /** What a command answers: the app's own types, or nothing for a verb whose effect is elsewhere. */
-type Answer = DesktopInfo | HomeFacts | LocalRecent[] | LocalRoster | UpdateStage | SandboxStatus[] | SetupArgs | string | boolean | null | Promise<void> | { memoryBytes: number; cpus: number };
+type Answer = AccountAnswer | DesktopInfo | HomeFacts | LocalRecent[] | LocalRoster | UpdateStage | SandboxStatus[] | SetupArgs | string | boolean | null | Promise<void> | { memoryBytes: number; cpus: number };
 
 const DESKTOP_INFO: DesktopInfo = {
     version: `1.318.0`,
@@ -114,7 +119,40 @@ const DESKTOP_INFO: DesktopInfo = {
     fixLimitSeconds: 600,
 };
 
-const signedIn = (machine: Machine): boolean => machine !== `fresh`;
+const signedIn = (machine: Machine): boolean => machine !== `fresh` && sessionStorage.getItem(SIGNED_OUT_KEY) === null;
+
+/* THE ACCOUNT, as the platform answers a local window's account calls through the app (src-tauri/src/account.rs): Ada,
+   on a complimentary plan, with one API token. A rename or a new picture holds until the tab reloads. */
+const ACCOUNT: User = { id: `u_ada`, email: `ada@example.com`, name: `Ada Lovelace`, image: null };
+const PLAN: HostedPlanState = { enabled: true, onPlan: true, comped: true, priceUsd: 20 };
+const TOKENS: ApiToken[] = [{ id: `tok_1`, label: `CI deploys`, scope: `provision`, createdAt: new Date(NOW_S * 1000 - 12 * 86_400_000).toISOString() }];
+
+const replied = <Body>(body: Body, status = 200): AccountAnswer => ({ status, body: JSON.stringify(body), contentType: `application/json` });
+
+const accountAnswer = (machine: Machine, ask: AccountAsk): AccountAnswer => {
+    const route = ask.path.split(`?`)[0];
+    if (!signedIn(machine)) {
+        return route === `/api/auth/get-session` ? replied(null) : replied({ message: `Not signed in.` }, 401);
+    }
+    switch (route) {
+        case `/api/auth/get-session`:
+            return replied({ session: { id: `s_dev`, userId: ACCOUNT.id, expiresAt: new Date(Date.now() + 7 * 86_400_000).toISOString() }, user: ACCOUNT });
+        case `/api/auth/update-user`:
+            Object.assign(ACCOUNT, JSON.parse(ask.body ?? `{}`));
+            return replied({ status: true });
+        case `/api/auth/sign-out`:
+            sessionStorage.setItem(SIGNED_OUT_KEY, `yes`);
+            return replied({ success: true });
+        case `/rpc/hosted-plan`:
+            return replied(PLAN);
+        case `/rpc/tokens`:
+            return replied({ tokens: TOKENS });
+        case `/rpc/me/export`:
+            return replied({ user: ACCOUNT, sandboxes: SANDBOXES });
+        default:
+            return replied({ message: `The stand-in has no answer for ${ask.method} ${ask.path}.` }, 404);
+    }
+};
 
 // Every command the page reads back, answered for the machine chosen. A dialog answers yes, and picks nothing.
 const ANSWERS = new Map<string, (machine: Machine) => Answer>([
@@ -150,6 +188,10 @@ const answer = (machine: Machine, command: string, args: InvokeArgs | undefined)
     const answered = ANSWERS.get(command);
     if (answered !== undefined) {
         return answered(machine);
+    }
+    if (command === `account_relay` && args !== undefined && `ask` in args) {
+        // SAFETY: the page's own src/account.ts and local/platform.ts send it, as `accountRelay` types it.
+        return accountAnswer(machine, args[`ask`] as AccountAsk);
     }
     // Every verb the page sends and does not read back (point, open, sign in, the workspace, a sandbox's power…): said on
     // the console, which is where a dev server's reader looks for it.

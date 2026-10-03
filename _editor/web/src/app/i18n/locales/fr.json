@@ -3883,7 +3883,9 @@
             "export": "Exporter",
             "exportMyData": "Exporter mes données",
             "permanentlyRemovesAccountShared": "Supprime définitivement votre compte, les accès partagés et toute offre hébergée : l'abonnement est annulé avec.",
-            "sureAccessRevokedBefore": "Vous êtes sûr ? L'accès est révoqué avant que quoi que ce soit ne soit supprimé."
+            "sureAccessRevokedBefore": "Vous êtes sûr ? L'accès est révoqué avant que quoi que ce soit ne soit supprimé.",
+            "deleteInWorkspace": "Supprimer dans l'espace de travail",
+            "deleteFromWorkspace": "Supprime définitivement votre compte, les accès partagés et toute offre hébergée. Cela se fait depuis l'espace de travail, qui retire d'abord votre accès à chaque sandbox."
         },
         "settingsKeybindings": {
             "alsoOn": "Aussi sur",

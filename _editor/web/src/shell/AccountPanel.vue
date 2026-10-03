@@ -2,21 +2,25 @@
 import type { Disposable } from "@intentic/extension-api";
 import { AnchoredOverlay, Avatar, browserOwnsClick, StatusBadge, vAction } from "@intentic/ui";
 import { computed, onMounted, onUnmounted, ref } from "vue";
-import { RouterLink, useRoute } from "vue-router";
+import { RouterLink, useRoute, useRouter } from "vue-router";
 import { ACCOUNT } from "./commands/categories";
 import { registerCommand } from "./commands/useCommands";
-import { useAuth } from "../features/auth/useAuth";
+import { useAccount } from "./useAccount";
 import { useHostedPlan } from "../features/settings/hosted-plan/useHostedPlan";
 import { environment } from "../app/environments/environment";
 import { useT } from "@intentic/ui/i18n";
 
 // The rail's bottom account control: an avatar opening a popover with account identity (email, name,
-// plan) and actions (Settings, Sign out). The sandbox switcher lives above; theme lives on /settings.
+// plan) and actions (Settings, Sign out). The sandbox switcher lives above; theme lives on /settings. The same control at
+// the foot of a desktop window on a folder of this computer (local/LocalShell.vue), drawn and pressed the same: there the
+// account is the one the app reaches for the window (useAccount.ts), and Settings opens in that window.
 
 const t = useT();
 
-const { user, signOut } = useAuth();
+const account = useAccount();
+const { user } = account;
 const route = useRoute();
+const router = useRouter();
 
 // A chip stating the account's plan, not a clickable row; absent where the platform sells no plan.
 const { planBadge } = useHostedPlan();
@@ -46,7 +50,15 @@ const dismiss = (event: MouseEvent): void => {
 };
 
 const logout = async (): Promise<void> => {
-    await signOut();
+    await account.signOut();
+    if (account.local) {
+        // A window on a folder stays on its folder: what signing out ends there is the account, not the window's work.
+        open.value = false;
+        if (onSettings.value) {
+            await router.push(`/workspace`);
+        }
+        return;
+    }
     // Full navigation, not a router push: afterSignOut may point outside this SPA.
     globalThis.location.href = environment.afterSignOut;
 };

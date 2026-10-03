@@ -1,3 +1,4 @@
+mod account;
 mod agent_status;
 mod auth;
 mod badge;
@@ -176,6 +177,7 @@ pub fn run() {
             local::local_recents,
             local::local_forget_recent,
             local::local_roster,
+            account::account_relay,
         ])
         .setup(|app| {
             app.manage(state::AppState::load(app.handle())?);

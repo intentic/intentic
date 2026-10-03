@@ -17,6 +17,7 @@ import { conversationRedirect } from "./conversationLink";
 import { mobileChatPath } from "../shell/tabRoots";
 import SplitViewOutline from "../components/SplitViewOutline.vue";
 import { restorePersistedQueries } from "../lib/queryPersistence";
+import { useAccount } from "../shell/useAccount";
 import { useAuth } from "../features/auth/useAuth";
 import { useGoogleIdentity } from "../features/auth/useGoogleIdentity";
 import { mintsOnArrival } from "../features/auth/handoffSpent";
@@ -423,10 +424,19 @@ const routes: RouteRecordRaw[] = [
     { path: `/:pathMatch(.*)*`, redirect: `/` },
 ];
 
+// The account's Settings in a desktop window on a folder: only while there is an account (useAccount.ts), since every
+// section but the look is about one. Waits on one ask of the platform at most, which the app gives up on in seconds.
+const requireAccount = async (): Promise<true | RouteLocationRaw> => {
+    const account = useAccount();
+    await account.settled();
+    return account.user.value === null ? `/workspace` : true;
+};
+
 // A DESKTOP WINDOW ON A FOLDER OF THIS COMPUTER (app/environments/local.ts) has a shell of its own, not a sandbox's: the
 // same rail, holding what needs no sandbox (local/LocalShell.vue). Files is the folder; every other tile is a view the app
-// adds (localHost.ts), This device first. Guarded like the sandbox shell: the window's bootstrap seeds what both guards
-// read, so neither waits on a server. Anything else leads back to the folder, since every other screen reads a sandbox.
+// adds (localHost.ts), This device first; the account's Settings open from the rail's foot, as in the sandbox shell.
+// Guarded like the sandbox shell: the window's bootstrap seeds what both guards read, so neither waits on a server.
+// Anything else leads back to the folder, since every other screen reads a sandbox.
 const localRoutes = (): RouteRecordRaw[] => [
     {
         path: `/`,
@@ -449,6 +459,13 @@ const localRoutes = (): RouteRecordRaw[] => [
                     component: asyncView(view.load),
                 }),
             ),
+            {
+                path: `settings/:tab?`,
+                name: `settings`,
+                meta: { title: () => t(`shared.settings`) },
+                beforeEnter: requireAccount,
+                component: asyncView(() => import(`../features/settings/SettingsHub.vue`), hubOutline(`Settings`, ``, 5)),
+            },
         ],
     },
     { path: `/:pathMatch(.*)*`, redirect: `/workspace` },

@@ -24,6 +24,9 @@ test("the link-only host knows nothing of this computer and adds no view", async
     expect(await LINK_HOST.facts()).toEqual({ accountSeen: false, homeFolder: `` });
     expect(await LINK_HOST.places()).toEqual([]);
     expect(await LINK_HOST.roster()).toEqual({ account: null, sandboxes: [] });
+    // Nobody is signed in where the platform cannot be asked, and signing that nobody out is nothing to fail at.
+    expect(await LINK_HOST.account()).toBeNull();
+    expect(await LINK_HOST.signOut()).toBeUndefined();
 });
 
 /* What it can do is what any local window could always ask by link: the system dialog, in a window of its own. */

@@ -5,6 +5,8 @@ import { computed, onMounted, onUnmounted } from "vue";
 import { RouterView, useRoute, useRouter } from "vue-router";
 import { LOCAL_NAVIGATE_EVENT } from "../app/environments/local";
 import { type LocalView, localHost } from "../app/environments/localHost";
+import { useAccount } from "../shell/useAccount";
+import AccountPanel from "../shell/AccountPanel.vue";
 import { railFrame } from "../shell/rail/railFrame";
 import RailTile from "../shell/rail/RailTile.vue";
 import { useIconRailSize } from "../shell/rail/useIconRailSize";
@@ -15,14 +17,16 @@ import LocalPlaceSwitcher from "./LocalPlaceSwitcher.vue";
 // THE SHELL OF A DESKTOP WINDOW ON A FOLDER OF THIS COMPUTER: the sandbox shell's rail and page, holding what needs no
 // sandbox and no account. At the top, the place this window shows and every other one, the account's sandboxes
 // included (LocalPlaceSwitcher); under it Files, the folder itself, then every view the app adds (This device, titled
-// This computer, localHost.ts); at the foot, the account, or the sign-in before there is one (LocalAccountTile). The
-// tiles are the sandbox shell's own (shell/rail/iconRail.css), so signing in changes what the rail holds, never what it is.
+// This computer, localHost.ts); at the foot, the account, the sandbox shell's own control (AccountPanel: Settings open in
+// this window, Sign out leaves it on its folder), or the sign-in before there is one (LocalAccountTile). The tiles are
+// the sandbox shell's own (shell/rail/iconRail.css), so signing in changes what the rail holds, never what it is.
 
 const t = useT();
 const host = localHost();
 const route = useRoute();
 const router = useRouter();
 const { iconRailSize } = useIconRailSize();
+const { user } = useAccount();
 const gridStyle = computed(() => railFrame(iconRailSize.value));
 
 interface Tile {
@@ -78,9 +82,10 @@ onUnmounted(() => window.removeEventListener(LOCAL_NAVIGATE_EVENT, onNavigate));
                 />
             </div>
 
-            <!-- At the foot, where the sandbox shell keeps the account: the account, or the sign-in that brings one. -->
+            <!-- At the foot, where the sandbox shell keeps the account: the same control, or the sign-in that brings one. -->
             <div class="mt-auto flex flex-col items-center">
-                <LocalAccountTile />
+                <AccountPanel v-if="user !== null" />
+                <LocalAccountTile v-else />
             </div>
         </nav>
 

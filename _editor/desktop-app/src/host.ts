@@ -2,12 +2,14 @@ import { t } from "@intentic/ui/i18n";
 import type { LocalFace } from "@intentic/web/local";
 import type { LocalHost, LocalView } from "@intentic/web/local-host";
 import { computed } from "vue";
+import { readAccount, signOutAccount, updateAccount } from "./account";
 import { homeFacts, localForgetRecent, localOpenPath, localPick, localPoint, localRecents, localRoster, signIn, workspaceOpen } from "./desktop";
 import { deviceBadge } from "./device/badge";
 import { useDevice } from "./device/useDevice";
 
 // THE APP'S HALF OF A LOCAL WINDOW'S SHELL (the web's app/environments/localHost.ts): what the editor asks of this
-// computer, answered by the app's own commands, and the view the app adds to the rail, This device. Installed on the
+// computer, answered by the app's own commands, the account the workspace signed in with (account.ts), and the view the
+// app adds to the rail, This device. Installed on the
 // window by the local face's bootstrap (local/main.ts) before the editor's modules run, so the router finds the view
 // when it builds its routes.
 //
@@ -52,6 +54,9 @@ export const nativeHost = (): LocalHost => ({
     forget: (path) => localForgetRecent(path),
     signIn: () => signIn(),
     openWorkspace: (path) => workspaceOpen(path),
+    account: () => readAccount(),
+    updateAccount: (change) => updateAccount(change),
+    signOut: () => signOutAccount(),
 });
 
 /**

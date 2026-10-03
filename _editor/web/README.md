@@ -74,15 +74,20 @@ flowchart LR
   which a folder does not serve. A document's own window takes no drop. A refused call says the feature is not there for a folder rather than
   asking for an update, and a recording plays from its bytes over `/workspace/raw` where no media ticket is minted.
   `local/` holds the window's own parts: its shell (`LocalShell.vue`, the sandbox shell's rail from
-  `shell/rail/iconRail.css`, holding the place chip `LocalPlaceSwitcher.vue`, Files, the views the app adds, and the
-  account or the sign-in `LocalAccountTile.vue`), Ctrl+P, Ctrl+Shift+F, Ctrl+W and Alt+1–9 (`localKeys.ts`), the close guard for unsaved edits
-  (`useUnsavedGuard.ts`), and a project folder's Bring back section (`LocalBringBack.vue`). The place chip lists the
-  places in the sandbox switcher's order, this computer first (its settings, the app's view, on its heading) and then
-  the account's sandboxes, and the sandbox switcher lists "This computer" first in the app's workspace window to match,
-  with the same digits for the same places in both: Alt+0 this computer, Alt+1–9 the sandboxes. What only the desktop app can answer
-  (the recent places, pointing the window at another folder, whether there is an account, who is signed in and the
-  sandboxes as the workspace last told it, This device) comes from the host it installs before the editor runs (`app/environments/localHost.ts`); a page
-  without one gets the link-only host. The workspace's switcher is what tells the app the account and those sandboxes
+  `shell/rail/iconRail.css`, holding the place chip `LocalPlaceSwitcher.vue`, Files, the views the app adds, and at
+  the foot the sandbox shell's own account control `shell/AccountPanel.vue`, or the sign-in `LocalAccountTile.vue`
+  before there is an account), Ctrl+P, Ctrl+Shift+F, Ctrl+W and Alt+1–9 (`localKeys.ts`), the close guard for unsaved edits
+  (`useUnsavedGuard.ts`), and a project folder's Bring back section (`LocalBringBack.vue`). The place chip names the
+  window's folder and lists the account's sandboxes, the only other places the window goes, as the sandbox switcher
+  lists "This computer" first in the app's workspace window, with the same digits for the same places in both: Alt+0
+  this computer, Alt+1–9 the sandboxes. What only the desktop app can answer (the recent places, whether there is an
+  account, who is signed in and the sandboxes as the workspace last told it, This device, and the account itself)
+  comes from the host it installs before the editor runs (`app/environments/localHost.ts`); a page without one gets
+  the link-only host. The account is `shell/useAccount.ts`: in the workspace the editor's own session, in a local
+  window the one the workspace signed in with, which the app asks the platform about for the window. A local window's
+  editor runs as a placeholder for its folder, so the account is kept apart from it: the account menu, Settings and
+  the plan read `useAccount`, and a sign-out or a refused call ends the account and never the folder's session
+  (`useAuth.ts` skips its teardown there). The workspace's switcher is what tells the app the account and those sandboxes
   (`announceDesktopRoster` in `app/environments/desktop.ts`), and a sign-out tells it there are none. A sandbox picked
   there reaches a workspace page already loaded without a reload: the app calls the opener the page registered
   (`installDesktopOpener`), and `openInPage` (`router/index.ts`) selects the sandbox the path names and routes there.
@@ -92,8 +97,10 @@ flowchart LR
   desktop app's, for a synced folder or a sandbox picked on a local window's place chip) opens the shell on it if the
   account lists it, and otherwise says that sandbox is not on the account any more; the id leaves the address either
   way (`router/sandboxArrival.ts`). A desktop window on a local folder builds another table instead: `/` is
-  `local/LocalShell.vue`, with `workspace/:path*` (the folder) and one route per view the app adds (`device`), kept in
-  the hash (`files/local#/device`), since the app serves that page at one address only.
+  `local/LocalShell.vue`, with `workspace/:path*` (the folder), one route per view the app adds (`device`) and
+  `settings/:tab?`, the same Settings hub, open while there is an account. There it leaves out Notifications (a
+  sandbox's), and Data hands deleting the account to the workspace, which knows every sandbox it must leave first. The
+  routes are kept in the hash (`files/local#/device`), since the app serves that page at one address only.
 - **On a phone.** `ShellMobile.vue` shows one screen at a time. The Sandbox and Settings hubs open on an index of
   their sections, grouped as the desktop rail groups them, and each section is a page with a way back to that
   index (`shell/hub/hubDrill.ts`). The Menu tab uses the same grouped rows (`shell/MenuRow.vue`). A card's or row's

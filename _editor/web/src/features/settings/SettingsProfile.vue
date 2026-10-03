@@ -3,15 +3,16 @@ import { Avatar, InlineRename, RowGroup, RowNote, StatusBadge } from "@intentic/
 import { errorMessage } from "@intentic/ui/async";
 import { ref } from "vue";
 import { fileToSquareDataUrl } from "../../lib/imageDataUrl";
-import { useAuth } from "../auth/useAuth";
+import { useAccount } from "../../shell/useAccount";
 import { useHostedPlan } from "./hosted-plan/useHostedPlan";
 import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
 
-/* Profile: display name + avatar, saved via Better Auth's update-user (useAuth.updateProfile). */
+/* Profile: display name + avatar, saved via Better Auth's update-user (useAccount.updateProfile: the workspace's own
+   session, or in a desktop window on a folder the one the app reaches for it). */
 
-const { user, updateProfile } = useAuth();
+const { user, updateProfile } = useAccount();
 
 /* The plan chip beside the name: the same derivation the account menu reads, so the two cannot disagree about which lane this account is on. */
 const { planBadge } = useHostedPlan();

@@ -5279,7 +5279,9 @@
             "export": "Eksport",
             "exportMyData": "Eksportuj moje dane",
             "permanentlyRemovesAccountShared": "Trwale usuwa Twoje konto, udostępnione dostępy i każdy plan hostowany: subskrypcja zostaje anulowana razem z nim.",
-            "sureAccessRevokedBefore": "Na pewno? Dostęp jest odbierany, zanim cokolwiek zostanie usunięte."
+            "sureAccessRevokedBefore": "Na pewno? Dostęp jest odbierany, zanim cokolwiek zostanie usunięte.",
+            "deleteInWorkspace": "Usuń w przestrzeni roboczej",
+            "deleteFromWorkspace": "Trwale usuwa Twoje konto, udostępnione dostępy i każdy plan hostowany. Robi się to w przestrzeni roboczej, która najpierw odbiera Ci dostęp do każdego sandboxa."
         },
         "settingsKeybindings": {
             "alsoOn": "Także w",
@@ -7167,31 +7169,16 @@
             "trash": "Przeniesiono do Kosza"
         },
         "placeSwitcher": {
-            "switchPlace": "Zmień folder lub sandbox: {name}",
-            "onThisComputer": "Na tym komputerze",
-            "showInFileManager": "Pokaż w menedżerze plików",
-            "movedOrDeleted": "Przeniesiono lub usunięto",
-            "hasSandbox": "Synchronizowany z własnym sandboxem",
-            "sandbox": "Sandbox",
-            "forget": "Usuń {name} z tej listy",
-            "goneOffer": "Tego już tam nie ma. Usunąć z tej listy?",
-            "openFolder": "Otwórz folder…",
-            "openFile": "Otwórz plik…",
+            "switchPlace": "{name}: przejdź do sandboxa",
             "workspace": "Twoja przestrzeń robocza",
             "workspaceLead": "Agenci i sandboxy",
             "putAgentsToWork": "Zaprzęgnij agentów do pracy",
-            "signInLead": "Zaloguj się, żeby utworzyć sandbox",
-            "switchAnyway": "Przełącz mimo to",
-            "switchingDiscardsUnsaved": "Otwarcie tu innego folderu odrzuci ich niezapisane zmiany. Tego nie da się cofnąć.",
-            "reveal": "Pokaż folder",
-            "forgetNote": "Tylko z tej listy",
-            "computerSettingsNote": "Sandboxy, agent, Docker, aktualizacje"
+            "signInLead": "Zaloguj się, żeby utworzyć sandbox"
         },
         "agentsTile": {
             "putAgentsToWork": "Zaprzęgnij agentów do pracy",
             "agentsLead": "Agenci pracują w sandboxie: na tym komputerze w Dockerze albo na maszynie, którą utrzymujemy my. Zaloguj się, żeby go utworzyć.",
             "finishInBrowser": "Dokończ logowanie w przeglądarce. Twoja przestrzeń robocza otworzy się tutaj, gdy skończysz.",
-            "openWorkspace": "Otwórz przestrzeń roboczą",
             "filesStayHere": "Twoje pliki zostają na tym komputerze. Nic tutaj nie wymaga konta."
         },
         "emptyFolder": {

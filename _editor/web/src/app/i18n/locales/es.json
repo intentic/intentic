@@ -3904,7 +3904,9 @@
             "export": "Exportar",
             "exportMyData": "Exportar mis datos",
             "permanentlyRemovesAccountShared": "Elimina de forma permanente tu cuenta, los accesos compartidos y cualquier plan alojado: la suscripción se cancela con ello.",
-            "sureAccessRevokedBefore": "¿Seguro? El acceso se revoca antes de eliminar nada."
+            "sureAccessRevokedBefore": "¿Seguro? El acceso se revoca antes de eliminar nada.",
+            "deleteInWorkspace": "Eliminar en el espacio de trabajo",
+            "deleteFromWorkspace": "Elimina de forma permanente tu cuenta, los accesos compartidos y cualquier plan alojado. Se hace desde el espacio de trabajo, que primero retira tu acceso a cada sandbox."
         },
         "settingsKeybindings": {
             "alsoOn": "También en",

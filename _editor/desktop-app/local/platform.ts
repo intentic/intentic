@@ -1,11 +1,13 @@
 import type { apiContract, SandboxSummary, User } from "@intentic/api-contract";
 import type { LocalFace } from "@intentic/web/local";
+import type { AccountAnswer, AccountAsk } from "../src/desktop";
 import { LOCAL_PLATFORM_ORIGIN } from "./origin";
 
 // The platform's side of what a local window boots on, answered in the page: who is signed in and which sandbox is
 // open. The editor asks both before it draws anything (router/index.ts, requireAuth and requireSetup), and a window on
 // a folder has neither an account nor a sandbox, so it is told of one person and one "sandbox", the folder itself,
 // whose daemon is the app's intentic-files sidecar. Nothing here leaves the page: its origin (origin.ts) does not resolve.
+// The account's own calls are the exception (`RELAYED`): the app sends those to the platform, with the workspace's session.
 
 // What a platform procedure answers, read off the contract's own output schema through the Standard Schema type slot
 // (the one oRPC infers from), so an answer below that drifts from the contract fails the type check, not the window.
@@ -81,13 +83,58 @@ export const platformAnswer = (face: LocalFace, url: URL): Response => {
     }
 };
 
-// Routes the page's platform calls to the answers above; every other request goes where it was going.
-export const installPlatform = (face: LocalFace): void => {
+// THE ACCOUNT'S CALLS that Settings and the account menu make through the editor's API client: the plan and its
+// checkout (useHostedPlan, Billing), API tokens, the data export. They are not the folder's to answer, so the app sends
+// them on with the session the workspace signed in with (src-tauri/src/account.rs, whose list decides; this one only
+// routes). Who is signed in is not among them: this page's own session check stays the folder's placeholder above, and
+// the shell asks for the account through its host (src/host.ts), so a platform that cannot be reached never holds the
+// window's first paint.
+const RELAYED: ReadonlySet<string> = new Set([
+    `/rpc/hosted-plan`,
+    `/rpc/hosted-plan/slots`,
+    `/rpc/hosted-plan/tier`,
+    `/rpc/hosted-plan/checkout`,
+    `/rpc/hosted-plan/portal`,
+    `/rpc/tokens`,
+    `/rpc/tokens/create`,
+    `/rpc/tokens/revoke`,
+    `/rpc/me/export`,
+]);
+
+export type PlatformRelay = (ask: AccountAsk) => Promise<AccountAnswer>;
+
+// Statuses a Response must be built without a body for.
+const BODILESS: ReadonlySet<number> = new Set([101, 204, 205, 304]);
+
+// One of those calls as the app carries it, and its answer as the fetch that asked would have had it. A platform the
+// app cannot reach rejects, as a fetch does.
+const relayed = async (relay: PlatformRelay, request: Request): Promise<Response> => {
+    const url = new URL(request.url);
+    const text = request.method === `POST` ? await request.text() : ``;
+    const ask: AccountAsk = { method: request.method === `POST` ? `POST` : `GET`, path: `${url.pathname}${url.search}` };
+    const answer = await relay(text === `` ? ask : { ...ask, body: text });
+    const headers: Record<string, string> = answer.contentType === null ? {} : { "content-type": answer.contentType };
+    return new Response(BODILESS.has(answer.status) ? null : answer.body, { status: answer.status, headers });
+};
+
+const isRelayed = (url: URL, method: string): boolean => RELAYED.has(url.pathname) && (method === `GET` || method === `POST`);
+
+// Routes the page's platform calls to the answers above, the account's own through `relay` where the app is there to
+// carry them; every other request goes where it was going.
+export const installPlatform = (face: LocalFace, relay?: PlatformRelay): void => {
     const original = globalThis.fetch;
     const passThrough = original.bind(globalThis);
     const routed = (...[input, init]: Parameters<typeof fetch>): Promise<Response> => {
         const url = new URL(input instanceof Request ? input.url : String(input), window.location.href);
-        return url.origin === LOCAL_PLATFORM_ORIGIN ? Promise.resolve(platformAnswer(face, url)) : passThrough(input, init);
+        if (url.origin !== LOCAL_PLATFORM_ORIGIN) {
+            return passThrough(input, init);
+        }
+        // The editor's API client asks with a Request and options beside it (`credentials`), which a new Request merges.
+        const method = (init?.method ?? (input instanceof Request ? input.method : `GET`)).toUpperCase();
+        if (relay === undefined || !isRelayed(url, method)) {
+            return Promise.resolve(platformAnswer(face, url));
+        }
+        return relayed(relay, input instanceof Request ? new Request(input, init) : new Request(url, init));
     };
     // Whatever the runtime hangs on its fetch (bun's `preconnect`, where the tests run) stays on the one replacing it.
     globalThis.fetch = Object.assign(routed, original);

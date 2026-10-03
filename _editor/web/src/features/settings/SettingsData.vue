@@ -3,7 +3,9 @@ import { Button, Row, RowGroup } from "@intentic/ui";
 import { errorMessage } from "@intentic/ui/async";
 import { ref } from "vue";
 import { useRouter } from "vue-router";
+import { localHost } from "../../app/environments/localHost";
 import { apiClient } from "../../lib/useApi";
+import { useAccount } from "../../shell/useAccount";
 import { useAuth } from "../auth/useAuth";
 import { useSandbox } from "../sandbox/client/useSandbox";
 import { useHubWork } from "../../shell/hub/hubWork";
@@ -16,6 +18,23 @@ const t = useT();
 const { deleteAccount } = useAuth();
 const { sandboxes } = useSandbox();
 const router = useRouter();
+
+// A desktop window on a folder knows only its folder, and deleting the account takes this account's access off every
+// sandbox first (useAuth.ts `deleteAccount`). So there it is done from the workspace, which knows them all; the export
+// is the platform's alone and works in place.
+const { local } = useAccount();
+const handing = ref(false);
+const deleteInWorkspace = async (): Promise<void> => {
+    handing.value = true;
+    deleteError.value = undefined;
+    try {
+        await localHost().openWorkspace(`/settings/data`);
+    } catch (error) {
+        deleteError.value = errorMessage(error, `The workspace could not be opened.`);
+    } finally {
+        handing.value = false;
+    }
+};
 
 // GDPR data export: download everything the platform stores about the account as JSON (me.export).
 const hubWork = useHubWork();
@@ -69,10 +88,13 @@ const confirmDelete = async (): Promise<void> => {
                 icon="trash"
                 tone="danger"
                 :title="t(`settings.settingsData.deleteAccount`)"
-                :description="t(`settings.settingsData.permanentlyRemovesAccountShared`)"
+                :description="local ? t(`settings.settingsData.deleteFromWorkspace`) : t(`settings.settingsData.permanentlyRemovesAccountShared`)"
             >
                 <template #control>
-                    <Button v-if="!confirmingDelete" :label="t(`ui.action.delete`)" severity="danger" size="small" @click="confirmingDelete = true" />
+                    <Button v-if="local" :label="t(`settings.settingsData.deleteInWorkspace`)" severity="danger" size="small" :loading="handing" @click="deleteInWorkspace">
+                        <template #icon><Icon name="arrow-up-right" /></template>
+                    </Button>
+                    <Button v-else-if="!confirmingDelete" :label="t(`ui.action.delete`)" severity="danger" size="small" @click="confirmingDelete = true" />
                 </template>
                 <template v-if="confirmingDelete || deleteError" #below>
                     <div v-if="confirmingDelete" class="flex items-center justify-end gap-2">

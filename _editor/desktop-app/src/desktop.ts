@@ -242,8 +242,7 @@ export const openUrl = (url: string): Promise<void> => invoke(`open_url`, { url 
 export interface LocalRecent {
     path: string;
     folder: boolean;
-    // When it was last opened: Unix seconds as state.rs keeps them, or an ISO 8601 instant. Read it through the web's
-    // local/places.ts `openedAtMs`, which takes either, rather than as a number.
+    // When it was last opened: Unix seconds as state.rs keeps them, or an ISO 8601 instant.
     openedAt: number | string;
     // Whether the path is still there, asked as the list is read: a recent that has moved is drawn as moved.
     exists: boolean;
@@ -280,6 +279,24 @@ export interface LocalRoster {
     sandboxes: LocalSandbox[];
 }
 export const localRoster = (): Promise<LocalRoster> => invoke(`local_roster`);
+
+// One platform call of a local window's account menu or Settings, sent by the app with the session the workspace signed
+// in with (src-tauri/src/account.rs), which checks it against a short list of its own. The answer is the platform's, as
+// a fetch would have had it; nobody signed in is the platform's own answer to that (`null`, or 401). Rejects with a
+// sentence for the reader when the platform cannot be reached, and when the call is not on the list.
+export interface AccountAsk {
+    method: `GET` | `POST`;
+    // The platform path, with a query on a GET: `/api/auth/get-session`, `/rpc/tokens`.
+    path: string;
+    // JSON, on a POST.
+    body?: string;
+}
+export interface AccountAnswer {
+    status: number;
+    body: string;
+    contentType: string | null;
+}
+export const accountRelay = (ask: AccountAsk): Promise<AccountAnswer> => invoke(`account_relay`, { ask });
 
 /* WHAT THE SHELL AND THIS DEVICE ARE DRAWN FROM: facts the app keeps across launches (src-tauri/src/state.rs). */
 

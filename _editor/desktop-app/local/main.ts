@@ -1,4 +1,5 @@
 import type { LocalFace } from "@intentic/web/local";
+import { accountRelay } from "../src/desktop";
 import { installHost } from "../src/host";
 import { registerDesktopCatalog } from "../src/i18n";
 import { installPlatform, LOCAL_EMAIL, sandboxIdOf } from "./platform";
@@ -50,8 +51,9 @@ const boot = async (face: LocalFace): Promise<void> => {
     localStorage.setItem(`intentic.session.${id}`, JSON.stringify({ token: face.token, expiresAt: Date.now() + 365 * 86_400_000, email: LOCAL_EMAIL }));
     // The loopback shortcut is for reaching a sandbox faster; the sidecar is already on loopback.
     localStorage.setItem(`intentic.localShortcut.declined.${id}`, `yes`);
-    installPlatform(face);
     await standInForTheApp();
+    // The account's calls ride the app (platform.ts `RELAYED`), when there is an app: a page in a test's browser has none.
+    installPlatform(face, `__TAURI_INTERNALS__` in window ? accountRelay : undefined);
     // The app's own words (This device, the tile it adds), registered before the editor starts its languages, and its
     // half of the shell, on the window before the router reads it (src/host.ts).
     await registerDesktopCatalog();

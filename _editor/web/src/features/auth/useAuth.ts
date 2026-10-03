@@ -4,6 +4,7 @@ import { ref } from "vue";
 import { reloadOnHotUpdate } from "../../app/hotReload";
 import { announceDesktopRoster } from "../../app/environments/desktop";
 import { environment } from "../../app/environments/environment";
+import { localFace } from "../../app/environments/local";
 import { clearPersistedQueries } from "../../lib/queryPersistence";
 import { useSandboxSession } from "../sandbox/session/sandboxSession";
 import { useGoogleIdentity } from "./useGoogleIdentity";
@@ -22,6 +23,12 @@ const user = ref<User | null>(null);
 let refreshing: Promise<User | null> | undefined;
 
 onPlatformAuthInvalidated(async () => {
+    // A desktop window on a folder of this computer runs as a placeholder with no platform session to lose, and the one
+    // session it holds is its folder's: tearing down here would cut it off from its own files. What a sign-out or a
+    // refused call ends there is the account the app reaches for it, which shell/useAccount.ts clears.
+    if (localFace() !== undefined) {
+        return;
+    }
     // Signed-in runtime stops first, before storage/cache cleanup, so no live daemon stream outlives the teardown.
     user.value = null;
     directMode.value = false;

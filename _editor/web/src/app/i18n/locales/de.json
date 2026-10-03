@@ -3884,7 +3884,9 @@
             "deleteMyAccount": "Mein Konto löschen",
             "exportMyData": "Meine Daten exportieren",
             "permanentlyRemovesAccountShared": "Entfernt Ihr Konto, geteilte Zugriffe und jeden gehosteten Tarif dauerhaft: das Abo wird mit gekündigt.",
-            "sureAccessRevokedBefore": "Sind Sie sicher? Der Zugriff wird entzogen, bevor irgendetwas gelöscht wird."
+            "sureAccessRevokedBefore": "Sind Sie sicher? Der Zugriff wird entzogen, bevor irgendetwas gelöscht wird.",
+            "deleteInWorkspace": "Im Arbeitsbereich löschen",
+            "deleteFromWorkspace": "Entfernt Ihr Konto, geteilte Zugriffe und jeden gehosteten Tarif dauerhaft. Das geschieht im Arbeitsbereich, der zuerst Ihren Zugriff auf jede Sandbox entfernt."
         },
         "settingsKeybindings": {
             "alsoOn": "Auch bei",

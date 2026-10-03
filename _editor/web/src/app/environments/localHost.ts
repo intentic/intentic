@@ -1,12 +1,15 @@
+import { type User, UserSchema } from "@intentic/api-contract";
 import type { ViewBadge } from "@intentic/extension-api";
 import type { Component, Ref } from "vue";
+import { z } from "zod";
 import { askLocalApp } from "./local";
 
 // THE APP'S HALF OF A LOCAL WINDOW'S SHELL. The editor draws the shell around a folder of this computer (local/LocalShell.vue):
 // its rail, its Files view, the place chip and the way to agents. What only the desktop app can answer comes from here:
 // the folders and documents this computer has opened, pointing the window at another folder, whether this install has an
-// account, who the workspace last said is signed in and which sandboxes it listed, and the views the app adds to the
-// rail (This device, titled This computer). The app installs its host on the window before the
+// account, who the workspace last said is signed in and which sandboxes it listed, the account itself (asked of the
+// platform by the app, with the session the workspace signed in with, which this page never holds), and the views the
+// app adds to the rail (This device, titled This computer). The app installs its host on the window before the
 // editor's modules run (`__INTENTIC_LOCAL_HOST__`, _editor/desktop-app/src/host.ts), so it is there when the router
 // builds its routes. A window without one (a dev server, a test) gets `LINK_HOST`: what any local window can ask by link.
 
@@ -14,7 +17,7 @@ import { askLocalApp } from "./local";
 export interface LocalPlace {
     readonly path: string;
     readonly folder: boolean;
-    /** When it was last opened: Unix seconds, epoch ms or an ISO instant, as the app kept it (local/places.ts `openedAtMs`). */
+    /** When it was last opened: Unix seconds, epoch ms or an ISO instant, as the app kept it. */
     readonly openedAt: number | string;
     /** Still there when the list was read: one that has moved is drawn as moved, and opens nothing. */
     readonly exists: boolean;
@@ -96,7 +99,50 @@ export interface LocalHost {
     signIn(): Promise<void>;
     /** The workspace (agents and sandboxes), in this window's place, at its root or a path under it. */
     openWorkspace(path?: string): Promise<void>;
+    /**
+     * Who is signed in, asked of the platform now (shell/useAccount.ts): null when nobody is. Rejects when the
+     * platform cannot be reached, which says nothing about whether anyone is.
+     */
+    account(): Promise<User | null>;
+    /** A new name, or a new picture as a data URL, as Settings › Profile saves them. */
+    updateAccount(change: { readonly name?: string; readonly image?: string }): Promise<void>;
+    /** Signs the account out on the platform, for the workspace too: the app forgets the session and the sandboxes. */
+    signOut(): Promise<void>;
 }
+
+/* THE ACCOUNT'S ANSWERS, as the app hands their text over (its src/account.ts): Better Auth's, read as useAuth.ts reads
+   them. Text that is not JSON (a proxy's error page) says nothing, as an answer out of shape says nothing. */
+
+// `get-session` answers `{ session, user }`, or `null` for nobody. Only what the editor's User holds is kept; a user
+// with no name or picture has them empty, and an answer out of shape is nobody rather than half someone.
+const SessionAnswerSchema = z
+    .object({ user: UserSchema.extend({ name: z.string().catch(``), image: z.string().nullable().catch(null) }) })
+    .nullable();
+
+export const accountOfSession = (text: string): User | null => {
+    try {
+        return SessionAnswerSchema.safeParse(JSON.parse(text)).data?.user ?? null;
+    } catch (error) {
+        if (error instanceof SyntaxError) {
+            return null;
+        }
+        throw error;
+    }
+};
+
+// A refusal's sentence, which Better Auth and oRPC both say as `message`.
+const RefusalSchema = z.object({ message: z.string().min(1) });
+
+export const refusalOf = (text: string): string | undefined => {
+    try {
+        return RefusalSchema.safeParse(JSON.parse(text)).data?.message;
+    } catch (error) {
+        if (error instanceof SyntaxError) {
+            return undefined;
+        }
+        throw error;
+    }
+};
 
 declare global {
     interface Window {
@@ -126,6 +172,9 @@ export const LINK_HOST: LocalHost = {
     forget: nothing,
     signIn: nothing,
     openWorkspace: nothing,
+    account: () => Promise.resolve(null),
+    updateAccount: nothing,
+    signOut: nothing,
 };
 
 export const localHost = (): LocalHost => window.__INTENTIC_LOCAL_HOST__ ?? LINK_HOST;

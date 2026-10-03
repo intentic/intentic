@@ -2618,31 +2618,16 @@
             "trash": "Moved to the Trash"
         },
         "placeSwitcher": {
-            "switchPlace": "Switch folder or sandbox: {name}",
-            "onThisComputer": "On this computer",
-            "showInFileManager": "Show in file manager",
-            "movedOrDeleted": "Moved or deleted",
-            "hasSandbox": "Synced with its own sandbox",
-            "sandbox": "Sandbox",
-            "forget": "Remove {name} from this list",
-            "goneOffer": "It isn't there any more. Remove it from this list?",
-            "openFolder": "Open a folder…",
-            "openFile": "Open a file…",
+            "switchPlace": "{name}: switch to a sandbox",
             "workspace": "Your workspace",
             "workspaceLead": "Agents and sandboxes",
             "putAgentsToWork": "Put agents to work",
-            "signInLead": "Sign in to set up a sandbox",
-            "switchAnyway": "Switch anyway",
-            "switchingDiscardsUnsaved": "Opening another folder here discards their unsaved edits. This can't be undone.",
-            "reveal": "Reveal folder",
-            "forgetNote": "Only from this list",
-            "computerSettingsNote": "Sandboxes, agent, Docker, updates"
+            "signInLead": "Sign in to set up a sandbox"
         },
         "agentsTile": {
             "putAgentsToWork": "Put agents to work",
             "agentsLead": "Agents work in a sandbox: on this computer, in Docker, or on a machine we host. Sign in to set one up.",
             "finishInBrowser": "Finish signing in in your browser. Your workspace opens here when you're done.",
-            "openWorkspace": "Open workspace",
             "filesStayHere": "Your files stay on this computer. Nothing here needs an account."
         },
         "emptyFolder": {
@@ -5519,7 +5504,9 @@
             "export": "Export",
             "exportMyData": "Export my data",
             "permanentlyRemovesAccountShared": "Permanently removes your account, shared access, and any hosted plan: the subscription is cancelled with it.",
-            "sureAccessRevokedBefore": "Are you sure? Access is revoked before anything is deleted."
+            "sureAccessRevokedBefore": "Are you sure? Access is revoked before anything is deleted.",
+            "deleteInWorkspace": "Delete in workspace",
+            "deleteFromWorkspace": "Permanently removes your account, shared access, and any hosted plan. It's done from the workspace, which takes your access off every sandbox first."
         },
         "settingsKeybindings": {
             "alsoOn": "Also on",

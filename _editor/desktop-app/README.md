@@ -28,23 +28,22 @@ flowchart LR
   folder of this computer. A panel the editor floats out gets a frameless window of its own. This package's own `src/`
   bundle (`index.html`) now draws one thing, the close question (`CloseConfirm.vue`).
 - **The main window.** The editor's shell with the sandbox shell's rail, holding what needs no sandbox and no
-  account: at the top the place chip (the folder this window shows, and every other place, in the order the
-  workspace's sandbox switcher lists them too: this computer first, with its settings on its heading (This device),
-  its recent folders and documents, and the system's Open folder… and Open file… on one line, then the account's
-  sandboxes, each opening the workspace on itself at `/?sandbox=<id>` and picked from anywhere in the window by
-  Alt+1–9 as in the workspace, or the sign-in before an account), then Files (the folder's tree and documents,
-  `/workspace`), then This device (`/device`), and at the foot the account as the sandbox shell draws it (who is
-  signed in, the workspace, and the account's settings, where signing out is), or the sign-in in the default browser
-  until an account has been seen. The sandboxes and the account are what the workspace last told the app: its
+  account: at the top the place chip (the folder this window shows, and the account's sandboxes, each opening the
+  workspace on itself at `/?sandbox=<id>` and picked from anywhere in the window by Alt+1–9 as in the workspace, or
+  the sign-in before an account), then Files (the folder's tree and documents, `/workspace`), then This device
+  (`/device`), and at the foot the sandbox shell's own account control (who is signed in, Settings, Sign out), or the
+  sign-in in the default browser until there is an account. Settings open in the window itself (`#/settings`), and
+  signing out leaves it on its folder. The sandboxes and the account are what the workspace last told the app: its
   switcher hands them over on `intentic://roster` whenever either changes, a sign-out empties them, and the app keeps
   them in `roster.json` (`local_roster`), with no address, token or logo, so a row carries a name, where it runs and
   whether it is shared, and no count or state, and the account an address, a name and an `https` avatar. Before the
-  workspace has said, the row is the workspace itself and the account has no name. It opens on the folder it was last
+  workspace has said, the row is the workspace itself; the account menu shows the named account at once and then
+  what the platform answers (below). It opens on the folder it was last
   pointed at (`home-folder.json`), or on `~/intentic/local`, which a first launch creates: nothing is asked before the
-  first screen. A folder picked on the place chip takes the window's place (`local_point`: a grant of its own, the old
-  one revoked, the page reloaded onto the new face at `#/workspace`), after the page has asked about anything unsaved;
-  a folder another window already shows raises that window instead. A document picked there opens where `local_open_path`
-  puts it. The main window's ×, like the workspace's, is a question and a hide (`request_close`), so nothing it holds
+  first screen. A folder picked in the system's dialog from an empty folder's page takes the window's place
+  (`local_pick`, then `point`: a grant of its own, the old one revoked, the page reloaded onto the new face at
+  `#/workspace`); a folder another window already shows raises that window instead. Other folders and documents open
+  from the tray, each in a window of its own. The main window's ×, like the workspace's, is a question and a hide (`request_close`), so nothing it holds
   is lost and the tray brings it back as it was. The shell's routes ride the page's hash (`files/local#/device`),
   since the asset protocol answers `files/local` with the local page and an address below it with the bundle's other
   page.
@@ -61,8 +60,22 @@ flowchart LR
   one is for and offered the way to one, and nothing about Docker. Only the main window takes the work the app parks
   for its face (a setup, a recreate, a sync, a sleeping engine); every local window draws the same view and runs its
   verbs. The machine is read when the page opens and every 30 seconds while it is on screen.
-- **The workspace, opened somewhere.** A press that opens the workspace at a path (a sandbox on the place chip, the
-  account's settings) swaps the workspace into the main window's frame and, when its page is already loaded, tells
+- **The account in a local window.** Who is signed in, the plan, API tokens and the data export, as the account menu
+  and Settings ask for them. The page cannot hold the platform's session (an HttpOnly cookie on the API's host, which
+  the platform answers only from the workspace's origin), but every window of the app shares one browser profile, so
+  the cookie the workspace's sign-in set is in the store a local window's webview reads. `account_relay`
+  (`src-tauri/src/account.rs`) reads it there, sends the call with the workspace's origin (Better Auth's check on an
+  auth call that changes something), and writes back whatever cookie the answer sets, so the session rolls forward.
+  Only a short list may be asked, checked in Rust: `get-session`, `update-user`, `sign-out`, the hosted plan and
+  its checkout and portal, the tokens, and `me/export`. Deleting the account is not on it, since it must first take
+  the account's access off every sandbox's daemon, and a local window knows only its own folder. A sign-out also
+  deletes the session from the store, empties `roster.json` and reloads the workspace window, so both faces are signed
+  out together. In the page, `src/account.ts` asks for the account (the host's `account`, `updateAccount`,
+  `signOut`) and `local/platform.ts` routes the plan, token and export calls of the editor's API client; who is
+  signed in for the page's own session check stays the folder's placeholder, so a platform out of reach never holds
+  the first paint.
+- **The workspace, opened somewhere.** A press that opens the workspace at a path (a sandbox on the place chip,
+  deleting the account from a local window's Settings) swaps the workspace into the main window's frame and, when its page is already loaded, tells
   that page the path instead of loading it again (`open_in_place` in `windows.rs`): a script the app runs in the page
   calls the opener the page registered (`__INTENTIC_OPEN__`, the web's `installDesktopOpener`), which selects the
   sandbox the path names and routes there in place. A page that registered none, from another origin or still
@@ -152,12 +165,21 @@ flowchart LR
   instead of a sandbox. The app starts the sidecar (with the main window, or a few seconds after a launch with recents),
   grants each window one folder by a random token on the sidecar's stdin, and revokes it when the window closes
   (`src-tauri/src/sidecar.rs`). What else a local window may do is the commands its capability names
-  (`capabilities/local.json`): the place chip's and This device's, granted by name (`build.rs`); its links are only its
+  (`capabilities/local.json`): the shell's (its place chip, its account) and This device's, granted by name (`build.rs`); its links are only its
   own title bar and `local`. The documents it draws can do none of it: the page's policy runs no script but the
   bundle's own (`vite.local.config.ts`), a frame a document opens is another origin, which holds no capability, and a
   link it carries is heard only as `window` or `local`. No sandbox, account or Docker is needed to open anything. What
   fails to open is said in a native dialog in the user's words (the place chip shows the same sentence under the row),
   and the original error goes to stderr.
+
+  (2026-10-03) The local window's account menu became the sandbox shell's own (Settings and Sign out), and its Settings
+  open in the window, where they used to swap in the workspace on whichever sandbox was last open. The account's calls
+  ride the app (`account_relay`) rather than the page, for the reason below: the page still holds no session and
+  reaches no platform. Opening the workspace's own Settings, or a Settings in the window with every account section
+  read-only, were rejected: the first is the face swap the reader asked to lose, and the second leaves Profile, the one
+  section they came for, unusable. The place chip lost "On this computer" (the folder, its recents, Open folder…/Open
+  file… and This device's cog): the window already shows its folder, the rail already holds This device, and the tray
+  opens the rest, so the chip lists the sandboxes, as the workspace's switcher lists only this computer.
 
   (2026-10-01) The sandboxes joined the place chip, where "Your workspace" alone stood for them: a reader on this
   computer took two presses and a face swap to reach the sandbox they meant, while the workspace's switcher reached

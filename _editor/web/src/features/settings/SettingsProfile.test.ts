@@ -8,8 +8,8 @@ import { IconStub } from "@intentic/ui/testing";
 
 const user = ref<{ name: string; image: string | null } | undefined>({ name: `Artur Kurowski`, image: null });
 const updateProfile = jest.fn<(input: { name?: string; image?: string }) => Promise<void>>().mockResolvedValue(undefined);
-jest.mock(`../auth/useAuth`, () => ({
-    useAuth: () => ({ user, updateProfile }),
+jest.mock(`../../shell/useAccount`, () => ({
+    useAccount: () => ({ user, updateProfile }),
 }));
 
 const fileToSquareDataUrl = jest.fn<(file: File, fit: `cover` | `contain`) => Promise<string>>().mockResolvedValue(`data:image/webp;base64,NEW`);
