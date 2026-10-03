@@ -102,7 +102,8 @@ watch(
 );
 
 // Which subscriptions still have room, in the width panes can't use (rule: chatCapacity's railFitsBeside). Shown
-// only in the panel's own window — every other surface already has the Usage tab and the picker a click away.
+// in the panel's own window or when docked to the main icons rail (/chat full-window slot) — every other surface
+// already has the Usage tab and the picker a click away.
 // Measured off the panel's real width, watched; zero until measured so it can't flash on before the first read.
 const panelWidth = ref(0);
 let panelObserver: ResizeObserver | undefined;
@@ -130,10 +131,11 @@ onBeforeUnmount(stopMeasuring);
 // `tabs: false` means no rail is taking width off the panes, so nothing is reserved. Only reserved with something
 // in it (hasCapacity), or the panel would hold 240px of padding for a rail rendering nothing; mid-load counts as
 // non-empty so the transcript doesn't reflow when it lands. Keyed on capacity alone, never on the chat's checklist,
-// so picking up a first task can't reflow the panel mid-turn.
+// so picking up a first task can't reflow the panel mid-turn. Shown when floating in its own window or when docked
+// to the main icons rail (chatWide without floating, i.e. /chat full-window view).
 const showsRail = computed(
     () =>
-        floating.value &&
+        (floating.value || chatWide.value) &&
         !mobile.value &&
         // The window's side panel stands where the rail would, while it holds anything (FloatingSection.vue).
         shownSideTabs.value.length === 0 &&
