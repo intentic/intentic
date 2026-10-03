@@ -189,7 +189,7 @@ export const answerConfirm = async (
     const closed = async (): Promise<boolean> => {
         const deadline = ops.now() + ANSWER_SETTLE_MS;
         for (;;) {
-            // A listing that failed (one past run()'s timeout on a loaded runner) is "not known yet", not "still up".
+            // allow(silent-catch): a listing that failed (one past run()'s timeout on a loaded runner) is "not known yet", not "still up".
             const still = await ops.showing().catch(() => ``);
             if (still === undefined) {
                 return true;

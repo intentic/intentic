@@ -1,6 +1,7 @@
 // Needs jsdom: Dismiss beside Send threw away an answer already picked and ended the turn, so with an answer under way
 // it asks first.
 import "@intentic/testing/dom";
+import { ATTACHMENTS_DIR } from "@intentic/sandbox-contract";
 import { IconStub } from "@intentic/ui/testing";
 import { type App, createApp, h, nextTick } from "vue";
 import type { CardAnswer } from "../../session/cardReplies";
@@ -92,7 +93,7 @@ it(`asks before dismissing a picked answer, and keeps it on "Keep my answer"`, a
     expect(sent).toEqual([{ kind: `question`, cancelled: true }]);
 });
 
-const SHOT = `.intentic/records/artifacts/attachments/a/shot.png`;
+const SHOT = `${ATTACHMENTS_DIR}/a/shot.png`;
 
 // A screenshot can be the whole of an own-words answer: Other with a file and no words still submits, carrying the file.
 it(`submits a file attached to Other, under its question, with no words needed`, async () => {

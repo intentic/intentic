@@ -13,11 +13,11 @@ import { IconStub } from "@intentic/ui/testing";
 
 // Import chain pulls in app-wide singletons reading browser globals at import time (matchMedia, window.env).
 const { default: ChatCapacityRail } = await import("./ChatCapacityRail.vue");
-const { accountsLoaded, providerAccounts, providerRefusals, translatorAccounts } = await import("../accounts/providerAccounts");
-const { heldAccounts } = await import("../accounts/useChat-accounts");
+const { accountsLoaded, providerAccounts, providerRefusals, translatorAccounts } = await import("../../accounts/providerAccounts");
+const { heldAccounts } = await import("../../accounts/useChat-accounts");
 // The app's own reset formatter, not a copy: assertions check it carries the reset, not a fixed timezone string.
-const { formatReset } = await import("../session/usageStatus");
-const { judgeAccountStores } = await import("../../../testing/judgedAccounts");
+const { formatReset } = await import("../../session/usageStatus");
+const { judgeAccountStores } = await import("../../../../testing/judgedAccounts");
 
 const NO_ROUTED: TranslatorAccounts = { codex: [], grok: [], kimi: [], gemini: [] };
 const MEASURED_AT = Date.now() - 60_000;

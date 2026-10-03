@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { CAPACITY_RAIL_PX } from "./chatCapacity";
+import { CAPACITY_RAIL_PX } from "./capacity/chatCapacity";
 import { uiLength } from "../../../shell/window/uiScale";
-import ChatCapacityRail from "./ChatCapacityRail.vue";
+import ChatCapacityRail from "./capacity/ChatCapacityRail.vue";
 import ChatRailChecklist from "./ChatRailChecklist.vue";
 import { useT } from "@intentic/ui/i18n";
 

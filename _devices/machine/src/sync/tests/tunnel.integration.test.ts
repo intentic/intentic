@@ -1,3 +1,4 @@
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import { connect, createServer, type Server, type Socket } from "node:net";
 import { setTimeout as sleep } from "node:timers/promises";
 import { stubGlobal, unstubAllGlobals, advanceTimersByTimeAsync } from "@intentic/testing/bun";
@@ -157,7 +158,7 @@ describe("tunnelTargets", () => {
             mode: "sync",
             syncToken: "tok",
             localDir: "/home/u/app",
-            remoteDir: "/work/app",
+            remoteDir: `${WORKSPACE_ROOT}/app`,
             project: true,
             transport: "docker",
             container: "intentic-sandbox-sandbox-b",

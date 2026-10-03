@@ -6,8 +6,8 @@ import { createApp } from "../app.js";
 import { clientFor } from "../harness/route-client.testing.js";
 import { services } from "../harness/route-services.testing.js";
 import { testConfig } from "../testing.js";
-import { refreshReleaseNotes } from "./boot/release-notes.js";
-import { refreshLatestVersion } from "./boot/version-check.js";
+import { refreshReleaseNotes } from "./updates/release-notes.js";
+import { refreshLatestVersion } from "./updates/version-check.js";
 
 // What /info says about this sandbox's version beyond the version itself: what the host last did about it, a release the
 // owner skipped, and whether the running release was withdrawn. Its own file, since the release caches it fills are

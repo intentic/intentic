@@ -1,6 +1,7 @@
 // The picks a question card keeps across a reload: found by the same requestId and no other, gone once the
 // card is settled or swept, and limited to what the live card would still accept.
 import "@intentic/testing/dom";
+import { ATTACHMENTS_DIR } from "@intentic/sandbox-contract";
 import { freshImport } from "@intentic/testing/bun";
 import { answerStarted, clearQuestionDraft, type DraftQuestionShape, OTHER_LABEL, readQuestionDraft, writeQuestionDraft } from "./questionDraft";
 
@@ -73,7 +74,7 @@ it("counts a pick or typed words as an answer started, and nothing else", () => 
 
 // A screenshot uploaded for an Other answer is on disk already, so a reload brings it back with the words beside it.
 it("keeps the files uploaded for a free-text row, and counts one as an answer started", () => {
-    const otherFiles = { 0: [{ name: `shot.png`, path: `.intentic/records/artifacts/attachments/a/shot.png` }] };
+    const otherFiles = { 0: [{ name: `shot.png`, path: `${ATTACHMENTS_DIR}/a/shot.png` }] };
     writeQuestionDraft(`req-a`, { selections: { 0: [OTHER_LABEL] }, otherTexts: {}, otherFiles });
 
     expect(readQuestionDraft(`req-a`, CARD)).toEqual({ selections: { 0: [OTHER_LABEL] }, otherTexts: {}, otherFiles });

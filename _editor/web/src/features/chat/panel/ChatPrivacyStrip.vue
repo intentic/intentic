@@ -65,7 +65,7 @@ const safety = { name: `sandbox`, params: { tab: `agent` }, query: { section: `s
                 :disabled="!reachable || isSaving || streaming"
                 v-tooltip.top="{
                     title: t(`chat.chatPaneNotices.privacyLetReadTitle`),
-                    note: t(`chat.chatPaneNotices.privacyLetReadNote`, { provider: standing.label }),
+                    note: t(`chat.chatPaneNotices.privacyLetReadNote`),
                 }"
                 @click="grant(true)"
             >
@@ -88,7 +88,7 @@ const safety = { name: `sandbox`, params: { tab: `agent` }, query: { section: `s
             :text="true"
             class="shrink-0"
             :disabled="!reachable || isSaving"
-            v-tooltip.top="{ title: t(`chat.chatPaneNotices.privacyTakeBackTitle`, { provider: standing.label }) }"
+            v-tooltip.top="{ title: t(`chat.chatPaneNotices.privacyTakeBackTitle`) }"
             @click="grant(false)"
         >
             {{ t(`chat.chatPaneNotices.privacyTakeBack`) }}

@@ -47,7 +47,7 @@ export type Lane = "hosted" | "own";
 export interface DiagnosisInput {
     // Network-shaped failures only: a refusal, a removal and a missing address each have their own screen.
     readonly failure: ConnectionFailure | undefined;
-    // The visible part of the current outage (useRecovery.ts `useVisibleOutage`).
+    // The visible part of the current outage (gates/useVisibleOutage.ts).
     readonly outageMs: number;
     // When the current outage began, to tell a report written about it from one written before it.
     readonly outageStartedAt: number | undefined;

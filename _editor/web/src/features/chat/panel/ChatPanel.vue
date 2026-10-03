@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Button, Icon, useDevice, ui } from "@intentic/ui";
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
-import { CAPACITY_RAIL_PX, hasCapacity, railFitsBeside } from "./chatCapacity";
+import { CAPACITY_RAIL_PX, hasCapacity, railFitsBeside } from "./capacity/chatCapacity";
 import { accountsLoaded } from "../accounts/providerAccounts";
 import { chatRun, closeRun, modeForSessions, type RunSession, runOnFocus, runToFollow, showingRunGraph, showRun } from "../run/chatRun";
 import type { Conversation } from "../session/conversation";

@@ -1,7 +1,7 @@
 import type { AccountFix, AgentProvider, PlanLimitsHeld } from "@intentic/sandbox-contract";
 import { t } from "@intentic/ui/i18n";
-import { providerAccounts, providerRefusals, translatorAccounts } from "../accounts/providerAccounts";
-import { providerDisplayLabel } from "../accounts/providerCatalog";
+import { providerAccounts, providerRefusals, translatorAccounts } from "../../accounts/providerAccounts";
+import { providerDisplayLabel } from "../../accounts/providerCatalog";
 import {
     accountFixLabel,
     attentionGroups,
@@ -15,7 +15,7 @@ import {
     poolPeriod,
     poolScope,
     unreadGroups,
-} from "../session/usageStatus";
+} from "../../session/usageStatus";
 
 // Projection behind ChatCapacityRail.vue for the popped-out chat: not the Usage tab's full reconciliation, but what has
 // room to start the next task right now. Reads module state, not the current conversation's provider.

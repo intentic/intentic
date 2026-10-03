@@ -104,6 +104,7 @@ export const useRecovery = (deps: RecoveryDeps) => {
             )
         ).flat();
         if (answered.length > 0) {
+            // allow(silent-catch): no answer is shown, not swallowed: sortOne marks each sandbox "could not be asked, check again".
             const standings = await deps.lookup(answered.map((each) => each.sandboxId)).catch(() => undefined);
             for (const { entry, sandboxId } of answered) {
                 sortOne(entry, sandboxId, standings?.find((held) => held.sandboxId === sandboxId)?.standing);

@@ -65,7 +65,7 @@ const settledAvailability = (state: ConnectionState, removed: boolean): SandboxA
 };
 
 // `hiddenMs` is the part of the outage the page spent hidden or asleep: a page woken after a night has waited none of it,
-// so it does not read as a long wait (useVisibleOutage in gates/useRecovery.ts). `alive` is whether the diagnosis of
+// so it does not read as a long wait (useVisibleOutage in gates/useVisibleOutage.ts). `alive` is whether the diagnosis of
 // this outage saw the sandbox alive (diagnosis/useDiagnosis.ts `sandboxSeemsAlive`).
 export const sandboxAvailability = (
     state: ConnectionState,

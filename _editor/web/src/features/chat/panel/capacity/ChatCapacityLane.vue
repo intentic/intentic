@@ -2,7 +2,7 @@
 import { useReducedMotion } from "@intentic/ui/reduced-motion";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import type { CapacityLane, CapacityRow } from "./chatCapacity";
-import { meterFill, meterTint, meterTrack, remainingFigure, usageTone } from "../session/usageStatus";
+import { meterFill, meterTint, meterTrack, remainingFigure, usageTone } from "../../session/usageStatus";
 
 // One lane of the capacity rail: its axis label, its bar and its figure, as three cells of the parent's grid.
 // A re-read moves it rather than swapping it: the bar, the figure and the tint travel together from the old reading to

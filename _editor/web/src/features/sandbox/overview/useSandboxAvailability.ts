@@ -4,7 +4,7 @@ import { isBlocked } from "../live/connection";
 import { sandboxAvailability, type SandboxAvailability } from "./availability";
 import { useSandbox } from "../client/useSandbox";
 import { daemonReady } from "./useDaemonBoot";
-import { useVisibleOutage } from "../gates/useRecovery";
+import { useVisibleOutage } from "../gates/useVisibleOutage";
 import { sandboxSeemsAlive } from "../diagnosis/useDiagnosis";
 
 /* Component-scoped because useNow registers disposal with the caller's Vue scope. */

@@ -38,10 +38,10 @@ import {
 import { settleTerminalHelpFor, terminalHelpFor } from "../terminal/terminal-help.js";
 import { isNoTmuxServer } from "../terminal/tmux-server.js";
 import { projectDirOf } from "./project-dir.js";
-import { latestVersion } from "./boot/version-check.js";
-import { breakingNotes, MAX_UPDATE_NOTES, updateNotes, withdrawnRelease } from "./boot/release-notes.js";
-import { preparingUpdate, stagedUpdate, updateOutcome } from "./boot/staged-update.js";
-import { fileUpdateSkip, updateOffered } from "./boot/update-skip.js";
+import { latestVersion } from "./updates/version-check.js";
+import { breakingNotes, MAX_UPDATE_NOTES, updateNotes, withdrawnRelease } from "./updates/release-notes.js";
+import { preparingUpdate, stagedUpdate, updateOutcome } from "./updates/staged-update.js";
+import { fileUpdateSkip, updateOffered } from "./updates/update-skip.js";
 import { opt } from "../opt.js";
 import { runtimeHealth } from "../agent/providers/adapter-health.js";
 import { buildId } from "../version.js";

@@ -237,10 +237,10 @@ describe("absentInSandbox", () => {
         expect(seen).toEqual([
             {
                 command: `docker`,
-                args: [`exec`, `intentic-sandbox-sandbox-box`, `sh`, `-c`, expect.not.stringMatching(/^'/), `_`, `/work`, `pkg-a`, `pkg-b`],
+                args: [`exec`, `intentic-sandbox-sandbox-box`, `sh`, `-c`, expect.not.stringMatching(/^'/), `_`, WORKSPACE_ROOT, `pkg-a`, `pkg-b`],
             },
         ]);
-        expect(absentProbeArgv({ kind: `ssh`, alias: `intentic-sync-box` }, `/work`, [`pkg-a`]).args[5]).toMatch(/^'.*'$/);
+        expect(absentProbeArgv({ kind: `ssh`, alias: `intentic-sync-box` }, WORKSPACE_ROOT, [`pkg-a`]).args[5]).toMatch(/^'.*'$/);
     });
 
     it("answers undefined when ssh failed, which must never read as 'the sandbox does not have it'", async () => {

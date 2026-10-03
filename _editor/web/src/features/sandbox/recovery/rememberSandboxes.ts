@@ -44,6 +44,7 @@ const askAboutMissing = async (email: string): Promise<void> => {
     if (asked.length === 0) {
         return;
     }
+    // allow(silent-catch): an unanswered lookup forgets nothing and is asked again with the next list; see the comment above.
     const answer = await apiClient.sandbox.lookup({ sandboxIds: asked.map((each) => each.sandboxId) }).catch(() => undefined);
     for (const { sandboxId, entry } of asked) {
         const standing = answer?.sandboxes.find((held) => held.sandboxId === sandboxId)?.standing;

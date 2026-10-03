@@ -12,7 +12,7 @@ jest.mock("@intentic/ui/async", () => ({ useNow: () => clock }));
 jest.mock("../client/useSandbox", () => ({ useSandbox: () => ({ active, connection, reachable, activeWakeRefused }) }));
 jest.mock("../live/sandboxRestart", () => ({ restartExpected: () => undefined }));
 jest.mock("../diagnosis/useDiagnosis", () => ({ useDiagnosis: () => computed(() => undefined) }));
-const { useRecoveryDue, useVisibleOutage } = await import("./useRecovery");
+const { useRecoveryDue, useVisibleOutage } = await import("./useVisibleOutage");
 
 it(`excludes hidden time and waits for a failed reconnect after wake`, async () => {
     let visible = true;

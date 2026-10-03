@@ -14,7 +14,7 @@ import DiagnosisChain from "../diagnosis/DiagnosisChain.vue";
 import FixCommand from "../diagnosis/FixCommand.vue";
 import type { DiagnosisAction } from "../diagnosis/presentation";
 import { recoveryCommands, type SiblingManager, siblingManagers } from "./recovery";
-import { useDiagnosisNotice, useVisibleOutage } from "./useRecovery";
+import { useDiagnosisNotice, useVisibleOutage } from "./useVisibleOutage";
 
 // THE WAY BACK WHEN A SANDBOX DOESN'T COME BACK, drawn by the connecting gate and by the notification lane beneath the
 // diagnosis's own sentence. It shows which link of the chain broke, what the machine the sandbox runs on found (in its

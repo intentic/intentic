@@ -1,7 +1,7 @@
 import type { AccountUsage, OauthAccount, TranslatorAccount, TranslatorAccounts } from "@intentic/sandbox-contract";
 import { CAPACITY_RAIL_PX, chatCapacity as readCapacity, hasCapacity, railFitsBeside } from "./chatCapacity";
-import { judgeAccountStores } from "../../../testing/judgedAccounts";
-import { providerAccounts, providerRefusals, translatorAccounts, usageByAccount } from "../accounts/providerAccounts";
+import { judgeAccountStores } from "../../../../testing/judgedAccounts";
+import { providerAccounts, providerRefusals, translatorAccounts, usageByAccount } from "../../accounts/providerAccounts";
 
 // The rail's offers must all still serve a turn, and everything it withholds must be accounted for: spent, refused,
 // dropped, or pooled.

@@ -9,7 +9,7 @@ import { useGoogleIdentity } from "../../auth/useGoogleIdentity";
 import { restartExpected } from "../live/sandboxRestart";
 import { type ConnectionNotice, connectionNotice, stalledBody } from "./connectionNotice";
 import SandboxRecovery from "./SandboxRecovery.vue";
-import { useDiagnosisNotice, useRecoveryDue, useVisibleOutage } from "./useRecovery";
+import { useDiagnosisNotice, useRecoveryDue, useVisibleOutage } from "./useVisibleOutage";
 import { stalledPaths } from "../../../app/perf";
 import { DEADLINE_MS } from "../client/sandboxAuthFetch";
 import { useT } from "@intentic/ui/i18n";

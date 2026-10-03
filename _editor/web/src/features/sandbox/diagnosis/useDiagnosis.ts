@@ -211,8 +211,8 @@ export const sandboxSeemsAlive = (now = Date.now()): boolean => {
 };
 
 // Component-scoped (its clocks bind to the caller): the diagnosis of the active sandbox, or undefined while it answers
-// or while what is wrong is not a silence. `elapsed` is the visible part of the outage (useRecovery.ts), which the
-// caller already holds for its own words.
+// or while what is wrong is not a silence. `elapsed` is the visible part of the outage (gates/useVisibleOutage.ts),
+// which the caller already holds for its own words.
 export const useDiagnosis = (clock: { readonly elapsed: ComputedRef<number> }): ComputedRef<Diagnosis | undefined> => {
     const now = useNow(() => !reachable.value && connection.value.unavailableSince !== undefined);
     return computed(() => {

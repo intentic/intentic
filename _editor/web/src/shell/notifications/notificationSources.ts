@@ -3,7 +3,7 @@ import { plural } from "@intentic/base/format";
 import { useNow } from "@intentic/ui/async";
 import PushQuestionBody from "./PushQuestionBody.vue";
 import SandboxRecovery from "../../features/sandbox/gates/SandboxRecovery.vue";
-import { useDiagnosisNotice, useRecoveryDue, useVisibleOutage } from "../../features/sandbox/gates/useRecovery";
+import { useDiagnosisNotice, useRecoveryDue, useVisibleOutage } from "../../features/sandbox/gates/useVisibleOutage";
 import type { DiagnosisNotice } from "../../features/sandbox/diagnosis/presentation";
 import UploadProgressBody from "../../features/workspace/files/upload/UploadProgressBody.vue";
 import { useAppUpdate, type AppUpdate } from "../../app/appUpdate";

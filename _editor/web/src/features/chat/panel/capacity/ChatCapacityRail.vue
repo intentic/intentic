@@ -11,10 +11,10 @@ import {
     chatCapacity,
     heldReadings,
 } from "./chatCapacity";
-import { accountsLoaded } from "../accounts/providerAccounts";
-import { formatAge, formatRemaining, formatReset } from "../session/usageStatus";
-import { heldAccounts, refreshConnections } from "../accounts/useChat-accounts";
-import ProviderLogo from "../accounts/ProviderLogo.vue";
+import { accountsLoaded } from "../../accounts/providerAccounts";
+import { formatAge, formatRemaining, formatReset } from "../../session/usageStatus";
+import { heldAccounts, refreshConnections } from "../../accounts/useChat-accounts";
+import ProviderLogo from "../../accounts/ProviderLogo.vue";
 import { useT } from "@intentic/ui/i18n";
 
 // Headroom rail in chat pop-out: displays runnable provider capacity without full Usage tab reconciliation.

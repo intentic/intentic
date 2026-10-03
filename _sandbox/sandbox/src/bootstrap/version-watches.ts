@@ -1,7 +1,7 @@
 import { startEngineWatch } from "../engines/engines.js";
 import { startExtensionUpdateWatch } from "../extensions/extension-updates.js";
-import { startReleaseNotesCheck } from "../system/boot/release-notes.js";
-import { startVersionCheck } from "../system/boot/version-check.js";
+import { startReleaseNotesCheck } from "../system/updates/release-notes.js";
+import { startVersionCheck } from "../system/updates/version-check.js";
 import type { BootPhase } from "./boot-phase.js";
 
 // All warmed off the request path; none blocks anything.
