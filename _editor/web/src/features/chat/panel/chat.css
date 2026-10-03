@@ -35,31 +35,6 @@
 .chat-prompt-pinned .chat-surface {
     box-shadow: var(--shadow-sm);
 }
-/* Over wallpaper, frost the whole pinned area, not just its bubble: scrolling words in the gutter must pass under
-   it too. Mask only this inert backdrop so its tint AND blur fade at the bottom without fading the prompt's text. */
-[data-wallpaper] .chat-floating-root .chat-prompt-pinned {
-    background-image: none;
-}
-[data-wallpaper] .chat-floating-root .chat-prompt-pinned::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    z-index: -1;
-    background-color: color-mix(in srgb, var(--color-card) 85%, transparent);
-    -webkit-backdrop-filter: blur(16px);
-    backdrop-filter: blur(16px);
-    mask-image:
-        linear-gradient(to bottom, #000 calc(100% - 1rem), transparent),
-        linear-gradient(to right, transparent, #000 1rem, #000 calc(100% - 1rem), transparent);
-    mask-composite: intersect;
-    pointer-events: none;
-}
-[data-wallpaper] .chat-floating-root .chat-prompt-pinned .chat-surface {
-    background-color: color-mix(in srgb, var(--color-card) 90%, transparent);
-    -webkit-backdrop-filter: blur(16px);
-    backdrop-filter: blur(16px);
-    box-shadow: var(--wallpaper-card-drop);
-}
 /* Doomed edits include the prompt and all following content. */
 .chat-doomed {
     opacity: 0.55;

@@ -46,23 +46,12 @@
     }
 
     /* The canvas colour stays under the art, so the board is its usual self for the frame before the picture decodes. */
-    [data-wallpaper] :is(.agents-board, .wallpaper-surface, .chat-floating-root) {
+    [data-wallpaper] :is(.agents-board, .wallpaper-surface) {
         background-color: var(--color-canvas);
         background-image: var(--wallpaper-scrim), linear-gradient(var(--wallpaper-veil), var(--wallpaper-veil)), var(--wallpaper-art);
         background-position: center;
         background-size: cover;
         background-repeat: no-repeat;
-    }
-    /* Sanctum paints vignettes, grain and a horizon on `#app > :first-child`, which is .chat-floating-root in the
-       floating window. With a wallpaper active those layers bury the picture under dark overlays; suppress them so
-       only the wallpaper's own scrim tones the art. Specificity matches Sanctum's `[data-skin] #app > :first-child`. */
-    [data-wallpaper][data-skin] #app > .chat-floating-root {
-        background-color: var(--color-canvas);
-        background-image: var(--wallpaper-scrim), linear-gradient(var(--wallpaper-veil), var(--wallpaper-veil)), var(--wallpaper-art);
-        background-position: center;
-        background-size: cover;
-        background-repeat: no-repeat;
-        background-attachment: scroll;
     }
 
     /* An extension page's own words — its title, its lede, its section labels — stand on the picture as the lanes'
@@ -82,19 +71,10 @@
     }
     /* A dashed card is a place for something and has no fill of its own, which on the picture put its words straight
        onto the trees: frosted instead, still lighter than a card, so it keeps reading as a slot. */
-    [data-wallpaper] :is(.agents-board, .wallpaper-surface, .chat-floating-root) :is(.ui-card-dashed, .border-dashed):not(.bg-card) {
+    [data-wallpaper] :is(.agents-board, .wallpaper-surface) :is(.ui-card-dashed, .border-dashed):not(.bg-card) {
         background-color: color-mix(in oklab, var(--color-canvas) 62%, transparent);
         -webkit-backdrop-filter: blur(8px);
         backdrop-filter: blur(8px);
-    }
-
-    /* POPPED-OUT CHAT WINDOW — transparent chat panel so the picture shows behind, card drop on the agent rail.
-       The pinned prompt's frosted band and bubble belong to chat.css, beside their non-wallpaper treatment. */
-    [data-wallpaper] .chat-floating-root .chat-panel {
-        background-color: transparent !important;
-    }
-    [data-wallpaper] .chat-floating-root .session-card {
-        --card-drop: var(--wallpaper-card-drop);
     }
 
     /* WORDS STANDING ON THE PICTURE — lane names, an empty lane's line, the "earlier" fold — carry a halo of the
