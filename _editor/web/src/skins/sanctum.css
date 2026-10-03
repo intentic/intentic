@@ -1,5 +1,10 @@
 /* Sanctum skin for the app's IDE-like shell, using the site's design vocabulary. */
 
+/* Navigation rows and session cards share the same gold selection edge. */
+:root[data-skin="sanctum"] {
+    --color-selection-edge: color-mix(in srgb, var(--sanctum-gold) 60%, transparent);
+}
+
 /* TIER 0 · THE STONE The surface ramp in warm ash. */
 [data-skin="sanctum"] {
     color-scheme: dark;
@@ -538,7 +543,7 @@
     [data-skin="sanctum"] .ui-row-select-on,
     [data-skin="sanctum"] .ui-row-select-on:hover:not(:disabled) {
         background: rgba(201, 160, 92, 0.1);
-        box-shadow: inset 2px 0 0 rgba(201, 160, 92, 0.6);
+        box-shadow: inset 2px 0 0 var(--color-selection-edge);
     }
 
     [data-skin="sanctum"] .ui-row-select-horizontal.ui-row-select-on,

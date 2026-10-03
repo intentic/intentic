@@ -81,9 +81,9 @@
     }
 }
 
-/* Selected sessions carry a softer primary-coloured edge, shared by the board and chat rail. */
+/* Selection edges use the navigation accent; session cards soften it by width rather than colour. */
 :root {
-    --color-selection-edge: color-mix(in srgb, var(--color-primary-500) 55%, var(--color-card));
+    --color-selection-edge: var(--color-primary-500);
 
 /* Room for an h-7 (1.75rem) icon button with air above and below, once the 1px border is taken out. */
     --bar-height: 2.25rem;
@@ -178,7 +178,7 @@
     .session-card.session-card-on {
         color: var(--color-content);
         --card-fill: color-mix(in oklab, var(--color-primary-500) 8%, var(--color-overlay));
-        --card-accent: inset 2px 0 0 0 var(--color-selection-edge);
+        --card-accent: inset 1px 0 0 0 var(--color-selection-edge);
     }
 /* NO RULE HERE REPAINTS A CHIP ON A SELECTED CARD, and that absence is the fix rather than the gap in it. */
 /* THE FILTER NAMED THIS CARD BY ITS ID: a halo outside the edge, where the selection ring (inset) never draws, so the card that is found and also open wears both and neither hides the other. An outline, not one more shadow in the stack: it costs no layout and no other rule writes it. */
