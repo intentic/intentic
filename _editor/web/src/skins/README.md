@@ -33,7 +33,7 @@ the four looks. `useWallpaper.ts` stores it under `ui-wallpaper` (`none` or `mis
 main scroller (`.wallpaper-surface`, set by `useWallpaperedRoute`) on those pages, so the picture stays put while the
 page scrolls. The scheme picks each picture's dark or light version and its scrims, and every picture is toned the
 same way: dimmed by a veil that keeps its own hue (warm paper by day, dark by night), never desaturated, which read as grey. While one is worn the board's lane headers drop their
-canvas band and stop pinning, since a pinned header with nothing behind it would slide over the cards under it. In the popped-out chat, the chat panel is made transparent and the pinned prompt drops its opaque card wash for a frosted floating surface.
+canvas band and stop pinning, since a pinned header with nothing behind it would slide over the cards under it. In the popped-out chat, the chat panel is transparent and the pinned prompt has a frosted bubble over a soft translucent band across the sticky area. The band's tint and blur fade together at its lower edge, keeping scrolling text readable only below it.
 
 - A picture's masters are `src/assets/wallpaper/<name>-dark.png` and `<name>-light.png`, 16:9;
   `pnpm --filter @intentic/web wallpaper:art` encodes every master into the AVIF rungs under

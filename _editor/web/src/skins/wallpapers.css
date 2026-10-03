@@ -88,22 +88,13 @@
         backdrop-filter: blur(8px);
     }
 
-    /* POPPED-OUT CHAT WINDOW — transparent chat panel so the picture shows behind, card drop on the agent rail,
-       and a frosted floating surface for the pinned prompt instead of the flat opaque card wash. */
+    /* POPPED-OUT CHAT WINDOW — transparent chat panel so the picture shows behind, card drop on the agent rail.
+       The pinned prompt's frosted band and bubble belong to chat.css, beside their non-wallpaper treatment. */
     [data-wallpaper] .chat-floating-root .chat-panel {
         background-color: transparent !important;
     }
     [data-wallpaper] .chat-floating-root .session-card {
         --card-drop: var(--wallpaper-card-drop);
-    }
-    [data-wallpaper] .chat-floating-root .chat-prompt-pinned {
-        background-image: none !important;
-    }
-    [data-wallpaper] .chat-floating-root .chat-prompt-pinned .chat-surface {
-        background-color: color-mix(in srgb, var(--color-card) 90%, transparent) !important;
-        -webkit-backdrop-filter: blur(16px);
-        backdrop-filter: blur(16px);
-        box-shadow: var(--wallpaper-card-drop) !important;
     }
 
     /* WORDS STANDING ON THE PICTURE — lane names, an empty lane's line, the "earlier" fold — carry a halo of the

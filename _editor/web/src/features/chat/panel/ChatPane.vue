@@ -410,11 +410,12 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
             <Icon name="times" class="text-2xs" />
         </button>
         <!-- One scroller for the transcript and the composer under it, so the composer's height is reserved by layout, not measured back into it. -->
+        <!-- The gap below the composer is outside the scroller, so clipping keeps it clear without an opaque strip over the transcript. -->
         <!-- `.chat-scroller` is the IntersectionObserver root each prompt uses to tell if it's pinned. -->
         <div
             ref="scroller"
             class="chat-scroller flex flex-1 flex-col"
-            :class="[bare ? 'overflow-visible' : 'overflow-x-hidden overflow-y-auto', { 'chat-realize': realizing }]"
+            :class="[bare ? 'overflow-visible' : 'overflow-x-hidden overflow-y-auto', { 'chat-realize': realizing, 'mb-3': !strip }]"
         >
             <div ref="content" class="flex min-w-0 flex-1 flex-col">
                 <!-- Bare: the turns are the one part withheld, so no message component mounts and the scroller shrinks to the composer. -->
@@ -430,7 +431,7 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                 <div
                     ref="footer"
                     class="chat-footer sticky bottom-0 z-10 mx-auto flex w-full max-w-[51rem] flex-col gap-2"
-                    :class="strip ? 'chat-footer-strip' : 'px-2 py-3'"
+                    :class="strip ? 'chat-footer-strip' : 'px-2 pt-3'"
                 >
                     <!-- The composer stands whatever this chat can or cannot send with: a box that vanishes reads as the app
                          breaking, and a first-run reader has nowhere to type their task. Having no model is said in a line

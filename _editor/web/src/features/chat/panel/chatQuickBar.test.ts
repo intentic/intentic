@@ -574,6 +574,8 @@ it(`a transcript lifts the withheld turns without moving the composer they arriv
     expect(document.body.textContent).toContain(`an earlier turn`);
     expect(document.querySelector(`.chat-panel`)!.classList.contains(`chat-transcript-lifted`)).toBe(true);
     expect(document.querySelector(`.chat-footer`)!.classList.contains(`chat-footer-strip`)).toBe(true);
+    expect(document.querySelector(`.chat-scroller`)!.classList.contains(`mb-3`)).toBe(false);
+    expect(document.querySelector(`.chat-footer`)!.classList.contains(`pt-3`)).toBe(false);
 });
 
 it(`the same panel drawn anywhere else still has its transcript, and a composer that is not the strip's`, async () => {
@@ -584,4 +586,8 @@ it(`the same panel drawn anywhere else still has its transcript, and a composer 
     expect(document.querySelectorAll(`.chat-turns`)).toHaveLength(1);
     expect(document.body.textContent).toContain(`an earlier turn`);
     expect(document.querySelector(`.chat-footer`)!.classList.contains(`chat-footer-strip`)).toBe(false);
+    // Clearance below the composer is outside the transcript's scrollport, not an opaque mask inside it.
+    expect(document.querySelector(`.chat-scroller`)!.classList.contains(`mb-3`)).toBe(true);
+    expect(document.querySelector(`.chat-footer`)!.classList.contains(`pt-3`)).toBe(true);
+    expect(document.querySelector(`.chat-footer`)!.classList.contains(`py-3`)).toBe(false);
 });
