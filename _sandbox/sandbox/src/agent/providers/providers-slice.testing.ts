@@ -63,6 +63,8 @@ const idleOpenCode = () =>
         // one-shot, an OpenCode turn) runs only in suites that pass their own `openCode`, and Grok's boot warm-up asks
         // for it only once xAI is connected, which it never is here.
         client: async () => ({}) as never,
+        // SAFETY: like client() above, this idle lease is never executed; helper/turn suites supply their own OpenCode.
+        acquire: async () => ({ client: {} as never, release: () => {} }),
         stop: async () => {},
         events: async () => ({ stream: { async *[Symbol.asyncIterator]() {} } }),
         watch: async () => {},

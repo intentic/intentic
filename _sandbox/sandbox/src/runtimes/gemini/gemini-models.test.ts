@@ -36,6 +36,7 @@ test("keeps every model the Google channel vends, Claude and GPT-OSS included", 
     const fake = translator([
         { id: "gemini-pro-agent", owned_by: "antigravity" },
         { id: "claude-opus-4-6-thinking", owned_by: "antigravity" },
+        { id: "claude-opus-5-5-high", owned_by: "antigravity" },
         { id: "gpt-oss-120b-medium", owned_by: "antigravity" },
         { id: "gemini-3.1-flash-image", owned_by: "antigravity" },
         { id: "gpt-5.6-sol", owned_by: "openai" },
@@ -45,6 +46,7 @@ test("keeps every model the Google channel vends, Claude and GPT-OSS included", 
     expect((await discoverGeminiModels("http://127.0.0.1:8788/", "local-bearer", fake)).map((model) => model.id)).toEqual([
         "gemini-pro-agent",
         "claude-opus-4-6-thinking",
+        "claude-opus-5-5-high",
         "gpt-oss-120b-medium",
     ]);
 });

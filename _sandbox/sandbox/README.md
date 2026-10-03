@@ -73,6 +73,13 @@ flowchart LR
   handed the card's settings by the door; `/x/*` refuses a backend's own MCP path, so tools are reached only through
   the door. The contribution inventory is built once and kept until an extension, the enablement file or the
   capability manifest changes (`capabilities/contributions.ts`).
+- OpenCode's Google model registrations are refreshed from the translator's catalog before a turn, including model
+  additions and changed input modalities (`runtimes/opencode/opencode.ts`). A turn holds the shared server through
+  setup and cleanup, including ungated turns and one-shot helpers; Grok device sign-in holds it until approval,
+  cancellation or expiry too. Catalog changes restart only an idle server, after its owned process exits;
+  existing registered models remain usable while busy, and a newly discovered model asks for a retry after active
+  work finishes rather than interrupting it or substituting another model. Failed/empty catalog refreshes retain
+  a working registration, and a stalled catalog read is bounded so it cannot block the shared runtime indefinitely.
 - A process the daemon starts is put in a workload class by whoever starts it (`workload/workload-class.ts`,
   `spawnAs`): its niceness, IO class and rank for the kernel's OOM killer, inherited by everything it forks. Builds
   go first, agent runtimes last, children before their parents. Nothing ranks a process by its command line.

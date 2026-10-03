@@ -282,32 +282,95 @@ export const sessionFamily = (root: string, judge: SessionJudge | undefined, jud
     };
 };
 
-// Production runner: creates/resumes the session on the shared OpenCode client, fires the prompt, and yields the
-// session's events off the global SSE stream. No event for this session within the inactivity window is a stuck turn,
-// aborted; `timeouts` is injectable for tests.
-export const createOpenCodeRunner = (openCode: OpenCodeService, timeouts: TurnTimeouts = DEFAULT_TURN_TIMEOUTS): OpenCodeRunner =>
-    async function* (turn) {
-        const c = await openCode.client();
-        // Subscribes before creating/prompting so session.created and early events aren't missed; scoped to this turn's
-        // directory, since an unscoped stream carries no session events (see subscribeEvents in opencode.ts).
-        const sse = await openCode.events(turn.cwd);
-        // Registers this turn's directory for delegation watching (idempotent); an isolated turn works in a worktree
-        // the boot doesn't know about.
+const abortSession = async (c: OpencodeClient, sessionId: string): Promise<void> => {
+    // allow(silent-catch): a refused abort leaves the session ending on its own events or the watchdog
+    await c.session.abort({ path: { id: sessionId } }).catch(() => {});
+};
+
+// Consumes only this session family's events; the setup/cleanup owner keeps its stream and runtime leased throughout.
+async function* consumeTurn({
+    c,
+    turn,
+    sessionId,
+    read,
+    clock,
+    family,
+    absorbed,
+}: {
+    readonly c: OpencodeClient;
+    readonly turn: OpenCodeTurn;
+    readonly sessionId: string;
+    readonly read: ReturnType<typeof turnReader>;
+    readonly clock: TurnWatchdog;
+    readonly family: ReturnType<typeof sessionFamily>;
+    readonly absorbed: ReturnType<typeof modelSelfHeal>;
+}): AsyncGenerator<OpenCodeTurnEvent> {
+    for (;;) {
+        const event = await read();
+        if (event === EXPIRED) {
+            await abortSession(c, sessionId);
+            throw new Error(`${openCodeBackendLabel(turn.provider ?? XAI)} turn timed out waiting for OpenCode: ${clock.expiry()}.`);
+        }
+        if (event === undefined) {
+            refuseEarlyClose(turn);
+            return;
+        }
+        // A card the judge raised goes out as it came; it is the daemon's own doing, not OpenCode's activity.
+        if (event.type === "intentic.frame") {
+            yield event;
+            continue;
+        }
+        const whose = family.whose(event);
+        if (whose === undefined) {
+            continue;
+        }
+        clock.touch();
+        // A subagent's event never ends, retries or re-prompts the turn; streamTurn puts it under its task.
+        if (whose === "subagent") {
+            yield event;
+            continue;
+        }
+        // Move inactivity past a retry's next attempt, still bounded by the hard turn cap.
+        if (event.type === "session.status" && event.properties.status.type === "retry") {
+            clock.extendPast(event.properties.status.next);
+        }
+        if (await absorbed(event)) {
+            continue;
+        }
+        yield event;
+        if (event.type === "session.idle" || event.type === "session.error") {
+            return;
+        }
+    }
+}
+
+// Runs on a leased client; even setup before the session has a judge belongs to this turn's server lifetime.
+async function* runOpenCodeTurn(
+    openCode: OpenCodeService,
+    c: OpencodeClient,
+    turn: OpenCodeTurn,
+    timeouts: TurnTimeouts,
+): AsyncGenerator<OpenCodeTurnEvent> {
+    // Subscribe/read before creating/prompting so the session's earliest events aren't missed; scoped to this turn's
+    // directory, since an unscoped stream carries no session events.
+    const stopStream = new AbortController();
+    let opened: OpenedStream | undefined;
+    let family: ReturnType<typeof sessionFamily> | undefined;
+    let unmount = async (): Promise<void> => {};
+    try {
+        const sse = await openCode.events(turn.cwd, stopStream.signal);
         await openCode.watch(turn.cwd);
-        const opened = await openStream(sse);
+        opened = await openStream(sse);
         const sessionId = await sessionFor(c, turn);
-        // Registered only once the session id exists: a signal already aborted before this point never fires a listener
-        // added later, so the session would run to completion while the UI shows it stopped.
-        // allow(silent-catch): a stop OpenCode refuses leaves the turn to end on its own events or the watchdog
-        whenAborted(turn.signal, () => void c.session.abort({ path: { id: sessionId } }).catch(() => {}));
-        // Drives the iterator manually so each read can race the watchdog (`for await` can't); closed on exit since it's
-        // per-turn. Inactivity advances only on this session's events; the turn deadline is a hard backstop. Started
-        // before the prompt, since a permission ask can hold it before the session's first event arrives.
+        // whenAborted also handles a signal aborted before the session id existed.
+        whenAborted(turn.signal, () => void abortSession(c, sessionId));
         const clock = turnWatchdog(timeouts);
-        // What the turn's judge raises (a permission card, its resolution), read ahead of the stream's next event.
         const raised = raisedFrames();
-        const read = turnReader(opened, clock, raised);
-        const family = sessionFamily(sessionId, turn.gate === undefined ? undefined : { gate: turn.gate, push: raised.push, hold: clock.hold }, openCode.judges);
+        family = sessionFamily(
+            sessionId,
+            turn.gate === undefined ? undefined : { gate: turn.gate, push: raised.push, hold: clock.hold },
+            openCode.judges,
+        );
         const mounts = turn.mounts ?? openCodeMounts(undefined, []);
         const sendPrompt = (modelId: string | undefined): ReturnType<typeof c.session.promptAsync> =>
             c.session.promptAsync({ path: { id: sessionId }, query: { directory: turn.cwd }, body: promptBodyOf(turn, mounts, modelId) });
@@ -315,64 +378,37 @@ export const createOpenCodeRunner = (openCode: OpenCodeService, timeouts: TurnTi
             await openCode.recordModels(suggestions);
             await sendPrompt(suggestions[0]);
         };
-        // The self-heal is xAI-specific: the rejection wording and the corrected catalog both come from xAI. Gemini's
-        // catalog comes off the translator and needs no rescue.
+        // The self-heal remains xAI-specific. Google must never silently substitute another model.
         const selfHeals = (turn.provider ?? XAI) === XAI;
-        // Replaced by the mount's own release once the servers are up; the finally owes it however the turn ends.
-        let unmount = async (): Promise<void> => {};
+        unmount = await openCode.mount(turn.cwd, mcpServersOf(mounts));
+        const healed = await sendFirst(sendPrompt, turn.model, selfHeals ? heal : undefined);
+        clock.touch();
+        yield* consumeTurn({
+            c,
+            turn,
+            sessionId,
+            read: turnReader(opened, clock, raised),
+            clock,
+            family,
+            absorbed: modelSelfHeal(!selfHeals || healed, heal),
+        });
+    } finally {
+        // The SDK prefetches on a native async generator: return() alone queues behind its pending read forever.
+        stopStream.abort();
+        // allow(silent-catch): closing a stream that already failed has nothing left to report
+        await opened?.iterator.return?.().catch(() => {});
+        family?.release();
+        await unmount();
+    }
+}
+
+export const createOpenCodeRunner = (openCode: OpenCodeService, timeouts: TurnTimeouts = DEFAULT_TURN_TIMEOUTS): OpenCodeRunner =>
+    async function* (turn) {
+        const lease = await openCode.acquire({ providerID: turn.provider ?? XAI, ...opt("modelID", turn.model) });
         try {
-            unmount = await openCode.mount(turn.cwd, mcpServersOf(mounts));
-            const healed = await sendFirst(sendPrompt, turn.model, selfHeals ? heal : undefined);
-            // Silence is counted from the prompt, not from however long the servers took to mount.
-            clock.touch();
-            const absorbed = modelSelfHeal(!selfHeals || healed, heal);
-            for (;;) {
-                const event = await read();
-                if (event === EXPIRED) {
-                    // allow(silent-catch): the turn already ends on the deadline; a session that will not abort changes nothing
-                    await c.session.abort({ path: { id: sessionId } }).catch(() => {});
-                    throw new Error(`${openCodeBackendLabel(turn.provider ?? XAI)} turn timed out waiting for OpenCode: ${clock.expiry()}.`);
-                }
-                if (event === undefined) {
-                    // Stream closed without the turn ending; refuseEarlyClose throws unless this turn's own abort caused
-                    // it.
-                    refuseEarlyClose(turn);
-                    return;
-                }
-                // A card the judge raised goes out as it came; it is the daemon's own doing, not OpenCode's activity.
-                if (event.type === "intentic.frame") {
-                    yield event;
-                    continue;
-                }
-                const whose = family.whose(event);
-                if (whose === undefined) {
-                    continue;
-                }
-                clock.touch();
-                // A subagent's event never ends, retries or re-prompts the turn; streamTurn puts it under its task.
-                if (whose === "subagent") {
-                    yield event;
-                    continue;
-                }
-                // OpenCode announces an in-turn retry wait once, with the instant of the next attempt; the inactivity
-                // deadline moves past that instant so a long backoff isn't read as a hang, still bounded by the hard
-                // turn cap.
-                if (event.type === "session.status" && event.properties.status.type === "retry") {
-                    clock.extendPast(event.properties.status.next);
-                }
-                if (await absorbed(event)) {
-                    continue;
-                }
-                yield event;
-                if (event.type === "session.idle" || event.type === "session.error") {
-                    return;
-                }
-            }
+            yield* runOpenCodeTurn(openCode, lease.client, turn, timeouts);
         } finally {
-            // allow(silent-catch): closing a stream that already failed has nothing left to report
-            await opened.iterator.return?.().catch(() => {});
-            family.release();
-            await unmount();
+            lease.release();
         }
     };
 
@@ -418,7 +454,15 @@ const finishedToolCall = (
     const content = [diff ?? { type: "text" as const, text: failed ? state.error : state.output }];
     const status = failed ? ("failed" as const) : ("completed" as const);
     return first
-        ? toolCallOpened({ id: part.callID, name, status, target: toolTarget(state.input), locations: toolLocations(state.input, cwd), content, parentToolUseId: parent })
+        ? toolCallOpened({
+              id: part.callID,
+              name,
+              status,
+              target: toolTarget(state.input),
+              locations: toolLocations(state.input, cwd),
+              content,
+              parentToolUseId: parent,
+          })
         : { kind: "tool_call_update", id: part.callID, status, content };
 };
 
@@ -445,7 +489,15 @@ const toolPartFrames = (part: ToolPart, view: TurnView, started: Set<string>, pa
     }
     if (state.status === "running") {
         return first
-            ? [toolCallOpened({ id: part.callID, name, target: toolTarget(state.input), locations: toolLocations(state.input, cwd), parentToolUseId: parent })]
+            ? [
+                  toolCallOpened({
+                      id: part.callID,
+                      name,
+                      target: toolTarget(state.input),
+                      locations: toolLocations(state.input, cwd),
+                      parentToolUseId: parent,
+                  }),
+              ]
             : [];
     }
     return [finishedToolCall(part, name, state, cwd, first, parent)];
@@ -469,7 +521,8 @@ const passedThrough = (event: OpenCodeTurnEvent, own: string | undefined, subage
 };
 
 // OpenCode's checklist as the panel's; anything past in-progress and completed reads as still to do.
-const todoStatus = (status: string): "pending" | "in_progress" | "completed" => (status === "in_progress" || status === "completed" ? status : "pending");
+const todoStatus = (status: string): "pending" | "in_progress" | "completed" =>
+    status === "in_progress" || status === "completed" ? status : "pending";
 const todosFrame = (todos: Extract<Event, { type: "todo.updated" }>["properties"]["todos"]): AgentEvent => ({
     kind: "todos",
     items: todos.map((todo) => ({ content: todo.content, status: todoStatus(todo.status) })),
@@ -675,7 +728,8 @@ export const createOpenCodeAgent = (runner: OpenCodeRunner, provider: string = X
             }
         } catch (error) {
             if (!surfacedError) {
-                const message = unreachableServer(error, provider) ?? (error instanceof Error ? error.message : `${openCodeBackendLabel(provider)} agent failed`);
+                const message =
+                    unreachableServer(error, provider) ?? (error instanceof Error ? error.message : `${openCodeBackendLabel(provider)} agent failed`);
                 // A thrown model-not-found (self-heal found no alternatives) gets the same code as the event path, so
                 // the client reloads the catalog and drops the bad pinned model.
                 yield { kind: "error", message, ...(MODEL_INVALID.test(message) ? { code: "grok-model-invalid" as const } : {}) };

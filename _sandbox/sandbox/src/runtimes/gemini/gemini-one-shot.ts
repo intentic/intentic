@@ -32,37 +32,43 @@ export const geminiOneShot = async (services: Pick<Services, "openCode" | "priva
     if (refused !== undefined) {
         throw new Error(refused);
     }
-    const client = await services.openCode.client();
-    const created = await client.session.create({ query: { directory: ask.cwd }, body: { title: HELPER_SESSION_TITLE } });
-    const id = created.data?.id;
-    if (id === undefined) {
-        throw new Error(`the model did not answer (Gemini's runtime opened no session)`);
-    }
-    // Deadline and cancel both abort the session, and must also end the wait; abort alone won't settle it.
-    const deadline = oneShotDeadline(ask.signal, DEADLINE_MS, () => void client.session.abort({ path: { id } }).catch(() => {}));
+    const lease = await services.openCode.acquire({ providerID: OPENCODE_GEMINI_PROVIDER, modelID: ask.model });
     try {
-        const answered = await client.session.prompt({
-            path: { id },
-            query: { directory: ask.cwd },
-            // No effort knob: OpenCode names only (provider, model), and Google's catalog rows publish no effort scale.
-            body: {
-                model: { providerID: OPENCODE_GEMINI_PROVIDER, modelID: ask.model },
-                system: SYSTEM,
-                tools: { ...NO_TOOLS },
-                parts: [{ type: `text`, text: ask.prompt }],
-            },
-        });
-        const text = textOf(answered.data?.parts ?? []);
-        if (text === ``) {
-            // Empty covers every quiet failure alike; only the clock is worth distinguishing.
-            throw deadline.unanswered();
+        const { client } = lease;
+        const created = await client.session.create({ query: { directory: ask.cwd }, body: { title: HELPER_SESSION_TITLE } });
+        const id = created.data?.id;
+        if (id === undefined) {
+            throw new Error(`the model did not answer (Gemini's runtime opened no session)`);
         }
-        return text;
-    } catch (error) {
-        throw deadline.claim(error);
+        // Deadline and cancel both abort the session, and must also end the wait; abort alone won't settle it.
+        const deadline = oneShotDeadline(ask.signal, DEADLINE_MS, () => void client.session.abort({ path: { id } }).catch(() => {}));
+        try {
+            const answered = await client.session.prompt({
+                path: { id },
+                query: { directory: ask.cwd },
+                // No effort knob: OpenCode names only (provider, model), and Google's catalog rows publish no effort scale.
+                body: {
+                    model: { providerID: OPENCODE_GEMINI_PROVIDER, modelID: ask.model },
+                    system: SYSTEM,
+                    tools: { ...NO_TOOLS },
+                    parts: [{ type: `text`, text: ask.prompt }],
+                },
+            });
+            const text = textOf(answered.data?.parts ?? []);
+            if (text === ``) {
+                // Empty covers every quiet failure alike; only the clock is worth distinguishing.
+                throw deadline.unanswered();
+            }
+            return text;
+        } catch (error) {
+            throw deadline.claim(error);
+        } finally {
+            deadline.release();
+            // Same guarantee as persistSession: false on the Claude Code helper, done by hand; OpenCode has no such option.
+            await client.session.delete({ path: { id } }).catch(() => {});
+        }
     } finally {
-        deadline.release();
-        // Same guarantee as persistSession: false on the Claude Code helper, done by hand; OpenCode has no such option.
-        await client.session.delete({ path: { id } }).catch(() => {});
+        // Held through session deletion too, including failures before a session id existed.
+        lease.release();
     }
 };

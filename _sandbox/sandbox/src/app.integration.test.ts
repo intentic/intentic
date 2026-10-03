@@ -8,7 +8,9 @@ import { type AgentEvent, type Capability, isTurnFact, PROVIDER_VENDOR, RAW_ROUT
 
 import { sandboxIdFromToken, sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 
+import { unstubbed } from "@intentic/testing";
 import { SETTLES, waitFor } from "@intentic/testing/bun";
+import type { OpenCodeService } from "./runtimes/opencode/opencode.js";
 
 import { createApp } from "./app.js";
 import { workspacePaths } from "./workspace/workspace.js";
@@ -914,24 +916,15 @@ test("agent.run sends a Grok turn an explicit live-valid model, replacing an inv
         clientFor(
             createApp(
                 services({
-                    openCode: {
-                        client: async () => ({}) as never,
-                        stop: async () => {},
-                        events: async () => ({ stream: { async *[Symbol.asyncIterator]() {} } }),
-                        watch: async () => {},
-
+                    openCode: unstubbed<OpenCodeService>("openCode", {
                         connected: async () => true,
                         sessionExists: async () => true,
                         xaiModels: async () => ({
                             models: [{ id: "grok-4.20-0309-reasoning", label: "grok-4.20-0309-reasoning" }],
                             default: "grok-4.20-0309-reasoning",
                         }),
-                        recordModels: async () => {},
-                        disconnect: async () => {},
-                        mount: async () => async () => {},
-                        judges: { register: () => {}, release: () => {} },
                         shielded: async () => true,
-                    },
+                    }),
                     async *grokAgent(request) {
                         seen.push(request.spec.model);
                         yield { kind: "done" };

@@ -138,7 +138,17 @@ test("a turn maps OpenCode events onto session, thinking, tools, todos, deltas, 
 // Session events as OpenCode sends them, whole, for the tests that read them typed.
 const sessionCreated = (id: string, parentID?: string): Event => ({
     type: "session.created",
-    properties: { info: { id, projectID: "p1", directory: WORKSPACE_ROOT, title: id, version: "1.18.32", time: { created: 0, updated: 0 }, ...opt("parentID", parentID) } },
+    properties: {
+        info: {
+            id,
+            projectID: "p1",
+            directory: WORKSPACE_ROOT,
+            title: id,
+            version: "1.18.32",
+            time: { created: 0, updated: 0 },
+            ...opt("parentID", parentID),
+        },
+    },
 });
 const sessionIdle = (sessionID: string): Event => ({ type: "session.idle", properties: { sessionID } });
 const sessionBusy = (sessionID: string): Event => ({ type: "session.status", properties: { sessionID, status: { type: "busy" } } });
@@ -161,14 +171,28 @@ test("a task's subagent runs under its card: its session's calls, prose and spen
         { type: "message.updated", properties: { info: { id: "cm0", sessionID: "child-1", role: "user", time: { created: 0 } } } },
         child({ type: "text", id: "ct0", messageID: "cm0", text: "Find every read of users." }),
         task({ status: "running", input, title: "Map the reads", metadata: { sessionId: "child-1", parentSessionId: "s1" }, time: { start: 0 } }),
-        child({ type: "tool", id: "ctp", messageID: "cm1", callID: "cc1", tool: "grep", state: { status: "running", input: { pattern: "from(users)" }, time: { start: 0 } } }),
         child({
             type: "tool",
             id: "ctp",
             messageID: "cm1",
             callID: "cc1",
             tool: "grep",
-            state: { status: "completed", input: { pattern: "from(users)" }, output: "api/a.ts:3", title: "grep", metadata: {}, time: { start: 0, end: 1 } },
+            state: { status: "running", input: { pattern: "from(users)" }, time: { start: 0 } },
+        }),
+        child({
+            type: "tool",
+            id: "ctp",
+            messageID: "cm1",
+            callID: "cc1",
+            tool: "grep",
+            state: {
+                status: "completed",
+                input: { pattern: "from(users)" },
+                output: "api/a.ts:3",
+                title: "grep",
+                metadata: {},
+                time: { start: 0, end: 1 },
+            },
         }),
         {
             type: "message.updated",
@@ -243,7 +267,10 @@ test("a turn's session family takes in its subagents' sessions, gates them as it
     const judge: SessionJudge = { gate: unstubbed<CommandGuard>("gate", {}), push: () => {}, hold: () => () => {} };
     const registered: string[] = [];
     const released: string[] = [];
-    const family = sessionFamily("s1", judge, { register: (session) => void registered.push(session), release: (session) => void released.push(session) });
+    const family = sessionFamily("s1", judge, {
+        register: (session) => void registered.push(session),
+        release: (session) => void released.push(session),
+    });
 
     expect([family.whose(sessionIdle("s1")), family.whose(sessionCreated("child-1", "s1")), family.whose(sessionIdle("child-1"))]).toEqual([
         "own",
@@ -576,62 +603,53 @@ const fakeOpenCode = (
     closes = false,
 ): {
     openCode: OpenCodeService;
+    client: Awaited<ReturnType<OpenCodeService["client"]>>;
+    leases: { selections: Parameters<OpenCodeService["acquire"]>[0][]; active: number; released: number };
+    streamReturned: () => boolean;
     aborted: () => boolean;
     recorded: string[][];
     prompts: (string | undefined)[];
     systems: (string | undefined)[];
-    // The `tools` map each message carried: which MCP servers its session was shown.
     shown: (Record<string, boolean> | undefined)[];
-    // Directories the turn subscribed and registered a watcher for; asserted because a mis-scoped subscription fails
-    // silently.
     scopes: { subscribed: string[]; watched: string[] };
-    // "read" / "create", in the order they happened.
     order: string[];
-    // What the turn mounted, where, and whether it let go; "mount" and "unmount" also land in `order`.
     mounted: { directory: string; servers: readonly OpenCodeMcpServer[] }[];
-    // Who judges each session's asks while the turn runs, as the turn registered them.
     judges: Map<string, SessionJudge>;
 } => {
     let aborted = false;
-    let releaseHang: (() => void) | undefined;
-    // Model ids each promptAsync fired with (self-heal path).
+    let returned = false;
+    const selections: Parameters<OpenCodeService["acquire"]>[0][] = [];
+    const leases = { selections, active: 0, released: 0 };
     const prompts: (string | undefined)[] = [];
-    // System instructions each message carried, proving `instructions: "append"` isn't dropped.
     const systems: (string | undefined)[] = [];
     const shown: (Record<string, boolean> | undefined)[] = [];
     const recorded: string[][] = [];
     // Mimics the real stream's opening `server.connected`, which the runner awaits before creating a session.
     const withHello: Event[] = [{ type: "server.connected", properties: {} } as unknown as Event, ...events];
+    let streamSignal: AbortSignal | undefined;
     const stream = {
-        [Symbol.asyncIterator]() {
-            let i = 0;
-            let closed = false;
-            return {
-                next(): Promise<IteratorResult<Event>> {
-                    if (order[0] === undefined) {
-                        order.push("read");
-                    }
-                    if (closed) {
-                        return Promise.resolve({ done: true, value: undefined as never });
-                    }
-                    if (i < withHello.length) {
-                        return Promise.resolve({ done: false, value: withHello[i++]! });
-                    }
-                    if (closes) {
-                        return Promise.resolve({ done: true, value: undefined as never });
-                    }
-                    return new Promise<IteratorResult<Event>>((resolve) => {
-                        releaseHang = () => resolve({ done: true, value: undefined as never });
+        // Like the pinned SDK, return() cannot wake a prefetched next() on this native generator; only abort can.
+        async *[Symbol.asyncIterator]() {
+            if (order[0] === undefined) {
+                order.push("read");
+            }
+            try {
+                yield* withHello;
+                if (!closes) {
+                    await new Promise<void>((resolve) => {
+                        if (streamSignal?.aborted === true) {
+                            resolve();
+                        } else {
+                            streamSignal?.addEventListener("abort", () => resolve(), { once: true });
+                        }
                     });
-                },
-                return(): Promise<IteratorResult<Event>> {
-                    closed = true;
-                    releaseHang?.();
-                    return Promise.resolve({ done: true, value: undefined as never });
-                },
-            };
+                }
+            } finally {
+                returned = true;
+            }
         },
     };
+    // SAFETY: the runner uses only this SDK client's session methods; the fake returns every response field it reads.
     const client = {
         event: { subscribe: async () => ({ stream }) },
         session: {
@@ -644,8 +662,6 @@ const fakeOpenCode = (
                 prompts.push(modelID);
                 systems.push(options.body?.system);
                 shown.push(options.body?.tools);
-                // Mimics xAI rejecting an unknown model id via a thrown error rather than a session.error event
-                // (initial-send path).
                 if (rejectModel !== undefined && modelID === rejectModel.id) {
                     throw new Error(rejectModel.message);
                 }
@@ -656,34 +672,161 @@ const fakeOpenCode = (
                 return {};
             },
         },
-    };
+    } as unknown as Awaited<ReturnType<OpenCodeService["client"]>>;
     const scopes = { subscribed: [] as string[], watched: [] as string[] };
-    // subscribe() opens the stream only on first read; reading after session creation misses `session.created`.
     const order: string[] = [];
     const mounted: { directory: string; servers: readonly OpenCodeMcpServer[] }[] = [];
     const judges = new Map<string, SessionJudge>();
-    const openCode = {
+    const openCode = unstubbed<OpenCodeService>("openCode", {
         client: async () => client,
-        events: async (directory: string) => {
+        acquire: async (model) => {
+            leases.selections.push(model);
+            leases.active += 1;
+            return {
+                client,
+                release: () => {
+                    leases.released += 1;
+                    leases.active -= 1;
+                },
+            };
+        },
+        events: async (directory, signal) => {
             scopes.subscribed.push(directory);
+            streamSignal = signal;
             return { stream };
         },
-        watch: async (directory: string) => void scopes.watched.push(directory),
-        recordModels: async (ids: string[]) => void recorded.push(ids),
-        mount: async (directory: string, servers: readonly OpenCodeMcpServer[]) => {
+        watch: async (directory) => void scopes.watched.push(directory),
+        recordModels: async (ids) => void recorded.push(ids),
+        mount: async (directory, servers) => {
             order.push("mount");
             mounted.push({ directory, servers });
             return async () => void order.push("unmount");
         },
         judges: {
-            register: (session: string, judge: SessionJudge) => void judges.set(session, judge),
-            release: (session: string) => void judges.delete(session),
+            register: (session, judge) => void judges.set(session, judge),
+            release: (session) => void judges.delete(session),
         },
+    });
+    return {
+        openCode,
+        client,
+        leases,
+        streamReturned: () => returned,
+        aborted: () => aborted,
+        recorded,
+        prompts,
+        systems,
+        shown,
+        scopes,
+        order,
+        mounted,
+        judges,
     };
-    return { openCode: openCode as unknown as OpenCodeService, aborted: () => aborted, recorded, prompts, systems, shown, scopes, order, mounted, judges };
 };
 
 const runnerTurn: OpenCodeTurn = { prompt: "hi", cwd: WORKSPACE_ROOT, agent: "build", signal: new AbortController().signal };
+
+test("an ungated Google turn leases its exact requested model and releases it on completion", async () => {
+    const { openCode, leases, prompts } = fakeOpenCode([sessionCreated("s1"), sessionIdle("s1")]);
+    for await (const event of createOpenCodeRunner(openCode)({ ...runnerTurn, provider: "intentic-gemini", model: "claude-opus-5-5-high" })) {
+        expect(leases.active).toBe(1);
+        void event;
+    }
+    expect(leases.selections).toEqual([{ providerID: "intentic-gemini", modelID: "claude-opus-5-5-high" }]);
+    expect(prompts).toEqual(["claude-opus-5-5-high"]);
+    expect(leases.active).toBe(0);
+    expect(leases.released).toBe(1);
+});
+
+test.each(["events", "watch", "session"])("a setup failure before a judge exists releases the runtime: %s", async (stage) => {
+    const fake = fakeOpenCode([]);
+    const fail = async (): Promise<never> => {
+        throw new Error("setup failed");
+    };
+    const openCode = {
+        ...fake.openCode,
+        events: stage === "events" ? fail : fake.openCode.events,
+        watch: stage === "watch" ? fail : fake.openCode.watch,
+    };
+    if (stage === "session") {
+        fake.client.session.create = fail;
+    }
+    const turn = createOpenCodeRunner(openCode)(runnerTurn)[Symbol.asyncIterator]();
+    await expect(turn.next()).rejects.toThrow("setup failed");
+    expect(fake.leases.active).toBe(0);
+    expect(fake.leases.released).toBe(1);
+    expect(fake.judges.size).toBe(0);
+    if (stage === "session") {
+        expect(fake.streamReturned()).toBe(true);
+    }
+});
+
+test("closing the consumer cancels a silent native SSE read before releasing the runtime", async () => {
+    const fake = fakeOpenCode([sessionCreated("s1")]);
+    const turn = createOpenCodeRunner(fake.openCode)(runnerTurn)[Symbol.asyncIterator]();
+    expect(await turn.next()).toEqual({ done: false, value: sessionCreated("s1") });
+    expect(fake.leases.active).toBe(1);
+    expect(fake.streamReturned()).toBe(false);
+    expect(await turn.return?.()).toEqual({ done: true, value: undefined });
+    expect(fake.streamReturned()).toBe(true);
+    expect(fake.order).toEqual(["read", "create", "mount", "unmount"]);
+    expect(fake.leases.active).toBe(0);
+    expect(fake.leases.released).toBe(1);
+});
+
+test("a resumed session also acquires a runtime lease without creating a replacement session", async () => {
+    const fake = fakeOpenCode([sessionIdle("s1")]);
+    for await (const event of createOpenCodeRunner(fake.openCode)({ ...runnerTurn, sessionId: "s1", model: "grok-4" })) {
+        void event;
+    }
+    expect(fake.order).toEqual(["read", "mount", "unmount"]);
+    expect(fake.leases.selections).toEqual([{ providerID: "xai", modelID: "grok-4" }]);
+    expect(fake.leases.released).toBe(1);
+});
+
+test("the runtime stays leased until MCP cleanup completes", async () => {
+    const fake = fakeOpenCode([sessionIdle("s1")]);
+    const entered = Promise.withResolvers<void>();
+    const cleanup = Promise.withResolvers<void>();
+    const openCode = {
+        ...fake.openCode,
+        mount: async () => async () => {
+            entered.resolve();
+            await cleanup.promise;
+        },
+    };
+    const drain = async (): Promise<void> => {
+        for await (const event of createOpenCodeRunner(openCode)(runnerTurn)) {
+            void event;
+        }
+    };
+    const finished = drain();
+    await entered.promise;
+    expect(fake.leases.active).toBe(1);
+    expect(fake.leases.released).toBe(0);
+    cleanup.resolve();
+    await finished;
+    expect(fake.leases.active).toBe(0);
+    expect(fake.leases.released).toBe(1);
+});
+
+test("a cleanup failure still releases the runtime lease", async () => {
+    const fake = fakeOpenCode([sessionIdle("s1")]);
+    const openCode = {
+        ...fake.openCode,
+        mount: async () => async () => {
+            throw new Error("cleanup failed");
+        },
+    };
+    const drain = async (): Promise<void> => {
+        for await (const event of createOpenCodeRunner(openCode)(runnerTurn)) {
+            void event;
+        }
+    };
+    await expect(drain()).rejects.toThrow("cleanup failed");
+    expect(fake.leases.active).toBe(0);
+    expect(fake.leases.released).toBe(1);
+});
 
 // An unscoped subscription still connects and heartbeats but carries no session events, so this is asserted on the
 // call, not on the emitted frames.
@@ -724,7 +867,7 @@ test("a stalled turn is reported against the backend the user actually picked", 
         (async () => {
             for await (const event of createOpenCodeRunner(fakeOpenCode([]).openCode, { ...DEFAULT_TURN_TIMEOUTS, inactivityMs: 20 })({
                 ...runnerTurn,
-                ...(provider !== undefined ? { provider } : {}),
+                ...opt("provider", provider),
             })) {
                 void event;
             }
@@ -806,7 +949,7 @@ test("createOpenCodeRunner ends the turn on session.error even while the stream 
 });
 
 test("createOpenCodeRunner aborts and throws when no event arrives within the inactivity window", async () => {
-    const { openCode, aborted } = fakeOpenCode([{ type: "session.created", properties: { info: { id: "s1" } } } as unknown as Event]);
+    const { openCode, aborted, leases } = fakeOpenCode([{ type: "session.created", properties: { info: { id: "s1" } } } as unknown as Event]);
     const drain = async (): Promise<void> => {
         for await (const event of createOpenCodeRunner(openCode, { ...DEFAULT_TURN_TIMEOUTS, inactivityMs: 20 })(runnerTurn)) {
             void event;
@@ -814,12 +957,14 @@ test("createOpenCodeRunner aborts and throws when no event arrives within the in
     };
     await expect(drain()).rejects.toThrow(/timed out/);
     expect(aborted()).toBe(true);
+    expect(leases.active).toBe(0);
+    expect(leases.released).toBe(1);
 });
 
 // A Stop before the session exists reaches an already-aborted signal, which a fresh listener never fires on; asserted
 // on the call since the turn ends the same way either way.
 test("a turn stopped before its session existed still tells OpenCode to abort it", async () => {
-    const { openCode, aborted } = fakeOpenCode([
+    const { openCode, aborted, leases } = fakeOpenCode([
         { type: "session.created", properties: { info: { id: "s1" } } } as unknown as Event,
         { type: "session.idle", properties: { sessionID: "s1" } } as unknown as Event,
     ]);
@@ -831,10 +976,12 @@ test("a turn stopped before its session existed still tells OpenCode to abort it
     }
 
     expect(aborted()).toBe(true);
+    expect(leases.active).toBe(0);
+    expect(leases.released).toBe(1);
 });
 
 test("a retry's announced next attempt pushes the inactivity deadline past it", async () => {
-    const { openCode, aborted } = fakeOpenCode([
+    const { openCode, aborted, leases } = fakeOpenCode([
         { type: "session.created", properties: { info: { id: "s1" } } } as unknown as Event,
         {
             type: "session.status",
@@ -854,6 +1001,8 @@ test("a retry's announced next attempt pushes the inactivity deadline past it", 
     ).rejects.toThrow(/timed out/);
     expect(Date.now() - startedAt).toBeGreaterThanOrEqual(150);
     expect(aborted()).toBe(true);
+    expect(leases.active).toBe(0);
+    expect(leases.released).toBe(1);
     expect(seen).toEqual(["session.created", "session.status"]);
 });
 
@@ -1053,7 +1202,13 @@ test("a turn whose prompt is refused still lets go of its servers and its sessio
 test("a card the turn's judge raises goes out in order, and the turn waits on it past the silence window", async () => {
     const { openCode, judges } = fakeOpenCode([sessionCreated("s1")]);
     const gate = unstubbed<CommandGuard>("gate", { enforcing: true });
-    const card: AgentEvent = { kind: "permission", requestId: "card-1", toolName: "Bash", title: "This command would push to main", displayName: "Run command" };
+    const card: AgentEvent = {
+        kind: "permission",
+        requestId: "card-1",
+        toolName: "Bash",
+        title: "This command would push to main",
+        displayName: "Run command",
+    };
     const answer: AgentEvent = { kind: "resolved", requestId: "card-1" };
     const turn = createOpenCodeRunner(openCode, { ...DEFAULT_TURN_TIMEOUTS, inactivityMs: 50 })({ ...runnerTurn, gate })[Symbol.asyncIterator]();
 
@@ -1079,7 +1234,13 @@ test("a card the turn's judge raises goes out in order, and the turn waits on it
 });
 
 test("a card raised mid-turn reaches the chat in order with the session's own frames", async () => {
-    const card: AgentEvent = { kind: "permission", requestId: "card-2", toolName: "Bash", title: "This command would push to main", displayName: "Run command" };
+    const card: AgentEvent = {
+        kind: "permission",
+        requestId: "card-2",
+        toolName: "Bash",
+        title: "This command would push to main",
+        displayName: "Run command",
+    };
     const { runner } = fakeRunner([
         sessionCreated("s1"),
         { type: "intentic.frame", frame: card },
@@ -1123,7 +1284,11 @@ test("an OpenCode turn mounts the turn's remote servers, and a call to one reads
         sessionIdle("s1"),
     ]);
 
-    const events = await collect(createOpenCodeAgent(runner), { ...request, spec: { ...request.spec, conversationId: "chat-1" }, tools: { remote: [web] } });
+    const events = await collect(createOpenCodeAgent(runner), {
+        ...request,
+        spec: { ...request.spec, conversationId: "chat-1" },
+        tools: { remote: [web] },
+    });
 
     expect(calls.map((call) => call.mounts)).toEqual([mounts]);
     expect(events.find((event) => event.kind === "tool_call")).toMatchObject({ id: "c1", name: "Browser navigate" });

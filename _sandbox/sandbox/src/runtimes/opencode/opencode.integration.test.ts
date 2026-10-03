@@ -9,7 +9,9 @@ import { SEED_XAI_MODELS } from "./xai-models.js";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import type { CommandGuard } from "../../guard/command-guard.js";
-import { createOpenCodeService, geminiProviderConfig, type SessionJudge } from "./opencode.js";
+import { createOpencodeServer, type Config as OpenCodeConfig } from "@opencode-ai/sdk";
+import { OPENCODE_GEMINI_PROVIDER } from "../gemini/gemini-models.js";
+import { createOpenCodeService, geminiProviderConfig, type OpenCodeGeminiConfig, type OpenCodeService, type SessionJudge } from "./opencode.js";
 import { mcpServersOf, openCodeMounts } from "./opencode-mcp.js";
 import { parkedCards } from "../../conversations/actor/parked-cards.js";
 import { memoryFleet } from "../../testing.js";
@@ -19,7 +21,10 @@ const cards = parkedCards(memoryFleet().conversations);
 
 // Captures server-spawn options instead of booting a real `opencode serve`; the client doubles also feed an event
 // stream and record every permission answered, on whichever route answered it, and every MCP server mounted.
-const serverSpawns = [] as { config?: unknown }[];
+const serverSpawns: { config?: OpenCodeConfig }[] = [];
+const serverCloses: number[] = [];
+const subscriptionSignals: (AbortSignal | null | undefined)[] = [];
+const liveServices: OpenCodeService[] = [];
 // The per-session route an older ask is answered on, which carries no reason.
 const legacyReplies: { sessionID: string; permissionID: string; directory: string | undefined; response: string | undefined }[] = [];
 // The current route, whose refusal carries the reason back to the model.
@@ -32,14 +37,20 @@ const streamEvents = [] as unknown[];
 // Every event subscription asked for, by directory; `refused` makes each one fail the way a dead server's does.
 const subscriptions = { refused: false, asked: [] as (string | undefined)[] };
 jest.mock("@opencode-ai/sdk", () => ({
-    createOpencodeServer: async (options: { config?: unknown }) => {
-        serverSpawns.push(options);
-        return { url: "http://127.0.0.1:0", close: (): void => {} };
+    createOpencodeServer: async (options: { config?: OpenCodeConfig }) => {
+        const index = serverSpawns.push(options) - 1;
+        return {
+            url: "http://127.0.0.1:0",
+            close: (): void => {
+                serverCloses.push(index);
+            },
+        };
     },
     createOpencodeClient: () => ({
         event: {
-            subscribe: async (options?: { query?: { directory?: string } }) => {
+            subscribe: async (options?: { query?: { directory?: string }; signal?: AbortSignal | null }) => {
                 subscriptions.asked.push(options?.query?.directory);
+                subscriptionSignals.push(options?.signal);
                 if (subscriptions.refused) {
                     throw new Error("connect ECONNREFUSED");
                 }
@@ -47,9 +58,14 @@ jest.mock("@opencode-ai/sdk", () => ({
                     stream: {
                         async *[Symbol.asyncIterator]() {
                             yield* streamEvents;
-                            // Stays open like the real subscription; ending it would send the watcher round its retry
-                            // ladder mid-assertion.
-                            await new Promise(() => {});
+                            // Stays open until this boot is stopped, as the real SDK's signal-aware stream does.
+                            await new Promise<void>((resolve) => {
+                                if (options?.signal?.aborted === true) {
+                                    resolve();
+                                    return;
+                                }
+                                options?.signal?.addEventListener("abort", () => resolve(), { once: true });
+                            });
                         },
                     },
                 };
@@ -121,6 +137,9 @@ const forbiddenFetch = (() => {
 const SEED_CATALOG = { models: SEED_XAI_MODELS.map((id) => ({ id, label: humanizeModelId(id) })), default: SEED_XAI_MODELS[0]! };
 
 afterEach(async () => {
+    await Promise.all(liveServices.splice(0).map((service) => service.stop()));
+    serverCloses.length = 0;
+    subscriptionSignals.length = 0;
     await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
     // The three doubles are module-level; reset so one test's stream/permissions don't leak into the next.
     streamEvents.length = 0;
@@ -600,4 +619,328 @@ test("the Google provider declares each model's published modalities, so a scree
 test("no Google models means no Google provider at all, rather than one registered serving nothing", () => {
     expect(geminiProviderConfig({ baseUrl: "http://127.0.0.1:8789", token: "local", models: async () => [] }, [])).toEqual({});
     expect(geminiProviderConfig(undefined, [{ id: "gemini-pro-agent", inputModalities: ["text", "image"] }])).toEqual({});
+});
+
+const OLD_GOOGLE_MODEL = { id: "claude-opus-4-6-thinking", inputModalities: ["text", "image"] as const };
+const NEW_GOOGLE_MODEL = { id: "claude-opus-5-5-high", inputModalities: ["text", "image"] as const };
+const OLD_SELECTION = { providerID: OPENCODE_GEMINI_PROVIDER, modelID: OLD_GOOGLE_MODEL.id };
+const NEW_SELECTION = { providerID: OPENCODE_GEMINI_PROVIDER, modelID: NEW_GOOGLE_MODEL.id };
+
+// The real service with the same SDK doubles as the lifecycle tests above; only its read-through catalog changes.
+const googleRuntime = async (options: Omit<NonNullable<Parameters<typeof createOpenCodeService>[1]>, "gemini"> = {}) => {
+    const models = jest.fn<OpenCodeGeminiConfig["models"]>().mockResolvedValue([OLD_GOOGLE_MODEL]);
+    const service = createOpenCodeService(await scratch(), {
+        fetchImpl: forbiddenFetch,
+        ...options,
+        gemini: { baseUrl: "http://127.0.0.1:8789", token: "local", models },
+    });
+    liveServices.push(service);
+    return { service, models };
+};
+const registeredGoogleModels = () => serverSpawns.at(-1)?.config?.provider?.[OPENCODE_GEMINI_PROVIDER]?.models;
+
+test("a stalled Google refresh times out without blocking warm Grok or poisoning the acquisition queue", async () => {
+    const { service, models } = await googleRuntime();
+    const previous = await service.client();
+    const entered = Promise.withResolvers<void>();
+    const stalled = Promise.withResolvers<Awaited<ReturnType<OpenCodeGeminiConfig["models"]>>>();
+    models.mockImplementationOnce(() => {
+        entered.resolve();
+        return stalled.promise;
+    });
+    jest.useFakeTimers();
+    const grok = service.acquire({ providerID: "xai", modelID: "grok-4" });
+    const google = service.acquire(OLD_SELECTION);
+    await entered.promise;
+    await advanceTimersByTimeAsync(5_000);
+    const first = await grok;
+    const second = await google;
+    expect(first.client).toBe(previous);
+    expect(second.client).toBe(previous);
+    expect(serverSpawns).toHaveLength(1);
+    expect(serverCloses).toEqual([]);
+    // A late answer must not mutate the running registration behind already-acquired turns.
+    stalled.resolve([OLD_GOOGLE_MODEL, NEW_GOOGLE_MODEL]);
+    await stalled.promise;
+    expect(serverSpawns).toHaveLength(1);
+    expect(serverCloses).toEqual([]);
+    expect(registeredGoogleModels()).toEqual({
+        [OLD_GOOGLE_MODEL.id]: { attachment: true, modalities: { input: ["text", "image"], output: ["text"] } },
+    });
+    first.release();
+    second.release();
+    jest.useRealTimers();
+    models.mockResolvedValue([OLD_GOOGLE_MODEL, NEW_GOOGLE_MODEL]);
+    const retry = await service.acquire(NEW_SELECTION);
+    expect(serverSpawns).toHaveLength(2);
+    expect(registeredGoogleModels()).toHaveProperty(NEW_GOOGLE_MODEL.id);
+    retry.release();
+});
+
+test("turn stream cancellation is passed to the SDK without cancelling its directory's permission watcher", async () => {
+    const { service } = await googleRuntime();
+    await service.watch(WORKSPACE_ROOT);
+    const watcher = subscriptionSignals.at(-1);
+    const controller = new AbortController();
+    await service.events(WORKSPACE_ROOT, controller.signal);
+    expect(subscriptionSignals.at(-1)).toBe(controller.signal);
+    controller.abort();
+    expect(watcher?.aborted).toBe(false);
+});
+
+test("an already-warm server registers newly discovered Opus before its next turn, preserving privacy routing", async () => {
+    const { service, models } = await googleRuntime({ route: async (provider) => `http://127.0.0.1:9000/${provider}` });
+    await service.recordModels(["grok-4-latest"]);
+    const previous = await service.client();
+    expect(registeredGoogleModels()).not.toHaveProperty(NEW_GOOGLE_MODEL.id);
+    models.mockClear();
+    // A second discovery would be stale again: boot must register the exact snapshot acquisition compared.
+    models.mockResolvedValueOnce([OLD_GOOGLE_MODEL, NEW_GOOGLE_MODEL]);
+    const lease = await service.acquire(NEW_SELECTION);
+    expect(lease.client).not.toBe(previous);
+    expect(serverSpawns).toHaveLength(2);
+    expect(serverCloses).toEqual([0]);
+    expect(models).toHaveBeenCalledTimes(1);
+    expect(registeredGoogleModels()).toEqual({
+        [OLD_GOOGLE_MODEL.id]: { attachment: true, modalities: { input: ["text", "image"], output: ["text"] } },
+        [NEW_GOOGLE_MODEL.id]: { attachment: true, modalities: { input: ["text", "image"], output: ["text"] } },
+    });
+    expect(serverSpawns.at(-1)?.config).toMatchObject({
+        share: "disabled",
+        provider: {
+            xai: { options: { baseURL: "http://127.0.0.1:9000/grok" }, models: { "grok-4-latest": { options: { store: false } } } },
+            [OPENCODE_GEMINI_PROVIDER]: { options: { baseURL: "http://127.0.0.1:9000/gemini/v1", apiKey: "local" } },
+        },
+    });
+    lease.release();
+});
+
+test("a modality-only catalog change refreshes the model's runtime capabilities", async () => {
+    const { service, models } = await googleRuntime();
+    const previous = await service.client();
+    models.mockResolvedValue([{ id: OLD_GOOGLE_MODEL.id, inputModalities: ["text"] }]);
+    const lease = await service.acquire(OLD_SELECTION);
+    expect(lease.client).not.toBe(previous);
+    expect(serverSpawns).toHaveLength(2);
+    expect(registeredGoogleModels()).toEqual({
+        [OLD_GOOGLE_MODEL.id]: { attachment: false, modalities: { input: ["text"], output: ["text"] } },
+    });
+    lease.release();
+});
+
+test("identical catalogs and reordered models/modalities reuse the existing server", async () => {
+    const { service, models } = await googleRuntime();
+    models.mockResolvedValue([OLD_GOOGLE_MODEL, NEW_GOOGLE_MODEL]);
+    const previous = await service.client();
+    const identical = await service.acquire(NEW_SELECTION);
+    identical.release();
+    models.mockResolvedValue([
+        { id: NEW_GOOGLE_MODEL.id, inputModalities: ["image", "text"] },
+        { id: OLD_GOOGLE_MODEL.id, inputModalities: ["image", "text"] },
+    ]);
+    const reordered = await service.acquire(NEW_SELECTION);
+    expect(identical.client).toBe(previous);
+    expect(reordered.client).toBe(previous);
+    expect(serverSpawns).toHaveLength(1);
+    expect(serverCloses).toEqual([]);
+    reordered.release();
+});
+
+test.each(["rejected", "empty"])("a %s catalog refresh retains a working registration and retries later", async (failure) => {
+    const { service, models } = await googleRuntime();
+    const previous = await service.client();
+    if (failure === "rejected") {
+        models.mockRejectedValueOnce(new Error("translator unavailable"));
+    } else {
+        models.mockResolvedValueOnce([]);
+    }
+    const unchanged = await service.acquire(OLD_SELECTION);
+    expect(unchanged.client).toBe(previous);
+    expect(serverSpawns).toHaveLength(1);
+    expect(serverCloses).toEqual([]);
+    expect(registeredGoogleModels()).toHaveProperty(OLD_GOOGLE_MODEL.id);
+    unchanged.release();
+    models.mockResolvedValue([OLD_GOOGLE_MODEL, NEW_GOOGLE_MODEL]);
+    const recovered = await service.acquire(NEW_SELECTION);
+    expect(serverSpawns).toHaveLength(2);
+    expect(registeredGoogleModels()).toHaveProperty(NEW_GOOGLE_MODEL.id);
+    recovered.release();
+});
+
+test.each(["rejected", "empty"])("an initially %s Google registration recovers without losing the Grok runtime", async (failure) => {
+    const { service, models } = await googleRuntime();
+    if (failure === "rejected") {
+        models.mockRejectedValueOnce(new Error("translator unavailable"));
+    } else {
+        models.mockResolvedValueOnce([]);
+    }
+    await service.client();
+    expect(serverSpawns.at(-1)?.config?.provider).not.toHaveProperty(OPENCODE_GEMINI_PROVIDER);
+    models.mockResolvedValue([OLD_GOOGLE_MODEL, NEW_GOOGLE_MODEL]);
+    const lease = await service.acquire(NEW_SELECTION);
+    expect(serverSpawns).toHaveLength(2);
+    expect(registeredGoogleModels()).toHaveProperty(NEW_GOOGLE_MODEL.id);
+    lease.release();
+});
+
+test.each([OPENCODE_GEMINI_PROVIDER, "xai"])("active %s leases protect ungated turns and helpers; only new models wait", async (providerID) => {
+    const { service, models } = await googleRuntime();
+    const first = await service.acquire({ providerID, modelID: providerID === "xai" ? "grok-4" : OLD_GOOGLE_MODEL.id });
+    models.mockResolvedValue([OLD_GOOGLE_MODEL, NEW_GOOGLE_MODEL]);
+    const existing = await service.acquire(OLD_SELECTION);
+    expect(existing.client).toBe(first.client);
+    await expect(service.acquire(NEW_SELECTION)).rejects.toThrow(/running other turns.*once they finish.*claude-opus-5-5-high/);
+    expect(serverSpawns).toHaveLength(1);
+    expect(serverCloses).toEqual([]);
+    first.release();
+    // The other turn still owns it, even after the turn that held it first has finished.
+    await expect(service.acquire(NEW_SELECTION)).rejects.toThrow(/once they finish/);
+    existing.release();
+    const next = await service.acquire(NEW_SELECTION);
+    expect(serverSpawns).toHaveLength(2);
+    expect(next.client).not.toBe(first.client);
+    next.release();
+});
+
+test("concurrent acquisitions refresh once, and releasing twice cannot make another turn look idle", async () => {
+    const { service, models } = await googleRuntime();
+    await service.client();
+    models.mockResolvedValue([OLD_GOOGLE_MODEL, NEW_GOOGLE_MODEL]);
+    const [first, second] = await Promise.all([service.acquire(NEW_SELECTION), service.acquire(NEW_SELECTION)]);
+    expect(serverSpawns).toHaveLength(2);
+    expect(serverCloses).toEqual([0]);
+    expect(first.client).toBe(second.client);
+    first.release();
+    first.release();
+    const third = { id: "gemini-next", inputModalities: ["text", "image"] as const };
+    models.mockResolvedValue([OLD_GOOGLE_MODEL, NEW_GOOGLE_MODEL, third]);
+    const selection = { providerID: OPENCODE_GEMINI_PROVIDER, modelID: third.id };
+    await expect(service.acquire(selection)).rejects.toThrow(/once they finish/);
+    second.release();
+    const next = await service.acquire(selection);
+    expect(serverSpawns).toHaveLength(3);
+    expect(registeredGoogleModels()).toHaveProperty(third.id);
+    next.release();
+});
+
+test("a failed boot neither poisons queued acquisitions nor leaks an active lease", async () => {
+    const spawnServer = jest.fn<typeof createOpencodeServer>().mockImplementation(createOpencodeServer);
+    spawnServer.mockRejectedValueOnce(new Error("boot failed"));
+    const { service, models } = await googleRuntime({ spawnServer });
+    const failed = service.acquire(OLD_SELECTION);
+    const waiting = service.acquire(OLD_SELECTION);
+    await expect(failed).rejects.toThrow("boot failed");
+    const lease = await waiting;
+    expect(spawnServer).toHaveBeenCalledTimes(2);
+    lease.release();
+    models.mockResolvedValue([OLD_GOOGLE_MODEL, NEW_GOOGLE_MODEL]);
+    const next = await service.acquire(NEW_SELECTION);
+    expect(spawnServer).toHaveBeenCalledTimes(3);
+    expect(serverCloses).toEqual([0]);
+    expect(registeredGoogleModels()).toHaveProperty(NEW_GOOGLE_MODEL.id);
+    next.release();
+});
+
+test("a failed refresh boot is retried on the next acquisition", async () => {
+    const spawnServer = jest.fn<typeof createOpencodeServer>().mockImplementation(createOpencodeServer);
+    const { service, models } = await googleRuntime({ spawnServer });
+    await service.client();
+    models.mockResolvedValue([OLD_GOOGLE_MODEL, NEW_GOOGLE_MODEL]);
+    spawnServer.mockRejectedValueOnce(new Error("refresh boot failed"));
+    await expect(service.acquire(NEW_SELECTION)).rejects.toThrow("refresh boot failed");
+    const next = await service.acquire(NEW_SELECTION);
+    expect(spawnServer).toHaveBeenCalledTimes(3);
+    expect(serverSpawns).toHaveLength(2);
+    expect(serverCloses).toEqual([0]);
+    expect(registeredGoogleModels()).toHaveProperty(NEW_GOOGLE_MODEL.id);
+    next.release();
+});
+
+test("a registered legacy judge also prevents an idle refresh", async () => {
+    const { service, models } = await googleRuntime();
+    await service.client();
+    service.judges.register("legacy", judgeOf(unstubbed<CommandGuard>("gate", { enforcing: true })).judge);
+    models.mockResolvedValue([OLD_GOOGLE_MODEL, NEW_GOOGLE_MODEL]);
+    await expect(service.acquire(NEW_SELECTION)).rejects.toThrow(/once they finish/);
+    expect(serverCloses).toEqual([]);
+    service.judges.release("legacy");
+    const lease = await service.acquire(NEW_SELECTION);
+    expect(serverSpawns).toHaveLength(2);
+    lease.release();
+});
+
+test("a privacy change cannot restart a leased runtime, including asynchronous acquisition setup", async () => {
+    let shield = false;
+    const { service, models } = await googleRuntime({ route: async () => (shield ? "http://127.0.0.1:9000/gateway" : undefined) });
+    await service.client();
+    const entered = Promise.withResolvers<void>();
+    const discovery = Promise.withResolvers<Awaited<ReturnType<OpenCodeGeminiConfig["models"]>>>();
+    models.mockImplementationOnce(() => {
+        entered.resolve();
+        return discovery.promise;
+    });
+    const acquiring = service.acquire(OLD_SELECTION);
+    await entered.promise;
+    shield = true;
+    expect(await service.shielded()).toBe(false);
+    expect(serverCloses).toEqual([]);
+    discovery.resolve([OLD_GOOGLE_MODEL]);
+    const lease = await acquiring;
+    expect(await service.shielded()).toBe(false);
+    expect(serverCloses).toEqual([]);
+    lease.release();
+    expect(await service.shielded()).toBe(true);
+    expect(serverCloses).toEqual([0]);
+    const next = await service.acquire(OLD_SELECTION);
+    expect(serverSpawns.at(-1)?.config).toMatchObject({
+        provider: {
+            xai: { options: { baseURL: "http://127.0.0.1:9000/gateway" } },
+            [OPENCODE_GEMINI_PROVIDER]: { options: { baseURL: "http://127.0.0.1:9000/gateway/v1" } },
+        },
+    });
+    next.release();
+});
+
+test("refresh aborts old permission streams without reconnecting them or erasing replacement watchers", async () => {
+    const { service, models } = await googleRuntime({ workspaceRoot: WORKSPACE_ROOT });
+    const worktree = `${WORKSPACE_ROOT}/worktree`;
+    const first = await service.acquire(OLD_SELECTION);
+    await service.watch(worktree);
+    first.release();
+    models.mockResolvedValue([OLD_GOOGLE_MODEL, NEW_GOOGLE_MODEL]);
+    const next = await service.acquire(NEW_SELECTION);
+    await service.watch(worktree);
+    expect(subscriptions.asked).toEqual([WORKSPACE_ROOT, worktree, WORKSPACE_ROOT, worktree]);
+    expect(subscriptionSignals.map((signal) => signal?.aborted)).toEqual([true, true, false, false]);
+    // Old streams finish after their retry delay; neither may delete the new watcher's same-directory registration.
+    jest.useFakeTimers();
+    await advanceTimersByTimeAsync(6_000);
+    await service.watch(WORKSPACE_ROOT);
+    await service.watch(worktree);
+    expect(subscriptions.asked).toHaveLength(4);
+    next.release();
+});
+
+test("an idle refresh leaves per-directory MCP mounting usable with the next turn's bearer", async () => {
+    const { service, models } = await googleRuntime();
+    const servers = (token: string) => mcpServersOf(openCodeMounts("chat-1", [{ name: "web", url: "http://127.0.0.1:7000/mcp/web", token }]));
+    const older = servers("turn-1");
+    const newer = servers("turn-2");
+    const name = older[0]?.name ?? "";
+    const first = await service.acquire(OLD_SELECTION);
+    const releaseOld = await service.mount(WORKSPACE_ROOT, older);
+    await releaseOld();
+    first.release();
+    models.mockResolvedValue([OLD_GOOGLE_MODEL, NEW_GOOGLE_MODEL]);
+    const next = await service.acquire(NEW_SELECTION);
+    const releaseNew = await service.mount(WORKSPACE_ROOT, newer);
+    await releaseNew();
+    next.release();
+    expect(mcpCalls).toEqual([
+        { call: "add", name, directory: WORKSPACE_ROOT, config: older[0]?.config },
+        { call: "disconnect", name, directory: WORKSPACE_ROOT },
+        { call: "add", name, directory: WORKSPACE_ROOT, config: newer[0]?.config },
+        { call: "disconnect", name, directory: WORKSPACE_ROOT },
+    ]);
+    expect(serverSpawns).toHaveLength(2);
 });
