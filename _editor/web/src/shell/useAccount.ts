@@ -44,6 +44,15 @@ const askPlatform = (): Promise<User | null> =>
             asking = undefined;
         }));
 
+// The platform's answer, asked again without failing the caller: it is asked once more on the next focus.
+const recheckPlatform = async (): Promise<void> => {
+    try {
+        await askPlatform();
+    } catch (error) {
+        console.warn(`[local] the platform could not be asked who is signed in:`, error);
+    }
+};
+
 // Who the workspace last named comes first, from the app's own record (localHost.ts `roster`) and with no wait on the
 // network, so the rail's foot is the account from the first paint; the platform's answer follows. That record carries
 // no id, and nothing a local window does with the account needs one.
@@ -57,11 +66,7 @@ const startLocal = (): Promise<void> =>
         } catch (error) {
             console.error(`[local] who is signed in could not be read:`, error);
         }
-        try {
-            await askPlatform();
-        } catch (error) {
-            console.warn(`[local] the platform could not be asked who is signed in:`, error);
-        }
+        await recheckPlatform();
     })());
 
 const localAccount: Account = {
@@ -87,7 +92,7 @@ if (localFace() !== undefined) {
         localUser.value = null;
     });
     // A sign-in finishing in the browser, or a sign-out in the workspace, is found out when the reader comes back.
-    globalThis.addEventListener?.(`focus`, () => void askPlatform().catch(() => undefined));
+    globalThis.addEventListener?.(`focus`, () => void recheckPlatform());
     void startLocal();
 }
 

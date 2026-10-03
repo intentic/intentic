@@ -155,7 +155,7 @@ export const diagnosisCard = (notice: DiagnosisNotice, due: boolean, dismiss: ()
 export const startNotificationSources = (): void => {
     // useSandboxAvailability binds to the caller's Vue scope, so this must run from a component's setup.
     const { user } = useAuth();
-    const { active, activeSandboxId, reachable, connection } = useSandbox();
+    const { activeSandboxId, reachable, connection } = useSandbox();
     const { presentedEmail, invalidateSession, getSessionToken } = useSandboxSession();
     const { clearCredential } = useGoogleIdentity();
     // The gate's own reading (established.ts): a screen the gate took is its to explain, and every other screen is this

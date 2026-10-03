@@ -69,9 +69,9 @@ import { stateRegroupStep } from "../store/evolution/steps/state-regroup.js";
 import { issueInstallsDocument, webchatInstallsDocument } from "../store/installs.js";
 import { newestRunDocument } from "../store/newest-run.js";
 import { bootFailureDocument } from "../system/boot/boot-failure.js";
+import { heavyCommandsDocument } from "../system/resources/heavy-commands.js";
 import { stagedUpdateDocument, updateOutcomeDocument, updatePreparingDocument } from "../system/updates/staged-update.js";
 import { skippedUpdateDocument } from "../system/updates/update-skip.js";
-import { heavyCommandsDocument } from "../system/resources/heavy-commands.js";
 import { workspaceIdentityDocument } from "../system/workspace-identity.js";
 import { accountUsageDocument } from "../usage/account-usage.js";
 import { modelCooldownsDocument } from "../usage/model-cooldowns.js";
@@ -158,11 +158,11 @@ export const stateDocuments = (): readonly DocumentSpec[] => [
     webchatInstallsDocument,
     newestRunDocument,
     bootFailureDocument,
+    heavyCommandsDocument,
     stagedUpdateDocument,
     updateOutcomeDocument,
     updatePreparingDocument,
     skippedUpdateDocument,
-    heavyCommandsDocument,
     workspaceIdentityDocument,
     accountUsageDocument,
     modelCooldownsDocument,
