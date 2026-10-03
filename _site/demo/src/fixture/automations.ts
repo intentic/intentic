@@ -1,8 +1,7 @@
 import type { Automation, AutomationApproval, AutomationCatalog, AutomationSummary } from "@intentic/sandbox-contract";
 
 // Automations acme-shop runs unattended: one of each trigger kind (schedule, once, listener, workspace, event) so the
-// page's claim that they share one machine holds. `runs` give each row a real history; the approvals queue holds one
-// held wake.
+// page's claim that they share one machine holds. `runs` give each row a real history.
 
 const minutes = (count: number): number => count * 60_000;
 const hours = (count: number): number => count * 3_600_000;
@@ -84,18 +83,6 @@ const seed = (now: number): AutomationSummary[] => [
         models: [{ provider: `codex`, model: `gpt-5.3-codex`, harness: `native` }],
         enabled: false,
         runs: [{ at: now - hours(26), outcome: `error`, detail: `the turn ended without reaching a verdict` }],
-    },
-];
-
-const seedApprovals = (now: number): AutomationApproval[] => [
-    {
-        id: `apr_visitor_chat_1`,
-        automationId: `aut_visitor_chat`,
-        payload: `visitor: "Does intentic work with a self-hosted GitLab?"`,
-        origin: { automationId: `aut_visitor_chat`, provider: `webchat`, author: `visitor · 84.12.9.x` },
-        title: `Visitor chat: self-hosted GitLab?`,
-        actsAs: `maya-support`,
-        createdAt: now - minutes(6),
     },
 ];
 
@@ -266,7 +253,7 @@ let automations: AutomationSummary[] | undefined;
 let approvals: AutomationApproval[] | undefined;
 
 const state = (now: number): AutomationSummary[] => (automations ??= seed(now));
-const heldState = (now: number): AutomationApproval[] => (approvals ??= seedApprovals(now));
+const heldState = (_now: number): AutomationApproval[] => (approvals ??= []);
 
 export const automationsList = (now: number): AutomationSummary[] => state(now);
 export const automationApprovals = (now: number): AutomationApproval[] => heldState(now);
