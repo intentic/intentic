@@ -6,6 +6,7 @@ import { STATE_DIR } from "@intentic/constants";
 import { defaultGit } from "@intentic/scaffold";
 import { type AgentSummary, NATIVE_PROVIDERS, type PipelineRun, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
+import { SETTLES, waitFor } from "@intentic/testing/bun";
 import { fileCapabilitiesStore } from "../capabilities/capabilities-store.js";
 import type { Services } from "../composition.js";
 import type { PersistedAgent } from "../conversations/registry/agents-store.js";
@@ -268,6 +269,11 @@ test("a run still going when its clock runs out hands over what failed so far, a
     expect(started[0]!.prompt).toContain(`run 41 failed 1 job: "verify-core"`);
     expect(started[0]!.prompt).toContain("so these are the jobs that had failed by then; any that fails later in it is sent to you when it finishes");
 
+    // The rest is the finish's to hand over, so the clock goes back to its real length once the first hand-over is on
+    // file (nothing is parked or in flight then): the lint job the finish parks arms a clock of its own, and on a loaded
+    // runner a 20 ms one beat the finish to it and said the run was still going.
+    await waitFor(async () => expect((await failure())?.heard).toEqual(["41/410"]), SETTLES);
+    resetMainFixer();
     running.delete(FIXER);
     await failRun(41, ["verify-core", "lint"]);
     expect(said.map((words) => words.turn.conversationId)).toEqual([FIXER]);

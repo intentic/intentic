@@ -7,7 +7,7 @@
    workspace arriving says where the file tree and the editor are. A page switching or a menu opening says nothing a
    static frame does not, so those do not move.
 
-   THE SWITCH is `data-motion="reduced"` on <html>, written by ../motion/preference.ts from the Appearance setting and,
+   THE SWITCH is `data-motion="reduced"` on <html>, written by ../motion/choice.ts from the Appearance setting and,
    under `system`, the OS's reduce-motion answer. Under it every duration token reads 0ms and every transition is
    stilled from base below, so no component carries its own opt-out (app/reducedMotion.test.ts). Loops that say work is
    happening (a spinner, the thinking rosette) slow down instead of stopping, in their own files. */

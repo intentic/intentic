@@ -120,9 +120,8 @@ if (!contentOnly) {
             if ("slug" in copy) {
                 assert.equal(rendered.reviewedOn, copy.verifiedOn, `${path}: incorrect source-review date`);
             } else {
-                for (const detail of comparePages) {
-                    assert(rendered.comparisonLinks.includes(compareHref(detail.slug)), `Hub is missing ${detail.name}`);
-                }
+                const unlinked = comparePages.filter((detail) => !rendered.comparisonLinks.includes(compareHref(detail.slug))).map((detail) => detail.name);
+                assert.deepEqual(unlinked, [], `Hub is missing ${unlinked.join(", ")}`);
             }
             assert(sitemap.includes(`<loc>${canonical}</loc>`), `${path}: missing sitemap entry`);
         }

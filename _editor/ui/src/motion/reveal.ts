@@ -1,6 +1,6 @@
 import { onBeforeUnmount, onMounted, type Ref, ref, watch } from "vue";
 import { canAnimate } from "./fold.js";
-import { lessMotion } from "./preference.js";
+import { lessMotion } from "./choice.js";
 
 // ROWS ARRIVING IN READING ORDER. When a list of sessions shows (the agents board, the chat's lanes, the rail's
 // checklist and usage), its rows play into place top to bottom: each rises a few pixels as it comes in, and row `i`
@@ -14,7 +14,7 @@ import { lessMotion } from "./preference.js";
 //
 // Played as Web Animations on `translate` and `opacity` (compositor-only, and `translate` rather than `transform`, so a
 // card's own flight or fold keeps running beside it), held at their first frame through their delay (`backwards`),
-// and gone once finished, so a row at rest carries nothing. Skipped outright when motion is off (preference.ts).
+// and gone once finished, so a row at rest carries nothing. Skipped outright when motion is off (choice.ts).
 
 /** How long one row takes to arrive. */
 export const REVEAL_MS = 240;

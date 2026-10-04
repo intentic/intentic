@@ -1,5 +1,5 @@
 import { type Ref, watch } from "vue";
-import { lessMotion } from "./preference.js";
+import { lessMotion } from "./choice.js";
 
 // HOW A TRAY FOLDS, AND HOW WHAT STANDS BELOW IT MAKES ROOM. Only transform-family properties and opacity animate off the
 // main thread (Chromium's compositable properties); `height` and `grid-template-rows` re-lay the column out every frame,

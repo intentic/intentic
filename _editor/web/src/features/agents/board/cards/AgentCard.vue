@@ -584,7 +584,7 @@ const grab = (event: PointerEvent): void => {
         role="button"
         tabindex="0"
         :aria-label="t(`agents.agentCard.focusAgent`, { displayTitle })"
-        class="session-card group flex w-full select-none flex-col rounded-[20px] border text-left focus-visible:ring-2 focus-visible:ring-primary-500/25"
+        class="session-card group flex w-full select-none flex-col rounded-2xl border text-left focus-visible:ring-2 focus-visible:ring-primary-500/25"
         :class="[
             /* A LIVE CARD IS A BIGGER CARD (see `live`): the two lanes about work in flight get 16px of padding and a 14px title, the ledger keeps 14 and 12. */
             live ? 'gap-2.5 p-4' : 'gap-2 p-3.5',

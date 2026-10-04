@@ -327,4 +327,4 @@ export { type ColorScheme, type SchemeChoice, useTheme } from "./composables/use
 export { default as ColorPicker } from "./components/forms/ColorPicker.vue";
 export { type TextSize, useTextSize } from "./composables/useTextSize.js";
 // Whether the interface moves: the Appearance row, its OS fallback, and the one answer script-played moves ask.
-export { lessMotion, MOTION_CHOICES, type MotionChoice, useMotion } from "./motion/preference.js";
+export { lessMotion, MOTION_CHOICES, type MotionChoice, useMotion } from "./motion/choice.js";
