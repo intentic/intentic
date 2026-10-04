@@ -135,6 +135,27 @@ const describeMachine = async (client: HostClient, signal: AbortSignal): Promise
     }
 };
 
+// The hub's facts are the machine's answer to `describe` at hello, and a hello comes only with a new socket. What a
+// row shows from them that can change under a live connection (the link count behind "Forget them") would otherwise
+// hold until the next reconnect, so every pull re-asks too. A change is announced itself: the pull's own announcement
+// only fires on a change of gap.
+const refreshFacts = async (services: Services, id: string): Promise<void> => {
+    const before = JSON.stringify(services.hostHub.state(id).facts?.links);
+    // Never costs the reading it rides beside: the last answer stands, as at hello.
+    try {
+        await services.hostHub.refresh(id, PULL_TIMEOUT_MS);
+    } catch {
+        return;
+    }
+    if (JSON.stringify(services.hostHub.state(id).facts?.links) !== before) {
+        publishRuntimeChange("hosts");
+    }
+};
+
+// How long after a drop of dead links the machine's own stamp has caught up: it rewrites it every 5s
+// (LINK_STAMP_MS in the machine's device/config.ts), and the agent closes the dropped links on its next pass first.
+const LINKS_SETTLE_MS = 12_000;
+
 // Every failure reads as a named gap, not an absence. Report and fleet go out together under one deadline; the report
 // alone decides the gap, and the fleet answer survives either verdict — a card granting sandbox management and nothing
 // else lists its containers while refusing to describe the machine, and that list is what every "do it out there"
@@ -149,6 +170,7 @@ const pull = async (services: Services, id: string): Promise<PullResult> => {
     const [described, fleet] = await Promise.all([
         describeMachine(client, signal),
         callTool(services, id, "list_sandboxes", {}, signal).catch(() => ({ text: "", refused: true })),
+        refreshFacts(services, id),
     ]);
     // Absent, not empty, when the machine wouldn't answer: "none there" is a reading, and this isn't one.
     // Report's agent block is left as stated; version rides the row (agentVersion) instead, not merged here.
@@ -519,5 +541,12 @@ export async function* runDeviceAgentFlow(services: Services, id: string, input:
     } finally {
         // Clears the cache: the agent may be a different build now, and the version change is this flow's answer.
         pulled.delete(id);
+        // A drop leaves the agent running on the same socket, so no hello re-describes it. The read the view makes
+        // right after this lands before the machine's stamp catches up; this one lands after it.
+        if (input.op === "forget-unreachable") {
+            void delay(LINKS_SETTLE_MS, undefined, { ref: false })
+                .then(async () => await refreshFacts(services, id))
+                .catch(() => undefined);
+        }
     }
 }

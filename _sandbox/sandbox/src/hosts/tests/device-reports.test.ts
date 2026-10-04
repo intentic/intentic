@@ -438,6 +438,29 @@ test("announces only a landing that changes what the view says", async () => {
     expect(published).toEqual(["hosts"]);
 });
 
+// The link count behind "Forget them" is a fact told at hello, and a drop happens on a socket that stays up: unless the
+// pull re-asks, the strip offering the drop outlives the drop until the machine next reconnects.
+test("re-reads a live machine's facts with each pull, and announces a changed link count", async () => {
+    jest.useFakeTimers();
+    const { services } = fakeServices("drop-pc", async (call) => (call.tool === "report" ? report("drop", { capturedAt: Date.now() }) : answer("[]")));
+    let facts = { links: { total: 2, unreachable: 1, unreachableSince: 1 } };
+    let described = { links: { total: 2, unreachable: 1, unreachableSince: 1 } };
+    const hub = services.hostHub as unknown as Record<string, unknown>;
+    hub.state = () => ({ online: true, version: "0.1.0", facts });
+    hub.refresh = async () => {
+        facts = described;
+    };
+
+    expect((await devices(services))[0]?.facts?.links?.unreachable).toBe(1);
+    published.length = 0;
+
+    described = { links: { total: 1, unreachable: 0 } } as typeof described;
+    jest.setSystemTime(Date.now() + 31_000);
+    await devices(services);
+    await waitFor(() => expect(published).toEqual(["hosts"]));
+    expect((await devices(services))[0]?.facts?.links).toEqual({ total: 1, unreachable: 0 });
+});
+
 test("coalesces concurrent readers into a single round trip", async () => {
     let release = (): void => {};
     const held = new Promise<void>((resolve) => (release = resolve));
