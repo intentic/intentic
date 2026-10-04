@@ -22,17 +22,28 @@ installDesktopLinks();
 
 const opened: string[] = [];
 
-/* A link on the page, pressed the way a reader presses it. Returns whether the press was answered here. */
-const press = (attributes: Record<string, string>, modifiers: MouseEventInit = {}): boolean => {
+const linkOnPage = (attributes: Record<string, string>): HTMLAnchorElement => {
     const link = document.createElement(`a`);
     for (const [name, value] of Object.entries(attributes)) {
         link.setAttribute(name, value);
     }
     link.textContent = `link`;
     document.body.append(link);
+    return link;
+};
+
+/* A link on the page, pressed the way a reader presses it. Returns whether the press was answered here. */
+const press = (attributes: Record<string, string>, modifiers: MouseEventInit = {}): boolean => {
+    const link = linkOnPage(attributes);
     const event = new window.MouseEvent(`click`, { bubbles: true, cancelable: true, button: 0, ...modifiers });
     link.dispatchEvent(event);
     link.remove();
+    return event.defaultPrevented;
+};
+
+const contextMenu = (target: EventTarget): boolean => {
+    const event = new window.MouseEvent(`contextmenu`, { bubbles: true, cancelable: true, button: 2 });
+    target.dispatchEvent(event);
     return event.defaultPrevented;
 };
 
@@ -44,6 +55,7 @@ stubGlobal(`open`, (url: string | URL | undefined) => {
 
 afterEach(() => {
     opened.length = 0;
+    window.getSelection()?.removeAllRanges();
     document.body.replaceChildren();
 });
 
@@ -98,6 +110,93 @@ test("every other link on the page is left exactly as it was", () => {
     /* A named target is the one the webview already hands the app. */
     expect(press({ href: `https://intentic.dev/`, target: `preview` })).toBe(false);
     expect(opened).toEqual([]);
+});
+
+test.each([`/workspace`, `#/device`, `${window.location.origin}/files/local#/workspace`, `intentic://launcher`, `intentic://local?do=open-folder`])(
+    "internal desktop link %s has no browser link menu",
+    (href) => {
+        expect(contextMenu(linkOnPage({ href }))).toBe(true);
+        expect(opened).toEqual([]);
+    },
+);
+
+test("right-clicking a nested SVG icon finds its internal navigation link", () => {
+    const link = linkOnPage({ href: `#/workspace` });
+    const icon = document.createElementNS(`http://www.w3.org/2000/svg`, `svg`);
+    const path = document.createElementNS(`http://www.w3.org/2000/svg`, `path`);
+    icon.append(path);
+    link.append(icon);
+    expect(contextMenu(path)).toBe(true);
+});
+
+test.each([
+    `https://intentic.dev/docs/`,
+    `mailto:help@example.com`,
+    `tel:+12025550100`,
+    `blob:${window.location.origin}/document`,
+    `data:text/plain,notes`,
+])("useful link %s keeps its native menu", (href) => {
+    expect(contextMenu(linkOnPage({ href }))).toBe(false);
+});
+
+test("downloads keep Save link as even on the app's own origin", () => {
+    expect(contextMenu(linkOnPage({ href: `/api/export.zip`, download: `export.zip` }))).toBe(false);
+});
+
+test.each([`input`, `textarea`, `select`, `span`])("editing in an internal link's %s keeps its native menu", (tag) => {
+    const link = linkOnPage({ href: `#/workspace` });
+    const editor = document.createElement(tag);
+    if (tag === `span`) {
+        editor.setAttribute(`contenteditable`, `true`);
+        // jsdom does not implement the browser's inherited editing flag.
+        Object.defineProperty(editor, `isContentEditable`, { value: true });
+    }
+    link.append(editor);
+    expect(contextMenu(editor)).toBe(false);
+});
+
+test("selected link text keeps its native Copy action", () => {
+    const link = linkOnPage({ href: `#/workspace` });
+    window.getSelection()?.selectAllChildren(link);
+    expect(contextMenu(link)).toBe(false);
+});
+
+test("a selection elsewhere does not bring the broken menu back on a navigation icon", () => {
+    const text = document.createElement(`p`);
+    text.textContent = `Selected document text`;
+    document.body.append(text);
+    window.getSelection()?.selectAllChildren(text);
+    expect(contextMenu(linkOnPage({ href: `#/workspace` }))).toBe(true);
+});
+
+test("custom menus get first refusal and native-menu suppression never stops propagation", () => {
+    const custom = linkOnPage({ href: `/workspace` });
+    const seenBeforeCustomMenu: boolean[] = [];
+    custom.addEventListener(`contextmenu`, (event) => {
+        seenBeforeCustomMenu.push(event.defaultPrevented);
+        event.preventDefault();
+    });
+    const bubbled = jest.fn();
+    window.addEventListener(`contextmenu`, bubbled);
+    try {
+        expect(contextMenu(custom)).toBe(true);
+        expect(seenBeforeCustomMenu).toEqual([false]);
+        expect(contextMenu(linkOnPage({ href: `#/device` }))).toBe(true);
+        expect(bubbled).toHaveBeenCalledTimes(2);
+    } finally {
+        window.removeEventListener(`contextmenu`, bubbled);
+    }
+});
+
+test("ordinary text, controls, empty anchors and non-element targets keep their menus", () => {
+    const text = document.createElement(`p`);
+    text.textContent = `Document text`;
+    const control = document.createElement(`button`);
+    document.body.append(text, control);
+    expect(contextMenu(text)).toBe(false);
+    expect(contextMenu(control)).toBe(false);
+    expect(contextMenu(linkOnPage({}))).toBe(false);
+    expect(contextMenu(document)).toBe(false);
 });
 
 test("in a browser nothing is installed at all: `_blank` needs no help there", () => {

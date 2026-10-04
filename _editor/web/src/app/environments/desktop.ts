@@ -154,7 +154,9 @@ const rosterRow = (entry: DesktopRosterEntry): DesktopRosterEntry | undefined =>
     return { id: entry.id, name: name === `` ? entry.id : name, place: entry.place, shared: entry.shared };
 };
 const httpsImage = (image: string | null | undefined): string | undefined =>
-    image !== null && image !== undefined && image.length <= IMAGE_MAX && URL.canParse(image) && new URL(image).protocol === `https:` ? image : undefined;
+    image !== null && image !== undefined && image.length <= IMAGE_MAX && URL.canParse(image) && new URL(image).protocol === `https:`
+        ? image
+        : undefined;
 // The account as the link carries it (setup_link.rs `RosterAccount`): a name and an avatar only where there are any.
 interface SentAccount {
     email: string;
@@ -314,16 +316,43 @@ const followBlankLink = (event: MouseEvent): void => {
     window.open(link.href);
 };
 
+// Routes inside this webview and `intentic://` commands are not useful browser links: opening or saving one from the
+// native link menu leaves the app's navigation behind. Keep the menu for real links, downloads and text actions instead.
+const internalLinkContextMenu = (event: MouseEvent): void => {
+    const target = event.target;
+    if (event.defaultPrevented || !(target instanceof Element)) {
+        return;
+    }
+    const link = target.closest<HTMLAnchorElement>(`a[href]`);
+    if (link === null || link.hasAttribute(`download`)) {
+        return;
+    }
+    const ownOrigin = link.protocol === window.location.protocol && link.origin === window.location.origin;
+    if (!ownOrigin && link.protocol !== `intentic:`) {
+        return;
+    }
+    if (target.closest(`input, textarea, select`) !== null || target.closest<HTMLElement>(`[contenteditable]`)?.isContentEditable === true) {
+        return;
+    }
+    const selection = window.getSelection();
+    if (selection?.isCollapsed === false && selection.getRangeAt(0).intersectsNode(target)) {
+        return;
+    }
+    event.preventDefault();
+};
+
 /**
  * Makes `target="_blank"` work for the life of this window. Capture, because a surface whose own handler stops the
  * press from bubbling would otherwise take the link down with it — which also means a `_blank` link is answered here
- * before anything below the document sees the press. A no-op in a browser, where the target needs no help.
+ * before anything below the document sees the press. Also suppresses native menus for internal links, after the app's
+ * own context-menu handlers have had the event. A no-op in a browser, where neither policy is needed.
  */
 export const installDesktopLinks = (): void => {
     if (desktopVersion() === undefined) {
         return;
     }
     document.addEventListener(`click`, followBlankLink, true);
+    document.addEventListener(`contextmenu`, internalLinkContextMenu);
 };
 
 /* WHAT A PAGE MAY DO TO ITS OWN WINDOW ONLY IF ITS SCRIPT OPENED IT: close it, raise it, resize it. A browser popup
