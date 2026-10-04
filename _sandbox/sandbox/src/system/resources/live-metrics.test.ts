@@ -196,6 +196,7 @@ describe("the sandbox and the daemon", () => {
             coresUsed: rest.coresUsed,
         });
 
+    // Free is the limit less the resident part alone (16 − 7 GiB): the 1 GiB in swap leaves that room free.
     test("memory is the budget's working set and swap against its limit, and CPU is against the quota", async () => {
         expect(await usageOf(files, { disk: { usedBytes: 5, totalBytes: 9 }, processes: 42, coresUsed: 0.5 })).toEqual({
             cpuPercent: 25,
@@ -203,7 +204,7 @@ describe("the sandbox and the daemon", () => {
             memoryBytes: 8 * 2 ** 30,
             memoryLimitBytes: 16 * 2 ** 30,
             swapBytes: 2 ** 30,
-            memoryRoom: { freeBytes: 8 * 2 ** 30, reservedBytes: 0, personNeedBytes: 2 ** 30, stallPercent: 3, stallLimitPercent: 20 },
+            memoryRoom: { freeBytes: 9 * 2 ** 30, reservedBytes: 0, personNeedBytes: 2 ** 30, stallPercent: 3, stallLimitPercent: 20 },
             diskBytes: 5,
             diskTotalBytes: 9,
             loadAverage: [1.5, 1.25, 1],
@@ -232,7 +233,8 @@ describe("the sandbox and the daemon", () => {
 
     // The promise the gauge makes: when it turns amber, a person's turn is held, and when it does not, it is not.
     test("the gauge and the gate read one snapshot: the same limit, used, free and stall, and the same verdict", async () => {
-        for (const current of [10, 17.5]) {
+        // 18.5 GiB less 3 GiB of reclaimable cache leaves 15.5 GiB resident against 16: 0.5 GiB free, short of a turn.
+        for (const current of [10, 18.5]) {
             const texts = { ...files, "/sys/fs/cgroup/memory.current": `${current * 2 ** 30}\n` };
             const budget = budgetOver(texts);
             const shown = sandboxUsageOf({ cgroup: await cgroupOf(texts), room: await budget.snapshot(), machine, disk: undefined, processes: 1, coresUsed: undefined });
@@ -241,7 +243,7 @@ describe("the sandbox and the daemon", () => {
             const room = shown.memoryRoom;
             const warns = room !== undefined && ((room.freeBytes ?? Number.POSITIVE_INFINITY) < room.personNeedBytes || room.stallPercent >= room.stallLimitPercent);
             const verdict = (await budget.admit({ workload: "agentRuntime", attended: true, actor: "ada" })).verdict;
-            expect({ current, warns, verdict }).toEqual({ current, warns: current === 17.5, verdict: current === 17.5 ? "refuse" : "run" });
+            expect({ current, warns, verdict }).toEqual({ current, warns: current === 18.5, verdict: current === 18.5 ? "refuse" : "run" });
         }
     });
 

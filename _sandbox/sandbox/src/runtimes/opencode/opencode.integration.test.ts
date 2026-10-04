@@ -47,9 +47,24 @@ jest.mock("@opencode-ai/sdk", () => ({
         };
     },
     createOpencodeClient: () => ({
+        mcp: {
+            add: async (options: { body?: { name: string; config: unknown }; query?: { directory?: string } }) => {
+                mcpCalls.push({ call: "add", name: options.body?.name ?? "", directory: options.query?.directory, config: options.body?.config });
+                return {};
+            },
+            disconnect: async (options: { path: { name: string }; query?: { directory?: string } }) => {
+                mcpCalls.push({ call: "disconnect", name: options.path.name, directory: options.query?.directory });
+                return {};
+            },
+        },
+    }),
+}));
+jest.mock("@opencode-ai/sdk/v2/client", () => ({
+    createOpencodeClient: () => ({
+        // The event stream rides the current API's client, the one whose fetch can be replaced.
         event: {
-            subscribe: async (options?: { query?: { directory?: string }; signal?: AbortSignal | null }) => {
-                subscriptions.asked.push(options?.query?.directory);
+            subscribe: async (parameters?: { directory?: string }, options?: { signal?: AbortSignal | null }) => {
+                subscriptions.asked.push(parameters?.directory);
                 subscriptionSignals.push(options?.signal);
                 if (subscriptions.refused) {
                     throw new Error("connect ECONNREFUSED");
@@ -71,20 +86,6 @@ jest.mock("@opencode-ai/sdk", () => ({
                 };
             },
         },
-        mcp: {
-            add: async (options: { body?: { name: string; config: unknown }; query?: { directory?: string } }) => {
-                mcpCalls.push({ call: "add", name: options.body?.name ?? "", directory: options.query?.directory, config: options.body?.config });
-                return {};
-            },
-            disconnect: async (options: { path: { name: string }; query?: { directory?: string } }) => {
-                mcpCalls.push({ call: "disconnect", name: options.path.name, directory: options.query?.directory });
-                return {};
-            },
-        },
-    }),
-}));
-jest.mock("@opencode-ai/sdk/v2/client", () => ({
-    createOpencodeClient: () => ({
         permission: {
             respond: async (parameters: { sessionID: string; permissionID: string; directory?: string; response?: string }) => {
                 legacyReplies.push({

@@ -445,7 +445,7 @@ test("re-reads a live machine's facts with each pull, and announces a changed li
     const { services } = fakeServices("drop-pc", async (call) => (call.tool === "report" ? report("drop", { capturedAt: Date.now() }) : answer("[]")));
     let facts = { links: { total: 2, unreachable: 1, unreachableSince: 1 } };
     let described = { links: { total: 2, unreachable: 1, unreachableSince: 1 } };
-    const hub = services.hostHub as unknown as Record<string, unknown>;
+    const hub = services.hostHub as unknown as { state: () => unknown; refresh: () => Promise<void> };
     hub.state = () => ({ online: true, version: "0.1.0", facts });
     hub.refresh = async () => {
         facts = described;

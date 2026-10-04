@@ -294,12 +294,47 @@ const STREAM_RETRY_MS = 5_000;
 // reader parked on a stream that never ends; bounded, the stream ends and its reader sees the server gone.
 const SSE_RETRY_ATTEMPTS = 3;
 const SSE_RETRY_DELAY_MS = 1_000;
-const subscribeEvents = async (
-    client: OpencodeClient,
+
+// Both SDKs' streams end on abort by cancelling their body reader, and drop the promise that cancel returns. Fetch hears
+// the same abort first and errors the body, so that promise rejects with the abort and nothing handles it: every stopped
+// stream was a stray rejection, which under bun test fails whichever test runs next. So the abort reaches fetch only
+// while it connects; once a response is in, the SDK's own cancel closes the live body, which ends the request.
+export const abortWhileConnecting = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    const request = new Request(input, init);
+    const connecting = new AbortController();
+    const abort = (): void => connecting.abort(request.signal.reason);
+    if (request.signal.aborted) {
+        abort();
+    } else {
+        request.signal.addEventListener("abort", abort, { once: true });
+    }
+    try {
+        return await fetch(new Request(request, { signal: connecting.signal }));
+    } finally {
+        request.signal.removeEventListener("abort", abort);
+    }
+};
+
+// Subscribed through the current API's client: the v1 client's stream calls the global fetch itself, so only this one can
+// be handed abortWhileConnecting. The events are the same server's JSON whichever client reads them.
+export const subscribeEvents = async (
+    replies: OpencodeReplyClient,
     directory: string,
     signal: AbortSignal | null = null,
-): ReturnType<OpencodeClient["event"]["subscribe"]> =>
-    client.event.subscribe({ query: { directory }, signal, sseMaxRetryAttempts: SSE_RETRY_ATTEMPTS, sseDefaultRetryDelay: SSE_RETRY_DELAY_MS });
+): Promise<{ readonly stream: AsyncIterable<OpenCodeEvent> }> => {
+    const { stream } = await replies.event.subscribe(
+        { directory },
+        {
+            signal,
+            // bun-types' `fetch` carries `preconnect`, which a request wrapper has no use for.
+            fetch: abortWhileConnecting as typeof fetch,
+            sseMaxRetryAttempts: SSE_RETRY_ATTEMPTS,
+            sseDefaultRetryDelay: SSE_RETRY_DELAY_MS,
+        },
+    );
+    // SAFETY: one server writes this stream whichever SDK parses it; its readers are written against the v1 event union.
+    return { stream: stream as AsyncIterable<OpenCodeEvent> };
+};
 
 // Whether a process still exists; signal 0 checks without sending anything, and EPERM still means it is there.
 export const processAlive = (pid: number): boolean => {
@@ -312,7 +347,7 @@ export const processAlive = (pid: number): boolean => {
 };
 
 // The server's two clients: the one every call rides, and the current API's, which alone can answer a permission with
-// the reason the model should hear.
+// the reason the model should hear, and whose event stream takes the fetch a stream needs to stop quietly.
 interface OpenCodeClients {
     readonly client: OpencodeClient;
     readonly replies: OpencodeReplyClient;
@@ -324,11 +359,11 @@ interface OpenCodeClients {
 // raised on this stream. Per directory, not server-wide, since that's the only stream the server gives
 // (subscribeEvents). `ended` runs once it gives up, so the next turn there opens a new watch rather than trusting a dead
 // one with its permission asks.
-const watchSessionEvents = ({ client, replies, judgeOf }: OpenCodeClients, directory: string, signal: AbortSignal, ended: () => void): void => {
+const watchSessionEvents = ({ replies, judgeOf }: OpenCodeClients, directory: string, signal: AbortSignal, ended: () => void): void => {
     void (async () => {
         for (let failures = 0; failures < STREAM_RETRIES && !signal.aborted; failures += 1) {
             try {
-                const sse = await subscribeEvents(client, directory, signal);
+                const sse = await subscribeEvents(replies, directory, signal);
                 for await (const event of sse.stream) {
                     if (signal.aborted) {
                         return;
@@ -809,7 +844,7 @@ export const createOpenCodeService = (
         client: async () => (await ensure()).client,
         acquire,
         stop: async () => closeServer(),
-        events: async (directory, signal) => subscribeEvents((await ensure()).client, directory, signal),
+        events: async (directory, signal) => subscribeEvents((await ensure()).replies, directory, signal),
         watch: async (directory) => watchers.watch(await ensure(), directory),
         mount: mounts.mount,
         judges: {

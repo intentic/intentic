@@ -1,5 +1,8 @@
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
+import { createOpencodeClient } from "@opencode-ai/sdk/v2/client";
 import { SPAWN_STAMP_ENV } from "../../workload/workload-class.js";
-import { createOpenCodeService, pinnedAcross } from "./opencode.js";
+import { abortWhileConnecting, createOpenCodeService, pinnedAcross, subscribeEvents } from "./opencode.js";
 
 // The service's data root: never created, since the spawn is a fake and the catalog file boot looks for is absent.
 const XDG = "/nonexistent/opencode-env/xdg";
@@ -121,4 +124,51 @@ test("pinnedAcross restores the environment when the spawn throws", () => {
         }),
     ).toThrow("spawn opencode ENOENT");
     expect(process.env["XDG_DATA_HOME"]).toBe(PRIOR_XDG);
+});
+
+// A stream's abort reaches fetch only while it connects (abortWhileConnecting), so stopping a live stream rests on the
+// SDK's own reader cancel: the read in flight must still end and the request still close. The stray rejection the old
+// path left behind shows against a real server, in the opencode wire tier (src/e2e/opencode-wire.e2e.test.ts).
+test("a directory's event stream stops on its signal: the read in flight ends and the request closes", async () => {
+    const closed = Promise.withResolvers<void>();
+    const sse = createServer((request, response) => {
+        response.writeHead(200, { "content-type": "text/event-stream" });
+        response.write(`data: ${JSON.stringify({ type: "server.connected", properties: {} })}\n\n`);
+        request.on("close", () => closed.resolve());
+    });
+    await new Promise<void>((resolve) => sse.listen(0, "127.0.0.1", resolve));
+    // SAFETY: a server listening on a TCP port reports an AddressInfo, never a pipe name or null.
+    const { port } = sse.address() as AddressInfo;
+    try {
+        const stop = new AbortController();
+        const replies = createOpencodeClient({ baseUrl: `http://127.0.0.1:${String(port)}` });
+        const reading = (await subscribeEvents(replies, "/srv/project", stop.signal)).stream[Symbol.asyncIterator]();
+        expect((await reading.next()).value).toMatchObject({ type: "server.connected" });
+        const pending = reading.next();
+        stop.abort();
+        expect(await pending).toEqual({ done: true, value: undefined });
+        await closed.promise;
+    } finally {
+        sse.closeAllConnections();
+        sse.close();
+    }
+});
+
+test("an abort before the response cancels the connect itself", async () => {
+    const asked = Promise.withResolvers<void>();
+    // Takes the request and never answers it: only the abort can end the fetch.
+    const silent = createServer(() => asked.resolve());
+    await new Promise<void>((resolve) => silent.listen(0, "127.0.0.1", resolve));
+    // SAFETY: a server listening on a TCP port reports an AddressInfo, never a pipe name or null.
+    const { port } = silent.address() as AddressInfo;
+    try {
+        const stop = new AbortController();
+        const connecting = abortWhileConnecting(`http://127.0.0.1:${String(port)}/event`, { signal: stop.signal });
+        await asked.promise;
+        stop.abort();
+        await expect(connecting).rejects.toMatchObject({ name: "AbortError" });
+    } finally {
+        silent.closeAllConnections();
+        silent.close();
+    }
 });

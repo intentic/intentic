@@ -59,8 +59,9 @@ it(`raises nothing for a sentence with no figures`, () => {
 });
 
 // The notice over the composer says the hold in a few characters: in use against the limit, resident when swap is in play.
+// Free is the limit less what is resident, so the swap case is short only once its resident part nears the limit.
 it(`says in use against the limit in a few characters, and nothing where no ceiling is named`, () => {
-    expect(memoryShare(sentence({ usedBytes: 7.3 * GIB, swapBytes: 2.4 * GIB, limitBytes: 8 * GIB }))).toBe(`4.9/8.0 GiB`);
+    expect(memoryShare(sentence({ usedBytes: 9.7 * GIB, swapBytes: 2.4 * GIB, limitBytes: 8 * GIB }))).toBe(`7.3/8.0 GiB`);
     expect(memoryShare(sentence({ usedBytes: 17.6 * GIB }))).toBe(`17.6/18.0 GiB`);
     expect(memoryShare(sentence({ usedBytes: 2 * GIB, stallPercent: 45 }))).toBeUndefined();
     expect(memoryShare(undefined)).toBeUndefined();

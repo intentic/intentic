@@ -59,6 +59,7 @@ export const awaitPairingAnswer = (ws: FrameSource, timeoutMs: number): { readon
         ws.on("frame", onFrame);
     });
     // A refusal that lands while the request itself is still failing is reported through the request, not unhandled.
+    // allow(silent-catch): the caller awaits `answer` once the request succeeds, so the refusal reaches its own catch.
     answer.catch(() => undefined);
     return { answer, cancel: () => stop() };
 };
