@@ -49,7 +49,7 @@ const TONE: Record<WorkflowRun["state"], string> = {
         role="button"
         tabindex="0"
         :aria-label="t(`agents.workflowRunCard.openSessions`, { name: run.workflow.name })"
-        class="session-card group flex w-full select-none flex-col rounded-xl border border-dashed text-left outline-none focus-visible:ring-2 focus-visible:ring-primary-500/25"
+        class="session-card group flex w-full select-none flex-col rounded-[20px] border border-dashed text-left outline-none focus-visible:ring-2 focus-visible:ring-primary-500/25"
         :class="[
             // Same step the agent cards take (AgentCard's `live`), so a lane draws one card size.
             bigLane ? 'gap-2.5 p-4' : 'gap-2 p-3.5',

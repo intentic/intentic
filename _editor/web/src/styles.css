@@ -201,3 +201,32 @@
 .ws-scoped .view-header {
     background-color: color-mix(in srgb, var(--color-primary-500) 8%, var(--color-card));
 }
+
+/* THE FLEET BOARD'S CARDS — a softer corner and a diagonal fill in the scheme's own card colours, not the flat slab the rail uses. */
+.agents-board .session-card {
+    border-radius: 20px;
+    --agents-card-fill-hi: color-mix(in oklab, var(--color-content) 4%, var(--color-card));
+    --agents-card-fill-lo: color-mix(in oklab, var(--color-canvas) 10%, var(--color-card));
+    background-color: transparent;
+    background-image: linear-gradient(145deg, var(--agents-card-fill-hi), var(--agents-card-fill-lo));
+    transition:
+        color 150ms cubic-bezier(0.4, 0, 0.2, 1),
+        background-color 150ms cubic-bezier(0.4, 0, 0.2, 1),
+        background-image 150ms cubic-bezier(0.4, 0, 0.2, 1),
+        border-color 150ms cubic-bezier(0.4, 0, 0.2, 1),
+        box-shadow 150ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+@media (hover: hover) {
+    .agents-board .session-card:hover {
+        background-image: none;
+        background-color: var(--card-fill);
+    }
+}
+.agents-board .session-card:active,
+.agents-board .session-card.session-card-on {
+    background-image: none;
+    background-color: var(--card-fill);
+}
+[data-skin="sanctum"] .agents-board .session-card {
+    background-image: linear-gradient(145deg, var(--agents-card-fill-hi), var(--agents-card-fill-lo));
+}
