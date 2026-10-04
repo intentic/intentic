@@ -74,7 +74,7 @@ const chipHint = computed((): Tip | undefined =>
         :is="to === undefined ? `button` : RouterLink"
         :type="to === undefined ? `button` : undefined"
         :to="to"
-        class="session-card group flex w-full min-w-0 shrink-0 scroll-mt-8 rounded-lg border p-3 text-left text-2xs"
+        class="session-card group flex w-full min-w-0 shrink-0 scroll-mt-8 rounded-[20px] border p-3 text-left text-2xs"
         :class="[
             { 'session-card-on': selected, 'session-card-attention': attention, 'border-dashed': dashed },
             $slots[`aside`] ? `items-stretch gap-2.5` : `flex-col gap-1.5`,
