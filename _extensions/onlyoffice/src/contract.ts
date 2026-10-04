@@ -1,6 +1,7 @@
 // What the backend answers, shared by both halves so the card and the server agree on every state.
 
-// The route namespace the daemon proxies to this extension's backend.
+// The namespace a desktop local window answers this extension's routes under (local-office.ts), where it is always
+// the baked id. The viewer never spells it: `api.backend` adds whichever id this install routes by.
 export const NAMESPACE = "/x/intentic.onlyoffice";
 
 // Which engine runs an editor. `browser`: ONLYOFFICE's offline build converting and editing in the reader's browser,

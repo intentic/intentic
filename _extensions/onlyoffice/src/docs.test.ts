@@ -19,7 +19,7 @@ beforeEach(() => {
     asked.length = 0;
     bindHost(
         unstubbed<IntenticApi>(`host`, {
-            sandbox: unstubbed<IntenticApi[`sandbox`]>(`host.sandbox`, {
+            backend: unstubbed<IntenticApi[`backend`]>(`host.backend`, {
                 request: async (path, init) => {
                     asked.push({ path, method: init?.method ?? `GET`, body: init?.body === undefined ? undefined : JSON.parse(String(init.body)) });
                     return answer();
@@ -32,10 +32,10 @@ beforeEach(() => {
 const json = (body: unknown, status = 200): Response => new Response(JSON.stringify(body), { status, headers: { "content-type": `application/json` } });
 
 describe(`the kept original`, () => {
-    it(`is asked about under the extension's namespace, the path as a query`, async () => {
+    it(`is asked about through the extension's own backend, the path as a query`, async () => {
         answer = () => json({ kept: false });
         await originalOf(`reports/Q3 plan.docx`);
-        expect(asked).toEqual([{ path: `/x/intentic.onlyoffice/original?path=reports%2FQ3+plan.docx`, method: `GET`, body: undefined }]);
+        expect(asked).toEqual([{ path: `original?path=reports%2FQ3+plan.docx`, method: `GET`, body: undefined }]);
     });
 
     it(`reads a kept original with when it was kept, in epoch milliseconds whichever way the backend wrote it`, async () => {
@@ -62,7 +62,7 @@ describe(`the kept original`, () => {
     it(`is restored by posting the path, and a refused restore fails with the backend's words`, async () => {
         answer = () => json({ restored: true });
         await restoreOriginal(`brief.docx`);
-        expect(asked).toEqual([{ path: `/x/intentic.onlyoffice/restore-original`, method: `POST`, body: { path: `brief.docx` } }]);
+        expect(asked).toEqual([{ path: `restore-original`, method: `POST`, body: { path: `brief.docx` } }]);
         answer = () => new Response(`no original kept for brief.docx`, { status: 404 });
         await expect(restoreOriginal(`brief.docx`)).rejects.toThrow(`no original kept for brief.docx`);
     });
