@@ -77,12 +77,12 @@ const request = (text: string) => ({
 
 const harness = async (policy: Partial<PrivacyShieldPolicy>, provider: string, answer: (body: string) => Response = echoTokens) => {
     const fake = privacySliceFake({ policy });
-    const provider_ = upstream(answer);
+    const fakeUpstream = upstream(answer);
     const app = new Hono<AppEnv>();
     const warnings: string[] = [];
     app.all(
         "/privacy/gateway/:session/*",
-        createGatewayRoute({ shield: fake.privacyShield, warn: (message) => warnings.push(message), fetch: provider_.fetch }),
+        createGatewayRoute({ shield: fake.privacyShield, warn: (message) => warnings.push(message), fetch: fakeUpstream.fetch }),
     );
     const base = await fake.privacyShield.baseUrlFor({ provider, upstream: "https://api.anthropic.com", conversationId: "c-1" });
     const send = (path: string, body: unknown, headers: Record<string, string> = {}) =>
@@ -91,7 +91,7 @@ const harness = async (policy: Partial<PrivacyShieldPolicy>, provider: string, a
             headers: { "content-type": "application/json", authorization: "Bearer sk-oauth", ...headers },
             body: JSON.stringify(body),
         });
-    return { fake, provider: provider_, send, base, warnings };
+    return { fake, provider: fakeUpstream, send, base, warnings };
 };
 
 // The concatenated text deltas and the tool input JSON, as a runtime assembles them.

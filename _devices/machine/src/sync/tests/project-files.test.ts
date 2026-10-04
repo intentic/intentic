@@ -67,10 +67,10 @@ describe("the project ignore list, as Mutagen reads it", () => {
 
     // A repository's own `.intentic/` is committed content (`checks.json`), but its iq caches are each machine's own.
     it("leaves out a repository's machine-local .intentic folders at any depth, and keeps the rest of it", () => {
-        for (const path of [".intentic/cache/iq/index.db-shm", "intentic/.intentic/local/cache/iq/index.db", "a/b/.intentic/cache"]) {
+        for (const path of [`${STATE_DIR}/cache/iq/index.db-shm`, `intentic/${STATE_DIR}/local/cache/iq/index.db`, `a/b/${STATE_DIR}/cache`]) {
             expect([path, ignored(path)]).toEqual([path, true]);
         }
-        for (const path of [".intentic/checks.json", "intentic/.intentic/checks.json", "x.intentic/cache/a", ".intentic/cached"]) {
+        for (const path of [`${STATE_DIR}/checks.json`, `intentic/${STATE_DIR}/checks.json`, `x${STATE_DIR}/cache/a`, `${STATE_DIR}/cached`]) {
             expect([path, ignored(path)]).toEqual([path, false]);
         }
     });

@@ -11,7 +11,13 @@ const source = join(dirname(import.meta.dirname), "src");
 const generated = join(source, "store", "generated");
 try {
     const { documents } = await stateModules(source);
-    const recordText = await readFile(join(generated, "state-shapes.json"), "utf8").catch(() => "");
+    // No record yet reads as the generator's first-run empty one; any other failed read is doubt, and regenerates below.
+    const recordText = await readFile(join(generated, "state-shapes.json"), "utf8").catch((error) => {
+        if (error?.code === "ENOENT") {
+            return "";
+        }
+        throw error;
+    });
     const want = `${CONVERSION_CHECKS_STAMP}${await conversionChecksInputs(source, documents, recordText)}`;
     const have = (await readFile(join(generated, "state-shapes.ts"), "utf8")).split("\n", 1)[0];
     if (have !== want) {

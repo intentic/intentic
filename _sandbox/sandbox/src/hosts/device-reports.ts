@@ -75,11 +75,15 @@ const pulled = new Map<string, PullEntry>();
 // fresh answer.
 export const forgetPull = (id: string): void => void pulled.delete(id);
 
+// An answer this build cannot parse is no reading; JSON.parse throws nothing else for a string, and anything else is a bug.
 const safeJson = (text: string): unknown => {
     try {
         return JSON.parse(text);
-    } catch {
-        return undefined;
+    } catch (error) {
+        if (error instanceof SyntaxError) {
+            return undefined;
+        }
+        throw error;
     }
 };
 
@@ -145,6 +149,7 @@ const refreshFacts = async (services: Services, id: string): Promise<void> => {
     try {
         await services.hostHub.refresh(id, PULL_TIMEOUT_MS);
     } catch {
+        // allow(silent-catch): a machine that did not re-describe itself keeps its facts from hello, which the row shows
         return;
     }
     if (JSON.stringify(services.hostHub.state(id).facts?.links) !== before) {
@@ -488,6 +493,7 @@ export async function* manageDeviceSandbox(services: Services, id: string, input
                     const definition = await Promise.resolve()
                         .then(() => settingsDefinition(services))
                         .then((settings) => (Object.keys(settings.settings).length === 0 ? undefined : emitDefinitionToml(settings)))
+                        // allow(silent-catch): settings ride along best-effort; the runner is built without them, never refused
                         .catch(() => undefined);
                     // Absent is no overlay; a read that failed throws, or the runner would be built without it.
                     const overlay = await services.files.read(approvedPath(services));
@@ -546,6 +552,7 @@ export async function* runDeviceAgentFlow(services: Services, id: string, input:
         if (input.op === "forget-unreachable") {
             void delay(LINKS_SETTLE_MS, undefined, { ref: false })
                 .then(async () => await refreshFacts(services, id))
+                // allow(silent-catch): detached once the flow has ended; refreshFacts already keeps the last facts on a failed ask
                 .catch(() => undefined);
         }
     }
