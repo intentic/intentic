@@ -13,10 +13,13 @@ flowchart LR
     integ --> figures["sitemap lastmod<br/>page figures"]
 ```
 
-- Runs in Node during the site's build, never in the browser. Plain `.mjs` with JSDoc and `src/index.d.ts` for types, so `build` and `check` only syntax-check.
+- Runs in Node during the site's build, never in the browser. Plain `.mjs` with JSDoc and `src/index.d.ts` for types.
+  `build` and `check` syntax-check the integrations; `typecheck` checks the git date helper and its regressions as JavaScript.
 - `llmsText` and `docsSearch` read the HTML Astro just wrote to `dist/`, so tables rendered from expressions are indexed as a reader sees them. Pages marked `noindex` stay out of llms.txt. Both use the parser in `html-to-markdown.mjs`, which handles Astro's own well-formed output and nothing wider.
 - `gitStats`, `latestRelease`, `npmDownloads` and `scorecard` return `null` on any failure, so a page leaves a figure out instead of printing a wrong one; the network readers say so in the build log. `gitStats` counts commits authored by `agent@intentic.dev` and needs a full clone.
-- `lastModForUrl` maps a URL back to its source page and returns that file's last commit date. Paths resolve from `process.cwd()`, the site being built.
+- `lastModForUrl` maps a URL back to its source files and returns the last commit date touching any of them. Comparison
+  details fall back to `src/pages/compare/[slug].astro`; both details and the `/compare/` hub include
+  `../site-content/src/compare.ts` alongside their page template. Paths resolve from `process.cwd()`, the site being built.
 
 ## Key files
 
@@ -24,4 +27,11 @@ flowchart LR
 - [src/llms-text.mjs](src/llms-text.mjs) — llms.txt, llms-full.txt and the per-page `.md` mirrors.
 - [src/docs-search.mjs](src/docs-search.mjs) — splits built docs pages into heading-led search blocks.
 - [src/html-to-markdown.mjs](src/html-to-markdown.mjs) — the HTML parser and Markdown writer both integrations share.
-- [src/git-lastmod.mjs](src/git-lastmod.mjs) — URL to source file to last commit date.
+- [src/git-lastmod.mjs](src/git-lastmod.mjs) — URL to source files to last commit date.
+
+## Commands
+
+```sh
+pnpm --filter @intentic/astro-integrations test git-lastmod.integration.test.mjs
+pnpm --filter @intentic/astro-integrations typecheck
+```

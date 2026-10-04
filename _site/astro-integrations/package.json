@@ -16,7 +16,16 @@
     },
     "scripts": {
         "build": "node --check src/index.mjs && node --check src/llms-text.mjs && node --check src/html-to-markdown.mjs && node --check src/docs-search.mjs && node --check src/scorecard.mjs",
-        "check": "node --check src/index.mjs && node --check src/llms-text.mjs && node --check src/html-to-markdown.mjs && node --check src/docs-search.mjs && node --check src/scorecard.mjs"
+        "check": "node --check src/index.mjs && node --check src/llms-text.mjs && node --check src/html-to-markdown.mjs && node --check src/docs-search.mjs && node --check src/scorecard.mjs",
+        "typecheck": "tsgo --noEmit -p tsconfig.test.json",
+        "test": "suites"
+    },
+    "devDependencies": {
+        "@intentic/testing": "workspace:*",
+        "@intentic/tsconfig": "workspace:*",
+        "@types/bun": "catalog:",
+        "@types/node": "catalog:",
+        "@typescript/native-preview": "catalog:"
     },
     "peerDependencies": {
         "astro": "catalog:"

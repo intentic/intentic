@@ -14,6 +14,7 @@ flowchart LR
 - Read only by `_site/site`, at build. Each module is exported as raw source by subpath (`@intentic/site-content/docs`), so there is no build step.
 - A `Book` (`book.ts`) is one documentation tree with its own root, sidebar and search scope: `docs.ts` for users, `developers.ts` for extension authors, and `reference.ts` for the sandbox HTTP API, generated from `@intentic/sandbox-openapi` behind a few hand-written pages. A new docs page is an entry in its tree plus an `.astro` page under `_site/site/src/pages/`.
 - `page-meta.ts` maps every indexable path to its title, description and `datePublished`; `dateModified` comes from git at build.
+- `compare.ts` holds comparison copy, competitor strengths, official sources and visible FAQ answers. Each page's `verifiedOn` records when its retained sources were read; it is not a publication date. The same FAQ data drives the visible answers and structured data. Search targets and their answer locations are recorded in [the comparison research map](../../docs/marketing/comparison-search-research.md).
 - Prices, tiers, origins and legal specifics are imported from `@intentic/constants`, so the site cannot state a figure the product does not use.
 
 ## Key files

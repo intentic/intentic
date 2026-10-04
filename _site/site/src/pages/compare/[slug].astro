@@ -1,5 +1,6 @@
 ---
-import { compareFamilies, compareHref, comparePages, compareVerifiedOn, type ComparePage } from "@intentic/site-content/compare";
+import { compareFamilies, compareHref, comparePages, type ComparePage } from "@intentic/site-content/compare";
+import ComparisonFaq from "../../components/ComparisonFaq.astro";
 import { APP_URL, githubIssuesUrl, ORG_NAME } from "@intentic/site-content/site";
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import Footer from "../../components/Footer.astro";
@@ -18,15 +19,13 @@ interface Props {
 const { page } = Astro.props;
 const family = compareFamilies.find((entry) => entry.id === page.family);
 const index = comparePages.indexOf(page);
-const next = comparePages[(index + 1) % comparePages.length];
+const next = comparePages[(index + 1) % comparePages.length] ?? page;
 
 const theirRows = page.table.filter((row) => row.theirs).length;
 const host = new URL(page.url).host;
 
-// Written out rather than left as an ISO string: the note is read as a sentence, and "18 August 2026" is a
-// date a reader dates the page by, where "2026-08-18" is a field they skim past. `datetime` keeps the machine
-// -readable form on the <time> element for anything parsing the page.
-const verifiedOn = compareVerifiedOn;
+// Keep source-review dates separate from the page's publication and git modification dates.
+const verifiedOn = page.verifiedOn;
 const verifiedLabel = new Date(`${verifiedOn}T00:00:00Z`).toLocaleDateString("en-GB", {
     day: "numeric",
     month: "long",
@@ -35,10 +34,10 @@ const verifiedLabel = new Date(`${verifiedOn}T00:00:00Z`).toLocaleDateString("en
 });
 ---
 
-<BaseLayout breadcrumbs={[{ name: "Comparisons", path: compareHref("") }, { name: page.navLabel, path: compareHref(page.slug) }]}>
+<BaseLayout faq={page.faq} breadcrumbs={[{ name: "Comparisons", path: compareHref("") }, { name: page.name, path: compareHref(page.slug) }]}>
     <Nav />
     <main class="flex-1">
-        <!-- Hero: the framing, then what they are in their own words -->
+        <!-- Hero: the choice and a checked product summary -->
         <section class="page-hero">
             <div class="below-bar relative mx-auto max-w-7xl px-6 pb-14 lg:pb-16">
                 <div class="flex flex-wrap items-center gap-3">
@@ -48,9 +47,9 @@ const verifiedLabel = new Date(`${verifiedOn}T00:00:00Z`).toLocaleDateString("en
                 <h1 class="display mt-3 max-w-3xl text-3xl leading-tight font-semibold sm:text-4xl">{page.heading}</h1>
                 <p class="mt-4 max-w-copy text-base leading-relaxed text-muted">{page.sub}</p>
 
-                {/* Their words carry their own quotation marks and a caption naming whose they are; no rule down the left. */}
+                {/* A checked product summary, not a quotation attributed to the vendor. */}
                 <figure class="mt-7">
-                    <blockquote class="max-w-copy text-sm leading-relaxed text-muted">{page.theirPitch}</blockquote>
+                    <p class="max-w-copy text-sm leading-relaxed text-muted">{page.theirPitch}</p>
                     <figcaption class="mt-2 text-2xs text-subtle">
                         {page.name} ·
                         <a href={page.url} target="_blank" rel="noopener nofollow" class="transition-colors hover:text-link">{host}</a>
@@ -58,8 +57,8 @@ const verifiedLabel = new Date(`${verifiedOn}T00:00:00Z`).toLocaleDateString("en
                 </figure>
 
                 <div class="mt-7 flex flex-wrap gap-3">
-                    <a class="btn btn-primary" href={APP_URL}>Create your workspace</a>
-                    <a class="btn btn-secondary" href="/features/">See the product</a>
+                    <a class="btn btn-primary" href={APP_URL}>Try intentic free</a>
+                    <a class="btn btn-secondary" href="/features/">See how intentic works</a>
                 </div>
             </div>
         </section>
@@ -76,13 +75,13 @@ const verifiedLabel = new Date(`${verifiedOn}T00:00:00Z`).toLocaleDateString("en
 <!-- Head to head: the centrepiece. -->
             <section class="fade-in border-b band-rule py-14 lg:py-16">
                 <div class="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
-                    <h2 class="text-xl font-semibold tracking-tight text-content">Head to head</h2>
+                    <h2 class="text-xl font-semibold tracking-tight text-content">{page.name} vs intentic: at a glance</h2>
                     <p class="text-2xs text-subtle">
-                        {theirRows} of {page.table.length} rows go to {page.name}: <span class="text-primary-400">▸</span> marks them
+                        <span class="text-primary-400">▸</span> marks {page.name}'s strengths ({theirRows} rows)
                     </p>
                 </div>
                 <p class="mt-3 max-w-copy text-sm leading-relaxed text-subtle">
-                    <span class="font-medium text-muted">Where you agree · </span>{page.overlap.body}
+                    <span class="font-medium text-muted">{page.overlap.title} · </span>{page.overlap.body}
                 </p>
                 <table class="cmp mt-7 w-full">
                     <thead>
@@ -111,7 +110,7 @@ const verifiedLabel = new Date(`${verifiedOn}T00:00:00Z`).toLocaleDateString("en
 
 <!-- What it comes down to: the one or two distinctions that survive the table. -->
             <section class="fade-in border-b band-rule py-14 lg:py-16">
-                <h2 class="text-xl font-semibold tracking-tight text-content">What it comes down to</h2>
+                <h2 class="text-xl font-semibold tracking-tight text-content">The main differences</h2>
                 <div class:list={["mt-6 grid gap-4", page.differences.length >= 3 ? "md:grid-cols-3" : "md:grid-cols-2"]}>
                     {
                         page.differences.map((section, i) => (
@@ -139,18 +138,18 @@ const verifiedLabel = new Date(`${verifiedOn}T00:00:00Z`).toLocaleDateString("en
 
             <!-- The case for them, last and at full weight. If this is soft the whole page reads as marketing. -->
             <section class="fade-in py-14 lg:py-16">
-                <h2 class="text-xl font-semibold tracking-tight text-content">Pick {page.name} when</h2>
+                <h2 class="text-xl font-semibold tracking-tight text-content">When to choose {page.name}</h2>
                 <p class="mt-4 max-w-copy text-lg leading-relaxed text-content">{page.pickThem}</p>
             </section>
 
-<!-- THE EVIDENCE, NAMED AND DATED. -->
+            <ComparisonFaq items={page.faq} heading={`${page.name}: common questions`} />
+
             <section class="border-t band-rule py-10">
-                <h2 class="text-sm font-semibold tracking-tight text-content">How this was checked</h2>
+                <h2 class="text-sm font-semibold tracking-tight text-content">Sources and last checked date</h2>
                 <p class="mt-3 max-w-copy text-sm leading-relaxed text-subtle">
-                    Every claim about {page.name} on this page is drawn from its own documentation, last read on{" "}
-                    <time datetime={verifiedOn}>{verifiedLabel}</time>. These products move fast. Spot something out of date?{" "}
-                    <a href={githubIssuesUrl} target="_blank" rel="noopener" class="text-link hover:underline">Open an issue</a>{" "}
-                    and it is fixed in the next build.
+                    Product facts were checked against these official sources on{" "}
+                    <time datetime={verifiedOn}>{verifiedLabel}</time>. Prices and features can change.{" "}
+                    <a href={githubIssuesUrl} target="_blank" rel="noopener" class="text-link hover:underline">Report a mistake</a>.
                 </p>
                 <ul class="mt-4 flex flex-wrap gap-2">
                     <li>
@@ -190,7 +189,7 @@ const verifiedLabel = new Date(`${verifiedOn}T00:00:00Z`).toLocaleDateString("en
                     <p class="mt-1 max-w-sm text-sm text-muted">{next.menuBlurb}</p>
                 </a>
                 <div class="flex flex-wrap gap-3">
-                    <a class="btn btn-primary" href={APP_URL}>Create your workspace</a>
+                    <a class="btn btn-primary" href={APP_URL}>Try intentic free</a>
                     <a class="btn btn-secondary" href={compareHref("")}>All comparisons</a>
                 </div>
             </div>

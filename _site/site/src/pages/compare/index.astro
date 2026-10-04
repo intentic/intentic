@@ -2,6 +2,7 @@
 import { compareFamilies, compareHref, compareIndex, comparePages, familyPages } from "@intentic/site-content/compare";
 import { APP_URL, DEMO_PATH, githubIssuesUrl } from "@intentic/site-content/site";
 import BaseLayout from "../../layouts/BaseLayout.astro";
+import ComparisonFaq from "../../components/ComparisonFaq.astro";
 import Footer from "../../components/Footer.astro";
 import Nav from "../../components/Nav.astro";
 
@@ -12,7 +13,7 @@ import Nav from "../../components/Nav.astro";
 const pageByName = new Map(comparePages.map((page) => [page.name, page]));
 ---
 
-<BaseLayout breadcrumbs={[{ name: "Comparisons", path: compareHref("") }]}>
+<BaseLayout faq={compareIndex.faq} breadcrumbs={[{ name: "AI coding tool comparisons", path: compareHref("") }]}>
     <Nav />
     <main class="flex-1">
         <!-- Hero + the jump strip: find your tool without reading anything -->
@@ -23,7 +24,7 @@ const pageByName = new Map(comparePages.map((page) => [page.name, page]));
                 <p class="mt-4 max-w-copy text-base leading-relaxed text-muted">{compareIndex.sub}</p>
 
                 <div class="mt-8 border-t border-line pt-6">
-                    <div class="eyebrow">Jump to one</div>
+                    <div class="eyebrow">Find your tool</div>
                     <div class="mt-3 flex flex-wrap gap-2">
                         {
                             comparePages.map((page) => (
@@ -39,7 +40,7 @@ const pageByName = new Map(comparePages.map((page) => [page.name, page]));
                 </div>
 
                 <div class="mt-8 flex flex-wrap gap-3">
-                    <a class="btn btn-primary" href={APP_URL}>Create your workspace</a>
+                    <a class="btn btn-primary" href={APP_URL}>Try intentic free</a>
                     <a class="btn btn-secondary" href={DEMO_PATH}>Open the live workspace</a>
                 </div>
             </div>
@@ -114,7 +115,11 @@ const pageByName = new Map(comparePages.map((page) => [page.name, page]));
             </div>
         </section>
 
-        <!-- Corrections. A comparison page that invites its own contradiction is the only kind worth trusting. -->
+        <div class="mx-auto max-w-7xl px-6">
+            <ComparisonFaq items={compareIndex.faq} heading="AI coding tools: common questions" />
+        </div>
+
+        <!-- Corrections. -->
         <section class="border-t band-rule">
             <div class="mx-auto flex max-w-7xl flex-col gap-6 px-6 py-14 sm:flex-row sm:items-center sm:justify-between">
                 <div>

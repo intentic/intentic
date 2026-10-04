@@ -10,6 +10,7 @@
         "preview": "astro preview",
         "check": "astro check",
         "test": "node scripts/check-desk-palette.mjs && node scripts/check-alignment.mjs",
+        "test:compare": "bun --conditions=@intentic/src scripts/check-comparisons.mjs",
         "astro": "astro",
         "sync:registry": "node scripts/sync-registry.mjs"
     },

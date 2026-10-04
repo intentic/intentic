@@ -1,0 +1,24 @@
+---
+import type { FaqEntry } from "@intentic/site-content/structured-data";
+
+interface Props {
+    items: FaqEntry[];
+    heading: string;
+}
+
+const { items, heading } = Astro.props;
+---
+
+<section id="faq" class="border-t band-rule py-14 lg:py-16" aria-labelledby="faq-heading">
+    <h2 id="faq-heading" class="text-xl font-semibold tracking-tight text-content">{heading}</h2>
+    <div class="mt-7 grid gap-x-12 gap-y-8 lg:grid-cols-2">
+        {
+            items.map((item, index) => (
+                <div id={`faq-${index + 1}`} class="scroll-mt-28">
+                    <h3 class="text-base font-semibold text-content">{item.question}</h3>
+                    <p class="mt-2 max-w-copy text-sm leading-relaxed text-muted">{item.answer}</p>
+                </div>
+            ))
+        }
+    </div>
+</section>

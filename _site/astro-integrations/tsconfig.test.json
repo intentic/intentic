@@ -1,0 +1,16 @@
+/* Checks the git date helper and its regressions without emitting build artifacts. */
+{
+    "extends": "@intentic/tsconfig/tsconfig.base.json",
+    "compilerOptions": {
+        "allowJs": true,
+        "checkJs": true,
+        "types": ["node", "bun", "@intentic/testing/globals"],
+        "noEmit": true,
+        "composite": false,
+        "declaration": false,
+        "declarationMap": false,
+        "tsBuildInfoFile": "./.cache/tsbuildinfo-typecheck"
+    },
+    "include": ["./src/git-lastmod.mjs", "./src/git-lastmod.integration.test.mjs"],
+    "exclude": []
+}
