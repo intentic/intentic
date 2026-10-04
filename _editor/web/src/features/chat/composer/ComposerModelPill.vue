@@ -64,7 +64,7 @@ defineExpose({ el, label: modelLabelText });
         <!-- Hides with the name: on a pill down to its logo it would be the one word left. -->
         <span v-if="runningOn !== undefined" class="shrink-0 font-normal text-subtle" :class="labelClass">{{ t(`chat.composerModelPill.nextMessage`) }}</span>
         <!-- Goes with the name: a pill down to its logo is a glyph press like its neighbours, and the chevron was width it no longer
-             had. The wrapper is what hides, since the icon's own display rule outranks a utility put on it. -->
-        <span class="inline-flex shrink-0" :class="labelClass"><Icon name="chevron-down" class="text-2xs text-subtle" /></span>
+             had. -->
+        <Icon name="chevron-down" class="text-2xs text-subtle" :class="labelClass" />
     </button>
 </template>

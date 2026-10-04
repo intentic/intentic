@@ -85,14 +85,16 @@
     }
 }
 
-[data-mode="dark"] :is(.ui-code, .ui-code-field) .shiki,
-[data-mode="dark"] :is(.ui-code, .ui-code-field) .shiki span {
+/* SHIKI'S DUAL THEME, WHEREVER IT IS DRAWN. Shiki writes each token's light colour inline and its dark one beside it as
+   `--shiki-dark`, and only `!important` outranks an inline style. Keyed to that property rather than to a wrapper class
+   per consumer (this kit's code, the chat's blocks and commands, search snippets, a file peek, a rule's command, the
+   markdown editor's code lines), each of which used to carry its own copy: a new place that draws tokens is dark in the
+   dark scheme without one. An element with no token colour of its own keeps the colour it inherits or is given. */
+[data-mode="dark"] [style*="--shiki-dark"] {
     color: var(--shiki-dark) !important;
 }
 
-/* The placeholder is not code, so it does not take the grammar's colours in either mode. */
-[data-mode="dark"] .ui-code-field-placeholder .ui-code-field-html .shiki,
-[data-mode="dark"] .ui-code-field-placeholder .ui-code-field-html .shiki span,
+/* The placeholder is not code, so it does not take the grammar's colours in either mode; it outranks the rule above. */
 .ui-code-field-placeholder .ui-code-field-html .shiki,
 .ui-code-field-placeholder .ui-code-field-html .shiki span {
     color: var(--color-subtle) !important;

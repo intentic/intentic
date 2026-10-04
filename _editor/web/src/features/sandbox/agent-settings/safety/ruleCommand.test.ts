@@ -18,14 +18,13 @@ afterEach(() => {
     document.body.innerHTML = ``;
 });
 
-it(`renders the rule command with the syntax highlighting hook`, () => {
+it(`renders the rule command as code`, () => {
     const host = mount(`node _tools/oxlint/lint-edit.mjs {file}`);
-    const code = host.querySelector(`code`);
-    expect(code).not.toBeNull();
-    expect(code?.className).toContain(`rule-command-code`);
+    expect(host.querySelector(`code`)?.textContent).toBe(`node _tools/oxlint/lint-edit.mjs {file}`);
 });
 
-it(`tokenizes command into syntax-colored spans`, async () => {
+// Each coloured span carries Shiki's dark value inline, which is what code.css's one dark-mode rule keys off.
+it(`tokenizes command into syntax-colored spans, each with its dark value`, async () => {
     const host = mount(`node _tools/oxlint/lint-edit.mjs {file}`);
     const until = performance.now() + 10_000;
     const coloured = (): HTMLElement[] => [...host.querySelectorAll<HTMLElement>(`code span`)].filter((span) => span.style.color !== ``);
@@ -34,4 +33,5 @@ it(`tokenizes command into syntax-colored spans`, async () => {
     }
     const spans = coloured();
     expect(spans.length).toBeGreaterThan(0);
+    expect(spans.every((span) => span.style.getPropertyValue(`--shiki-dark`) !== ``)).toBe(true);
 });

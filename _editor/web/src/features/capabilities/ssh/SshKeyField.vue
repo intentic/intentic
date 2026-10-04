@@ -69,7 +69,7 @@ onBeforeUnmount(() => {
     <div class="ui-field">
         <span class="ui-field-label">
             {{ field.label }}
-            <Icon v-if="publicKey" name="check-circle" class="ml-1 align-middle text-2xs text-success" />
+            <Icon v-if="publicKey" name="check-circle" class="ml-1 text-2xs text-success" />
         </span>
         <template v-if="publicKey">
             <Code :code="publicKey" :wrap="true" :label="t(`capabilities.sshKeyField.publicKey`)" />

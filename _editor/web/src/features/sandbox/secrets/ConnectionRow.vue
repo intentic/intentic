@@ -60,10 +60,11 @@ const DOT_TONE: Record<string, string> = {
 </script>
 
 <template>
-    <!-- Every connection row stands at one height, two lines or one, so a list of them reads as a column rather than a staircase. -->
+    <!-- Every connection row stands at one height, two lines or one, so a list of them reads as a column rather than a staircase:
+         the row's lines centre in that height (`content-center`, since the row is a wrapping flex line of its own). -->
     <Row
         :interactive="interactive"
-        :class="[tone === `warning` ? `bg-warning/10` : ``, state === `action` ? `` : `flex min-h-[calc(3.5rem+1px)] flex-col justify-center`]"
+        :class="[tone === `warning` ? `bg-warning/10` : ``, state === `action` ? `` : `min-h-[calc(3.5rem+1px)] content-center`]"
     >
         <!-- One column as wide as the tier's mark, so a dot, a meter and a plus all centre on the same line and every name starts at the same x. -->
         <template #lead="{ mark }">

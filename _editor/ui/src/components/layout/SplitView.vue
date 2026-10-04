@@ -63,37 +63,36 @@ const railClass = computed(() => {
 </script>
 
 <template>
-    <div class="flex flex-col" :class="scroll === `panes` ? `h-full min-h-0 overflow-hidden` : ``">
-        <!-- The head does not scroll: the title and anything pinned under it stay put while you read. -->
-        <Page :width="PAGE_WIDTH" class="flex flex-col" :class="scroll === `panes` ? `min-h-0 flex-1` : ``">
-            <PageHeader :title="title" :description="description">
-                <template v-if="$slots[`info`]" #info><slot name="info" /></template>
-                <template v-if="$slots[`actions`]" #actions><slot name="actions" /></template>
-            </PageHeader>
+    <!-- The head does not scroll: the title and anything pinned under it stay put while you read. With panes that
+         scroll, the page is the full height its container gives it, and nothing past it: no column of its own to fill. -->
+    <Page :width="PAGE_WIDTH" class="flex flex-col" :class="scroll === `panes` ? `h-full min-h-0 overflow-hidden` : ``">
+        <PageHeader :title="title" :description="description">
+            <template v-if="$slots[`info`]" #info><slot name="info" /></template>
+            <template v-if="$slots[`actions`]" #actions><slot name="actions" /></template>
+        </PageHeader>
 
-            <!-- Screen-wide banners (error, live run, draft), above the split so they're never inside the pane they describe. -->
-            <div v-if="$slots[`strips`]" class="mb-4 flex shrink-0 flex-col gap-3"><slot name="strips" /></div>
+        <!-- Screen-wide banners (error, live run, draft), above the split so they're never inside the pane they describe. -->
+        <div v-if="$slots[`strips`]" class="mb-4 flex shrink-0 flex-col gap-3"><slot name="strips" /></div>
 
-            <!-- Width of this element is what's divided between rail and body (see FOLD_AT_REM); `items-start` applies only unfolded. -->
+        <!-- Width of this element is what's divided between rail and body (see FOLD_AT_REM); `items-start` applies only unfolded. -->
+        <div
+            ref="row"
+            class="flex gap-4"
+            :class="[railAside ? `flex-row` : `flex-col`, scroll === `panes` ? `min-h-0 flex-1` : railAside ? `items-start` : ``]"
+        >
+            <!-- Beside the body with room, above and full-width otherwise; nothing to index means no rail column at all. -->
             <div
-                ref="row"
-                class="flex gap-4"
-                :class="[railAside ? `flex-row` : `flex-col`, scroll === `panes` ? `min-h-0 flex-1` : railAside ? `items-start` : ``]"
+                v-if="showRail && ($slots[`rail`] !== undefined || $slots[`compact`] !== undefined)"
+                class="flex min-w-0 flex-col"
+                :class="[railClass, scroll === `panes` ? `min-h-0` : ``]"
             >
-                <!-- Beside the body with room, above and full-width otherwise; nothing to index means no rail column at all. -->
-                <div
-                    v-if="showRail && ($slots[`rail`] !== undefined || $slots[`compact`] !== undefined)"
-                    class="flex min-w-0 flex-col"
-                    :class="[railClass, scroll === `panes` ? `min-h-0` : ``]"
-                >
-                    <slot v-if="!railAside && $slots[`compact`]" name="compact" />
-                    <slot v-else name="rail" />
-                </div>
-                <!-- `compact` is passed as a slot prop too, since an inline caller body sits above this component's injection and can't read it directly. -->
-                <div v-if="showDetail" class="flex min-w-0 flex-1 flex-col" :class="scroll === `panes` ? `min-h-0` : ``">
-                    <slot name="detail" :compact="narrow" />
-                </div>
+                <slot v-if="!railAside && $slots[`compact`]" name="compact" />
+                <slot v-else name="rail" />
             </div>
-        </Page>
-    </div>
+            <!-- `compact` is passed as a slot prop too, since an inline caller body sits above this component's injection and can't read it directly. -->
+            <div v-if="showDetail" class="flex min-w-0 flex-1 flex-col" :class="scroll === `panes` ? `min-h-0` : ``">
+                <slot name="detail" :compact="narrow" />
+            </div>
+        </div>
+    </Page>
 </template>

@@ -58,70 +58,66 @@ const when = (at: number): string => {
         <Notice v-if="actionError" :of="noticeOf(actionError)" class="mb-2" />
         <Notice v-else-if="error" :of="noticeOf(error)" class="mb-2" />
 
-        <div v-if="shares.length > 0" class="rounded-lg bg-card shadow-sm">
-            <div class="flex flex-col divide-y divide-line-subtle">
-                <div v-for="share in shares" :key="share.id" class="flex flex-col gap-1.5 px-4 py-2.5">
-                    <div class="flex items-center gap-3">
-                        <Icon name="comments" class="shrink-0 text-subtle" />
-                        <div class="min-w-0 flex-1">
-                            <p class="truncate text-xs font-medium text-content" v-tooltip.top.overflow="share.title">{{ share.title }}</p>
-                            <!-- Order matters: how current, how much, how deep. -->
-                            <p class="truncate text-2xs text-subtle">
-                                {{
-                                    t(
-                                        `sharedConversations.summary`,
-                                        {
-                                            when: when(share.sharedAt),
-                                            count: share.messages,
-                                            detail:
-                                                share.detail === `messages`
-                                                    ? t(`sharedConversations.messagesOnly`)
-                                                    : t(`sharedConversations.withAgentWork`),
-                                        },
-                                        share.messages,
-                                    )
-                                }}
-                            </p>
-                        </div>
-                        <a
-                            v-if="share.url"
-                            :href="share.url"
-                            target="_blank"
-                            rel="noopener"
-                            class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted hover:bg-overlay hover:text-content"
-                            :aria-label="t(`sharedConversations.openInNewTab`, { title: share.title })"
-                            v-tooltip.bottom="t(`common.newTab`)"
-                        >
-                            <Icon name="external-link" />
-                        </a>
-                        <CopyButton v-if="share.url" :text="share.url" :label="t(`sharedConversations.copyLink`)" />
-                        <!-- Update, not re-share: the link stays the same, since it's already in someone's messages. -->
-                        <Button
-                            :label="t(`sharedConversations.update`)"
-                            size="small"
-                            severity="secondary"
-                            :disabled="busy !== undefined"
-                            v-tooltip.bottom="{ title: t(`sharedConversations.publishLatest`), note: t(`sharedConversations.linkStaysSame`) }"
-                            @click="act(share.id, update.mutateAsync)"
-                        >
-                            <template #icon><Icon name="refresh" /></template>
-                        </Button>
-                        <Button
-                            :label="t(`sharedConversations.stopSharing`)"
-                            size="small"
-                            severity="secondary"
-                            :disabled="busy !== undefined"
-                            @click="act(share.id, remove.mutateAsync)"
-                        >
-                            <template #icon><Icon name="trash" /></template>
-                        </Button>
+        <div v-if="shares.length > 0" class="flex flex-col divide-y divide-line-subtle rounded-lg bg-card shadow-sm">
+            <div v-for="share in shares" :key="share.id" class="flex flex-col gap-1.5 px-4 py-2.5">
+                <div class="flex items-center gap-3">
+                    <Icon name="comments" class="shrink-0 text-subtle" />
+                    <div class="min-w-0 flex-1">
+                        <p class="truncate text-xs font-medium text-content" v-tooltip.top.overflow="share.title">{{ share.title }}</p>
+                        <!-- Order matters: how current, how much, how deep. -->
+                        <p class="truncate text-2xs text-subtle">
+                            {{
+                                t(
+                                    `sharedConversations.summary`,
+                                    {
+                                        when: when(share.sharedAt),
+                                        count: share.messages,
+                                        detail:
+                                            share.detail === `messages`
+                                                ? t(`sharedConversations.messagesOnly`)
+                                                : t(`sharedConversations.withAgentWork`),
+                                    },
+                                    share.messages,
+                                )
+                            }}
+                        </p>
                     </div>
-                    <span v-if="share.url" class="truncate font-mono text-2xs text-subtle" v-tooltip.bottom.overflow="share.url">{{
-                        share.url
-                    }}</span>
-                    <!-- No tunnel means the page exists but nothing can reach it; worth flagging instead of looking fine. -->
-                    <span v-else class="text-2xs text-danger">{{ t(`sharedConversations.sandboxNoPublicAddress`) }}</span>
+                    <a
+                        v-if="share.url"
+                        :href="share.url"
+                        target="_blank"
+                        rel="noopener"
+                        class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted hover:bg-overlay hover:text-content"
+                        :aria-label="t(`sharedConversations.openInNewTab`, { title: share.title })"
+                        v-tooltip.bottom="t(`common.newTab`)"
+                    >
+                        <Icon name="external-link" />
+                    </a>
+                    <CopyButton v-if="share.url" :text="share.url" :label="t(`sharedConversations.copyLink`)" />
+                    <!-- Update, not re-share: the link stays the same, since it's already in someone's messages. -->
+                    <Button
+                        :label="t(`sharedConversations.update`)"
+                        size="small"
+                        severity="secondary"
+                        :disabled="busy !== undefined"
+                        v-tooltip.bottom="{ title: t(`sharedConversations.publishLatest`), note: t(`sharedConversations.linkStaysSame`) }"
+                        @click="act(share.id, update.mutateAsync)"
+                    >
+                        <template #icon><Icon name="refresh" /></template>
+                    </Button>
+                    <Button
+                        :label="t(`sharedConversations.stopSharing`)"
+                        size="small"
+                        severity="secondary"
+                        :disabled="busy !== undefined"
+                        @click="act(share.id, remove.mutateAsync)"
+                    >
+                        <template #icon><Icon name="trash" /></template>
+                    </Button>
                 </div>
+                <span v-if="share.url" class="truncate font-mono text-2xs text-subtle" v-tooltip.bottom.overflow="share.url">{{ share.url }}</span>
+                <!-- No tunnel means the page exists but nothing can reach it; worth flagging instead of looking fine. -->
+                <span v-else class="text-2xs text-danger">{{ t(`sharedConversations.sandboxNoPublicAddress`) }}</span>
             </div>
         </div>
     </section>

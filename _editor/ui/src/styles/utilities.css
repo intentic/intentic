@@ -78,6 +78,19 @@
     }
 }
 
+/* THE ICON'S BOX (Icon.vue): a 1em glyph that sits on the text it labels and keeps its size in a flex row, where the flex
+   algorithm would otherwise shrink it on the main axis to a sliver. A component default, layered like the kit's others
+   so a utility put on an <Icon> (`hidden`, `max-md:hidden`, `block`) outranks it as it would on any element. It used to
+   be the component's own scoped rule, which, unlayered, outranked every utility, so hiding an icon at a breakpoint took
+   a wrapper span around it. */
+@layer components {
+    .ui-icon {
+        display: inline-block;
+        vertical-align: -0.125em;
+        flex: none;
+    }
+}
+
 /* Loading placeholder. */
 @layer components {
     .skeleton {

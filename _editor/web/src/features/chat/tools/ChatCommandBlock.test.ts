@@ -1,5 +1,5 @@
-// Pins that the dark-mode color flip actually applies: the class the `<pre>` renders and the chat.css rule
-// keying off it are two halves of one contract, tested together since either alone fails silently.
+// Pins that the dark-mode color flip actually applies: the `--shiki-dark` every coloured span carries inline and the
+// code.css rule keying off it are two halves of one contract, tested together since either alone fails silently.
 import "@intentic/testing/dom";
 import type { ProgramAsk } from "@intentic/sandbox-contract";
 import { readFileSync } from "node:fs";
@@ -7,9 +7,6 @@ import { join } from "node:path";
 import { type App, createApp, h } from "vue";
 import ChatCommandBlock from "./ChatCommandBlock.vue";
 import { IconStub } from "@intentic/ui/testing";
-
-// The hook the two halves meet on, spelled once and asserted on both sides.
-const HOOK = `chat-command-block`;
 
 const PROGRAM: ProgramAsk = {
     text: `rm -rf /tmp/film-ws && node /tmp/film-ws.mjs 60 2>&1 | tail -25`,
@@ -35,16 +32,11 @@ afterEach(() => {
     document.body.innerHTML = ``;
 });
 
-it(`renders the command under the class dark mode's colour flip keys off`, () => {
-    const pre = mount(PROGRAM).querySelector(`pre`);
-    expect(pre?.className).toContain(HOOK);
-});
-
 it(`flips those tokens to their dark value in dark mode, over the inline light one`, () => {
-    const css = readFileSync(join(import.meta.dirname, `../panel/chat.css`), `utf8`);
-    // Requires `!important`, since without it the inline light `color` would win.
-    const rule = new RegExp(String.raw`\[data-mode="dark"\][^{}]*\.${HOOK}[^{}]*\{[^{}]*var\(--shiki-dark\)\s*!important`);
-    expect(css).toMatch(rule);
+    // The kit's one rule for every place Shiki's dual theme is drawn, keyed to the `--shiki-dark` each token carries
+    // inline (pinned below). Requires `!important`, since without it the inline light `color` would win.
+    const css = readFileSync(join(import.meta.dirname, `../../../../../ui/src/styles/code.css`), `utf8`);
+    expect(css).toMatch(/\[data-mode="dark"\]\s*\[style\*="--shiki-dark"\]\s*\{[^{}]*color:\s*var\(--shiki-dark\)\s*!important/);
 });
 
 // The dark var only exists once Shiki's grammar loads for this language; an unsupported language renders

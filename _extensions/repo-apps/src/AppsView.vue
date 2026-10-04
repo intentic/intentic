@@ -258,71 +258,66 @@ onMounted(async () => {
                     <div v-else-if="appRows.length === 0 && !isLoading" :class="ui.emptyState()">
                         {{ t(`appsView.noAppsYetUse`) }}
                     </div>
-                    <div v-else class="overflow-hidden rounded-lg bg-card shadow-sm">
-                        <div class="flex flex-col divide-y divide-line-subtle">
-                            <div v-for="app in appRows" :key="app.app" class="flex items-center gap-3 px-4 py-2.5">
-                                <Icon :name="app.badge.icon" class="shrink-0 text-lg" :class="app.badge.tint" />
-                                <div class="flex min-w-0 flex-1 items-center gap-2">
-                                    <span class="truncate font-medium text-content">{{ app.app }}</span>
-                                    <span
-                                        v-if="app.badge.label"
-                                        class="shrink-0 rounded px-1.5 py-0.5 text-2xs font-medium"
-                                        :class="app.badge.pill"
-                                        >{{ app.badge.label }}</span
-                                    >
-                                    <span v-if="app.kind && app.kind !== app.app && app.badge.known" class="shrink-0 truncate text-2xs text-subtle">{{
-                                        app.kind
-                                    }}</span>
-                                </div>
-                                <StatusBadge
-                                    :variant="app.healthy ? 'success' : app.running ? 'info' : 'neutral'"
-                                    :label="app.healthy ? 'healthy' : app.running ? 'starting' : 'stopped'"
-                                    size="xs"
-                                    dot
-                                />
-                                <a
-                                    v-if="app.previewUrl && app.healthy"
-                                    :href="app.previewUrl"
-                                    target="_blank"
-                                    rel="noopener"
-                                    :class="ui.iconButton(`h-8 w-8`)"
-                                    :aria-label="t(`appsView.openPreviewInNew`, { app: app.app })"
-                                    v-tooltip.top="t(`appsView.openPreview`)"
-                                >
-                                    <Icon name="external-link" />
-                                </a>
-                                <button
-                                    type="button"
-                                    :class="ui.iconButton(`h-8 w-8`)"
-                                    :aria-label="t(`appsView.openTerminal`, { app: app.app })"
-                                    v-tooltip.top="t(`appsView.terminal`)"
-                                    @click="openFocused(sessionOf(app.app))"
-                                >
-                                    <Icon name="align-left" />
-                                </button>
-                                <Button
-                                    v-if="testsOf(app.app).length > 0"
-                                    :label="t(`appsView.runTests`)"
-                                    size="small"
-                                    severity="secondary"
-                                    @click="runTests(`${app.app}__test`, testsOf(app.app))"
-                                >
-                                    <template #icon><Icon name="bolt" /></template>
-                                </Button>
-                                <Button v-if="!app.running" :label="t(`appsView.start`)" size="small" :disabled="busy" @click="startOne(app.app)">
-                                    <template #icon><Icon name="play" /></template>
-                                </Button>
-                                <Button
-                                    v-else
-                                    :label="t(`appsView.stop`)"
-                                    size="small"
-                                    severity="secondary"
-                                    :disabled="busy"
-                                    @click="act(() => stopApp(app.app))"
-                                >
-                                    <template #icon><Icon name="stop" /></template>
-                                </Button>
+                    <div v-else class="flex flex-col divide-y divide-line-subtle overflow-hidden rounded-lg bg-card shadow-sm">
+                        <div v-for="app in appRows" :key="app.app" class="flex items-center gap-3 px-4 py-2.5">
+                            <Icon :name="app.badge.icon" class="shrink-0 text-lg" :class="app.badge.tint" />
+                            <div class="flex min-w-0 flex-1 items-center gap-2">
+                                <span class="truncate font-medium text-content">{{ app.app }}</span>
+                                <span v-if="app.badge.label" class="shrink-0 rounded px-1.5 py-0.5 text-2xs font-medium" :class="app.badge.pill">{{
+                                    app.badge.label
+                                }}</span>
+                                <span v-if="app.kind && app.kind !== app.app && app.badge.known" class="shrink-0 truncate text-2xs text-subtle">{{
+                                    app.kind
+                                }}</span>
                             </div>
+                            <StatusBadge
+                                :variant="app.healthy ? 'success' : app.running ? 'info' : 'neutral'"
+                                :label="app.healthy ? 'healthy' : app.running ? 'starting' : 'stopped'"
+                                size="xs"
+                                dot
+                            />
+                            <a
+                                v-if="app.previewUrl && app.healthy"
+                                :href="app.previewUrl"
+                                target="_blank"
+                                rel="noopener"
+                                :class="ui.iconButton(`h-8 w-8`)"
+                                :aria-label="t(`appsView.openPreviewInNew`, { app: app.app })"
+                                v-tooltip.top="t(`appsView.openPreview`)"
+                            >
+                                <Icon name="external-link" />
+                            </a>
+                            <button
+                                type="button"
+                                :class="ui.iconButton(`h-8 w-8`)"
+                                :aria-label="t(`appsView.openTerminal`, { app: app.app })"
+                                v-tooltip.top="t(`appsView.terminal`)"
+                                @click="openFocused(sessionOf(app.app))"
+                            >
+                                <Icon name="align-left" />
+                            </button>
+                            <Button
+                                v-if="testsOf(app.app).length > 0"
+                                :label="t(`appsView.runTests`)"
+                                size="small"
+                                severity="secondary"
+                                @click="runTests(`${app.app}__test`, testsOf(app.app))"
+                            >
+                                <template #icon><Icon name="bolt" /></template>
+                            </Button>
+                            <Button v-if="!app.running" :label="t(`appsView.start`)" size="small" :disabled="busy" @click="startOne(app.app)">
+                                <template #icon><Icon name="play" /></template>
+                            </Button>
+                            <Button
+                                v-else
+                                :label="t(`appsView.stop`)"
+                                size="small"
+                                severity="secondary"
+                                :disabled="busy"
+                                @click="act(() => stopApp(app.app))"
+                            >
+                                <template #icon><Icon name="stop" /></template>
+                            </Button>
                         </div>
                     </div>
                     <div v-if="adding" class="mt-2 flex items-center gap-2 text-xs text-muted">
@@ -334,15 +329,13 @@ onMounted(async () => {
                 <!-- _apps/<x> dirs with tests but not startable apps; muted and denser so this never competes with Apps. -->
                 <section v-if="monorepo && packageEntries.length > 0" class="mt-6">
                     <h3 :class="ui.sectionLabel('mb-2')">{{ t(`appsView.packages`) }}</h3>
-                    <div class="overflow-hidden rounded-lg bg-card/40 shadow-sm">
-                        <div class="flex flex-col divide-y divide-line/60">
-                            <div v-for="[name, dirs] in packageEntries" :key="name" class="flex items-center gap-3 px-4 py-2">
-                                <Icon name="box" class="shrink-0 text-subtle" />
-                                <span class="min-w-0 flex-1 truncate font-mono text-sm text-content">{{ name }}</span>
-                                <Button :label="t(`appsView.runTests`)" size="small" severity="secondary" @click="runTests(`${name}__test`, dirs)">
-                                    <template #icon><Icon name="bolt" /></template>
-                                </Button>
-                            </div>
+                    <div class="flex flex-col divide-y divide-line/60 overflow-hidden rounded-lg bg-card/40 shadow-sm">
+                        <div v-for="[name, dirs] in packageEntries" :key="name" class="flex items-center gap-3 px-4 py-2">
+                            <Icon name="box" class="shrink-0 text-subtle" />
+                            <span class="min-w-0 flex-1 truncate font-mono text-sm text-content">{{ name }}</span>
+                            <Button :label="t(`appsView.runTests`)" size="small" severity="secondary" @click="runTests(`${name}__test`, dirs)">
+                                <template #icon><Icon name="bolt" /></template>
+                            </Button>
                         </div>
                     </div>
                 </section>
@@ -361,15 +354,13 @@ onMounted(async () => {
                             <template #icon><Icon name="play" /></template>
                         </Button>
                     </div>
-                    <div class="overflow-hidden rounded-lg bg-card/40 shadow-sm">
-                        <div class="flex flex-col divide-y divide-line/60">
-                            <div v-for="dir in grouped.libraries" :key="dir" class="flex items-center gap-3 px-4 py-2">
-                                <Icon name="bolt" class="shrink-0 text-subtle" />
-                                <span class="min-w-0 flex-1 truncate font-mono text-sm text-content">{{ label(dir) }}</span>
-                                <Button :label="t(`appsView.run`)" size="small" severity="secondary" @click="runTests(libSuffix(dir), [dir])">
-                                    <template #icon><Icon name="play" /></template>
-                                </Button>
-                            </div>
+                    <div class="flex flex-col divide-y divide-line/60 overflow-hidden rounded-lg bg-card/40 shadow-sm">
+                        <div v-for="dir in grouped.libraries" :key="dir" class="flex items-center gap-3 px-4 py-2">
+                            <Icon name="bolt" class="shrink-0 text-subtle" />
+                            <span class="min-w-0 flex-1 truncate font-mono text-sm text-content">{{ label(dir) }}</span>
+                            <Button :label="t(`appsView.run`)" size="small" severity="secondary" @click="runTests(libSuffix(dir), [dir])">
+                                <template #icon><Icon name="play" /></template>
+                            </Button>
                         </div>
                     </div>
                 </section>
@@ -379,15 +370,13 @@ onMounted(async () => {
                     <div v-if="projects.length === 0 && !testsLoading" :class="ui.emptyState()">
                         {{ t(`appsView.noVitestProjectsFound`) }}
                     </div>
-                    <div v-else class="overflow-hidden rounded-lg bg-card shadow-sm">
-                        <div class="flex flex-col divide-y divide-line-subtle">
-                            <div v-for="dir in projects" :key="dir" class="flex items-center gap-3 px-4 py-2">
-                                <Icon name="bolt" class="shrink-0 text-subtle" />
-                                <span class="min-w-0 flex-1 truncate font-mono text-sm text-content">{{ label(dir) }}</span>
-                                <Button :label="t(`appsView.run`)" size="small" @click="runTests(libSuffix(dir), [dir])">
-                                    <template #icon><Icon name="play" /></template>
-                                </Button>
-                            </div>
+                    <div v-else class="flex flex-col divide-y divide-line-subtle overflow-hidden rounded-lg bg-card shadow-sm">
+                        <div v-for="dir in projects" :key="dir" class="flex items-center gap-3 px-4 py-2">
+                            <Icon name="bolt" class="shrink-0 text-subtle" />
+                            <span class="min-w-0 flex-1 truncate font-mono text-sm text-content">{{ label(dir) }}</span>
+                            <Button :label="t(`appsView.run`)" size="small" @click="runTests(libSuffix(dir), [dir])">
+                                <template #icon><Icon name="play" /></template>
+                            </Button>
                         </div>
                     </div>
                 </section>

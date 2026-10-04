@@ -46,7 +46,7 @@ const shown = computed(() => (clamped.value ? lines.value.slice(0, CLAMP_LINES) 
             <!-- `pre-wrap`, not a scroller: a command being judged must show its tail, not hide it off the right edge. -->
             <!-- Reserve right padding so the copy button cannot cover wrapped command text. -->
             <pre
-                class="chat-command-block overflow-hidden rounded-md border border-line bg-canvas py-2 pr-16 pl-3 font-mono text-xs leading-relaxed break-all whitespace-pre-wrap"
+                class="overflow-hidden rounded-md border border-line bg-canvas py-2 pr-16 pl-3 font-mono text-xs leading-relaxed break-all whitespace-pre-wrap"
             ><code><template v-for="(line, index) in shown" :key="index"><span v-for="(piece, at) in line.pieces" :key="at" :style="piece.style" :class="piece.marked ? 'chat-command-mark' : 'chat-command-dim'">{{ piece.text }}</span>{{ index === shown.length - 1 ? "" : "\n" }}</template></code></pre>
             <!-- Copies the whole program, never the clamped rendering: half a command is worse than none. -->
             <!-- Positioned in its own box: the button's own root is `relative` for its press spinner, so `absolute` has to come from here instead. -->

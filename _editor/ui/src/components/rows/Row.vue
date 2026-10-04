@@ -114,7 +114,7 @@ const picked = as === `button`;
         :rel="href !== undefined ? `noopener` : undefined"
         :type="as === `button` && href === undefined ? `button` : undefined"
         :aria-current="selected ? `true` : undefined"
-        class="group block w-full text-left"
+        class="group flex w-full flex-wrap items-center justify-between gap-x-4 gap-y-2 text-left"
         :class="[
             flush ? `` : pad,
             // The app's one hover tint and one selected tint (styles/utilities.css). This used to carry
@@ -123,88 +123,77 @@ const picked = as === `button`;
             selected ? `ui-row-select-on` : ``,
         ]"
     >
-        <!-- The selection column leads the HEADLINE, not the whole row or `#lead`, so it stays aligned even when `#below` adds lines beneath the row. -->
-        <div :class="$slots[`before`] ? `flex items-center ${TIERS[tier].gap}` : `contents`">
-            <div v-if="$slots[`before`]" class="flex shrink-0 items-center"><slot name="before" /></div>
-            <div :class="$slots[`before`] ? `min-w-0 flex-1` : `contents`">
-                <!-- Wraps rather than squeezes: below the tier's headline width the trailing cluster takes a line of its own, since a title crushed to one word per line is not a narrower row, it's a broken one. -->
-                <div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-                    <!-- The left region takes the free space (`grow`) rather than shrink-wrapping the title, so the gap after a short name is still part of the hit area. -->
-                    <component
-                        :is="headerButton ? `button` : `div`"
-                        :type="headerButton ? `button` : undefined"
-                        :aria-expanded="headerButton ? headerExpanded : undefined"
-                        :aria-controls="headerButton ? headerControls : undefined"
-                        class="flex min-w-0 grow items-center"
-                        :class="[
-                            TIERS[tier].gap,
-                            TIERS[tier].headline,
-                            headerButton
-                                ? `cursor-pointer rounded-sm text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-primary-500`
-                                : ``,
-                        ]"
-                        @click="onHeaderClick"
-                    >
-                        <!-- The lead mark's size, handed to the slot so callers don't look up or restate the tier's number. -->
-                        <slot name="lead" :mark="mark" :icon-class="TIERS[tier].icon" />
-                        <Icon
-                            v-if="icon !== undefined"
-                            :name="icon"
-                            :spin="spin"
-                            class="shrink-0"
-                            :class="[TIERS[tier].icon, selected && tone === `default` ? `text-link` : TONES[tone]]"
-                        />
-                        <!-- `break-words` so an address, a path or an id breaks instead of running out of its box and painting over the `#meta` cluster beside it. -->
-                        <div class="min-w-0 flex-1 break-words" @click="onHeadlineClick">
-                            <component
-                                :is="heading === undefined ? `div` : `h${heading}`"
-                                v-if="title !== undefined || $slots[`title`]"
-                                class="min-w-0"
-                                :class="[
-                                    TIERS[tier].title,
-                                    heading === undefined ? `` : `text-lg`,
-                                    picked && !selected ? `text-muted group-hover:text-content` : `text-content`,
-                                ]"
-                            >
-                                <slot name="title">{{ title }}</slot>
-                            </component>
-                            <p v-if="description !== undefined || $slots[`description`]" class="min-w-0 text-muted" :class="TIERS[tier].description">
-                                <slot name="description">{{ description }}</slot>
-                            </p>
-                        </div>
-                    </component>
-                    <!-- `ml-auto` only bites on the line this wraps onto, where it keeps the cluster on the row's right edge rather than under the icon. -->
-                    <!-- Never wider than the row: a cluster that outgrows even a line of its own (a member's role, areas and remove on a phone) breaks between its own items instead of running off the card's edge. -->
-                    <div
-                        v-if="$slots[`meta`] || $slots[`control`] || chevron || href !== undefined"
-                        class="flex max-w-full flex-wrap items-center justify-end gap-2"
-                        :class="wideControl ? `grow basis-auto` : `ml-auto shrink-0`"
-                    >
-                        <!-- Facts, not controls: tabular so a column of sizes/times lines up, muted so the row's name still leads. -->
-                        <div v-if="$slots[`meta`]" class="flex shrink-0 items-center gap-2 text-2xs tabular-nums text-subtle">
-                            <slot name="meta" />
-                        </div>
-                        <!-- `display: contents` keeps the cluster's layout invisible while still catching clicks (`.stop`), so a control here never also toggles the row. -->
-                        <div v-if="$slots[`control`]" class="contents" @click.stop><slot name="control" /></div>
-                        <Icon v-if="chevron || href !== undefined" name="chevron-right" class="text-2xs text-subtle" />
-                    </div>
-                </div>
+        <!-- The row is its own headline line. Wraps rather than squeezes: below the tier's headline width the trailing cluster takes a line of its own, since a title crushed to one word per line is not a narrower row, it's a broken one. -->
+        <!-- The left region takes the free space (`grow`) rather than shrink-wrapping the title, so the gap after a short name is still part of the hit area. -->
+        <component
+            :is="headerButton ? `button` : `div`"
+            :type="headerButton ? `button` : undefined"
+            :aria-expanded="headerButton ? headerExpanded : undefined"
+            :aria-controls="headerButton ? headerControls : undefined"
+            class="flex min-w-0 grow items-center"
+            :class="[
+                TIERS[tier].gap,
+                TIERS[tier].headline,
+                headerButton
+                    ? `cursor-pointer rounded-sm text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-primary-500`
+                    : ``,
+            ]"
+            @click="onHeaderClick"
+        >
+            <!-- The lead mark's size, handed to the slot so callers don't look up or restate the tier's number. -->
+            <slot name="lead" :mark="mark" :icon-class="TIERS[tier].icon" />
+            <Icon
+                v-if="icon !== undefined"
+                :name="icon"
+                :spin="spin"
+                class="shrink-0"
+                :class="[TIERS[tier].icon, selected && tone === `default` ? `text-link` : TONES[tone]]"
+            />
+            <!-- `break-words` so an address, a path or an id breaks instead of running out of its box and painting over the `#meta` cluster beside it. -->
+            <div class="min-w-0 flex-1 break-words" @click="onHeadlineClick">
+                <component
+                    :is="heading === undefined ? `div` : `h${heading}`"
+                    v-if="title !== undefined || $slots[`title`]"
+                    class="min-w-0"
+                    :class="[
+                        TIERS[tier].title,
+                        heading === undefined ? `` : `text-lg`,
+                        picked && !selected ? `text-muted group-hover:text-content` : `text-content`,
+                    ]"
+                >
+                    <slot name="title">{{ title }}</slot>
+                </component>
+                <p v-if="description !== undefined || $slots[`description`]" class="min-w-0 text-muted" :class="TIERS[tier].description">
+                    <slot name="description">{{ description }}</slot>
+                </p>
             </div>
+        </component>
+        <!-- `ml-auto` only bites on the line this wraps onto, where it keeps the cluster on the row's right edge rather than under the icon. -->
+        <!-- Never wider than the row: a cluster that outgrows even a line of its own (a member's role, areas and remove on a phone) breaks between its own items instead of running off the card's edge. -->
+        <div
+            v-if="$slots[`meta`] || $slots[`control`] || chevron || href !== undefined"
+            class="flex max-w-full flex-wrap items-center justify-end gap-2"
+            :class="wideControl ? `grow basis-auto` : `ml-auto shrink-0`"
+        >
+            <!-- Facts, not controls: tabular so a column of sizes/times lines up, muted so the row's name still leads. -->
+            <div v-if="$slots[`meta`]" class="flex shrink-0 items-center gap-2 text-2xs tabular-nums text-subtle">
+                <slot name="meta" />
+            </div>
+            <!-- `display: contents` keeps the cluster's layout invisible while still catching clicks (`.stop`), so a control here never also toggles the row. -->
+            <div v-if="$slots[`control`]" class="contents" @click.stop><slot name="control" /></div>
+            <Icon v-if="chevron || href !== undefined" name="chevron-right" class="text-2xs text-subtle" />
         </div>
-        <div v-if="$slots[`below`]" class="mt-3" :class="$slots[`before`] ? `flex ${TIERS[tier].gap}` : ``">
-            <!-- The `#before` column, mirrored and hidden, so `#below` aligns under the headline instead of a typed number going stale. -->
-            <span v-if="$slots[`before`]" class="invisible flex shrink-0 items-center" inert aria-hidden="true"><slot name="before" /></span>
-            <div :class="$slots[`before`] ? `min-w-0 flex-1` : `contents`">
-                <!-- The lead, mirrored and hidden, so the block starts where the title does. -->
-                <div v-if="indent" class="flex" :class="TIERS[tier].gap">
-                    <span class="invisible flex shrink-0 items-center" :class="TIERS[tier].gap" inert aria-hidden="true">
-                        <slot name="lead" :mark="mark" :icon-class="TIERS[tier].icon" />
-                        <Icon v-if="icon !== undefined" :name="icon" :class="TIERS[tier].icon" />
-                    </span>
-                    <div class="min-w-0 flex-1"><slot name="below" /></div>
-                </div>
-                <slot v-else name="below" />
+        <!-- A line of its own under the headline: the wrap spaces it by `gap-y-2`, and its margin makes up the rest of the 0.75rem. -->
+        <div v-if="$slots[`below`]" class="mt-1 basis-full">
+            <!-- The lead, mirrored and hidden, so the block starts where the title does. -->
+            <div v-if="indent" class="flex" :class="TIERS[tier].gap">
+                <span class="invisible flex shrink-0 items-center" :class="TIERS[tier].gap" inert aria-hidden="true">
+                    <slot name="lead" :mark="mark" :icon-class="TIERS[tier].icon" />
+                    <Icon v-if="icon !== undefined" :name="icon" :class="TIERS[tier].icon" />
+                </span>
+                <div class="min-w-0 flex-1"><slot name="below" /></div>
             </div>
+            <slot v-else name="below" />
         </div>
     </component>
 </template>

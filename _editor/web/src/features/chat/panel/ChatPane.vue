@@ -567,7 +567,7 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                                     >
                                         <Icon :name="modeIcon" class="text-2xs text-link" />
                                         <span class="@max-md:hidden">{{ modeLabel }}</span>
-                                        <span class="inline-flex max-md:hidden"><Icon name="chevron-down" class="text-2xs text-subtle" /></span>
+                                        <Icon name="chevron-down" class="text-2xs text-subtle max-md:hidden" />
                                     </button>
 
                                     <!-- Placement controls the machine, not the message. -->
@@ -583,7 +583,7 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                                     >
                                         <Icon :name="remote ? `boxes` : `desktop`" class="text-2xs text-link" />
                                         <span class="@max-lg:hidden">{{ placementLabel }}</span>
-                                        <span class="inline-flex max-md:hidden"><Icon name="chevron-down" class="text-2xs text-subtle" /></span>
+                                        <Icon name="chevron-down" class="text-2xs text-subtle max-md:hidden" />
                                     </button>
 
                                     <!-- Persona: who the chat is to the outside world. -->
@@ -697,7 +697,7 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                                     >
                                         <Icon :name="conversation.sendLater.value?.kind === `after` ? `link` : `clock`" class="text-2xs text-link" />
                                         <span class="max-w-40 truncate">{{ laterText }}</span>
-                                        <span class="inline-flex max-md:hidden"><Icon name="chevron-down" class="text-2xs text-subtle" /></span>
+                                        <Icon name="chevron-down" class="text-2xs text-subtle max-md:hidden" />
                                     </button>
 
                                     <!-- Files from this device; the same chips as a drop or a paste, since one `attach` serves all three. -->

@@ -2,8 +2,8 @@
 import { type CodeToken, useHighlighter } from "@intentic/ui";
 import { ref, watch } from "vue";
 
-// Single-line shell command rendered as syntax-highlighted code (Shiki), matching ChatCommandBlock's light/dark
-// handling via `--shiki-dark`. Truncates rather than wrapping, so a long command can't push its container's layout.
+// Single-line shell command rendered as syntax-highlighted code (Shiki), dark in the dark scheme by code.css's one
+// `--shiki-dark` rule. Truncates rather than wrapping, so a long command can't push its container's layout.
 
 const { command, wrap = false } = defineProps<{
     command: string;
@@ -32,20 +32,10 @@ watch(
 </script>
 
 <template>
-    <code
-        class="rule-command-code inline-block max-w-full font-mono text-content align-bottom"
-        :class="wrap ? `whitespace-pre-wrap break-words` : `truncate`"
-    >
+    <code class="inline-block max-w-full font-mono text-content align-bottom" :class="wrap ? `whitespace-pre-wrap break-words` : `truncate`">
         <template v-if="tokens !== undefined && tokens.length > 0">
             <span v-for="(token, index) in tokens" :key="index" :style="token.htmlStyle">{{ token.content }}</span>
         </template>
         <template v-else>{{ command }}</template>
     </code>
 </template>
-
-<style scoped>
-/* Shiki inlines the light color and a `--shiki-dark` var; dark mode swaps to the latter. */
-[data-mode="dark"] .rule-command-code span {
-    color: var(--shiki-dark) !important;
-}
-</style>

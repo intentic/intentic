@@ -111,81 +111,89 @@ const wrapperSelect = computed(() => (disabled ? `` : `ui-row-select`));
 </script>
 
 <template>
-    <div class="group" :class="[tint, wrapperSelect, $slots[`before`] ? `flex flex-col` : ``]" @pointerdown="onPointerDown">
+    <!-- With a selection column, a grid: the column and <Row> share its first line and the drawer spans both under them. -->
+    <div
+        class="group"
+        :class="[tint, wrapperSelect, $slots[`before`] ? `grid grid-cols-[auto_minmax(0,1fr)] items-center` : ``]"
+        @pointerdown="onPointerDown"
+    >
         <!-- The selection column, outside the toggle: a checkbox can't nest in the button that opens the row. -->
-        <div :class="$slots[`before`] ? `flex w-full items-center` : `contents`">
-            <div v-if="$slots[`before`]" class="flex shrink-0 items-center"><slot name="before" /></div>
-            <Row
-                :class="[$slots[`before`] ? `min-w-0 flex-1` : ``, open && body === `drawer` ? `!pb-0` : ``]"
-                :density="tier"
-                :lead="lead"
-                :tone="tone"
-                :icon="icon"
-                :title="title"
-                :description="description"
-                :wide-control="wideControl"
-                :header-button="hit === `header` && !disabled"
-                :header-expanded="disabled ? undefined : open"
-                :header-controls="disabled ? undefined : bodyId"
-                :headline-guard="hit === `pair`"
-                @header-click="onRowClick"
-                @click="onRowClick"
-            >
-                <template #lead>
-                    <!-- The tier's mark size, forwarded so a disclosure row's lead is written exactly like a plain row's. -->
-                    <slot name="lead" :mark="mark" :icon-class="ROW_TIERS[tier].icon" />
-                </template>
+        <div v-if="$slots[`before`]" class="flex shrink-0 items-center"><slot name="before" /></div>
+        <Row
+            :class="open && body === `drawer` ? `!pb-0` : ``"
+            :density="tier"
+            :lead="lead"
+            :tone="tone"
+            :icon="icon"
+            :title="title"
+            :description="description"
+            :wide-control="wideControl"
+            :header-button="hit === `header` && !disabled"
+            :header-expanded="disabled ? undefined : open"
+            :header-controls="disabled ? undefined : bodyId"
+            :headline-guard="hit === `pair`"
+            @header-click="onRowClick"
+            @click="onRowClick"
+        >
+            <template #lead>
+                <!-- The tier's mark size, forwarded so a disclosure row's lead is written exactly like a plain row's. -->
+                <slot name="lead" :mark="mark" :icon-class="ROW_TIERS[tier].icon" />
+            </template>
 
-                <template v-if="$slots[`title`]" #title><slot name="title" /></template>
-                <template v-if="$slots[`description`]" #description><slot name="description" /></template>
-                <!-- Trailing cluster matches <Row chevron>: facts, then the disclosure mark at the right edge. -->
-                <template v-if="$slots[`meta`] || !disabled" #meta>
-                    <slot name="meta" />
-                    <!-- In `pair` this button IS the keyboard's way into the toggle, since the row-wide click handler only reaches pointers. -->
-                    <component
-                        :is="hit !== `header` && !disabled ? `button` : `span`"
-                        :type="hit !== `header` && !disabled ? `button` : undefined"
-                        :aria-expanded="hit !== `header` && !disabled ? open : undefined"
-                        :aria-controls="hit !== `header` && !disabled ? bodyId : undefined"
-                        :class="
-                            hit !== `header` && !disabled
-                                ? `cursor-pointer rounded-sm text-subtle hover:text-content focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary-500`
-                                : ``
-                        "
-                        @click="onPairClick"
-                    >
-                        <!-- Rotation, not an icon swap: `chevron-up`/`chevron-down` are two names a caller could get backwards. -->
-                        <Icon
-                            v-if="!disabled"
-                            name="chevron-right"
-                            class="shrink-0 text-subtle transition-transform group-hover:text-muted"
-                            :class="[chevronSize, open ? `rotate-90` : ``]"
-                            aria-hidden="true"
-                        />
-                    </component>
-                </template>
-                <template v-if="$slots[`control`]" #control><slot name="control" /></template>
+            <template v-if="$slots[`title`]" #title><slot name="title" /></template>
+            <template v-if="$slots[`description`]" #description><slot name="description" /></template>
+            <!-- Trailing cluster matches <Row chevron>: facts, then the disclosure mark at the right edge. -->
+            <template v-if="$slots[`meta`] || !disabled" #meta>
+                <slot name="meta" />
+                <!-- In `pair` this button IS the keyboard's way into the toggle, since the row-wide click handler only reaches pointers. -->
+                <component
+                    :is="hit !== `header` && !disabled ? `button` : `span`"
+                    :type="hit !== `header` && !disabled ? `button` : undefined"
+                    :aria-expanded="hit !== `header` && !disabled ? open : undefined"
+                    :aria-controls="hit !== `header` && !disabled ? bodyId : undefined"
+                    :class="
+                        hit !== `header` && !disabled
+                            ? `cursor-pointer rounded-sm text-subtle hover:text-content focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary-500`
+                            : ``
+                    "
+                    @click="onPairClick"
+                >
+                    <!-- Rotation, not an icon swap: `chevron-up`/`chevron-down` are two names a caller could get backwards. -->
+                    <Icon
+                        v-if="!disabled"
+                        name="chevron-right"
+                        class="shrink-0 text-subtle transition-transform group-hover:text-muted"
+                        :class="[chevronSize, open ? `rotate-90` : ``]"
+                        aria-hidden="true"
+                    />
+                </component>
+            </template>
+            <template v-if="$slots[`control`]" #control><slot name="control" /></template>
 
-                <!-- The rail: inside <Row>'s padding so it aligns with the row above, offset by a hidden copy of the lead so it starts
-                     flush under the title. No rule beside it: the open row's wash and that indent already say whose evidence it is. -->
-                <template v-if="open && body === `rail`" #below>
-                    <div class="flex" :class="gap">
-                        <!-- The lead, mirrored and hidden, so the block starts where the title does. -->
-                        <span class="invisible flex shrink-0 items-center" :class="gap" inert aria-hidden="true">
-                            <slot name="lead" :mark="mark" :icon-class="ROW_TIERS[tier].icon" />
-                            <Icon v-if="icon !== undefined" :name="icon" :class="ROW_TIERS[tier].icon" />
-                        </span>
-                        <!-- `.stop`: this sits inside <Row>, whose row-wide handler would otherwise read a press on the evidence as "close what you just opened.". -->
-                        <div :id="bodyId" class="min-w-0 flex-1 cursor-auto" @click.stop>
-                            <slot name="below" />
-                        </div>
+            <!-- The rail: inside <Row>'s padding so it aligns with the row above, offset by a hidden copy of the lead so it starts
+                 flush under the title. No rule beside it: the open row's wash and that indent already say whose evidence it is. -->
+            <template v-if="open && body === `rail`" #below>
+                <div class="flex" :class="gap">
+                    <!-- The lead, mirrored and hidden, so the block starts where the title does. -->
+                    <span class="invisible flex shrink-0 items-center" :class="gap" inert aria-hidden="true">
+                        <slot name="lead" :mark="mark" :icon-class="ROW_TIERS[tier].icon" />
+                        <Icon v-if="icon !== undefined" :name="icon" :class="ROW_TIERS[tier].icon" />
+                    </span>
+                    <!-- `.stop`: this sits inside <Row>, whose row-wide handler would otherwise read a press on the evidence as "close what you just opened.". -->
+                    <div :id="bodyId" class="min-w-0 flex-1 cursor-auto" @click.stop>
+                        <slot name="below" />
                     </div>
-                </template>
-            </Row>
-        </div>
+                </div>
+            </template>
+        </Row>
 
         <!-- The drawer: a sibling of <Row>, not its `#below`, since it's full-bleed and pulling it out of <Row>'s padding would need tier-matched negative margins. -->
-        <div v-if="open && body === `drawer`" :id="bodyId" class="cursor-auto border-t border-line-subtle" :class="ROW_DRAWER_PAD[tier]">
+        <div
+            v-if="open && body === `drawer`"
+            :id="bodyId"
+            class="cursor-auto border-t border-line-subtle"
+            :class="[ROW_DRAWER_PAD[tier], $slots[`before`] ? `col-span-full` : ``]"
+        >
             <slot name="below" />
         </div>
     </div>

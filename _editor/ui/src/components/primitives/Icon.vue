@@ -30,6 +30,7 @@ const SPINNER_STROKE = 2.5;
 const composited = useCompositedLoops();
 const turnsOnCompositor = computed(() => spin && composited.value);
 const reducedMotion = useReducedMotion(() => spin && !composited.value);
+const turnsBySmil = computed(() => spin && !turnsOnCompositor.value);
 </script>
 
 <template>
@@ -44,45 +45,41 @@ const reducedMotion = useReducedMotion(() => spin && !composited.value);
         :aria-label="label()"
         class="ui-icon"
         :class="{ 'ui-icon-turning': turnsOnCompositor }"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="square"
+        stroke-linejoin="miter"
+        stroke-miterlimit="2"
+        :shape-rendering="isSpinner ? `geometricPrecision` : undefined"
     >
-        <g
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="square"
-            stroke-linejoin="miter"
-            stroke-miterlimit="2"
-            :shape-rendering="isSpinner ? `geometricPrecision` : undefined"
-        >
-            <!-- The circle the spinner's arc travels, at a quiet fraction of the same ink. -->
-            <circle v-if="isSpinner" cx="12" cy="12" r="8.75" :stroke-width="SPINNER_STROKE" opacity="0.35" />
-            <!-- Everything that turns, and only what turns. -->
-            <g :stroke-width="isSpinner ? SPINNER_STROKE : undefined" :stroke-linecap="isSpinner ? `round` : undefined">
-                <path v-if="drawing.outline" :d="drawing.outline" />
-                <path v-if="drawing.solid" :d="drawing.solid" fill="currentColor" stroke="none" />
-                <!-- SMIL leaves DevTools' CSS animation model alone. Reduced motion keeps the slower spinner. -->
-                <animateTransform
-                    v-if="spin && !turnsOnCompositor"
-                    attributeName="transform"
-                    type="rotate"
-                    from="0 12 12"
-                    to="360 12 12"
-                    :dur="reducedMotion ? `3s` : `1.1s`"
-                    repeatCount="indefinite"
-                />
-            </g>
+        <!-- The pack's ink is set on the <svg> itself and inherited, so a still glyph is the svg and its paths: no group
+             of its own, on the most numerous element in the app. -->
+        <!-- The circle the spinner's arc travels, at a quiet fraction of the same ink. -->
+        <circle v-if="isSpinner" cx="12" cy="12" r="8.75" :stroke-width="SPINNER_STROKE" opacity="0.35" />
+        <!-- Everything that turns, and only what turns: the one group, drawn only where something does. -->
+        <g v-if="isSpinner || turnsBySmil" :stroke-width="isSpinner ? SPINNER_STROKE : undefined" :stroke-linecap="isSpinner ? `round` : undefined">
+            <path v-if="drawing.outline" :d="drawing.outline" />
+            <path v-if="drawing.solid" :d="drawing.solid" fill="currentColor" stroke="none" />
+            <!-- SMIL leaves DevTools' CSS animation model alone. Reduced motion keeps the slower spinner. -->
+            <animateTransform
+                v-if="turnsBySmil"
+                attributeName="transform"
+                type="rotate"
+                from="0 12 12"
+                to="360 12 12"
+                :dur="reducedMotion ? `3s` : `1.1s`"
+                repeatCount="indefinite"
+            />
         </g>
+        <template v-else>
+            <path v-if="drawing.outline" :d="drawing.outline" />
+            <path v-if="drawing.solid" :d="drawing.solid" fill="currentColor" stroke="none" />
+        </template>
     </svg>
 </template>
 
 <style scoped>
-/* The svg is 1em×1em; in a flex container it would otherwise shrink to a sliver, so keep its intrinsic size regardless of flex pressure. */
-svg {
-    display: inline-block;
-    vertical-align: -0.125em;
-    flex: none;
-}
-
 /* THE SPINNER ON THE COMPOSITOR (useCompositedLoops): the whole glyph turns as one composited layer, rasterised once and rotated off the main
    thread. Its track is a full circle about the centre, so turning it with the arc changes nothing the eye can see.
    Reduced motion slows it to the SMIL spinner's 3s rather than stopping it: a still mark beside live work reads as hung. */

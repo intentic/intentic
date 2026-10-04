@@ -240,7 +240,7 @@ const onKeydown = (event: KeyboardEvent): void => {
                     >
                         <span class="w-7 shrink-0 text-right font-mono text-2xs text-subtle">{{ painted.row.hit.line }}</span>
                         <!-- One span per colour token; the matched run is a `<mark>` (see searchSnippet.ts). -->
-                        <span class="ws-snippet min-w-0 flex-1 truncate font-mono text-xs text-content/90"
+                        <span class="min-w-0 flex-1 truncate font-mono text-xs text-content/90"
                             ><span v-if="painted.elided" class="text-subtle">…</span
                             ><template v-for="(piece, index) in painted.pieces" :key="index"
                                 ><mark v-if="piece.hit" :style="piece.style">{{ piece.text }}</mark
@@ -277,11 +277,6 @@ const onKeydown = (event: KeyboardEvent): void => {
 </template>
 
 <style scoped>
-/* Shiki sets an inline light colour plus a `--shiki-dark` custom property; dark mode is a pure CSS override, no. */
-[data-mode="dark"] .ws-snippet span,
-[data-mode="dark"] .ws-snippet mark {
-    color: var(--shiki-dark) !important;
-}
 /* Match keeps its syntax colour; only a tinted background is added, since recolouring would lose that signal. */
 mark {
     background: color-mix(in srgb, var(--color-primary-500) 28%, transparent);

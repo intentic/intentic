@@ -35,10 +35,14 @@ const ownSpinner = computed(() => slots[`loadingicon`] === undefined);
         <template v-if="ownSpinner" #loadingicon><Icon name="spinner" spin /></template>
         <template v-else #loadingicon="slotProps"><slot name="loadingicon" v-bind="slotProps ?? {}" /></template>
         <template v-if="wrapped" #default>
-            <!-- `display: contents` keeps the children as direct flex items; `visibility` hides them so the button doesn't resize when the spinner appears. -->
-            <span class="contents" :class="shown ? `invisible` : ``"><slot /></span>
-            <!-- Absolutely centred over the button so the hidden content keeps its width; `ui-press-spinner` is now only the press-lock tests' hook, not a style. -->
-            <span v-if="shown" class="ui-press-spinner absolute inset-0 flex items-center justify-center"><Icon name="spinner" spin /></span>
+            <!-- While the spinner shows: `visibility` hides the content so the button doesn't resize, and `display: contents` keeps
+                 the children direct flex items. Only for that wait, so a button at rest holds its content and nothing else. -->
+            <template v-if="shown">
+                <span class="contents invisible"><slot /></span>
+                <!-- Absolutely centred over the button so the hidden content keeps its width; `ui-press-spinner` is now only the press-lock tests' hook, not a style. -->
+                <span class="ui-press-spinner absolute inset-0 flex items-center justify-center"><Icon name="spinner" spin /></span>
+            </template>
+            <slot v-else />
         </template>
     </PrimeButton>
 </template>

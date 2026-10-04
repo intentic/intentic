@@ -1204,10 +1204,6 @@ const includeTip = computed(
 </template>
 
 <style scoped>
-/* `.ws-scoped` (the not-shared-tree tint) sits in styles.css beside .view-header, reaching child bars too. */
-
-/* The context seat's own rule travels with the markup, in EditorPane, which now has two such seats. */
-
 /* The dot pulses once via a separate scaling ring, so the dot itself never moves; reduced motion drops the ring. */
 .ws-stashed-new::after {
     content: "";

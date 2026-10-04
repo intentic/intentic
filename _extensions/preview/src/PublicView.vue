@@ -98,41 +98,39 @@ const size = (bytes: number): string => {
                 </p>
             </div>
 
-            <div v-else-if="files.length > 0" class="rounded-lg bg-card shadow-sm">
-                <div class="flex flex-col divide-y divide-line-subtle">
-                    <div v-for="file in files" :key="file.path" class="flex items-center gap-3 px-4 py-2">
-                        <Icon :name="file.blocked ? `times` : `file`" :class="file.blocked ? `shrink-0 text-danger` : `shrink-0 text-subtle`" />
-                        <div class="min-w-0 flex-1">
-                            <p class="truncate font-mono text-xs text-content" v-tooltip.top.overflow="file.path">{{ file.path }}</p>
-                            <!-- A blocked file sits in the folder looking published; this line is the only thing that says otherwise. -->
-                            <p v-if="file.blocked" class="truncate text-2xs text-danger">
-                                {{ t(`publicView.notServed`, { blocked: file.blocked }) }}
-                            </p>
-                            <p v-else class="text-2xs text-subtle">{{ size(file.size) }}</p>
-                        </div>
-                        <StatusBadge v-if="file.blocked" variant="danger" :label="t(`publicView.blocked`)" size="xs" />
-                        <a
-                            v-if="file.url"
-                            :href="file.url"
-                            target="_blank"
-                            rel="noopener"
-                            class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted hover:bg-overlay hover:text-content"
-                            :aria-label="t(`publicView.openInNewTab`, { path: file.path })"
-                            v-tooltip.bottom="t(`common.newTab`)"
-                        >
-                            <Icon name="external-link" />
-                        </a>
-                        <SharePreview v-if="file.url" :url="file.url" :label="t(`publicView.share`)" />
-                        <Button
-                            :label="t(`publicView.unpublish`)"
-                            size="small"
-                            severity="secondary"
-                            :disabled="busy !== undefined"
-                            @click="withdraw(file.path)"
-                        >
-                            <template #icon><Icon name="trash" /></template>
-                        </Button>
+            <div v-else-if="files.length > 0" class="flex flex-col divide-y divide-line-subtle rounded-lg bg-card shadow-sm">
+                <div v-for="file in files" :key="file.path" class="flex items-center gap-3 px-4 py-2">
+                    <Icon :name="file.blocked ? `times` : `file`" :class="file.blocked ? `shrink-0 text-danger` : `shrink-0 text-subtle`" />
+                    <div class="min-w-0 flex-1">
+                        <p class="truncate font-mono text-xs text-content" v-tooltip.top.overflow="file.path">{{ file.path }}</p>
+                        <!-- A blocked file sits in the folder looking published; this line is the only thing that says otherwise. -->
+                        <p v-if="file.blocked" class="truncate text-2xs text-danger">
+                            {{ t(`publicView.notServed`, { blocked: file.blocked }) }}
+                        </p>
+                        <p v-else class="text-2xs text-subtle">{{ size(file.size) }}</p>
                     </div>
+                    <StatusBadge v-if="file.blocked" variant="danger" :label="t(`publicView.blocked`)" size="xs" />
+                    <a
+                        v-if="file.url"
+                        :href="file.url"
+                        target="_blank"
+                        rel="noopener"
+                        class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted hover:bg-overlay hover:text-content"
+                        :aria-label="t(`publicView.openInNewTab`, { path: file.path })"
+                        v-tooltip.bottom="t(`common.newTab`)"
+                    >
+                        <Icon name="external-link" />
+                    </a>
+                    <SharePreview v-if="file.url" :url="file.url" :label="t(`publicView.share`)" />
+                    <Button
+                        :label="t(`publicView.unpublish`)"
+                        size="small"
+                        severity="secondary"
+                        :disabled="busy !== undefined"
+                        @click="withdraw(file.path)"
+                    >
+                        <template #icon><Icon name="trash" /></template>
+                    </Button>
                 </div>
             </div>
         </section>

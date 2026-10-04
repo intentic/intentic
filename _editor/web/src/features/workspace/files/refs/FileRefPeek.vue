@@ -405,9 +405,7 @@ const placeholders = PLACEHOLDER_WIDTHS.slice(0, PEEK_SPAN);
                         >
                         <span class="min-w-0 flex-1 overflow-hidden pr-3 text-ellipsis whitespace-pre text-content"
                             ><template v-if="row.tokens !== undefined"
-                                ><span v-for="(token, at) in row.tokens" :key="at" class="file-peek-token" :style="token.htmlStyle">{{
-                                    token.content
-                                }}</span></template
+                                ><span v-for="(token, at) in row.tokens" :key="at" :style="token.htmlStyle">{{ token.content }}</span></template
                             ><template v-else>{{ row.text }}</template></span
                         >
                     </div>
@@ -437,11 +435,3 @@ const placeholders = PLACEHOLDER_WIDTHS.slice(0, PEEK_SPAN);
         </div>
     </AnchoredOverlay>
 </template>
-
-<style scoped>
-/* Shiki inlines the light colour and a `--shiki-dark` var on each token; dark mode swaps to the latter (as RuleCommand
-   and ChatCommandBlock do). An ancestor attribute, which no class on the span can say. */
-[data-mode="dark"] .file-peek-token {
-    color: var(--shiki-dark) !important;
-}
-</style>

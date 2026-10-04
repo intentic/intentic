@@ -66,7 +66,7 @@ it(`turns the spinner's arc over a track that holds still`, async () => {
 
     expect(turning.querySelector(`path`)?.getAttribute(`d`)).toBe(ICONS.spinner.outline);
     expect(turning.querySelector(`circle`)).toBeNull();
-    expect(host.querySelector(`svg > g > circle`)).not.toBeNull();
+    expect(host.querySelector(`svg > circle`)).not.toBeNull();
     // Round ends and a stroke heavier than the pack's 2: at rail size a square-ended hairline is caps and grey.
     expect({ cap: turning.getAttribute(`stroke-linecap`), width: turning.getAttribute(`stroke-width`) }).toEqual({
         cap: `round`,
@@ -194,7 +194,10 @@ it(`renders the whole vocabulary without a plugin, with one geometry and stroke 
     for (const svg of rendered) {
         expect(svg.getAttribute(`viewBox`)).toBe(`0 0 24 24`);
         expect(svg.querySelectorAll(`path`).length).toBeGreaterThan(0);
-        expect(svg.querySelector(`g`)?.getAttribute(`stroke-width`)).toBe(`2`);
+        expect(svg.getAttribute(`stroke-width`)).toBe(`2`);
+        // A still glyph is the svg and its paths: the pack's ink is inherited from the svg, with no group of its own.
+        // The spinner keeps one, for the arc it turns over its track.
+        expect(svg.querySelector(`g`) === null).toBe(svg.getAttribute(`data-icon-name`) !== `spinner`);
         expect(svg.getAttribute(`width`)).toBe(`1em`);
         expect(svg.getAttribute(`height`)).toBe(`1em`);
         expect(svg.getAttribute(`focusable`)).toBe(`false`);

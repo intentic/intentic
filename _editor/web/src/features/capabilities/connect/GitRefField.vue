@@ -128,7 +128,7 @@ const pickable = computed(() => manual.value && refs.value !== undefined);
     <label class="ui-field">
         <span class="ui-field-label">
             {{ field.label }}
-            <Icon v-if="selected && !manual" name="check-circle" class="ml-1 align-middle text-2xs text-success" />
+            <Icon v-if="selected && !manual" name="check-circle" class="ml-1 text-2xs text-success" />
         </span>
         <Picker
             v-if="refs && !manual"

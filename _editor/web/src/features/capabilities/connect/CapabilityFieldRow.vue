@@ -71,7 +71,7 @@ const emit = defineEmits<{ edited: []; pasted: [event: ClipboardEvent]; left: []
                 class="ml-1.5 align-middle"
             />
             <!-- The check marks a value that passed the field's validation rule. -->
-            <Icon v-if="checked" name="check-circle" class="ml-1 align-middle text-2xs text-success" />
+            <Icon v-if="checked" name="check-circle" class="ml-1 text-2xs text-success" />
         </span>
         <SegmentedControl
             v-if="field.options"

@@ -147,11 +147,6 @@
     display: none;
 }
 
-/* Shiki emits both themes at once, the dark one as a custom property inline styles cannot be overridden without (see code.css). */
-[data-mode="dark"] .md-editing .md-code-line span {
-    color: var(--shiki-dark) !important;
-}
-
 /* A TABLE IS A TABLE HERE TOO, drawn by the same prose.css rules as the rendered one — its pipes are markers, so what this sheet adds is only the row that is nothing BUT markup. */
 .md-editing .md-src-align > td {
     padding-block: 0;

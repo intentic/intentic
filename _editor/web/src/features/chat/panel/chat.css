@@ -632,10 +632,6 @@
     line-height: inherit;
     overflow: visible;
 }
-[data-mode="dark"] .chat-code .shiki,
-[data-mode="dark"] .chat-code .shiki span {
-    color: var(--shiki-dark) !important;
-}
 .chat-tab {
     color: var(--color-muted);
     cursor: pointer;
@@ -733,10 +729,6 @@
 /* The taken option on a DECIDED card: quieter than the live `.ui-row-select-on` it replaces. */
 .chat-option-picked {
     background: color-mix(in srgb, var(--color-primary-500) 10%, transparent);
-}
-/* THE HELD COMMAND'S OWN COLOURS (ChatCommandBlock). */
-[data-mode="dark"] .chat-command-block span {
-    color: var(--shiki-dark) !important;
 }
 /* THE TWO HALVES OF A HELD COMMAND: the fragment the gate stopped it for, and everything else. */
 .chat-command-dim {
