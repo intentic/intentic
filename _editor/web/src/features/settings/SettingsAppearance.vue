@@ -111,7 +111,7 @@ const iconRailOptions = computed(() => [
     { label: t(`settings.words.iconRailCompact`), value: `compact` as const },
     { label: t(`settings.words.iconRailComfortable`), value: `comfortable` as const },
 ]);
-// Whether the interface moves (@intentic/ui/motion, preference.ts): `system` defers to the OS's reduce-motion switch, the other two decide
+// Whether the interface moves (@intentic/ui/motion, choice.ts): `system` defers to the OS's reduce-motion switch, the other two decide
 // outright. Off is instant, not merely calmer: every transition in the app reads its duration through motion.css.
 const { motion, setMotion } = useMotion();
 // Only `system` explains itself: the other two say what they do.

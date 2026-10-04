@@ -50,7 +50,7 @@ const animationClasses = (): Set<string> => {
 };
 
 // Every editor source a reader's motion could be decided in, scripts and stylesheets alike: the app, the kit, the
-// extensions. The motion module is the one place the OS is asked (@intentic/ui/motion, preference.ts and loops.ts).
+// extensions. The motion module is the one place the OS is asked (@intentic/ui/motion, choice.ts and loops.ts).
 const motionModule = resolve(uiRoot, `motion`);
 const editorFiles = (dir: string): string[] => {
     const out: string[] = [];

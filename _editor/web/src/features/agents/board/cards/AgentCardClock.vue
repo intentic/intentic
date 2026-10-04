@@ -148,7 +148,7 @@ const coolingTip = computed((): Tip | undefined =>
             :text="true"
             class="shrink-0"
             :aria-label="t(`agents.agentCard.stopCommand`)"
-            v-tooltip.top="{ title: t(`agents.agentCard.stopCommand`), note: t(`agents.agentStatus.inputWaitNote`) }"
+            v-tooltip.top="{ title: t(`agents.agentCard.stopCommand`), note: t(`agents.agentCard.stopCommandNote`) }"
             :disabled="busy"
             @click.stop="emit(`stopJob`, prompt.jobId)"
         >

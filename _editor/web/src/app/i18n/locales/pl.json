@@ -46,7 +46,8 @@
             "answerNotTaken": "Nie udało się tego wysłać: tura mogła się już skończyć.",
             "settingsNotSaved": "Zmienione na stronie Sandbox {pages}, jeszcze niezapisane: otwórz przegląd i naciśnij „Zapisz je i scal”.",
             "movingTo": "przechodzi na {account}",
-            "stopCommand": "Zatrzymaj polecenie"
+            "stopCommand": "Zatrzymaj polecenie",
+            "stopCommandNote": "Żeby praca mogła trafić."
         },
         "agentConflictReport": {
             "agentWriting": "Agent pisze",

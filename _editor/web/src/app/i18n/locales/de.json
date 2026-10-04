@@ -42,7 +42,8 @@
             "temporary": ", vorübergehend",
             "waitingMaintainer": "{landAsk}: wartet auf einen Maintainer",
             "movingTo": "wechselt zu {account}",
-            "stopCommand": "Befehl stoppen"
+            "stopCommand": "Befehl stoppen",
+            "stopCommandNote": "Damit die Arbeit landet."
         },
         "agentConflictReport": {
             "agentWriting": "Agent schreibt",

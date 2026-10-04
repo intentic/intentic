@@ -3,7 +3,7 @@ import { freshImport, stubGlobal } from "@intentic/testing/bun";
 
 // Storage and the OS's answer are read once, at module scope, so each case needs its own evaluation of it: of the
 // setting's own module, since a fresh copy of the module's barrel would re-export the one evaluation it already has.
-const MOTION = new URL(`preference.ts`, import.meta.resolve("@intentic/ui/motion")).href;
+const MOTION = new URL(`choice.ts`, import.meta.resolve("@intentic/ui/motion")).href;
 const load = () => freshImport<typeof import("@intentic/ui/motion")>(MOTION, import.meta.url);
 const root = () => document.documentElement;
 

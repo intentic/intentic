@@ -42,7 +42,8 @@
             "temporary": ", temporal",
             "waitingMaintainer": "{landAsk}: esperando a un responsable",
             "movingTo": "pasando a {account}",
-            "stopCommand": "Detener el comando"
+            "stopCommand": "Detener el comando",
+            "stopCommandNote": "Para que el trabajo llegue."
         },
         "agentConflictReport": {
             "agentWriting": "El agente escribe",

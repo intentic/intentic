@@ -46,7 +46,8 @@
             "answerNotTaken": "Couldn't send that: the turn may have ended.",
             "settingsNotSaved": "Changed on the Sandbox page {pages}, not saved yet: open its review and press Save them and land.",
             "movingTo": "moving to {account}",
-            "stopCommand": "Stop the command"
+            "stopCommand": "Stop the command",
+            "stopCommandNote": "So the work can land."
         },
         "agentConflictReport": {
             "agentWriting": "Agent writing",
