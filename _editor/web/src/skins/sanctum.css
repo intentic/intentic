@@ -344,32 +344,52 @@
             0 1px 2px rgba(0, 0, 0, 0.4);
     }
 
-    /* Quiet and severity tiers use opaque plates instead of washes. */
+    /* THE QUIET TIERS ARE BASALT: the limestone plaque's darker sibling, cut the same way. Same lit top lip, same dark
+       contact rim and drop shadow, so it reads as one family with the primary and only the weight differs. A light rim
+       around a translucent wash (what this was until 2026-10) read as an outlined web box, not stone. The face keeps the
+       tooth and veining but not the pitting: lit pit lips on a dark ground read as dirt. Severity tints the stone. */
     [data-skin="sanctum"] .p-button-secondary:where(:not(.p-button-text, .p-button-link)) {
         --ui-button-tone: var(--color-content);
     }
 
     [data-skin="sanctum"]
-        .p-button:where(.p-button-secondary, .p-button-danger, .p-button-warn, .p-button-success):where(
+        .p-button:where(.p-button-secondary, .p-button-danger, .p-button-warn):where(
             :not(.p-button-text, .p-button-outlined, .p-button-link)
         ) {
-        background-color: color-mix(in oklab, var(--ui-button-tone) 12%, var(--color-card));
-        border-color: color-mix(in oklab, var(--ui-button-tone) 30%, transparent);
+        background-color: color-mix(in oklab, var(--ui-button-tone) 8%, #37312a);
+        background-image:
+            var(--sanctum-tooth), var(--sanctum-mottle),
+            linear-gradient(180deg, rgba(255, 250, 238, 0.05), transparent 48%, rgba(0, 0, 0, 0.14));
+        background-position: 0 0;
+        background-size: auto, auto, 100% 100%;
+        background-repeat: repeat, repeat, no-repeat;
+        border-color: rgba(10, 8, 5, 0.7);
+        box-shadow:
+            inset 0 1px 0 rgba(255, 244, 222, 0.1),
+            0 1px 0 rgba(0, 0, 0, 0.4),
+            0 2px 5px -2px rgba(0, 0, 0, 0.6);
+        text-shadow: 0 -1px 0 rgba(0, 0, 0, 0.4);
     }
     [data-skin="sanctum"]
-        .p-button:where(.p-button-secondary, .p-button-danger, .p-button-warn, .p-button-success):where(
+        .p-button:where(.p-button-secondary, .p-button-danger, .p-button-warn):where(
             :not(.p-button-text, .p-button-outlined, .p-button-link)
         ):enabled:hover {
-        background-color: color-mix(in oklab, var(--ui-button-tone) 20%, var(--color-card));
-        border-color: color-mix(in oklab, var(--ui-button-tone) 44%, transparent);
+        background-color: color-mix(in oklab, var(--ui-button-tone) 11%, #423b33);
+        border-color: rgba(10, 8, 5, 0.7);
+        box-shadow:
+            inset 0 1px 0 rgba(255, 244, 222, 0.14),
+            0 1px 0 rgba(0, 0, 0, 0.4),
+            0 2px 6px -2px rgba(0, 0, 0, 0.6);
     }
-
-    /* The neutral tier keeps its own rim weight. */
-    [data-skin="sanctum"] .p-button-secondary:where(:not(.p-button-text, .p-button-outlined, .p-button-link)) {
-        border-color: color-mix(in oklab, var(--ui-button-tone) 16%, transparent);
-    }
-    [data-skin="sanctum"] .p-button-secondary:where(:not(.p-button-text, .p-button-outlined, .p-button-link)):enabled:hover {
-        border-color: color-mix(in oklab, var(--ui-button-tone) 28%, transparent);
+    /* Pressed sinks the plate: the lip goes dark and the shadow moves inside. */
+    [data-skin="sanctum"]
+        .p-button:where(.p-button-secondary, .p-button-danger, .p-button-warn):where(
+            :not(.p-button-text, .p-button-outlined, .p-button-link)
+        ):enabled:active {
+        background-color: color-mix(in oklab, var(--ui-button-tone) 6%, #2c2721);
+        box-shadow:
+            inset 0 1px 2px rgba(0, 0, 0, 0.45),
+            0 1px 0 rgba(255, 250, 238, 0.04);
     }
 
 /* Hover raises the light on the stone and leaves the cutting alone: a carved letter does not go pale when the sun comes out. */
