@@ -154,6 +154,7 @@ export const planHarnessTurn = async (
         credential = await shieldHarnessCredential(deps.privacyShield, harnessCredentialOf(resolved.credentials), {
             provider: input.agent ?? "claude",
             conversationId: input.conversationId,
+            clearing: context.toolResultClearing === true,
         });
     } catch (error) {
         return { ok: false, message: error instanceof Error ? error.message : "the privacy shield's policy could not be read" };

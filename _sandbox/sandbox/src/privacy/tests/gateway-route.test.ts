@@ -2,6 +2,7 @@ import type { PrivacyShieldPolicy } from "@intentic/sandbox-contract";
 import { Hono } from "hono";
 import type { AppEnv } from "../../app-env.js";
 import { createGatewayRoute } from "../gateway/gateway-route.js";
+import { CLEARED_PLACEHOLDER } from "../gateway/tool-result-clearing.js";
 import { privacySliceFake } from "../privacy-slice.testing.js";
 
 // The gateway end to end, over the real shield (detectors, vault, masker, wire walkers) and a stand-in provider: what the
@@ -185,6 +186,55 @@ describe("what passes untouched", () => {
     test("with the shield off no gateway address is handed out at all", async () => {
         const { base } = await harness({ mode: "off" }, "claude");
         expect(base).toBeUndefined();
+    });
+});
+
+// A conversation in the tool-result clearing arm goes through the gateway with the shield off: its long requests reach
+// the provider with the old results replaced, and nothing else about them changes or is logged.
+describe("tool-result clearing", () => {
+    // Thirty results of 5,000 tokens each: past the trigger, with ten behind the kept window, of which two whole chunks go.
+    const longRequest = () => ({
+        model: "claude-opus-5",
+        messages: [
+            { role: "user", content: "Read the logs." },
+            ...Array.from({ length: 30 }, (_, index) => [
+                { role: "assistant", content: [{ type: "tool_use", id: `t${index}`, name: "Bash", input: { command: `cat log-${index}` } }] },
+                { role: "user", content: [{ type: "tool_result", tool_use_id: `t${index}`, content: `log ${index} `.padEnd(20_000, "x") }] },
+            ]).flat(),
+        ],
+        stream: true,
+    });
+    const relay = async (clearing: boolean) => {
+        const fake = privacySliceFake({ policy: { mode: "off" } });
+        const provider = upstream(() => new Response("{}", { headers: { "content-type": "application/json" } }));
+        const app = new Hono<AppEnv>();
+        app.all("/privacy/gateway/:session/*", createGatewayRoute({ shield: fake.privacyShield, warn: () => undefined, fetch: provider.fetch }));
+        const base = await fake.privacyShield.relayUrlFor({
+            provider: "claude",
+            upstream: "https://api.anthropic.com",
+            conversationId: "c-1",
+            clearing,
+        });
+        await app.request(`${new URL(base).pathname}/v1/messages`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(longRequest()),
+        });
+        return { fake, sent: provider.seen[0]?.body ?? "" };
+    };
+
+    test("the clearing arm's long request reaches the provider with its oldest results replaced, and leaves no log line", async () => {
+        const { fake, sent } = await relay(true);
+        expect(sent.split(CLEARED_PLACEHOLDER).length - 1).toBe(8);
+        expect(sent).not.toContain("log 0 ");
+        expect(sent).toContain("log 8 ");
+        expect(sent).toContain("log 29 ");
+        expect(fake.privacyLedger.entries).toEqual([]);
+    });
+
+    test("a relay outside the arm sends the same request byte for byte", async () => {
+        const { sent } = await relay(false);
+        expect(sent).toBe(JSON.stringify(longRequest()));
     });
 });
 

@@ -49,9 +49,13 @@ export interface TurnPremise {
         readonly map: boolean | undefined;
         readonly notes: boolean | undefined;
         readonly guidance: boolean | undefined;
+        readonly clearing: boolean | undefined;
     };
     // The guidance the turn is composed with: the arm where one was drawn, else the owner's switch.
     readonly guidance: GuidanceVariant;
+    // Whether the gateway replaces this turn's old tool results: the arm where one was drawn, else the owner's switch,
+    // and only ever for a native Claude turn.
+    readonly toolResultClearing: boolean;
     readonly iqSearchEnabled: boolean;
     // Workspace-relative: the card's own folder, else the one the conversation latched at its first turn.
     readonly startIn: string | undefined;
@@ -67,6 +71,10 @@ const mapDue = (briefing: TurnBriefing, settings: SandboxSettings, arm: boolean 
 // inside compactedSinceLastTurn, since the turn after the one a compaction is filed under is the one that owes it.
 const landingChecksDue = (input: AgentTurn, entry: ConversationEntry | undefined, turns: number): boolean =>
     (turns === 0 && input.forkOf === undefined) || compactedSinceLastTurn(entry, turns);
+
+// Native Claude on its own loop: the one runtime whose model requests are Anthropic Messages requests to Anthropic, which
+// is what tool-result clearing reads and what its cache arithmetic was simulated on.
+const clearable = (runtime: TurnRuntime): boolean => runtime.provider === "claude" && runtime.capabilities.runtime === "claude-code";
 
 // The Claude Code loop loads the teaching as a plugin; every other runtime is sent it once, then carried by its session.
 const iqTeachingDue = (runtime: TurnRuntime, enabled: boolean): boolean =>
@@ -90,11 +98,13 @@ export const premiseOf = (facts: PremiseFacts, input: AgentTurn, runtime: TurnRu
     // A card that drops the map takes its conversation out of the experiment, not into its control group.
     const map = briefing.sends("map") ? armOf(EXPERIMENTS.workspaceMap, settings, input.conversationId) : undefined;
     const guidance = armOf(EXPERIMENTS.guidance, settings, input.conversationId);
+    const clearing = clearable(runtime) ? armOf(EXPERIMENTS.clearing, settings, input.conversationId) : undefined;
     return {
         persona,
         briefing,
-        arms: { search, map, notes: armOf(EXPERIMENTS.fieldNotes, settings, input.conversationId), guidance },
+        arms: { search, map, notes: armOf(EXPERIMENTS.fieldNotes, settings, input.conversationId), guidance, clearing },
         guidance: (guidance ?? EXPERIMENTS.guidance.on(settings)) ? "lean" : "full",
+        toolResultClearing: clearable(runtime) && (clearing ?? EXPERIMENTS.clearing.on(settings)),
         iqSearchEnabled,
         startIn: persona.workspace?.startIn ?? entry?.identity.startIn ?? input.startIn,
         send: {

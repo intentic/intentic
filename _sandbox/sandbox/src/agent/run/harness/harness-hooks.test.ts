@@ -22,6 +22,7 @@ const depsHolding = (entry: PersistedAgent | undefined): HarnessHooksDeps => ({
     ruleFirings: unstubbed<Services["ruleFirings"]>("ruleFirings", {}),
     agents: unstubbed<Services["agents"]>("agents", { entry: () => entry }),
     agentWorktrees: unstubbed<Services["agentWorktrees"]>("agentWorktrees", {}),
+    perf: unstubbed<Services["perf"]>("perf", {}),
 });
 
 // The same turn, in a conversation's own worktree, as the route hands it over.
@@ -45,4 +46,14 @@ test("a conversation the registry does not hold, or one in the shared tree, chan
         const checks = harnessHooks(depsHolding(entry), await isolated(), [], TURN_CHECKS).turnChecks;
         expect(await checks?.change()).toEqual({ paths: [], repos: [] });
     }
+});
+
+test("each hook callback's time is filed under hook.<event>, with the tool it held and the conversation", async () => {
+    const spans: { op: string; ms: number; fields: unknown }[] = [];
+    const deps = {
+        ...depsHolding(undefined),
+        perf: unstubbed<Services["perf"]>("perf", { record: (op, ms, fields) => void spans.push({ op, ms, fields }) }),
+    };
+    harnessHooks(deps, await isolated(), [], []).hookTimed?.("PreToolUse", 1200, { matcher: "Bash", at: 3, tool: "Bash" });
+    expect(spans).toEqual([{ op: "hook.PreToolUse", ms: 1200, fields: { matcher: "Bash", at: 3, tool: "Bash", conversation: "c1" } }]);
 });

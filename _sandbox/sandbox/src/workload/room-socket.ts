@@ -1,13 +1,15 @@
 import { unlink } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
-import { COST_BYTES, needBytes, ROOM_SOCKET, type RoomWorkload } from "@intentic/constants/memory-room";
+import { COST_BYTES, needBytes, ROOM_SOCKET, type RoomSize, type RoomWorkload } from "@intentic/constants/memory-room";
 import type { Logger } from "pino";
+import type { PerfTracker } from "../system/resources/perf.js";
 import type { ResourceBudget } from "./resource-budget.js";
 
 // The budget's verdict for the scripts that start heavy work outside a turn (bin/queue-run, through `memory-room`;
 // _tools/scripts/verify/test-workers.mjs), on a Unix socket of its own: never the daemon's socket, which the front
 // relays to the internet. `GET /room?class=toolchain&wait=120&label=…` admits one more of that class, holding the
-// answer up to `wait` seconds for room; `GET /snapshot` is the reading and what admitted work holds, for a caller that
+// answer up to `wait` seconds for room; `size=targeted` prices a command aimed at named files below its class, and
+// `pid=N` names the process the work runs as, whose exit hands its reservation back; `GET /snapshot` is the reading and what admitted work holds, for a caller that
 // sizes itself to the free memory without asking to start anything.
 
 const MAX_WAIT_SECONDS = 30 * 60;
@@ -18,7 +20,9 @@ export interface RoomSocket {
     readonly close: () => Promise<void>;
 }
 
-export const createRoomServer = (budget: ResourceBudget): Server =>
+// Each admission's wait goes to perf.jsonl as `room.admit` once it is slow: the gate held heavy commands 17 hours in one
+// week (2026-09-26..10-02) and nothing the daemon logged showed it.
+export const createRoomServer = (budget: ResourceBudget, perf?: Pick<PerfTracker, "record">): Server =>
     createServer((request, response) => {
         const url = new URL(request.url ?? "/", "http://room");
         const answer = (status: number, body: unknown): void => {
@@ -44,6 +48,8 @@ export const createRoomServer = (budget: ResourceBudget): Server =>
                 return;
             }
             const waitSeconds = Math.min(MAX_WAIT_SECONDS, Math.max(0, Number(url.searchParams.get("wait")) || 0));
+            const size: RoomSize | undefined = url.searchParams.get("size") === "targeted" ? "targeted" : undefined;
+            const pid = Number(url.searchParams.get("pid"));
             // A caller that hangs up stops holding its place in the wait.
             const gone = new AbortController();
             response.on("close", () => {
@@ -55,13 +61,23 @@ export const createRoomServer = (budget: ResourceBudget): Server =>
                 workload,
                 attended: false,
                 where: "local",
+                size,
+                pid: Number.isInteger(pid) && pid > 1 ? pid : undefined,
                 ...(waitSeconds > 0 ? { wait: { deadlineMs: waitSeconds * 1000, signal: gone.signal } } : {}),
             });
             const snapshot = await budget.snapshot();
+            perf?.record("room.admit", admission.waitedMs, {
+                class: workload,
+                size,
+                verdict: admission.verdict,
+                label: url.searchParams.get("label") ?? undefined,
+                freeBytes: snapshot.freeBytes,
+                reservedBytes: snapshot.reservedBytes,
+            });
             answer(200, {
                 verdict: admission.verdict,
                 waitedMs: admission.waitedMs,
-                needBytes: needBytes(workload, false),
+                needBytes: needBytes(workload, false, size),
                 freeBytes: snapshot.freeBytes,
                 reservedBytes: snapshot.reservedBytes,
                 ...(admission.verdict === "run" ? {} : { diagnosis: admission.message }),
@@ -70,8 +86,13 @@ export const createRoomServer = (budget: ResourceBudget): Server =>
     });
 
 /** Serves the budget on `path`; a sandbox without /run/intentic (a dev daemon on a laptop) goes without, and says so. */
-export const startRoomSocket = async (budget: ResourceBudget, logger: Pick<Logger, "warn">, path: string = ROOM_SOCKET): Promise<RoomSocket> => {
-    const server = createRoomServer(budget);
+export const startRoomSocket = async (
+    budget: ResourceBudget,
+    logger: Pick<Logger, "warn">,
+    path: string = ROOM_SOCKET,
+    perf?: Pick<PerfTracker, "record">,
+): Promise<RoomSocket> => {
+    const server = createRoomServer(budget, perf);
     // A previous daemon's socket file outlives it and would refuse the bind.
     await unlink(path)
         // allow(silent-catch): no socket file left behind is the ordinary case, and anything else the bind below reports

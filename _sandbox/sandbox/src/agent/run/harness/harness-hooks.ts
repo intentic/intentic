@@ -24,7 +24,7 @@ import { opt } from "../../../opt.js";
 
 // What the harness's hooks reach for: the reviewers' deps, the conversation's checkout for what its work changed, and
 // the ledgers they stamp.
-export type HarnessHooksDeps = Pick<Services, "workspace" | "logger" | "ruleFirings" | "agents" | "agentWorktrees">;
+export type HarnessHooksDeps = Pick<Services, "workspace" | "logger" | "ruleFirings" | "agents" | "agentWorktrees" | "perf">;
 
 // A rule's command inside the turn's own namespace via nsenter, since the daemon-side worktree has empty dependency
 // directories; `repo` is carried this far because inside the namespace `--wdns`, not the cwd, decides where it runs.
@@ -63,6 +63,7 @@ const editReviewersOf = (deps: HarnessHooksDeps, context: TurnContext, rules: re
         roots,
         place: (file) => (isolation?.anchor === undefined ? inWorktree(file, isolation?.plan) : file),
         onFired: (rule: Rule) => stampFiring(deps, rule),
+        onRan: (rule, ms, status) => deps.perf.record("edit.rule", ms, { rule: rule.id, status }, status === "error"),
     });
     return { editReviewers: [bytes, commands].filter((each) => each !== undefined) };
 };
@@ -99,7 +100,8 @@ const turnChecksOf = (deps: HarnessHooksDeps, context: TurnContext, rules: reado
         turnChecks: {
             rules,
             change: () => turnChangeOf(deps, conversationId, named),
-            run: (command, timeoutMs, repo) => spawnEditCommand(repoCwd(context.localCwd, repo))(ruleCommandIn(command, isolation.anchor, repo), timeoutMs),
+            run: (command, timeoutMs, repo) =>
+                spawnEditCommand(repoCwd(context.localCwd, repo))(ruleCommandIn(command, isolation.anchor, repo), timeoutMs),
             // A firing date on the settings list, as an edit check's; a feed row per turn would be noise.
             onFired: (rule) => stampFiring(deps, rule),
             logger: deps.logger.child({ conversationId }),
@@ -125,6 +127,14 @@ export const harnessHooks = (deps: HarnessHooksDeps, context: TurnContext, fileE
     dirtyFiles: dirtyFilesOf(context),
     ...editReviewersOf(deps, context, fileEdited),
     ...turnChecksOf(deps, context, turnEnding),
+    // Each hook callback's time, filed under `hook.<event>`: slow ones land in perf.jsonl with the tool they held.
+    hookTimed: (event, ms, timing) =>
+        deps.perf.record(`hook.${event}`, ms, {
+            matcher: timing.matcher,
+            at: timing.at,
+            tool: timing.tool,
+            conversation: context.base.spec.conversationId,
+        }),
     // The rebase the cards take back while the user is answering them; isolated turns only.
     ...opt("resync", context.resync),
 });

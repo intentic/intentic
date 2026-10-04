@@ -36,6 +36,8 @@ export interface FileEditedDeps {
     // workspace with no repositories gives.
     readonly repos?: (() => Promise<readonly string[]>) | undefined;
     readonly onFired?: ((rule: Rule) => void) | undefined;
+    // Told how long each rule's command took on one file, whatever it found, for the perf log.
+    readonly onRan?: ((rule: Rule, ms: number, status: EditCommandRun["status"]) => void) | undefined;
 }
 
 const relativeTo = (file: string, roots: readonly string[] | undefined): string => {
@@ -80,22 +82,27 @@ export const fileEditedReviewer = (
         const relative = relativeTo(file, deps.roots);
         const placed = deps.place === undefined ? file : deps.place(file);
         const repos = aimed ? await repoOfFile(relative, deps.repos) : undefined;
-        const notes: string[] = [];
-        for (const rule of armed) {
-            if (rule.action.kind !== "command" || !conditionHolds(rule.when, { paths: [relative], repos })) {
-                continue;
-            }
-            const command = rule.action.command.replaceAll(FILE_TOKEN, shellQuoted(placed));
-            // In the repository it named, like every other moment; the file itself travels as an absolute path, so the
-            // working directory changes where the command runs without changing what it is given.
-            const run = await deps.run(command, Math.min(rule.action.timeoutMs, EDIT_COMMAND_CEILING_MS), rule.when?.repo);
-            if (run.status === "passed") {
-                continue;
-            }
-            deps.onFired?.(rule);
-            notes.push(noteOf(rule, run, relative, how));
-        }
-        return notes.length === 0 ? undefined : notes.join("\n\n");
+        // Every matching rule at once, reported in the rules' order: an edit waits for the slowest command, not the sum.
+        const notes = await Promise.all(
+            armed.map(async (rule): Promise<string | undefined> => {
+                if (rule.action.kind !== "command" || !conditionHolds(rule.when, { paths: [relative], repos })) {
+                    return undefined;
+                }
+                const command = rule.action.command.replaceAll(FILE_TOKEN, shellQuoted(placed));
+                // In the repository it named, like every other moment; the file itself travels as an absolute path, so the
+                // working directory changes where the command runs without changing what it is given.
+                const from = performance.now();
+                const run = await deps.run(command, Math.min(rule.action.timeoutMs, EDIT_COMMAND_CEILING_MS), rule.when?.repo);
+                deps.onRan?.(rule, performance.now() - from, run.status);
+                if (run.status === "passed") {
+                    return undefined;
+                }
+                deps.onFired?.(rule);
+                return noteOf(rule, run, relative, how);
+            }),
+        );
+        const said = notes.filter((note) => note !== undefined);
+        return said.length === 0 ? undefined : said.join("\n\n");
     };
 };
 

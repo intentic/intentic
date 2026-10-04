@@ -2691,9 +2691,13 @@
             "cleanCommandOutput": "Czyść wyjście poleceń",
             "cleaned": "Czyszczone",
             "cleaners": "Czyściciele",
+            "clearedResults": "Wyczyszczone",
+            "clearOldResults": "Czyść stare wyniki narzędzi",
+            "clearOldResultsDescription": "Gdy rozmowa z Claude się wydłuża, zastępuj jej najstarsze wyniki narzędzi krótkim znacznikiem, dużymi porcjami, zostawiając najnowsze w całości. Mniejsze prompty kosztują mniej i szybciej dostają odpowiedź; agent może uruchomić narzędzie ponownie, jeśli potrzebuje tego, co wyczyszczono.",
             "commandOutput": "Wyjście poleceń",
             "ledgerFillsAssistantRuns": "Rejestr zapełnia się, gdy asystent uruchamia polecenia powłoki — jeden wiersz na polecenie.",
             "ofCommandsRunUncleaned": "poleceń działa bez czyszczenia",
+            "ofConversationsKeepEveryResult": "rozmów zachowuje każdy wynik narzędzia",
             "outputSavings": "Oszczędność wyjścia",
             "raw": "Surowe",
             "tokensSavedAllTime": "zaoszczędzonych tokenów, łącznie",
@@ -3742,10 +3746,12 @@
             "likelyMore": "Prawdopodobnie od {low}% do {high}% więcej",
             "metric": {
                 "callsBeforeTarget": "Wywołania narzędzi przed właściwym plikiem",
+                "contextPerCall": "Tokeny promptu na wywołanie modelu",
                 "failedCalls": "Nieudane wywołania narzędzi na turę",
                 "openingListings": "Listowania katalogów w pierwszej turze",
                 "openingSearches": "Wyszukiwania przed otwarciem pliku",
                 "outputReached": "Wyjście docierające do agenta",
+                "roundTrips": "Wywołania modelu na turę",
                 "searchCalls": "Wyszukiwania na turę"
             },
             "more": "{pct}% więcej",
@@ -3763,9 +3769,11 @@
             },
             "savedSoFar": {
                 "callsBeforeTarget": "Dotąd około {count} wywołań narzędzi mniej.",
+                "contextPerCall": "Dotąd około {count} tokenów promptu mniej.",
                 "failedCalls": "Dotąd około {count} nieudanych wywołań mniej.",
                 "openingListings": "Dotąd około {count} listowań katalogów mniej.",
                 "openingSearches": "Dotąd około {count} wyszukiwań mniej.",
+                "roundTrips": "Dotąd około {count} wywołań modelu mniej.",
                 "searchCalls": "Dotąd około {count} wyszukiwań mniej."
             },
             "tooEarly": "Za wcześnie, by ocenić",

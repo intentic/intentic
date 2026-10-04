@@ -4,8 +4,10 @@ import type { AppEnv } from "../../app-env.js";
 import { GATEWAY_PATH, type PrivacyShield } from "../privacy-shield.js";
 import { type GatewayProtocol, protocolOf, restoreResponse, restoreStream, shieldRequest } from "./protocols/index.js";
 import { emptyTally, maskingShield, watchingShield } from "./request-shield.js";
+import { toJson } from "./protocols/walk.js";
 import type { GatewaySession } from "./session-token.js";
 import type { ShieldTally } from "./shield-types.js";
+import { clearToolResults } from "./tool-result-clearing.js";
 
 // `ALL /privacy/gateway/<session>/*`: where every shielded runtime sends its model requests. The session names the
 // provider and the upstream the runtime would otherwise have called; the request goes there with its own headers
@@ -46,6 +48,34 @@ const refusal = (protocol: GatewayProtocol | undefined, message: string): Respon
 };
 
 const isJson = (type: string | null): boolean => type !== null && /^application\/([\w.+-]*\+)?json\b/iu.test(type);
+
+// A Messages request with its old tool results replaced (tool-result-clearing.ts), or the bytes as they came: when
+// nothing is due, and when they do not parse, since clearing is a saving and never a reason to refuse.
+const clearedBody = (raw: Uint8Array<ArrayBuffer>): Uint8Array<ArrayBuffer> => {
+    try {
+        const outcome = clearToolResults(toJson(JSON.parse(new TextDecoder().decode(raw))));
+        return outcome.cleared === 0 ? raw : new TextEncoder().encode(JSON.stringify(outcome.body));
+    } catch {
+        // allow(silent-catch): a body this cannot read goes exactly as the harness sent it, which is what no clearing means
+        return raw;
+    }
+};
+
+// The request's bytes as the harness sent them; for a conversation in the clearing arm, a Messages request's old tool
+// results are replaced first, before anything reads it for the shield, so what is cleared is never masked, logged or sent.
+const requestBody = async (
+    c: Context<AppEnv>,
+    session: GatewaySession,
+    protocol: GatewayProtocol | undefined,
+    contentType: string | null,
+): Promise<Uint8Array<ArrayBuffer> | undefined> => {
+    if (c.req.method === "GET" || c.req.method === "HEAD") {
+        return undefined;
+    }
+    const sent = new Uint8Array(await c.req.arrayBuffer());
+    const clearing = session.clearing === true && protocol === "anthropic" && sent.byteLength > 0 && isJson(contentType);
+    return clearing ? clearedBody(sent) : sent;
+};
 const isEventStream = (type: string | null): boolean => type !== null && /^text\/event-stream\b/iu.test(type);
 
 // What follows the session in the path, query included, which is what the upstream is asked for.
@@ -100,8 +130,8 @@ export const createGatewayRoute = ({ shield, warn, fetch: send = fetch, now = ()
         }
         const masking = policy.mode === "on" && !trusted;
         const watching = policy.mode === "watch" && !trusted;
-        const raw = c.req.method === "GET" || c.req.method === "HEAD" ? undefined : new Uint8Array(await c.req.arrayBuffer());
         const contentType = c.req.header("content-type") ?? null;
+        const raw = await requestBody(c, session, protocol, contentType);
         let body: Uint8Array<ArrayBuffer> | undefined = raw;
         let tally: ShieldTally | undefined;
 

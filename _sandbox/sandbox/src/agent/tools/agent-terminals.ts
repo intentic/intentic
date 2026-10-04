@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
 import { forkedExec } from "@intentic/scaffold";
+import { z } from "zod";
 import { nsenterPrefix, type TurnPlacement } from "../../conversations/worktrees/isolation.js";
 import { AGENT_SESSION_ENV } from "../../system/boot/container-owner.js";
 import { WORKLOAD_ENV } from "../../seams/workload-stamp.js";
@@ -14,7 +15,16 @@ import { OFFLOAD_RUN_BIN } from "../../offload/offload-prefix.js";
 import { type HeavyCommands, heavyEnvPrefix, QUEUE_RUN_BIN, queueRunEnabled } from "../../system/resources/heavy-commands.js";
 import { shellPrefix } from "../../workload/workload-class.js";
 import { shellQuote } from "@intentic/sandbox-run/quote";
-import { type BackgroundJob, backgroundJobOf, type BackgroundJobSeed, jobCommandLine, openBackgroundJob, stopBackgroundJob } from "./jobs/background-jobs.js";
+import {
+    type BackgroundJob,
+    backgroundJobOf,
+    type BackgroundJobSeed,
+    fileOverrunCommand,
+    jobCommandLine,
+    jobOutputPath,
+    openBackgroundJob,
+    stopBackgroundJob,
+} from "./jobs/background-jobs.js";
 import { turnRunOf } from "../../conversations/actor/conversation-holdings.js";
 
 // Rewrites every Bash tool command through bin/tmux-run so it runs visibly in the `agent-<sdk session>` tmux session
@@ -107,6 +117,88 @@ const startJob = (
     return job;
 };
 
+// The Bash tool's own timeout when a call names none, and the longest it accepts, in ms.
+const BASH_DEFAULT_TIMEOUT_MS = 120_000;
+const BASH_MAX_TIMEOUT_MS = 600_000;
+// What bin/tmux-run returns early by when nothing else is said, and the margin it keeps under the call's own timeout.
+const SOFT_TIMEOUT_S = 110;
+const SOFT_MARGIN_S = 10;
+
+/**
+ * Seconds bin/tmux-run waits on a foreground call before returning early, for a call that asked for more time than the
+ * default; undefined leaves its 110. A shorter timeout keeps 110 too, so the CLI's own kill still ends the command at the
+ * time the agent set, as it asked.
+ */
+export const softTimeoutOf = (timeoutMs: number | undefined): number | undefined => {
+    if (timeoutMs === undefined || !Number.isFinite(timeoutMs) || timeoutMs <= BASH_DEFAULT_TIMEOUT_MS) {
+        return undefined;
+    }
+    return Math.max(SOFT_TIMEOUT_S, Math.floor(Math.min(timeoutMs, BASH_MAX_TIMEOUT_MS) / 1000) - SOFT_MARGIN_S);
+};
+
+// What this module reads of a Bash call beyond its command, each field absent when the CLI sent something else.
+const CallFieldsSchema = z.object({
+    description: z.string().optional().catch(undefined),
+    timeout: z.number().optional().catch(undefined),
+});
+
+// A Bash call's result as the CLI hands it to PostToolUse: its stdout, or the text itself in an older shape.
+const BashResultSchema = z.union([z.string(), z.object({ stdout: z.string() }).transform((result) => result.stdout)]).catch("");
+
+// The line bin/tmux-run ends an early return with, while the command runs on in its pane.
+const STILL_RUNNING = "--- command still running in tmux window ";
+
+// What the agent is told of a call that came back early and was filed as a job: the id to wait on, and what not to do.
+export const overrunNote = (job: BackgroundJob): string =>
+    `That command is still running, now as background job ${job.id}. Wait for it with the \`wait\` tool (target "${job.id}"), which returns when it exits with its exit code and output tail; do not poll its log with sleep or re-run it beside the live one. Full output so far: ${jobOutputPath(job)}`;
+
+// A foreground call on its way to the pane, kept until its result shows whether it came back early.
+interface ForegroundCall {
+    readonly dir: string;
+    readonly command: string;
+    readonly session: string;
+    readonly description: string | undefined;
+    readonly startedAt: number;
+}
+
+// Beside the line, how long tmux-run waits on this call before returning early; and the call itself, kept for its result
+// where a job could be filed for it.
+const holdForeground = (call: ForegroundCall & { readonly toolUseId: string; readonly timeoutMs: number | undefined }, foreground: Map<string, ForegroundCall> | undefined): void => {
+    const soft = softTimeoutOf(call.timeoutMs);
+    if (soft !== undefined) {
+        writeFileSync(join(call.dir, "soft"), `${String(soft)}\n`, { mode: 0o600 });
+    }
+    foreground?.set(call.toolUseId, call);
+};
+
+// A foreground call that came back early becomes a job the agent waits on (fileOverrunCommand). Only calls this turn's
+// PreToolUse sent to a pane are looked at, and each once.
+const overrunHooks = (jobs: BackgroundJobSeed, foreground: Map<string, ForegroundCall>): HookCallbackMatcher => ({
+    matcher: "Bash",
+    hooks: [
+        async (input) => {
+            if (input.hook_event_name !== "PostToolUse") {
+                return {};
+            }
+            const call = foreground.get(input.tool_use_id);
+            foreground.delete(input.tool_use_id);
+            if (call === undefined || !BashResultSchema.parse(input.tool_response).includes(STILL_RUNNING)) {
+                return {};
+            }
+            const job = fileOverrunCommand(jobs, { ...call, toolUseId: input.tool_use_id });
+            if (job === undefined) {
+                return {};
+            }
+            turnRunOf(jobs.conversations, job.conversationId)?.note({
+                role: "notice",
+                text: `Background job: ${job.label}`,
+                backgroundJob: { id: job.id, label: job.label, command: jobCommandLine(call.command), startedAt: job.startedAt },
+            });
+            return { hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: overrunNote(job) } };
+        },
+    ],
+});
+
 // The CLI's own ways to stop a background task by the id its Bash call returned, across its renames.
 const TASK_STOP_TOOLS = "TaskStop|KillShell|KillBash";
 
@@ -153,8 +245,10 @@ export const bashTmuxHooks = (
     jobs?: BackgroundJobSeed,
 ): Partial<Record<HookEvent, HookCallbackMatcher[]>> => {
     const envFlags = envKeyFlags(envKeys);
+    // Only a turn that can file a job keeps its foreground calls to look at.
+    const foreground = jobs === undefined ? undefined : new Map<string, ForegroundCall>();
     return {
-        ...(jobs === undefined ? {} : { PostToolUse: taskStopHooks(jobs) }),
+        ...(jobs === undefined || foreground === undefined ? {} : { PostToolUse: [...taskStopHooks(jobs), overrunHooks(jobs, foreground)] }),
         PreToolUse: [
             {
                 matcher: "Bash",
@@ -230,6 +324,10 @@ export const bashTmuxHooks = (
                         writeFileSync(join(dir, "line"), `${inner}\n`, { mode: 0o600 });
                         writeFileSync(join(dir, "said"), command, { mode: 0o600 });
                         writeFileSync(join(dir, "name"), windowSlug(tool.description), { mode: 0o600 });
+                        if (job === undefined) {
+                            const { description, timeout } = CallFieldsSchema.parse(tool);
+                            holdForeground({ dir, command, session, description, startedAt: Date.now(), toolUseId: input.tool_use_id, timeoutMs: timeout }, foreground);
+                        }
                         const jobFlag = job === undefined ? "" : `-b ${shellQuote(job.dir)} `;
                         return {
                             hookSpecificOutput: {

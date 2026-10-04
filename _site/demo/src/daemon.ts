@@ -1330,6 +1330,8 @@ const DEMO_SETTINGS: SandboxHandlerOutput<`settings`, `get`> = {
     fieldNotesHoldout: 0.2,
     leanGuidance: true,
     leanGuidanceHoldout: 0.2,
+    toolResultClearing: true,
+    toolResultClearingHoldout: 0.5,
 };
 
 // What a conversation was told before its first word. Every source at once, because the chip's whole job is to let a
@@ -1468,6 +1470,23 @@ const DEMO_SAVINGS: SavingsReport = {
         metrics: [
             { metric: `failedCalls`, on: { turns: 84, mean: 1.3 }, off: { turns: 21, mean: 2.1 } },
             { metric: `callsBeforeTarget`, on: { turns: 84, mean: 4.9 }, off: { turns: 21, mean: 5.1 } },
+        ],
+    },
+    // Tool-result clearing as its simulation predicted it: the prompt per call resolved smaller, and the two readings of
+    // what it could cost still inside their margins.
+    clearing: {
+        minTurns: 30,
+        sampleUnit: `conversations`,
+        metrics: [
+            {
+                metric: `contextPerCall`,
+                on: { turns: 64, mean: 191_400 },
+                off: { turns: 58, mean: 238_900 },
+                marginPct: 9.6,
+                deltaPct: -19.9,
+            },
+            { metric: `roundTrips`, on: { turns: 64, mean: 71.2 }, off: { turns: 58, mean: 68.5 }, marginPct: 21.4, controlTurnsNeeded: 210 },
+            { metric: `failedCalls`, on: { turns: 64, mean: 1.9 }, off: { turns: 58, mean: 1.8 }, marginPct: 30.2 },
         ],
     },
 };

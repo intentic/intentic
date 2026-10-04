@@ -153,6 +153,7 @@ const sharedContext = (
     iqSearchEnabled: premise.iqSearchEnabled,
     ...opt("contextTrim", trim),
     ...opt("iqSearchCohort", facts.iqTeaching?.cohort),
+    toolResultClearing: premise.toolResultClearing,
 });
 
 // The turn index only for a turn in a conversation; the map's size off the notes as they will be sent, trimmed. The
@@ -172,6 +173,7 @@ const experimentsOf = (
         fieldNotes: notes,
         turnContext: facts.turnContext,
         guidance: { arm: guided ? premise.arms.guidance : undefined },
+        clearing: { arm: premise.arms.clearing },
     });
 
 // A turn acting as a card this workspace lacks runs with nothing, while its prompt still reads as if it had everything.

@@ -1,3 +1,4 @@
+import type { HookTimer } from "../run/hook-timing.js";
 import type { McpServerConfig } from "@anthropic-ai/claude-agent-sdk";
 import type {
     AdmissionRule,
@@ -173,6 +174,10 @@ export interface TurnTools {
 // shield is off and the harness talks to its provider directly.
 export interface ShieldedRoute {
     readonly gateway?: string;
+    // The gateway stands in only to clear old tool results (privacy/gateway/tool-result-clearing.ts), with the shield
+    // off: nothing is masked, so the harness keeps its own reporting, and the experiment's two arms differ in clearing
+    // alone.
+    readonly clearingOnly?: true;
 }
 
 // What authenticates the turn, one variant per kind. `container` carries nothing: the runtime authenticates from what the
@@ -217,6 +222,8 @@ export interface TurnHooks {
     readonly dirtyFiles?: DirtyFiles;
     // Owner's file.edited rules bound to this turn's placement, run on every file an edit tool or shell writes.
     readonly editReviewers?: readonly EditReviewer[];
+    // Told how long each hook callback took (run/hook-timing.ts), for the perf log; absent times nothing.
+    readonly hookTimed?: HookTimer;
     // The repositories' own `turn` checks bound to this turn's tree, run once when it is about to stop. Absent for a
     // turn in the shared tree, one no adopted repository declares a `turn` check for, and every runtime but the Claude
     // Code loop, which alone has a Stop the daemon can answer.

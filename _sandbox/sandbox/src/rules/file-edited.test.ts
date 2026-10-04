@@ -105,4 +105,33 @@ describe("the file.edited moment", () => {
         const message = await review?.(file, "this edit");
         expect(message).toBe(`"Lint the edit" on ${file} after this edit:\nunused import\n\n"Bytes" on ${file} after this edit:\nNUL at 3`);
     });
+
+    // The edit waits for its slowest command, not their sum; the message keeps the owner's order whichever ends first.
+    test("several rules run side by side, and the slower first one still speaks first", async () => {
+        const started: string[] = [];
+        let release: () => void = () => undefined;
+        const gate = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        const review = fileEditedReviewer(
+            [rule(), rule({ id: "bytes", label: "Bytes", action: { kind: "command", command: "bytes {file}", timeoutMs: 60_000 } })],
+            {
+                run: async (command) => {
+                    started.push(command.split(" ")[0] ?? "");
+                    if (command.startsWith("node")) {
+                        // The first rule finishes only once the second has started: run in turn, this would never end.
+                        await gate;
+                    } else {
+                        release();
+                    }
+                    return { status: "failed", output: command.startsWith("bytes") ? "NUL at 3" : "unused import" };
+                },
+            },
+        );
+        const file = `${WORKSPACE_ROOT}/a.ts`;
+        expect(await review?.(file, "this edit")).toBe(
+            `"Lint the edit" on ${file} after this edit:\nunused import\n\n"Bytes" on ${file} after this edit:\nNUL at 3`,
+        );
+        expect(started).toEqual(["node", "bytes"]);
+    });
 });

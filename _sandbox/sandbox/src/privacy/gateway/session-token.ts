@@ -3,6 +3,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { z } from "zod";
+import { opt } from "../../opt.js";
 
 // What a gateway URL carries: which provider the requests behind it are for (the trust decision), where they go next,
 // and whose conversation they belong to (the log). Signed rather than looked up, so a runtime spawned before a daemon
@@ -13,9 +14,12 @@ export interface GatewaySession {
     readonly provider: string;
     readonly upstream: string;
     readonly conversationId?: string | undefined;
+    // Old tool results in its requests are replaced a chunk at a time (tool-result-clearing.ts): the conversation drew
+    // that arm of the clearing experiment. Signed with the rest, so only the daemon decides it.
+    readonly clearing?: boolean | undefined;
 }
 
-const PayloadSchema = z.object({ p: z.string().min(1), u: z.string().url(), c: z.string().optional() });
+const PayloadSchema = z.object({ p: z.string().min(1), u: z.string().url(), c: z.string().optional(), k: z.literal(true).optional() });
 
 const SIGNATURE_CHARS = 32;
 
@@ -55,9 +59,14 @@ export const sessionTokensFrom = (readKey: () => Promise<Buffer>): SessionTokens
             .digest("base64url")
             .slice(0, SIGNATURE_CHARS);
     return {
-        sign: async ({ provider, upstream, conversationId }) => {
+        sign: async ({ provider, upstream, conversationId, clearing }) => {
             const payload = Buffer.from(
-                JSON.stringify({ p: provider, u: upstream, ...(conversationId !== undefined ? { c: conversationId } : {}) }),
+                JSON.stringify({
+                    p: provider,
+                    u: upstream,
+                    ...(conversationId !== undefined ? { c: conversationId } : {}),
+                    ...opt("k", clearing === true ? true : undefined),
+                }),
             ).toString("base64url");
             return `${payload}.${await signatureOf(payload)}`;
         },
@@ -73,7 +82,14 @@ export const sessionTokensFrom = (readKey: () => Promise<Buffer>): SessionTokens
             }
             try {
                 const parsed = PayloadSchema.safeParse(JSON.parse(Buffer.from(payload, "base64url").toString("utf8")));
-                return parsed.success ? { provider: parsed.data.p, upstream: parsed.data.u, conversationId: parsed.data.c } : undefined;
+                return parsed.success
+                    ? {
+                          provider: parsed.data.p,
+                          upstream: parsed.data.u,
+                          conversationId: parsed.data.c,
+                          ...opt("clearing", parsed.data.k),
+                      }
+                    : undefined;
             } catch {
                 // allow(silent-catch): signed by this key yet unreadable can only be a key reused across builds that spelled it differently.
                 return undefined;

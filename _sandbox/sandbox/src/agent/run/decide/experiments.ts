@@ -30,6 +30,8 @@ export interface ExperimentReadings {
     readonly turnContext: TurnContextOutcome | undefined;
     // Undefined on a turn sent no guidance at all (a custom prompt, no system seam, a trimmed window).
     readonly guidance: { readonly arm: boolean | undefined };
+    // Undefined on every turn but a native Claude one: no other runtime's requests pass a gateway that clears.
+    readonly clearing: { readonly arm: boolean | undefined };
 }
 
 interface Experiment<Reading> {
@@ -87,6 +89,14 @@ export const EXPERIMENTS: { readonly [K in keyof ExperimentReadings]: Experiment
         on: (settings) => settings.leanGuidance,
         holdout: (settings) => settings.leanGuidanceHoldout,
         stamps: ({ arm }) => ({ ...opt("guidanceArm", arm), ...opt("guidanceCohort", arm === undefined ? undefined : GUIDANCE_REVISION) }),
+    },
+    // The arm has its old tool results replaced by the gateway (privacy/gateway/tool-result-clearing.ts); the holdout
+    // keeps every one.
+    clearing: {
+        salt: "tool-result-clearing",
+        on: (settings) => settings.toolResultClearing,
+        holdout: (settings) => settings.toolResultClearingHoldout,
+        stamps: ({ arm }) => opt("clearingArm", arm),
     },
 };
 

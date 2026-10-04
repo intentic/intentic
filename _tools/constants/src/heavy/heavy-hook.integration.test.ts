@@ -78,7 +78,8 @@ describe.skipIf(!kernel.runs)(kernel.title("a node program under the hook"), () 
         const report = await underHook(await publish("vitest"), ["run", "src"], spec({ queue: true, queueRun }));
         expect(report).toEqual({ argv: ["run", "src"], oom: KLASS.oomScoreAdj, nice: 19, held: "vitest", slot: join(dir, "slot.1") });
         const args = (await readFile(join(dir, "queue-run.args"), "utf8")).trim().split("\n");
-        expect(args.slice(0, args.indexOf("--"))).toEqual(["--pool", "heavy", "--limit", "2", "--wait", "900", "--memory-gate", "120", "--max-hold", "1800", "--on-deadline", "run", "--label", "vitest"]);
+        // `run src` names what it runs, so the gate prices it as a targeted run.
+        expect(args.slice(0, args.indexOf("--"))).toEqual(['--pool', 'heavy', '--limit', '2', '--wait', '900', '--memory-gate', '120', '--max-hold', '1800', '--on-deadline', 'run', '--label', 'vitest', '--size', 'targeted']);
         expect(args.slice(args.indexOf("--") + 1).slice(-3)).toEqual([join(dir, "node_modules/vitest/bin/cli.js"), "run", "src"]);
     });
 

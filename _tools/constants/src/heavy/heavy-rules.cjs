@@ -186,6 +186,38 @@ const queueArgs = (match, config) => [
     match.id,
 ];
 
+// A test run that names what it runs: a word after the test verb that reads as a path, a test file or a filter
+// (`pnpm --filter web test src/router/signIn.test.ts`, `bun test --conditions=x src/a.test.ts`, `vitest run tools/`,
+// `pnpm --filter @intentic/sandbox test filter-stats`). The
+// memory gate prices it as one worker over a few files (memory-room.mjs TARGETED_RUN_BYTES), not as a package's
+// suite: measured 2026-09-26..10-02, 2,147 of 2,463 test runs named their files, and the gate held them a median 6.4 s
+// for work that takes under one. A recursive or turbo fan-out is never targeted, whatever it names.
+const TEST_VERB = /^(test|vitest|jest)$/u;
+const FAN_OUT = /^(-r|--recursive|turbo|--workspaces?|-ws)$/u;
+const PATHLIKE = /[/.]\p{L}|^\p{L}[\w-]*\.(test|spec)\b|\b(test|spec)s?\b/u;
+const targetedRun = (invocation) => {
+    const words = invocation.slice(0, MATCH_LIMIT).split(/\s+/u).filter((word) => word !== "");
+    if (words.some((word) => FAN_OUT.test(word))) {
+        return false;
+    }
+    const verb = words.findIndex((word, index) => TEST_VERB.test(word.split("/").pop() ?? "") && (index > 0 || word !== "test"));
+    if (verb === -1) {
+        return false;
+    }
+    // A bare word (`filter-stats`) is a filter too, unless it may be the value of the flag before it (`--reporter dot`).
+    return words.slice(verb + 1).some((word, index, rest) => {
+        if (word.startsWith("-") || word.startsWith("@") || word === "run" || !/\p{L}/u.test(word)) {
+            return false;
+        }
+        const before = rest[index - 1] ?? "";
+        return PATHLIKE.test(word) || !(before.startsWith("-") && before !== "--" && !before.includes("="));
+    });
+};
+
+// queue-run's `--size` for a match: `targeted` for a test run aimed at named files, nothing for everything else.
+const sizeArgs = (match, invocation) =>
+    ["vitest", "package-script"].includes(match.id) && targetedRun(invocation) ? ["--size", "targeted"] : [];
+
 // When a slot held this long is worth a line in the log: half of what its own rule lets it hold, never for a rule that
 // lets it hold forever.
 const holdWarnSeconds = (maxHold) => (maxHold > 0 ? maxHold / 2 : undefined);
@@ -202,6 +234,8 @@ module.exports = {
     overridesOf,
     matchInvocation,
     queueArgs,
+    targetedRun,
+    sizeArgs,
     holdWarnSeconds,
     ruleById,
 };

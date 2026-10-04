@@ -244,3 +244,74 @@ test("the guidance experiment compares failed calls between the short and long f
         off: { turns: MIN_ARM_TURNS, mean: 3.5 },
     });
 });
+
+// Round trips are what the long form's batching and context-reuse paragraphs are for. Only the Claude Code loop counts a
+// turn's model calls one by one; every other runtime reports 1 for the whole exchange, which is no count at all.
+test("the guidance experiment reads round trips off the Claude Code loop's rows alone", async () => {
+    const rows = [
+        ...Array.from({ length: MIN_ARM_TURNS }, (_, index) =>
+            turn({
+                conversationId: `short-${index}`,
+                harness: "claude-code",
+                guidanceArm: true,
+                guidanceCohort: "g1",
+                turns: index % 2 === 0 ? 40 : 60,
+            }),
+        ),
+        ...Array.from({ length: MIN_ARM_TURNS }, (_, index) =>
+            turn({
+                conversationId: `long-${index}`,
+                harness: "claude-code",
+                guidanceArm: false,
+                guidanceCohort: "g1",
+                turns: index % 2 === 0 ? 20 : 40,
+            }),
+        ),
+        // Another runtime's conversations, in both arms: their `turns: 1` must not read as one round trip each.
+        ...Array.from({ length: 10 }, (_, index) =>
+            turn({ conversationId: `codex-${index}`, harness: "codex", guidanceArm: index % 2 === 0, guidanceCohort: "g1" }),
+        ),
+    ];
+    const { guidance } = await readTurnExperiments(storeOf(rows), {});
+
+    expect(guidance?.metrics.map((reading) => reading.metric)).toEqual(["failedCalls", "callsBeforeTarget", "roundTrips"]);
+    expect(guidance?.metrics[2]).toMatchObject({
+        on: { turns: MIN_ARM_TURNS, mean: 50 },
+        off: { turns: MIN_ARM_TURNS, mean: 30 },
+    });
+});
+
+// Tool-result clearing is judged on the prompt each call carries, then on what losing a result could cost: more round
+// trips, more failed calls. Both per-call readings come from the Claude Code loop's own count of its calls.
+test("the clearing experiment compares the prompt per call, then round trips and failed calls", async () => {
+    const rows = [
+        ...Array.from({ length: MIN_ARM_TURNS }, (_, index) =>
+            turn({
+                conversationId: `cleared-${index}`,
+                harness: "claude-code",
+                clearingArm: true,
+                turns: 10,
+                cacheReadTokens: 1_500_000,
+                inputTokens: 0,
+                failedCalls: 1,
+            }),
+        ),
+        ...Array.from({ length: MIN_ARM_TURNS }, (_, index) =>
+            turn({
+                conversationId: `kept-${index}`,
+                harness: "claude-code",
+                clearingArm: false,
+                turns: 10,
+                cacheReadTokens: 2_000_000,
+                inputTokens: 0,
+                failedCalls: 1,
+            }),
+        ),
+    ];
+    const { clearing } = await readTurnExperiments(storeOf(rows), {});
+
+    expect(clearing?.sampleUnit).toBe("conversations");
+    expect(clearing?.metrics.map((reading) => reading.metric)).toEqual(["contextPerCall", "roundTrips", "failedCalls"]);
+    expect(clearing?.metrics[0]).toMatchObject({ on: { turns: MIN_ARM_TURNS, mean: 150_000 }, off: { turns: MIN_ARM_TURNS, mean: 200_000 } });
+    expect(clearing?.metrics[1]).toMatchObject({ on: { mean: 10 }, off: { mean: 10 } });
+});

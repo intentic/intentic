@@ -86,6 +86,9 @@ export interface TurnContext {
     readonly settings?: SandboxSettings;
     readonly conversationTurns?: number;
     readonly iqSearchEnabled?: boolean;
+    // The gateway replaces this turn's old tool results (privacy/gateway/tool-result-clearing.ts); decided with the
+    // turn's experiment arms, read by the harness plan when it routes the credential.
+    readonly toolResultClearing?: boolean;
     // What the model's declared window will not pay for (context-trim.ts), resolved once above everything that reads
     // it. Absent means the window is unknown or large enough, which is every model outside a local one's card.
     readonly contextTrim?: TurnTrim;

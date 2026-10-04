@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# queue-run --pool NAME --limit N [--wait SECONDS] [--memory-gate SECONDS] [--max-hold SECONDS] [--on-deadline run|skip] [--label ID] -- <command> [args...]
+# queue-run --pool NAME --limit N [--wait SECONDS] [--memory-gate SECONDS] [--max-hold SECONDS] [--on-deadline run|skip] [--label ID] [--size targeted] -- <command> [args...]
 #
 # Runs <command> once a slot in <pool> is free, so the expensive commands several agent sessions each decide to
 # run — a repo-wide test fan-out, a type check across 74 packages — take turns instead of landing on the box at
@@ -45,6 +45,7 @@ memory_gate=0
 max_hold=0
 label="command"
 on_deadline="run"
+size=""
 poll_seconds="${INTENTIC_QUEUE_POLL:-2}"
 
 # Grace between the ceiling's TERM and the KILL behind it: long enough for a build to flush its output, short
@@ -83,6 +84,7 @@ while [ "$i" -lt "${#flags[@]}" ]; do
         --max-hold) max_hold="${flags[$((i + 1))]:-0}"; i=$((i + 2)) ;;
         --label) label="${flags[$((i + 1))]:-command}"; i=$((i + 2)) ;;
         --on-deadline) on_deadline="${flags[$((i + 1))]:-run}"; i=$((i + 2)) ;;
+        --size) size="${flags[$((i + 1))]:-}"; i=$((i + 2)) ;;
         *) i=$((i + 1)) ;;
     esac
 done
@@ -128,6 +130,8 @@ poll_seconds=$(number "$poll_seconds" 2)
 [ "$poll_seconds" -lt 1 ] && poll_seconds=1
 # Two words only; anything else is "run", since an unknown mode must not become the reason a command did not run.
 case "$on_deadline" in run | skip) ;; *) on_deadline="run" ;; esac
+# One word, or none: a size the gate does not know is priced as the whole class.
+case "$size" in targeted) ;; *) size="" ;; esac
 
 # The memory half of the gate, before the slot rather than after: a box with no room should not burn a slot
 # sitting in it. `memory-room` asks the daemon's resource budget (the same verdict that holds a turn, and the same
@@ -137,11 +141,15 @@ case "$on_deadline" in run | skip) ;; *) on_deadline="run" ;; esac
 # Run through `node` when it is not executable: the symlink points into node_modules, and a tree re-synced into a
 # running sandbox can arrive without its executable bit (measured with the gate before it: every heavy command printed
 # "Permission denied" and the memory half of this gate silently never ran).
+# `--pid $$` names this very process, which the command becomes at the `exec` below (or `timeout`, its parent, under
+# --max-hold): the budget hands the reservation back when it exits, not 90 seconds later.
 if [ "$memory_gate" -gt 0 ] && gate="$(command -v memory-room 2>/dev/null)" && [ -n "$gate" ]; then
+    gate_args=(--class toolchain --wait "$memory_gate" --label "$label" --pid "$$")
+    [ -n "$size" ] && gate_args+=(--size "$size")
     if [ -x "$gate" ]; then
-        "$gate" --class toolchain --wait "$memory_gate" --label "$label" || true
+        "$gate" "${gate_args[@]}" || true
     else
-        node "$gate" --class toolchain --wait "$memory_gate" --label "$label" || true
+        node "$gate" "${gate_args[@]}" || true
     fi
 fi
 

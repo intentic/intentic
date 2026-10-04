@@ -15,7 +15,7 @@
 const { spawnSync } = require("node:child_process");
 const { accessSync, constants, readFileSync, writeFileSync } = require("node:fs");
 const { getPriority, setPriority } = require("node:os");
-const { matchInvocation, queueArgs } = require("./heavy-rules.cjs");
+const { matchInvocation, queueArgs, sizeArgs } = require("./heavy-rules.cjs");
 
 // The spec the daemon handed down, or undefined when this program is not under it or is already covered.
 const pendingSpec = (env = process.env) => {
@@ -92,13 +92,14 @@ const takeTurn = ({ program, args, command, env = process.env }) => {
     if (spec === undefined) {
         return false;
     }
-    const match = matchInvocation([program, ...args].join(" "), spec.rules);
+    const invocation = [program, ...args].join(" ");
+    const match = matchInvocation(invocation, spec.rules);
     if (match === undefined) {
         return false;
     }
     env.INTENTIC_HEAVY_HELD = match.id;
     applyClass(spec.klass);
-    const queue = spec.queue === true && typeof spec.queueRun === "string" && runnable(spec.queueRun) ? [spec.queueRun, ...queueArgs(match, spec.rules), "--"] : [];
+    const queue = spec.queue === true && typeof spec.queueRun === "string" && runnable(spec.queueRun) ? [spec.queueRun, ...queueArgs(match, spec.rules), ...sizeArgs(match, invocation), "--"] : [];
     const runner = spec.offload?.[match.id];
     if (runner !== undefined && typeof spec.offloadRun === "string") {
         const here = queue.length === 0 ? "" : `${queue.map(quote).join(" ")} `;

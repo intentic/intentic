@@ -104,7 +104,7 @@ const bootToGate = async (attempt: BootAttempt, fault: BootFault | undefined): P
     // The budget's verdict for heavy commands and test fan-outs, on a socket of its own; one per container, so the
     // daemon that claimed the container serves it.
     if (role.container) {
-        const room = await startRoomSocket(services.resources, logger);
+        const room = await startRoomSocket(services.resources, logger, undefined, services.perf);
         shutdown.push(() => void room.close());
     }
     shutdown.push(() => services.perf.stop());

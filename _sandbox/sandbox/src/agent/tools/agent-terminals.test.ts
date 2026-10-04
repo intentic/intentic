@@ -1,4 +1,4 @@
-import { readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
@@ -9,7 +9,7 @@ import { syncHookOutput, memoryFleet } from "../../testing.js";
 import { OOM_SCORE, priorityOf } from "../../workload/workload-class.js";
 import type { SecretAccess } from "../../secrets/secret-access.js";
 import { queueRunEnabled } from "../../system/resources/heavy-commands.js";
-import { bashTmuxHooks, PIPESTATUS_TRAP } from "./agent-terminals.js";
+import { bashTmuxHooks, PIPESTATUS_TRAP, softTimeoutOf } from "./agent-terminals.js";
 import { backgroundJobOf, type BackgroundJob, noteJobShell, settledBackgroundJobs } from "./jobs/background-jobs.js";
 
 // One fleet's actors, and the cards a turn here parks in them.
@@ -374,4 +374,79 @@ test("a pkill pattern the command names appears in no argv of its own call, and 
     expect(files.agent).toBe(script("pkill -f vite; rm -rf node_modules/.vite && pnpm dev"));
     expect(files.name).toBe("kill-vite");
     expect(files.line).not.toContain("vite");
+});
+
+// A call that asked for longer than the CLI's two-minute default used to come back at 110 s anyway (922 times in one
+// week), and its agent then polled the log. A shorter timeout keeps 110, so the CLI's own kill still lands when asked.
+test("tmux-run waits as long as the call asked for, less a margin, and never past ten minutes", () => {
+    expect([undefined, 30_000, 120_000].map(softTimeoutOf)).toEqual([undefined, undefined, undefined]);
+    expect([121_000, 300_000, 600_000, 3_600_000].map(softTimeoutOf)).toEqual([111, 290, 590, 590]);
+});
+
+test("a long call's wait rides beside its line as `soft`; an ordinary call writes none", async () => {
+    const long = await rewritten({ command: "pnpm test", timeout: 300_000 });
+    const dir = dirname((/ -f (\S+) /u.exec(long ?? "")?.[1] ?? "").replaceAll("'", ""));
+    expect(readFileSync(join(dir, "soft"), "utf8")).toBe("290\n");
+    rmSync(dir, { recursive: true, force: true });
+    const plain = await rewritten({ command: "pnpm test" });
+    const plainDir = dirname((/ -f (\S+) /u.exec(plain ?? "")?.[1] ?? "").replaceAll("'", ""));
+    expect(existsSync(join(plainDir, "soft"))).toBe(false);
+    rmSync(plainDir, { recursive: true, force: true });
+});
+
+const postToolUse = (hooks: ReturnType<typeof bashTmuxHooks>, response: unknown) => {
+    const hook = hooks.PostToolUse?.find((matcher) => matcher.matcher === "Bash")?.hooks[0];
+    if (hook === undefined) {
+        throw new Error("PostToolUse Bash hook not registered");
+    }
+    return hook(
+        {
+            hook_event_name: "PostToolUse",
+            tool_name: "Bash",
+            tool_input: {},
+            tool_response: response,
+            tool_use_id: "tu-1",
+            session_id: "3f2a9b1c-0000-0000-0000-000000000000",
+            transcript_path: "/tmp/t",
+            cwd: WORKSPACE_ROOT,
+        },
+        "tu-1",
+        { signal: new AbortController().signal },
+    );
+};
+
+test("a foreground call that came back still running is filed as a job the agent waits on, not a log it polls", async () => {
+    const jobs = { conversationId: "conv-overrun", profile: {}, conversations: actors };
+    const hooks = bashTmuxHooks([], undefined, undefined, undefined, undefined, undefined, jobs);
+    const command = await rewritten({ command: "pnpm test", description: "Run the tests" }, hooks);
+    const dir = dirname((/ -f (\S+) /u.exec(command ?? "")?.[1] ?? "").replaceAll("'", ""));
+    // What tmux-run leaves for a command still running: its own files, and no status yet.
+    writeFileSync(join(dir, "cmd"), "pnpm test\n");
+    writeFileSync(join(dir, "out"), "12 pass\n");
+    const output = syncHookOutput(await postToolUse(hooks, { stdout: `12 pass\n\n--- command still running in tmux window run-the-tests · follow: ${dir}/out`, stderr: "" }));
+    const specific = output.hookSpecificOutput;
+    const told = specific?.hookEventName === "PostToolUse" ? (specific.additionalContext ?? "") : "";
+    const id = /background job (\S+)\./u.exec(told)?.[1] ?? "";
+    const job = backgroundJobOf(actors, "conv-overrun", id);
+    expect(job?.dir).toBe(dir);
+    expect(job?.label).toBe("Run the tests");
+    expect(told).toContain(`target "${id}"`);
+    // Still running as the turn ends: awaited, so its exit wakes the conversation.
+    expect(settledBackgroundJobs(actors, "conv-overrun").running.map((filed) => filed.id)).toEqual([id]);
+    rmSync(dir, { recursive: true, force: true });
+});
+
+test("a foreground call that finished, or came back early and then finished in its turn, wakes nobody", async () => {
+    const jobs = { conversationId: "conv-overrun-done", profile: {}, conversations: actors };
+    const hooks = bashTmuxHooks([], undefined, undefined, undefined, undefined, undefined, jobs);
+    await rewritten({ command: "ls" }, hooks);
+    expect(await postToolUse(hooks, { stdout: "a\nb\n", stderr: "" })).toEqual({});
+    const command = await rewritten({ command: "pnpm test" }, hooks);
+    const dir = dirname((/ -f (\S+) /u.exec(command ?? "")?.[1] ?? "").replaceAll("'", ""));
+    writeFileSync(join(dir, "cmd"), "pnpm test\n");
+    await postToolUse(hooks, { stdout: "--- command still running in tmux window run · follow: x", stderr: "" });
+    writeFileSync(join(dir, "status"), "0\n");
+    // The agent was handed the result to look at in its turn; a finished overrun is not an unread completion.
+    expect(settledBackgroundJobs(actors, "conv-overrun-done")).toEqual({ running: [], unseen: [] });
+    rmSync(dir, { recursive: true, force: true });
 });

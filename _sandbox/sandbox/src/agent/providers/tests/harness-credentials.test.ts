@@ -136,6 +136,25 @@ test("a shielded credential points every kind of harness at the gateway, keeping
     expect(harnessEnv({ kind: "claude-oauth", token: "sk-oauth" })["ANTHROPIC_BASE_URL"]).toBeUndefined();
 });
 
+// The gateway in front of a turn only to clear its old tool results masks nothing, so the CLI keeps its own reporting: the
+// clearing experiment's two arms must differ in clearing alone.
+test("a gateway that only clears keeps the harness's own reporting, which the shield's gateway switches off", () => {
+    const gateway = "http://127.0.0.1:8787/privacy/gateway/session";
+    const clearing = harnessEnv({ kind: "container", gateway, clearingOnly: true });
+    expect(clearing["ANTHROPIC_BASE_URL"]).toBe(gateway);
+    expect([clearing["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"], clearing["DISABLE_TELEMETRY"], clearing["DISABLE_ERROR_REPORTING"]]).toEqual([
+        undefined,
+        undefined,
+        undefined,
+    ]);
+    const shielded = harnessEnv({ kind: "container", gateway });
+    expect([shielded["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"], shielded["DISABLE_TELEMETRY"], shielded["DISABLE_ERROR_REPORTING"]]).toEqual([
+        "1",
+        "1",
+        "1",
+    ]);
+});
+
 test("a custom endpoint with no resolved model pins nothing rather than an empty id", () => {
     const env = harnessEnv({ kind: "routed", baseUrl: "https://router.example", authToken: "local" });
     expect(env["ANTHROPIC_BASE_URL"]).toBe("https://router.example");

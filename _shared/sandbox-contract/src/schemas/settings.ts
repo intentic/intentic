@@ -318,6 +318,23 @@ export const SandboxSettingsSchema = z.object({
         .describe(
             "What share of conversations to keep on the long form, so the two can be compared. Whole conversations rather than individual turns, because the guidance sits in the prompt for the whole session.",
         ),
+    // Measured by the `clearing` experiment: the gateway in front of a native Claude turn replaces old tool results with
+    // a placeholder, a chunk at a time, so the cached prompt breaks once per chunk rather than on every call
+    // (privacy/gateway/tool-result-clearing.ts). Off by default until that experiment says it pays.
+    toolResultClearing: z
+        .boolean()
+        .default(false)
+        .describe(
+            "Replace old tool results from a Claude conversation once it grows long, a large chunk at a time, keeping the most recent ones whole. The agent sees a short placeholder where each one was and can run the tool again. Smaller prompts cost less and answer sooner, at the risk of the agent re-reading what it already saw.",
+        ),
+    toolResultClearingHoldout: z
+        .number()
+        .min(0)
+        .max(1)
+        .default(0.5)
+        .describe(
+            "What share of conversations keep every tool result, so the two can be compared. Whole conversations rather than individual turns, because what was dropped stays dropped for the rest of the session.",
+        ),
     iqSearch: z
         .boolean()
         .default(false)
@@ -637,9 +654,13 @@ export const SavingsArmSchema = z.object({ turns: z.number(), mean: z.number() }
 // openingListings: directory listings a turn ran to orient itself (the project map).
 // callsBeforeTarget: how far a turn walked before touching a file it went on to edit.
 // failedCalls: tool calls that ended in error (the field notes, whose largest section is a failure taxonomy).
-// Never cost: each mechanism moves one small part of a turn's work, inside the noise of the rest.
+// roundTrips: model calls a turn took (the guidance form, whose batching and context-reuse paragraphs exist to save them).
+// contextPerCall: prompt tokens per model call, cached or not (tool-result clearing, which exists to shrink it).
+// Never cost: each mechanism moves one small part of a turn's work, inside the noise of the rest. Round trips are the
+// nearest a reading comes to it, and still a count of calls, not of tokens or money; the prompt a call carries is the
+// one exception, for the one mechanism that changes nothing else.
 export const TurnMetricReadingSchema = z.object({
-    metric: z.enum(["searchCalls", "openingSearches", "openingListings", "callsBeforeTarget", "failedCalls"]),
+    metric: z.enum(["searchCalls", "openingSearches", "openingListings", "callsBeforeTarget", "failedCalls", "roundTrips", "contextPerCall"]),
     on: SavingsArmSchema,
     off: SavingsArmSchema,
     // Additional control turns to reach a fixed target resolution, not today's delta (which inherits noise and always
@@ -703,6 +724,7 @@ export const SavingsReportSchema = z.object({
     map: TurnExperimentSchema.optional(),
     notes: TurnExperimentSchema.optional(),
     guidance: TurnExperimentSchema.optional(),
+    clearing: TurnExperimentSchema.optional(),
 });
 export type SavingsReport = z.infer<typeof SavingsReportSchema>;
 

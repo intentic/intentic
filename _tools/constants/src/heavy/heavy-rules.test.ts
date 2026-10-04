@@ -8,6 +8,8 @@ import {
     overridesOf,
     queueArgs,
     SHIPPED_HEAVY_COMMANDS,
+    sizeArgs,
+    targetedRun,
 } from "./heavy-rules.cjs";
 
 // A rule is matched against the program that runs and the arguments it got, `<program> <args…>`: the hook and the
@@ -197,6 +199,37 @@ test("queue-run is handed the rule's own flags, in the order it parses them", ()
         "--label",
         "repo-verify",
     ]);
+});
+
+test.each([
+    ["pnpm --filter @intentic/sandbox test src/logs/filter-stats.test.ts", true],
+    ["pnpm --filter @intentic/sandbox test filter-stats", true],
+    ["bun test --conditions=@intentic/src src/a.test.ts", true],
+    ["/usr/local/bin/bun test x.test.ts", true],
+    ["vitest run src/x", true],
+    ["pnpm test -- src/foo.test.ts", true],
+    ["pnpm test", false],
+    ["pnpm --filter web test", false],
+    ["bun test --timeout 5000", false],
+    ["bun test --reporter dot", false],
+    ["vitest run", false],
+    ["pnpm -r test foo/bar", false],
+    ["turbo run test --filter=web", false],
+    ["pnpm --filter @intentic/web typecheck", false],
+] as const)("whether %s names the files it runs: %s", (invocation, targeted) => {
+    expect(targetedRun(invocation)).toBe(targeted);
+});
+
+test("only a test rule's targeted run asks the gate for the smaller price", () => {
+    const config = mergeHeavyRules();
+    const sized = (invocation: string): string[] => {
+        const match = matchInvocation(invocation, config);
+        return match === undefined ? [] : sizeArgs(match, invocation);
+    };
+    expect(sized("pnpm --filter @intentic/sandbox test src/a.test.ts")).toEqual(["--size", "targeted"]);
+    expect(sized("vitest run src/a.test.ts")).toEqual(["--size", "targeted"]);
+    expect(sized("pnpm verify src/a.test.ts")).toEqual([]);
+    expect(sized("tsc -p src/a.test.ts")).toEqual([]);
 });
 
 test("a hold is worth a warning at half of what its rule allows, and never for a rule that allows forever", () => {

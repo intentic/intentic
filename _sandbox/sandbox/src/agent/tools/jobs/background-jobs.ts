@@ -85,6 +85,8 @@ const JobFileSchema = z.object({
     ports: z.array(z.number().int()).optional(),
     // The watch it was handed to, which a stop disarms before it ends the job.
     watch: z.string().optional(),
+    // A foreground call that ran past its time and was filed as a job then (fileOverrunCommand).
+    overran: z.boolean().optional(),
 });
 
 export interface BackgroundJob {
@@ -128,6 +130,9 @@ interface JobRecord {
     // Why the agent kept it for the person (the `keep` tool), the one fact that hands a job over as its turn ends.
     // Held here only: no turn survives a restart, so a restored job has nothing left to decide by it.
     kept: string | undefined;
+    // A foreground call filed as a job when it ran past its time. The CLI never knew it as a task, so no completion
+    // notice marks its end read: one that finished inside its turn was the agent's to look at, and wakes nobody after.
+    overran: boolean;
 }
 
 // A conversation's jobs, by job id, until nothing depends on one any more.
@@ -299,6 +304,8 @@ const persist = (record: JobRecord): void => {
                 ...(record.fate === "handed" ? { handed: true } : {}),
                 ...(record.ports === undefined ? {} : { ports: [...record.ports] }),
                 ...(record.watch === undefined ? {} : { watch: record.watch }),
+                // JSON drops an undefined field, so an ordinary job's file stays as it was.
+                overran: record.overran ? true : undefined,
             }),
             { mode: 0o600 },
         );
@@ -321,23 +328,63 @@ export const openBackgroundJob = (
     } catch {
         return undefined;
     }
+    return fileJob(seed, { ...spec, id, dir, startedAt: Date.now() }, false);
+};
+
+const fileJob = (
+    seed: BackgroundJobSeed,
+    spec: {
+        readonly id: string;
+        readonly dir: string;
+        readonly command: string;
+        readonly session: string;
+        readonly description?: string | undefined;
+        readonly toolUseId?: string | undefined;
+        readonly startedAt: number;
+    },
+    overran: boolean,
+): BackgroundJob => {
     const job: BackgroundJob = {
-        id,
+        id: spec.id,
         conversationId: seed.conversationId,
         command: spec.command,
         label: jobLabel(spec.description, spec.command),
-        dir,
+        dir: spec.dir,
         session: spec.session,
-        startedAt: Date.now(),
+        startedAt: spec.startedAt,
         profile: seed.profile,
     };
-    const record: JobRecord = { ...UNJUDGED, job, shellId: undefined, toolUseId: spec.toolUseId };
+    const record: JobRecord = { ...UNJUDGED, job, shellId: undefined, toolUseId: spec.toolUseId, overran };
     const actors = seed.conversations;
-    actors.holdings(JOBS).hold(job.conversationId, id, record);
+    actors.holdings(JOBS).hold(job.conversationId, job.id, record);
     persist(record);
     publish(actors, job.conversationId);
     followJob(actors, record);
     return job;
+};
+
+/**
+ * A foreground Bash call that ran past its time (bin/tmux-run's soft timeout returned while the command runs on), filed
+ * as a job in the capture dir its pane already writes its output and status into: `wait` takes its id, the card lists
+ * it, and its turn's end decides its fate like any job's, instead of the agent polling a log file call after call.
+ * Undefined for a dir that holds no run or one that already finished.
+ */
+export const fileOverrunCommand = (
+    seed: BackgroundJobSeed,
+    spec: {
+        readonly dir: string;
+        readonly command: string;
+        readonly session: string;
+        readonly description: string | undefined;
+        readonly toolUseId: string;
+        readonly startedAt: number;
+    },
+): BackgroundJob | undefined => {
+    const probe: BackgroundJob = { id: "", conversationId: seed.conversationId, command: spec.command, label: "", dir: spec.dir, session: spec.session, startedAt: spec.startedAt, profile: seed.profile };
+    if (!jobStarted(probe) || jobFinished(probe)) {
+        return undefined;
+    }
+    return fileJob(seed, { ...spec, id: randomUUID() }, true);
 };
 
 // A record as its job starts: nothing decided about it, nothing it waits on, nobody told of its end.
@@ -349,6 +396,7 @@ const UNJUDGED = {
     ports: undefined,
     stoppedBy: undefined,
     kept: undefined,
+    overran: false,
 } as const satisfies Omit<JobRecord, "job" | "shellId" | "toolUseId">;
 
 // Undefined for anything that is not a job file; never throws, so a bad entry cannot fail a boot.
@@ -358,7 +406,7 @@ const recordOf = (dir: string): JobRecord | undefined => {
         if (!parsed.success) {
             return undefined;
         }
-        const { shellId, adopted, handed, ports, watch, turn, ...rest } = parsed.data;
+        const { shellId, adopted, handed, ports, watch, turn, overran, ...rest } = parsed.data;
         return {
             ...UNJUDGED,
             job: { ...rest, dir, profile: profileOf(turn) },
@@ -367,6 +415,7 @@ const recordOf = (dir: string): JobRecord | undefined => {
             toolUseId: undefined,
             watch,
             ports,
+            overran: overran === true,
         };
     } catch {
         return undefined;
@@ -448,7 +497,7 @@ export const settledBackgroundJobs = (actors: Actors, conversationId: string): S
         }
         if (jobFinished(record.job)) {
             forgetJob(actors, record);
-            if (record.notice !== "read" && record.fate === undefined) {
+            if (record.notice !== "read" && record.fate === undefined && !record.overran) {
                 unseen.push(record.job);
             }
             continue;

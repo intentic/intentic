@@ -1,4 +1,5 @@
 import type { HarnessCredential } from "../agent/providers/agent-request.js";
+import { opt } from "../opt.js";
 import type { PrivacyShield } from "./privacy-shield.js";
 
 // Puts a Claude Code harness credential behind the privacy shield's gateway: the harness then sends every model request,
@@ -15,15 +16,26 @@ export const anthropicUpstream = (): string => {
 export const upstreamOf = (credential: HarnessCredential): string =>
     credential.kind === "routed" || credential.kind === "trial" ? credential.baseUrl : anthropicUpstream();
 
-// The credential as the harness should spend it: unchanged while the shield is off. A policy that can't be read
-// throws, which refuses the turn rather than running it unshielded.
+// The credential as the harness should spend it: unchanged while the shield is off, unless the conversation's old tool
+// results are cleared, which only the gateway can do (gateway/tool-result-clearing.ts); then it goes through the gateway
+// as a relay, marked so the harness keeps everything else as it was. A policy that can't be read throws, which refuses
+// the turn rather than running it unshielded.
 export const shieldHarnessCredential = async (
-    shield: Pick<PrivacyShield, "baseUrlFor">,
+    shield: Pick<PrivacyShield, "baseUrlFor" | "relayUrlFor">,
     credential: HarnessCredential,
-    session: { readonly provider: string; readonly conversationId?: string | undefined },
+    session: { readonly provider: string; readonly conversationId?: string | undefined; readonly clearing?: boolean | undefined },
 ): Promise<HarnessCredential> => {
-    const gateway = await shield.baseUrlFor({ provider: session.provider, upstream: upstreamOf(credential), conversationId: session.conversationId });
-    return gateway === undefined ? credential : { ...credential, gateway };
+    const gatewaySession = {
+        provider: session.provider,
+        upstream: upstreamOf(credential),
+        conversationId: session.conversationId,
+        ...opt("clearing", session.clearing === true ? true : undefined),
+    };
+    const gateway = await shield.baseUrlFor(gatewaySession);
+    if (gateway !== undefined) {
+        return { ...credential, gateway };
+    }
+    return session.clearing === true ? { ...credential, gateway: await shield.relayUrlFor(gatewaySession), clearingOnly: true } : credential;
 };
 
 // OpenCode's one shared server fixes its providers' base URLs at spawn, so a shield turned on while it serves other

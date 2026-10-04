@@ -32,29 +32,51 @@ const checkoutOf = (file) => {
 };
 
 // The rules judged: the root set plus the plugin tier, whose backlog is why only what the edit adds is reported. A file
-// the root config ignores is not judged at all, as `pnpm lint` does not judge it.
+// the root config ignores is not judged at all, as `pnpm lint` does not judge it: the fixing pass, under the root config,
+// says whether it judged the file (`judged`), so that takes no run of its own.
 const configOf = (checkout) => (existsSync(join(checkout, PLUGINS_CONFIG)) ? PLUGINS_CONFIG : ROOT_CONFIG);
-const lint = (oxlint, checkout, file) =>
-    lintReport(oxlint, checkout, ROOT_CONFIG, file)?.files === 0 ? [] : lintReport(oxlint, checkout, configOf(checkout), file)?.diagnostics;
+const lint = (oxlint, checkout, file, judged) => (judged === false ? [] : lintReport(oxlint, checkout, configOf(checkout), file)?.diagnostics);
 
+// How many files a JSON report says it linted; undefined for output that is not one (a crash, a timeout).
+const filesLinted = (stdout) => {
+    try {
+        const files = JSON.parse(stdout).number_of_files;
+        return Number.isInteger(files) ? files : undefined;
+    } catch {
+        // allow(silent-catch): output that is not oxlint's JSON leaves the question to the plugin tier's own report
+        return undefined;
+    }
+};
+
+// Fixes until a pass changes nothing, answering whether the root config judged the file at all (false for one it
+// ignores), or undefined when the last pass did not say. Each pass reports as JSON, so the settled one doubles as the
+// root config's verdict on the file instead of a third oxlint run (measured: 537 ms an edit, of which that run was 126).
 const fixUntilSettled = (oxlint, checkout, file) => {
     let previous = readFileSync(file, `utf8`);
+    let judged;
     for (let pass = 0; pass < FIX_PASSES; pass++) {
+        let stdout;
         try {
-            execFileSync(oxlint, [`--fix`, `--silent`, `-c`, join(checkout, ROOT_CONFIG), `--no-error-on-unmatched-pattern`, file], {
+            stdout = execFileSync(oxlint, [`--fix`, `-c`, join(checkout, ROOT_CONFIG), `-f`, `json`, `--no-error-on-unmatched-pattern`, file], {
                 cwd: checkout,
-                stdio: `ignore`,
+                encoding: `utf8`,
+                stdio: [`ignore`, `pipe`, `ignore`],
                 timeout: OXLINT_TIMEOUT_MS,
+                maxBuffer: 64 * 1024 * 1024,
             });
-        } catch {
-            // Non-zero means problems remain, which is the normal state between passes.
+        } catch (error) {
+            // Non-zero means problems remain, which is the normal state between passes; the report is still printed.
+            stdout = String(error?.stdout ?? ``);
         }
+        const files = filesLinted(stdout);
+        judged = files === undefined ? undefined : files > 0;
         const now = readFileSync(file, `utf8`);
         if (now === previous) {
-            return;
+            return judged;
         }
         previous = now;
     }
+    return judged;
 };
 
 const gitIn = (checkout, ...args) => execFileSync(`git`, args, { cwd: checkout, encoding: `buffer`, stdio: [`ignore`, `pipe`, `ignore`] });
@@ -110,8 +132,8 @@ const main = () => {
         return 0;
     }
 
-    fixUntilSettled(oxlint, checkout, file);
-    const current = (lint(oxlint, checkout, file) ?? []).filter((d) => !DEFERRED.has(d.code));
+    const judged = fixUntilSettled(oxlint, checkout, file);
+    const current = (lint(oxlint, checkout, file, judged) ?? []).filter((d) => !DEFERRED.has(d.code));
     if (current.length === 0) {
         return 0;
     }

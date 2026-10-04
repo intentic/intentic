@@ -55,7 +55,8 @@ const GIB = 1024 ** 3;
 // A warning the next press cannot get past is a wall: the send after the hold has to run.
 test("a short box holds a person's first turn with its reading, and runs the one after", async () => {
     const services = harnessServices({
-        resources: budgetOn(memoryReading(16, 12, 7)),
+        // 15.5 GiB resident against 16: short, whatever the 7 GiB parked in swap (which the cap does not bound).
+        resources: budgetOn(memoryReading(16, 15.5, 7)),
         agents: unstubbed<Services["agents"]>("agents", { entry: () => undefined }),
     });
     const asAda = { ...turn(), actor: "ada@example.com" };
@@ -64,7 +65,7 @@ test("a short box holds a person's first turn with its reading, and runs the one
     expect(held).toMatchObject({
         ok: false,
         code: "sandbox-memory-low",
-        memory: { limitBytes: 16 * GIB, residentBytes: 12 * GIB, swapBytes: 7 * GIB },
+        memory: { limitBytes: 16 * GIB, residentBytes: 15.5 * GIB, swapBytes: 7 * GIB },
     });
 
     expect((await planTurn(services, asAda, context)).ok).toBe(true);

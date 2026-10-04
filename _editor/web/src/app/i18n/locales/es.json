@@ -1989,9 +1989,13 @@
             "cleanCommandOutput": "Limpiar la salida de comandos",
             "cleaned": "Limpios",
             "cleaners": "Limpiadores",
+            "clearedResults": "Vaciado",
+            "clearOldResults": "Vaciar resultados antiguos de herramientas",
+            "clearOldResultsDescription": "Cuando una conversación con Claude se alarga, sustituir sus resultados de herramientas más antiguos por un marcador breve, en bloques grandes, conservando enteros los recientes. Los prompts más pequeños cuestan menos y responden antes; el agente puede volver a ejecutar una herramienta si necesita lo que se vació.",
             "commandOutput": "Salida de comandos",
             "ledgerFillsAssistantRuns": "El registro se llena a medida que el asistente ejecuta comandos de shell, una fila por comando.",
             "ofCommandsRunUncleaned": "de los comandos se ejecutan sin limpiar",
+            "ofConversationsKeepEveryResult": "de las conversaciones conservan todos los resultados",
             "outputSavings": "Ahorro de salida",
             "raw": "Sin limpiar",
             "tokensSavedAllTime": "tokens ahorrados, en total",
@@ -2804,10 +2808,12 @@
             "likelyMore": "Probablemente entre un {low} % y un {high} % más",
             "metric": {
                 "callsBeforeTarget": "Llamadas a herramientas antes del archivo correcto",
+                "contextPerCall": "Tokens de prompt por llamada al modelo",
                 "failedCalls": "Llamadas a herramientas fallidas por turno",
                 "openingListings": "Listados de directorios en el primer turno",
                 "openingSearches": "Búsquedas antes de abrir un archivo",
                 "outputReached": "Salida que llega al agente",
+                "roundTrips": "Idas y vueltas al modelo por turno",
                 "searchCalls": "Búsquedas por turno"
             },
             "more": "{pct} % más",
@@ -2825,9 +2831,11 @@
             },
             "savedSoFar": {
                 "callsBeforeTarget": "Unas {count} llamadas a herramientas menos hasta ahora.",
+                "contextPerCall": "Unos {count} tokens de prompt menos hasta ahora.",
                 "failedCalls": "Unas {count} llamadas fallidas menos hasta ahora.",
                 "openingListings": "Unos {count} listados de directorios menos hasta ahora.",
                 "openingSearches": "Unas {count} búsquedas menos hasta ahora.",
+                "roundTrips": "Unas {count} idas y vueltas al modelo menos hasta ahora.",
                 "searchCalls": "Unas {count} búsquedas menos hasta ahora."
             },
             "tooEarly": "Aún es pronto",

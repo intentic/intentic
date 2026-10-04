@@ -17,7 +17,8 @@
 #
 # -f hands the command over BY FILE, which is how the agent's hook calls it: `line` is what the pane runs, and beside
 # it `said` is the command as the agent wrote it (the output filter's subject: which cleaners match, which un-cleaned
-# commands deserve a handler) and `name` the window's name. None of it rides an argv — not this wrapper's, not the
+# commands deserve a handler), `name` the window's name and, when the call asked for more time than the default,
+# `soft` the seconds to wait before returning early (see the soft timeout below). None of it rides an argv — not this wrapper's, not the
 # CLI's shell that starts it, not the pane's — because `pkill -f PATTERN` matches every process's whole command line,
 # and an agent command naming a pattern used to kill its own call through whichever of those carried it. The file's
 # directory is this run's capture dir, owned and removed like one this wrapper made (or the job dir under -b).
@@ -63,6 +64,7 @@ if [ -n "$cmdfile" ]; then
     name="$(cat "$cmddir/name" 2>/dev/null)"
     name="${name:-run}"
     agentcmd="$(cat "$cmddir/said" 2>/dev/null)"
+    callsoft="$(cat "$cmddir/soft" 2>/dev/null)"
 else
     cmd="$2"
     name="${3:-run}"
@@ -143,6 +145,16 @@ else
 fi
 printf '%s\n' "$cmd" > "$d/cmd"
 : > "$d/out"
+# THE RUNNER WAKES THIS WRAPPER THE MOMENT IT PUBLISHES THE STATUS, through a FIFO beside it, instead of the wait loop
+# finding out on its next poll. The poll slept 50 ms a turn, and for an ordinary short command that sleep WAS the
+# wrapper's cost: 51 of its 73 ms for `true` (measured 2026-10-04), on every Bash call an agent makes. Both sides open
+# it read-write, so neither can block on the other: the runner's open succeeds with nobody reading (the wrapper
+# returned early, or was killed) and its one byte is dropped with the pipe. This side opens it only once the pane
+# exists (below), because a tmux client that finds no server forks one, and that server keeps every descriptor its
+# client held, for good. A byte the runner sends before then is lost, but it sends it only after the status is in
+# place, which the wait loop tests before it ever reads. No FIFO (mkfifo refused) is the old poll, unchanged.
+wake=""
+mkfifo "$d/wake" 2>/dev/null && wake=1
 # Runner executed inside the pane. tee mirrors output to the pane tty AND the capture file; PIPESTATUS[0]
 # preserves the command's exit code through the pipe.
 #
@@ -194,7 +206,7 @@ epitaph='#{?#{==:#{pane_dead_status},0},#[fg=green]✓ finished,#[fg=red]✗ #{?
 # that is finished has nothing left running. The output goes through a process substitution rather than a pipe so the
 # runner learns the command returned even while a leftover still holds the output open, and tee is waited for after
 # the sweep, so the status still means the capture is complete.
-printf 'tmux set-option -w -t "$TMUX_PANE" remain-on-exit on 2>/dev/null\ntmux set-option -w -t "$TMUX_PANE" remain-on-exit-format %q 2>/dev/null\nexport INTENTIC_PIPESTATUS_FILE=%q/pipestatus\nexec 3> >(exec tee -a %q/out)\nteepid=$!\nbash %q/cmd >&3 2>&1\ncode=$?\nexec 3>&-\n%s\nwait "$teepid" 2>/dev/null\necho "$code" > %q/status.part\nmv %q/status.part %q/status\nexit $code\n' "$epitaph" "$d" "$d" "$d" "$sweep" "$d" "$d" "$d" > "$d/runner"
+printf 'tmux set-option -w -t "$TMUX_PANE" remain-on-exit on \\; set-option -w -t "$TMUX_PANE" remain-on-exit-format %q 2>/dev/null\nexport INTENTIC_PIPESTATUS_FILE=%q/pipestatus\nexec 3> >(exec tee -a %q/out)\nteepid=$!\nbash %q/cmd >&3 2>&1\ncode=$?\nexec 3>&-\n%s\nwait "$teepid" 2>/dev/null\necho "$code" > %q/status.part\nmv %q/status.part %q/status\n[ -p %q/wake ] && printf x 2>/dev/null 1<>%q/wake\nexit $code\n' "$epitaph" "$d" "$d" "$d" "$sweep" "$d" "$d" "$d" "$d" "$d" > "$d/runner"
 
 # The persistent pane log (written by the global pipe-pane hooks, src/logs/log-files.ts, VT-rendered to clean
 # text by pane-log-clean) — the filter's footer points the agent here for the full output. Path known only
@@ -211,7 +223,9 @@ emit() {
     # output in, compacted out) and defaults to agent-output-filter.
     filter="${INTENTIC_FILTER_CMD:-agent-output-filter}"
     if [ "${INTENTIC_RUN_FILTER:-1}" != "0" ] && command -v "$filter" >/dev/null 2>&1; then
-        "$filter" "$agentcmd" "$1" "$SECONDS" "$logfile" "$(cat "$d/pipestatus" 2>/dev/null)" < "$d/out" 2>/dev/null && return
+        # Without the image's NODE_OPTIONS preload (the heavy-command hook): the filter starts no process for it to
+        # hold, and loading it was 4 of the filter's 35 ms (measured 2026-10-04).
+        NODE_OPTIONS="" "$filter" "$agentcmd" "$1" "$SECONDS" "$logfile" "$(cat "$d/pipestatus" 2>/dev/null)" < "$d/out" 2>/dev/null && return
     fi
     if [ -n "${INTENTIC_RUN_OUTPUT_BYTES:-}" ]; then
         tail -c "$INTENTIC_RUN_OUTPUT_BYTES" "$d/out" 2>/dev/null
@@ -232,14 +246,13 @@ create() { tmux new-session -d -s "$session" "${window[@]}"; }
 # Which form is right depends on whether the session exists RIGHT NOW — and concurrent commands flip that under
 # us in BOTH directions: two first commands race to create it, and the prune below destroys a session whose
 # windows are all dead just as another command is about to add one to it. So both forms are always tried,
-# starting with the one has-session makes likely. Only the FIRST attempt's stderr is dropped — that is the
-# expected racy miss ("duplicate session" / "can't find session"); the retry's failure is the real one and must
-# reach the caller, and only then does fail-open drop the command out of tmux entirely.
-if tmux has-session -t "=$session" 2>/dev/null; then
-    pane="$(attach 2>/dev/null)" || pane="$(create)" || fallback "tmux would not open a window in session $session"
-else
-    pane="$(create 2>/dev/null)" || pane="$(attach)" || fallback "tmux would not open a window in session $session"
-fi
+# starting with attach, which is right for every command but a session's first: asking `has-session` first cost
+# every call a tmux round trip to save the first one a failed attach. A create that fails means another first
+# command created it in the meantime, so attach is tried once more. The attempts before the last drop their stderr —
+# those are the expected racy misses ("can't find session" / "duplicate session"); the last one's failure is the
+# real one and must reach the caller, and only then does fail-open drop the command out of tmux entirely.
+pane="$(attach 2>/dev/null)" || pane="$(create 2>/dev/null)" || pane="$(attach)" || fallback "tmux would not open a window in session $session"
+[ -n "$wake" ] && { exec 4<>"$d/wake"; } 2>/dev/null || wake=""
 [ -n "${INTENTIC_TERMINAL_LOGS_DIR:-}" ] && logfile="$INTENTIC_TERMINAL_LOGS_DIR/$session-$pane.log"
 
 # Stamp the session with the conversation that owns it (a tmux user option the daemon's reaper lists by —
@@ -249,7 +262,9 @@ fi
 # `=<name>:` — set-option refuses the bare `=<name>` exact form ("no such session"); the trailing colon makes
 # it read the target as a SESSION, exactly as capture-pane needs (src/terminal/terminal-session.ts).
 # Idempotent per command; best-effort like everything else here.
-[ -n "${INTENTIC_TURN_OWNER:-}" ] && tmux set-option -t "=$session:" @intentic_owner "$INTENTIC_TURN_OWNER" 2>/dev/null
+# Asked in the same tmux call as the prune's listing below (a lone `;` argument is tmux's command separator).
+stamp=()
+[ -n "${INTENTIC_TURN_OWNER:-}" ] && stamp=(set-option -t "=$session:" @intentic_owner "$INTENTIC_TURN_OWNER" ';')
 
 # Prune windows of finished commands, so the last output stays readable until the next command but dead
 # windows don't accumulate. AFTER this command's window exists, never before: with no bootstrap shell holding
@@ -259,7 +274,7 @@ fi
 # That cleanup race is expected, so keep tmux's "can't find window" diagnostic out of an unrelated tool result.
 # A read loop rather than `xargs tmux`: xargs execs the BINARY it is given and would walk straight past the
 # namespace hop the function above exists to make.
-tmux list-panes -s -t "=$session" -F '#{pane_dead} #{window_id}' 2>/dev/null \
+tmux ${stamp[@]+"${stamp[@]}"} list-panes -s -t "=$session" -F '#{pane_dead} #{window_id}' 2>/dev/null \
     | awk '$1==1{print $2}' | while read -r dead; do tmux kill-window -t "$dead" 2>/dev/null; done
 
 # A SIGTERM (the SDK's Bash timeout, or the daemon runner's abort/watchdog) takes the pane down with the
@@ -290,6 +305,10 @@ fi
 # $d — the runner still tees into it) stays alive; the dead-window prune sweeps it once it exits. Default
 # sits under the SDK's 2-minute Bash timeout; 0 disables (the daemon runner blocks to real completion).
 soft="${INTENTIC_RUN_SOFT_TIMEOUT_S:-110}"
+# A call that asked for a longer timeout (the Bash tool's `timeout`, up to ten minutes) is waited on that long, less a
+# margin, instead of being returned at 110 seconds anyway: the hook writes the figure to `soft` beside the line. Measured
+# 2026-09-26..10-02: 922 commands came back at 110 s, and their agents spent 1,916 more calls polling the log.
+case "${callsoft:-}" in '' | *[!0-9]*) ;; *) soft="$callsoft" ;; esac
 # A background job has no SDK Bash timeout to beat, and returning early would report it FINISHED to a caller
 # that asked to be told when it exits; it waits for the real status, and the turn ending is what releases it.
 [ -n "$jobdir" ] && soft=0
@@ -299,7 +318,18 @@ while [ ! -f "$d/status" ]; do
         printf '\n--- command still running in tmux window %s · follow: %s\n' "$name" "${logfile:-$d/out}"
         exit 0
     fi
-    [ "$(tmux display -p -t "$pane" '#{pane_dead}' 2>/dev/null)" = "0" ] && { sleep 0.05; continue; }
+    if [ -n "$wake" ]; then
+        # The runner's byte means the status is there; the loop's own test reads it. A quarter second without one
+        # asks the pane whether it is alive. A read that neither got a byte nor timed out (>128) means the FIFO
+        # broke, and the loop goes back to polling rather than spinning on it.
+        read -r -n 1 -t 0.25 -u 4 _ 2>/dev/null
+        got=$?
+        [ "$got" -eq 0 ] && continue
+        [ "$got" -le 128 ] && wake=""
+        [ "$(tmux display -p -t "$pane" '#{pane_dead}' 2>/dev/null)" = "0" ] && continue
+    else
+        [ "$(tmux display -p -t "$pane" '#{pane_dead}' 2>/dev/null)" = "0" ] && { sleep 0.05; continue; }
+    fi
     # Pane gone/dead: a normal fast exit writes status just before the pane dies, so give it a brief grace.
     for _ in 1 2 3 4 5; do [ -f "$d/status" ] && break; sleep 0.05; done
     break

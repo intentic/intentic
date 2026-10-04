@@ -34,6 +34,7 @@ export type TurnExperimentStamps = Partial<
         | "turnContextMs"
         | "guidanceArm"
         | "guidanceCohort"
+        | "clearingArm"
     >
 >;
 

@@ -1,9 +1,11 @@
+import { createHash } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 
 // Which modules define a stored document or a structural boot step, read from the source text rather than from what a
 // process happened to load: the one discovery the registry generator (write-state-shapes.ts) writes
-// src/bootstrap/state-registry.ts from, and the registry's test checks it against. Never shipped.
+// src/bootstrap/state-registry.ts from, and the registry's test checks it against. Never shipped. Node imports and
+// erasable types only: scripts/conversion-checks-fresh.mjs runs it with plain `node`, before any tsx starts.
 
 export interface Definition {
     // Package-relative to src/, forward slashes, with its .ts extension.
@@ -65,4 +67,25 @@ export const stateModules = async (source: string): Promise<StateModules> => {
     }
     const byName = (a: Definition, b: Definition): number => a.module.localeCompare(b.module) || a.name.localeCompare(b.name);
     return { documents: documents.toSorted(byName), steps: steps.toSorted(byName) };
+};
+
+// The first line of the generated shape checks, naming the inputs they were generated from (conversionChecksInputs).
+export const CONVERSION_CHECKS_STAMP = "// inputs: ";
+
+/**
+ * A digest of everything the generated shape checks are written from: the generator, the frozen shapes, and every
+ * document's module and the name it is exported under. Equal digests mean the file `--checks` would write is the one
+ * already there, so the typecheck skips loading every document module under tsx to write it again (1.3 to 1.7 s a run,
+ * measured 2026-10-02). A key built from a constant in another module is the one input it does not follow; the freeze
+ * before every land rewrites the shapes for a moved key, which changes the digest.
+ */
+export const conversionChecksInputs = async (source: string, documents: readonly Definition[], recordText: string): Promise<string> => {
+    const hash = createHash("sha256");
+    hash.update(await readFile(join(source, "store", "shapes", "write-state-shapes.ts"), "utf8"));
+    hash.update(recordText);
+    for (const { module, name } of documents) {
+        hash.update(`\0${module}\0${name}\0`);
+        hash.update(await readFile(join(source, module), "utf8"));
+    }
+    return hash.digest("hex");
 };

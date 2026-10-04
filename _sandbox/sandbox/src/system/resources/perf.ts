@@ -37,6 +37,19 @@ const SLOW_MS: Readonly<Record<string, number>> = {
     "devices.pull": 4_000,
     // Pushing one frame to one connected browser's /events stream.
     "events.frame": 250,
+    // A heavy command held for memory by the room socket (workload/room-socket.ts); any wait the gate's 5 s look can
+    // measure is worth a line.
+    "room.admit": 1_000,
+    // One hook callback of an agent turn (agent/run/hook-timing.ts): the tool it runs before or after waits on it, and a
+    // PreToolUse hook parked on a person's card waits as long as they take.
+    "hook.PreToolUse": 1_000,
+    "hook.PostToolUse": 3_000,
+    // The turn's own checks when it is about to stop (agent/run/turn-checks.ts), and a subagent's finishing hook: a
+    // repository's turn check is a type check or a test run, so seconds are its honest cost.
+    "hook.Stop": 30_000,
+    "hook.SubagentStop": 1_000,
+    // One repository edit check (`file.edited`, .intentic/checks.json) on one file; a lint or a one-file check.
+    "edit.rule": 2_000,
 };
 
 // Interval for the ranked summary to print while anything is being measured. Counts are cumulative, so a longer cadence

@@ -67,5 +67,9 @@ export function mergeHeavyRules(overrides?: HeavyCommandOverrides): HeavyCommand
 export function overridesOf(full: Partial<HeavyCommandSettings> & { readonly rules?: readonly HeavyCommandRule[] | undefined }): HeavyCommandOverrides;
 export function matchInvocation(invocation: string, config: HeavyCommands, report?: (detail: string) => void): HeavyMatch | undefined;
 export function queueArgs(match: HeavyMatch, config: HeavyCommandSettings): string[];
+// Whether a test invocation names the files it runs, for the memory gate's smaller price.
+export function targetedRun(invocation: string): boolean;
+// queue-run's `--size targeted` for a targeted test run under a test rule, else nothing.
+export function sizeArgs(match: HeavyMatch, invocation: string): string[];
 export function holdWarnSeconds(maxHold: number): number | undefined;
 export function ruleById(config: HeavyCommands, id: string): HeavyCommandRule | undefined;

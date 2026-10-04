@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import {
     COST_BYTES,
+    costBytesOf,
     freeBytesOf,
     judge,
     type MemoryReading,
@@ -9,6 +10,7 @@ import {
     readingFrom,
     RESERVATION_MS,
     type RoomJudgement,
+    type RoomSize,
     type ShortMemory,
     STALL_PERCENT,
 } from "@intentic/constants/memory-room";
@@ -58,6 +60,11 @@ export interface AdmitRequest {
     // Who is asking, for the once-a-spell warning; "" when the daemon cannot name them.
     readonly actor?: string | undefined;
     readonly where?: WorkPlace;
+    // A toolchain command aimed at named files, priced below its class (TARGETED_RUN_BYTES).
+    readonly size?: RoomSize | undefined;
+    // The process the admitted work runs as: its reservation is handed back the moment it exits, rather than held for
+    // RESERVATION_MS by a one-second test that has long finished (measured: 5 GiB held that way on a quiet sandbox).
+    readonly pid?: number | undefined;
     // Hold work nobody is waiting on until there is room, instead of answering `wait`.
     readonly wait?: {
         readonly deadlineMs?: number;
@@ -96,6 +103,7 @@ interface Reservation {
     readonly place: WorkPlace;
     readonly bytes: number;
     readonly at: number;
+    readonly pid: number | undefined;
     // Kept for the door's own admission of the same owner, which takes it instead of judging.
     ticket: boolean;
 }
@@ -122,15 +130,28 @@ const sleep = (ms: number, signal: AbortSignal | undefined): Promise<void> =>
         signal?.addEventListener("abort", done, { once: true });
     });
 
+// Whether a process is still running here; one this daemon may not signal still counts as running.
+const processAlive = (pid: number): boolean => {
+    try {
+        process.kill(pid, 0);
+        return true;
+    } catch (error) {
+        return error instanceof Error && "code" in error && error.code === "EPERM";
+    }
+};
+
 export const createResourceBudget = ({
     read = () => readMemoryReading(),
     now = Date.now,
+    alive = processAlive,
     sampleMs = SAMPLE_MS,
     waitIntervalMs = WAIT_INTERVAL_MS,
     waitDeadlineMs = WAIT_DEADLINE_MS,
 }: {
     readonly read?: () => Promise<MemoryReading>;
     readonly now?: () => number;
+    // Whether the process an admission named is still running.
+    readonly alive?: (pid: number) => boolean;
     // 0 takes no timed samples: readings are taken only when asked for.
     readonly sampleMs?: number;
     // How often held work looks again, and how long it is held before it is turned away, unless a request says.
@@ -147,7 +168,7 @@ export const createResourceBudget = ({
 
     const live = (at: number): Reservation[] => {
         for (const [id, held] of reservations) {
-            if (at - held.at >= RESERVATION_MS) {
+            if (at - held.at >= RESERVATION_MS || (held.pid !== undefined && !alive(held.pid))) {
                 reservations.delete(id);
             }
         }
@@ -200,8 +221,10 @@ export const createResourceBudget = ({
         reservations.set(String(nextId), {
             owner: request.owner,
             place: request.where ?? "local",
-            bytes: WORKLOAD_COST_BYTES[request.workload],
+            bytes: request.size === undefined ? WORKLOAD_COST_BYTES[request.workload] : costBytesOf(request.workload, request.size),
             at,
+            // A pid this daemon cannot see (another pid namespace) would read as exited at once: the timed hold stands.
+            pid: request.pid !== undefined && alive(request.pid) ? request.pid : undefined,
             ticket: request.forTurn === true && request.owner !== undefined,
         });
     };
@@ -222,6 +245,7 @@ export const createResourceBudget = ({
             workload: request.workload,
             attended: request.attended,
             reservedBytes: localHeld(taken.at, request.owner),
+            size: request.size,
         });
         if (judged.verdict === "run") {
             claim(request, taken.at);

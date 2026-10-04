@@ -2916,9 +2916,13 @@
             "cleanCommandOutput": "Clean command output",
             "cleaned": "Cleaned",
             "cleaners": "Cleaners",
+            "clearedResults": "Cleared",
+            "clearOldResults": "Clear old tool results",
+            "clearOldResultsDescription": "Once a Claude conversation grows long, replace its oldest tool results with a short placeholder, a large chunk at a time, keeping the recent ones whole. Smaller prompts cost less and answer sooner; the agent can run a tool again if it needs what was cleared.",
             "commandOutput": "Command output",
             "ledgerFillsAssistantRuns": "The ledger fills as the assistant runs shell commands, one row per command.",
             "ofCommandsRunUncleaned": "of commands run uncleaned",
+            "ofConversationsKeepEveryResult": "of conversations keep every tool result",
             "outputSavings": "Output savings",
             "raw": "Raw",
             "tokensSavedAllTime": "tokens saved, all time",
@@ -3959,10 +3963,12 @@
             "likelyMore": "Likely between {low}% and {high}% more",
             "metric": {
                 "callsBeforeTarget": "Tool calls before the right file",
+                "contextPerCall": "Prompt tokens per model call",
                 "failedCalls": "Failed tool calls per turn",
                 "openingListings": "Directory listings on the first turn",
                 "openingSearches": "Searches before opening a file",
                 "outputReached": "Output reaching the agent",
+                "roundTrips": "Model round trips per turn",
                 "searchCalls": "Searches per turn"
             },
             "more": "{pct}% more",
@@ -3980,9 +3986,11 @@
             },
             "savedSoFar": {
                 "callsBeforeTarget": "About {count} fewer tool calls so far.",
+                "contextPerCall": "About {count} fewer prompt tokens so far.",
                 "failedCalls": "About {count} fewer failed calls so far.",
                 "openingListings": "About {count} fewer directory listings so far.",
                 "openingSearches": "About {count} fewer searches so far.",
+                "roundTrips": "About {count} fewer model round trips so far.",
                 "searchCalls": "About {count} fewer searches so far."
             },
             "tooEarly": "Too early to tell",

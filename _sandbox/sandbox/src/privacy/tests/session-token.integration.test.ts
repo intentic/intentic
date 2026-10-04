@@ -20,6 +20,20 @@ test("a signed session reads back exactly, and across a restart of the signer", 
     expect(await sessionTokens(key).verify(token)).toEqual({ provider: "claude", upstream: "https://api.anthropic.com", conversationId: "c-1" });
 });
 
+// The clearing arm rides in the signature too: a runtime cannot switch its own requests' clearing on or off.
+test("a session in the clearing arm says so, and one outside it carries no flag at all", async () => {
+    const signer = sessionTokens(join(dir, "key"));
+    const cleared = await signer.sign({ provider: "claude", upstream: "https://api.anthropic.com", conversationId: "c-1", clearing: true });
+    expect(await signer.verify(cleared)).toEqual({
+        provider: "claude",
+        upstream: "https://api.anthropic.com",
+        conversationId: "c-1",
+        clearing: true,
+    });
+    const plain = await signer.sign({ provider: "claude", upstream: "https://api.anthropic.com", clearing: false });
+    expect(await signer.verify(plain)).toEqual({ provider: "claude", upstream: "https://api.anthropic.com", conversationId: undefined });
+});
+
 test("an edited payload, a foreign key and a malformed token are all refused", async () => {
     const signer = sessionTokens(join(dir, "key"));
     const token = await signer.sign({ provider: "claude", upstream: "https://api.anthropic.com" });

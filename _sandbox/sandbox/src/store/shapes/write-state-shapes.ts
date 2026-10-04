@@ -8,7 +8,7 @@ import { z } from "zod";
 import { type DocumentSpec, documentKey } from "../evolution/documents.js";
 import { ANYTHING, typeFromSchema } from "./json-schema-type.js";
 import { beforeHorizon, freeze, type FrozenShape, isRelease, type Release, type Shapes } from "./shape-releases.js";
-import { type Definition, stateModules } from "./state-modules.js";
+import { type Definition, CONVERSION_CHECKS_STAMP, conversionChecksInputs, stateModules } from "./state-modules.js";
 
 // The shape generator, two modes. `--freeze` (the worktree fixer, before every land that touched daemon or contract
 // source) writes the state registry (src/bootstrap/state-registry.ts, every document and boot step the source defines,
@@ -254,7 +254,14 @@ await mkdir(dirname(SHAPES_FILE), { recursive: true });
 if (freezing) {
     await writeFile(SHAPES_FILE, `${JSON.stringify(sorted, undefined, 2)}\n`);
 }
-await writeFile(CHECKS_FILE, checksSource(sorted, located));
+// Stamped with what it was written from, so the next typecheck can see it is current without loading a module
+// (scripts/conversion-checks-fresh.mjs). Read back rather than reused: the record on disk is what that check digests.
+const recordText = await readFile(SHAPES_FILE, "utf8").catch(
+    // allow(silent-catch): no record yet is the first run's empty one, which readShapes read the same way
+    () => "",
+);
+const stamp = `${CONVERSION_CHECKS_STAMP}${await conversionChecksInputs(SOURCE, modules.documents, recordText)}`;
+await writeFile(CHECKS_FILE, `${stamp}\n${checksSource(sorted, located)}`);
 process.stdout.write(
     `${Object.values(sorted).reduce((sum, list) => sum + list.length, 0)} shapes across ${Object.keys(sorted).length} documents${ 
         freezing ? `; ${modules.documents.length} documents and ${modules.steps.length} steps in the registry\n` : "\n"}`,

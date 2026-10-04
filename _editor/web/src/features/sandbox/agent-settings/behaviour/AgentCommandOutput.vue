@@ -8,7 +8,7 @@ import { useSandboxSettings } from "../../overview/useSandboxSettings";
 import { allCleanerIds, cleanerOptions, savedByCleaner } from "../../usage/savingsChart";
 import { asPercent } from "../models/numberInputs";
 import MeasurementPanel from "../models/MeasurementPanel.vue";
-import type { ResultTable } from "../models/experimentReadings";
+import { type ResultTable, tableOf } from "../models/experimentReadings";
 import { useT } from "@intentic/ui/i18n";
 
 // Shell-output filter: master toggle, per-cleaner checklist, measurement holdout, and realized savings, as one
@@ -18,6 +18,10 @@ const t = useT();
 
 const { settings, patch, refusal } = useSandboxSettings();
 const { savings } = useSavings({});
+
+// Whole conversations again: a result the gateway replaced stays replaced for the rest of the session.
+const clearingHoldoutPercent = computed<number>(() => asPercent(settings.value?.toolResultClearingHoldout));
+const clearingTable = computed<ResultTable | undefined>(() => tableOf(savings.value?.clearing));
 
 // `outputCleaners` is a spec string (`` = all, `off` = disabled); finer specs come from the checklist below.
 const cleaningOn = computed(() => (settings.value?.outputCleaners ?? ``) !== `off`);
@@ -168,6 +172,33 @@ const savedTokens = computed(() => savedByCleaner(savings.value?.input));
                         @commit="(outputHoldout: number) => patch({ outputHoldout })"
                     />
                 </div>
+            </template>
+        </Row>
+
+        <!-- What stays in the conversation after it ran, where the row above is what reaches it: the gateway in front of
+             a Claude turn replaces old tool results a chunk at a time, measured on the prompt each call carries. -->
+        <Row
+            spine
+            icon="compress"
+            :title="t(`sandbox.agentCommandOutput.clearOldResults`)"
+            :description="t(`sandbox.agentCommandOutput.clearOldResultsDescription`)"
+        >
+            <template #control>
+                <ToggleSwitch
+                    :model-value="settings?.toolResultClearing ?? false"
+                    :disabled="settings === undefined"
+                    @update:model-value="(value: boolean) => patch({ toolResultClearing: value })"
+                />
+            </template>
+            <template v-if="settings?.toolResultClearing === true" #below>
+                <MeasurementPanel
+                    :table="clearingTable"
+                    :percent="clearingHoldoutPercent"
+                    :note="t(`sandbox.agentCommandOutput.ofConversationsKeepEveryResult`)"
+                    :on-label="t(`sandbox.agentCommandOutput.clearedResults`)"
+                    :off-label="t(`sandbox.measurementPanel.without`)"
+                    @commit="(toolResultClearingHoldout: number) => patch({ toolResultClearingHoldout })"
+                />
             </template>
         </Row>
 

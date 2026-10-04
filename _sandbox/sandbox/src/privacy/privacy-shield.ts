@@ -34,6 +34,10 @@ export interface PrivacyShield {
     // The base URL a runtime should send its model requests to instead of `upstream`; undefined while the shield is off,
     // so a sandbox that never turned it on sends nothing through the daemon.
     readonly baseUrlFor: (session: GatewaySession) => Promise<string | undefined>;
+    // The same gateway whatever the policy, for a session that needs it for something other than the shield: a
+    // conversation whose old tool results are cleared (gateway/tool-result-clearing.ts). Off, the gateway masks nothing
+    // and logs nothing, so this is a relay that only clears.
+    readonly relayUrlFor: (session: GatewaySession) => Promise<string>;
     // Whether a provider may read personal data as it is under a policy, everywhere or in this conversation: the gateway
     // is a plain relay for it, and a runtime the gateway cannot cover may run.
     readonly trusted: (policy: PrivacyShieldPolicy, provider: string, conversationId?: string) => Promise<boolean>;
@@ -121,6 +125,7 @@ export const createPrivacyShield = (deps: PrivacyShieldDeps): PrivacyShield => {
             }
             return `${deps.loopbackBase()}${GATEWAY_PATH}/${await deps.tokens.sign(session)}`;
         },
+        relayUrlFor: async (session) => `${deps.loopbackBase()}${GATEWAY_PATH}/${await deps.tokens.sign(session)}`,
         trusted,
         masker,
         redactForDisplay: async (text) => {

@@ -40,7 +40,8 @@ test("used is the working set plus swap: current less the inactive file cache, p
         }),
     );
     expect(reading).toEqual({ limitBytes: 16 * GIB, usedBytes: 9 * GIB, swapBytes: 2 * GIB, availableBytes: 60 * GIB, stallPercent: 0, oomKills: 2 });
-    expect(freeBytesOf(reading)).toBe(7 * GIB);
+    // Free is counted against the resident part: swap leaves the limit's room free.
+    expect(freeBytesOf(reading)).toBe(9 * GIB);
     // A machine with less available than the limit leaves is what binds: the sandbox cannot take memory it does not have.
     expect(freeBytesOf({ ...reading, availableBytes: 3 * GIB })).toBe(3 * GIB);
 });
@@ -80,6 +81,14 @@ test("the verdict for work nobody waits on leaves a person's turn free on top of
     });
     expect(judge(reading, { workload: "toolchain", attended: false, reservedBytes: 1 })).toMatchObject({ verdict: "wait", freeBytes: 2 * GIB - 1 });
     expect(judge(reading, { workload: "agentRuntime", attended: true, reservedBytes: GIB })).toMatchObject({ verdict: "run", needBytes: GIB });
+});
+
+test("a targeted toolchain run needs a worker's cost, not the class's, plus a person's turn", () => {
+    const reading = { limitBytes: 10 * GIB, usedBytes: 8.4 * GIB, swapBytes: 0, stallPercent: 0, oomKills: undefined };
+    expect(judge(reading, { workload: "toolchain", attended: false })).toMatchObject({ verdict: "wait", needBytes: 2 * GIB });
+    expect(judge(reading, { workload: "toolchain", attended: false, size: "targeted" })).toMatchObject({ verdict: "run", needBytes: 1.5 * GIB });
+    // A size names a toolchain command only; any other class keeps its own cost.
+    expect(judge(reading, { workload: "agentRuntime", attended: false, size: "targeted" })).toMatchObject({ needBytes: 2 * GIB });
 });
 
 test("a live reading of this machine parses to numbers or nothing, never throws", () => {

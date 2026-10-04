@@ -1,4 +1,11 @@
-import { type Capability, type CredentialGate, type Persona, PersonaPowersSchema, type Rule, SandboxSettingsSchema } from "@intentic/sandbox-contract";
+import {
+    type Capability,
+    type CredentialGate,
+    type Persona,
+    PersonaPowersSchema,
+    type Rule,
+    SandboxSettingsSchema,
+} from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import type { MemoryReading } from "@intentic/constants/memory-room";
 import type { Admission } from "../../../workload/resource-budget.js";
@@ -70,14 +77,20 @@ const conversationIn = (salt: string, arm: boolean): string => {
 // the memory gate
 
 const GIB = 1024 ** 3;
-// 12 GiB resident and 7 swapped against a 16 GiB cap: short for a person and for background work alike.
-const SHORT: MemoryReading = memoryReading(16, 12, 7);
+// 15.5 GiB resident and 7 swapped against a 16 GiB cap: short for a person and for background work alike. The swap is
+// named in the refusal but no longer counted against the cap, which bounds resident pages only (memory-room.mjs).
+const SHORT: MemoryReading = memoryReading(16, 15.5, 7);
 const ROOMY: MemoryReading = memoryReading(16, 4);
 
 const factsAfter = (admission: Admission): TurnFacts =>
     admission.verdict === "run"
         ? FACTS
-        : { held: { message: admission.message, ...(admission.verdict === "refuse" && admission.memory !== undefined ? { memory: admission.memory } : {}) } };
+        : {
+              held: {
+                  message: admission.message,
+                  ...(admission.verdict === "refuse" && admission.memory !== undefined ? { memory: admission.memory } : {}),
+              },
+          };
 
 // The door's own request, as gatherTurnFacts makes it: work nobody waits on is held for room, then turned away.
 const press = (budget: ReturnType<typeof budgetOn>, unattended: boolean): Promise<Admission> =>
@@ -107,7 +120,7 @@ test("a held turn is refused with the reading behind it, and owes the log nothin
         ok: false,
         code: "sandbox-memory-low",
         message: held.message,
-        memory: { limitBytes: 16 * GIB, residentBytes: 12 * GIB, swapBytes: 7 * GIB },
+        memory: { limitBytes: 16 * GIB, residentBytes: 15.5 * GIB, swapBytes: 7 * GIB },
         warnings: [],
         spawn: false,
     });
@@ -345,7 +358,11 @@ test("a window that cannot hold the loop refuses, and the log says how short it 
 
 // The privacy shield's refusal is a fact gathered before the decision; deciding on it sends nothing and holds the words.
 test("a turn the privacy shield cannot cover is turned away at the door, before any context is composed", () => {
-    const decision = decideTurn({ ...FACTS, privacyRefusal: "The privacy shield is on, and cursor runs on a loop the shield can't stand in front of." }, turn({ agent: "cursor" }), context);
+    const decision = decideTurn(
+        { ...FACTS, privacyRefusal: "The privacy shield is on, and cursor runs on a loop the shield can't stand in front of." },
+        turn({ agent: "cursor" }),
+        context,
+    );
 
     expect(decision).toMatchObject({ ok: false, code: "privacy-unshielded", message: expect.stringContaining("privacy shield"), spawn: false });
     expect(decision.warnings).toEqual([
@@ -482,6 +499,36 @@ test.each([
 
     expect(decision.experiments.guidanceArm).toBeUndefined();
     expect(decision.experiments.guidanceCohort).toBeUndefined();
+});
+
+// the tool-result clearing experiment: the arm's old tool results are replaced by the gateway, and only a native Claude
+// turn is ever in it, since no other runtime's requests pass a gateway that clears
+
+const CLEARING_MEASURED = SandboxSettingsSchema.parse({ toolResultClearing: true, toolResultClearingHoldout: 0.5 });
+
+test.each([true, false])("a native Claude conversation drawing the %s clearing arm is routed by it and stamped with it", (arm) => {
+    const decision = decided({ ...FACTS, settings: CLEARING_MEASURED }, turn({ conversationId: conversationIn("tool-result-clearing", arm) }));
+
+    expect(decision.context.toolResultClearing).toBe(arm);
+    expect(decision.experiments).toEqual({ turnIndex: 0, clearingArm: arm });
+});
+
+test("another runtime's conversation is never cleared and is in neither arm", () => {
+    const decision = decided(
+        { ...FACTS, settings: CLEARING_MEASURED },
+        turn({ agent: "cursor", harness: "native", conversationId: conversationIn("tool-result-clearing", true) }),
+    );
+
+    expect(decision.context.toolResultClearing).toBe(false);
+    expect(decision.experiments.clearingArm).toBeUndefined();
+});
+
+test("the switch with no holdout clears every native Claude conversation and measures nothing", () => {
+    const settings = SandboxSettingsSchema.parse({ toolResultClearing: true, toolResultClearingHoldout: 0 });
+    const decision = decided({ ...FACTS, settings }, turn({ conversationId: "c-1" }));
+
+    expect(decision.context.toolResultClearing).toBe(true);
+    expect(decision.experiments).toEqual({ turnIndex: 0 });
 });
 
 // the spawn door: the delegate shelf and full agency, on a conversation with a supervisor handed down

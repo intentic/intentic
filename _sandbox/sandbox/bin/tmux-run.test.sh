@@ -113,11 +113,23 @@ out="$(INTENTIC_RUN_SOFT_TIMEOUT_S=1 bash "$W" "$S" 'echo started; sleep 60' run
 case "$out" in *started*"still running"*) ;; *) echo "FAIL: soft-timeout output missing started/still-running: '$out'"; exit 1;; esac
 tmux list-panes -s -t "=$S" -F '#{pane_dead}' | grep -q 0 || { echo "FAIL: long-running pane did not survive early return"; exit 1; }
 
+# A call that asked for more time says so in `soft` beside its line, and is waited on that long: a command finishing at
+# 2 s under a 1 s default returns finished, with its real code, when the file grants it 5.
+C="$(mktemp -d "${TMPDIR:-/tmp}/intentic-run-XXXXXXXX")"
+printf 'sleep 2; echo late; exit 4\n' > "$C/line"; printf '5\n' > "$C/soft"
+out="$(INTENTIC_RUN_FILTER=0 INTENTIC_RUN_SOFT_TIMEOUT_S=1 bash "$W" -f "$C/line" "$S")"; rc=$?
+[ "$out" = late ] && [ "$rc" = 4 ] || { echo "FAIL: soft file did not extend the wait, got out='$out' rc=$rc (want late/4)"; exit 1; }
+
 # With the output filter on PATH: failures pass through verbatim; command-matched noise is stripped on
 # success with the footer naming the elision.
 command -v node >/dev/null || { echo "SKIP filter cases: node not installed"; echo "PASS: tmux-run self-check"; exit 0; }
 F="$(mktemp -d)"
-printf '#!/usr/bin/env bash\nexec node %q "$@"\n' "$(cd "$(dirname "$0")" && pwd)/agent-output-filter.mjs" > "$F/agent-output-filter"
+# The filter lives in its own package (_sandbox/output-cleaners) and sits beside this script only in the image's
+# /usr/local/bin; looked up only beside it, the cases below ran no filter at all and failed on the raw output.
+here="$(cd "$(dirname "$0")" && pwd)"
+filter="$here/agent-output-filter.mjs"
+[ -f "$filter" ] || filter="$here/../../output-cleaners/src/agent-output-filter.mjs"
+printf '#!/usr/bin/env bash\nexec node %q "$@"\n' "$filter" > "$F/agent-output-filter"
 chmod +x "$F/agent-output-filter"
 out="$(INTENTIC_RUN_FILTER=1 PATH="$F:$PATH" bash "$W" "$S" 'echo hi; exit 3' run)"; rc=$?
 [ "$out" = hi ] && [ "$rc" = 3 ] || { echo "FAIL: filtered failure got out='$out' rc=$rc (want hi/3)"; exit 1; }

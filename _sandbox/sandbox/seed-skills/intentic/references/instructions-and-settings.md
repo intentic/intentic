@@ -62,7 +62,12 @@ isolated turn, and it arrives by itself. During an isolated turn the owner's liv
 Some things ride only a conversation's first message, so turning them on shows in new conversations: the project
 map (`workspaceMap`), and, on OpenCode, Pi, Cursor and ACP, the list of skills (those runtimes cannot read the
 skills folder themselves). The comparison shares (`workspaceMapHoldout`, `iqSearchHoldout`,
-`fieldNotesHoldout`, `leanGuidanceHoldout`) assign whole conversations, not turns.
+`fieldNotesHoldout`, `leanGuidanceHoldout`, `toolResultClearingHoldout`) assign whole conversations, not turns.
+
+**Clear old tool results** (`toolResultClearing`, Agent → Tools → Command output) has the gateway in front of a native
+Claude turn replace the oldest tool results with a one-line placeholder once the conversation passes about 100k tokens,
+a large chunk at a time, keeping the most recent 20 whole. The agent can run the tool again for anything it needs back.
+Off by default; switched on, half the conversations keep every result so the savings report can compare them.
 
 Changing the model within the same provider keeps the conversation's session. Changing the provider, the loop
 (harness) or the account starts a fresh session on the next turn, handed the conversation's record and a "Where the

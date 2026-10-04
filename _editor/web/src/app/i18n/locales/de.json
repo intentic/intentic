@@ -1981,9 +1981,13 @@
             "cleanCommandOutput": "Befehlsausgabe säubern",
             "cleaned": "Gereinigt",
             "cleaners": "Säuberer",
+            "clearedResults": "Geleert",
+            "clearOldResults": "Alte Tool-Ergebnisse leeren",
+            "clearOldResultsDescription": "Sobald ein Claude-Gespräch lang wird, die ältesten Tool-Ergebnisse durch einen kurzen Platzhalter ersetzen, jeweils in einem großen Block, die neuesten bleiben vollständig. Kleinere Prompts kosten weniger und antworten schneller; der Agent kann ein Tool erneut ausführen, wenn er das Geleerte braucht.",
             "commandOutput": "Befehlsausgabe",
             "ledgerFillsAssistantRuns": "Das Register füllt sich, während der Assistent Shell-Befehle ausführt, eine Zeile pro Befehl.",
             "ofCommandsRunUncleaned": "der Befehle laufen ungereinigt",
+            "ofConversationsKeepEveryResult": "der Gespräche behalten jedes Tool-Ergebnis",
             "outputSavings": "Ausgabe-Ersparnis",
             "raw": "Roh",
             "tokensSavedAllTime": "Tokens gespart, insgesamt",
@@ -2792,10 +2796,12 @@
             "likelyMore": "Wahrscheinlich zwischen {low} % und {high} % mehr",
             "metric": {
                 "callsBeforeTarget": "Tool-Aufrufe bis zur richtigen Datei",
+                "contextPerCall": "Prompt-Tokens pro Modellaufruf",
                 "failedCalls": "Fehlgeschlagene Tool-Aufrufe pro Runde",
                 "openingListings": "Verzeichnisauflistungen in der ersten Runde",
                 "openingSearches": "Suchen vor dem ersten Öffnen einer Datei",
                 "outputReached": "Ausgabe, die den Agenten erreicht",
+                "roundTrips": "Modell-Durchläufe pro Runde",
                 "searchCalls": "Suchen pro Runde"
             },
             "more": "{pct} % mehr",
@@ -2813,9 +2819,11 @@
             },
             "savedSoFar": {
                 "callsBeforeTarget": "Bisher etwa {count} Tool-Aufrufe weniger.",
+                "contextPerCall": "Bisher etwa {count} Prompt-Tokens weniger.",
                 "failedCalls": "Bisher etwa {count} fehlgeschlagene Aufrufe weniger.",
                 "openingListings": "Bisher etwa {count} Verzeichnisauflistungen weniger.",
                 "openingSearches": "Bisher etwa {count} Suchen weniger.",
+                "roundTrips": "Bisher etwa {count} Modell-Durchläufe weniger.",
                 "searchCalls": "Bisher etwa {count} Suchen weniger."
             },
             "tooEarly": "Noch zu früh",

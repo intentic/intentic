@@ -9,8 +9,12 @@
 //          memory, never more than the machine's
 //   used   the working set (memory.current less the inactive file cache the kernel reclaims first) plus what was
 //          pushed to swap; at a root cgroup, which has no memory.current, the machine's own used memory and swap
-//   free   limit − used, and never more than the machine itself has available (MemAvailable): a sandbox on a
-//          shared machine cannot take memory the machine does not have, whatever its own limit says
+//   free   limit − the resident part of used, and never more than the machine itself has available (MemAvailable): a
+//          sandbox on a shared machine cannot take memory the machine does not have, whatever its own limit says.
+//          Swap is not subtracted: the limit bounds resident pages only, and cold pages parked in swap leave that room
+//          free. Counting them held every heavy command for minutes on a sandbox with 8 GB available (measured
+//          2026-09-26..10-02: 4.2 GiB of idle swap, 17 h of gate waits a week). Swap that is being paged back in shows
+//          as stall, below, which holds work whatever the bytes say.
 //   stall  memory PSI `full avg10`: the share of the last ten seconds in which everything waited on memory
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, realpathSync } from "node:fs";
@@ -33,6 +37,11 @@ export const COST_BYTES = Object.freeze({
     // A build, test or typecheck a heavy-command rule matched; the queue's slots bound how many run at once.
     toolchain: GIB,
 });
+
+// What a toolchain command aimed at named files takes: one bun worker over one test file, not a package's suite
+// (measured 2026-10-02: a 63-test file ran in 16 ms well under 300 MiB). heavy-rules.cjs `targetedRun` decides it from
+// the invocation, and queue-run passes it as `--size targeted`.
+export const TARGETED_RUN_BYTES = 512 * MIB;
 
 // What one test or typecheck process holds at its peak, for the scripts that size a fan-out to the free memory
 // (_tools/scripts/verify/test-workers.mjs) and the ceiling that stops a runaway one (_tools/scripts/lib/memory-ceiling.mjs).
@@ -139,16 +148,20 @@ export const readReadingSync = () => readingFrom(readSync);
 
 const gib = (bytes) => `${(bytes / GIB).toFixed(1)} GiB`;
 
+/** What one more of `workload` costs: its class's cost, or a targeted run's where `size` says so. */
+export const costBytesOf = (workload, size) =>
+    workload === "toolchain" && size === "targeted" ? TARGETED_RUN_BYTES : (COST_BYTES[workload] ?? COST_BYTES.agentRuntime);
+
 /** What starting one more of `workload` needs free: its own cost, plus a person's turn when nobody is waiting on it. */
-export const needBytes = (workload, attended) => (COST_BYTES[workload] ?? COST_BYTES.agentRuntime) + (attended ? 0 : PERSON_RESERVE_BYTES);
+export const needBytes = (workload, attended, size) => costBytesOf(workload, size) + (attended ? 0 : PERSON_RESERVE_BYTES);
 
 /**
  * The verdict for one more of `workload`: `run`, or, when the sandbox is short, `refuse` for work a person is waiting
  * on (they are told, and decide) and `wait` for work nobody is (it is held until there is room). `reservedBytes` is what
  * other admissions still hold off the reading. An unmeasurable sandbox has no opinion, and runs.
  */
-export const judge = (reading, { workload, attended, reservedBytes = 0 }) => {
-    const need = needBytes(workload, attended);
+export const judge = (reading, { workload, attended, reservedBytes = 0, size }) => {
+    const need = needBytes(workload, attended, size);
     const { limitBytes, usedBytes, swapBytes, stallPercent, availableBytes } = reading;
     const unreserved = freeBytesOf(reading);
     if (limitBytes === undefined || usedBytes === undefined || unreserved === undefined) {
@@ -171,12 +184,12 @@ export const judge = (reading, { workload, attended, reservedBytes = 0 }) => {
         return { verdict: "run", needBytes: need, freeBytes, reservedBytes };
     }
     // The machine, not the sandbox's own limit, is what ran out: saying "9 of 16 GiB used" would read as a wrong refusal.
-    if (availableBytes !== undefined && availableBytes < limitBytes - usedBytes) {
+    if (availableBytes !== undefined && availableBytes < limitBytes - (usedBytes - swapBytes)) {
         const held = reservedBytes > 0 ? `, and ${gib(reservedBytes)} held for work that just started` : "";
         return shortOf(`Sandbox memory is low: the machine it runs on has ${gib(availableBytes)} available${held}`);
     }
     // Resident and swapped are named apart once paging starts: the limit bounds resident pages only, so their sum can
-    // exceed it, and "19.2 GiB of 16.0 GiB used" reads as a bug.
+    // exceed it, and "19.2 GiB of 16.0 GiB used" reads as a bug. Free is counted against the resident part alone.
     const used =
         swapBytes > 0
             ? `${gib(usedBytes - swapBytes)} resident + ${gib(swapBytes)} swapped, against ${gib(limitBytes)}`
@@ -186,17 +199,26 @@ export const judge = (reading, { workload, attended, reservedBytes = 0 }) => {
     return shortOf(`Sandbox memory is low: ${used}${held}`, { limitBytes, residentBytes: usedBytes - swapBytes, swapBytes });
 };
 
-/** Free memory as the formula counts it, or undefined where nothing bounds or measures it. */
+/** Free memory as the formula counts it (the limit less what is resident), or undefined where nothing bounds or measures it. */
 export const freeBytesOf = (reading) =>
     reading.limitBytes === undefined || reading.usedBytes === undefined
         ? undefined
-        : Math.max(0, Math.min(reading.limitBytes - reading.usedBytes, reading.availableBytes ?? Number.POSITIVE_INFINITY));
+        : Math.max(
+              0,
+              Math.min(reading.limitBytes - (reading.usedBytes - (reading.swapBytes ?? 0)), reading.availableBytes ?? Number.POSITIVE_INFINITY),
+          );
 
 // ---- asking the daemon, with the formula itself as the fallback ----
 
-const askSocket = (workload, waitSeconds, label, socketPath) =>
+const askSocket = (workload, waitSeconds, label, socketPath, size, pid) =>
     new Promise((resolve) => {
         const query = new URLSearchParams({ class: workload, wait: String(waitSeconds), label });
+        if (size !== undefined) {
+            query.set("size", size);
+        }
+        if (pid !== undefined) {
+            query.set("pid", String(pid));
+        }
         const asked = request({ socketPath, path: `/room?${query}`, method: "GET", timeout: (waitSeconds + 15) * 1000 }, (response) => {
             let body = "";
             response.setEncoding("utf8");
@@ -266,24 +288,36 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 /**
  * The daemon's verdict for one more of `workload`, waiting up to `waitSeconds` for room; where no daemon answers, the
  * same formula over the same files, polled every `intervalMs`. Never throws: every failure is an answer of `run`.
+ * `size: "targeted"` prices a toolchain command aimed at named files (TARGETED_RUN_BYTES); `pid` is the process the
+ * admitted work runs as, whose exit hands its reservation back at once instead of after RESERVATION_MS.
  */
-export const askRoom = async ({ workload = "toolchain", waitSeconds = 0, label = "command", socketPath = ROOM_SOCKET, intervalMs = 5_000, read = readReadingSync } = {}) => {
-    const answered = await askSocket(workload, waitSeconds, label, socketPath);
+export const askRoom = async ({
+    workload = "toolchain",
+    waitSeconds = 0,
+    label = "command",
+    socketPath = ROOM_SOCKET,
+    intervalMs = 5_000,
+    read = readReadingSync,
+    size,
+    pid,
+} = {}) => {
+    const answered = await askSocket(workload, waitSeconds, label, socketPath, size, pid);
     if (answered !== undefined) {
         return { ...answered, source: "daemon" };
     }
     const startedAt = Date.now();
-    let verdict = judge(read(), { workload, attended: false });
+    let verdict = judge(read(), { workload, attended: false, size });
     while (verdict.verdict !== "run" && Date.now() - startedAt < waitSeconds * 1000) {
         await sleep(intervalMs);
-        verdict = judge(read(), { workload, attended: false });
+        verdict = judge(read(), { workload, attended: false, size });
     }
     return { ...verdict, waitedMs: Date.now() - startedAt, source: "formula" };
 };
 
-// `memory-room --class toolchain --wait 120 --label NAME` holds a command until there is room, printing why it waited,
-// and always exits 0: a gate that cannot read the sandbox must not be the reason a command did not run. `--json` prints
-// the answer instead; `--free` prints the free memory as the daemon counts it, for a caller that sizes itself to it.
+// `memory-room --class toolchain --wait 120 --label NAME [--size targeted] [--pid PID]` holds a command until there is
+// room, printing why it waited, and always exits 0: a gate that cannot read the sandbox must not be the reason a command
+// did not run. `--json` prints the answer instead; `--free` prints the free memory as the daemon counts it, for a caller
+// that sizes itself to it.
 const main = async (args) => {
     const option = (name, fallback) => {
         const at = args.indexOf(`--${name}`);
@@ -295,7 +329,15 @@ const main = async (args) => {
     }
     const waitSeconds = Math.max(0, Number(option("wait", "0")) || 0);
     const label = option("label", "command");
-    const answer = await askRoom({ workload: option("class", "toolchain"), waitSeconds, label, intervalMs: Math.max(50, Number(option("interval-ms", "5000")) || 5000) });
+    const pid = Number(option("pid", ""));
+    const answer = await askRoom({
+        workload: option("class", "toolchain"),
+        waitSeconds,
+        label,
+        intervalMs: Math.max(50, Number(option("interval-ms", "5000")) || 5000),
+        size: option("size", undefined) === "targeted" ? "targeted" : undefined,
+        pid: Number.isInteger(pid) && pid > 1 ? pid : undefined,
+    });
     if (args.includes("--json")) {
         process.stdout.write(`${JSON.stringify(answer)}\n`);
         return;

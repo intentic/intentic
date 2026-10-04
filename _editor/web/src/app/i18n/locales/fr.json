@@ -1980,9 +1980,13 @@
             "cleanCommandOutput": "Nettoyer la sortie des commandes",
             "cleaned": "Nettoyées",
             "cleaners": "Nettoyeurs",
+            "clearedResults": "Vidé",
+            "clearOldResults": "Vider les anciens résultats d'outils",
+            "clearOldResultsDescription": "Quand une conversation avec Claude s'allonge, remplacer ses plus anciens résultats d'outils par un court espace réservé, par gros blocs, en gardant les récents entiers. Des prompts plus petits coûtent moins et répondent plus vite ; l'agent peut relancer un outil s'il a besoin de ce qui a été vidé.",
             "commandOutput": "Sortie des commandes",
             "ledgerFillsAssistantRuns": "Le registre se remplit à mesure que l'assistant lance des commandes shell, une ligne par commande.",
             "ofCommandsRunUncleaned": "des commandes tournent sans nettoyage",
+            "ofConversationsKeepEveryResult": "des conversations gardent tous les résultats",
             "outputSavings": "Économies de sortie",
             "raw": "Brutes",
             "tokensSavedAllTime": "jetons économisés, en tout",
@@ -2794,10 +2798,12 @@
             "likelyMore": "Probablement entre {low} % et {high} % de plus",
             "metric": {
                 "callsBeforeTarget": "Appels d'outils avant le bon fichier",
+                "contextPerCall": "Tokens de prompt par appel au modèle",
                 "failedCalls": "Appels d'outils échoués par tour",
                 "openingListings": "Listages de dossiers au premier tour",
                 "openingSearches": "Recherches avant d'ouvrir un fichier",
                 "outputReached": "Sortie qui parvient à l'agent",
+                "roundTrips": "Allers-retours avec le modèle par tour",
                 "searchCalls": "Recherches par tour"
             },
             "more": "{pct} % de plus",
@@ -2815,9 +2821,11 @@
             },
             "savedSoFar": {
                 "callsBeforeTarget": "Environ {count} appels d'outils de moins jusqu'ici.",
+                "contextPerCall": "Environ {count} tokens de prompt de moins jusqu'ici.",
                 "failedCalls": "Environ {count} appels échoués de moins jusqu'ici.",
                 "openingListings": "Environ {count} listages de dossiers de moins jusqu'ici.",
                 "openingSearches": "Environ {count} recherches de moins jusqu'ici.",
+                "roundTrips": "Environ {count} allers-retours avec le modèle de moins jusqu'ici.",
                 "searchCalls": "Environ {count} recherches de moins jusqu'ici."
             },
             "tooEarly": "Trop tôt pour le dire",

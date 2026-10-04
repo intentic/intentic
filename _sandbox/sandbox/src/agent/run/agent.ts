@@ -1,3 +1,4 @@
+import { timedHooks } from "./hook-timing.js";
 import type {
     CanUseTool,
     EffortLevel,
@@ -369,101 +370,105 @@ const baseOptions = (
         },
         // Hooks fire under bypassPermissions and for subagents: tmux wraps every Bash command, installs redirect to the
         // approved overlay, diagnostics type-checks native edits.
-        hooks: mergeHooks(
-            // Runs before the tmux wrapper, so the classifier and card see the agent's own command, not wrapper
-            // boilerplate.
-            commandGateHooks({
-                policy: request.policy.safetyPolicy ?? DEFAULT_SAFETY_POLICY,
-                judging: request.policy.judging ?? "on",
-                unattended: request.policy.unattended === true,
-                // Read per command, not snapshotted beside it: attendance is the one fact about a turn that can arrive
-                // after it starts, and it arrives as a steering message.
-                steered: () => request.hooks.steered?.() === true,
-                push,
-                signal: request.signal,
-                cards: request.hooks.cards,
-                taint,
-                cwd: request.spec.cwd,
-                // Whether that cwd is this conversation's own copy; without it `git switch` in a worktree reads as moving a
-                // checkout somebody else shares.
-                ...opt("ownCheckout", request.spec.ownCheckout),
-                judge: request.hooks.judge,
-                log: request.hooks.logSafety,
-                answered: request.hooks.safetyAnswered,
-                remember: request.hooks.rememberSafety,
-                // The same install rule and ledger every runtime's gate is built with (vendor-gate.ts).
-                installs: request.hooks.projectInstalls,
-                onImageInstall: request.hooks.onImageInstall,
-            }),
-            // Wraps content pulled in mid-turn (a fetched page, a foreign MCP result); sets the taint the gate reads.
-            outsideResultHooks((source) => {
-                taint.mark(source);
-            }),
-            // tmux wrapper carries the secret exit so the rewrites compose in order; without tmux the exit stands
-            // alone.
-            tmuxEnabled
-                ? bashTmuxHooks(
-                      Object.keys(request.tools.cliEnv ?? {}),
-                      request.spec.isolation,
-                      request.spec.conversationId,
-                      request.tools.secrets,
-                      request.tools.heavyCommands,
-                      request.tools.offloadCommands,
-                      request.hooks.backgroundJobs,
-                  )
-                : request.tools.secrets !== undefined
-                  ? secretCommandHooks(request.tools.secrets)
-                  : {},
-            // Masks every stored credential to its reference in any tool result, not just Bash's.
-            request.tools.secrets !== undefined ? redactionHooks(request.tools.secrets.list) : {},
-            installSteeringHooks(),
-            // Checks classified outbound calls against owner action rules before they run, even under
-            // bypassPermissions.
-            hasRules(request.policy.actionRules) ? outboundGuardHooks(request.policy.actionRules) : {},
-            // Persona's folder limit and config-edit permission; the only layer between an unattended wake and a bad
-            // path.
-            request.policy.personaScope !== undefined ? personaScopeHooks(request.policy.personaScope) : {},
-            // The harness's own ask: a checklist about to be left open is said back once, since
-            // the board reads that list to tell a finished session from one that stopped short.
-            checklistCloseHooks({ sessionStore: request.spec.sessionStore }),
-            // The repositories' own `turn` checks, once, as an isolated turn is about to stop: what they found in its
-            // change is said back, and the model fixes it or says why not. Nothing waits on them.
-            turnCheckHooks(request.hooks.turnChecks, request.spec.isolation !== undefined),
-            // Refuses a mid-turn edit that would change which settings or skill hooks run, which the CLI applies live.
-            settingsHookChangeHooks(request),
-            // Apply worktree redirection only when no anchor already resolves paths.
-            request.spec.isolation !== undefined && request.spec.isolation.anchor === undefined
-                ? worktreeRedirectHooks(request.spec.isolation.plan)
-                : {},
-            // Rewrites a model-named screenshot path into the tool-owned output directory before the tool sees it.
-            request.tools.browserOutputDir !== undefined ? browserArtifactHooks(request.tools.browserOutputDir) : {},
-            // One-time advisory about rg vs grep and an empty result; never rewrites, since the two regex dialects
-            // disagree.
-            searchNoticeHooks(request.tools.iqAvailable === true),
-            // Registers a watchable session the moment a browser call launches Chromium; the MCP owns its lifecycle.
-            request.tools.browserPorts !== undefined
-                ? browserSessionHooks(
-                      request.tools.browserPorts,
-                      request.tools.browserPasskeys ?? {},
-                      request.tools.browserAccounts ?? {},
-                      request.spec.conversationId,
-                  )
-                : {},
-            // Pairs this turn's in-process children with their meta files (type, ask, model, report) and appends what
-            // checked their work to each delegation's result.
-            subagents !== undefined ? subagentHooks(subagents) : {},
-            // Placed by the turn's isolation, since an anchored turn's dependencies exist only inside its own
-            // namespace.
-            editDiagnosticsHooks(
-                request.spec.isolation,
-                undefined,
-                undefined,
-                request.hooks.dirtyFiles === undefined ? undefined : createShellEditTracker(request.hooks.dirtyFiles),
-                request.hooks.editReviewers ?? [],
+        // Each callback timed for perf.jsonl (hook-timing.ts) when the turn says where to report.
+        hooks: timedHooks(
+            mergeHooks(
+                // Runs before the tmux wrapper, so the classifier and card see the agent's own command, not wrapper
+                // boilerplate.
+                commandGateHooks({
+                    policy: request.policy.safetyPolicy ?? DEFAULT_SAFETY_POLICY,
+                    judging: request.policy.judging ?? "on",
+                    unattended: request.policy.unattended === true,
+                    // Read per command, not snapshotted beside it: attendance is the one fact about a turn that can arrive
+                    // after it starts, and it arrives as a steering message.
+                    steered: () => request.hooks.steered?.() === true,
+                    push,
+                    signal: request.signal,
+                    cards: request.hooks.cards,
+                    taint,
+                    cwd: request.spec.cwd,
+                    // Whether that cwd is this conversation's own copy; without it `git switch` in a worktree reads as moving a
+                    // checkout somebody else shares.
+                    ...opt("ownCheckout", request.spec.ownCheckout),
+                    judge: request.hooks.judge,
+                    log: request.hooks.logSafety,
+                    answered: request.hooks.safetyAnswered,
+                    remember: request.hooks.rememberSafety,
+                    // The same install rule and ledger every runtime's gate is built with (vendor-gate.ts).
+                    installs: request.hooks.projectInstalls,
+                    onImageInstall: request.hooks.onImageInstall,
+                }),
+                // Wraps content pulled in mid-turn (a fetched page, a foreign MCP result); sets the taint the gate reads.
+                outsideResultHooks((source) => {
+                    taint.mark(source);
+                }),
+                // tmux wrapper carries the secret exit so the rewrites compose in order; without tmux the exit stands
+                // alone.
+                tmuxEnabled
+                    ? bashTmuxHooks(
+                          Object.keys(request.tools.cliEnv ?? {}),
+                          request.spec.isolation,
+                          request.spec.conversationId,
+                          request.tools.secrets,
+                          request.tools.heavyCommands,
+                          request.tools.offloadCommands,
+                          request.hooks.backgroundJobs,
+                      )
+                    : request.tools.secrets !== undefined
+                      ? secretCommandHooks(request.tools.secrets)
+                      : {},
+                // Masks every stored credential to its reference in any tool result, not just Bash's.
+                request.tools.secrets !== undefined ? redactionHooks(request.tools.secrets.list) : {},
+                installSteeringHooks(),
+                // Checks classified outbound calls against owner action rules before they run, even under
+                // bypassPermissions.
+                hasRules(request.policy.actionRules) ? outboundGuardHooks(request.policy.actionRules) : {},
+                // Persona's folder limit and config-edit permission; the only layer between an unattended wake and a bad
+                // path.
+                request.policy.personaScope !== undefined ? personaScopeHooks(request.policy.personaScope) : {},
+                // The harness's own ask: a checklist about to be left open is said back once, since
+                // the board reads that list to tell a finished session from one that stopped short.
+                checklistCloseHooks({ sessionStore: request.spec.sessionStore }),
+                // The repositories' own `turn` checks, once, as an isolated turn is about to stop: what they found in its
+                // change is said back, and the model fixes it or says why not. Nothing waits on them.
+                turnCheckHooks(request.hooks.turnChecks, request.spec.isolation !== undefined),
+                // Refuses a mid-turn edit that would change which settings or skill hooks run, which the CLI applies live.
+                settingsHookChangeHooks(request),
+                // Apply worktree redirection only when no anchor already resolves paths.
+                request.spec.isolation !== undefined && request.spec.isolation.anchor === undefined
+                    ? worktreeRedirectHooks(request.spec.isolation.plan)
+                    : {},
+                // Rewrites a model-named screenshot path into the tool-owned output directory before the tool sees it.
+                request.tools.browserOutputDir !== undefined ? browserArtifactHooks(request.tools.browserOutputDir) : {},
+                // One-time advisory about rg vs grep and an empty result; never rewrites, since the two regex dialects
+                // disagree.
+                searchNoticeHooks(request.tools.iqAvailable === true),
+                // Registers a watchable session the moment a browser call launches Chromium; the MCP owns its lifecycle.
+                request.tools.browserPorts !== undefined
+                    ? browserSessionHooks(
+                          request.tools.browserPorts,
+                          request.tools.browserPasskeys ?? {},
+                          request.tools.browserAccounts ?? {},
+                          request.spec.conversationId,
+                      )
+                    : {},
+                // Pairs this turn's in-process children with their meta files (type, ask, model, report) and appends what
+                // checked their work to each delegation's result.
+                subagents !== undefined ? subagentHooks(subagents) : {},
+                // Placed by the turn's isolation, since an anchored turn's dependencies exist only inside its own
+                // namespace.
+                editDiagnosticsHooks(
+                    request.spec.isolation,
+                    undefined,
+                    undefined,
+                    request.hooks.dirtyFiles === undefined ? undefined : createShellEditTracker(request.hooks.dirtyFiles),
+                    request.hooks.editReviewers ?? [],
+                ),
+                // Flags a failing test/build caused by a genuinely missing package, checked first; asked of the main
+                // checkout.
+                depsNoticeHooks(request.hooks.dependencyIssue ?? (async () => undefined), request.policy.dependencyInstallAllowed === true),
             ),
-            // Flags a failing test/build caused by a genuinely missing package, checked first; asked of the main
-            // checkout.
-            depsNoticeHooks(request.hooks.dependencyIssue ?? (async () => undefined), request.policy.dependencyInstallAllowed === true),
+            request.hooks.hookTimed,
         ),
         ...opt("model", request.spec.model),
         ...resumeOptions(request.spec),

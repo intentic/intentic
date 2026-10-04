@@ -43,14 +43,49 @@ test("a person on a short box is told what is used and what is at stake", async 
 
 // The reading rides the refusal so the composer's notice can offer a raise sized against this box.
 test("a refusal on a paging box names the swap and carries the reading it was decided on", async () => {
-    const refused = await budgetOf(() => box(16, 12, 0, 7)).admit(person("ada"));
+    const refused = await budgetOf(() => box(16, 15.5, 0, 7)).admit(person("ada"));
     expect(refused).toEqual({
         verdict: "refuse",
         message:
-            "Sandbox memory is low: 12.0 GiB resident + 7.0 GiB swapped, against 16.0 GiB. Starting another agent now can slow the running ones down, and if memory runs out, the system kills processes to free it.",
-        memory: { limitBytes: 16 * GIB, residentBytes: 12 * GIB, swapBytes: 7 * GIB },
+            "Sandbox memory is low: 15.5 GiB resident + 7.0 GiB swapped, against 16.0 GiB. Starting another agent now can slow the running ones down, and if memory runs out, the system kills processes to free it.",
+        memory: { limitBytes: 16 * GIB, residentBytes: 15.5 * GIB, swapBytes: 7 * GIB },
         waitedMs: 0,
     });
+});
+
+// The limit bounds resident pages; cold pages parked in swap leave that room free. Paging back in shows as a stall.
+test("swap that sits idle takes no room from new work; a box paging it back in is held by its stall", async () => {
+    expect((await budgetOf(() => box(16, 10, 0, 8)).admit({ workload: "toolchain", attended: false })).verdict).toBe("run");
+    expect((await budgetOf(() => box(16, 10, 40, 8)).admit({ workload: "toolchain", attended: false })).verdict).toBe("wait");
+});
+
+test("a reservation that names its process is handed back the moment that process exits", async () => {
+    const running = new Set([4242]);
+    let now = 0;
+    const budget = createResourceBudget({ read: async () => box(16, 13.5), now: () => now, alive: (pid) => running.has(pid), sampleMs: 0 });
+    expect((await budget.admit({ workload: "toolchain", attended: false, pid: 4242 })).verdict).toBe("run");
+    now = 2_000;
+    expect((await budget.snapshot()).reservedBytes).toBe(GIB);
+    expect((await budget.admit({ workload: "toolchain", attended: false })).verdict).toBe("wait");
+    running.delete(4242);
+    now = 4_000;
+    expect((await budget.snapshot()).reservedBytes).toBe(0);
+    expect((await budget.admit({ workload: "toolchain", attended: false })).verdict).toBe("run");
+});
+
+test("a pid this daemon cannot see keeps the timed hold rather than reading as exited", async () => {
+    let now = 0;
+    const budget = createResourceBudget({ read: async () => box(16, 4), now: () => now, alive: () => false, sampleMs: 0 });
+    await budget.admit({ workload: "toolchain", attended: false, pid: 4242 });
+    now = 2_000;
+    expect((await budget.snapshot()).reservedBytes).toBe(GIB);
+});
+
+test("a targeted test run is priced as one worker over a few files, below a package's suite", async () => {
+    const budget = budgetOf(() => box(16, 14.4));
+    expect((await budget.admit({ workload: "toolchain", attended: false })).verdict).toBe("wait");
+    expect((await budget.admit({ workload: "toolchain", attended: false, size: "targeted" })).verdict).toBe("run");
+    expect((await budget.snapshot()).reservedBytes).toBe(GIB / 2);
 });
 
 test("a stalled box is short whatever its byte count, and a stall refusal carries no reading to raise", async () => {
