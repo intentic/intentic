@@ -1,5 +1,4 @@
 import { join } from "node:path";
-import { errorMessage } from "@intentic/base/errors";
 import { extensionRuntimeDir, type ListenerPairing } from "@intentic/sandbox-contract";
 import { type GatewayHooks, GatewayRefusal, runConnectorGateway } from "@intentic/connector-runtime";
 import {
@@ -11,6 +10,7 @@ import {
     type WhatsAppConnection,
 } from "./client.js";
 import { createWhatsAppListener, WHATSAPP_MAX } from "./listener.js";
+import { createControlRoutes } from "./routes.js";
 
 // WhatsApp gateway process: reconciles one paired session per capability, dispatches inbound messages and mention
 // replies, and publishes each capability's pairing status via a loopback control surface for the `whatsapp` CLI.
@@ -20,9 +20,6 @@ export interface WhatsAppConnectorConfig {
     readonly provider: string;
     readonly phoneNumber: string;
 }
-
-// Digits-only input becomes a DM JID for that number; anything already containing '@' passes through.
-export const chatJidOf = (chat: string): string => (chat.includes("@") ? chat : `${chat.replaceAll(/\D/g, "")}@s.whatsapp.net`);
 
 // Connection the control surface acts through; with multiple paired numbers, sends go out on whichever connected first.
 const firstReady = (): WhatsAppConnection | undefined => [...whatsappConnections().values()].find((each) => each.phase() === "ready");
@@ -109,72 +106,16 @@ void runConnectorGateway<WhatsAppConnectorConfig, WhatsAppConnection>({
                 if (connection === undefined) {
                     throw new GatewayRefusal("WhatsApp is not connected: pair the device from the capability card first.");
                 }
+                const target = await connection.resolveChat(channelId);
+                if (target.kind !== "jid") {
+                    throw new GatewayRefusal(`No single WhatsApp chat matches ${channelId}.`);
+                }
                 for (let base = 0; base < text.length; base += WHATSAPP_MAX) {
-                    await connection.sendText(chatJidOf(channelId), text.slice(base, base + WHATSAPP_MAX));
+                    await connection.sendText(target.jid, text.slice(base, base + WHATSAPP_MAX));
                 }
             },
-            // Loopback control surface the `whatsapp` CLI drives; every response is a human-readable string the CLI
-            // prints for the model.
-            routes: async (req, body) => {
-                const path = new URL(req.url ?? "/", "http://127.0.0.1").pathname;
-                if (req.method === "GET" && path === "/chats") {
-                    const connection = firstReady();
-                    if (connection === undefined) {
-                        return { status: 503, body: "WhatsApp is not connected, pair the device from the capability card first." };
-                    }
-                    let chats: Awaited<ReturnType<WhatsAppConnection["listChats"]>>;
-                    try {
-                        chats = await connection.listChats();
-                    } catch (error) {
-                        ctx.log.warn({ err: error }, "whatsapp chat listing failed");
-                        return { status: 502, body: `WhatsApp would not list this number's groups: ${errorMessage(error)}` };
-                    }
-                    return {
-                        body:
-                            chats.length === 0
-                                ? "No chats seen yet. Groups appear once connected; direct chats appear after their first message."
-                                : chats.map((chat) => `${chat.jid}\t${chat.kind}\t${chat.name}`).join("\n"),
-                    };
-                }
-                if (req.method === "POST" && path === "/send") {
-                    const { chat, text } = JSON.parse((await body()) || "{}") as { chat?: unknown; text?: unknown };
-                    if (typeof chat !== "string" || chat === "" || typeof text !== "string" || text === "") {
-                        return { status: 400, body: "chat and text required" };
-                    }
-                    const connection = firstReady();
-                    if (connection === undefined) {
-                        return { status: 503, body: "WhatsApp is not connected, pair the device from the capability card first." };
-                    }
-                    await connection.sendText(chatJidOf(chat), text);
-                    return { body: `Sent to ${chatJidOf(chat)}.` };
-                }
-                if (req.method === "POST" && path === "/send-file") {
-                    const { chat, path: filePath } = JSON.parse((await body()) || "{}") as { chat?: unknown; path?: unknown };
-                    if (typeof chat !== "string" || chat === "" || typeof filePath !== "string" || filePath === "") {
-                        return { status: 400, body: "chat and path required" };
-                    }
-                    const connection = firstReady();
-                    if (connection === undefined) {
-                        return { status: 503, body: "WhatsApp is not connected, pair the device from the capability card first." };
-                    }
-                    await connection.sendFile(chatJidOf(chat), filePath);
-                    return { body: `Sent ${filePath} to ${chatJidOf(chat)}.` };
-                }
-                if (req.method === "POST" && path === "/download") {
-                    const { id } = JSON.parse((await body()) || "{}") as { id?: unknown };
-                    if (typeof id !== "string" || id === "") {
-                        return { status: 400, body: "id required" };
-                    }
-                    for (const connection of whatsappConnections().values()) {
-                        const written = await connection.download(id, mediaDir);
-                        if (written !== undefined) {
-                            return { body: written };
-                        }
-                    }
-                    return { status: 404, body: "No downloadable media under that id, only recently received messages can be fetched." };
-                }
-                return undefined;
-            },
+            // Loopback control surface the `whatsapp` CLI drives (routes.ts).
+            routes: createControlRoutes({ ready: firstReady, connections: whatsappConnections, mediaDir, log: ctx.log }),
             shutdown: (wired) => {
                 for (const id of wired.keys()) {
                     closeWhatsAppConnection(id);

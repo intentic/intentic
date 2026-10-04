@@ -1,11 +1,23 @@
 #!/usr/bin/env node
-// The agent's WhatsApp tool: `whatsapp chats` / `whatsapp send <chat> <text>` / `whatsapp send-file <chat>
-// <path>` / `whatsapp download <messageId>`. WhatsApp has no public API to curl — the paired socket lives in
-// the long-lived gateway process — so every command forwards to the gateway's loopback control surface, whose
-// address the gateway writes to a gateway.url file under the workspace (the discord-voice pattern). ESM (the
-// package is type:module) with no deps, so it runs as a bare executable on the agent's PATH.
+// The agent's WhatsApp tool. WhatsApp has no public API to curl — the paired socket lives in the long-lived gateway
+// process — so every command forwards to the gateway's loopback control surface, whose address the gateway writes to
+// a gateway.url file under the workspace (the discord-voice pattern). ESM (the package is type:module) with no deps,
+// so it runs as a bare executable on the agent's PATH. A <chat> is a JID, a phone number with country code, or a
+// name (quote a name with spaces); the gateway resolves it and refuses an ambiguous one with the candidates.
 import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+
+const USAGE = `usage: whatsapp <command>
+  chats [query]                        every known chat, most recent first (or those matching query)
+  contacts <query…>                    people and groups whose name or number matches
+  history <chat> [count]               the chat's last messages (default 30), asking the phone for older ones
+  send <chat> <text…>                  send a message
+  reply <chat> <messageId> <text…>     send a message quoting an earlier one
+  send-file <chat> <path>              send a file (images as photos, audio as playable audio)
+  send-voice <chat> <path>             send audio as a voice note
+  react <chat> <messageId> <emoji>     react to a message ("" removes our reaction)
+  download <messageId>                 save a received photo/voice note/document and print its path
+<chat> is a JID, a phone number with country code, or a name ("Vicheta Samnang" in quotes).`;
 
 const findGatewayUrl = async () => {
     // Walk up from the agent's cwd to the workspace root, which holds .intentic/local/runtime/extensions/whatsapp/gateway.url.
@@ -28,18 +40,29 @@ const findGatewayUrl = async () => {
 };
 
 const usage = () => {
-    console.error("usage: whatsapp <chats | send <chat> <text…> | send-file <chat> <path> | download <messageId>>");
+    console.error(USAGE);
     process.exit(2);
 };
 
+const post = (path, payload) => ({ path, init: { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) } });
+const get = (path, params) => ({ path: `${path}?${new URLSearchParams(params).toString()}`, init: {} });
+
+// Each command: how many arguments it needs at least, and the request it becomes.
+const COMMANDS = {
+    chats: [0, (rest) => get("/chats", { q: rest.join(" ") })],
+    contacts: [1, (rest) => get("/contacts", { q: rest.join(" ") })],
+    history: [1, ([chat, count]) => get("/history", { chat, limit: count ?? "" })],
+    send: [2, ([chat, ...text]) => post("/send", { chat, text: text.join(" ") })],
+    reply: [3, ([chat, reply, ...text]) => post("/send", { chat, reply, text: text.join(" ") })],
+    "send-file": [2, ([chat, path]) => post("/send-file", { chat, path })],
+    "send-voice": [2, ([chat, path]) => post("/send-file", { chat, path, voice: true })],
+    react: [3, ([chat, id, emoji]) => post("/react", { chat, id, emoji })],
+    download: [1, ([id]) => post("/download", { id })],
+};
+
 const [command, ...rest] = process.argv.slice(2);
-if (command !== "chats" && command !== "send" && command !== "send-file" && command !== "download") {
-    usage();
-}
-if ((command === "send" || command === "send-file") && rest.length < 2) {
-    usage();
-}
-if (command === "download" && rest.length < 1) {
+const spec = Object.hasOwn(COMMANDS, command ?? "") ? COMMANDS[command] : undefined;
+if (spec === undefined || rest.length < spec[0]) {
     usage();
 }
 
@@ -49,32 +72,7 @@ if (base === undefined) {
     process.exit(1);
 }
 
-const request =
-    command === "chats"
-        ? { path: "/chats", init: {} }
-        : command === "send"
-          ? {
-                path: "/send",
-                init: {
-                    method: "POST",
-                    headers: { "content-type": "application/json" },
-                    body: JSON.stringify({ chat: rest[0], text: rest.slice(1).join(" ") }),
-                },
-            }
-          : command === "send-file"
-            ? {
-                  path: "/send-file",
-                  init: {
-                      method: "POST",
-                      headers: { "content-type": "application/json" },
-                      body: JSON.stringify({ chat: rest[0], path: rest[1] }),
-                  },
-              }
-            : {
-                  path: "/download",
-                  init: { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: rest[0] }) },
-              };
-
+const request = spec[1](rest);
 const res = await fetch(`${base}${request.path}`, request.init).catch(() => undefined);
 if (res === undefined) {
     console.error("The WhatsApp gateway did not answer — it may be restarting. Retry in a few seconds.");

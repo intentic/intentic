@@ -2124,6 +2124,9 @@ importers:
       baileys:
         specifier: 'catalog:'
         version: 7.0.0-rc14(sharp@0.35.4(@types/node@24.13.6))(supports-color@10.2.2)
+      zod:
+        specifier: 4.6.5
+        version: 4.6.5
     devDependencies:
       '@intentic/testing':
         specifier: workspace:*
