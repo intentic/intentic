@@ -16,7 +16,7 @@ import { displayNameOf } from "@intentic/agent-context/tool-calls";
 import { discoveredCatalog } from "../../agent/models/model-catalog.js";
 import { idCatalog } from "../../agent/models/model-discovery.js";
 import { engineBinary } from "../../engines/engine-resolve.js";
-import { applyToStampedChild, SPAWN_STAMP_ENV } from "../../workload/workload-class.js";
+import { applyToStampedChild, carriesStamp, SPAWN_STAMP_ENV } from "../../workload/workload-class.js";
 import { type InputModality, OPENCODE_GEMINI_PROVIDER } from "../gemini/gemini-models.js";
 import { type CommandGuard, consultWith, type GuardOutcome, vendorSubject } from "../../guard/command-guard.js";
 import { cacheFile } from "../../store/open-document.js";
@@ -82,13 +82,36 @@ const XAI_UPSTREAM = "https://api.x.ai/v1";
 // loaded host can miss it.
 const BOOT_TIMEOUT_MS = 60_000;
 
-// The SDK's close() only signals the child. Do not race a replacement against its still-bound fixed port.
+// The SDK's close() only sends SIGTERM. Do not race a replacement against its still-bound fixed port.
+// A server still there after the grace is killed outright: on CI one ran the signal handlers it had installed, which
+// took themselves off, and stayed up and idle until a SIGKILL ended it at once (run 37232648385). Only a process that
+// still carries this boot's spawn stamp is killed, so a pid the kernel has handed to something else is left alone.
+const STOP_GRACE_MS = 3_000;
 const STOP_TIMEOUT_MS = 10_000;
-const waitForExit = async (pid: number, alive: (pid: number) => boolean): Promise<void> => {
-    const deadline = Date.now() + STOP_TIMEOUT_MS;
+
+// The served process: its pid, found by the stamp its spawn carried, and that stamp.
+interface ServedProcess {
+    readonly pid: number;
+    readonly stamp: string;
+}
+
+const waitForExit = async ({ pid, stamp }: ServedProcess, alive: (pid: number) => boolean): Promise<void> => {
+    const started = Date.now();
+    let killed = false;
     while (alive(pid)) {
-        if (Date.now() >= deadline) {
+        const waited = Date.now() - started;
+        if (waited >= STOP_TIMEOUT_MS) {
             throw new Error("OpenCode's previous runtime has not finished stopping. Retry once it exits.");
+        }
+        if (!killed && waited >= STOP_GRACE_MS) {
+            killed = true;
+            if (carriesStamp(pid, stamp)) {
+                try {
+                    process.kill(pid, "SIGKILL");
+                } catch {
+                    // allow(silent-catch): it exited between the look and the kill, which is what the kill was for
+                }
+            }
         }
         await delay(20);
     }
@@ -671,7 +694,7 @@ export const createOpenCodeService = (
     let activeTurns = 0;
     let booting: Promise<OpenCodeClients> | undefined;
     // The served process, once found by its spawn stamp; undefined where it cannot be found (not Linux).
-    let serverPid: number | undefined;
+    let served: ServedProcess | undefined;
     let serverHandle: { close(): void } | undefined;
     const watchers = directoryWatchers();
     const sessionJudges = new Map<string, SessionJudge>();
@@ -726,7 +749,8 @@ export const createOpenCodeService = (
         // Started now, while the child is young, and read once the server is up; it never rejects.
         const classed = applyToStampedChild(stamp, { class: "agentRuntime", spawnDepth: 0 });
         const server = await starting;
-        serverPid = await classed;
+        const pid = await classed;
+        served = pid === undefined ? undefined : { pid, stamp };
         serverHandle = server;
         const clients = {
             client: createOpencodeClient({ baseUrl: server.url }),
@@ -740,17 +764,17 @@ export const createOpenCodeService = (
         return clients;
     };
 
-    let stoppingPid: number | undefined;
+    let stoppingServer: ServedProcess | undefined;
     let stopping: Promise<void> | undefined;
-    // A timed-out stop keeps its pid: a later acquisition retries the exit wait, never spawns onto an occupied port.
+    // A timed-out stop keeps its process: a later acquisition retries the exit wait, never spawns onto an occupied port.
     const finishStopping = (): Promise<void> => {
-        if (stoppingPid === undefined) {
+        if (stoppingServer === undefined) {
             return Promise.resolve();
         }
-        const pid = stoppingPid;
-        stopping ??= waitForExit(pid, alive)
+        const server = stoppingServer;
+        stopping ??= waitForExit(server, alive)
             .then(() => {
-                stoppingPid = undefined;
+                stoppingServer = undefined;
             })
             .finally(() => {
                 stopping = undefined;
@@ -761,7 +785,7 @@ export const createOpenCodeService = (
     // cached client so the next turn boots a fresh server rather than fetching a dead port.
     const ensure = async (geminiModels?: GeminiModels): Promise<OpenCodeClients> => {
         await finishStopping();
-        if (booting !== undefined && serverPid !== undefined && !alive(serverPid)) {
+        if (booting !== undefined && served !== undefined && !alive(served.pid)) {
             forget();
         }
         booting ??= retryableBoot(boot(geminiModels));
@@ -771,7 +795,7 @@ export const createOpenCodeService = (
     // Everything that belonged to the last server: its client, its watchers and its mounted MCP clients.
     function forget(): void {
         booting = undefined;
-        serverPid = undefined;
+        served = undefined;
         bootedShielded = undefined;
         bootedGeminiModels = [];
         watchers.forget();
@@ -780,7 +804,7 @@ export const createOpenCodeService = (
     const closeServer = (): Promise<void> => {
         serverHandle?.close();
         serverHandle = undefined;
-        stoppingPid ??= serverPid;
+        stoppingServer ??= served;
         forget();
         return finishStopping();
     };

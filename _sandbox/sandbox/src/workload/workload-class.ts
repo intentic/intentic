@@ -176,7 +176,9 @@ const ownChildren = (): number[] => {
     }
 };
 
-const carriesStamp = (pid: number, stamp: string): boolean => {
+// Whether a process still is the one a stamped spawn started (or one it started in turn, which inherits the stamp): a
+// pid the kernel handed to anything else since does not carry it.
+export const carriesStamp = (pid: number, stamp: string): boolean => {
     try {
         return readFileSync(`/proc/${String(pid)}/environ`, "utf8").split("\0").includes(`${SPAWN_STAMP_ENV}=${stamp}`);
     } catch {
