@@ -51,8 +51,12 @@ flowchart LR
 - Node drives the front over the control socket: length-prefixed JSON frames on a Unix socket that push listen config
   and certificates, and either side asks the other a question under one envelope (an id, an answer or a refusal, five
   seconds' patience; the front's `ping` waits as long as its connection lasts). A reply the front cannot read refuses
-  its own question and leaves the link up, which is how an older Node answers a question it does not know. The front
-  owns every socket and byte, Node every decision about them: which terminal a socket
+  its own question and leaves the link up, which is how an older Node answers a question it does not know. A new
+  connection becomes the link at its first frame that decodes (Node says hello last, once it serves HTTP); one whose
+  first frame does not is refused and the live link stands, and one that spoke HTTP is told in HTTP that this is not
+  the daemon's HTTP socket. (2026-10-04: an agent ran `curl --unix-socket` on the control socket, the front handed it
+  the link at accept, and Node, reading its link closing as the box going down, stopped and took the container with
+  it.) The front owns every socket and byte, Node every decision about them: which terminal a socket
   opens onto (the front composes tmux's command), and what becomes of a preview request (an upstream to relay, a page
   to write, or the outbox to hand back), decided once when asked. [crates/front-wire](crates/front-wire) defines the frames, and nothing a browser sees;
   [crates/browser-wire](crates/browser-wire) defines what one does (the terminal's messages, the vitals, the

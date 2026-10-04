@@ -431,8 +431,27 @@ async fn the_front_answers_its_vitals_itself_whatever_state_node_is_in() {
         (404, "no preview here")
     );
 
-    // A new connection replaces Node's (a restarted Node), and is not up until it says hello.
-    let _next = tokio::net::UnixStream::connect(harness.dir.join("front.sock"))
+    // Whatever else dials the control socket leaves Node's link as it was: here an agent that took it for HTTP.
+    let mut stray = tokio::net::UnixStream::connect(harness.dir.join("front.sock"))
+        .await
+        .unwrap();
+    stray
+        .write_all(b"GET /agents HTTP/1.1\r\nHost: sandbox\r\n\r\n")
+        .await
+        .unwrap();
+    let mut refused = String::new();
+    stray.read_to_string(&mut refused).await.unwrap();
+    assert!(refused.starts_with("HTTP/1.1 400 "), "{refused}");
+    assert_eq!(vitals(daemon, &own).await.1.node, NodeLink::Up);
+
+    // A restarted Node's first frame takes the link from the old one, and it is not up until it says hello.
+    let mut next = tokio::net::UnixStream::connect(harness.dir.join("front.sock"))
+        .await
+        .unwrap();
+    let first = FromNode::Unwatch {
+        dir: "/nowhere".into(),
+    };
+    next.write_all(&front_wire::frame(&first).unwrap())
         .await
         .unwrap();
     let restarting = vitals_once(daemon, &own, |read| read.node != NodeLink::Up).await;
