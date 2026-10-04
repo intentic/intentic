@@ -1,11 +1,11 @@
 import { nextTick, onBeforeUpdate, onMounted, onUpdated, type Ref } from "vue";
 import type { FleetLane } from "../../fleet/agentStatus";
 import type { FleetAgent } from "../../fleet/useAgents-fleet";
-import { lessMotion, slideFrom, stopSlide } from "./foldMotion";
+import { lessMotion, slideFrom, stopSlide } from "@intentic/ui/motion";
 
 // Where the cards stand on screen and how they move between renders: a card changing lanes flies from where it stood,
 // with elevation and a landing pulse, and the cards it left close ranks, as do the cards below a tray that opened or
-// shut (foldMotion). Measured across the render that moved them (FLIP), the only moment that knows both places.
+// shut (@intentic/ui/motion, fold.ts). Measured across the render that moved them (FLIP), the only moment that knows both places.
 
 // Where a card stands: its box on screen and the lane it is in.
 export interface CardPlace {

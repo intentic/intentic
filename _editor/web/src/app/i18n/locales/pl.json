@@ -5194,6 +5194,14 @@
                 "wallpaper": "Tapeta",
                 "wallpaperHint": "Obraz za tablicą agentów, w jasnej lub ciemnej wersji Twojego motywu."
             },
+            "motion": {
+                "title": "Animacje",
+                "hint": "Jak otwierają się menu, panele i strony. Wyłączone sprawiają, że każda zmiana jest natychmiastowa.",
+                "system": "System",
+                "systemHint": "Podąża za systemem operacyjnym: natychmiast, gdy prosi o ograniczenie ruchu, z animacją, gdy nie.",
+                "on": "Wł.",
+                "off": "Wył."
+            },
             "theme": {
                 "dark": "Ciemny",
                 "light": "Jasny",

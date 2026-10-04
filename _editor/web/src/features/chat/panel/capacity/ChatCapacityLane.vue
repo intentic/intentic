@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useReducedMotion } from "@intentic/ui/reduced-motion";
+import { useReducedMotion } from "@intentic/ui/motion";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import type { CapacityLane, CapacityRow } from "./chatCapacity";
 import { meterFill, meterTint, meterTrack, remainingFigure, usageTone } from "../../session/usageStatus";

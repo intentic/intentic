@@ -210,8 +210,9 @@ const roster = computed(() => {
                                 </span>
                             </div>
 
-                            <!-- Segments are account counts; a surface gap separates them, so even a single account draws a visible sliver. -->
-                            <div v-if="capacityTotal > 0" class="flex h-1.5 gap-0.5">
+                            <!-- Segments are account counts; a surface gap separates them, so even a single account draws a visible sliver. The
+                                 strip is drawn left to right as one, the way the count beside it is read (motion.css `ui-grow-wipe`). -->
+                            <div v-if="capacityTotal > 0" class="ui-grow-wipe flex h-1.5 gap-0.5">
                                 <div
                                     v-for="segment in capacity"
                                     :key="segment.band"
@@ -356,7 +357,7 @@ const roster = computed(() => {
                                         <!-- A pool inside another (the session inside the week) hangs off it on an elbow, one step in per
                                              level; the elbow sits inside the label's fixed width, so every bar still starts on one line. -->
                                         <div
-                                            v-for="{ item: pool, depth, parent, capped } in nestedPools(row)"
+                                            v-for="({ item: pool, depth, parent, capped }, poolIndex) in nestedPools(row)"
                                             :key="pool.kind"
                                             class="flex flex-wrap items-center gap-x-3 gap-y-1 @xl:flex-nowrap"
                                         >
@@ -392,9 +393,9 @@ const roster = computed(() => {
                                                 :class="[meterTrack(pool.percent), depth > 0 ? `h-1` : `h-1.5`, capped ? `opacity-40` : ``]"
                                             >
                                                 <div
-                                                    class="ui-meter-fill h-full rounded-full"
+                                                    class="ui-meter-fill ui-grow-x h-full rounded-full"
                                                     :class="usageTone(pool.percent)"
-                                                    :style="{ width: `${meterFill(pool.percent)}%`, ...meterTint(pool.percent) }"
+                                                    :style="{ width: `${meterFill(pool.percent)}%`, ...meterTint(pool.percent), '--ui-grow-i': poolIndex }"
                                                 />
                                             </div>
                                             <span
@@ -419,7 +420,7 @@ const roster = computed(() => {
                                 <template v-else>
                                     <div class="flex h-5 items-end gap-0.5">
                                         <span
-                                            v-for="row in barsOf(group)"
+                                            v-for="(row, barIndex) in barsOf(group)"
                                             :key="row.id"
                                             v-tooltip.top="barTooltip(row)"
                                             class="flex h-full w-1.5 items-end rounded-2xs"
@@ -427,9 +428,9 @@ const roster = computed(() => {
                                         >
                                             <span
                                                 v-if="row.percent !== undefined"
-                                                class="ui-meter-fill w-full rounded-2xs"
+                                                class="ui-meter-fill ui-grow-y w-full rounded-2xs"
                                                 :class="usageTone(row.percent)"
-                                                :style="{ height: `${meterFill(row.percent, 5)}%`, ...meterTint(row.percent) }"
+                                                :style="{ height: `${meterFill(row.percent, 5)}%`, ...meterTint(row.percent), '--ui-grow-i': barIndex }"
                                             />
                                         </span>
                                     </div>

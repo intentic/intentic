@@ -333,12 +333,12 @@ const hasSpend = computed(() => current.value.length > 0);
                 <div class="grid gap-3 @2xl:grid-cols-2">
                     <Card>
                         <h3 class="mb-3 text-sm font-semibold text-content">{{ t(`sandbox.sandboxUsage.costByModel`) }}</h3>
-                        <BarChart v-if="byModel.length > 0" :items="rankedBars(byModel)" :label-width="8" />
+                        <BarChart v-if="byModel.length > 0" :items="rankedBars(byModel)" :label-width="8" grow />
                         <p v-else :class="ui.emptyState()">{{ t(`sandbox.sandboxUsage.noUsageInRange`) }}</p>
                     </Card>
                     <Card>
                         <h3 class="mb-3 text-sm font-semibold text-content">{{ t(`sandbox.sandboxUsage.costByAgent`) }}</h3>
-                        <BarChart v-if="byAgent.length > 0" :items="rankedBars(byAgent)" :label-width="8" />
+                        <BarChart v-if="byAgent.length > 0" :items="rankedBars(byAgent)" :label-width="8" grow />
                         <p v-else :class="ui.emptyState()">{{ t(`sandbox.sandboxUsage.noUsageInRange`) }}</p>
                     </Card>
                 </div>

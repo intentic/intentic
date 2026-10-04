@@ -326,12 +326,17 @@ html[data-frameless] .entry {
         transform: rotate(1turn);
     }
 }
+/* Still a ring with a bright side, so the state is legible without anything moving. The OS's answer for a window that
+   never set the app's own (the desktop launcher), and the Appearance setting's (`data-motion`, motion.css) for the rest. */
 @media (prefers-reduced-motion: reduce) {
-    /* Still a ring with a bright side, so the state is legible without anything moving. */
     .entry-seal-sweep {
         animation: none;
         background: conic-gradient(from 0turn, var(--rule-strong) 0turn, var(--gold-bright) 0.5turn, var(--rule-strong) 1turn);
     }
+}
+:root[data-motion="reduced"] .entry-seal-sweep {
+    animation: none;
+    background: conic-gradient(from 0turn, var(--rule-strong) 0turn, var(--gold-bright) 0.5turn, var(--rule-strong) 1turn);
 }
 
 /* The finial carries no plate of its own: a filled box behind it reads as a sticker punched through the wall the frame stands on. */
@@ -498,6 +503,11 @@ html[data-frameless] .entry {
         .entry .p-button::after {
             transition: none;
         }
+    }
+    :root[data-motion="reduced"] .entry .p-button,
+    :root[data-motion="reduced"] .entry .p-button::before,
+    :root[data-motion="reduced"] .entry .p-button::after {
+        transition: none;
     }
 /* A plaque nobody may press is a plaque with the light off it — not a faded one. */
     .entry .p-button:disabled:not(.p-button-loading) {

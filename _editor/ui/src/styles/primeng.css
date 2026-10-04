@@ -184,11 +184,9 @@
         outline: 2px solid var(--house-bronze-ink);
         outline-offset: -4px;
     }
-    @media (prefers-reduced-motion: reduce) {
-        .p-button.ui-button-gilded,
-        .p-button.ui-button-gilded::after {
-            transition: none;
-        }
+    :root[data-motion="reduced"] .p-button.ui-button-gilded,
+    :root[data-motion="reduced"] .p-button.ui-button-gilded::after {
+        transition: none;
     }
 
 /* Compact touch controls use a 26px visual height. */
@@ -503,4 +501,13 @@
 
 .ui-shake {
     animation: ui-shake 400ms ease-in-out;
+}
+
+/* Under the motion switch (motion.css) the error is simply there, and the shake takes a millisecond rather than none,
+   so the `animationend` its callers clear the class on still arrives. */
+:root[data-motion="reduced"] .ui-field-error {
+    animation: none;
+}
+:root[data-motion="reduced"] .ui-shake {
+    animation-duration: 1ms;
 }

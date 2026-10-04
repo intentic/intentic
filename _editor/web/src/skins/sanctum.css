@@ -544,12 +544,10 @@
     [data-skin="sanctum"] .p-button.ui-button-loud:not(:disabled):active::after {
         opacity: 0;
     }
-    @media (prefers-reduced-motion: reduce) {
-        [data-skin="sanctum"] .p-button.ui-button-loud,
-        [data-skin="sanctum"] .p-button.ui-button-loud::before,
-        [data-skin="sanctum"] .p-button.ui-button-loud::after {
-            transition: none;
-        }
+    [data-motion="reduced"][data-skin="sanctum"] .p-button.ui-button-loud,
+    [data-motion="reduced"][data-skin="sanctum"] .p-button.ui-button-loud::before,
+    [data-motion="reduced"][data-skin="sanctum"] .p-button.ui-button-loud::after {
+        transition: none;
     }
 
 /* Solid accent controls — checkbox, radio, switch — read as inlay: the unticked box is cut down into the plate like a field. */

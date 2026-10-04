@@ -49,7 +49,35 @@ const animationClasses = (): Set<string> => {
     return found;
 };
 
+// Every editor source a reader's motion could be decided in, scripts and stylesheets alike: the app, the kit, the
+// extensions. The motion module is the one place the OS is asked (@intentic/ui/motion, preference.ts and loops.ts).
+const motionModule = resolve(uiRoot, `motion`);
+const editorFiles = (dir: string): string[] => {
+    const out: string[] = [];
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const full = join(dir, entry.name);
+        if (entry.isDirectory()) {
+            if (entry.name !== `node_modules` && entry.name !== `dist` && full !== motionModule) {
+                out.push(...editorFiles(full));
+            }
+        } else if (/\.(ts|vue|css)$/.test(entry.name) && !entry.name.endsWith(`.test.ts`)) {
+            out.push(full);
+        }
+    }
+    return out;
+};
+const appRoot = resolve(here, `..`);
+
 describe(`reduced motion`, () => {
+    it(`asks the OS about reduced motion in the motion module alone`, () => {
+        // A media query or a matchMedia call anywhere else answers to the OS behind the reader's back: the Appearance
+        // setting's On would not move it, and its Off would not still it. Read `data-motion` (motion.css) instead.
+        const askers = [appRoot, uiRoot, ...everyExtensionSrc]
+            .flatMap(editorFiles)
+            .filter((file) => readFileSync(file, `utf8`).includes(`prefers-reduced-motion`));
+        expect(askers.map((file) => file.slice(resolve(here, `../../../..`).length + 1))).toEqual([]);
+    });
+
     it(`keeps request-driven CSS animation utilities out of app source`, () => {
         expect([...animationClasses()].toSorted()).toEqual([]);
     });

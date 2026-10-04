@@ -1,0 +1,149 @@
+/* THE HOUSE MOTION — the durations and curves the interface moves by, the one switch that stills it, and the few
+   recipes the views that move are drawn with. The rest of the motion module is TypeScript (../motion/: the setting,
+   looping glyphs, folds, row reveals); this is the part a stylesheet has to say.
+
+   Motion is spent where it shows the reader something, not everywhere: a chart growing from its baseline says how
+   big each figure is as the eye follows it, rows arriving in reading order say how a board is laid out, the
+   workspace arriving says where the file tree and the editor are. A page switching or a menu opening says nothing a
+   static frame does not, so those do not move.
+
+   THE SWITCH is `data-motion="reduced"` on <html>, written by ../motion/preference.ts from the Appearance setting and,
+   under `system`, the OS's reduce-motion answer. Under it every duration token reads 0ms and every transition is
+   stilled from base below, so no component carries its own opt-out (app/reducedMotion.test.ts). Loops that say work is
+   happening (a spinner, the thinking rosette) slow down instead of stopping, in their own files. */
+
+@theme {
+    /* The house curve: fast out of the gate, a long settle. Tailwind's `ease-smooth`. */
+    --ease-smooth: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+:root {
+    /* A hover's answer, a fold closing. */
+    --motion-quick: 150ms;
+    /* A surface arriving. */
+    --motion-base: 200ms;
+    /* A figure growing to its value: long enough for the eye to follow the bar to where it stops. */
+    --motion-grow: 560ms;
+    /* The step between one bar of a chart and the next, left to right. */
+    --motion-grow-step: 14ms;
+
+    /* How far a surface travels in. */
+    --motion-rise: 6px;
+}
+
+/* Every duration to zero, so anything timed off a token is already still. */
+:root[data-motion="reduced"] {
+    --motion-quick: 0ms;
+    --motion-base: 0ms;
+    --motion-grow: 0ms;
+    --motion-grow-step: 0ms;
+}
+
+/* And every transition, whoever wrote it: Tailwind's `transition-*`, PrimeVue's own, a hover's colour fade. In base, the
+   earliest layer, because an `!important` in an earlier layer outranks one in a later layer: no component can win this
+   back by accident. Vue's <Transition> finishes a 0s transition at once, and nothing in the app waits on
+   `transitionend`. */
+@layer base {
+    :root[data-motion="reduced"],
+    :root[data-motion="reduced"] *,
+    :root[data-motion="reduced"] *::before,
+    :root[data-motion="reduced"] *::after {
+        transition-duration: 0s !important;
+        transition-delay: 0s !important;
+        scroll-behavior: auto !important;
+    }
+}
+
+/* Tailwind's own reduced-motion variants answer to the setting rather than straight to the OS, so a `motion-safe:` in
+   markup stills with everything else when the reader turns motion off, and keeps moving when they turned it on. */
+@custom-variant motion-safe (&:where(:root:not([data-motion="reduced"]), :root:not([data-motion="reduced"]) *));
+@custom-variant motion-reduce (&:where(:root[data-motion="reduced"], :root[data-motion="reduced"] *));
+
+/* PrimeVue opens its dialog, menus, drawer and mask with keyframes, which the transition switch above does not reach:
+   under it they take no time (Vue finishes a 0s animation at once), and the ripple a press leaves is not drawn. After
+   the primeng layer PrimeVue writes into, so these win. */
+@layer components {
+    :root[data-motion="reduced"] :is(
+        .p-dialog-enter-active,
+        .p-dialog-leave-active,
+        .p-anchored-overlay-enter-active,
+        .p-anchored-overlay-leave-active,
+        .p-drawer-enter-active,
+        .p-drawer-leave-active,
+        .p-overlay-mask-enter-active,
+        .p-overlay-mask-leave-active,
+        .p-collapsible-enter-active,
+        .p-collapsible-leave-active
+    ) {
+        animation-duration: 0s;
+    }
+    :root[data-motion="reduced"] .p-ink {
+        display: none;
+    }
+}
+
+@layer components {
+    /* A SURFACE ARRIVING: it rises the few pixels of `--motion-rise` as it fades in, from the first frame it is drawn
+       (`@starting-style`). No exit. Ends at `translate: none`, so at rest it holds no layer and is no containing block
+       for anything fixed inside it. Worn by the workspace, which is where the reader looks for their files and their
+       editor to be. */
+    .ui-enter {
+        transition:
+            opacity var(--motion-base) var(--ease-smooth),
+            translate var(--motion-base) var(--ease-smooth);
+    }
+    /* From the edge it opens at, rather than from below: the workspace's explorer from the left. */
+    .ui-enter-from-start {
+        --ui-enter-from: calc(var(--motion-rise) * -2) 0;
+    }
+    /* No travel, for a scrim. */
+    .ui-enter-fade {
+        transition: opacity var(--motion-base) var(--ease-smooth);
+    }
+
+    /* A FIGURE GROWING FROM ITS BASELINE, the way a chart is read: the eye follows each bar to where it stops, so the
+       sizes are compared while they are still moving. `-x` grows a bar from its left end, `-y` a column from its foot,
+       `-wipe` draws a line or a stacked strip from left to right. Each starts `--ui-grow-i` steps after the first
+       (capped at twenty), so a chart fills left to right or top to bottom. A figure that changes value later glides to
+       it (width, height) on the same clock rather than jumping, so what changed is seen changing. Drawn from the frame
+       an element is inserted on, so a new range or filter that draws new bars grows them again; a refetch that only
+       changes values glides. */
+    .ui-grow-x,
+    .ui-grow-y {
+        --ui-grow-delay: calc(min(var(--ui-grow-i, 0), 20) * var(--motion-grow-step));
+        transition:
+            scale var(--motion-grow) var(--ease-smooth) var(--ui-grow-delay),
+            width var(--motion-grow) var(--ease-smooth),
+            height var(--motion-grow) var(--ease-smooth);
+    }
+    .ui-grow-x {
+        transform-origin: left center;
+    }
+    .ui-grow-y {
+        transform-origin: center bottom;
+    }
+    .ui-grow-wipe {
+        --ui-grow-delay: calc(min(var(--ui-grow-i, 0), 20) * var(--motion-grow-step));
+        clip-path: inset(0 0 0 0);
+        transition: clip-path var(--motion-grow) var(--ease-smooth) var(--ui-grow-delay);
+    }
+
+    @starting-style {
+        .ui-enter {
+            opacity: 0;
+            translate: var(--ui-enter-from, 0 var(--motion-rise));
+        }
+        .ui-enter-fade {
+            opacity: 0;
+        }
+        .ui-grow-x {
+            scale: 0 1;
+        }
+        .ui-grow-y {
+            scale: 1 0;
+        }
+        .ui-grow-wipe {
+            clip-path: inset(0 100% 0 0);
+        }
+    }
+}

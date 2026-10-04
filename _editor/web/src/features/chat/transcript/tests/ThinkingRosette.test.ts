@@ -1,7 +1,7 @@
 import "@intentic/testing/dom";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick } from "vue";
-import { setDeveloperBuild } from "@intentic/ui/reduced-motion";
+import { setDeveloperBuild } from "@intentic/ui/motion";
 import ThinkingRosette from "../ThinkingRosette.vue";
 
 let app: App | undefined;

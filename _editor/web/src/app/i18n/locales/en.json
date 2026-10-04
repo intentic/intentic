@@ -5436,6 +5436,14 @@
                 "hint": "Changes the words the app uses and which page is home. Nothing about your files or your agents.",
                 "maker": "I don't",
                 "makerHint": "Plain words, a project page as the home, tooling files out of the way."
+            },
+            "motion": {
+                "title": "Animations",
+                "hint": "How menus, panels and pages open. Off makes every change instant.",
+                "system": "System",
+                "systemHint": "Follows your operating system: instant when it asks for reduced motion, animated when it does not.",
+                "on": "On",
+                "off": "Off"
             }
         },
         "hostedHours": {

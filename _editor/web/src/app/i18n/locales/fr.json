@@ -3765,6 +3765,14 @@
                 "wallpaper": "Fond d’écran",
                 "wallpaperHint": "Une image derrière le tableau des agents, dans la version claire ou sombre de votre thème."
             },
+            "motion": {
+                "title": "Animations",
+                "hint": "La façon dont s'ouvrent les menus, les panneaux et les pages. Désactivées, chaque changement est instantané.",
+                "system": "Système",
+                "systemHint": "Suit votre système d'exploitation : instantané quand il demande moins de mouvement, animé sinon.",
+                "on": "Oui",
+                "off": "Non"
+            },
             "theme": {
                 "dark": "Sombre",
                 "light": "Clair",

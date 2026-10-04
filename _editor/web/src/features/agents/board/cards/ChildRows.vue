@@ -4,7 +4,7 @@ import { type ComponentPublicInstance, computed, inject } from "vue";
 import { agentDisplayTitle } from "../../fleet/agentStatus";
 import type { FleetAgent } from "../../fleet/useAgents-fleet";
 import { FINISHED_FOLD, inProcess, type TrayChild, trayOf } from "../view/childFold";
-import { trayFold } from "../view/foldMotion";
+import { trayFold } from "@intentic/ui/motion";
 import ChildGroupRow from "./ChildGroupRow.vue";
 import ChildRow from "./ChildRow.vue";
 import { CHILD_ROWS } from "./childRows";
@@ -20,7 +20,7 @@ import { CHILD_ROWS } from "./childRows";
 //
 // OPEN ONLY UNDER THE CARD BEING LOOKED AT. Drawn under every card, the trays turned each lane into a list of lists, and
 // every helper an unwatched card's runtime started or finished pushed a row in or out and shook every card below it.
-// So a tray opens, folding out from under the card (foldMotion), only under the card the reader is on (`focused`), under a card
+// So a tray opens, folding out from under the card (@intentic/ui/motion, fold.ts), only under the card the reader is on (`focused`), under a card
 // whose child is on screen (the ring must be on something drawn), and under every card while a filter is on (a result
 // set must not hide its own matches). Every other card counts its family on itself instead (ChildCount), which moves no
 // card's height. The one exception is a child asking what only the reader can give: that is news, not history, and a

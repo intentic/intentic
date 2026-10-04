@@ -7,10 +7,12 @@ import {
     SegmentedControl,
     useDevice,
     useExplorerStyle,
+    useMotion,
     useTextSize,
     useTheme,
     explorerTreatment,
     type IconName,
+    MOTION_CHOICES,
 } from "@intentic/ui";
 import { activeLocale, type Locale, LOCALE_CODES, LOCALES, setLocale, useT } from "@intentic/ui/i18n";
 import ToggleSwitch from "primevue/toggleswitch";
@@ -109,6 +111,18 @@ const iconRailOptions = computed(() => [
     { label: t(`settings.words.iconRailCompact`), value: `compact` as const },
     { label: t(`settings.words.iconRailComfortable`), value: `comfortable` as const },
 ]);
+// Whether the interface moves (@intentic/ui/motion, preference.ts): `system` defers to the OS's reduce-motion switch, the other two decide
+// outright. Off is instant, not merely calmer: every transition in the app reads its duration through motion.css.
+const { motion, setMotion } = useMotion();
+// Only `system` explains itself: the other two say what they do.
+const motionOptions = computed(() =>
+    MOTION_CHOICES.map((value) =>
+        value === `system`
+            ? { label: t(`settings.appearance.motion.system`), value, title: t(`settings.appearance.motion.systemHint`) }
+            : { label: t(`settings.appearance.motion.${value}`), value },
+    ),
+);
+
 // Labeled by effect, not percentage, so nobody sets this and the browser's 110% zoom together.
 const textSizeOptions = computed(() => [
     { label: t(`settings.words.iconRailCompact`), value: `compact` as const },
@@ -186,6 +200,11 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
                 <template #control>
                     <ColorPicker :model-value="accent" size="sm" class="justify-end" @update:model-value="setAccent" />
                 </template>
+            </Row>
+            <Row icon="sparkles" :title="t(`settings.appearance.motion.title`)" :description="t(`settings.appearance.motion.hint`)">
+                <template #control
+                    ><SegmentedControl :model-value="motion" :options="motionOptions" @update:model-value="setMotion"
+                /></template>
             </Row>
             <!-- Above the rail row: this one moves the whole workspace, that one moves a column of it. -->
             <Row icon="expand" :title="t(`settings.appearance.look.textSize`)">

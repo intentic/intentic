@@ -676,10 +676,8 @@ onMounted(() => {
     }
 }
 
-@media (prefers-reduced-motion: reduce) {
-    /* The fill still lands where it should; it just arrives there without the travel. */
-    .steps::before {
-        transition: none;
-    }
+/* The fill still lands where it should; it just arrives there without the travel. */
+:root[data-motion="reduced"] .steps::before {
+    transition: none;
 }
 </style>

@@ -32,6 +32,15 @@ flowchart LR
   Class recipes live in `ui` (`src/lib/ui.ts`) and merge through `tailwind-merge`, so the caller's classes win.
   `RowGroup equal-rows` aligns simple settings rows to the tallest row on desktop; leave it off groups with drawers
   or below-row content. On phones, rows grow with their own content. `ColorPicker size="sm"` fits a settings row.
+- **Motion.** One module, `src/motion/` (`@intentic/ui/motion`), with its stylesheet `src/styles/motion.css`.
+  Appearance's Animations row (`useMotion`: System, On or Off) writes `data-motion="reduced"` on `<html>` when
+  motion is off, or when it is left at System and the OS asks for less. Under that attribute every duration token is
+  0ms and every transition stops, so a component never checks reduced motion itself. Moves played from script ask
+  `lessMotion()`: the tray fold and the column FLIP (`fold.ts`) and the row reveal (`reveal.ts`, `useRowReveal`),
+  which plays a list's `[data-reveal]` rows in reading order when it shows. Looping glyphs take their pace from
+  `loops.ts`. The CSS recipes are `ui-grow-x`, `ui-grow-y` and `ui-grow-wipe` (a figure growing from its
+  baseline) and `ui-enter` (the workspace arriving). Motion is for the few views where it shows something: the board
+  and the chat's lanes, the usage charts, the workspace.
 - **Icons.** Every glyph is a native SVG drawing in `src/icons/`. The [patches](patches) route PrimeVue, Mermaid and
   Monaco icons to them, and a suite in web keeps third-party icon packages out of the lockfile.
   Attention and warnings use `exclamation-circle`; legacy `exclamation-triangle` and `exclamation` names resolve
@@ -68,7 +77,7 @@ flowchart LR
   Past the project check, the id is read only when there is no label, since a renamed persona keeps its old id.
   `PersonaFace` does this for a persona. `AssistantFace` takes a `seed` (color and motion phase), an accessible
   `label`, a pixel `size`, an `accessory`, an optional `color` overriding the seed's, and `animated` (default
-  true). Larger faces bob and breathe; toolbar faces stay still and `prefers-reduced-motion` stops them. Try names
+  true). Larger faces bob and breathe; toolbar faces stay still, and turning motion off stops them. Try names
   at `/kit#assistants`. (2026-09-30: the eight fixed illustrated characters this replaced tied color and prop
   together, so a persona's prop said nothing about its job.)
 
@@ -112,8 +121,9 @@ The [interactive preview](src/components/brand/assistants/modular/preview.html) 
 | --- | --- |
 | `components/` | Components by role: primitives, layout, forms, rows, overlays, feedback, charts, markdown, brand, sandbox |
 | `composables/` | Shared reactive state: theme, text size, device, drafts, list navigation |
+| `motion/` | Whether the interface moves, looping glyphs, folds, row reveals |
 | `markdown/` | The markdown engine: render, figures, frontmatter, code blocks, block editing, history |
-| `styles/` | Tokens, colour scales, the PrimeVue skin; `opt-in/` for prose and the extension class surface |
+| `styles/` | Tokens, motion, colour scales, the PrimeVue skin; `opt-in/` for prose and the extension class surface |
 | `icons/` | Native SVG glyph sets and file-type icons |
 | `lib/` | Class recipes, formatting, paths, overlay placement, clipboard, press handling |
 | `i18n/` | vue-i18n setup and the kit's own strings per language |

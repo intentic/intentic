@@ -110,13 +110,13 @@
             "types": "./src/i18n/locales.ts",
             "default": "./src/i18n/locales.ts"
         },
+        "./motion": {
+            "types": "./src/motion/index.ts",
+            "default": "./src/motion/index.ts"
+        },
         "./preference": {
             "types": "./src/composables/preference.ts",
             "default": "./src/composables/preference.ts"
-        },
-        "./reduced-motion": {
-            "types": "./src/composables/useReducedMotion.ts",
-            "default": "./src/composables/useReducedMotion.ts"
         },
         "./text-size": {
             "types": "./src/composables/useTextSize.ts",

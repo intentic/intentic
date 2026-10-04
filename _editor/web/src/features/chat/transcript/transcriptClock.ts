@@ -1,5 +1,5 @@
 import type { TranscriptRequests, TranscriptRow } from "@intentic/sandbox-contract";
-import { useTouchMotion } from "@intentic/ui/reduced-motion";
+import { useTouchMotion } from "@intentic/ui/motion";
 import { computed, type ComputedRef, ref, shallowRef } from "vue";
 import { recordPerf } from "../../../app/perf";
 import type { ChatMessage } from "./transcript";

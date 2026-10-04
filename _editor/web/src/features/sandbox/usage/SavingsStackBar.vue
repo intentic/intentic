@@ -24,7 +24,8 @@ const tooltipFor = (label: string, tokens: number): string => `${label} · ~${fo
 
 <template>
     <figure class="flex min-w-0 flex-col gap-2">
-        <div class="flex h-2.5 w-full overflow-hidden rounded-full bg-canvas">
+        <!-- Its segments fill the whole track, so the strip is drawn left to right as one (motion.css `ui-grow-wipe`). -->
+        <div class="ui-grow-wipe flex h-2.5 w-full overflow-hidden rounded-full bg-canvas">
             <!-- `min-w-px`: a small saving stays visible, not absent; the one place those two could be confused. -->
             <div
                 v-for="segment in composition.segments"

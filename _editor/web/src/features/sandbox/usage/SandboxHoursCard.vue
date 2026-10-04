@@ -65,7 +65,7 @@ const note = computed(() => {
                     t(`sandbox.sandboxHours.billing`)
                 }}</RouterLink>
             </div>
-            <HostedHoursMeter :hours="hours" />
+            <HostedHoursMeter :hours="hours" grow />
             <p v-if="note" class="text-2xs text-subtle">{{ note }}</p>
         </Card>
 

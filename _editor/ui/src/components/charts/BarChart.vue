@@ -5,7 +5,10 @@ import { computed } from "vue";
 import type { BarItem } from "./barChart.js";
 import { seriesColor } from "./seriesAccent.js";
 
-const { items, title, labelWidth = 9 } = defineProps<{ items: readonly BarItem[]; title?: string; labelWidth?: number }>();
+// `grow`: the bars extend from their baseline as the chart is drawn, top to bottom, and glide to a new value (motion.css
+// `ui-grow-x`). For a chart that is the point of its page (the usage view's costs); a figure standing in a document
+// leaves it off and is simply there.
+const { items, title, labelWidth = 9, grow = false } = defineProps<{ items: readonly BarItem[]; title?: string; labelWidth?: number; grow?: boolean }>();
 
 // `|| 1` so an all-zero set divides by one and draws nothing, rather than dividing by zero and drawing NaN.
 const max = computed(() => Math.max(...items.map((item) => item.value), 0) || 1);
@@ -22,7 +25,7 @@ const tip = (item: BarItem): string => item.display ?? item.value.toLocaleString
         <figcaption v-if="title !== undefined" class="text-xs font-medium text-content">{{ title }}</figcaption>
         <ul class="flex flex-col gap-2.5">
             <li
-                v-for="item in items"
+                v-for="(item, index) in items"
                 :key="item.key ?? item.label"
                 class="grid items-center gap-3"
                 :style="{ gridTemplateColumns: `minmax(0,${labelWidth}rem) 1fr auto` }"
@@ -38,7 +41,8 @@ const tip = (item: BarItem): string => item.display ?? item.value.toLocaleString
                     <!-- 10px thick, 4px rounded data-end, square at the baseline it grows from. -->
                     <div
                         class="h-2.5 min-w-px rounded-r-xs"
-                        :style="{ width: `${(item.value / max) * 100}%`, background: seriesColor(item.accent) }"
+                        :class="{ 'ui-grow-x': grow }"
+                        :style="{ width: `${(item.value / max) * 100}%`, background: seriesColor(item.accent), '--ui-grow-i': index }"
                     />
                 </div>
                 <!-- tabular-nums here and NOT on a stat tile's value: this is a column of numbers that must align vertically. -->

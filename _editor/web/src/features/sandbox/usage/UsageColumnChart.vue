@@ -53,13 +53,18 @@ const PLOT_HEIGHT = `10rem`;
                 <div class="absolute inset-0 flex items-end gap-0.5">
                     <!-- Hit target is the whole band, not the mark: a $0.02 day is 1px tall and otherwise unhoverable. -->
                     <div
-                        v-for="bucket in series"
+                        v-for="(bucket, index) in series"
                         :key="bucket.start"
                         v-tooltip.top="tooltipFor(bucket)"
                         class="flex h-full min-w-0 flex-1 cursor-default items-end justify-center rounded-sm transition-colors hover:bg-content/5"
                     >
-                        <!-- Columns are capped at 24px and centered within the chart. -->
-                        <div class="flex w-full max-w-6 flex-col justify-end gap-0.5" :style="{ height: `${(bucket.totals.costUsd / max) * 100}%` }">
+                        <!-- Columns are capped at 24px and centered within the chart. Each rises from the axis, a step after the one
+                             to its left, so the days fill in the order they are read; a filter that changes a day's
+                             spend moves its column to the new height rather than redrawing it (motion.css `ui-grow-y`). -->
+                        <div
+                            class="ui-grow-y flex w-full max-w-6 flex-col justify-end gap-0.5"
+                            :style="{ height: `${(bucket.totals.costUsd / max) * 100}%`, '--ui-grow-i': index }"
+                        >
                             <div
                                 v-for="(segment, index) in stackOf(bucket)"
                                 :key="segment.key"

@@ -2,7 +2,7 @@
 <script setup lang="ts">
 import { computed, useAttrs } from "vue";
 import { ICONS, type IconName } from "../../icons/iconSets.js";
-import { useCompositedLoops, useReducedMotion } from "../../composables/useReducedMotion.js";
+import { useCompositedLoops, useReducedMotion } from "../../motion/loops.js";
 import type { Glyph } from "../../icons/glyph.js";
 
 const { name, spin = false } = defineProps<{ name: IconName; spin?: boolean }>();
@@ -93,9 +93,7 @@ const turnsBySmil = computed(() => spin && !turnsOnCompositor.value);
     }
 }
 
-@media (prefers-reduced-motion: reduce) {
-    .ui-icon-turning {
-        animation-duration: 3s;
-    }
+:root[data-motion="reduced"] .ui-icon-turning {
+    animation-duration: 3s;
 }
 </style>

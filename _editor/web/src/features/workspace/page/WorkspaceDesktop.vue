@@ -831,9 +831,11 @@ const includeTip = computed(
 
 <template>
     <!-- Swallows drops that miss the explorer, so the browser doesn't navigate to the file (wiping unsaved buffers). -->
+    <!-- THE WORKSPACE ARRIVES: the page rises the few pixels of `ui-enter` while the explorer slides in from the left edge
+         it lives at, so opening the workspace reads as the file tree and the editor taking their places (motion.css). -->
     <div
         ref="rootEl"
-        class="ws flex h-full min-h-0 flex-col overflow-hidden bg-canvas text-content"
+        class="ws ui-enter flex h-full min-h-0 flex-col overflow-hidden bg-canvas text-content"
         :class="{ 'ws-scoped': workspaceAgent !== undefined }"
         @dragover.prevent
         @drop.prevent
@@ -848,9 +850,10 @@ const includeTip = computed(
             @drop="onRootDrop"
         >
             <!-- A column when there's room for two, a drawer over the viewer otherwise; the drawer ignores the stored column width. -->
+            <!-- Slides in from the left edge it opens at, as a column or as the narrow pane's drawer (motion.css). -->
             <aside
                 v-if="sidebarOpen"
-                class="relative flex min-h-0 flex-col border-r border-line bg-card"
+                class="ui-enter ui-enter-from-start relative flex min-h-0 flex-col border-r border-line bg-card"
                 :class="narrowBody ? `absolute inset-y-0 left-0 z-20 w-[min(20rem,85%)] shadow-xl` : `shrink-0`"
                 :style="narrowBody ? undefined : { width: uiLength(layout.sidebarWidth.value) }"
             >
@@ -1078,7 +1081,7 @@ const includeTip = computed(
             />
 
             <!-- Dismisses the drawer by clicking the file it covers, the only affordance the toggle doesn't already provide. -->
-            <div v-if="narrowBody && sidebarOpen" class="absolute inset-0 z-10 bg-black/30" @click="drawerOpen = false"></div>
+            <div v-if="narrowBody && sidebarOpen" class="ui-enter-fade absolute inset-0 z-10 bg-black/30" @click="drawerOpen = false"></div>
 
             <!-- The editor: one pane, or two with a seam (EditorStrip). Workspace chrome rides the main pane's bar as slots. -->
             <div class="relative flex min-h-0 min-w-0 flex-1">
@@ -1224,9 +1227,7 @@ const includeTip = computed(
         opacity: 0;
     }
 }
-@media (prefers-reduced-motion: reduce) {
-    .ws-stashed-new::after {
-        animation: none;
-    }
+:root[data-motion="reduced"] .ws-stashed-new::after {
+    animation: none;
 }
 </style>

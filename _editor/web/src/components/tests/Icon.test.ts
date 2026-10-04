@@ -2,7 +2,7 @@ import "@intentic/testing/dom";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import Icon from "@intentic/ui/icon";
-import { setDeveloperBuild } from "@intentic/ui/reduced-motion";
+import { setDeveloperBuild } from "@intentic/ui/motion";
 import ViewBadgeChip from "../../core-views/ViewBadgeChip.vue";
 import { glyphBody } from "../../../../ui/src/icons/glyph.js";
 import { sectionIcon, ICONS, isIconName, type IconName } from "../../../../ui/src/icons/iconSets.js";

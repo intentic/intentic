@@ -2,7 +2,7 @@
 // stable style set before the app mounts.
 import { installDevStyles } from "virtual:intentic-dev-styles";
 import { installChunkRecovery, installUi } from "@intentic/ui";
-import { setDeveloperBuild } from "@intentic/ui/reduced-motion";
+import { setDeveloperBuild } from "@intentic/ui/motion";
 import { highlightInWorker } from "@intentic/ui/markdown";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { createApp } from "vue";

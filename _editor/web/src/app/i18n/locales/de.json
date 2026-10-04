@@ -3769,6 +3769,14 @@
                 "wallpaper": "Hintergrundbild",
                 "wallpaperHint": "Ein Bild hinter der Agenten-Übersicht, in der hellen oder dunklen Fassung deines Designs."
             },
+            "motion": {
+                "title": "Animationen",
+                "hint": "Wie sich Menüs, Bereiche und Seiten öffnen. Aus macht jede Änderung sofort sichtbar.",
+                "system": "System",
+                "systemHint": "Folgt deinem Betriebssystem: ohne Animation, wenn es weniger Bewegung wünscht, sonst animiert.",
+                "on": "An",
+                "off": "Aus"
+            },
             "theme": {
                 "dark": "Dunkel",
                 "light": "Hell",

@@ -121,9 +121,10 @@ export const sourceAliases = (): Record<string, string> => ({
     // Scheme-and-accent singleton answering a two-attribute question on <html>; through the barrel that question would
     // also cost mermaid, shiki and vue-flow.
     "@intentic/ui/theme": fromRoot("_editor/ui/src/composables/useTheme.ts"),
-    // One media query, read by every glyph that moves; the chat's thinking rosette is one of them and must not boot
-    // the component graph to ask how fast it may breathe.
-    "@intentic/ui/reduced-motion": fromRoot("_editor/ui/src/composables/useReducedMotion.ts"),
+    // THE MOTION MODULE: whether the interface moves (the Appearance setting and its OS fallback, installed on every
+    // boot beside the theme), how fast a looping glyph may turn, and the moves played from script (folds, slides, row
+    // reveals). Read by the thinking rosette and the board's folds, which must not boot the component graph to ask.
+    "@intentic/ui/motion": fromRoot("_editor/ui/src/motion/index.ts"),
     // A device agent's panel shape and the wording every caller shares; built from a device registry here and from a
     // machine's own reading in the desktop app, and unit-tested without rendering anything. Before `device`, which
     // shares its prefix.

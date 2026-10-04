@@ -19,7 +19,14 @@ const path = computed(() => {
 </script>
 
 <template>
-    <svg v-if="points.length > 1" :viewBox="`0 0 ${VIEW_WIDTH} ${VIEW_HEIGHT}`" preserveAspectRatio="none" class="h-5 w-full" aria-hidden="true">
+    <!-- Drawn left to right as it appears, the way a trend is read (motion.css `ui-grow-wipe`). -->
+    <svg
+        v-if="points.length > 1"
+        :viewBox="`0 0 ${VIEW_WIDTH} ${VIEW_HEIGHT}`"
+        preserveAspectRatio="none"
+        class="ui-grow-wipe h-5 w-full"
+        aria-hidden="true"
+    >
         <path
             :d="path"
             fill="none"

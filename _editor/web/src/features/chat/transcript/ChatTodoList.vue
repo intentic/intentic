@@ -128,7 +128,14 @@ const hint = computed(() => `${expanded.value ? `Hide` : `Show`} the checklist Â
             <div v-if="delta === undefined || expanded" class="grid">
                 <div class="min-h-0 overflow-hidden">
                     <div class="flex w-full flex-col" :class="dense ? 'gap-1.5' : 'gap-1 px-3 py-2'">
-                        <div v-for="(todo, index) in todos" :key="index" class="flex items-start gap-2" :class="dense ? 'text-2xs' : 'text-xs'">
+                        <!-- A row the rail's checklist plays in (`data-reveal`, ChatRailChecklist); inert in a transcript, which reveals nothing. -->
+                        <div
+                            v-for="(todo, index) in todos"
+                            :key="index"
+                            class="flex items-start gap-2"
+                            :class="dense ? 'text-2xs' : 'text-xs'"
+                            data-reveal
+                        >
                             <Icon v-bind="todoIcon(todo)" class="mt-0.5" :class="dense ? 'text-3xs' : 'text-2xs'" />
                             <span :class="{ 'text-subtle': todo.status === 'completed', 'line-through': todo.status === 'completed' }">{{
                                 todoText(todo)

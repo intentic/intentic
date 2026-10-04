@@ -1,4 +1,5 @@
 import { type Ref, watch } from "vue";
+import { lessMotion } from "./preference.js";
 
 // HOW A TRAY FOLDS, AND HOW WHAT STANDS BELOW IT MAKES ROOM. Only transform-family properties and opacity animate off the
 // main thread (Chromium's compositable properties); `height` and `grid-template-rows` re-lay the column out every frame,
@@ -15,8 +16,6 @@ const SLIDE = `fold-slide`;
 
 // A page without the Web Animations API (a test DOM) moves nothing and folds at once.
 export const canAnimate = (el: Element | null | undefined): el is HTMLElement => el instanceof HTMLElement && typeof el.animate === `function`;
-
-export const lessMotion = (): boolean => typeof window !== `undefined` && window.matchMedia?.(`(prefers-reduced-motion: reduce)`).matches === true;
 
 // Slides an element from `dy` back to where it stands, on the individual `translate` property: a `transform` animation of
 // its own (a lane's scale-in, a card's flight) keeps running beside it, where a second `transform` would take both off

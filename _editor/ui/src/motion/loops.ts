@@ -1,17 +1,19 @@
 import { computed, onBeforeUnmount, readonly, ref, watch, type Ref } from "vue";
+import { motionChoice, REDUCE_MOTION_QUERY, resolveReducedMotion } from "./preference.js";
 
 // Whether the reader asked for less motion, for the glyphs that move: they slow down rather than stop, since a still
 // mark beside a live turn reads as a hung one. Per-component and not a module singleton on purpose — the listener has
-// to go when its component does, and `window.matchMedia` is swapped between mounts under test.
+// to go when its component does, and `window.matchMedia` is swapped between mounts under test. "Asked" is the
+// Appearance setting first (preference.ts): `off` and `on` decide outright, and only `system` hands it to the OS.
 //
 // `active` narrows WHEN the question is asked at all: an Icon is mounted a thousand times and spins in a handful of
 // places, so the query and its listener exist only while the caller actually moves (a spinner on a desktop pointer,
 // see useTouchMotion below). Absent, it is asked for the component's whole life.
 export function useReducedMotion(active: () => boolean = () => true): Readonly<Ref<boolean>> {
-    const reduced = ref(false);
+    const osReduces = ref(false);
     let query: MediaQueryList | undefined;
     const read = (): void => {
-        reduced.value = query?.matches === true;
+        osReduces.value = query?.matches === true;
     };
     const release = (): void => {
         query?.removeEventListener(`change`, read);
@@ -27,14 +29,14 @@ export function useReducedMotion(active: () => boolean = () => true): Readonly<R
             if (query !== undefined || !(`matchMedia` in globalThis)) {
                 return;
             }
-            query = globalThis.matchMedia(`(prefers-reduced-motion: reduce)`);
+            query = globalThis.matchMedia(REDUCE_MOTION_QUERY);
             read();
             query.addEventListener(`change`, read);
         },
         { immediate: true },
     );
     onBeforeUnmount(release);
-    return readonly(reduced);
+    return readonly(computed(() => resolveReducedMotion(motionChoice(), osReduces.value)));
 }
 
 // WHERE A LOOPING GLYPH MAY RUN, as a question about the screen: true on a touch-first one (a phone, a tablet), where

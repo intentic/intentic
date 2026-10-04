@@ -301,10 +301,8 @@
 }
 
 /* The checkbox flourish is optional; its checked mark and accessible state carry the meaning without motion. */
-@media (prefers-reduced-motion: reduce) {
-    .p-checkbox-checked .p-checkbox-icon {
-        animation: none;
-    }
+:root[data-motion="reduced"] .p-checkbox-checked .p-checkbox-icon {
+    animation: none;
 }
 
 /* Kept for the tiny tooltip and anchored-overlay reveal. */
@@ -368,20 +366,17 @@
         filter: blur(var(--ui-badge-blur));
     }
 
-/* The central answer, here rather than as a `motion-reduce:` at four call sites. */
-    @media (prefers-reduced-motion: reduce) {
-        .ui-badge-enter-active,
-        .ui-badge-leave-active {
-            transition: none;
-            will-change: auto;
-        }
+/* The central answer, here rather than as a `motion-reduce:` at four call sites, and the setting's rather than the OS's
+   (motion.css): the chip is simply there, or simply gone. */
+    :root[data-motion="reduced"] :is(.ui-badge-enter-active, .ui-badge-leave-active) {
+        transition: none;
+        will-change: auto;
+    }
 
-        .ui-badge-enter-from,
-        .ui-badge-leave-to {
-            translate: 0 0;
-            scale: 1;
-            filter: none;
-        }
+    :root[data-motion="reduced"] :is(.ui-badge-enter-from, .ui-badge-leave-to) {
+        translate: 0 0;
+        scale: 1;
+        filter: none;
     }
 }
 
@@ -396,9 +391,7 @@
             top 0.15s ease-out;
     }
 
-    @media (prefers-reduced-motion: reduce) {
-        .ui-home-move {
-            transition: none;
-        }
+    :root[data-motion="reduced"] .ui-home-move {
+        transition: none;
     }
 }

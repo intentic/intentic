@@ -1,9 +1,10 @@
+import { useMotion } from "@intentic/ui/motion";
 import { useTextSize } from "@intentic/ui/text-size";
 import { useTheme } from "@intentic/ui/theme";
 import { useSkin } from "../../skins/useSkin";
 import { useWallpaper } from "../../skins/useWallpaper";
 
-// Preferences that paint <html> directly (theme, text size, skin, wallpaper): applied via each composable's module load, not by
+// Preferences that paint <html> directly (theme, text size, motion, skin, wallpaper): applied via each composable's module load, not by
 // whichever surface happens to import them. Called once here, from main.ts before mount, so every window gets them
 // regardless of import graph.
 export const installDocumentAppearance = (): void => {
@@ -11,6 +12,7 @@ export const installDocumentAppearance = (): void => {
     // that happens in every window.
     useTheme();
     useTextSize();
+    useMotion();
     useSkin();
     useWallpaper();
 };

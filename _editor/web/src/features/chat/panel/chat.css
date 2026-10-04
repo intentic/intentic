@@ -308,10 +308,8 @@
         opacity: 0.45;
     }
 }
-@media (prefers-reduced-motion: reduce) {
-    .chat-spine-node-live {
-        animation: none;
-    }
+:root[data-motion="reduced"] .chat-spine-node-live {
+    animation: none;
 }
 /* A RUN'S WEIGHT IS THE SEAM ITSELF, NOT A NUMBER: the gap above the words the run led to becomes a band of the same
    ground, 1% toward the ink (in oklab, over whatever ground it lies on) and each call making it 2px taller, so a
@@ -347,10 +345,8 @@
 .chat-spine-wash-live {
     animation: chat-spine-breathe 1.8s ease-in-out infinite;
 }
-@media (prefers-reduced-motion: reduce) {
-    .chat-spine-wash-live {
-        animation: none;
-    }
+:root[data-motion="reduced"] .chat-spine-wash-live {
+    animation: none;
 }
 /* A band is space the row takes on purpose: shut, it keeps the gap between it and the words, and a thought mark beside
    it centres on it rather than on the bare seam. */
@@ -521,6 +517,27 @@
     opacity: 0;
     translate: 0 -4px;
 }
+/* A CHECKLIST'S ROWS UNFOLD BY THEIR GRID TRACK (ChatTodoList): the delta line's rows open below it and fold back up,
+   the clipped child giving way as the track grows. ChatTodoList has always named this transition; until it had these
+   rules it snapped. */
+.chat-run-reveal-enter-active,
+.chat-run-reveal-leave-active {
+    transition:
+        grid-template-rows var(--motion-base) var(--ease-smooth),
+        opacity var(--motion-base) var(--ease-smooth);
+}
+.chat-run-reveal-leave-active {
+    transition-duration: var(--motion-quick);
+}
+.chat-run-reveal-enter-from,
+.chat-run-reveal-leave-to {
+    grid-template-rows: 0fr;
+    opacity: 0;
+}
+.chat-run-reveal-enter-to,
+.chat-run-reveal-leave-from {
+    grid-template-rows: 1fr;
+}
 /* A SHUT MATERIAL MAY HOLD NO SCROLL BOX OF ITS OWN: when it scrolls, the material itself is the scroller. Chromium
    (2026-10, desktop and WebView2) keeps a box that scrolled inside a `hidden="until-found"` element
    (`content-visibility: hidden`) as a stale scroller, and from then on paints every sticky box in the transcript at an
@@ -539,15 +556,13 @@
     translate: 0 -4px;
     transition: none;
 }
-@media (prefers-reduced-motion: reduce) {
-    .chat-mark-reveal-enter-active,
-    .chat-mark-material {
-        transition-property: opacity;
-    }
-    .chat-mark-reveal-enter-from,
-    .chat-mark-material[hidden] {
-        translate: none;
-    }
+:root[data-motion="reduced"] .chat-mark-reveal-enter-active,
+:root[data-motion="reduced"] .chat-mark-material {
+    transition-property: opacity;
+}
+:root[data-motion="reduced"] .chat-mark-reveal-enter-from,
+:root[data-motion="reduced"] .chat-mark-material[hidden] {
+    translate: none;
 }
 /* Opened by find-in-page, which scrolls to the match at once and would miss it mid-fold. */
 .chat-mark-material.chat-mark-found {
@@ -834,11 +849,9 @@
         scale: 0.94;
     }
 }
-@media (prefers-reduced-motion: reduce) {
-    .chat-quick-open .chat-quick-host,
-    .chat-quick-woken:not(.chat-quick-open) .chat-quick-host {
-        animation: none;
-    }
+:root[data-motion="reduced"] .chat-quick-open .chat-quick-host,
+:root[data-motion="reduced"] .chat-quick-woken:not(.chat-quick-open) .chat-quick-host {
+    animation: none;
 }
 
 /* THE TRANSCRIPT'S MOTION. Both of these MOUNT with the transcript, and a transition has no earlier value to run from on the frame
@@ -892,17 +905,15 @@
         opacity: 0;
     }
 }
-@media (prefers-reduced-motion: reduce) {
-    .chat-quick-card,
-    .chat-transcript-lifted .chat-turns {
-        transition: none;
-    }
-    .chat-quick-transcript .chat-quick-card,
-    .chat-quick-transcript .chat-transcript-lifted .chat-turns,
-    .chat-quick-tools,
-    .chat-quick-transcript .chat-quick-tools {
-        animation: none;
-    }
+:root[data-motion="reduced"] .chat-quick-card,
+:root[data-motion="reduced"] .chat-transcript-lifted .chat-turns {
+    transition: none;
+}
+:root[data-motion="reduced"] .chat-quick-transcript .chat-quick-card,
+:root[data-motion="reduced"] .chat-quick-transcript .chat-transcript-lifted .chat-turns,
+:root[data-motion="reduced"] .chat-quick-tools,
+:root[data-motion="reduced"] .chat-quick-transcript .chat-quick-tools {
+    animation: none;
 }
 .composer-ghost {
     display: inline-flex;
@@ -955,11 +966,9 @@
         box-shadow: 0 0 0 0 transparent;
     }
 }
-@media (prefers-reduced-motion: reduce) {
-    .composer-flash {
-        animation: none;
-        box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary-500) 50%, transparent);
-    }
+:root[data-motion="reduced"] .composer-flash {
+    animation: none;
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary-500) 50%, transparent);
 }
 /* The composer wearing the AGENT's voice (ChatPane's voiceAgent): the whole box changes standing, not just a pill. */
 .composer-voice {

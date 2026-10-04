@@ -182,3 +182,8 @@
         border-right-color: var(--ui-tooltip-border);
     }
 }
+
+/* Under the motion switch (motion.css) the label is simply there. */
+:root[data-motion="reduced"] .ui-tooltip {
+    animation: none;
+}

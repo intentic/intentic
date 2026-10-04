@@ -49,7 +49,8 @@ import { providerLabel } from "@intentic/sandbox-contract";
 import { useCardFocus, useCardRing } from "./view/cardSelection";
 import { useFoundCard } from "./view/foundCard";
 import { boardStarters } from "./view/firstScreen";
-import { useLaneMotion } from "./view/laneMotion";
+import { useRowReveal } from "@intentic/ui/motion";
+import { laneOrder, useLaneMotion } from "./view/laneMotion";
 import { useT } from "@intentic/ui/i18n";
 import { useWallpaper } from "../../../skins/useWallpaper";
 // Kanban across Attention/Active/Finished, pure projections of laneOf; a drop runs the action that causes a lane change
@@ -218,6 +219,19 @@ const toggleFinished = async (): Promise<void> => {
 const { panels: workspaceRepos } = usePanels();
 const workspaceChanges = useChanges();
 const starters = computed(() => boardStarters(workspaceRepos.value.length, workspaceChanges.count.value));
+
+// THE BOARD OPENS ROW BY ROW (@intentic/ui/motion, reveal.ts): the lanes and their headings are there at once, and the
+// cards in them arrive in reading order, row one of every lane together, then row two, so the board is seen filling
+// the way it is read and the opening lasts as long as the longest lane, capped, never as long as every card. Stacked
+// on a narrow screen, the lanes are one column read top to bottom, so the whole board is one column here too. Rows are
+// what a lane holds (`data-reveal`): held wakes, limit groups, runs and agent cards with their trays.
+//
+// A CARD ARRIVING after that scale-fades into its lane (`lane` below): a new agent, or a filter's matches coming back.
+// Each card sits in its own <Transition>, which only plays an entrance with `appear`, so `appear` turns on once the
+// opening has played (`boardDrawn`); before then a card is part of the opening, not news.
+const boardRows = (): string =>
+    [laneOrder(scope.boardLanes.value), LANES.value.map((lane) => runsFor(lane.key).map((run) => run.runId)), scopedHeld.value.map((entry) => entry.id)].join(`#`);
+const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
 </script>
 <!-- `relative` positions the lane-drop affordances only; the fixed drag ghost and the app's notification lane need no containing block here. -->
 <!-- Kept outside the template: a comment inside it makes this multi-root, and dev patches a multi-root subtree
@@ -326,6 +340,7 @@ const starters = computed(() => boardStarters(workspaceRepos.value.length, works
                     v-for="lane in LANES"
                     :key="lane.key"
                     :data-lane="lane.key"
+                    :data-reveal-column="narrow ? undefined : ``"
                     :data-drop="lane.key === 'finished' && view.archive ? undefined : lane.key"
                     class="flex min-w-0 flex-col rounded-xl transition-colors"
                     :class="[!dragging && !narrow ? 'min-h-0' : '', laneDropClass(lane.key)]"
@@ -404,6 +419,7 @@ const starters = computed(() => boardStarters(workspaceRepos.value.length, works
                         <HeldWakeCard
                             v-for="entry in scopedHeld"
                             :key="entry.id"
+                            data-reveal
                             :entry="entry"
                             :dense="narrow"
                             @approve="releaseWake(entry.id, `approve`)"
@@ -415,6 +431,7 @@ const starters = computed(() => boardStarters(workspaceRepos.value.length, works
                         <div
                             v-for="group in limitStopped"
                             :key="group.provider"
+                            data-reveal
                             class="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 rounded-lg border border-line px-3 py-2 text-2xs text-muted"
                         >
                             <span class="min-w-0">{{
@@ -444,6 +461,7 @@ const starters = computed(() => boardStarters(workspaceRepos.value.length, works
                         <WorkflowRunCard
                             v-for="run in runsFor(lane.key)"
                             :key="run.runId"
+                            data-reveal
                             :run="run"
                             :dense="narrow"
                             :selected="chatStrip.run?.runId === run.runId"
@@ -499,9 +517,10 @@ const starters = computed(() => boardStarters(workspaceRepos.value.length, works
                             ]"
                             :name="isMovingLane(agent.id) ? undefined : 'lane'"
                             :css="!isMovingLane(agent.id)"
+                            :appear="boardDrawn"
                         >
                             <!-- A card and the children riding under it (ChildRows), one unit to the lane: they arrive, leave, space and slide as one (laneMotion). -->
-                            <div class="flex flex-col" data-fold-unit>
+                            <div class="flex flex-col" data-fold-unit data-reveal>
                                 <AgentCard
                                     :ref="(el) => setCardEl(agent.id, el)"
                                     :agent="agent"

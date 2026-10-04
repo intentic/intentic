@@ -1,6 +1,6 @@
 <!-- The mark beside a live turn's status word: a lotus rosette whose petals light in a wave while the flower breathes. -->
 <script setup lang="ts">
-import { useCompositedLoops, useReducedMotion } from "@intentic/ui/reduced-motion";
+import { useCompositedLoops, useReducedMotion } from "@intentic/ui/motion";
 import { computed } from "vue";
 
 // Drawn on the icon pack's 24×24 box at 1em and reaching r=10 like the spinner's outer edge, so swapping the two moves
@@ -113,10 +113,8 @@ const petals = computed(() =>
     --rosette-cycle: 2.4s;
 }
 
-@media (prefers-reduced-motion: reduce) {
-    .rosette {
-        --rosette-cycle: 6.5s;
-    }
+:root[data-motion="reduced"] .rosette {
+    --rosette-cycle: 6.5s;
 }
 
 .rosette-breath {

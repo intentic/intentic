@@ -13,7 +13,7 @@ import type { OpenChat } from "./cardView";
 import { useChatTrays } from "./chatTrays";
 import { CHILD_ROWS } from "../../agents/board/cards/childRows";
 import { closeSubagent, subagentOnScreen } from "../panel/subagent/subagentView";
-import { useFoldFlip } from "../../agents/board/view/foldMotion";
+import { useFoldFlip, useRowReveal } from "@intentic/ui/motion";
 import ChatRowList from "./ChatRowList.vue";
 import { laneOrdered, steadyLanes } from "./laneOrder";
 import { personaOfAgent, personaOfTab, tabsInLane, tabsOfPersona } from "./tabs";
@@ -242,6 +242,23 @@ useFoldFlip(
             .map((conversation) => conversation.conversationId)
             .join(`,`)}|${subagentOnScreen.value?.id}`,
 );
+// THE LANES OPEN ROW BY ROW, as the board's do (@intentic/ui/motion, reveal.ts): the lane labels are there at once and
+// the cards arrive top to bottom. This rail is one column, so the order is simply down it. Unlike the board, whose
+// cards have an entrance of their own, a card that turns up later plays in the same way (`arrivals`): a chat starting,
+// one moving to Finished, a persona's lanes swapped in for another's, each seen arriving where it now stands.
+useRowReveal(scroller, {
+    key: () =>
+        occupiedLanes.value
+            .map((lane) =>
+                [
+                    runsIn(lane.key).map((run) => run.runId),
+                    cardsIn(lane.key).map((entry) => entry.conversation.conversationId),
+                    notOpenIn(lane.key).map((agent) => agent.id),
+                ].join(`,`),
+            )
+            .join(`|`),
+    arrivals: true,
+});
 watch(scoped, async () => {
     await nextTick();
     if (scroller.value !== null) {
@@ -310,6 +327,7 @@ defineExpose({ beginRename: actions.beginRename });
                     <RailCard
                         v-for="run in runsIn(lane.key)"
                         :key="run.runId"
+                        data-reveal
                         :title="run.workflow.name"
                         icon="sitemap"
                         dashed
@@ -338,6 +356,7 @@ defineExpose({ beginRename: actions.beginRename });
                     :attention="lane.key === `attention`"
                     quiet
                     data-fold-unit
+                    data-reveal
                     @click="openAgent(agent, `peek`)"
                 />
                 <!-- Not a pager — the count itself is the point ("12 more open"), one press away rather than gone. -->

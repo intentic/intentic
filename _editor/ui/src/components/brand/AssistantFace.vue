@@ -84,9 +84,7 @@ const tintId = `assistant-tint-${useId()}`;
     50% { transform: translateY(-2%) rotate(.6deg) scale(1.015, 1.025); }
 }
 
-@media (prefers-reduced-motion: reduce) {
-    .assistant-face[data-animated="true"] .assistant-art {
-        animation: none;
-    }
+:root[data-motion="reduced"] .assistant-face[data-animated="true"] .assistant-art {
+    animation: none;
 }
 </style>

@@ -1,7 +1,7 @@
 import "@intentic/testing/dom";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
-import { FOLD_MS, trayFold, useFoldFlip } from "../foldMotion";
+import { FOLD_MS, trayFold, useFoldFlip } from "@intentic/ui/motion";
 
 // Pins how a tray folds and how what stands below it makes room: the tray takes its height at once and its rows slide
 // out of its top edge; shutting, it leaves the flow where it stood and its rows slide back up; the column's units slide
