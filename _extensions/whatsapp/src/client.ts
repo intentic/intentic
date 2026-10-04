@@ -3,9 +3,18 @@ import { basename, extname, join } from "node:path";
 import { createBackoff } from "@intentic/base/async";
 import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
 // oxlint-disable-next-line import/no-named-as-default -- Baileys exports the factory in both forms.
-import makeWASocket, { DisconnectReason, downloadMediaMessage, jidNormalizedUser, useMultiFileAuthState } from "baileys";
+import makeWASocket, {
+    Browsers,
+    DisconnectReason,
+    downloadMediaMessage,
+    fetchLatestWaWebVersion,
+    jidNormalizedUser,
+    useMultiFileAuthState,
+    type WAVersion,
+} from "baileys";
 import type { ListenerPairing } from "@intentic/sandbox-contract";
 import type { Logger } from "@intentic/connector-runtime";
+import { awaitPairingAnswer } from "./pairing.js";
 import type { WaRawMessage } from "./types.js";
 
 // Module singleton map of WhatsApp connections, one socket per capability, alive while its listener or CLI connector
@@ -17,6 +26,16 @@ const RETRY_MIN_MS = 2_000;
 const RETRY_MAX_MS = 60_000;
 // Raw messages cached for media download and reply quoting; media decrypts only from its original envelope.
 const RAW_CACHE_MAX = 500;
+// WhatsApp answers a link-code request within a second; past this the code is shown unconfirmed rather than withheld.
+const PAIRING_ANSWER_MS = 15_000;
+// How long a fetched WhatsApp Web version is reused before asking again, and how long one ask may take.
+const VERSION_TTL_MS = 6 * 60 * 60_000;
+const VERSION_FETCH_MS = 10_000;
+
+// The identity this device presents. WhatsApp checks the link-code request's "<browser> (<os>)" display against real
+// browsers and systems: a made-up OS like "intentic" is refused with 400 bad-request, and the phone then reports
+// "Couldn't link device" for the code. So the device presents as Chrome on Ubuntu, a pair WhatsApp accepts.
+const BROWSER = Browsers.ubuntu("Chrome");
 
 export type ConnectionPhase = "pairing" | "connecting" | "ready";
 
@@ -82,6 +101,23 @@ const extensionOf = (mimetype: string | undefined): string => {
 // Extensions sendFile sends as an image; everything else goes as a document with its filename intact.
 const IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif"]);
 
+// The WhatsApp Web version to advertise. WhatsApp refuses to finish linking a device that advertises a stale one
+// (Baileys #2679), and the default baked into baileys ages with every month no release ships; undefined keeps that
+// default when web.whatsapp.com cannot be asked.
+let versionCache: { readonly version: WAVersion; readonly at: number } | undefined;
+const webVersion = async (log: Logger): Promise<WAVersion | undefined> => {
+    if (versionCache !== undefined && Date.now() - versionCache.at < VERSION_TTL_MS) {
+        return versionCache.version;
+    }
+    const latest = await fetchLatestWaWebVersion({ signal: AbortSignal.timeout(VERSION_FETCH_MS) });
+    if (!latest.isLatest) {
+        log.warn({ err: latest.error }, "whatsapp web version lookup failed; advertising the last known one");
+        return versionCache?.version;
+    }
+    versionCache = { version: latest.version, at: Date.now() };
+    return latest.version;
+};
+
 // Whether a session dir holds a session worth resuming, rather than leftovers from an unfinished pairing. Only a missing
 // creds file means nothing to resume: a read that failed throws, because the caller wipes whatever this calls unpaired.
 const sessionRegistered = async (sessionDir: string, log: Logger, capabilityId: string): Promise<boolean> => {
@@ -145,15 +181,17 @@ export const openWhatsAppConnection = async (options: OpenOptions): Promise<What
         return sock;
     };
 
-    const start = (): void => {
+    const start = async (): Promise<void> => {
+        // Asked before the socket exists: a close() that lands meanwhile finds nothing to end, and stops this here.
+        const version = await webVersion(log);
         if (closed) {
             return;
         }
         const socket = makeWASocket({
             auth: auth.state,
             logger: silentLogger as never,
-            // Name shown for this device in the phone's Linked Devices list.
-            browser: ["intentic", "Chrome", "1.0"],
+            browser: BROWSER,
+            ...(version === undefined ? {} : { version }),
             markOnlineOnConnect: false,
             syncFullHistory: false,
         });
@@ -171,13 +209,25 @@ export const openWhatsAppConnection = async (options: OpenOptions): Promise<What
             // `qr` signals the socket is ready to pair; request a phone-number code instead of ever rendering the QR.
             if (update.qr !== undefined && !auth.state.creds.registered && !pairingRequested) {
                 pairingRequested = true;
+                // The code is shown only once WhatsApp has not refused it; see pairing.ts for why baileys alone
+                // cannot say.
+                const reply = awaitPairingAnswer(socket.ws, PAIRING_ANSWER_MS);
                 void socket
                     .requestPairingCode(phone)
-                    .then((code) => {
+                    .then(async (code) => {
+                        const answer = await reply.answer;
+                        // A socket that closed meanwhile was replaced, and its code died with it.
+                        if (sock !== socket) {
+                            return;
+                        }
                         pairing = { state: "code", code, since: Date.now() };
-                        log.info({ capabilityId }, "pairing code issued");
+                        log.info({ capabilityId, answer }, "pairing code issued");
                     })
                     .catch((error: unknown) => {
+                        reply.cancel();
+                        if (sock !== socket) {
+                            return;
+                        }
                         // A refused number is surfaced to the owner via `pairing`, not just logged.
                         pairing = { state: "failed", detail: errorMessage(error) };
                         log.warn({ err: error, capabilityId }, "pairing code request failed");
@@ -218,7 +268,7 @@ export const openWhatsAppConnection = async (options: OpenOptions): Promise<What
                 if (phase === "pairing" && pairing?.state === "code") {
                     pairing = { state: "waiting" };
                 }
-                setTimeout(start, wait);
+                setTimeout(() => void start(), wait);
             }
         });
         socket.ev.on("messages.upsert", ({ messages, type }) => {
@@ -310,7 +360,7 @@ export const openWhatsAppConnection = async (options: OpenOptions): Promise<What
             }
         },
     });
-    start();
+    await start();
     return connection;
 };
 

@@ -20,6 +20,10 @@ flowchart LR
   loopback control surface, found through a `gateway.url` file under the workspace's runtime directory.
 - Unlike the other messaging gateways it connects as soon as the card exists, because pairing starts then. The card
   shows a pairing code the owner enters on the phone, refreshed while unpaired.
+- The device presents itself as Chrome on Ubuntu, using the current WhatsApp Web version. WhatsApp refuses a link-code
+  request that names a made-up OS, and will not finish linking a client that reports a stale version. Baileys returns
+  the code before WhatsApp has answered, so the client waits for that answer before the card shows the code, and shows
+  WhatsApp's refusal in its place when the request is refused.
 - Removing the card or changing its number unlinks the device and wipes the saved session.
 - Chats are end-to-end encrypted with no history to fetch. The agent's context is the recent messages this process
   saw, and a restart empties it. A reply is sent whole when the turn ends.
