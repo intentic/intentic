@@ -37,8 +37,12 @@ const watches = computed(() => (agent.value?.watches ?? []).filter((watch) => !j
 const visible = computed(() => !streaming.value && (jobs.value.length > 0 || watches.value.length > 0));
 const now = useNow(() => visible.value);
 
+// A job sitting at a prompt (AgentJob.inputWait): its exit, the one thing its wake waits on, will not come by itself.
+const asking = (job: AgentJob): boolean => job.inputWait !== undefined && job.stoppedBy === undefined;
+const atPrompt = computed(() => jobs.value.some(asking));
+
 // Whether anything here runs the chat again by itself, which is what "is it done?" is really asking.
-const wakes = computed(() => watches.value.length > 0 || jobs.value.some((job) => job.handed !== true));
+const wakes = computed(() => watches.value.length > 0 || jobs.value.some((job) => job.handed !== true && !asking(job)));
 
 interface Row {
     readonly key: string;
@@ -46,6 +50,8 @@ interface Row {
     readonly spin: boolean;
     readonly label: string;
     readonly detail: string;
+    // Said in the warning hue: a command at a prompt, which only a press or a person typing ends.
+    readonly warn: boolean;
     readonly job?: AgentJob;
     readonly watch?: AgentWatch;
 }
@@ -56,6 +62,9 @@ const jobDetail = (job: AgentJob): string => {
     const elapsed = formatElapsed(job.startedAt, now.value);
     if (job.stoppedBy !== undefined) {
         return t(`chat.chatLeftRunning.stopping`);
+    }
+    if (job.inputWait !== undefined) {
+        return t(`chat.chatLeftRunning.atPrompt`, { elapsed: formatElapsed(job.inputWait.since, now.value), program: job.inputWait.program });
     }
     if (job.handed === true) {
         return t(`chat.chatLeftRunning.servedOn`, { ports: portsLine(job.ports ?? []), elapsed });
@@ -69,10 +78,11 @@ const jobDetail = (job: AgentJob): string => {
 const rows = computed((): readonly Row[] => [
     ...jobs.value.map((job) => ({
         key: `job:${job.id}`,
-        icon: (job.stoppedBy !== undefined ? `stop` : job.handed === true ? `server` : `spinner`) as IconName,
-        spin: job.stoppedBy === undefined && job.handed !== true,
+        icon: (job.stoppedBy !== undefined ? `stop` : asking(job) ? `terminal` : job.handed === true ? `server` : `spinner`) as IconName,
+        spin: job.stoppedBy === undefined && job.handed !== true && !asking(job),
         label: job.label,
         detail: jobDetail(job),
+        warn: asking(job),
         job,
     })),
     ...watches.value.map((watch) => ({
@@ -81,6 +91,7 @@ const rows = computed((): readonly Row[] => [
         spin: false,
         label: watch.note,
         detail: t(`chat.chatLeftRunning.watchLine`, { interval: briefDuration(watch.intervalSeconds), left: formatElapsed(now.value, watch.deadlineAt) }),
+        warn: false,
         watch,
     })),
 ]);
@@ -127,15 +138,17 @@ const preview = (job: AgentJob): void => {
             <Icon :name="wakes ? `clock` : `server`" class="mt-0.5 shrink-0" />
             <div class="flex min-w-0 flex-col">
                 <span class="font-medium text-content">{{ t(`chat.chatLeftRunning.title`) }}</span>
-                <span class="text-subtle">{{ wakes ? t(`chat.chatLeftRunning.wakes`) : t(`chat.chatLeftRunning.leftForYou`) }}</span>
+                <span class="text-subtle">{{
+                    atPrompt ? t(`chat.chatLeftRunning.stuckAtPrompt`) : wakes ? t(`chat.chatLeftRunning.wakes`) : t(`chat.chatLeftRunning.leftForYou`)
+                }}</span>
             </div>
         </div>
         <!-- Name above what happens next, so a narrow pane cuts neither: the deadline and the port are the point of the row. -->
         <div v-for="row in rows" :key="row.key" class="flex min-w-0 items-center gap-2 border-t border-line pt-1.5">
-            <Icon :name="row.icon" :spin="row.spin" class="shrink-0 text-2xs" :class="row.icon === `spinner` ? `text-link` : `text-subtle`" />
+            <Icon :name="row.icon" :spin="row.spin" class="shrink-0 text-2xs" :class="row.warn ? `text-warning` : row.icon === `spinner` ? `text-link` : `text-subtle`" />
             <div class="flex min-w-0 flex-1 flex-col">
                 <span class="truncate text-content" v-tooltip.top.overflow="row.label">{{ row.label }}</span>
-                <span class="text-subtle">{{ row.detail }}</span>
+                <span :class="row.warn ? `text-warning` : `text-subtle`">{{ row.detail }}</span>
             </div>
             <div class="flex shrink-0 items-center gap-0.5">
                 <button

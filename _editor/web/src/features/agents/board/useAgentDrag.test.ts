@@ -14,6 +14,10 @@ const stub = {
     // The shared sentence both land presses take, held here so a test proves they pass the same one rather than each
     // inventing its own wording.
     nothingLanded: `Nothing to land: this conversation's branch holds no work your workspace doesn't already have.`,
+    // Cards the store answers `agentById` with, and what each press of the watch's Stop asked the store to do.
+    agents: new Map<string, { watches?: { id: string }[]; jobs?: { id: string; watch?: string; endedAt?: number }[] }>(),
+    unwatched: new Set<string>(),
+    stoppedJobs: new Set<string>(),
 };
 
 jest.mock("../fleet/useAgents", () => ({
@@ -21,7 +25,13 @@ jest.mock("../fleet/useAgents", () => ({
         fleet: stub.fleet,
         refresh: async () => undefined,
         notice: stub.notice,
-        stopWatching: async () => undefined,
+        stopWatching: async (id: string) => {
+            stub.unwatched.add(id);
+        },
+        stopJob: async (id: string, jobId: string) => {
+            stub.stoppedJobs.add(`${id}/${jobId}`);
+        },
+        agentById: (id: string) => stub.agents.get(id),
     }),
 }));
 jest.mock("../fleet/fleetScope", () => ({ otherFleet: { value: [] } }));
@@ -46,6 +56,9 @@ const { pendingOn } = await import("../fleet/useAgents-provisional");
 const { useAgentDrag } = await import("./useAgentDrag");
 
 afterEach(() => {
+    stub.agents.clear();
+    stub.unwatched.clear();
+    stub.stoppedJobs.clear();
     stub.asks.length = 0;
     stub.lands.length = 0;
     stub.said.length = 0;
@@ -154,4 +167,19 @@ describe("a land pressed on a card", () => {
         stub.lands[0]?.({ landed: true, changed: true });
         await pressed;
     });
+});
+
+// 2026-10-04: a card whose watch waited on an `npm exec` at its prompt was cleared, and the command sat on in its pane
+// for hours. The watch's Stop ends what the watch waits on.
+it("the watch's Stop ends the command a job's watch waits on, and only disarms a watch no job holds", async () => {
+    const { unwatchNow } = useAgentDrag();
+    stub.agents.set(`held`, { watches: [{ id: `watch-q9xp` }], jobs: [{ id: `job-9672`, watch: `watch-q9xp` }, { id: `job-old`, watch: `watch-gone`, endedAt: 1 }] });
+    await unwatchNow(`held`);
+    expect([...stub.stoppedJobs]).toEqual([`held/job-9672`]);
+    expect([...stub.unwatched]).toEqual([]);
+
+    stub.agents.set(`ci`, { watches: [{ id: `watch-ci` }], jobs: [] });
+    await unwatchNow(`ci`);
+    expect([...stub.stoppedJobs]).toEqual([`held/job-9672`]);
+    expect([...stub.unwatched]).toEqual([`ci`]);
 });

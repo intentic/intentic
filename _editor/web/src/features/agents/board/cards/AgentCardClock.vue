@@ -6,7 +6,7 @@ import { formatWhen } from "@intentic/ui/format";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { sandboxNow } from "../../fleet/sandboxClock";
-import { activityIcon, formatElapsed, limitClosed, limitCorner, turnInFlight, watching, watchLine } from "../../fleet/agentStatus";
+import { activityIcon, formatElapsed, limitClosed, limitCorner, promptLine, turnInFlight, watching, watchLine } from "../../fleet/agentStatus";
 import { cacheCooling, cacheWarm, warmMark } from "../../fleet/prompt-cache/promptCache";
 import type { FleetAgent } from "../../fleet/useAgents-fleet";
 import AgentCardDate from "./AgentCardDate.vue";
@@ -23,6 +23,8 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{
     unwatch: [];
+    // The job a watch waits on sits at a prompt: Stop ends that command, which disarms its watch first.
+    stopJob: [jobId: string];
     // Either cache mark was pressed; the card anchors the keep-warm panel on the press.
     warm: [event: MouseEvent];
 }>();
@@ -44,6 +46,15 @@ const limit = computed(() => limitCorner(props.agent, now.value));
 // window runs nothing (turn-admission holds its words back), so the reset is the next moment the card can move, and
 // the watch's countdown comes back with its Stop press once the limit has had its say.
 const watch = computed(() => (props.working || limit.value !== undefined ? undefined : watchLine(props.agent, now.value)));
+// Takes the watch's place when what the watch waits on is a command at a prompt: its countdown promised a wake that the
+// command's exit would bring, and that exit will not come by itself. Amber, and its Stop always shown rather than on
+// hover, since this is the card's one way forward.
+const prompt = computed(() => (watch.value === undefined ? undefined : promptLine(props.agent, now.value)));
+// The watch's own Stop ends the commands its watches wait on (useAgentDrag's `unwatch`), so it says so when there are any.
+const stopsCommand = computed(() => {
+    const armed = new Set((props.agent.watches ?? []).map((entry) => entry.id));
+    return (props.agent.jobs ?? []).some((job) => job.endedAt === undefined && job.watch !== undefined && armed.has(job.watch));
+});
 // Its hover from the facts the card holds (whose limit, when it reopens) rather than the provider's refusal sentence;
 // the corner says the wait, the hover the instant. A booked resend or move says it goes by itself, so nothing needs
 // pressing (and the card offers no press: AgentCard's `resendable`).
@@ -120,8 +131,28 @@ const coolingTip = computed((): Tip | undefined =>
         <AgentCardDate :at="agent.updatedAt" />
     </span>
 
+    <!-- A watch whose command sits at a prompt: what is waiting and for how long, in the watch's slot, with the press that
+    ends it. One row of siblings, so the words are the only part that gives way: nested, the glyph and clock were squeezed
+    under the press on a narrow card. -->
+    <span v-if="prompt !== undefined" class="inline-flex min-w-0 items-center gap-1.5 font-medium text-warning" v-tooltip.top="prompt.hint">
+        <Icon name="terminal" class="shrink-0 text-2xs" />
+        <span class="min-w-0 truncate">{{ t(`agents.agentStatus.waitingForInput`) }}</span>
+        <span class="shrink-0 tabular-nums">{{ prompt.elapsed }}</span>
+        <Button
+            size="small"
+            severity="secondary"
+            :text="true"
+            class="shrink-0"
+            :aria-label="t(`agents.agentCard.stopCommand`)"
+            v-tooltip.top="{ title: t(`agents.agentCard.stopCommand`), note: t(`agents.agentStatus.inputWaitNote`) }"
+            :disabled="busy"
+            @click.stop="emit(`stopJob`, prompt.jobId)"
+        >
+            {{ t(`ui.action.stop`) }}
+        </Button>
+    </span>
     <!-- Same slot and grammar as the running tool and the settled date: a card is only ever one of those three things at a time. -->
-    <span v-if="watch !== undefined" class="inline-flex min-w-0 items-center gap-1.5">
+    <span v-else-if="watch !== undefined" class="inline-flex min-w-0 items-center gap-1.5">
         <!-- Readout and its hint wrap together, separately from the press beside them. -->
         <span class="inline-flex min-w-0 items-center gap-1.5 font-medium text-link" v-tooltip.top="watch.hint">
             <Icon name="eye" class="shrink-0 text-2xs" />
@@ -134,8 +165,8 @@ const coolingTip = computed((): Tip | undefined =>
             severity="secondary"
             :text="true"
             class="shrink-0"
-            :aria-label="t(`agents.words.stopWatching`)"
-            v-tooltip.top="{ title: t(`agents.words.stopWatching`), note: t(`agents.agentCard.chatWontWake`) }"
+            :aria-label="stopsCommand ? t(`agents.agentCard.stopCommand`) : t(`agents.words.stopWatching`)"
+            v-tooltip.top="{ title: stopsCommand ? t(`agents.agentCard.stopCommand`) : t(`agents.words.stopWatching`), note: t(`agents.agentCard.chatWontWake`) }"
             :disabled="busy"
             :class="mobile ? 'opacity-60' : 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100'"
             @click.stop="emit(`unwatch`)"

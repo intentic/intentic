@@ -127,6 +127,8 @@ const emit = defineEmits<{
     reland: [];
     // Disarms every outside condition this conversation is parked on.
     unwatch: [];
+    // Ends a command it left running: one its watch waits on that sits at a prompt.
+    stopJob: [jobId: string];
     archive: [];
     restore: [];
     close: [];
@@ -924,6 +926,7 @@ const grab = (event: PointerEvent): void => {
                         :activity-text="activityText"
                         :busy="busy"
                         @unwatch="emit(`unwatch`)"
+                        @stop-job="(jobId) => emit(`stopJob`, jobId)"
                         @warm="openWarm"
                     />
                 </span>

@@ -1,7 +1,8 @@
 import { fileRestartResume } from "../agent/run/turn/restart-resume.js";
 import { createTurnResumeScheduler, resumeInterruptedTurns } from "../agent/run/turn/turn-resume.js";
 import { adoptBackgroundJobs } from "../agent/tools/jobs/background-adoption.js";
-import { restoreBackgroundJobs } from "../agent/tools/jobs/background-jobs.js";
+import { restoreBackgroundJobs, settleLostRuns } from "../agent/tools/jobs/background-jobs.js";
+import { onInputWaitStarted } from "../agent/tools/jobs/input-wait-follow.js";
 import { restoreWatchers } from "../agent/verification/watchers.js";
 import { resumeInterruptedFires } from "../automations/fire-resume.js";
 import { resumeWorkflowExecution } from "../workflows/workflow-runner.js";
@@ -41,8 +42,27 @@ export const startBootResumes = ({ logger, role, services, shutdown }: BootPhase
             logger.error({ err: error }, "interrupted automation fires could not be re-fired, they stand on the record as interrupted"),
         );
 
-    // Each watch is re-checked once, since it may have resolved during the rebuild.
-    void restoreWatchers().catch((error: unknown) => logger.error({ err: error }, "armed condition watches could not be restored"));
+    // Each watch is re-checked once, since it may have resolved during the rebuild. First, every run the restart took
+    // down has its end written for it, so the watch waiting on it reports the loss at that look rather than at its
+    // deadline.
+    const restoring = async (): Promise<void> => {
+        try {
+            const lost = await settleLostRuns();
+            if (lost.length > 0) {
+                logger.warn({ dirs: lost }, "agent commands the restart took down were written down as lost, their watches report it now");
+            }
+        } catch (error) {
+            logger.warn({ err: error }, "agent commands the restart took down could not be written down, their watches wait out their deadlines");
+        }
+        await restoreWatchers();
+    };
+    void restoring().catch((error: unknown) => logger.error({ err: error }, "armed condition watches could not be restored"));
+
+    // Every agent command found sitting at a prompt is on the record as it happens (input-wait.ts), so a turn that stalled
+    // on one can be read back from the log rather than pieced together from a transcript.
+    onInputWaitStarted((dir, wait) => {
+        logger.warn({ dir, program: wait.program, pid: wait.pid, since: wait.since }, "agent command: waiting for input nobody in the sandbox will type");
+    });
 
     // A job whose turn died before adopting it is adopted now, or its ending would reach nobody.
     try {

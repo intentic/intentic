@@ -3,6 +3,7 @@ import { briefDuration } from "@intentic/base/format";
 import { formatClock, formatWhen } from "@intentic/ui/format";
 import {
     type AgentAttention,
+    type AgentJob,
     type AgentOrigin,
     type AgentProvider,
     type AgentStatus,
@@ -41,6 +42,9 @@ export interface AgentStanding {
     readonly watches?: readonly AgentWatch[];
     // Whether it runs again by itself (AgentSummary.awaitingWake): the daemon's one reading, which `watching` asks.
     readonly awaitingWake?: boolean;
+    // The commands it left running and how the recent ones ended (AgentSummary.jobs); `heldByPrompt` reads which of its
+    // watches a job at a prompt holds. Absent for nearly every conversation.
+    readonly jobs?: readonly AgentJob[];
     // Why a refused land is still refusing (AgentSummary.conflictCauses), which decides whose press can clear it.
     // Absent for every card but one refusing to merge.
     readonly conflictCauses?: readonly LandConflictReason[];
@@ -167,6 +171,29 @@ export const conflictIsYours = (agent: AgentStanding): boolean =>
 // never `ready`, since the daemon holds the land for the wake), but the conversation is not over. The daemon's own
 // reading (a watch, or a wake waiting in its queue); a daemon older than it is read by its watches.
 export const watching = (agent: AgentStanding): boolean => awaitsWake(agent);
+
+// The running job behind one of its armed watches that sits at a prompt (AgentJob.inputWait: blocked reading its
+// terminal, nothing moving), the first such where there are several. Its watch fires only on an exit that will not
+// come, so the card names it and offers to end it.
+export const promptHeldJob = (agent: AgentStanding): AgentJob | undefined => {
+    const armed = new Set((agent.watches ?? []).map((watch) => watch.id));
+    return agent.jobs?.find((job) => job.endedAt === undefined && job.inputWait !== undefined && job.watch !== undefined && armed.has(job.watch));
+};
+
+// Parked only on jobs at a prompt: every watch it holds waits on an exit nobody in the sandbox will bring about, so the
+// conversation is not resuming by itself, it is stuck until the reader ends the command (or types into its terminal).
+// Not while a turn runs, whose own readout says what it is doing. On 2026-10-04 such a card sat in Active for hours
+// under a six-hour countdown, with its Land press hidden behind the wake it was waiting for.
+export const heldByPrompt = (agent: AgentStanding): boolean => {
+    const watches = agent.watches ?? [];
+    if (watches.length === 0 || turnInFlight(agent)) {
+        return false;
+    }
+    const prompts = new Set(
+        (agent.jobs ?? []).filter((job) => job.endedAt === undefined && job.inputWait !== undefined && job.watch !== undefined).map((job) => job.watch),
+    );
+    return watches.every((watch) => prompts.has(watch.id));
+};
 
 // No registry entry behind this card: archiving, reviewing, landing, discarding and dropping all address an agent
 // by id through the daemon, and none of these ids name anything there.
@@ -329,6 +356,7 @@ export const blocked = (agent: AgentStanding): boolean =>
           // and stays in Active, one that stopped is waiting on nothing but the answer.
           (agent.attention.need === true && agent.status !== `running`) ||
           landBroken(agent) ||
+          heldByPrompt(agent) ||
           BLOCKING_ENDINGS.has(agent.status);
 
 // The half of `blocked` that is literally waiting on an answer (plan, question, permission, capability), narrower
@@ -456,6 +484,11 @@ export const attentionReason = (agent: AgentStanding): string | undefined => {
     if (landFailure(agent) !== undefined) {
         return useVocabulary().value.couldntLand;
     }
+    // Before the endings: the turn ended cleanly, and what holds the card is a command it left at a prompt. Its own short
+    // word, since a chip beside the name has no room for "Waiting for input": the readout says that, with the clock.
+    if (heldByPrompt(agent)) {
+        return t(`agents.agentStatus.needsInput`);
+    }
     // A park the attention block can't name: `awaiting` covers a browser or terminal hand-off, neither of which raises
     // a wire flag, so it arrives as a bare status. Checked last, only once nothing more specific applies.
     return endingReasons()[agent.status] ?? (agent.status === `awaiting` ? t(`agents.agentStatus.waitingOn`) : undefined);
@@ -521,19 +554,23 @@ export const standingFrom = (agent: AgentStanding): AgentStanding => {
     const hold = scheduledHold(agent);
     return hold === undefined ? standing : { ...standing, queue: hold };
 };
-const standingCopy = (agent: AgentStanding): AgentStanding => ({
-    status: agent.status,
-    // Copied, not referenced: this outlives the roster entry it was read from, in a tab and in storage.
-    attention: { ...agent.attention },
-    ...(agent.watches !== undefined ? { watches: agent.watches } : {}),
-    ...(agent.awaitingWake !== undefined ? { awaitingWake: agent.awaitingWake } : {}),
-    ...(agent.conflictCauses !== undefined ? { conflictCauses: agent.conflictCauses } : {}),
-    ...(agent.failureCode !== undefined ? { failureCode: agent.failureCode } : {}),
-    ...(agent.limitResetsAt !== undefined ? { limitResetsAt: agent.limitResetsAt } : {}),
-    ...(agent.limitHeld !== undefined ? { limitHeld: agent.limitHeld } : {}),
-    ...(agent.limitScheduled !== undefined ? { limitScheduled: agent.limitScheduled } : {}),
-    ...(agent.limitMoving !== undefined ? { limitMoving: agent.limitMoving } : {}),
-});
+const standingCopy = (agent: AgentStanding): AgentStanding => {
+    const copy: AgentStanding = {
+        status: agent.status,
+        // Copied, not referenced: this outlives the roster entry it was read from, in a tab and in storage.
+        attention: { ...agent.attention },
+        ...(agent.watches !== undefined ? { watches: agent.watches } : {}),
+        ...(agent.awaitingWake !== undefined ? { awaitingWake: agent.awaitingWake } : {}),
+        ...(agent.conflictCauses !== undefined ? { conflictCauses: agent.conflictCauses } : {}),
+        ...(agent.failureCode !== undefined ? { failureCode: agent.failureCode } : {}),
+        ...(agent.limitResetsAt !== undefined ? { limitResetsAt: agent.limitResetsAt } : {}),
+        ...(agent.limitHeld !== undefined ? { limitHeld: agent.limitHeld } : {}),
+        ...(agent.limitScheduled !== undefined ? { limitScheduled: agent.limitScheduled } : {}),
+        ...(agent.limitMoving !== undefined ? { limitMoving: agent.limitMoving } : {}),
+    };
+    // The jobs go with it: a job at a prompt holds the card's lane (heldByPrompt).
+    return agent.jobs === undefined ? copy : { ...copy, jobs: agent.jobs };
+};
 
 // Nothing owed to the user. The one "no attention" block in the app: a client-only card has no daemon account of
 // what a turn asked, and two copies of this would let two surfaces place the same conversation differently.
@@ -1184,7 +1221,35 @@ export const watchLine = (
               };
     return {
         text: watches.length === 1 ? soonest.note : `Watching ${watches.length} conditions`,
-        countdown,
+        // "5h 46m" alone beside a running card's elapsed readout read as six hours spent, not six hours to go.
+        countdown: t(`agents.agentStatus.timeLeft`, { time: countdown }),
         hint,
+    };
+};
+
+// The card's readout for a job at a prompt, in the slot a watch's countdown takes: what is waiting, for how long, and
+// the job a press of Stop ends. Undefined unless one holds a watch (promptHeldJob).
+export const promptLine = (
+    agent: AgentStanding,
+    now: number,
+): { readonly jobId: string; readonly program: string; readonly elapsed: string; readonly hint: Tip } | undefined => {
+    const job = promptHeldJob(agent);
+    if (job?.inputWait === undefined) {
+        return undefined;
+    }
+    const elapsed = formatElapsed(job.inputWait.since, now);
+    return {
+        jobId: job.id,
+        program: job.inputWait.program,
+        elapsed,
+        hint: {
+            title: t(`agents.agentStatus.waitingForInput`),
+            tone: `warn`,
+            rows: [
+                { label: t(`agents.agentStatus.inputWaitProcess`), value: job.inputWait.program },
+                { label: t(`agents.agentStatus.inputWaitFor`), value: elapsed },
+            ],
+            note: t(`agents.agentStatus.inputWaitNote`),
+        },
     };
 };

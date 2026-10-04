@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { open } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -10,6 +10,8 @@ import type { Holding } from "../../../conversations/actor/conversation-holdings
 import { whenFileAppears } from "../file-appears.js";
 import { publishRuntimeChange } from "../../../seams/runtime-feed.js";
 import { endSession } from "../../../seams/session-processes.js";
+import { opt } from "../../../opt.js";
+import { followRun, inputWaitAt } from "./input-wait-follow.js";
 import { jobRunnerPids } from "./job-processes.js";
 
 // Every `run_in_background` Bash call, which outlives the per-turn CLI in its own pane, held by its conversation's
@@ -23,6 +25,8 @@ const OUTPUT_FILE = "out";
 const COMMAND_FILE = "cmd";
 // The status body of a job whose command never ran, which no exit code can be.
 const NEVER_RAN = "never-ran";
+// The status body of a run a restart took down mid-command, which left no exit code to read.
+const LOST = "lost";
 // The job itself, rewritten whole as it is named and adopted, so a restarted daemon can take it back.
 const JOB_FILE = "job.json";
 
@@ -122,6 +126,8 @@ interface JobRecord {
     notice: Notice;
     // Stops watching for the status file; the card moves the moment it lands.
     unwatch: (() => void) | undefined;
+    // Stops following it for an input wait (input-wait-follow.ts), which the card shows while it lasts.
+    unfollow: (() => void) | undefined;
     // The watch an `awaited` job was handed to.
     watch: string | undefined;
     // Where a `handed` job listens.
@@ -182,6 +188,7 @@ const endNeverRan = (job: BackgroundJob): void => endInPlace(job, NEVER_RAN, "--
 
 const cardOf = (record: JobRecord): AgentJob => {
     const { job } = record;
+    const waiting = inputWaitAt(job.dir);
     return {
         id: job.id,
         label: job.label,
@@ -191,6 +198,7 @@ const cardOf = (record: JobRecord): AgentJob => {
         ...(record.fate === "handed" ? { handed: true } : {}),
         ...(record.ports === undefined ? {} : { ports: [...record.ports] }),
         ...(record.stoppedBy === undefined ? {} : { stoppedBy: record.stoppedBy }),
+        ...opt("inputWait", waiting === undefined || record.stoppedBy !== undefined ? undefined : { since: waiting.since, program: waiting.program }),
     };
 };
 
@@ -198,7 +206,7 @@ const cardOf = (record: JobRecord): AgentJob => {
 const endOf = (record: JobRecord): AgentJob => {
     const { job } = record;
     // What it was waiting on, or left running for, is over once it ends; who stopped it is what stays worth saying.
-    const { watch: _watch, handed: _handed, ...card } = cardOf(record);
+    const { watch: _watch, handed: _handed, inputWait: _inputWait, ...card } = cardOf(record);
     try {
         const code = Number(readFileSync(jobStatusPath(job), "utf8").trim());
         // Clamped to the start: a filesystem clock coarser than Date.now() can date a quick exit before it began.
@@ -245,6 +253,8 @@ const sweepEnds = (actors: Actors): void => {
         if (!ended(actors, record.job) && jobFinished(record.job) && noteEnded(actors, record)) {
             record.unwatch?.();
             record.unwatch = undefined;
+            record.unfollow?.();
+            record.unfollow = undefined;
             moved.add(record.job.conversationId);
         }
     }
@@ -275,6 +285,12 @@ const followEnds = (actors: Actors): void => {
 
 const followJob = (actors: Actors, record: JobRecord): void => {
     record.unwatch = whenFileAppears(jobStatusPath(record.job), () => sweepEnds(actors));
+    // Its card says so the moment it starts or stops waiting for input, and a parked `wait` hears it (work-wait.ts).
+    record.unfollow = followRun(record.job.dir, () => {
+        if (actors.holdings(JOBS).get(record.job.id) === record) {
+            publish(actors, record.job.conversationId);
+        }
+    });
     followEnds(actors);
 };
 
@@ -283,6 +299,8 @@ const forgetJob = (actors: Actors, record: JobRecord): void => {
     actors.holdings(JOBS).drop(record.job.id);
     record.unwatch?.();
     record.unwatch = undefined;
+    record.unfollow?.();
+    record.unfollow = undefined;
     if (jobFinished(record.job)) {
         noteEnded(actors, record);
     }
@@ -392,6 +410,7 @@ const UNJUDGED = {
     fate: undefined,
     notice: "none",
     unwatch: undefined,
+    unfollow: undefined,
     watch: undefined,
     ports: undefined,
     stoppedBy: undefined,
@@ -420,6 +439,44 @@ const recordOf = (dir: string): JobRecord | undefined => {
     } catch {
         return undefined;
     }
+};
+
+// Every agent run's capture dir, a job's (`intentic-run-job-`) or a foreground call's filed as one when it ran past its
+// time (`intentic-run-`), under the tmp sweep's prefix.
+const RUN_DIR_PREFIX = "intentic-run-";
+
+/**
+ * Once at boot, before the watches come back: every run filed as a job that has no status and no runner left was taken
+ * down by the restart, so nothing will ever publish its end. Its end is written down for it (status `lost`, never run
+ * when it never started), and the watch its conversation was handed reports that at its first look, instead of waiting
+ * out its six hours on a file no runner is left to write. On 2026-10-04 a container restart did that to a watch on an
+ * `npm exec` that had died with the container: re-armed for two and a half more hours, to wake a conversation whose
+ * work had already landed. A runner still alive (the daemon restarted, the panes did not) is left to run.
+ */
+export const settleLostRuns = async (root: string = tmpdir(), procRoot = "/proc"): Promise<readonly string[]> => {
+    const unfinished = readdirSync(root, { withFileTypes: true })
+        .filter((entry) => entry.isDirectory() && entry.name.startsWith(RUN_DIR_PREFIX))
+        .map((entry) => join(root, entry.name))
+        .filter((dir) => existsSync(join(dir, JOB_FILE)) && !existsSync(join(dir, STATUS_FILE)));
+    if (unfinished.length === 0) {
+        return [];
+    }
+    const alive = await jobRunnerPids(unfinished, procRoot);
+    const lost = unfinished.filter((dir) => !alive.has(dir));
+    for (const dir of lost) {
+        const started = existsSync(join(dir, COMMAND_FILE)) || existsSync(join(dir, OUTPUT_FILE));
+        try {
+            appendFileSync(
+                join(dir, OUTPUT_FILE),
+                started ? "\n--- intentic: the sandbox restarted while this ran, and the command did not survive the restart\n" : "--- intentic: this command never reached a terminal, so it never ran\n",
+            );
+            writeFileSync(join(dir, `${STATUS_FILE}.part`), `${started ? LOST : NEVER_RAN}\n`);
+            renameSync(join(dir, `${STATUS_FILE}.part`), join(dir, STATUS_FILE));
+        } catch {
+            // allow(silent-catch): a dir that cannot be written is one the tmp sweep is already taking; its watch reads that as broken.
+        }
+    }
+    return lost;
 };
 
 /** Once at boot: re-files the still-running jobs a dead daemon left, each as adopted as its own file says. */
@@ -690,6 +747,9 @@ export const backgroundJobOf = (actors: Holders, conversationId: string, id: str
         .of(conversationId)
         .find((record) => record.shellId === id || record.job.id === id)?.job;
 
+/** The id the CLI knows the job by: its own task id, which only a `run_in_background` call ever has. */
+export const jobShellId = (actors: Holders, job: BackgroundJob): string | undefined => actors.holdings(JOBS).get(job.id)?.shellId;
+
 /** The id the model was given for the job, else the daemon's own. */
 export const jobHandle = (actors: Holders, job: BackgroundJob): string => actors.holdings(JOBS).get(job.id)?.shellId ?? job.id;
 
@@ -719,13 +779,29 @@ export interface JobReport {
     readonly running: boolean;
     readonly outputTail: string;
     readonly outputFile: string;
+    // While it runs: how long since it last printed anything, so an unchanged tail reads as the silence it is.
+    readonly quietForSeconds?: number;
+    // While it sits at a prompt nobody will answer (input-wait.ts): the process waiting, and for how long.
+    readonly waitingForInput?: { readonly program: string; readonly pid: number; readonly forSeconds: number };
 }
 
+// Whole seconds since the output last grew, from the capture's own mtime; the start when it never printed.
+const quietSince = (job: BackgroundJob, now: number): number | undefined => {
+    try {
+        return Math.max(0, Math.round((now - Math.max(job.startedAt, statSync(jobOutputPath(job)).mtimeMs)) / 1000));
+    } catch {
+        // allow(silent-catch): a capture the tmp sweep already took has no silence to measure.
+        return undefined;
+    }
+};
 
-export const jobReport = async (actors: Holders, job: BackgroundJob): Promise<JobReport> => {
+
+export const jobReport = async (actors: Holders, job: BackgroundJob, now: number = Date.now()): Promise<JobReport> => {
     const finished = jobFinished(job);
     const status = finished ? (await tailOf(jobStatusPath(job), 64)).trim() : "";
     const code = status === "" ? Number.NaN : Number(status);
+    const quiet = finished ? undefined : quietSince(job, now);
+    const waiting = finished ? undefined : inputWaitAt(job.dir);
     return {
         id: jobHandle(actors, job),
         command: jobCommandLine(job.command),
@@ -733,5 +809,13 @@ export const jobReport = async (actors: Holders, job: BackgroundJob): Promise<Jo
         running: !finished,
         outputTail: await tailOf(jobOutputPath(job), OUTPUT_TAIL_BYTES),
         outputFile: jobOutputPath(job),
+        ...opt("quietForSeconds", quiet),
+        ...opt(
+            "waitingForInput",
+            waiting === undefined ? undefined : { program: waiting.program, pid: waiting.pid, forSeconds: Math.max(0, Math.round((now - waiting.since) / 1000)) },
+        ),
     };
 };
+
+/** The job's input wait, if it is sitting at a prompt nobody will answer (input-wait.ts). */
+export const jobInputWait = (job: BackgroundJob) => (jobFinished(job) ? undefined : inputWaitAt(job.dir));

@@ -1,4 +1,4 @@
-import type { AgentStatus, AgentWatch } from "@intentic/sandbox-contract";
+import type { AgentJob, AgentStatus, AgentWatch } from "@intentic/sandbox-contract";
 import { formatWhen } from "@intentic/ui/format";
 import {
     type AgentStanding,
@@ -24,6 +24,8 @@ import {
     limitGroups,
     memoryHeld,
     onlyOwnerCanAnswer,
+    promptHeldJob,
+    promptLine,
     type RimAgent,
     reviewAction,
     scheduledSend,
@@ -388,7 +390,8 @@ describe("watchLine", () => {
         const armed = watch();
         const line = watchLine({ status: `idle`, attention: none, watches: [armed] }, NOW);
         expect(line?.text).toBe(armed.note);
-        expect(line?.countdown).toBe(`42m 0s`);
+        // Said as time left: "42m 0s" alone beside a running card's elapsed readout read as time spent.
+        expect(line?.countdown).toBe(`42m 0s left`);
     });
 
     // Several notes truncated into a narrow column read as noise, so they collapse to a count; the clock still names
@@ -397,7 +400,7 @@ describe("watchLine", () => {
         const watches = [watch({ deadlineAt: NOW + 3 * 60 * 60 * 1000 }), watch({ id: `watch-2`, note: `deploy`, deadlineAt: NOW + 5 * 60 * 1000 })];
         const line = watchLine({ status: `idle`, attention: none, watches }, NOW);
         expect(line?.text).toContain(String(watches.length));
-        expect(line?.countdown).toBe(`5m 0s`);
+        expect(line?.countdown).toBe(`5m 0s left`);
     });
 
     // The hint carries what the line can't: every note in full with its pacing, and that the end of the wait is the
@@ -427,6 +430,58 @@ describe("watchLine", () => {
     // Pacing in the fewest characters that stay true: a half-hourly check reads as minutes, not seconds.
     it("says a slow cadence in minutes", () => {
         expect(watchLine({ status: `idle`, attention: none, watches: [watch({ intervalSeconds: 1800 })] }, NOW)?.hint.rows?.[0]?.value).toBe(`30m`);
+    });
+});
+
+// A job its turn left running, whose exit the watch `watch-1` waits on; `inputWait` while it sits at a prompt.
+const job = (over: Partial<AgentJob> = {}): AgentJob => ({
+    id: `job-9672`,
+    label: `npx eslint src/components/RailCard.vue`,
+    session: `agent-f8b7ed13`,
+    startedAt: NOW - 60 * 60 * 1000,
+    watch: `watch-1`,
+    ...over,
+});
+const AT_PROMPT = { since: NOW - 58 * 60 * 1000, program: `npm exec eslint src/components/RailCard.vue` };
+
+// 2026-10-04: an `npx eslint` asked "Ok to proceed? (y)" as its turn ended. The card sat in Active under a six-hour
+// countdown, its Land press hidden behind a wake that only the command's exit could bring.
+describe("a watch held by a command at a prompt", () => {
+    const held = { status: `idle` as const, attention: none, watches: [watch()], awaitingWake: true, jobs: [job({ inputWait: AT_PROMPT })] };
+
+    it("is the reader's to end: Attention, chipped as needing input", () => {
+        expect(laneOf(held)).toBe(`attention`);
+        expect(blocked(held)).toBe(true);
+        expect(attentionReason(held)).toBe(`Needs input`);
+    });
+
+    it("is a wake to come like any other while the job runs on, or once it has ended", () => {
+        expect(laneOf({ ...held, jobs: [job()] })).toBe(`active`);
+        expect(laneOf({ ...held, jobs: [job({ inputWait: AT_PROMPT, endedAt: NOW })] })).toBe(`active`);
+        expect(promptHeldJob({ ...held, jobs: [job()] })).toBeUndefined();
+    });
+
+    it("is not held while another watch can still wake it, nor while a turn is running", () => {
+        expect(laneOf({ ...held, watches: [watch(), watch({ id: `watch-ci`, note: `CI run 316` })] })).toBe(`active`);
+        expect(laneOf({ ...held, status: `running` })).toBe(`active`);
+    });
+
+    it("reads on the card as what waits and for how long, with the job its Stop ends", () => {
+        expect(promptLine(held, NOW)).toEqual({
+            jobId: `job-9672`,
+            program: AT_PROMPT.program,
+            elapsed: `58m 0s`,
+            hint: {
+                title: `Waiting for input`,
+                tone: `warn`,
+                rows: [
+                    { label: `Process`, value: AT_PROMPT.program },
+                    { label: `Waiting for`, value: `58m 0s` },
+                ],
+                note: `Nothing in the sandbox will answer it. Stop ends the command, so the work can land.`,
+            },
+        });
+        expect(promptLine({ ...held, jobs: [job()] }, NOW)).toBeUndefined();
     });
 });
 

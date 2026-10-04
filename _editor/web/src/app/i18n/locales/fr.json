@@ -41,7 +41,8 @@
             "steps": "Étapes",
             "temporary": ", temporaire",
             "waitingMaintainer": "{landAsk} : en attente d'un mainteneur",
-            "movingTo": "passage à {account}"
+            "movingTo": "passage à {account}",
+            "stopCommand": "Arrêter la commande"
         },
         "agentConflictReport": {
             "agentWriting": "L'agent écrit",
@@ -220,7 +221,13 @@
             "waitingOn": "Vous attend",
             "waitingOnCondition": "Attend une condition",
             "wakesThisChat": "Réveille ce chat",
-            "watchPace": "toutes les {interval} · reste {left}"
+            "watchPace": "toutes les {interval} · reste {left}",
+            "timeLeft": "encore {time}",
+            "waitingForInput": "En attente d’une saisie",
+            "needsInput": "Saisie requise",
+            "inputWaitProcess": "Processus",
+            "inputWaitFor": "En attente depuis",
+            "inputWaitNote": "Rien dans le sandbox n’y répondra. Arrêter met fin à la commande pour que le travail puisse être intégré."
         },
         "agentsView": {
             "agentResolveConflict": "Laisser l'agent résoudre le conflit ?",
@@ -1088,6 +1095,7 @@
             "title": "En arrière-plan"
         },
         "chatLeftRunning": {
+            "atPrompt": "En attente d’une saisie depuis {elapsed} · {program}",
             "chatWontWake": "Le chat ne se réveille pas",
             "disarm": "Désarmer",
             "endNow": "Arrêter maintenant",
@@ -1097,6 +1105,7 @@
             "servedOn": "Laissé en marche pour toi sur {ports} · {elapsed}",
             "stopFailed": "L'arrêt n'a pas abouti.",
             "stopping": "Arrêt en cours…",
+            "stuckAtPrompt": "Une commande attend une saisie que rien dans le sandbox ne fournira. Arrêtez-la, ou répondez-y dans son terminal.",
             "title": "Toujours en marche après le tour",
             "wakes": "Ce chat se réveille tout seul quand ceci se termine.",
             "wakesOnExit": "Réveille ce chat à sa fin · {elapsed}, abandonne dans {left}",

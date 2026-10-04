@@ -312,7 +312,18 @@ case "${callsoft:-}" in '' | *[!0-9]*) ;; *) soft="$callsoft" ;; esac
 # A background job has no SDK Bash timeout to beat, and returning early would report it FINISHED to a caller
 # that asked to be told when it exits; it waits for the real status, and the turn ending is what releases it.
 [ -n "$jobdir" ] && soft=0
+# A foreground command sitting at a prompt (npx asking to install, git asking for a username, a `read`) comes back as
+# soon as the daemon is sure of it, instead of at the soft timeout: nothing in the agent's turn can type into this pane,
+# so every second held is wasted, and a prompt behind a `| tail` never showed the agent its own question. The daemon
+# writes `input-wait` beside the capture once a process of this pane has sat blocked reading the terminal with nothing
+# moving (src/agent/tools/jobs/input-wait.ts); its line names the process, and the hook turns the line into the advice.
 while [ ! -f "$d/status" ]; do
+    if [ -z "$jobdir" ] && [ -f "$d/input-wait" ]; then
+        emit running
+        printf '\n--- waiting for input: %s\n' "$(head -n 1 "$d/input-wait" 2>/dev/null)"
+        printf -- '--- command still running in tmux window %s · follow: %s\n' "$name" "${logfile:-$d/out}"
+        exit 0
+    fi
     if [ "$soft" -ge 1 ] 2>/dev/null && [ "$SECONDS" -ge "$soft" ]; then
         emit running
         printf '\n--- command still running in tmux window %s · follow: %s\n' "$name" "${logfile:-$d/out}"

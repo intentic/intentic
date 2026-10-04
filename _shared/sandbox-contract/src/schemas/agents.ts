@@ -618,6 +618,17 @@ export const AgentSummarySchema = z.object({
                     .describe(
                         "Who stopped it: the sandbox, when the turn that used it ended without handing it over; a person; or the agent itself. Present from the moment the stop is asked. Absent for a job that exited by itself.",
                     ),
+                // agent/tools/jobs/input-wait.ts: told from /proc, never from what it printed, since a prompt can go
+                // straight to the terminal or sit in a pipe.
+                inputWait: z
+                    .object({
+                        since: z.number().describe("When it went still, in milliseconds."),
+                        program: z.string().describe("The process blocked reading the terminal, as its command line."),
+                    })
+                    .optional()
+                    .describe(
+                        "Present while it sits blocked reading its terminal with nothing moving: a prompt nobody in the sandbox will answer, which only stopping it or a person typing into its terminal ends. Absent while it runs on, and once it ends.",
+                    ),
             }),
         )
         .optional()

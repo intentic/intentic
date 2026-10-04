@@ -79,8 +79,10 @@ whose steps are named in `agent/run/placement/turn-close.ts`:
    conversation's queue for the next turn, rather than going into a queue no model reads.
 2. **Judge jobs**, once per run, however the turn ended (`agent/tools/jobs/job-fates.ts`). A job the agent kept for
    the person with the `keep` tool, or one on a port the conversation already handed over, keeps running for them. A
-   server the turn reached and nobody kept is stopped with it; anything else is awaited. The closing reply's words
-   decide nothing.
+   server the turn reached and nobody kept is stopped with it, and so is a job sitting at a prompt
+   (`agent/tools/jobs/input-wait.ts`: blocked reading its terminal with nothing moving), since no agent is left to
+   answer it; anything else is awaited. The closing reply's words decide nothing. (2026-10-04: awaiting such a job armed
+   a six-hour watch that held the land behind a question nobody would answer.)
 3. **Arm wakes.** Each awaited job, and each finished one whose exit the model never read, is handed to a watch
    (`background-adoption.ts`). Whether the conversation now runs again by itself is read from what it holds:
    `awaitingWake` (`conversations/actor/conversation-state.ts`: an armed watch, or the sandbox's or an agent's words

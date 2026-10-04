@@ -41,7 +41,8 @@
             "steps": "Schritte",
             "temporary": ", vorübergehend",
             "waitingMaintainer": "{landAsk}: wartet auf einen Maintainer",
-            "movingTo": "wechselt zu {account}"
+            "movingTo": "wechselt zu {account}",
+            "stopCommand": "Befehl stoppen"
         },
         "agentConflictReport": {
             "agentWriting": "Agent schreibt",
@@ -220,7 +221,13 @@
             "waitingOn": "Wartet auf Sie",
             "waitingOnCondition": "Wartet auf eine Bedingung",
             "wakesThisChat": "Weckt diesen Chat",
-            "watchPace": "alle {interval} · noch {left}"
+            "watchPace": "alle {interval} · noch {left}",
+            "timeLeft": "noch {time}",
+            "waitingForInput": "Wartet auf Eingabe",
+            "needsInput": "Eingabe nötig",
+            "inputWaitProcess": "Prozess",
+            "inputWaitFor": "Wartet seit",
+            "inputWaitNote": "Nichts in der Sandbox wird darauf antworten. Stoppen beendet den Befehl, damit die Arbeit übernommen werden kann."
         },
         "agentsView": {
             "agentResolveConflict": "Den Agenten den Konflikt lösen lassen?",
@@ -1086,6 +1093,7 @@
             "title": "Läuft im Hintergrund"
         },
         "chatLeftRunning": {
+            "atPrompt": "Wartet seit {elapsed} auf Eingabe · {program}",
             "chatWontWake": "Chat wacht nicht auf",
             "disarm": "Entschärfen",
             "endNow": "Jetzt beenden",
@@ -1095,6 +1103,7 @@
             "servedOn": "Für dich laufen gelassen auf {ports} · {elapsed}",
             "stopFailed": "Das ließ sich nicht stoppen.",
             "stopping": "Wird gestoppt…",
+            "stuckAtPrompt": "Ein Befehl wartet auf eine Eingabe, die nichts in der Sandbox geben wird. Stoppen Sie ihn oder antworten Sie in seinem Terminal.",
             "title": "Läuft nach dem Durchgang weiter",
             "wakes": "Dieser Chat wacht von selbst auf, wenn diese fertig sind.",
             "wakesOnExit": "Weckt diesen Chat, wenn er endet · {elapsed}, gibt in {left} auf",

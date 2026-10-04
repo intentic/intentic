@@ -14,14 +14,15 @@ const TMUX_RUN = join(packageRoot(import.meta.url), "bin", "tmux-run");
 
 // Stub records argv to `calls`, answers pane-id/liveness/dead-pane queries, and (via nsenter) execs through so a hop
 // leaves both an nsenter and tmux line; `plantStatus` writes STATUS_BYTES as the status file.
-const plantStatus = `for a in "$@"; do case "$a" in "bash "*/runner) p="\${a#bash }"; [ -n "\${STATUS_BYTES+x}" ] && printf '%s' "$STATUS_BYTES" > "\${p%/runner}/status" ;; esac; done\n`;
+// PLANT_WAIT writes the daemon's input-wait marker beside the capture, as input-wait-follow.ts does for a pane at a prompt.
+const plantStatus = `for a in "$@"; do case "$a" in "bash "*/runner) p="\${a#bash }"; [ -n "\${STATUS_BYTES+x}" ] && printf '%s' "$STATUS_BYTES" > "\${p%/runner}/status"; [ -n "\${PLANT_WAIT+x}" ] && printf '%s\\n' "$PLANT_WAIT" > "\${p%/runner}/input-wait" ;; esac; done\n`;
 
 const stubs = async (): Promise<{ dir: string; calls: () => Promise<string[]> }> => {
     const dir = await mkdtemp(join(tmpdir(), "tmux-run-"));
     const log = join(dir, "calls");
     await writeFile(
         join(dir, "tmux"),
-        `#!/usr/bin/env bash\nprintf 'tmux %s\\n' "$*" >> ${JSON.stringify(log)}\ncase "$1" in\n  new-session|new-window) ${plantStatus}    echo '%7' ;;\n  list-panes) echo '1 @3' ;;\n  display) echo 1 ;;\nesac\nexit 0\n`,
+        `#!/usr/bin/env bash\nprintf 'tmux %s\\n' "$*" >> ${JSON.stringify(log)}\ncase "$1" in\n  new-session|new-window) ${plantStatus}    echo '%7' ;;\n  list-panes) echo '1 @3' ;;\n  display) if [ -n "\${PANE_ALIVE+x}" ]; then echo 0; else echo 1; fi ;;\nesac\nexit 0\n`,
         { mode: 0o755 },
     );
     await writeFile(join(dir, "nsenter"), `#!/usr/bin/env bash\nprintf 'nsenter %s\\n' "$1" >> ${JSON.stringify(log)}\nshift 2\nexec "$@"\n`, {
@@ -82,4 +83,25 @@ const statusProbe = async (bytes: string): Promise<number> => {
 test("a status file that is empty or not a number exits 1, the honest failure, rather than bash's invented 2", async () => {
     expect(await statusProbe("")).toBe(1);
     expect(await statusProbe("not-a-number")).toBe(1);
+});
+
+// A foreground command at a prompt returns as soon as the daemon marks it, not at its soft timeout: the pane stays alive
+// and never publishes a status here, so only the marker can end the wait before the minute is up.
+test("a command the daemon marks as waiting for input comes back at once, naming what waits, while it runs on in its pane", async () => {
+    const { dir } = await stubs();
+    const { INTENTIC_TMUX_NS: _inherited, ...base } = process.env;
+    const started = Date.now();
+    const { stdout } = await execFileAsync("bash", [TMUX_RUN, "agent-wait", "true", "probe"], {
+        env: {
+            ...base,
+            PATH: `${dir}:${process.env["PATH"] ?? ""}`,
+            INTENTIC_RUN_FILTER: "0",
+            INTENTIC_RUN_SOFT_TIMEOUT_S: "60",
+            PANE_ALIVE: "1",
+            PLANT_WAIT: "npm exec eslint src/a.vue (pid 4242)",
+        },
+    });
+    // Far under the 60 s soft timeout: the marker, not the clock, ended the wait.
+    expect(Date.now() - started).toBeLessThan(30_000);
+    expect(stdout).toContain("\n--- waiting for input: npm exec eslint src/a.vue (pid 4242)\n--- command still running in tmux window probe · follow: ");
 });

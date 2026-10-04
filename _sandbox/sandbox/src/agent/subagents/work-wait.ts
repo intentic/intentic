@@ -1,7 +1,8 @@
 import type { SubagentSession } from "@intentic/sandbox-contract";
 import type { PendingChildCard } from "./children.js";
 import { whenFileAppears } from "../tools/file-appears.js";
-import { type BackgroundJob, backgroundJobOf, jobFinished, type JobReport, jobReport, jobStatusPath, runningJobsOf } from "../tools/jobs/background-jobs.js";
+import { type BackgroundJob, backgroundJobOf, jobFinished, jobInputWait, type JobReport, jobReport, jobStatusPath, runningJobsOf } from "../tools/jobs/background-jobs.js";
+import { followRun } from "../tools/jobs/input-wait-follow.js";
 import { type SubagentWaitOptions, type SubagentWaitUntil, waitForSubagent } from "./subagents.js";
 import type { ConversationActors } from "../../conversations/actor/conversation-actors.js";
 import { whenSteered } from "../../conversations/actor/conversation-holdings.js";
@@ -23,14 +24,17 @@ export interface WorkWaitOutcome {
 // A job's completion is bin/tmux-run's status file appearing; polled at this cadence, in ms, only where unwatchable.
 const JOB_POLL_MS = 500;
 
-// The first of these jobs to finish, or the timeout, or the abort.
+// The first of these jobs to finish, or to sit at a prompt (when the wait counts `blocked`), or the timeout, or the abort.
 // Where a conversation's children and commands are held: each conversation's actor.
 type Actors = Pick<ConversationActors, "holdings">;
 
+// A command at a prompt is blocked the way a child parked on a question is: it moves only once something answers it, and
+// nothing in the waiting turn can type into its pane (input-wait.ts). On 2026-10-04 an agent waited 45 minutes, four
+// times over, on an `npx` asking "Ok to proceed? (y)", each wait ending in a timeout with the same unchanged tail.
 const waitForJobs = (
     actors: Actors,
     jobs: readonly BackgroundJob[],
-    options: Pick<SubagentWaitOptions, "timeoutMs" | "signal">,
+    options: Pick<SubagentWaitOptions, "timeoutMs" | "signal"> & { readonly until?: SubagentWaitOptions["until"] },
 ): Promise<WorkWaitOutcome> =>
     new Promise((resolve) => {
         if (options.signal?.aborted === true) {
@@ -58,6 +62,11 @@ const waitForJobs = (
             const done = jobs.find(jobFinished);
             if (done !== undefined) {
                 settle(jobReport(actors, done).then((job) => ({ outcome: "finished", job })));
+                return;
+            }
+            const asking = options.until?.includes("blocked") === true ? jobs.find((job) => jobInputWait(job) !== undefined) : undefined;
+            if (asking !== undefined) {
+                settle(jobReport(actors, asking).then((job) => ({ outcome: "blocked", job })));
             }
         };
         const deadline = setTimeout(
@@ -78,6 +87,12 @@ const waitForJobs = (
             const stop = whenFileAppears(jobStatusPath(job), look);
             if (settled) {
                 stop?.();
+                return;
+            }
+            // Hears the job start waiting for input the moment the daemon is sure of it; one already waiting answers now.
+            stops.push(followRun(job.dir, look));
+            look();
+            if (settled) {
                 return;
             }
             if (stop === undefined) {
@@ -157,7 +172,8 @@ export const waitForWork = async (
 
 // The park itself: the named command, else the children, raced against every command still running for "any".
 const parkOnWork = async (actors: Actors, conversationId: string, options: SubagentWaitOptions): Promise<WorkWaitOutcome> => {
-    // A command only ever finishes, so it answers a named wait whatever `until` asks for.
+    // A command finishes, which answers a named wait whatever `until` asks for, or sits at a prompt, which answers one
+    // that counts `blocked`.
     const named = options.target === undefined ? undefined : backgroundJobOf(actors, conversationId, options.target);
     if (named !== undefined) {
         return waitForJobs(actors, [named], options);
@@ -174,12 +190,16 @@ const parkOnWork = async (actors: Actors, conversationId: string, options: Subag
             // No child to wait on is not a move.
             result.outcome === "unknown-target" ? NEVER : result,
         );
-        return await Promise.race([children, waitForJobs(actors, jobs, { timeoutMs: options.timeoutMs, signal: race.signal })]);
+        return await Promise.race([children, waitForJobs(actors, jobs, { timeoutMs: options.timeoutMs, signal: race.signal, until: options.until })]);
     } finally {
         options.signal?.removeEventListener("abort", abort);
         race.abort();
     }
 };
+
+// What a wait on a command at a prompt tells the model: waiting again cannot end it, and what can.
+const AT_A_PROMPT = (id: string): string =>
+    `This command is waiting for input: the process named in waitingForInput is blocked reading its terminal and nothing has moved, and nothing in your turn can type into it, so waiting again will not end it. Stop it with TaskStop (task_id "${id}") and run it so it cannot ask: a flag that answers for it (--yes, --no-input), its answer piped in, or prompting turned off (npm_config_yes, GIT_TERMINAL_PROMPT=0). If only a person can answer (a password, a one-time code), hand them its terminal with request_help.`;
 
 // What a wait handed back for words said into its turn tells the model, since the words themselves come after it.
 const WORDS_SAID =
@@ -213,6 +233,9 @@ export const workWaitAnswer = (result: WorkWaitOutcome, lookups: ChildLookups): 
         ...(question === undefined ? {} : { question }),
         ...opt("report", report),
         ...opt("landing", landing),
-        ...opt("note", result.outcome === "message" ? WORDS_SAID : undefined),
+        ...opt(
+            "note",
+            result.outcome === "message" ? WORDS_SAID : result.outcome === "blocked" && result.job?.waitingForInput !== undefined ? AT_A_PROMPT(result.job.id) : undefined,
+        ),
     };
 };

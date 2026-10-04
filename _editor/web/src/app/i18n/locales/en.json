@@ -45,7 +45,8 @@
             "skip": "Skip",
             "answerNotTaken": "Couldn't send that: the turn may have ended.",
             "settingsNotSaved": "Changed on the Sandbox page {pages}, not saved yet: open its review and press Save them and land.",
-            "movingTo": "moving to {account}"
+            "movingTo": "moving to {account}",
+            "stopCommand": "Stop the command"
         },
         "agentConflictReport": {
             "agentWriting": "Agent writing",
@@ -242,6 +243,12 @@
             "waitingOnCondition": "Waiting on a condition",
             "wakesThisChat": "Wakes this chat",
             "watchPace": "every {interval} · {left} left",
+            "timeLeft": "{time} left",
+            "waitingForInput": "Waiting for input",
+            "needsInput": "Needs input",
+            "inputWaitProcess": "Process",
+            "inputWaitFor": "Waiting for",
+            "inputWaitNote": "Nothing in the sandbox will answer it. Stop ends the command, so the work can land.",
             "webhook": "Webhook",
             "couldntLandChip": "Couldn't land",
             "couldntLand": "Couldn't land: {reason}",
@@ -1583,6 +1590,7 @@
             "title": "Running in the background"
         },
         "chatLeftRunning": {
+            "atPrompt": "Waiting for input for {elapsed} · {program}",
             "chatWontWake": "Chat won't wake",
             "disarm": "Disarm",
             "endNow": "End now",
@@ -1592,6 +1600,7 @@
             "servedOn": "Left running for you on {ports} · {elapsed}",
             "stopFailed": "That didn't stop.",
             "stopping": "Stopping…",
+            "stuckAtPrompt": "A command here waits for input nobody in the sandbox will give. Stop it, or answer it in its terminal.",
             "title": "Still running after the turn",
             "wakes": "This chat wakes by itself when these finish.",
             "wakesOnExit": "Wakes this chat when it exits · {elapsed}, gives up in {left}",

@@ -221,7 +221,10 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
                     "says: an agent's own account of its work is a claim, not a result. A spawned one's `landing` says where " +
                     "its work went: into your checkout already, or held on its branch where it clashed with your edits " +
                     "(merge brings it in). For a command it returns the " +
-                    "exit code, the tail of its output and the file holding all of it. Target a subagent your runtime's own " +
+                    "exit code, the tail of its output and the file holding all of it, and while it runs how long it has " +
+                    "been quiet; a command sitting at a prompt (blocked reading its terminal, nothing moving) returns " +
+                    "`blocked` with `waitingForInput`, since nothing in your turn can type into it and waiting again will " +
+                    "not end it. Target a subagent your runtime's own " +
                     "tool started by that call's id, one you spawned by the id spawn returned, a background command by " +
                     'the ID its Bash call returned, or "any" for whichever of these moves first (each is reported once). ' +
                     "An agent `paused` has not finished: its turn stopped on a spent allowance or stopped short, the sandbox " +

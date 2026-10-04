@@ -543,6 +543,7 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                                     @land="pressLand(agent, `land`, mobile)"
                                     @reland="pressLand(agent, `reland`, mobile)"
                                     @unwatch="unwatchNow(agent.id, agent.sandboxId)"
+                                    @stop-job="(jobId) => agents.stopJob(agent.id, jobId)"
                                     @archive="familyArchive.request(agent)"
                                     @restore="restore(familyIds(agent))"
                                     @close="closeAgent(agent)"
@@ -625,6 +626,7 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                             @review="drillIn(agent)"
                             @restore="restore([agent.id])"
                             @unwatch="unwatchNow(agent.id)"
+                            @stop-job="(jobId) => agents.stopJob(agent.id, jobId)"
                             @contextmenu.prevent.stop="openCardMenu(agent, $event)"
                         />
                     </div>

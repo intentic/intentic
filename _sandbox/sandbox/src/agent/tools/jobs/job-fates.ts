@@ -8,6 +8,7 @@ import {
     type BackgroundJob,
     handedPorts,
     handJobOver,
+    jobInputWait,
     jobPanes,
     type JobStopper,
     jobsToJudge,
@@ -23,6 +24,9 @@ import {
 //   of either sentence told them apart;
 // - stopped, when it listens on a port the turn reached itself and nobody kept it: the instrument of the agent's own
 //   look, which the sandbox reclaims rather than leave holding memory, the land and a six-hour watch;
+// - stopped too, when it sits at a prompt (input-wait.ts: blocked reading its terminal, nothing moving) and nobody kept
+//   it: no agent is left to answer it, and awaiting it armed a six-hour watch that held the land the whole time. On
+//   2026-10-04 an `npx eslint` asking "Ok to proceed? (y)" did exactly that to a conversation whose work was done;
 // - awaited, anything else: work whose exit the conversation waits on (background-adoption.ts), a listener the turn
 //   never reached included (a test suite's own server mid-run), so a turn that ended to wait on its tests keeps them.
 
@@ -50,18 +54,22 @@ type JobFateVerdict = "handed" | "stopped" | "awaited";
 /**
  * One job's fate from what its turn did: `kept` whether the agent kept it for the person, `ports` where it listens,
  * `targets` what the turn's calls acted on, `handed` ports this conversation already left for the person (a restarted
- * server keeps its standing without being kept twice).
+ * server keeps its standing without being kept twice), `waiting` whether it sits at a prompt nobody will answer.
  */
 export const jobFate = (fact: {
     readonly kept: boolean;
     readonly ports: readonly number[];
     readonly targets: readonly string[];
     readonly handed: ReadonlySet<number>;
+    readonly waiting: boolean;
 }): JobFateVerdict => {
     if (fact.kept || fact.ports.some((port) => fact.handed.has(port))) {
         return "handed";
     }
-    return fact.ports.some((port) => fact.targets.some((target) => reachedAt(port).test(target))) ? "stopped" : "awaited";
+    if (fact.ports.some((port) => fact.targets.some((target) => reachedAt(port).test(target)))) {
+        return "stopped";
+    }
+    return fact.waiting ? "stopped" : "awaited";
 };
 
 // Disarming a watch that already fired or was stopped is nothing to report; any other failure is logged, never thrown,
@@ -108,7 +116,8 @@ export const resolveTurnJobs = async (deps: JobFateDeps, conversationId: string)
             const pane = panes.get(job.dir);
             const ports = pane === undefined ? [] : listeners.filter((listener) => listener.pane === pane).map((listener) => listener.port);
             const targets = run.rows.flatMap((row) => targetsOf(row.tools ?? [], toolUseId));
-            const verdict = jobFate({ kept, ports, targets, handed });
+            const waiting = jobInputWait(job);
+            const verdict = jobFate({ kept, ports, targets, handed, waiting: waiting !== undefined });
             if (verdict === "handed") {
                 const watch = handJobOver(deps.conversations, job, ports);
                 if (watch !== undefined) {
@@ -116,7 +125,14 @@ export const resolveTurnJobs = async (deps: JobFateDeps, conversationId: string)
                 }
                 deps.logger.info({ conversationId, job: job.id, ports, kept }, "background job: left running for the person, kept for them or on a port already handed over");
             } else if (verdict === "stopped") {
-                deps.logger.info({ conversationId, job: job.id, ports }, "background job: stopped with its turn, which used it and handed it to nobody");
+                if (waiting === undefined) {
+                    deps.logger.info({ conversationId, job: job.id, ports }, "background job: stopped with its turn, which used it and handed it to nobody");
+                } else {
+                    deps.logger.warn(
+                        { conversationId, job: job.id, program: waiting.program, since: waiting.since },
+                        "background job: stopped with its turn, it was waiting for input nobody would type",
+                    );
+                }
                 // Not awaited: marking it is what frees the land, and the processes take their grace in the background.
                 void stopJob(deps, job, "turn");
             }

@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
-import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { TranscriptRow } from "@intentic/sandbox-contract";
@@ -16,9 +17,13 @@ import {
     noteJobWatch,
     openBackgroundJob,
     settledBackgroundJobs,
+    settleLostRuns,
     stopBackgroundJob,
     sweepJobEnds,
 } from "./background-jobs.js";
+import { requires } from "@intentic/testing/requires";
+import { INPUT_WAIT_MS } from "./input-wait.js";
+import { lookAtRuns } from "./input-wait-follow.js";
 import { jobFate, resolveTurnJobs, stopJob } from "./job-fates.js";
 
 // What a turn's ending does with what it left running, over real processes: each job here runs under a runner shaped
@@ -80,6 +85,49 @@ const running = async (conversationId: string, command = "exec sleep 60", toolUs
     return { job, leader };
 };
 
+// `script` gives the runner a terminal of its own, as a tmux pane does; its stdin is a pipe held open, so it never hands
+// the program an end of input.
+const terminal = requires(existsSync("/usr/bin/script"), "util-linux script at /usr/bin/script");
+
+// A running job whose runner's stdin is a terminal, as a pane's is.
+const runningOnTerminal = async (conversationId: string, command: string): Promise<{ job: BackgroundJob; leader: number }> => {
+    const job = openBackgroundJob({ conversationId, profile: {}, conversations: actors }, { command, session: `agent-${conversationId}` });
+    if (job === undefined) {
+        throw new Error("the job dir could not be minted");
+    }
+    dirs.push(job.dir);
+    writeFileSync(join(job.dir, "cmd"), `${command}\n`);
+    writeFileSync(join(job.dir, "runner"), RUNNER(job.dir));
+    // SHELL=bash: script runs `$SHELL -c`, and bash execs a lone command, so the runner itself leads the session.
+    const child = spawn("script", ["-qfc", `bash ${join(job.dir, "runner")}`, "/dev/null"], {
+        detached: true,
+        stdio: ["pipe", "ignore", "ignore"],
+        env: { ...process.env, SHELL: "/bin/bash" },
+    });
+    child.unref();
+    if (child.pid === undefined) {
+        throw new Error("script did not start");
+    }
+    leaders.push(child.pid);
+    const deadline = Date.now() + 2_000;
+    while (!existsSync(join(job.dir, "out")) && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    return { job, leader: child.pid };
+};
+
+// Looks at the job on a clock running ahead of the real one, past the stillness a prompt needs, until its card says it is
+// waiting or the program has had every chance to reach its prompt.
+const untilWaiting = async (conversationId: string, job: BackgroundJob): Promise<void> => {
+    const deadline = Date.now() + 5_000;
+    let ahead = Date.now() + 10_000;
+    while (card(conversationId, job.id)?.inputWait === undefined && Date.now() < deadline) {
+        await lookAtRuns("/proc", ahead);
+        ahead += INPUT_WAIT_MS;
+        await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+};
+
 // A turn's run as the conversation holds it: its rows, under an id each ending judges once.
 const turnWith = (conversationId: string, rows: readonly TranscriptRow[], id = `run-${conversationId}`): void => {
     const run = { id, rows, done: false, expired: () => false } as unknown as LiveRun;
@@ -114,30 +162,39 @@ describe("a job's fate, from what its turn did", () => {
     const none = new Set<number>();
 
     it("hands over whatever the agent kept, reached or not, listening or not", () => {
-        expect(jobFate({ kept: true, ports: [5173], targets: ["curl -s localhost:5173"], handed: none })).toBe("handed");
-        expect(jobFate({ kept: true, ports: [5173], targets: [], handed: none })).toBe("handed");
-        expect(jobFate({ kept: true, ports: [], targets: [], handed: none })).toBe("handed");
+        expect(jobFate({ kept: true, ports: [5173], targets: ["curl -s localhost:5173"], handed: none, waiting: false })).toBe("handed");
+        expect(jobFate({ kept: true, ports: [5173], targets: [], handed: none, waiting: false })).toBe("handed");
+        expect(jobFate({ kept: true, ports: [], targets: [], handed: none, waiting: false })).toBe("handed");
     });
 
     it("waits on anything unkept that listens on nothing", () => {
-        expect(jobFate({ kept: false, ports: [], targets: ["curl localhost:5173"], handed: none })).toBe("awaited");
+        expect(jobFate({ kept: false, ports: [], targets: ["curl localhost:5173"], handed: none, waiting: false })).toBe("awaited");
     });
 
     it("stops an unkept server the turn reached", () => {
-        expect(jobFate({ kept: false, ports: [47_148], targets: ["http://127.0.0.1:47148/demo/kit"], handed: none })).toBe("stopped");
-        expect(jobFate({ kept: false, ports: [5173], targets: ["curl -s http://[::1]:5173/"], handed: none })).toBe("stopped");
+        expect(jobFate({ kept: false, ports: [47_148], targets: ["http://127.0.0.1:47148/demo/kit"], handed: none, waiting: false })).toBe("stopped");
+        expect(jobFate({ kept: false, ports: [5173], targets: ["curl -s http://[::1]:5173/"], handed: none, waiting: false })).toBe("stopped");
     });
 
     it("leaves an unkept listener the turn never reached awaited: a test suite's own server, mid-run", () => {
-        expect(jobFate({ kept: false, ports: [34_567], targets: ["pnpm test"], handed: none })).toBe("awaited");
+        expect(jobFate({ kept: false, ports: [34_567], targets: ["pnpm test"], handed: none, waiting: false })).toBe("awaited");
     });
 
     it("does not read a longer port, or a starting command's flag, as the port", () => {
-        expect(jobFate({ kept: false, ports: [5173], targets: ["pnpm dev --port 5173", "curl localhost:51730"], handed: none })).toBe("awaited");
+        expect(jobFate({ kept: false, ports: [5173], targets: ["pnpm dev --port 5173", "curl localhost:51730"], handed: none, waiting: false })).toBe("awaited");
     });
 
     it("keeps a port this conversation already handed over, restarted and not kept again", () => {
-        expect(jobFate({ kept: false, ports: [5173], targets: ["curl localhost:5173"], handed: new Set([5173]) })).toBe("handed");
+        expect(jobFate({ kept: false, ports: [5173], targets: ["curl localhost:5173"], handed: new Set([5173]), waiting: false })).toBe("handed");
+    });
+
+    it("stops one sitting at a prompt that nobody kept, since no agent is left to answer it", () => {
+        expect(jobFate({ kept: false, ports: [], targets: [], handed: none, waiting: true })).toBe("stopped");
+        expect(jobFate({ kept: false, ports: [], targets: [], handed: none, waiting: false })).toBe("awaited");
+    });
+
+    it("still hands over one the agent kept for the person, prompt or not: answering it is theirs", () => {
+        expect(jobFate({ kept: true, ports: [], targets: [], handed: none, waiting: true })).toBe("handed");
     });
 });
 
@@ -154,6 +211,22 @@ describe("keeping a job for the person", () => {
 });
 
 describe("a turn's ending, over a real job", () => {
+    // 2026-10-04: an `npx eslint` asked "Ok to proceed? (y)" into a `| tail`, the turn ended on it, and a six-hour watch
+    // held the conversation's land behind a question nobody would answer.
+    test.skipIf(!terminal.runs)(terminal.title("stops a job left at a prompt instead of waiting six hours on it, and the card said why first"), async () => {
+        const { job } = await runningOnTerminal("conv-fate-prompt", `read -p "Ok to proceed? (y) " answer 2>&1 | tail -10`);
+        await untilWaiting("conv-fate-prompt", job);
+        expect(card("conv-fate-prompt", job.id)?.inputWait).toEqual({ since: expect.any(Number), program: `bash ${join(job.dir, "cmd")}` });
+        turnWith("conv-fate-prompt", [said("The typecheck is still running; I'll report when it finishes.")]);
+        await resolveTurnJobs({ conversations: actors, logger, scanPorts: () => Promise.resolve([]) }, "conv-fate-prompt");
+        expect(card("conv-fate-prompt", job.id)?.stoppedBy).toBe("turn");
+        // Nothing left to hand a watch, so nothing holds the land.
+        expect(settledBackgroundJobs(actors, "conv-fate-prompt").running).toEqual([]);
+        await ended(job);
+        expect(card("conv-fate-prompt", job.id)).toMatchObject({ stoppedBy: "turn", exitCode: 143 });
+        expect(card("conv-fate-prompt", job.id)?.inputWait).toBeUndefined();
+    });
+
     it("stops a server the turn used and handed to nobody, frees the land, and wakes nothing", async () => {
         const { job, leader } = await running("conv-fate-stop");
         turnWith("conv-fate-stop", [called("http://127.0.0.1:47148/demo/kit"), said("HTML blocks are highlighted now.")]);
@@ -280,5 +353,42 @@ describe("the agent's own TaskStop", () => {
             { signal: new AbortController().signal },
         );
         expect(existsSync(jobStatusPath(job))).toBe(false);
+    });
+});
+
+// 2026-10-04: a container restart killed an overrun `npm exec` mid-prompt, and the daemon re-armed the watch on it for two
+// and a half more hours, waiting on a status no runner was left to write.
+describe("a restart under a job", () => {
+    it("writes down the end of every run it took down, and leaves the finished, the living and the unfiled alone", async () => {
+        const root = mkdtempSync(join(tmpdir(), "settle-lost-"));
+        dirs.push(root);
+        const run = (name: string, files: Record<string, string>): string => {
+            const dir = join(root, `intentic-run-${name}`);
+            mkdirSync(dir);
+            for (const [file, body] of Object.entries(files)) {
+                writeFileSync(join(dir, file), body);
+            }
+            return dir;
+        };
+        const lost = run("lost", { "job.json": "{}", cmd: "npx eslint\n", out: "Need to install the following packages:\n" });
+        const done = run("done", { "job.json": "{}", cmd: "true\n", out: "", status: "0\n" });
+        const unstarted = run("job-unstarted", { "job.json": "{}" });
+        const plain = run("plain", { cmd: "ls\n", out: "" });
+        const living = run("living", { "job.json": "{}", cmd: "sleep 60\n", out: "", runner: "sleep 60\n" });
+        const child = spawn("bash", [join(living, "runner")], { detached: true, stdio: "ignore" });
+        child.unref();
+        leaders.push(child.pid ?? 0);
+        // Its runner stays bash (as tmux-run's does, never exec-ing), whose command line is what marks it alive.
+        await new Promise((resolve) => setTimeout(resolve, 200));
+
+        expect((await settleLostRuns(root)).toSorted()).toEqual([lost, unstarted].toSorted());
+        expect(readFileSync(join(lost, "status"), "utf8")).toBe("lost\n");
+        expect(readFileSync(join(lost, "out"), "utf8")).toBe(
+            "Need to install the following packages:\n\n--- intentic: the sandbox restarted while this ran, and the command did not survive the restart\n",
+        );
+        expect(readFileSync(join(unstarted, "status"), "utf8")).toBe("never-ran\n");
+        expect(readFileSync(join(done, "status"), "utf8")).toBe("0\n");
+        expect(existsSync(join(plain, "status"))).toBe(false);
+        expect(existsSync(join(living, "status"))).toBe(false);
     });
 });

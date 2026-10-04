@@ -41,7 +41,8 @@
             "steps": "Pasos",
             "temporary": ", temporal",
             "waitingMaintainer": "{landAsk}: esperando a un responsable",
-            "movingTo": "pasando a {account}"
+            "movingTo": "pasando a {account}",
+            "stopCommand": "Detener el comando"
         },
         "agentConflictReport": {
             "agentWriting": "El agente escribe",
@@ -223,7 +224,13 @@
             "waitingOn": "Esperándote",
             "waitingOnCondition": "Esperando una condición",
             "wakesThisChat": "Despierta este chat",
-            "watchPace": "cada {interval} · quedan {left}"
+            "watchPace": "cada {interval} · quedan {left}",
+            "timeLeft": "quedan {time}",
+            "waitingForInput": "Esperando una respuesta",
+            "needsInput": "Pide entrada",
+            "inputWaitProcess": "Proceso",
+            "inputWaitFor": "Esperando desde hace",
+            "inputWaitNote": "Nada en el sandbox lo va a responder. Detener termina el comando para que el trabajo pueda integrarse."
         },
         "agentsView": {
             "agentResolveConflict": "¿Que el agente resuelva el conflicto?",
@@ -1094,6 +1101,7 @@
             "title": "En segundo plano"
         },
         "chatLeftRunning": {
+            "atPrompt": "Esperando una respuesta desde hace {elapsed} · {program}",
             "chatWontWake": "El chat no despertará",
             "disarm": "Desactivar",
             "endNow": "Terminar ya",
@@ -1103,6 +1111,7 @@
             "servedOn": "Dejado en marcha para ti en {ports} · {elapsed}",
             "stopFailed": "No se detuvo.",
             "stopping": "Deteniendo…",
+            "stuckAtPrompt": "Un comando espera una respuesta que nada en el sandbox va a dar. Detenlo o respóndelo en su terminal.",
             "title": "Sigue en marcha tras el turno",
             "wakes": "Este chat se despierta solo cuando esto termine.",
             "wakesOnExit": "Despierta este chat al terminar · {elapsed}, se rinde en {left}",

@@ -19,7 +19,7 @@ import type { FleetAgent } from "../fleet/useAgents-fleet";
 // Far enough that a click with a shaky hand still opens the card.
 const DRAG_THRESHOLD_PX = 5;
 
-const { fleet, refresh, notice, stopWatching } = useAgents();
+const { fleet, refresh, notice, stopWatching, stopJob, agentById } = useAgents();
 const { say } = useNotifications();
 
 // An id and its box: agent ids are minted per daemon, so the same id can be on two cards from two sandboxes, and
@@ -116,7 +116,17 @@ const runAction = async (id: string, chosen: PendingAction, at?: string): Promis
         // The store's own optimistic write moves the card out of Active on press (useAgents.stopWatching), so nothing
         // else is needed here. Refused for a card in another box (laneDrop's NEEDS_THIS_BOX), since this store is the
         // active daemon's roster.
-        await stopWatching(id);
+        //
+        // A watch armed for a job waits on that job's exit, so the job is what this press ends (which disarms its watch
+        // first): disarming the watch alone left the command running in its pane with nothing left to end it, as an
+        // `npm exec` sat at its prompt for hours after its card was cleared on 2026-10-04. Any other watch is disarmed.
+        const agent = agentById(id);
+        const armed = new Set((agent?.watches ?? []).map((watch) => watch.id));
+        const held = (agent?.jobs ?? []).filter((job) => job.endedAt === undefined && job.watch !== undefined && armed.has(job.watch));
+        await Promise.all(held.map((job) => stopJob(id, job.id)));
+        if (held.length < armed.size) {
+            await stopWatching(id);
+        }
         return;
     }
     if (chosen === `land` || chosen === `reland`) {
