@@ -53,7 +53,13 @@ const ready = (status: FleetAgent[`status`] = `ready`): FleetAgent => ({
     unsent: false,
 });
 
-let app: App | undefined;
+// Some cases mount several cards; retire all of them so none keeps a shared clock alive into the next test.
+const apps: App[] = [];
+const unmount = (): void => {
+    for (const app of apps.splice(0)) {
+        app.unmount();
+    }
+};
 // Icon and v-tooltip are registered app-wide by installUi; stand-ins here avoid pulling in the whole UI plugin.
 // IconStub prints the glyph it's given, since which glyph is what shows a button is in flight.
 const mount = (
@@ -63,7 +69,7 @@ const mount = (
 ): HTMLElement => {
     const el = document.createElement(`div`);
     document.body.append(el);
-    app = createApp({
+    const app = createApp({
         render: () =>
             h(AgentCard, {
                 agent,
@@ -71,6 +77,7 @@ const mount = (
                 ...handlers,
             }),
     });
+    apps.push(app);
     app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.use(router);
@@ -79,8 +86,7 @@ const mount = (
 };
 
 afterEach(() => {
-    app?.unmount();
-    app = undefined;
+    unmount();
     jest.useRealTimers();
     document.body.innerHTML = ``;
     providerAccounts.value = NO_ACCOUNTS;
@@ -275,6 +281,28 @@ it(`ticks its own elapsed readout without a clock prop from the transition group
     await advanceTimersByTimeAsync(1_000);
     await nextTick();
     expect(card.textContent).toContain(`1s`);
+});
+
+it(`advances a settled card's age without a click or new roster data`, async () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(60_000_000);
+    const card = mount({ ...ready(`landed`), updatedAt: Date.now() - 26 * 60_000 });
+    expect(card.textContent).toContain(`26m`);
+
+    await advanceTimersByTimeAsync(19 * 60_000);
+    await nextTick();
+    expect(card.textContent).toContain(`45m`);
+});
+
+it(`advances an archived card's age from when it left the board`, async () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(60_000_000);
+    const card = mount({ ...ready(`landed`), archivedAt: Date.now() - 26 * 60_000 });
+    expect(card.textContent).toContain(`Archived 26m`);
+
+    await advanceTimersByTimeAsync(60_000);
+    await nextTick();
+    expect(card.textContent).toContain(`Archived 27m`);
 });
 
 // A `starting` turn has no daemon entry yet, so archive is unavailable; close must stay, or the card would offer no
@@ -504,8 +532,7 @@ it(`keeps the agent's press while any cause is still one a rebase reaches`, () =
         const el = mount(agent);
         expect(pressFor(el, `Have the agent resolve it`)).toEqual(expect.any(Object));
         expect(el.textContent ?? ``).not.toContain(`Your own uncommitted edits`);
-        app?.unmount();
-        app = undefined;
+        unmount();
     }
 });
 
@@ -594,8 +621,7 @@ it(`withholds Send again in the archive and on another sandbox's card`, () => {
         const card = mount(agent);
         expect(sendAgainButton(card)).toBeUndefined();
         expect(textButton(card, `Open chat`)).toEqual(expect.any(Object));
-        app?.unmount();
-        app = undefined;
+        unmount();
     }
 });
 
@@ -612,7 +638,6 @@ it(`says no "Completed" on a finished card, with a drill-in or without one`, () 
     const { branch: _branch, ...unbranched } = ready(`landed`);
     for (const agent of [ready(`landed`), unbranched]) {
         expect(mount(agent).textContent).not.toContain(`Completed`);
-        app?.unmount();
-        app = undefined;
+        unmount();
     }
 });

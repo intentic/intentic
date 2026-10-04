@@ -1,8 +1,8 @@
-import { effectScope, nextTick, ref, watchEffect } from "vue";
+import { effectScope, nextTick, ref, watchEffect, type EffectScope, type MaybeRefOrGetter } from "vue";
 import { useNow } from "@intentic/ui/async";
 
-// The ref-count is the whole point: one interval however many readouts are up, none once the last one is gone,
-// and a consumer that arms after an idle spell reads a fresh instant rather than the one the clock stopped on.
+// The ref-count is the whole point: one interval per cadence however many readouts are up, none once the last one
+// is gone, and a consumer that arms after an idle spell reads a fresh instant rather than the one the clock stopped on.
 describe(`useNow`, () => {
     beforeEach(() => {
         jest.useFakeTimers();
@@ -107,5 +107,97 @@ describe(`useNow`, () => {
         expect(now.value).toBe(1_001_000);
         steady.stop();
         await nextTick();
+    });
+});
+
+describe(`useNow cadences`, () => {
+    const scopes: EffectScope[] = [];
+    const follow = (active: MaybeRefOrGetter<boolean> = true, intervalMs = 60_000) => {
+        const scope = effectScope();
+        scopes.push(scope);
+        return { scope, now: scope.run(() => useNow(active, intervalMs))! };
+    };
+
+    beforeEach(() => {
+        jest.useFakeTimers();
+        jest.setSystemTime(60_000_000);
+    });
+    afterEach(() => {
+        for (const scope of scopes.splice(0)) {
+            scope.stop();
+        }
+        jest.useRealTimers();
+    });
+
+    it(`shares one minute timer and retires it with its last consumer`, () => {
+        const first = follow();
+        const second = follow();
+        expect(jest.getTimerCount()).toBe(1);
+        expect([first.now.value, second.now.value]).toEqual([60_000_000, 60_000_000]);
+
+        first.scope.stop();
+        jest.advanceTimersByTime(60_000);
+        expect(second.now.value).toBe(60_060_000);
+        expect(jest.getTimerCount()).toBe(1);
+
+        second.scope.stop();
+        expect(jest.getTimerCount()).toBe(0);
+    });
+
+    it(`does not wake minute consumers on the second clock's ticks`, async () => {
+        const minute = follow();
+        const second = follow(true, 1_000);
+        let reads = 0;
+        minute.scope.run(() => watchEffect(() => {
+            void minute.now.value;
+            reads += 1;
+        }));
+        expect(jest.getTimerCount()).toBe(2);
+
+        jest.advanceTimersByTime(59_000);
+        await nextTick();
+        expect(second.now.value).toBe(60_059_000);
+        expect(minute.now.value).toBe(60_000_000);
+        expect(reads).toBe(1);
+
+        jest.advanceTimersByTime(1_000);
+        await nextTick();
+        expect(minute.now.value).toBe(60_060_000);
+        expect(reads).toBe(2);
+    });
+
+    it(`refreshes a new consumer even while the shared minute timer is already running`, () => {
+        const first = follow();
+        jest.advanceTimersByTime(59_000);
+        expect(first.now.value).toBe(60_000_000);
+
+        const second = follow();
+        expect([first.now.value, second.now.value]).toEqual([60_059_000, 60_059_000]);
+        expect(jest.getTimerCount()).toBe(1);
+
+        jest.advanceTimersByTime(1_000);
+        expect(second.now.value).toBe(60_060_000);
+    });
+
+    it(`refreshes on rearming and freezes when disarmed without retiring another consumer's timer`, async () => {
+        const active = ref(false);
+        const gated = follow(active);
+        const steady = follow();
+        jest.advanceTimersByTime(30_000);
+        active.value = true;
+        await nextTick();
+        expect(gated.now.value).toBe(60_030_000);
+        expect(jest.getTimerCount()).toBe(1);
+
+        active.value = false;
+        await nextTick();
+        jest.advanceTimersByTime(30_000);
+        expect(gated.now.value).toBe(60_030_000);
+        expect(steady.now.value).toBe(60_060_000);
+
+        gated.scope.stop();
+        expect(jest.getTimerCount()).toBe(1);
+        steady.scope.stop();
+        expect(jest.getTimerCount()).toBe(0);
     });
 });

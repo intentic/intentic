@@ -1,36 +1,51 @@
-import { computed, onScopeDispose, ref, toValue, watch, type ComputedRef, type MaybeRefOrGetter } from "vue";
+import { computed, onScopeDispose, ref, toValue, watch, type ComputedRef, type MaybeRefOrGetter, type Ref } from "vue";
 
-// The wall clock, once: every live elapsed/time-ago readout shares this ref instead of its own interval.
-// Ref-counted: the interval runs only while a consumer is armed. The first arm after an idle spell
-// re-stamps the instant, so a readout doesn't reopen on a clock frozen where the last consumer left it.
+// One shared wall clock per cadence, not one interval per readout. Live elapsed/countdowns use seconds; relative
+// dates use minutes so settled cards are not woken by every running card's tick. Each timer is ref-counted.
+interface Clock {
+    readonly now: Ref<number>;
+    readonly intervalMs: number;
+    consumers: number;
+    ticker: ReturnType<typeof setInterval> | undefined;
+}
 
-const now = ref(Date.now());
-let consumers = 0;
-let ticker: ReturnType<typeof setInterval> | undefined;
-
-const arm = (): void => {
-    if (consumers++ > 0) {
-        return;
+const clocks = new Map<number, Clock>();
+const clockFor = (intervalMs: number): Clock => {
+    const existing = clocks.get(intervalMs);
+    if (existing !== undefined) {
+        return existing;
     }
-    now.value = Date.now();
-    ticker = setInterval(() => (now.value = Date.now()), 1000);
+    const clock: Clock = { now: ref(Date.now()), intervalMs, consumers: 0, ticker: undefined };
+    clocks.set(intervalMs, clock);
+    return clock;
 };
 
-const disarm = (): void => {
-    if (--consumers > 0) {
+const arm = (clock: Clock): void => {
+    // A minute clock may have last ticked nearly a minute ago. Starting to follow it must show the current instant,
+    // even when another consumer already keeps its timer alive; do not restart that timer and postpone its next tick.
+    clock.now.value = Date.now();
+    if (clock.consumers++ > 0) {
         return;
     }
-    clearInterval(ticker);
-    ticker = undefined;
+    clock.ticker = setInterval(() => (clock.now.value = Date.now()), clock.intervalMs);
 };
 
-export function useNow(active: MaybeRefOrGetter<boolean> = true): ComputedRef<number> {
+const disarm = (clock: Clock): void => {
+    if (--clock.consumers > 0) {
+        return;
+    }
+    clearInterval(clock.ticker);
+    clock.ticker = undefined;
+};
+
+export function useNow(active: MaybeRefOrGetter<boolean> = true, intervalMs = 1000): ComputedRef<number> {
+    const clock = clockFor(intervalMs);
     const on = computed(() => toValue(active));
     // Tracked per consumer so a scope dying while inactive doesn't decrement a count it never raised.
     let armed = false;
     // The instant this consumer stopped following. Held so a settled readout keeps the time it settled at instead of
     // jumping to whenever some other consumer last ticked.
-    const frozen = ref(now.value);
+    const frozen = ref(clock.now.value);
     watch(
         on,
         (next) => {
@@ -39,23 +54,23 @@ export function useNow(active: MaybeRefOrGetter<boolean> = true): ComputedRef<nu
             }
             armed = next;
             if (next) {
-                arm();
+                arm(clock);
                 return;
             }
-            frozen.value = now.value;
-            disarm();
+            frozen.value = clock.now.value;
+            disarm(clock);
         },
         { immediate: true },
     );
     onScopeDispose(() => {
         if (armed) {
             armed = false;
-            disarm();
+            disarm(clock);
         }
     });
     // Reads the shared ref only while armed, so the gate binds the DEPENDENCY and not merely the interval. One running
     // card arms the clock for the whole window, and a consumer reading `now` unconditionally was woken once a second
     // by a tick it had asked not to receive — measured as three shell components re-evaluating every second on an
     // otherwise idle board.
-    return computed(() => (on.value ? now.value : frozen.value));
+    return computed(() => (on.value ? clock.now.value : frozen.value));
 }

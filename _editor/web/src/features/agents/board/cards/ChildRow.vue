@@ -3,7 +3,7 @@ import type { AgentProvider } from "@intentic/sandbox-contract";
 import { useNow } from "@intentic/ui/async";
 import { computed } from "vue";
 import { formatElapsed } from "../../fleet/agentStatus";
-import { relativeTime } from "../../../chat/models/catalog";
+import AgentCardDate from "./AgentCardDate.vue";
 import { markSegments } from "../../review/markSegments";
 import { inProcess, type TrayChild } from "../view/childFold";
 import { childLook } from "./childLook";
@@ -32,7 +32,7 @@ const props = defineProps<{
 const emit = defineEmits<{ open: [event: MouseEvent]; review: []; menu: [event: MouseEvent] }>();
 
 const look = computed(() => childLook(props.child, props.provider));
-// Ticks only while it works; a settled row shares the clock without re-ticking.
+// Ticks each second only while it works; settled dates below follow their own minute-rate leaf.
 const now = useNow(() => look.value.working);
 // The second line, only for a child whose model is recorded; its kind rides the title row.
 const facts = computed(() => look.value.run !== undefined);
@@ -85,7 +85,9 @@ const menu = (event: MouseEvent): void => {
             <span v-if="look.working && look.since !== undefined" v-tooltip.top="look.doing" class="min-w-12 shrink-0 text-right text-2xs font-medium tabular-nums text-link">{{
                 formatElapsed(look.since, now)
             }}</span>
-            <span v-else-if="look.ask === undefined && look.at > 0" class="min-w-12 shrink-0 text-right text-2xs text-subtle">{{ relativeTime(look.at) }}</span>
+            <span v-else-if="look.ask === undefined && look.at > 0" class="min-w-12 shrink-0 text-right text-2xs text-subtle">
+                <AgentCardDate :at="look.at" />
+            </span>
         </span>
         <!-- Under the title on a narrow row, where the title keeps the first line. -->
         <span v-if="look.run !== undefined" class="flex w-full min-w-0 items-center gap-1.5 pl-5 text-2xs text-subtle @md:hidden">

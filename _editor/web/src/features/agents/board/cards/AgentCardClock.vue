@@ -9,10 +9,10 @@ import { sandboxNow } from "../../fleet/sandboxClock";
 import { activityIcon, formatElapsed, limitClosed, limitCorner, turnInFlight, watching, watchLine } from "../../fleet/agentStatus";
 import { cacheCooling, cacheWarm, warmMark } from "../../fleet/prompt-cache/promptCache";
 import type { FleetAgent } from "../../fleet/useAgents-fleet";
-import { relativeTime } from "../../../chat/models/catalog";
+import AgentCardDate from "./AgentCardDate.vue";
 
 // An agent card's "when" corner: the settled date, or the running elapsed, a watch, a limit or a cache countdown.
-// The only part of the card that reads the ticking clock, so a tick redraws these few nodes and not the card's links.
+// Live clock ticks redraw only this corner; relative dates below tick in their own minute-rate leaf.
 
 const props = defineProps<{
     agent: FleetAgent;
@@ -29,7 +29,7 @@ const emit = defineEmits<{
 
 const t = useT();
 const { mobile } = useDevice();
-// Ticks only while needed (turn, watch, limit countdown, warm cache); a settled card shares the clock without re-ticking.
+// Second-rate ticks only for live clocks (turn, watch, limit countdown, warm cache); dates use AgentCardDate.
 // On the sandbox's clock: every instant this corner counts to or from is one the sandbox stamped (sandboxClock.ts).
 const tick = useNow(() => turnInFlight(props.agent) || watching(props.agent) || limitClosed(props.agent) || cacheWarm(props.agent));
 const now = computed(() => sandboxNow(tick.value));
@@ -84,8 +84,8 @@ const coolingTip = computed((): Tip | undefined =>
 
 <template>
     <!-- Archived card dates itself by when it left the board, the same "when" slot a running card's elapsed uses. -->
-    <span v-if="agent.archivedAt !== undefined" class="shrink-0"
-        >{{ t(`agents.agentCard.archived`, { archivedAt: relativeTime(agent.archivedAt) }) }}
+    <span v-if="agent.archivedAt !== undefined" class="shrink-0">
+        <AgentCardDate :at="agent.archivedAt" archived />
     </span>
     <!-- Takes the date's slot: "back in 27m" tells the reader something to plan around, unlike "last active". -->
     <span v-else-if="limit !== undefined" class="inline-flex shrink-0 items-center gap-1" v-tooltip.top="limitTip">
@@ -116,7 +116,9 @@ const coolingTip = computed((): Tip | undefined =>
         <Icon name="bolt" class="shrink-0 text-2xs" />
         {{ cooling.text }}<span class="tabular-nums">{{ cooling.countdown }}</span>
     </button>
-    <span v-else-if="watch === undefined && !working && agent.updatedAt > 0" class="shrink-0">{{ relativeTime(agent.updatedAt) }}</span>
+    <span v-else-if="watch === undefined && !working && agent.updatedAt > 0" class="shrink-0">
+        <AgentCardDate :at="agent.updatedAt" />
+    </span>
 
     <!-- Same slot and grammar as the running tool and the settled date: a card is only ever one of those three things at a time. -->
     <span v-if="watch !== undefined" class="inline-flex min-w-0 items-center gap-1.5">
