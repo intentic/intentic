@@ -19,6 +19,8 @@
         "claude.json",
         ".git",
         ".pnpm-store",
-        ".image-out"
+        ".image-out",
+        "**/.intentic/cache",
+        "**/.intentic/local"
     ]
 }

@@ -32,7 +32,7 @@ const COUNT_LIMIT: u64 = 60_000;
 /// What a project folder's sync leaves on this computer, at any depth (`PROJECT_IGNORES` in
 /// `_devices/machine/src/sync/ssh.ts`, which is what the sync actually does): skipped by the count as they are by
 /// the sync. Held to that list by `project-ignores.fixture.json`, which both sides' tests read.
-const NOT_SYNCED: [&str; 20] = [
+const NOT_SYNCED: [&str; 22] = [
     "node_modules",
     "dist",
     ".turbo",
@@ -53,12 +53,21 @@ const NOT_SYNCED: [&str; 20] = [
     ".git",
     ".pnpm-store",
     ".image-out",
+    "**/.intentic/cache",
+    "**/.intentic/local",
 ];
 
-/// Whether a file or folder called `name` stays on this computer: a [`NOT_SYNCED`] pattern names it, where `*`
-/// stands for any run of characters, as in the sync's own ignore patterns.
-fn not_synced(name: &str) -> bool {
-    NOT_SYNCED.iter().any(|pattern| matches_name(pattern, name))
+/// Whether the file or folder at `relative` (under the project folder, `/`-separated) stays on this computer: a
+/// [`NOT_SYNCED`] pattern names its last segment, where `*` stands for any run of characters, or a `**/a/b` pattern
+/// names the run of folders it ends with, at any depth, as in the sync's own ignore patterns.
+fn not_synced(relative: &str) -> bool {
+    let name = relative.rsplit('/').next().unwrap_or(relative);
+    NOT_SYNCED
+        .iter()
+        .any(|pattern| match pattern.strip_prefix("**/") {
+            Some(tail) => relative == tail || relative.ends_with(&format!("/{tail}")),
+            None => matches_name(pattern, name),
+        })
 }
 
 fn matches_name(pattern: &str, name: &str) -> bool {
@@ -239,7 +248,9 @@ fn weigh(path: &Path) -> (u64, u64) {
             let Ok(kind) = entry.file_type() else {
                 continue;
             };
-            if not_synced(&entry.file_name().to_string_lossy()) {
+            let entry_path = entry.path();
+            let relative = entry_path.strip_prefix(path).unwrap_or(&entry_path);
+            if not_synced(&relative.to_string_lossy().replace('\\', "/")) {
                 continue;
             }
             if kind.is_dir() {
@@ -791,6 +802,16 @@ mod tests {
         assert!(!not_synced("my.env.local"));
         assert!(!not_synced("dist-old"));
         assert!(!not_synced("src"));
+    }
+
+    #[test]
+    fn a_repository_s_machine_local_intentic_folders_stay_here_at_any_depth() {
+        assert!(not_synced(".intentic/cache"));
+        assert!(not_synced("intentic/.intentic/local"));
+        assert!(!not_synced(".intentic"));
+        assert!(!not_synced(".intentic/checks.json"));
+        assert!(!not_synced("x.intentic/cache"));
+        assert!(not_synced("web/node_modules"));
     }
 
     #[test]

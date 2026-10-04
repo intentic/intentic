@@ -65,13 +65,23 @@ describe("the project ignore list, as Mutagen reads it", () => {
         expect(ignoreMatcher(["/build"])("pkg/build/out.js")).toBe(false);
     });
 
+    // A repository's own `.intentic/` is committed content (`checks.json`), but its iq caches are each machine's own.
+    it("leaves out a repository's machine-local .intentic folders at any depth, and keeps the rest of it", () => {
+        for (const path of [".intentic/cache/iq/index.db-shm", "intentic/.intentic/local/cache/iq/index.db", "a/b/.intentic/cache"]) {
+            expect([path, ignored(path)]).toEqual([path, true]);
+        }
+        for (const path of [".intentic/checks.json", "intentic/.intentic/checks.json", "x.intentic/cache/a", ".intentic/cached"]) {
+            expect([path, ignored(path)]).toEqual([path, false]);
+        }
+    });
+
     it("leaves out Mutagen's own scratch files, which it never syncs", () => {
         expect(ignored("src/.mutagen-temporary-cross-device-rename-1")).toBe(true);
     });
 
     // Read too narrowly, a pattern would offer an ignored file (a secret among them) for bringing back.
     it("refuses a pattern it cannot match exactly rather than approximating it", () => {
-        for (const pattern of ["!keep", "src/*.log", "build/", "a?", "[ab]", "**", "/"]) {
+        for (const pattern of ["!keep", "src/*.log", "build/", "a?", "[ab]", "**", "/", "**/build", "**/a/*", "**/a/../b", "a/b"]) {
             expect(() => ignoreExpression(pattern)).toThrow("is not one this agent can match exactly");
         }
     });

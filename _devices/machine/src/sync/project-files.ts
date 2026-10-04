@@ -35,16 +35,21 @@ export const CHANGES_MAX = 5_000;
 const MUTAGEN_TEMPORARY = ".mutagen-temporary-*";
 
 // One pattern of the spellings a project's ignore list uses (ssh.ts PROJECT_IGNORES), as Mutagen reads it: a single
-// name, `*` matching within it, that matches the name at any depth, or only at the root when it starts with `/`. A
-// matched directory takes everything under it along. Anything else (`!`, `?`, `**`, `[...]`, an inner or trailing `/`)
-// is refused rather than approximated: a pattern read too narrowly would offer an ignored file, a secret among them, for
-// bringing back.
+// name, `*` matching within it, that matches the name at any depth, or only at the root when it starts with `/`; or
+// `**/` followed by plain names joined by `/` (no `*`), which matches that run of folders at any depth, the root
+// included. A matched directory takes everything under it along. Anything else (`!`, `?`, a bare `**`, `[...]`, any
+// other inner or trailing `/`) is refused rather than approximated: a pattern read too narrowly would offer an ignored
+// file, a secret among them, for bringing back.
 const PATTERN = /^\/?[^/*?[\]!\\{}]*(?:\*[^/*?[\]!\\{}]*)*$/;
+const DEEP_PATH = /^\*\*\/[^/*?[\]!\\{}]+(?:\/[^/*?[\]!\\{}]+)+$/;
 
 const escaped = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
 
 // The pattern as a regular expression over a whole relative path, which the sandbox's walk runs as it is (project-remote.ts).
 export const ignoreExpression = (pattern: string): string => {
+    if (DEEP_PATH.test(pattern) && pattern.split("/").slice(1).every((segment) => segment !== "." && segment !== "..")) {
+        return `(?:^|/)${escaped(pattern.slice("**/".length))}(?:/|$)`;
+    }
     const bare = pattern.replace(/^\//, "");
     if (!PATTERN.test(pattern) || bare === "" || bare.includes("**")) {
         throw new Error(`the ignore pattern ${JSON.stringify(pattern)} is not one this agent can match exactly, so it will not compare the folder with the sandbox's copy`);

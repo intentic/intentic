@@ -65,6 +65,13 @@ export const IGNORES = [
     // both sides write their own `package.json`/`pnpm-lock.yaml` per extension into it, which is 98 create-vs-create
     // conflicts that two-way-safe will never settle — and while they stand, that pairing propagates nothing at all.
     ".image-out",
+    // A REPOSITORY's own `.intentic/` travels (its `checks.json` is committed), but these two folders under it are the
+    // machine's own: iq's index (`.intentic/local/cache/iq`, a live SQLite database with its `-wal` and `-shm`) and
+    // its older `.intentic/cache/iq`. Each end that runs iq writes its own, so carried across they are create-vs-create
+    // conflicts that two-way-safe will never settle, measured on a dogfooding machine as a stuck `index.db-shm`.
+    // `**/` is Mutagen's (doublestar) spelling for "at any depth, the root included"; a path without it is anchored.
+    `**/${STATE_DIR}/cache`,
+    `**/${STATE_DIR}/local`,
 ];
 
 // The two entries above that describe the WORKSPACE root rather than any folder: a project pairing syncs one folder
