@@ -5437,7 +5437,8 @@
             "settingUpOnDevice": "Konfiguracja {what} na tym urządzeniu zatrzymała się. Okno Intentic ma powód i sposób, żeby spróbować ponownie.",
             "showSetup": "Pokaż konfigurację",
             "stoppedSettingUpOn": "Zatrzymałeś konfigurację {what} na tym urządzeniu. Nic więcej tam nie działa.",
-            "waitingInIntenticWindow": "Czeka na Ciebie w oknie Intentic"
+            "waitingInIntenticWindow": "Czeka na Ciebie w oknie Intentic",
+            "yourSandbox": "twojego sandboxa"
         },
         "hostedWait": {
             "puttingOnInternet": "Wystawiamy go do internetu",
@@ -5517,6 +5518,7 @@
             "pasteIntoTerminalPress": "Wklej to w tamtym terminalu i naciśnij Enter.",
             "pickWhereRunsYoull": "Wybierz, gdzie ma działać. Za minutę albo dwie będziesz w nim pracować.",
             "pickedUpNoSandbox": "Podjęte jakiś czas temu, a sandboxa wciąż nie ma. Sprawdź {where} pod kątem błędu. Ponowne uruchomienie jest bezpieczne.",
+            "pickingUpLastRunStopped": "Wracamy tam, gdzie skończyłeś: ostatnie uruchomienie na twoim komputerze zatrzymało się przed końcem.",
             "pickingUpWhereLeft": "Wracamy tam, gdzie skończyłeś: nic jeszcze nie ruszyło.",
             "platformDoesntSetOne": "Ta platforma żadnego nie stawia",
             "platformDoesntStartSandboxes": "Ta platforma nie uruchamia sandboxów ani nie rozdaje adresów: podłącza się do takiego, który już masz uruchomiony.",

@@ -15,7 +15,7 @@ const QUIET_MS = 20_000;
 const now = useNow(() => report.state === `running`);
 const quiet = computed(() => report.state === `running` && heardAt !== undefined && now.value - heardAt > QUIET_MS);
 
-const what = computed(() => (report.name === undefined ? `your sandbox` : report.name));
+const what = computed(() => (report.name === undefined ? t(`setup.desktopSetupProgress.yourSandbox`) : report.name));
 const showSetup = (): void => openDesktopLink(DESKTOP_LAUNCHER_LINK);
 </script>
 
@@ -29,8 +29,9 @@ const showSetup = (): void => openDesktopLink(DESKTOP_LAUNCHER_LINK);
                     <template v-else-if="quiet">{{ t(`setup.desktopSetupProgress.installingOnDeviceNo`, { what }) }}</template>
                     <template v-else>{{ t(`setup.desktopSetupProgress.installingOnDevice`, { what }) }}</template>
                 </span>
-                <span v-if="report.position" class="text-subtle">{{ report.position }}</span>
-                <span v-if="report.remaining && report.state === `running`" class="text-subtle">· {{ report.remaining }}</span>
+                <!-- The app's own account of its run: a replay keeps its words (app/replayText.ts). -->
+                <span v-if="report.position" class="text-subtle" data-replay="diagnostic">{{ report.position }}</span>
+                <span v-if="report.remaining && report.state === `running`" class="text-subtle" data-replay="diagnostic">· {{ report.remaining }}</span>
                 <span class="font-mono tabular-nums text-muted">{{ report.percent }}%</span>
             </div>
             <div class="h-1.5 overflow-hidden rounded-full bg-canvas">

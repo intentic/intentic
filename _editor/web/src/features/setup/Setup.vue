@@ -186,7 +186,10 @@ const resumedLine = computed((): string => {
     const resumed = created.value;
     const kind = resumed === null ? `never-ran` : resumedRow(resumed);
     if (kind === `never-ran` || resumed === null || resumed.lastSeenAt === null) {
-        return t(`setup.setup.pickingUpWhereLeft`);
+        // A machine claimed the command and never announced: a run started and stopped, which "nothing has run" denies.
+        return resumed !== null && resumed.setupCodeClaimedAt !== null
+            ? t(`setup.setup.pickingUpLastRunStopped`)
+            : t(`setup.setup.pickingUpWhereLeft`);
     }
     return kind === `removed`
         ? t(`setup.setup.stillOnPlatformCleanup`)
@@ -913,8 +916,9 @@ const discardBeforeSignOut = (): Promise<void> => row.discardDraft(committed.val
                                         {{ t(`setup.setup.alreadyFreeMachineAccount`) }}
                                     </template>
                                     <template v-else>
-                                        {{ t(`setup.setup.sleepsWhileYoureAway`)
-                                        }}<template v-if="collectedUnopened"> {{ t(`setup.setup.unopenedFewWeeksRemoved`) }}</template>
+                                        <!-- The space rides on the line break: Vue drops one that opens a <template>. -->
+                                        {{ t(`setup.setup.sleepsWhileYoureAway`) }}
+                                        <template v-if="collectedUnopened">{{ t(`setup.setup.unopenedFewWeeksRemoved`) }}</template>
                                     </template>
                                 </p>
                             </template>
@@ -1095,7 +1099,7 @@ const discardBeforeSignOut = (): Promise<void> => row.discardDraft(committed.val
                                     <!-- The machine's reported stage overrides the fallback label. -->
                                     <template v-if="handoff === `claimed` && buildStage !== undefined">
                                         <span class="font-medium text-success">{{ t(`setup.setup.machinePickedUp`) }}</span>
-                                        {{ t(`setup.setup.rightNow`) }} {{ buildStage }}.
+                                        {{ t(`setup.setup.rightNow`) }} <span data-replay="diagnostic">{{ buildStage }}</span>.
                                     </template>
                                     <template v-else-if="handoff === `claimed`">
                                         <span class="font-medium text-success">{{ t(`setup.setup.machinePickedUp`) }}</span>
@@ -1133,16 +1137,18 @@ const discardBeforeSignOut = (): Promise<void> => row.discardDraft(committed.val
 
                             <!-- THE APP'S OWN BAR, on this page: what "Back to your workspace" leaves behind. Kept once the machine
                                  claims the code, since the image pull after it is the long part: hiding it there left one static
-                                 line for four minutes. -->
+                                 line for four minutes. Its failed state stands down once the machine's own report is here: that
+                                 notice below says what broke, and two red boxes read as two failures. -->
                             <DesktopSetupProgress
-                                v-if="launched && desktopReport"
+                                v-if="launched && desktopReport && !(desktopReport.state === `failed` && reportFailures !== null)"
                                 :report="desktopReport"
                                 :heard-at="desktopHeardAt"
                             />
 
-                            <!-- The machine said exactly what broke: render it verbatim, problem and fix per check, and the one instruction that is always true. -->
+                            <!-- The machine said exactly what broke: render it verbatim, problem and fix per check, and the one instruction that is always true.
+                                 A replay keeps its words (`data-replay`, app/replayText.ts): this is what a stuck setup's recording is watched for. -->
                             <Notice v-if="reportFailures !== null" :of="{ tone: `danger`, title: t(`setup.setup.failedOnYourMachine`) }">
-                                <ul class="mt-1.5 flex flex-col gap-1.5">
+                                <ul class="mt-1.5 flex flex-col gap-1.5" data-replay="diagnostic">
                                     <li v-for="failure in reportFailures" :key="failure.check" class="min-w-0 text-2xs">
                                         <span class="font-medium">{{ failure.check }}:</span> {{ failure.problem }}
                                         <span v-if="failure.remedy !== ``">{{ t(`setup.setup.fix`, { remedy: failure.remedy }) }}</span>

@@ -1,12 +1,12 @@
 import "@intentic/testing/dom";
 import { registerCatalog } from "@intentic/ui/i18n";
-import { isAppCopy, maskAttribute, maskText, replayPrivacy } from "./replayPrivacy";
+import { maskAttribute, replayPrivacy } from "./replayPrivacy";
 
-// The interface's own wording, as a real catalog registers it: what a replay may show. The two forms of `count` and the
-// link cannot render as written, so they must not count as words we wrote.
+// The interface's own wording, as a real catalog registers it: what an attribute may keep. The text rules have their own
+// suite (replayText.test.ts).
 await registerCatalog({
     namespace: `probe`,
-    base: { save: `Save`, files: `no file | one file`, count: `{n} changed`, again: `@:probe.save again`, spaced: `Open   the\n menu` },
+    base: { save: `Save` },
     load: () => Promise.reject(new Error(`unused`)),
 });
 
@@ -15,45 +15,11 @@ const element = (tag: string): Element => document.createElement(tag);
 // What a masked value must look like: not one character of it left, whatever it was.
 const blank = (value: string): string => `*`.repeat(value.length);
 
-describe(`text`, () => {
-    it(`keeps a word the interface wrote and stars out a word anyone else wrote`, () => {
-        expect(maskText(`Save`)).toBe(`Save`);
-        expect(maskText(`src/checkout.ts`)).toBe(blank(`src/checkout.ts`));
-        expect(maskText(`Save the plan`)).toBe(`**** *** ****`);
-    });
-
-    // A text node arrives with whatever whitespace the template around it left, so it is compared as words.
-    it(`compares words, not whitespace, and keeps the whitespace it was given`, () => {
-        expect(maskText(`  Save\n`)).toBe(`  Save\n`);
-        expect(maskText(`Open the menu`)).toBe(`Open the menu`);
-        expect(maskText(` a  b `)).toBe(` *  * `);
-    });
-
-    it(`treats every form of a plural message as words we wrote`, () => {
-        expect(isAppCopy(`no file`)).toBe(true);
-        expect(isAppCopy(`one file`)).toBe(true);
-        expect(isAppCopy(`many files`)).toBe(false);
-    });
-
-    // "3 changed" is our sentence around a number that came from somewhere; masking the whole node is the safe side.
-    it(`does not trust a message that is filled in or linked, only ones that render as written`, () => {
-        expect(isAppCopy(`3 changed`)).toBe(false);
-        expect(isAppCopy(`{n} changed`)).toBe(false);
-        expect(isAppCopy(`Save again`)).toBe(false);
-        expect(isAppCopy(`@:probe.save again`)).toBe(false);
-    });
-
-    it(`has nothing to hide in an empty node`, () => {
-        expect(maskText(``)).toBe(``);
-        expect(maskText(`\n   `)).toBe(`\n   `);
-    });
-});
-
 describe(`attributes`, () => {
     it(`holds the words a screen reader or a tooltip speaks to the same rule as text`, () => {
         expect(maskAttribute(`title`, `Save`)).toBe(`Save`);
         expect(maskAttribute(`aria-label`, `Grace Hopper`)).toBe(`***** ******`);
-        expect(maskAttribute(`placeholder`, `Filter files`)).toBe(`****** *****`);
+        expect(maskAttribute(`placeholder`, `Grace's plans`)).toBe(`******* *****`);
         expect(maskAttribute(`ARIA-LABEL`, `Save`)).toBe(`Save`);
         expect(maskAttribute(`alt`, `screenshot of the invoice`)).toBe(`********** ** *** *******`);
     });
@@ -105,6 +71,14 @@ describe(`what posthog is told`, () => {
         expect(recording.maskTextFn(`src/checkout.ts`)).toBe(blank(`src/checkout.ts`));
         expect(recording.maskTextFn(`Save`)).toBe(`Save`);
         expect(recording.maskAttributeFn).toBe(maskAttribute);
+    });
+
+    // The recorder hands over the element a text node sits in, which is what lets a machine's report keep its words.
+    it(`judges a text node by where it sits`, () => {
+        const report = document.createElement(`p`);
+        report.dataset[`replay`] = `diagnostic`;
+        expect(recording.maskTextFn(`the network broke`, report)).toBe(`the network broke`);
+        expect(recording.maskTextFn(`the network broke`, null)).toBe(`*** ******* *****`);
     });
 
     it(`blocks the editor, its diff, terminals and everything that draws pixels or another page`, () => {

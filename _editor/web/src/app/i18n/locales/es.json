@@ -4010,7 +4010,8 @@
             "settingUpOnDevice": "La instalación de {what} en este dispositivo se detuvo. La ventana de Intentic tiene el motivo, y una forma de volver a intentarlo.",
             "showSetup": "Mostrar la instalación",
             "stoppedSettingUpOn": "Has detenido la instalación de {what} en este dispositivo. Allí no hay nada más en marcha.",
-            "waitingInIntenticWindow": "Te espera en la ventana de Intentic"
+            "waitingInIntenticWindow": "Te espera en la ventana de Intentic",
+            "yourSandbox": "tu sandbox"
         },
         "hostedWait": {
             "puttingOnInternet": "Poniéndolo en internet",
@@ -4087,6 +4088,7 @@
             "pasteIntoTerminalPress": "Pégalo en ese terminal y pulsa Intro.",
             "pickWhereRunsYoull": "Elige dónde se ejecuta. Estarás trabajando en él en un minuto o dos.",
             "pickedUpNoSandbox": "Recogido hace un rato, y todavía sin sandbox. Mira en {where} si hay un error. Se puede volver a ejecutar sin riesgo.",
+            "pickingUpLastRunStopped": "Retomando donde lo dejaste: la última ejecución en tu equipo se detuvo antes de terminar.",
             "pickingUpWhereLeft": "Retomando donde lo dejaste: todavía no se ha ejecutado nada.",
             "platformDoesntSetOne": "Esta plataforma no prepara ninguno",
             "platformDoesntStartSandboxes": "Esta plataforma no inicia sandboxes ni reparte direcciones: se conecta a uno que ya tienes en marcha.",

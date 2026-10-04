@@ -3968,7 +3968,8 @@
             "settingUpOnDevice": "L'installation de {what} sur cet appareil s'est arrêtée. La fenêtre Intentic en donne la raison, et un moyen de réessayer.",
             "showSetup": "Afficher l'installation",
             "stoppedSettingUpOn": "Vous avez arrêté l'installation de {what} sur cet appareil. Rien d'autre n'y tourne.",
-            "waitingInIntenticWindow": "Vous attend dans la fenêtre Intentic"
+            "waitingInIntenticWindow": "Vous attend dans la fenêtre Intentic",
+            "yourSandbox": "votre sandbox"
         },
         "hostedWait": {
             "puttingOnInternet": "Mise en ligne",
@@ -4045,6 +4046,7 @@
             "pasteIntoTerminalPress": "Collez-la dans ce terminal et appuyez sur Entrée.",
             "pickWhereRunsYoull": "Choisissez où il tourne. Vous y travaillerez d'ici une ou deux minutes.",
             "pickedUpNoSandbox": "Pris en charge il y a un moment, toujours pas de sandbox. Regardez dans {where} s'il y a une erreur. On peut relancer sans risque.",
+            "pickingUpLastRunStopped": "Reprise là où vous en étiez : la dernière exécution sur votre machine s'est arrêtée avant la fin.",
             "pickingUpWhereLeft": "Reprise là où vous en étiez : rien n'a encore été exécuté.",
             "platformDoesntSetOne": "Cette plateforme n'en installe pas",
             "platformDoesntStartSandboxes": "Cette plateforme ne démarre pas de sandboxes et ne distribue pas d'adresses : elle se connecte à un sandbox que vous faites déjà tourner.",

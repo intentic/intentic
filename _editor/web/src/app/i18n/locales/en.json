@@ -5662,7 +5662,8 @@
             "settingUpOnDevice": "Setting up {what} on this device stopped. The Intentic window has the reason, and a way to try again.",
             "showSetup": "Show the setup",
             "stoppedSettingUpOn": "You stopped setting up {what} on this device. Nothing else is running there.",
-            "waitingInIntenticWindow": "Waiting for you in the Intentic window"
+            "waitingInIntenticWindow": "Waiting for you in the Intentic window",
+            "yourSandbox": "your sandbox"
         },
         "hostedWait": {
             "puttingOnInternet": "Putting it on the internet",
@@ -5742,6 +5743,7 @@
             "pasteIntoTerminalPress": "Paste it into that terminal and press Enter.",
             "pickWhereRunsYoull": "Pick where it runs. You'll be working in it in a minute or two.",
             "pickedUpNoSandbox": "Picked up a while ago, still no sandbox. Check {where} for an error. It's safe to re-run.",
+            "pickingUpLastRunStopped": "Picking up where you left off: the last run on your machine stopped before it finished.",
             "pickingUpWhereLeft": "Picking up where you left off: nothing has run yet.",
             "platformDoesntSetOne": "This platform doesn't set one up",
             "platformDoesntStartSandboxes": "This platform doesn't start sandboxes or hand out addresses: it connects to one you're already running.",

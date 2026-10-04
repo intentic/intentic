@@ -146,14 +146,20 @@ flowchart LR
   [extension-ui](../../_shared/extension-ui) instances.
 - **Session replay and events.** `src/app/replayPrivacy.ts` decides what a PostHog recording may hold and
   `src/app/eventPrivacy.ts` does the same for every event, through `before_send`. `analytics.ts` hands both to
-  `posthog.init`. In a replay every text node is masked unless it is wording from an i18n catalog (`staticCopy` in
-  `@intentic/ui/i18n`), the code editor, its diff, terminals, images and embedded pages are blocked, and canvas, console
-  output, request bodies, network timing and web vitals attribution are switched off by name, since the PostHog
-  project's own settings would otherwise decide. A label built around a value ("Delete 3 files") is masked whole. In an
+  `posthog.init`. In a replay every text node goes through `src/app/replayText.ts`, which keeps wording from an i18n
+  catalog (`staticCopy` in `@intentic/ui/i18n`), punctuation, the product's name and a number standing alone, keeps the
+  wording of a message with placeholders (`copyTemplates`) while judging each value by its placeholder's name ("3 files
+  changed" whole, "Delete report.pdf?" as "Delete ***********?"), stars everything inside `pre` and `code`, and keeps
+  the words of what a machine reported inside `[data-replay="diagnostic"]` with its paths, addresses, emails and
+  identifiers starred (the setup page's failure list). Everything else turns into asterisks. The code editor, its diff,
+  terminals, images and embedded pages are blocked, and canvas, console output, request bodies, network timing and web
+  vitals attribution are switched off by name, since the PostHog project's own settings would otherwise decide. In an
   event every address becomes the router's route pattern (`routePatternOf` in `router/routePattern.ts`, for example
-  `/workspace/:path*`), the text and attributes of a clicked element pass the same allowlist, and an exception's message
-  is masked while its stack stays. Decided 2026-09-29 as default-deny because workspace names show all over the app
-  (rail, tabs, board, search), not only in the editor and chat, so a list of content views would miss the next one.
+  `/workspace/:path*`), the text and attributes of a clicked element pass the same rules, and an exception's message is
+  masked while its stack stays. Decided 2026-09-29 as default-deny because workspace names show all over the app (rail,
+  tabs, board, search), not only in the editor and chat, so a list of content views would miss the next one. Widened
+  2026-10-04 to sentences around values, numbers and setup diagnostics: replays of a failed onboarding showed a
+  screen of asterisks, the error included, and a deny-list of content views was rejected again for the reason above.
   Rejected: a marker on each content view, and one on each piece of chrome. The privacy policy
   (`_site/site-content/src/legal.ts`) states what leaves the browser, so change both together.
 - **Gotcha.** The dev server must stay on `https://localhost:47145`: CORS, Better Auth and the Google OAuth client

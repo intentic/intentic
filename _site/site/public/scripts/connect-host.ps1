@@ -100,7 +100,8 @@ function Get-PullRefusal([string]$Said) {
     $text = $Said.ToLowerInvariant()
     # Read first: the credential store fails before any registry answer, and only it says these words.
     if ($text -match 'error getting credentials|credential helper|credsstore') { return 'credentials' }
-    if ($text -match 'unauthorized|authentication required|denied:|access denied|insufficient_scope|forbidden') { return 'refused' }
+    # ': denied' is ghcr.io's refusal when the word ends the line ("error from registry: denied").
+    if ($text -match 'unauthorized|authentication required|denied:|: denied|access denied|insufficient_scope|forbidden') { return 'refused' }
     if ($text -match 'manifest unknown|manifest for|repository does not exist|name unknown') { return 'missing' }
     return 'broken'
 }

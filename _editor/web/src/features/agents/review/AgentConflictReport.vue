@@ -133,7 +133,7 @@ const ROW = `mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1`;
                     ><template v-if="theirs.length > 0">{{
                         t(`agents.agentConflictReport.yourEditsAreThere`, { count: theirs.length }, theirs.length)
                     }}</template
-                    >.<template v-if="mergeable"> {{ t(`agents.agentConflictReport.landingConflictMarkersStill`) }}</template>
+                    >.<template v-if="mergeable">{{ " " }}{{ t(`agents.agentConflictReport.landingConflictMarkersStill`) }}</template>
                 </span>
             </div>
 

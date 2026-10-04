@@ -29,6 +29,7 @@ export {
     activeLocale,
     BASE_LOCALE,
     type Catalog,
+    copyTemplates,
     installI18n,
     isLocale,
     type Locale,

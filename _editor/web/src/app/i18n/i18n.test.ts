@@ -175,6 +175,26 @@ describe(`the language layer`, () => {
         expect([...staticCopy()]).toEqual([`Save`, `no file`, `one file`, `Open the menu`, `Zapisz`]);
     });
 
+    // The other half of what a replay keeps: our sentence around a value, whose wording is ours and whose value is
+    // judged on its own (web/src/app/replayText.ts). Only placeholders qualify: a link or an escape renders something
+    // the message does not spell out.
+    it(`lists the messages that are only filled in, one per plural form, and none that are linked or escaped`, async () => {
+        const { copyTemplates, registerCatalog } = await freshI18n();
+        await registerCatalog({
+            namespace: `probe`,
+            base: {
+                save: `Save`,
+                filled: `{count}   changed`,
+                forms: `one file | {n} files in { dir }`,
+                escaped: `{'@'}x {n}`,
+                linked: `@:probe.save {n} now`,
+            },
+            load: () => Promise.reject(new Error(`unused`)),
+        });
+
+        expect([...copyTemplates()]).toEqual([`{count} changed`, `{n} files in { dir }`]);
+    });
+
     // THE ONE THAT SHIPPED BROKEN. Every assertion above reads `t` after the switch and passed while the app on
     // screen did not change: the words were right the next time anything asked for them, and nothing asked. What a
     // render actually needs is a DEPENDENCY, so these drive the two halves through `watchEffect` — the same thing a

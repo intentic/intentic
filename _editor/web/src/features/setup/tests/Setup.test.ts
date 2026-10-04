@@ -435,7 +435,9 @@ it(`does say where you left off once something has actually happened to the sand
     sandboxes.value = [started];
     list.mockResolvedValue([started]);
     const el = await mount();
-    expect(el.textContent).toContain(`Picking up where you left off`);
+    // A claimed command is a run that started, so "nothing has run yet" would deny the failure the reader just saw.
+    expect(el.textContent).toContain(`Picking up where you left off: the last run on your machine stopped before it finished.`);
+    expect(el.textContent).not.toContain(`nothing has run yet`);
     expect(el.textContent).toContain(`Use a new sandbox instead`);
 });
 

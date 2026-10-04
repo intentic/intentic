@@ -107,6 +107,11 @@ const words = new Set<string>();
 // spell out, so it is left out. A reader of `words` treats text it lacks as not ours, which is the safe direction.
 const RENDERS_DIFFERENTLY = /[{}@]/;
 
+// A message whose only syntax is named or numbered placeholders (`{count}`, `{0}`) is our sentence around values that
+// came from somewhere, kept apart for `copyTemplates`. Links (`@:`) and literal escapes (`{'{'}`) stay out of both sets.
+const PLACEHOLDER = /\{\s*[\w.]+\s*\}/g;
+const templates = new Set<string>();
+
 const isMessage = (node: string | MessageTree): node is string => typeof node === `string`;
 
 // An extension's catalog is JSON from outside this repository, so a value that is neither a string nor an object
@@ -121,8 +126,13 @@ const collect = (tree: MessageTree): void => {
         } else if (isMessage(node)) {
             for (const form of node.split(`|`)) {
                 const plain = form.replace(/\s+/g, ` `).trim();
-                if (plain !== `` && !RENDERS_DIFFERENTLY.test(plain)) {
+                if (plain === ``) {
+                    continue;
+                }
+                if (!RENDERS_DIFFERENTLY.test(plain)) {
                     words.add(plain);
+                } else if (!RENDERS_DIFFERENTLY.test(plain.replace(PLACEHOLDER, ``))) {
+                    templates.add(plain);
                 }
             }
         }
@@ -141,6 +151,13 @@ const merge = (locale: Locale, catalog: Catalog, tree: MessageTree): void => {
  * to keep the interface legible while it masks the rest (web/src/app/replayPrivacy.ts).
  */
 export const staticCopy = (): ReadonlySet<string> => words;
+
+/**
+ * Every loaded message whose only syntax is placeholders, as written (`{count} files changed`) with its whitespace
+ * collapsed: the app's own wording around values it did not write. Session replay keeps the wording and judges each value
+ * on its own (web/src/app/replayPrivacy.ts). Grows as catalogs arrive, like `staticCopy`.
+ */
+export const copyTemplates = (): ReadonlySet<string> => templates;
 
 const fetchInto = (locale: Locale, catalog: Catalog): Promise<void> => {
     const slot = slotOf(locale, catalog);

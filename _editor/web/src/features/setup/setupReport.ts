@@ -1,4 +1,5 @@
 import type { SetupReport } from "@intentic/api-contract";
+import { scrubDiagnostic } from "../../app/replayText";
 
 /* The machine's setup report, read for step 3's card. */
 
@@ -32,3 +33,16 @@ export const setupReportView = (report: SetupReport | null): SetupReportView => 
     }
     return { failures: null, stage: STAGE_LABELS[report.stage] };
 };
+
+// Of the first failure's problem, what the failure event carries: the cause and docker's own last words fit in it.
+const PROBLEM_CHARS = 600;
+
+/**
+ * What `sandbox_setup_failed` says about a run that stopped: the stage, every broken check, and the first one's own words,
+ * scrubbed like a replay's diagnostics (app/replayText.ts), so a cause can be counted without watching a replay.
+ */
+export const setupFailedEvent = (report: SetupReport) => ({
+    stage: report.stage,
+    checks: report.failed.map((failure) => failure.check).join(`,`),
+    problem: scrubDiagnostic(report.failed[0]?.problem ?? ``).slice(0, PROBLEM_CHARS),
+});

@@ -818,9 +818,12 @@ fn pull_refusal(said: &str) -> PullRefusal {
     {
         return PullRefusal::Credentials;
     }
+    // ": denied" is ghcr.io's refusal when the word ends the line, as in "error from registry: denied" or
+    // "...manifests/stable\": denied". Windows' "...docker_engine: Access is denied." never contains it.
     if text.contains("unauthorized")
         || text.contains("authentication required")
         || text.contains("denied:")
+        || text.contains(": denied")
         || text.contains("access denied")
         || text.contains("insufficient_scope")
         || text.contains("forbidden")
@@ -851,7 +854,7 @@ fn pull_refusal_message(image: &str, refusal: PullRefusal, said: &str) -> String
             "docker could not read its own saved credentials, so the pull of {image} never reached the registry. Run 'docker logout ghcr.io' (or remove \"credsStore\" from ~/.docker/config.json), then re-run."
         ),
         PullRefusal::Broken => format!(
-            "{image} did not finish downloading in {PULL_ATTEMPTS} attempts. The registry answered and the transfer broke, so this is the network between this machine and the registry rather than anything to fix here — re-run when it is steadier: the layers that finished are kept, so the next pull resumes rather than starting over."
+            "{image} did not finish downloading in {PULL_ATTEMPTS} attempts. That is most often the network between this machine and the registry (docker's own words close this message) — re-run when it is steadier: the layers that finished are kept, so the next pull resumes rather than starting over."
         ),
     };
     match docker_last_words(said) {
@@ -991,6 +994,18 @@ mod tests {
             ),
             PullRefusal::Refused
         );
+        // ghcr.io's wording for a stale login on Docker Desktop (2026-10-04). It used to fall through to Broken, so
+        // the login was never cleared and the user was told their network was at fault.
+        assert_eq!(
+            pull_refusal("Error response from daemon: error from registry: denied"),
+            PullRefusal::Refused
+        );
+        assert_eq!(
+            pull_refusal(
+                "Error response from daemon: Head \"https://ghcr.io/v2/intentic/sandbox/manifests/stable\": denied"
+            ),
+            PullRefusal::Refused
+        );
     }
 
     #[test]
@@ -1026,6 +1041,10 @@ mod tests {
             pull_refusal(
                 "error during connect: in the default daemon configuration on Windows, ... Access is denied."
             ),
+            PullRefusal::Broken
+        );
+        assert_eq!(
+            pull_refusal("error during connect: open //./pipe/docker_engine: Access is denied."),
             PullRefusal::Broken
         );
     }

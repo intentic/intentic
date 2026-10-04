@@ -1,15 +1,12 @@
-import { staticCopy } from "@intentic/ui/i18n";
 import type { CapturedNetworkRequest, PostHogConfig } from "posthog-js";
+import { maskText } from "./replayText";
 
-// What a session replay may keep of the screen: layout, clicks, scrolling and the interface's own wording, and nothing
-// that a person, an agent or the workspace put there. Every rule is default-deny, so a view added later is masked before
-// anyone has heard of it.
+// What a session replay may keep of the screen: layout, clicks, scrolling, the interface's own wording, numbers, and what
+// a machine reported about a failed setup, and nothing else that a person, an agent or the workspace put there. Every
+// rule is default-deny, so a view added later is masked before anyone has heard of it.
 //
-// Text: `maskTextSelector: "*"` sends every text node through `maskText`, which keeps only what an i18n catalog spells
-// out (`staticCopy`) and turns the rest into asterisks. The catalogs make a sound allowlist because
-// `_tools/checks/i18n-literals.mjs` ratchets English typed into templates, so chrome reaches the screen through them
-// and no component needs a marker. A label built around a value ("Delete 3 files") is masked whole, and so is a count.
-// A literal that is still typed into a template is masked too, which is the safe direction.
+// Text: `maskTextSelector: "*"` sends every text node through `maskText` (replayText.ts, which has the rules) with the
+// element it sits in. What no rule recognises turns into asterisks.
 //
 // Attributes: words in attributes (`title`, `aria-label`, `placeholder`) pass the same test. Addresses and paths are
 // always masked. Identifiers and `data-*` values survive only as a bare lowercase word or a number, which is what the
@@ -80,14 +77,6 @@ const KEYWORD = /^(?:[a-z][a-z-]{0,23}(?: [a-z][a-z-]{0,23}){0,3}|\d{1,6})$/;
 
 const stars = (text: string): string => text.replace(/\S/g, `*`);
 
-/** Whether this text is the interface's own wording (or nothing at all), as opposed to anything anyone wrote. */
-export const isAppCopy = (text: string): boolean => {
-    const words = text.replace(/\s+/g, ` `).trim();
-    return words === `` || staticCopy().has(words);
-};
-
-export const maskText = (text: string): string => (isAppCopy(text) ? text : stars(text));
-
 export const maskAttribute = (name: string, value: string, element?: Element): string => {
     const key = name.toLowerCase();
     if (WORDS.has(key)) {
@@ -113,7 +102,7 @@ export const replayPrivacy = (redactAddress: (address: string) => string, screen
         session_recording: {
             maskAllInputs: true,
             maskTextSelector: `*`,
-            maskTextFn: (text: string) => maskText(text),
+            maskTextFn: (text: string, element?: HTMLElement | null) => maskText(text, element),
             maskAttributeFn: maskAttribute,
             blockSelector: [...BLOCKED, ...(screen.touch === true ? TOUCH_BLOCKED : [])].join(`,`),
             captureCanvas: { recordCanvas: false },

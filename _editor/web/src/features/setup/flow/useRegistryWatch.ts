@@ -3,7 +3,7 @@ import { onScopeDispose, ref, type Ref } from "vue";
 import { track } from "../../../app/analytics";
 import type { useSandbox } from "../../sandbox/client/useSandbox";
 import type { HostedWaitView } from "../hostedWait";
-import { setupReportView } from "../setupReport";
+import { setupFailedEvent, setupReportView } from "../setupReport";
 import type { HostedLane } from "./hostedLane";
 import type { Machine } from "./machineLadder";
 import type { SetupRow } from "./useSetupRow";
@@ -16,6 +16,7 @@ type SandboxStore = ReturnType<typeof useSandbox>;
 
 // Between two registry reads (ms).
 const POLL_MS = 3_000;
+
 
 export interface RegistryWatchHost {
     readonly sandbox: Pick<SandboxStore, `refresh`>;
@@ -51,7 +52,7 @@ export const useRegistryWatch = ({ sandbox, row, hosted, mintedFor }: RegistryWa
         const reported = found?.setupReport ?? null;
         if (reported !== null && reported.failed.length > 0 && setupReportView(row.report.value).failures === null) {
             // Setup failed with a named cause, rather than a silent drop-off between the claim and a check-in.
-            track(`sandbox_setup_failed`, { stage: reported.stage, checks: reported.failed.map((failure) => failure.check).join(`,`) });
+            track(`sandbox_setup_failed`, setupFailedEvent(reported));
         }
         row.report.value = reported;
     };

@@ -53,8 +53,8 @@ const safety = { name: `sandbox`, params: { tab: `agent` }, query: { section: `s
         <!-- A floor, not `min-w-0`: every control beside this is `shrink-0` (ChatPaneNotices' strips). -->
         <span class="min-w-[14rem] flex-1">
             {{ t(`chat.chatPaneNotices.privacyRefused`, { provider: standing.label }) }}
-            <template v-if="!owner"> {{ t(`chat.chatPaneNotices.privacyOwnerOnly`) }}</template>
-            <template v-if="failed"> {{ t(`chat.chatPaneNotices.privacyGrantFailed`) }}</template>
+            <template v-if="!owner">{{ " " }}{{ t(`chat.chatPaneNotices.privacyOwnerOnly`) }}</template>
+            <template v-if="failed">{{ " " }}{{ t(`chat.chatPaneNotices.privacyGrantFailed`) }}</template>
         </span>
         <div class="flex shrink-0 items-center gap-1">
             <Button
@@ -79,7 +79,7 @@ const safety = { name: `sandbox`, params: { tab: `agent` }, query: { section: `s
         <Icon name="shield" class="shrink-0" />
         <span class="min-w-[14rem] flex-1">
             {{ t(`chat.chatPaneNotices.privacyGranted`, { provider: standing.label }) }}
-            <template v-if="failed"> {{ t(`chat.chatPaneNotices.privacyGrantFailed`) }}</template>
+            <template v-if="failed">{{ " " }}{{ t(`chat.chatPaneNotices.privacyGrantFailed`) }}</template>
         </span>
         <Button
             v-if="owner"

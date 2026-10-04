@@ -14,9 +14,10 @@ import { replayPrivacy } from "./replayPrivacy";
 // What this captures is what the privacy policy and sub-processor list (_site/site-content/src/legal.ts) say it
 // captures; a change here that alters what leaves the browser must move LEGAL_VERSION and both documents together.
 //
-// Neither the replay nor an event carries the workspace: replayPrivacy.ts masks every piece of text that is not the
-// interface's own wording and blocks the editor, terminals and media, and eventPrivacy.ts gives the same treatment to
-// the addresses and clicked text of the events. Widen either there, not here, and only together with the policy.
+// Neither the replay nor an event carries the workspace: replayPrivacy.ts (with replayText.ts) masks every piece of text
+// that is not the interface's own wording, a number or a setup's own diagnostics, and blocks the editor, terminals and
+// media, and eventPrivacy.ts gives the same treatment to the addresses and clicked text of the events. Widen either
+// there, not here, and only together with the policy.
 //
 // LOADED WHEN THE PAGE IS FIRST IDLE, not with the app: posthog-js is ~290 KB of JS that a phone downloaded and ran
 // before its first screen, and its recorder then started serialising a page still being built. Milestones tracked before

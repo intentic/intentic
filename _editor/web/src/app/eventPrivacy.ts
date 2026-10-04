@@ -1,5 +1,6 @@
 import type { BeforeSendFn, CaptureResult, JsonRecord, JsonType } from "posthog-js";
-import { maskAttribute, maskText } from "./replayPrivacy";
+import { maskAttribute } from "./replayPrivacy";
+import { maskText } from "./replayText";
 
 // What an analytics event may carry of the workspace. The replay is masked in replayPrivacy.ts, and this is the same
 // rule for everything else the SDK sends, which `before_send` sees one event at a time:
@@ -7,13 +8,14 @@ import { maskAttribute, maskText } from "./replayPrivacy";
 //  - Addresses. A path or URL in any property becomes the router's route pattern (`/workspace/:path*`), so a file path,
 //    a conversation id or a sandbox name never leaves. Another site's address is cut to its origin.
 //  - Text of a clicked element (`$el_text`, `$elements`, `$elements_chain`, and so the rage click and dead click events
-//    that carry them). It goes through the same allowlist as the replay, so "Commit all" still records and a file name
-//    does not.
+//    that carry them). It goes through the same rules as the replay's text (replayText.ts), so "Commit all" still
+//    records and a file name does not.
 //  - Page titles, and the message of an exception, which quotes whatever failed and so often names a path. The stack
 //    stays: its frames are the app's own bundle.
 //
-// Nothing else needs a rule. Our own `track()` events carry enums and counts, the heatmap event is keyed by page
-// address (handled with the addresses), and web vitals carry no selectors because `web_vitals_attribution` is off.
+// Nothing else needs a rule. Our own `track()` events carry enums and counts (and `sandbox_setup_failed` the machine's
+// own words, scrubbed at the call by `scrubDiagnostic`), the heatmap event is keyed by page address (handled with the
+// addresses), and web vitals carry no selectors because `web_vitals_attribution` is off.
 
 /** Where a browser path sits in the router's table: its route pattern, or undefined for a path nothing matches. */
 export type RoutePatternOf = (path: string) => string | undefined;

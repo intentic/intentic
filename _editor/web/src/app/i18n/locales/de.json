@@ -3991,7 +3991,8 @@
             "settingUpOnDevice": "Die Einrichtung von {what} auf diesem Gerät ist gestoppt. Das Intentic-Fenster nennt den Grund und einen Weg, es erneut zu versuchen.",
             "showSetup": "Einrichtung anzeigen",
             "stoppedSettingUpOn": "Sie haben die Einrichtung von {what} auf diesem Gerät gestoppt. Dort läuft sonst nichts.",
-            "waitingInIntenticWindow": "Wartet im Intentic-Fenster auf Sie"
+            "waitingInIntenticWindow": "Wartet im Intentic-Fenster auf Sie",
+            "yourSandbox": "Ihre Sandbox"
         },
         "hostedWait": {
             "puttingOnInternet": "Es kommt ins Internet",
@@ -4068,6 +4069,7 @@
             "pasteIntoTerminalPress": "Fügen Sie es in dieses Terminal ein und drücken Sie Enter.",
             "pickWhereRunsYoull": "Wählen Sie, wo es läuft. In ein, zwei Minuten arbeiten Sie darin.",
             "pickedUpNoSandbox": "Vor einer Weile aufgegriffen, immer noch keine Sandbox. Sehen Sie in {where} nach einem Fehler. Ein erneuter Lauf ist unbedenklich.",
+            "pickingUpLastRunStopped": "Es geht dort weiter, wo Sie aufgehört haben: Der letzte Lauf auf Ihrem Rechner hat vor dem Ende angehalten.",
             "pickingUpWhereLeft": "Es geht dort weiter, wo Sie aufgehört haben: bisher ist nichts gelaufen.",
             "platformDoesntSetOne": "Diese Plattform richtet keine ein",
             "platformDoesntStartSandboxes": "Diese Plattform startet keine Sandboxes und vergibt keine Adressen: sie verbindet sich mit einer, die Sie schon betreiben.",
