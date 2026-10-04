@@ -5,12 +5,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { RESERVED_MCP_SERVER_NAMES, stashedMarker, VAULTED } from "@intentic/sandbox-contract";
+import { gitFullHead, gitHead } from "@intentic/scaffold";
 
 import { createApp } from "../../app.js";
 import { hasSession, markConnected, sessionDir } from "../../browser/sessions/session-store.js";
 
 import { clientFor, collect, errorCode } from "../../harness/route-client.testing.js";
 import { tempWorkspace } from "../../harness/route-fakes.testing.js";
+import { makeWorkspaceDir, moveWorkspacePath, readWorkspaceFile, removeWorkspacePath } from "../../workspace/files/workspace-files.js";
 import { fakeFiles } from "../../workspace/workspace-slice.testing.js";
 import { services } from "../../harness/route-services.testing.js";
 import { memoryPersonasStore } from "../../harness/route-stores.testing.js";
@@ -274,4 +276,32 @@ test("capabilities.sshKey answers a public key and a one-time token, which one a
     expect(await addFailure({ id: "again", kind: "ssh", config: form })).toBe("BAD_REQUEST");
     expect(await addFailure({ id: "forged", kind: "ssh", config: { ...form, privateKey: stashedMarker("never-issued") } })).toBe("BAD_REQUEST");
     expect(await store.get("again")).toBeUndefined();
+});
+
+// A plugin's hooks run inside the agent's session, so its install pins the commit its branch named then: the stored
+// entry carries it, and only adding the plugin again moves it (plugin.handler.ts).
+test("capabilities.add stores the commit a plugin installed at, resolved from the branch it was added at", async () => {
+    const remote = mkdtempSync(join(tmpdir(), "plugin-route-remote-"));
+    const git = (cwd: string, ...args: string[]): string => execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
+    git(remote, "init", "-q");
+    writeFileSync(join(remote, "README.md"), "a plugin\n");
+    git(remote, "add", "-A");
+    git(remote, "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-q", "-m", "one");
+    const head = git(remote, "rev-parse", "HEAD");
+    const capabilities = memoryCapabilitiesStore([]);
+    const client = clientFor(
+        createApp(
+            services({
+                workspace: tempWorkspace([]),
+                capabilities,
+                files: fakeFiles({ read: readWorkspaceFile, mkdir: makeWorkspaceDir, remove: removeWorkspacePath, move: moveWorkspacePath }),
+                git: { head: gitHead, fullHead: gitFullHead },
+            }),
+        ),
+    );
+
+    const url = `file://${remote}`;
+    await collect(await client.capabilities.add({ id: "helper", kind: "plugin", config: { url, ref: "HEAD" } }));
+
+    expect(await capabilities.get("helper")).toEqual({ id: "helper", kind: "plugin", config: { url, ref: "HEAD", commit: head } });
 });

@@ -40,6 +40,13 @@ flowchart LR
   editor says it in the reader's language and audience. On the wire the code is any string; `SandboxNoticeSchema` is
   the typed list a reader decodes with, and a code it does not know draws `text`. (2026-09-29: a closed enum was
   rejected, since the editor parses every answer with its own schema and one newer code would fail the whole page.)
+- What a runtime's own extensions show has one lane, whichever runtime ran them (`src/events/agent-ui.ts`). An
+  `agent_status` frame is a keyed status entry (text, or null to clear it), a turn fact that replays to a late joiner and
+  is gone when the turn ends. An `agent_notice` frame (level `info` · `warning` · `error`, text, optional `source`) folds
+  into a `notice` row carrying `agentNotice`, so a reopened chat still says it. A dialog an extension opens is not part of
+  this lane: it rides the ordinary `question` card. Pi's extension UI and the Claude Code loop's informational lines
+  feed it today. (2026-10-04: a widget kind of its own was rejected: a widget's lines are a status entry's text, and
+  nothing yet draws a placement beside a composer.)
 - `StatePlanSchema` and `StateStatusSchema` are what `ic` reads by field name: the update pre-flight's line (embedded
   verbatim in the staged-update marker) and `/health`'s `state`. `golden/` holds their examples, which the contract's
   test keeps current and ic's Rust tests parse.

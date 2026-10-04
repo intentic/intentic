@@ -34,6 +34,7 @@ import { useLimitResend, useScheduledWays } from "./pane/scheduledSend";
 import { useComposerPopovers } from "./pane/composerPopovers";
 import { useComposerKeys, useRecallRing } from "./pane/composerKeys";
 import ChatCommandPopover from "../composer/ChatCommandPopover.vue";
+import ChatAgentStatus from "./ChatAgentStatus.vue";
 import ChatContinueStrip from "./ChatContinueStrip.vue";
 import ChatLeftRunning from "./jobs/ChatLeftRunning.vue";
 import ChatQueue from "../composer/later/ChatQueue.vue";
@@ -465,6 +466,8 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                         <ChatQueue />
                         <!-- An armed edit, and the two ways out of it. -->
                         <ChatEditNotice />
+                        <!-- What the runtime's extensions show while the turn runs: a status line each, gone when it ends (ChatAgentStatus). -->
+                        <ChatAgentStatus />
                         <!-- The whole box changes standing when the agent's voice is armed (.composer-voice); being in this mode by accident is the one mistake worth painting. -->
                         <form
                             class="ui-field-shell composer-frame relative flex flex-col rounded-2xl border-line-strong bg-overlay shadow-lg"

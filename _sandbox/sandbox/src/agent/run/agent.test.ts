@@ -2284,6 +2284,42 @@ test("output from a locally-answered command reaches the transcript as assistant
     expect(events).toContainEqual({ kind: "text_end" });
 });
 
+// The loop's informational lines reach the agent UI lane: a notice per line said once, a call's progress as a status
+// entry that goes with its result, and the CLI's transcript-only `info` level not at all.
+test("informational lines become notices and progress entries, by level", async () => {
+    const line = (content: string, level: string, extra: Record<string, unknown> = {}) => ({
+        type: "system",
+        subtype: "informational",
+        session_id: "s",
+        uuid: "u",
+        content,
+        level,
+        ...extra,
+    });
+    const events = await collect(
+        request,
+        fakeQuery(
+            { type: "system", subtype: "init", session_id: "s", model: "sonnet" },
+            line("UserPromptSubmit hook blocked: off-hours", "warning"),
+            line("Plugin loaded", "notice"),
+            line("Plugin loaded", "notice"),
+            line("Try /review next", "suggestion"),
+            line("debug detail", "info"),
+            line("Indexing 40%", "notice", { tool_use_id: "t1" }),
+            { type: "assistant", session_id: "s", message: { content: [{ type: "tool_use", id: "t1", name: "Grep", input: { pattern: "x" } }] } },
+            { type: "user", session_id: "s", message: { content: [{ type: "tool_result", tool_use_id: "t1", content: "ok" }] } },
+            { type: "result", subtype: "success" },
+        ),
+    );
+    expect(events.filter((event) => event.kind === "agent_notice" || event.kind === "agent_status")).toEqual([
+        { kind: "agent_notice", level: "warning", text: "UserPromptSubmit hook blocked: off-hours" },
+        { kind: "agent_notice", level: "info", text: "Plugin loaded" },
+        { kind: "agent_notice", level: "info", text: "Try /review next" },
+        { kind: "agent_status", key: "progress:t1", text: "Indexing 40%" },
+        { kind: "agent_status", key: "progress:t1", text: null },
+    ]);
+});
+
 // An unknown command discards the message after claiming the leading '/'; coded as an error rather than left silent, so
 // the client can tell the user to retype.
 test("an unknown command is an error the client can act on, naming the token that ate the message", async () => {
@@ -2338,21 +2374,23 @@ test("fast speed is asked for per session, and only by the turn that wanted it",
     expect(captured.at(-1)?.settings).not.toHaveProperty("fastModePerSessionOptIn");
 });
 
-// loop, schedule, keybindings-help and update-config assume an interactive process this harness doesn't run, so they're
-// hidden every turn and merged with, not replaced by, the fast-mode settings.
-test("the bundled CLI-only skills are hidden from the model on every turn, fast or not", async () => {
+// loop, schedule, keybindings-help, update-config and plugin-authoring assume an interactive process that draws, which
+// this harness doesn't run, so they're hidden every turn and merged with, not replaced by, the fast-mode settings. The
+// CLI's built-in AGENTS.md loader is held to CLAUDE.md alongside them: the daemon composes AGENTS.md itself.
+test("the bundled CLI-only skills and AGENTS.md loader are off on every turn, fast or not", async () => {
     const captured: Options[] = [];
     const capture: QueryFn = async function* (args) {
         captured.push(args.options);
         yield { type: "result", subtype: "success" } as SDKMessage;
     };
-    const hidden = { loop: "off", schedule: "off", "keybindings-help": "off", "update-config": "off" } as const;
+    const hidden = { loop: "off", schedule: "off", "keybindings-help": "off", "update-config": "off", "plugin-authoring": "off" } as const;
+    const instructionFiles = { pluginConfigs: { "agents-md@builtin": { options: { instructionFiles: "claude-md" } } } };
 
     await collect(request, capture);
-    expect(captured.at(-1)?.settings).toEqual({ skillOverrides: hidden });
+    expect(captured.at(-1)?.settings).toEqual({ skillOverrides: hidden, ...instructionFiles });
 
     await collect({ ...request, spec: { ...request.spec, fast: true } }, capture);
-    expect(captured.at(-1)?.settings).toEqual({ skillOverrides: hidden, fastMode: true, fastModePerSessionOptIn: true });
+    expect(captured.at(-1)?.settings).toEqual({ skillOverrides: hidden, ...instructionFiles, fastMode: true, fastModePerSessionOptIn: true });
 });
 
 // The flag layer is the one place the CLI takes disableAllHooks from without the workspace's own files overriding it;

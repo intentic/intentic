@@ -40,6 +40,16 @@ test("returns the model's answer", async () => {
     await expect(ask()).resolves.toBe("Wire the fleet board broadcast");
 });
 
+// The CLI's built-in agents-md mod ignores settingSources: without its own option a title or commit message would be
+// written with the workspace's AGENTS.md in context.
+test("a helper runs with the CLI's built-in AGENTS.md loader held to CLAUDE.md", async () => {
+    answering({ result: "Title" });
+    await ask();
+    expect(query.mock.calls.at(-1)?.[0].options.settings).toEqual({
+        pluginConfigs: { "agents-md@builtin": { options: { instructionFiles: "claude-md" } } },
+    });
+});
+
 // The CLI files an API failure as a success-subtype result carrying is_error, not a thrown error; every caller here
 // treats the reply as data, so it must be converted to a thrown failure.
 test("a result that reports an error is a failure, not an answer", async () => {

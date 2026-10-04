@@ -89,9 +89,33 @@
         "approvals": "Approvals"
     },
     "hookSetBody": {
+        "actsOn": "Acts on",
+        "enabledIn": "enabled in {where}",
         "filesPinned": "The approval also covers these files, byte for byte:",
+        "fromExtension": "brought by an extension",
+        "fromPersona": "a persona's kit",
+        "fromPlugin": "a plugin connection",
         "fromProjectSettings": "workspace .claude/settings.json",
-        "fromUserSettings": "~/.claude/settings.json"
+        "fromSkills": "a plugin folder among the skills",
+        "fromUserSettings": "~/.claude/settings.json",
+        "marketplace": "Adds the plugin marketplace {name} ({location}), which Claude Code may install enabled plugins from.",
+        "powers": {
+            "asksModel": "asks a model",
+            "callsTools": "calls the agent's tools",
+            "changesFiles": "writes or deletes files",
+            "changesMessages": "can change your messages before the agent reads them",
+            "decidesToolCalls": "can allow, block or change the agent's tool calls",
+            "networkRequests": "makes network requests",
+            "readsEnvironment": "reads the session's environment, where its credentials are",
+            "readsFiles": "reads files",
+            "rewritesSystemPrompt": "rewrites the agent's instructions",
+            "startsPrograms": "starts programs",
+            "startsSubagents": "starts subagents"
+        },
+        "reachesFor": "Reaches for",
+        "runsCode": "This plugin runs code inside Claude Code, with everything the agent's session can reach.",
+        "runsCodeDoing": "This plugin runs code inside Claude Code: it {powers}.",
+        "runsCodeUnreadable": "This plugin runs code inside Claude Code, and what that code does could not be read ({reason}). Approving lets it run all the same."
     },
     "postBody": {
         "showLess": "Show less",

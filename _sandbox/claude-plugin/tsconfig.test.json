@@ -5,6 +5,6 @@
         "types": ["node", "bun", "@intentic/testing/globals"],
         "tsBuildInfoFile": "./.cache/tsbuildinfo-typecheck"
     },
-    "include": ["./src/**/*"],
+    "include": ["./src/**/*", "./hooks/**/*.ts"],
     "exclude": []
 }

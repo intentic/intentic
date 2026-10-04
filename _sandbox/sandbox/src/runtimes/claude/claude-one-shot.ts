@@ -12,6 +12,7 @@ import {
 import { ONE_SHOT_OWNER, workloadStamp } from "../../seams/workload-stamp.js";
 import { shieldHarnessCredential } from "../../privacy/harness-route.js";
 import { sdk } from "../../engines/claude-sdk.js";
+import { CLAUDE_INSTRUCTION_FILES } from "./claude-builtins.js";
 
 // Claude's one-shot helper (agent/adapter.ts oneShot): no tools, session, transcript or events, so its output doesn't
 // drift with workspace state. Settings match SDK defaults except persistSession:false and thinking disabled unless
@@ -61,8 +62,9 @@ const oneShotOptions = (run: OneShotRun, abort: AbortController): Options => {
         // Written as disabled rather than omitted, since omitting it is the SDK's own adaptive-thinking default.
         thinking: { type: thinking === true ? `adaptive` : `disabled` },
         ...(effort === undefined ? {} : { effort: effort as NonNullable<Options["effort"]> }),
-        // The speed request where the pin made one; a request, not a promise, same as on a turn.
-        ...(run.fast === true ? { settings: { fastMode: true, fastModePerSessionOptIn: true } } : {}),
+        // The speed request where the pin made one; a request, not a promise, same as on a turn. A helper reads no
+        // AGENTS.md, so the CLI's built-in loader stays out of it too (claude-builtins.ts).
+        settings: { ...CLAUDE_INSTRUCTION_FILES, ...(run.fast === true ? { fastMode: true, fastModePerSessionOptIn: true } : {}) },
         // A routed provider's endpoint already names the upstream model id; a native Claude call uses the pinned model.
         model: endpoint?.model ?? run.model,
         env: {

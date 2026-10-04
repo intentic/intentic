@@ -172,11 +172,13 @@ export const enabledExtensions = async (services: ExtensionHost): Promise<Instal
 // `extensions` shelf, absent meaning every one. One predicate for the MCP mounts and the plugin dirs alike.
 export const extensionGranted = (shelf: readonly string[] | undefined, extensionId: string): boolean => shelf === undefined || shelf.includes(extensionId);
 
-// An enabled extension's agent plugin: the extension's id, its manifest name, and the plugin's dir.
+// An enabled extension's agent plugin: the extension's id, its manifest name, the plugin's dir, and where the extension
+// comes from (a baked one's code is the image's, which the settings-hook gate does not ask about).
 export interface ExtensionAgentDir {
     readonly id: string;
     readonly name: string;
     readonly dir: string;
+    readonly source: InstalledExtension["source"];
 }
 
 // Each enabled extension contributing an agent plugin; `contributes.agent.path` is relative to the extension root.
@@ -188,7 +190,7 @@ export const extensionAgentDirsOf = async (services: ExtensionHost): Promise<Ext
             continue;
         }
         const dir = agent.path === undefined ? extension.dir : join(extension.dir, agent.path);
-        dirs.push({ id: extension.id, name: extension.manifest.name, dir });
+        dirs.push({ id: extension.id, name: extension.manifest.name, dir, source: extension.source });
     }
     return dirs;
 };

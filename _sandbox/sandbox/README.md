@@ -43,6 +43,14 @@ flowchart LR
   on the same thread once that turn settles; this preserves accepted input even when completion wins the race
   (2026-10-01). Final completion closes steering admission before yielding terminal frames, while planning keeps
   the queue for execution. Stop sends `turn/interrupt`, with a process kill after three seconds if it does not settle.
+- What a runtime's in-process extensions put on screen reaches the chat through the contract's agent UI lane (a
+  status entry, a notice). Pi's extension UI (`runtimes/pi/pi-extension-ui.ts`): `notify` is a notice, `setStatus` and
+  `setWidget` are status entries, and `select`, `confirm` and `input` park on the same question card Codex's questions
+  use, with the clock held while a person answers, and the pick goes back as Pi's `extension_ui_response`. An `editor`
+  dialog is still cancelled (no card fits a multi-line editor). `setTitle` and `set_editor_text` are dropped: the title
+  and the composer are the person's. The Claude Code loop's `informational` lines (`agent/run/informational.ts`) are
+  notices by level, `info` dropped as the CLI shows it only in transcript mode. A line tied to a tool call is that call's
+  status entry until its result. Hook lifecycle messages are not requested.
 - Archive is sticky: only a person's message un-archives a conversation. A turn the daemon starts itself (a retry,
   a nudge, an automation's thread) is refused on an archived one (`conversations/actor/conversation-decide.ts`), and a
   thread whose conversation was archived opens a fresh one instead.
@@ -56,6 +64,22 @@ flowchart LR
   belongs to one extension (`extensions/listener/listener-state.ts`: the declarer owning the provider's card, else the first
   installed); a second declaration is refused at load and named on its Extensions row, and the listener routes answer
   the owner alone.
+- Claude Code hooks the owner has not approved in their exact form never run (`guard/settings-hooks.ts`,
+  `guard/hook-approvals.ts`, applied by `agent/run/harness/settings-hook-gate.ts`): a turn hashes the hooks in the
+  user and project settings, in skill, subagent and command frontmatter, and in every plugin it loads that the image
+  does not ship (plugin connections, git-installed and workspace extensions, persona kits, plugin folders among the
+  skills, plugins the settings enable), with the bytes of every script a hook names and of all of a hooks module's
+  code (`guard/plugin-hooks.ts`); the settings' `enabledPlugins` and `extraKnownMarketplaces` are in the digest too.
+  A digest not in the approvals ledger runs the turn with `disableAllHooks`, which also keeps every plugin's hooks
+  module from loading, and files a request whose card says what each module does, read once per digest by the pinned
+  CLI's `claude plugin validate --json` (`guard/plugin-modules.ts`; a failed read says so on the card and holds
+  nothing up). A plugin with no hooks and no module adds nothing, and a set with no plugin in it hashes as it did before
+  plugins counted. Only image-baked plugins are exempt (2026-10-04: a git-installed extension's or plugin's pinned
+  commit says what was cloned, but its checkout sits under `/work/.intentic`, which every turn can write, and an
+  extension's install review covers its declared powers, not its hooks module).
+- A plugin connection is pinned like an extension: its install resolves the branch or tag it names to a full commit,
+  stored as `commit` (`CapabilityHandler.installed`), and re-applying the stored entry checks that commit out again.
+  Adding it anew is the update.
 - Every MCP server the daemon hosts for a turn (its browser routers, the machines and browsers it was granted, its
   extension cards' endpoints) is a mount at one door, `ALL /mcp/<name>` (`agent/tools/turn-mounts.ts`). Each
   turn holds a bearer of its own, leased the names it mounted and forgotten when the turn ends, and the door refuses
@@ -194,6 +218,10 @@ Main groups under `src/`:
 | Network | `front/` `tunnel/` `vpn/` `exit/` `netdisk/` `public/` `share/` `webchat/` |
 | Plumbing | `bootstrap/` `store/` `seams/` `system/` `http/` `logs/` `invariants/` `workload/` |
 | Test support | `harness/` `fences/` `e2e/` |
+
+Beside `src/`, the image copies a few directories as they are: `bin/` (the command runners and asking CLIs),
+`seed-skills/` (the skills baked into `/root/.claude/skills`), `starter-site/`, and `claude-policy/`, Claude Code's
+managed settings and the policy mod they run first (`/etc/claude-code`, `/opt/intentic-claude-policy`).
 
 A slice's test fake sits beside its slice as `<slice>.testing.ts` (for example `auth/auth-slice.testing.ts`), along with the in-memory stores it holds. `harness/route-services.testing.ts` spreads those fakes into one `Services`, so a new service gets its fake in the slice it joins.
 

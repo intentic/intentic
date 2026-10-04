@@ -1207,7 +1207,7 @@
             "plugin": {
                 "name": "Claude plugin",
                 "description": "A Claude Code plugin from a git repo.",
-                "hint": "Loaded by the agent next turn. Re-adding the same name updates it.",
+                "hint": "Pinned to the commit it installs at and loaded by the agent next turn. Re-adding the same name updates it to the newest commit.",
                 "guide": {
                     "scopes": "private repos: read access (e.g. GitHub `repo`)",
                     "steps": {
@@ -2392,6 +2392,9 @@
             "reschedule": "Change when it sends",
             "anotherAgent": "another agent",
             "autoLand": "Auto-land"
+        },
+        "chatAgentStatus": {
+            "label": "What the agent's extensions show"
         }
     },
     "common": {

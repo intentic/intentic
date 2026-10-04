@@ -16,6 +16,7 @@ import {
     watchWakePrompt,
     watchWakeRow,
 } from "@intentic/sandbox-contract";
+import { foldTurn } from "@intentic/sandbox-contract/transcript-fold";
 import { errandOf, errands, errandPrompt } from "../../run/errands";
 import { changedNothing, type ChatMessage } from "../transcript";
 import { clockOffset, resetSandboxClock } from "../../../agents/fleet/sandboxClock";
@@ -1711,5 +1712,30 @@ describe(`a sandbox notice with a code`, () => {
         expect(mount(uncoded).textContent).toContain(held.text);
         app?.unmount();
         expect(mount({ ...held, noticeCode: { code: `somethingNewer` } }).textContent).toContain(held.text);
+    });
+});
+
+describe(`a runtime extension's notice`, () => {
+    // As the contract's fold writes it, so the row here is the one a live turn and a reopened chat both draw.
+    const noticeRow = (level: `info` | `warning` | `error`, source?: string): ChatMessage => {
+        const row = foldTurn([], [{ kind: `agent_notice`, level, text: `Command blocked\nby the guard`, ...(source === undefined ? {} : { source }) }]).at(-1)!;
+        return { id: 12, ...row };
+    };
+    const iconsOf = (element: HTMLElement): (string | null)[] => [...element.querySelectorAll(`i`)].map((icon) => icon.getAttribute(`data-icon`));
+
+    it(`draws a warning in the warning colour with its glyph, naming the extension that said it`, () => {
+        const element = mount(noticeRow(`warning`, `guard-ext`));
+        const line = element.querySelector(`[data-agent-notice]`);
+        expect(line?.getAttribute(`data-agent-notice`)).toBe(`warning`);
+        expect(line?.classList.contains(`text-warning`)).toBe(true);
+        expect(iconsOf(element)).toEqual([`exclamation-triangle`]);
+        expect(line?.textContent?.trim()).toBe(`guard-ext: Command blocked\nby the guard`);
+    });
+
+    it(`keeps an info line as muted as any other notice, and an error in the danger colour`, () => {
+        const info = mount(noticeRow(`info`)).querySelector(`[data-agent-notice]`);
+        expect(info?.classList.contains(`text-subtle`)).toBe(true);
+        expect(info?.textContent?.trim()).toBe(`Command blocked\nby the guard`);
+        expect(mount(noticeRow(`error`)).querySelector(`[data-agent-notice]`)?.classList.contains(`text-danger`)).toBe(true);
     });
 });

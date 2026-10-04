@@ -124,6 +124,26 @@ type TurnHost = Pick<
 export const newerQueue = (held: ConversationQueue | undefined, heard: ConversationQueue | undefined): ConversationQueue | undefined =>
     heard === undefined || (held !== undefined && held.revision > heard.revision) ? held : heard;
 
+/** One status entry a runtime's extension set: its words, and who set them when the runtime said. */
+export interface AgentStatusEntry {
+    readonly text: string;
+    readonly source?: string;
+}
+
+/** The entries after one agent_status fact: replaced or added by key, removed when it clears. */
+export const withAgentStatus = (
+    entries: ReadonlyMap<string, AgentStatusEntry>,
+    fact: Extract<TurnFact, { kind: `agent_status` }>,
+): ReadonlyMap<string, AgentStatusEntry> => {
+    const next = new Map(entries);
+    if (fact.text === null || fact.text.trim() === ``) {
+        next.delete(fact.key);
+    } else {
+        next.set(fact.key, fact.source === undefined ? { text: fact.text } : { text: fact.text, source: fact.source });
+    }
+    return next;
+};
+
 export class TurnClient {
     // Where this window's run stands; moved only by `advance`, and every other fact about the run is read off it.
     readonly phase = shallowRef<RunPhase>(IDLE);
@@ -138,6 +158,9 @@ export class TurnClient {
     readonly liveMode = ref<PermissionMode | undefined>();
     // Harness retrying inside the live turn; nothing has failed. Cleared once the turn produces anything or settles.
     readonly providerRetry = ref<Extract<TurnFact, { kind: `provider_retry` }> | undefined>();
+    // What the runtime's own extensions show while this turn runs (agent_status facts), by key, in the order first set.
+    // Live state, not transcript: gone once the turn settles, whatever the last frame said.
+    readonly agentStatus = shallowRef<ReadonlyMap<string, AgentStatusEntry>>(new Map());
 
     // A person ended the live turn (Stop, or a card waved away) and it is unwinding: set in the press's own frame, long
     // before the stream closes, and published with the tab (TabFacts.ending) so the board's card and this chat say the
@@ -641,6 +664,8 @@ export class TurnClient {
         this.message = undefined;
         // An in-turn retry belongs to the turn that was retrying; whatever it settled as, the wait is over.
         this.providerRetry.value = undefined;
+        // An extension's status lines belong to the turn that set them.
+        this.agentStatus.value = new Map();
         host.failures.armRenewalProbe();
         host.failures.settled();
         // A switch made while this turn ran held its divider back; the turn's over, so it goes here. No-op otherwise.

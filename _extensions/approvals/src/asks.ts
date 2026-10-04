@@ -1,5 +1,6 @@
 import type { ViewAsk } from "@intentic/extension-api";
 import type { ApprovalsList, ApprovalSummary, HookRequest, HookRequests } from "@intentic/sandbox-contract";
+import { hookSetSize, moduleSentence } from "./hookSet.js";
 import { destinationOf } from "./postText";
 import { waitingHooksOf } from "./useHookRequests";
 import { t } from "./i18n.js";
@@ -73,14 +74,20 @@ const failedAsk = (item: ApprovalSummary, presses: AskPresses): ViewAsk => ({
     actions: [{ label: t(`approvalsView.retry`), icon: `refresh`, tone: `primary`, run: () => presses.save({ ...item, status: `approved` }) }],
 });
 
-// One line per hook, as the page's own body lists them: when it fires, on what, and what it runs.
+// One line per hook, as the page's own body lists them: when it fires, on what, and what it runs; then one per plugin
+// module, in the words the page leads it with.
 const hooksBody = (request: HookRequest): string =>
-    request.hooks.map((hook) => [hook.event, hook.matcher, hook.run].filter((part) => part !== undefined && part !== ``).join(`  `)).join(`\n`);
+    [
+        ...request.hooks
+            .filter((hook) => request.plugins === undefined || hook.type !== `module`)
+            .map((hook) => [hook.event, hook.matcher, hook.run].filter((part) => part !== undefined && part !== ``).join(`  `)),
+        ...(request.plugins ?? []).flatMap((plugin) => (plugin.module === undefined ? [] : [`${plugin.name}: ${moduleSentence(plugin.module)}`])),
+    ].join(`\n`);
 
 const hooksAsk = (request: HookRequest, presses: AskPresses): ViewAsk => ({
     id: `hooks:${request.digest}`,
     kind: t(`approvalsView.hooks`),
-    title: t(`asks.hooksTitle`, { count: request.hooks.length }, request.hooks.length),
+    title: t(`asks.hooksTitle`, { count: hookSetSize(request) }, hookSetSize(request)),
     context: t(`approvalsView.hooksFound`),
     body: hooksBody(request),
     icon: `shield`,

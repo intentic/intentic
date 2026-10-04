@@ -2,6 +2,7 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { type ClaudeSdk, sdk } from "../../engines/claude-sdk.js";
 import { opt } from "../../opt.js";
+import { CLAUDE_INSTRUCTION_FILES } from "../../runtimes/claude/claude-builtins.js";
 import type { BuiltinPromptText } from "@intentic/sandbox-contract";
 
 // Claude Code's system prompt, captured from a real CLI request rather than transcribed here, since neither the SDK nor
@@ -89,8 +90,10 @@ const capture = async (copy: ClaudeSdk, cwd: string, model: string | undefined):
             cwd,
             ...opt("model", model),
             abortController: abort,
-            // Bare Claude Code only: no memory files, skills, or tools leaking into Claude's default.
+            // Bare Claude Code only: no memory files, skills, or tools leaking into Claude's default. The built-in
+            // AGENTS.md loader ignores settingSources, so it is switched off by its own option.
             settingSources: [],
+            settings: CLAUDE_INSTRUCTION_FILES,
             allowedTools: [],
             maxTurns: 1,
             thinking: { type: "disabled" },

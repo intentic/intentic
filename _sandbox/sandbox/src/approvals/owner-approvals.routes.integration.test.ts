@@ -30,7 +30,11 @@ const sandbox = async () => {
         configDir: join(historyRoot, "home", ".claude"),
         readable: (path: string) => path,
     };
-    const digest = (await gateSettingsHooks(historyRoot, place, undefined)).set?.digest ?? "";
+    // No plugin module is in this set, so nothing is read.
+    const unread = async (): Promise<never> => {
+        throw new Error("no module was expected");
+    };
+    const digest = (await gateSettingsHooks(historyRoot, place, undefined, unread)).set?.digest ?? "";
     const dir = join(workspaceExtensionsRoot(workspace.root), "stranger");
     await mkdir(dir, { recursive: true });
     await writeFile(

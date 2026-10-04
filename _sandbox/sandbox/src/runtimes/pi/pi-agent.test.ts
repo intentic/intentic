@@ -236,18 +236,155 @@ test("plan mode holds the plan text back, parks on the plan card, and executes o
     expect(String(prompts[1]?.["message"])).toContain("approved");
 });
 
-test("an extension UI dialog is answered (cancelled) so a project-level Pi extension can never hang the turn", async () => {
+// Collects a turn's frames, answering each question card it raises with `answer` (the reply minus its kind and id).
+const collectAnswering = async (
+    turn: AsyncGenerator<AgentEvent>,
+    answer: (questions: Extract<AgentEvent, { kind: "question" }>["questions"]) => { answers?: Record<string, string[]>; cancelled?: boolean },
+): Promise<AgentEvent[]> => {
+    const events: AgentEvent[] = [];
+    for await (const event of turn) {
+        events.push(event);
+        if (event.kind === "question") {
+            const reply = answer(event.questions);
+            setTimeout(() => cards.resolve({ kind: "question", requestId: event.requestId, ...reply }), 0);
+        }
+    }
+    return events;
+};
+
+const uiResponses = (pi: FakePi): Record<string, unknown>[] => pi.sent.filter((command) => command["type"] === "extension_ui_response");
+
+test("what an extension shows becomes the agent UI lane: notices, status entries and widgets, with no reply", async () => {
     const pi = fakePi([
         [
-            { type: "extension_ui_request", id: "u1", method: "confirm", title: "Clear session?" },
+            { type: "extension_ui_request", id: "u1", method: "notify", message: "Command blocked by user", notifyType: "warning" },
             { type: "extension_ui_request", id: "u2", method: "notify", message: "fyi" },
+            { type: "extension_ui_request", id: "u3", method: "setStatus", statusKey: "lint", statusText: "linting 3 files" },
+            { type: "extension_ui_request", id: "u4", method: "setWidget", widgetKey: "todo", widgetLines: ["- one", "- two"], widgetPlacement: "belowEditor" },
+            { type: "extension_ui_request", id: "u5", method: "setStatus", statusKey: "lint" },
+            { type: "extension_ui_request", id: "u6", method: "setWidget", widgetKey: "todo" },
+            { type: "extension_ui_request", id: "u7", method: "setTitle", title: "pi - project" },
+            { type: "extension_ui_request", id: "u8", method: "set_editor_text", text: "prefilled" },
             { type: "agent_settled" },
         ],
     ]);
-    await collect(createPiAgent(pi.spawn)(CONFIG, request()));
-    expect(pi.sent).toContainEqual({ type: "extension_ui_response", id: "u1", cancelled: true });
-    // Fire-and-forget methods get no reply.
-    expect(pi.sent.filter((command) => command["type"] === "extension_ui_response")).toHaveLength(1);
+    const events = await collect(createPiAgent(pi.spawn)(CONFIG, request()));
+    expect(events.filter((event) => event.kind === "agent_notice" || event.kind === "agent_status")).toEqual([
+        { kind: "agent_notice", level: "warning", text: "Command blocked by user" },
+        { kind: "agent_notice", level: "info", text: "fyi" },
+        { kind: "agent_status", key: "lint", text: "linting 3 files" },
+        { kind: "agent_status", key: "widget:todo", text: "- one\n- two" },
+        { kind: "agent_status", key: "lint", text: null },
+        { kind: "agent_status", key: "widget:todo", text: null },
+    ]);
+    expect(uiResponses(pi)).toEqual([]);
+});
+
+test("an extension's confirm parks on a question card, and the pick goes back as its confirmation", async () => {
+    const pi = fakePi([
+        [
+            { type: "extension_ui_request", id: "c1", method: "confirm", title: "Clear session?", message: "All messages will be lost." },
+            { type: "agent_settled" },
+        ],
+    ]);
+    const events = await collectAnswering(createPiAgent(pi.spawn)(CONFIG, request()), (questions) => ({ answers: { [questions[0]?.question ?? ""]: ["Yes"] } }));
+    expect(events.find((event) => event.kind === "question")).toMatchObject({
+        questions: [
+            {
+                question: "Clear session?\n\nAll messages will be lost.",
+                header: "Pi extension",
+                multiSelect: false,
+                options: [
+                    { label: "Yes", description: "" },
+                    { label: "No", description: "" },
+                ],
+            },
+        ],
+    });
+    // The card is frozen before the turn goes on.
+    expect(events.map((event) => event.kind)).toContain("resolved");
+    expect(uiResponses(pi)).toEqual([{ type: "extension_ui_response", id: "c1", confirmed: true }]);
+});
+
+test("a select returns the picked option, and an input the person's own words", async () => {
+    const pi = fakePi([
+        [
+            { type: "extension_ui_request", id: "s1", method: "select", title: "Allow dangerous command?", options: ["Allow", "Block"] },
+            { type: "extension_ui_request", id: "i1", method: "input", title: "Branch name", placeholder: "feature/…" },
+            { type: "agent_settled" },
+        ],
+    ]);
+    const events = await collectAnswering(createPiAgent(pi.spawn)(CONFIG, request()), (questions) => {
+        const question = questions[0]?.question ?? "";
+        return { answers: { [question]: [question === "Allow dangerous command?" ? "Block" : "feature/ping"] } };
+    });
+    expect(events.filter((event) => event.kind === "question").map((event) => event.questions[0])).toEqual([
+        {
+            question: "Allow dangerous command?",
+            header: "Pi extension",
+            multiSelect: false,
+            options: [
+                { label: "Allow", description: "" },
+                { label: "Block", description: "" },
+            ],
+        },
+        { question: "Branch name (feature/…)", header: "Pi extension", multiSelect: false, options: [] },
+    ]);
+    expect(uiResponses(pi)).toEqual([
+        { type: "extension_ui_response", id: "s1", value: "Block" },
+        { type: "extension_ui_response", id: "i1", value: "feature/ping" },
+    ]);
+});
+
+test("a dismissed card cancels the dialog, and an editor dialog, with no card that fits, is cancelled at once", async () => {
+    const pi = fakePi([
+        [
+            { type: "extension_ui_request", id: "e1", method: "editor", title: "Edit", prefill: "a\nb" },
+            { type: "extension_ui_request", id: "c1", method: "confirm", title: "Clear session?" },
+            { type: "agent_settled" },
+        ],
+    ]);
+    const events = await collectAnswering(createPiAgent(pi.spawn)(CONFIG, request()), () => ({ cancelled: true }));
+    expect(events.filter((event) => event.kind === "question")).toHaveLength(1);
+    expect(uiResponses(pi)).toEqual([
+        { type: "extension_ui_response", id: "e1", cancelled: true },
+        { type: "extension_ui_response", id: "c1", cancelled: true },
+    ]);
+});
+
+test("a dialog Pi times out by itself takes its card with it and gets no reply", async () => {
+    const pi = fakePi([[{ type: "extension_ui_request", id: "t1", method: "confirm", title: "Continue?", timeout: 20 }, { type: "agent_settled" }]]);
+    // Nobody answers: the card settles on Pi's own timeout.
+    const events = await collect(createPiAgent(pi.spawn)(CONFIG, request()));
+    // Frozen as nobody's answer: no reply rides the resolution.
+    expect(events.find((event) => event.kind === "resolved")).toEqual({ kind: "resolved", requestId: expect.any(String) });
+    expect(uiResponses(pi)).toEqual([]);
+});
+
+test("a card waiting on a person holds the silence watchdog, so a slow answer does not time the turn out", async () => {
+    const timeouts: TurnTimeouts = { inactivityMs: 30, maxTurnMs: 10_000 };
+    const pi = fakePi([[{ type: "extension_ui_request", id: "c1", method: "confirm", title: "Go on?" }]]);
+    const events: AgentEvent[] = [];
+    for await (const event of createPiAgent(pi.spawn, timeouts)(CONFIG, request())) {
+        events.push(event);
+        if (event.kind === "question") {
+            // Answered well past the silence window; Pi settles a moment after hearing back, inside a fresh one.
+            setTimeout(() => {
+                cards.resolve({ kind: "question", requestId: event.requestId, answers: { "Go on?": ["No"] } });
+                setTimeout(() => pi.emit({ type: "agent_settled" }), 10);
+            }, 120);
+        }
+    }
+    expect(events.some((event) => event.kind === "error")).toBe(false);
+    expect(uiResponses(pi)).toEqual([{ type: "extension_ui_response", id: "c1", confirmed: false }]);
+});
+
+test("a dialog with malformed fields still reaches a card with what could be read, since Pi is blocked on it", async () => {
+    const pi = fakePi([[{ type: "extension_ui_request", id: "x1", method: "select", options: "not a list", title: 7 }, { type: "agent_settled" }]]);
+    const events = await collectAnswering(createPiAgent(pi.spawn)(CONFIG, request()), () => ({ cancelled: true }));
+    // Its fields fall back rather than failing: an untitled card with no options, which a dismissal cancels.
+    expect(events.find((event) => event.kind === "question")).toMatchObject({ questions: [{ question: "", options: [] }] });
+    expect(uiResponses(pi)).toEqual([{ type: "extension_ui_response", id: "x1", cancelled: true }]);
 });
 
 test("a process death mid-turn surfaces as the turn's error, never a hang", async () => {

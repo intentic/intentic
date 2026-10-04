@@ -43,6 +43,7 @@
         "typecheck": "tsgo --noEmit -p tsconfig.test.json",
         "test": "suites",
         "test:watch": "suites --watch",
+        "test:mod": "node test-mod.mjs",
         "validate": "node build.mjs --validate"
     },
     "devDependencies": {

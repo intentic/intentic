@@ -18,6 +18,7 @@ import { localCommandText, unknownCommandName } from "../providers/agent-command
 import type { SteeringQueue } from "../checkpoints/agent-steering.js";
 import { contextOverflowFrame, errorFrame, modelUnavailableFrame, rateLimitFrame, retryStormFrame, safeguardFrame, trialRetryFrame } from "./error-frames.js";
 import { isSafeguardRefusal, RefusalFork } from "./refusal-fork.js";
+import { InformationalLines } from "./informational.js";
 import { probeRoutedEndpoint, type RoutedEndpoint } from "../providers/routed-refusal.js";
 import type { TurnAllowance } from "../providers/harness-credentials.js";
 import { opt } from "../../opt.js";
@@ -324,6 +325,8 @@ class TurnFold {
     // Where a turn the safety classifier stops can resume from, and whether it has stopped: said once, and the interrupted
     // result after it is that same ending, not another.
     private readonly fork = new RefusalFork();
+    // The loop's informational lines this turn, onto the agent UI lane (informational.ts).
+    private readonly informational = new InformationalLines();
     private flagged = false;
 
     constructor(args: StreamSdkArgs, session: AgentQuery) {
@@ -621,6 +624,7 @@ class TurnFold {
     }
 
     private *onToolResult(toolUseId: string, content: unknown, failed: boolean): Generator<AgentEvent> {
+        yield* this.informational.settled(toolUseId);
         // Backstop: the first Bash result guarantees tmux-run created the session, in case tool_use raced ahead of it.
         if (!this.terminalResurfaced && this.agentSession !== undefined && this.bashToolIds.has(toolUseId)) {
             this.terminalResurfaced = true;
@@ -657,6 +661,46 @@ class TurnFold {
             }
         }
         return attempt >= MAX_IN_TURN_RETRIES ? retryStormFrame(attempt, status) : undefined;
+    }
+
+    // A retry the loop is waiting out: a terminal frame when it should not be waited out live (returns true, ending the
+    // stream), else the provider_retry status.
+    private async *onApiRetry(message: Extract<SdkOf<"system">, { subtype: "api_retry" }>): AsyncGenerator<AgentEvent, boolean> {
+        // The platform already exhausted its key pool; another backoff cycle reads as an indefinite spinner.
+        if (this.args.trial) {
+            yield trialRetryFrame(message.error);
+            return true;
+        }
+        // A spent allowance is not an outage to ride out live: the SDK's own retry delay is the window's
+        // remaining lifetime, so end the stream as a terminal rate_limit frame and free the conversation's run
+        // lock for the resume scheduler.
+        if (message.error === "rate_limit") {
+            // The reset instant is offered only on a native turn, whose retry delay IS the window's remaining
+            // lifetime; a routed turn's delay is just SDK backoff, and turning it into an instant invents a
+            // false reset.
+            const allowance = this.args.allowance;
+            yield await rateLimitFrame(
+                allowance,
+                allowance === undefined ? Math.ceil((Date.now() + message.retry_delay_ms) / 1000) : undefined,
+            );
+            return true;
+        }
+        // The two ways a retry stops: an outright model refusal, or a storm long enough to hand off
+        // (endRetrying).
+        const terminal = await this.endRetrying(message.attempt, message.error_status ?? undefined);
+        if (terminal !== undefined) {
+            yield terminal;
+            return true;
+        }
+        // Forwarded so a long retry doesn't read as a hang; maxAttempts reports the smaller of the two budgets.
+        yield {
+            kind: "provider_retry",
+            attempt: message.attempt,
+            maxAttempts: Math.min(message.max_retries, MAX_IN_TURN_RETRIES),
+            nextAttemptAt: Date.now() + message.retry_delay_ms,
+            ...opt("status", message.error_status ?? undefined),
+        };
+        return false;
     }
 
     // Returns true when the message ends the whole stream, see the api_retry rate_limit path.
@@ -727,43 +771,13 @@ class TurnFold {
                 yield { kind: "text_end", ...opt("parentToolUseId", parent) };
                 return false;
             }
-            case "api_retry": {
-                // The platform already exhausted its key pool; another backoff cycle reads as an indefinite spinner.
-                if (this.args.trial) {
-                    yield trialRetryFrame(message.error);
-                    return true;
-                }
-                // A spent allowance is not an outage to ride out live: the SDK's own retry delay is the window's
-                // remaining lifetime, so end the stream as a terminal rate_limit frame and free the conversation's run
-                // lock for the resume scheduler.
-                if (message.error === "rate_limit") {
-                    // The reset instant is offered only on a native turn, whose retry delay IS the window's remaining
-                    // lifetime; a routed turn's delay is just SDK backoff, and turning it into an instant invents a
-                    // false reset.
-                    const allowance = this.args.allowance;
-                    yield await rateLimitFrame(
-                        allowance,
-                        allowance === undefined ? Math.ceil((Date.now() + message.retry_delay_ms) / 1000) : undefined,
-                    );
-                    return true;
-                }
-                // The two ways a retry stops: an outright model refusal, or a storm long enough to hand off
-                // (endRetrying).
-                const terminal = await this.endRetrying(message.attempt, message.error_status ?? undefined);
-                if (terminal !== undefined) {
-                    yield terminal;
-                    return true;
-                }
-                // Forwarded so a long retry doesn't read as a hang; maxAttempts reports the smaller of the two budgets.
-                yield {
-                    kind: "provider_retry",
-                    attempt: message.attempt,
-                    maxAttempts: Math.min(message.max_retries, MAX_IN_TURN_RETRIES),
-                    nextAttemptAt: Date.now() + message.retry_delay_ms,
-                    ...opt("status", message.error_status ?? undefined),
-                };
+            case "informational": {
+                // Hook feedback, status lines, a plugin's words: a notice, or a call's progress entry.
+                yield* this.informational.frames(message);
                 return false;
             }
+            case "api_retry":
+                return yield* this.onApiRetry(message);
             default: {
                 // The SDK's subagent lifecycle messages, the only account of a backgrounded child between its tool_use
                 // and its result. The registry owns the fold; this only forwards what came back.

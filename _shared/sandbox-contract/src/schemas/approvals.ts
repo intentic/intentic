@@ -133,8 +133,11 @@ const hookDigest = z.string().regex(/^[0-9a-f]{64}$/);
 
 export const SettingsHookSchema = z.object({
     source: z
-        .enum(["user", "project"])
-        .describe("Whose configuration declares it: the sandbox's own (~/.claude) or the workspace's (.claude/ in the project)."),
+        .enum(["user", "project", "plugin"])
+        .describe(
+            "Whose configuration declares it: the sandbox's own (~/.claude), the workspace's (.claude/ in the project), or a Claude Code plugin the turn loads.",
+        ),
+    plugin: z.string().optional().describe("The plugin that declares it, by the name the request's plugin list gives it. Present only for a plugin's hook."),
     declaredIn: z
         .string()
         .optional()
@@ -143,7 +146,11 @@ export const SettingsHookSchema = z.object({
         ),
     event: z.string().describe("When it runs, in Claude Code's own words: before a tool, after one, when a prompt is sent, when a session starts."),
     matcher: z.string().optional().describe("Which tools it is limited to, when it is limited at all."),
-    type: z.string().describe("What kind of hook it is: a shell command, an address it calls, a prompt it asks a model."),
+    type: z
+        .string()
+        .describe(
+            "What kind of hook it is: a shell command, an address it calls, a prompt it asks a model, or a module: a plugin's code that runs inside Claude Code itself.",
+        ),
     run: z.string().describe("Exactly what it runs: the command line, the address, the prompt."),
 });
 export type SettingsHook = z.infer<typeof SettingsHookSchema>;
@@ -162,6 +169,46 @@ export const HookScriptSchema = z.object({
 });
 export type HookScript = z.infer<typeof HookScriptSchema>;
 
+export const HookModuleSchema = z.object({
+    path: z.string().describe("The plugin's hooks module, as its hooks.json names it."),
+    hooks: z
+        .array(z.string())
+        .describe("The moments it acts on, in Claude Code's own words: a tool call, a prompt being sent, the system prompt being put together. Empty when it could not be read."),
+    calls: z
+        .array(z.string())
+        .describe(
+            "What it reaches for while it runs, as Claude Code names its methods: starting programs, network requests, reading and writing files. Empty when it could not be read, or when it reaches for nothing.",
+        ),
+    unreadable: z
+        .string()
+        .optional()
+        .describe("Why the sandbox could not tell what the module does. The approval still covers its code byte for byte. Present only when that is the case."),
+});
+export type HookModule = z.infer<typeof HookModuleSchema>;
+
+export const HookPluginSchema = z.object({
+    name: z.string().describe("The plugin, as the sandbox lists it: the connection, extension or persona that brought it, or the name settings enable it under."),
+    from: z
+        .enum(["plugin", "extension", "persona", "skills", "settings"])
+        .describe(
+            "What brought it into the turn: a plugin connection, an extension, a persona's kit, a plugin folder among Claude Code's skills, or Claude Code's own settings enabling it.",
+        ),
+    source: z
+        .enum(["user", "project"])
+        .optional()
+        .describe("Which settings enable it or hold it, the sandbox's own or the workspace's. Present only for a plugin settings or a skills folder bring in."),
+    dir: z.string().optional().describe("Where its files were read. Absent for one settings enable that this sandbox has not installed."),
+    module: HookModuleSchema.optional().describe("Its hooks module, code that runs inside Claude Code with everything the agent's session holds. Absent when it has none."),
+});
+export type HookPlugin = z.infer<typeof HookPluginSchema>;
+
+export const HookMarketplaceSchema = z.object({
+    source: z.enum(["user", "project"]).describe("Whose settings add it: the sandbox's own or the workspace's."),
+    name: z.string().describe("The marketplace's name in those settings."),
+    location: z.string().describe("Where Claude Code fetches it from, as the settings spell it."),
+});
+export type HookMarketplace = z.infer<typeof HookMarketplaceSchema>;
+
 export const HookRequestSchema = z.object({
     digest: hookDigest.describe(
         "The set's fingerprint: every hook as declared plus the bytes of every file they run. Approving it approves exactly this, and nothing that differs from it by a character.",
@@ -171,7 +218,15 @@ export const HookRequestSchema = z.object({
     hooks: z
         .array(SettingsHookSchema)
         .describe("Every hook in the set. Until it is approved, turns run with all of them off, and so with every other hook the agent would load."),
-    scripts: z.array(HookScriptSchema).describe("The files those hooks run by name, which the approval pins byte for byte."),
+    scripts: z.array(HookScriptSchema).describe("The files those hooks run by name, and a plugin module's code, which the approval pins byte for byte."),
+    plugins: z
+        .array(HookPluginSchema)
+        .optional()
+        .describe("The plugins whose hooks or modules are in the set, and those Claude Code's settings enable. Absent when none is."),
+    marketplaces: z
+        .array(HookMarketplaceSchema)
+        .optional()
+        .describe("Plugin marketplaces Claude Code's settings add, which it may install enabled plugins from. Absent when none is."),
     dismissed: z
         .boolean()
         .optional()

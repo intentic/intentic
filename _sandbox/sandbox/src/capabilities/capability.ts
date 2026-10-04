@@ -78,6 +78,9 @@ export interface CapabilityHandler {
     readonly echo: (config: unknown, connectors: ReadonlyMap<string, ResolvedContribution>) => Record<string, string | number | boolean>;
     // What a rename of this kind moves, or why not (CapabilityRename); required, the safe default differs per kind.
     readonly rename: CapabilityRename;
+    // The config to store once apply has succeeded, for a kind whose install learns something the entry must keep (the
+    // commit a plugin's branch resolved to); absent stores the config as applied.
+    readonly installed?: (ctx: CapabilityCtx, id: string, config: unknown) => Promise<unknown>;
 }
 
 // Builds the handler context from full Services, wrapping the existing scaffolders as session-scoped closures.

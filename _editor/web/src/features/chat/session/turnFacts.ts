@@ -4,6 +4,7 @@ import { setAccountUsage } from "../accounts/providerAccounts";
 import { boundSession } from "../run/turnRequest";
 import type { AttachEntry, TurnContext } from "../run/turnStream";
 import type { Conversation } from "./conversation";
+import { withAgentStatus } from "./turnClient";
 
 // What a run's entries mean to the conversation beyond its rows, which the transcript has already drawn: the session
 // the turn minted, the worktree it runs in, its live posture and model, the terminal and browser it drives, and how it
@@ -105,6 +106,10 @@ const FACTS: { readonly [K in TurnFact["kind"]]: (conversation: Conversation, fa
     // Not cleared at the turn boundary: the answer outlives the turn that reported it.
     fast_mode: (conversation, fact) => {
         conversation.fastMode.value = fact;
+    },
+    // A status line a runtime's extension set or cleared; the composer's status row draws them (ChatAgentStatus).
+    agent_status: (conversation, fact) => {
+        conversation.turn.agentStatus.value = withAgentStatus(conversation.turn.agentStatus.value, fact);
     },
     error: (conversation, fact) => conversation.failures.apply(fact),
     // The live gate, not a headroom reading: `account_usage` carries every pool for the readouts.

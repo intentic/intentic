@@ -6,6 +6,7 @@ import { SubagentKindSchema, SubagentStatusSchema, SubagentVerificationSchema } 
 import { NeedSchema } from "../schemas/needs.js";
 import { HeldEndingSchema, RetryLadderSchema } from "../schemas/turn-break.js";
 import { NoticeCodeSchema } from "./sandbox-notice.js";
+import { TranscriptAgentNoticeSchema } from "./agent-ui.js";
 import type { ToolCallContent, ToolCallLocation, ToolCallStatus, ToolKind } from "./requests.js";
 import {
     browserHelpRequest,
@@ -328,6 +329,10 @@ export const TranscriptRowSchema = z.object({
     // on the notices written before rows carried it, which a reader draws from `text` as it always did.
     noticeCode: NoticeCodeSchema.optional().describe(
         "Which of the sandbox's own notices this row is, and the facts it was worded from, so a reader can say it in the reader's own language. The text stays the English sentence.",
+    ),
+    // A notice a runtime's own extension or loop said (events/agent-ui.ts), the words in `text`; absent on every other row.
+    agentNotice: TranscriptAgentNoticeSchema.optional().describe(
+        "This notice was said by the agent's runtime or one of its extensions rather than by the sandbox: how loud, and who said it.",
     ),
     // At most one card per row; a card closes its bubble. One field per kind, so a reader reaches it by name.
     plan: TranscriptPlanSchema.optional().describe("The plan this row asked approval for, and the answer."),

@@ -89,9 +89,33 @@
         "approvals": "Zatwierdzenia"
     },
     "hookSetBody": {
+        "actsOn": "Działa przy",
+        "enabledIn": "włączona w {where}",
         "filesPinned": "Zatwierdzenie obejmuje też te pliki, bajt po bajcie:",
+        "fromExtension": "z rozszerzenia",
+        "fromPersona": "zestaw persony",
+        "fromPlugin": "połączenie wtyczki",
         "fromProjectSettings": ".claude/settings.json przestrzeni roboczej",
-        "fromUserSettings": "~/.claude/settings.json"
+        "fromSkills": "folder wtyczki wśród skilli",
+        "fromUserSettings": "~/.claude/settings.json",
+        "marketplace": "Dodaje marketplace wtyczek {name} ({location}), z którego Claude Code może instalować włączone wtyczki.",
+        "powers": {
+            "asksModel": "pyta model",
+            "callsTools": "wywołuje narzędzia agenta",
+            "changesFiles": "zapisuje lub usuwa pliki",
+            "changesMessages": "może zmieniać twoje wiadomości, zanim agent je przeczyta",
+            "decidesToolCalls": "może zezwalać na wywołania narzędzi agenta, blokować je lub zmieniać",
+            "networkRequests": "wysyła żądania sieciowe",
+            "readsEnvironment": "czyta środowisko sesji, w którym są jej dane uwierzytelniające",
+            "readsFiles": "czyta pliki",
+            "rewritesSystemPrompt": "przepisuje instrukcje agenta",
+            "startsPrograms": "uruchamia programy",
+            "startsSubagents": "uruchamia subagentów"
+        },
+        "reachesFor": "Sięga po",
+        "runsCode": "Ta wtyczka uruchamia kod wewnątrz Claude Code, ze wszystkim, do czego sięga sesja agenta.",
+        "runsCodeDoing": "Ta wtyczka uruchamia kod wewnątrz Claude Code: {powers}.",
+        "runsCodeUnreadable": "Ta wtyczka uruchamia kod wewnątrz Claude Code i nie udało się odczytać, co ten kod robi ({reason}). Zatwierdzenie i tak pozwoli mu działać."
     },
     "postBody": {
         "showLess": "Pokaż mniej",

@@ -1,7 +1,7 @@
 import { type Capability, profileOf, type SandboxSettings, SandboxSettingsSchema, type RoutedAgentTurn } from "@intentic/sandbox-contract";
 import { browserFields } from "../../../browser/tools/browser-fields.js";
 import type { Services } from "../../../composition.js";
-import { withSettingsHookGate } from "./settings-hook-gate.js";
+import { gatedPlugins, withSettingsHookGate } from "./settings-hook-gate.js";
 import { type TurnPersona, turnPersona } from "../../../personas/personas.js";
 import { declaredChecks } from "../../../rules/repo-checks.js";
 import { standing } from "../../../rules/rules.js";
@@ -189,12 +189,18 @@ export const planHarnessTurn = async (
         // trading away.
         secrets,
     };
-    // Hooks in Claude Code's settings files that the owner has not approved in this form switch every hook off.
+    // Hooks in Claude Code's settings files, or in a plugin the image does not ship, that the owner has not approved in
+    // this form switch every hook off.
     const gated = await deps.perf.track("turn.plan.hooks", {}, () =>
-        withSettingsHookGate(deps.config.historyRoot, input.conversationId, {
-            spec: harnessSpec(deps, input, context, resolved.credentials),
-            policy: harnessPolicy(context.base.policy, settings),
-        }),
+        withSettingsHookGate(
+            deps.config.historyRoot,
+            input.conversationId,
+            {
+                spec: harnessSpec(deps, input, context, resolved.credentials),
+                policy: harnessPolicy(context.base.policy, settings),
+            },
+            gatedPlugins(mounts),
+        ),
     );
     return armPlan(
         releasingMounts(deps.agent, mounted),

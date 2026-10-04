@@ -12,6 +12,7 @@ import { SubagentKindSchema, SubagentStatusSchema, SubagentVerificationSchema } 
 import { RetryLadderSchema } from "../schemas/turn-break.js";
 import { AgentCommandSchema, browserHelpRequest, capabilityOfferRequest, CapabilityOutcomeSchema, ContextUsageSchema, credentialOfferRequest, CredentialReceiptSchema, paymentOfferRequest, PaymentReceiptSchema, PermissionRequestSchema, PlanRequestSchema, QuestionRequestSchema, terminalHelpRequest, TodoItemSchema, ToolCallContentSchema, ToolCallLocationSchema, ToolCallStatusSchema, ToolKindSchema } from "./requests.js";
 import { TranscriptPatchSchema, TranscriptRowSchema, TurnNoteSchema } from "./transcript.js";
+import { agentNoticeEvent, agentStatusEvent } from "./agent-ui.js";
 
 // Every frame an agent turn streams, as one `kind`-discriminated union: turn facts (session, standing, cost) and the
 // attach stream a window joins through. One closed vocabulary, kept in one file.
@@ -194,6 +195,10 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
             .array(z.string())
             .describe("The projects it works on, workspace-relative, the workspace root as an empty string; empty when none could be named."),
     }),
+    // What a runtime's own extensions show (events/agent-ui.ts): a keyed status entry, live state replayed to a late
+    // joiner and dropped when the turn ends, and a notice, folded into the transcript as a notice row.
+    z.object(agentStatusEvent),
+    z.object(agentNoticeEvent),
     // The four interactive cards; each parks the turn until `POST /agent/reply` resolves its `requestId`.
     PlanRequestSchema,
     QuestionRequestSchema,
@@ -373,6 +378,7 @@ export const TURN_FACT_KINDS = [
     "account_usage",
     "context_usage",
     "mode",
+    "agent_status",
     "error",
 ] as const;
 export type TurnFact = Extract<AgentEvent, { kind: (typeof TURN_FACT_KINDS)[number] }>;

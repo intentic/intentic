@@ -1187,7 +1187,7 @@
             "plugin": {
                 "name": "Wtyczka Claude",
                 "description": "Wtyczka Claude Code z repozytorium git.",
-                "hint": "Agent wczyta ją w następnej turze. Ponowne dodanie pod tą samą nazwą ją aktualizuje.",
+                "hint": "Przypięta do commita, z którego się instaluje; agent wczyta ją w następnej turze. Ponowne dodanie pod tą samą nazwą aktualizuje ją do najnowszego commita.",
                 "guide": {
                     "scopes": "dostępu do odczytu przy prywatnych repozytoriach (np. GitHub `repo`)",
                     "steps": {
@@ -2392,6 +2392,9 @@
             "reschedule": "Zmień, kiedy wyjdzie",
             "anotherAgent": "innego agenta",
             "autoLand": "Auto-scalanie"
+        },
+        "chatAgentStatus": {
+            "label": "Co pokazują rozszerzenia agenta"
         }
     },
     "common": {

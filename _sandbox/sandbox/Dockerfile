@@ -363,6 +363,13 @@ COPY _search/iq/plugin /opt/iq-plugin
 # loaded via WEBQ_PLUGIN_DIR (turn-plan.ts), ungated: unlike iq there is no default-tool to displace and no
 # experiment to run, the CLI is simply on PATH and the skill says when it helps.
 COPY _sandbox/webq/plugin /opt/webq-plugin
+# Claude Code's managed settings, which load whatever a turn's settingSources say, and the policy mod they run first
+# (_sandbox/sandbox/claude-policy/plugins/intentic-guard). Without it a mod someone installs (Claude Code 2.1.287+)
+# can answer or overturn the daemon's tool-call guards, which are SDK callbacks; with these settings present Claude
+# Code also seats its own guard, sec-default, which keeps such mods off the system prompt. Claude Code counts a mod as
+# the organization's only when its marketplace is a directory listing it by relative path, hence the /opt copy.
+COPY _sandbox/sandbox/claude-policy /opt/intentic-claude-policy
+COPY _sandbox/sandbox/claude-policy/managed-settings.json /etc/claude-code/managed-settings.json
 # The sandbox daemon.
 COPY --from=trees sandbox /opt/sandbox
 # The front the entrypoint execs: every port, the ingress tunnel, and the daemon's supervision (_sandbox/front). Built

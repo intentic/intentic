@@ -1,0 +1,6 @@
+{
+    "name": "intentic-guard",
+    "version": "1.0.0",
+    "description": "Keeps the sandbox's own decisions on tool calls final: a mod someone installs can neither answer nor overturn them.",
+    "author": { "name": "Intentic" }
+}

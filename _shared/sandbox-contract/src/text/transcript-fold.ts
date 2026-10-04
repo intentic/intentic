@@ -459,6 +459,15 @@ export class TranscriptFold {
                 return this.pushRow(compactedRow());
             case "install":
                 return this.pushRow(installRow(event));
+            case "agent_notice":
+                // A runtime's own extension or loop said it: a notice row, so a reopened conversation still says it.
+                return event.text.trim() === ""
+                    ? []
+                    : this.pushRow({
+                          role: "notice",
+                          text: event.text,
+                          agentNotice: { level: event.level, ...(event.source === undefined ? {} : { source: event.source }) },
+                      });
             case "error":
                 // Keeps a refusal (no prose from the provider) from reading as a session that ended mid-question.
                 // A refusal that ran nothing takes its message back out ahead of the notice standing in for it.
@@ -554,6 +563,7 @@ export class TranscriptFold {
             case "account_usage":
             case "context_usage":
             case "mode":
+            case "agent_status":
             case "done":
                 return [];
         }

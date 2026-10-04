@@ -1,9 +1,19 @@
 import { join } from "node:path";
-import { type HookRequests, HookScriptSchema, SettingsHookSchema, type TurnNote } from "@intentic/sandbox-contract";
+import { errorMessage } from "@intentic/base/errors";
+import {
+    HookMarketplaceSchema,
+    type HookPlugin,
+    HookPluginSchema,
+    type HookRequests,
+    HookScriptSchema,
+    SettingsHookSchema,
+    type TurnNote,
+} from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
 import { defineDocument } from "../store/evolution/documents.js";
 import { openApprovalLedger, openDocument } from "../store/open-document.js";
+import type { ModuleReader } from "./plugin-modules.js";
 import { type HookPlace, type HookSet, settingsHookSet } from "./settings-hooks.js";
 
 /* The owner's yes to a set of Claude Code hooks (settings-hooks.ts), pinned by its digest, and the sets turns found still
@@ -21,6 +31,9 @@ const StoredRequestSchema = z.object({
     conversationId: z.string().optional(),
     hooks: z.array(SettingsHookSchema),
     scripts: z.array(HookScriptSchema),
+    // Added 2026-10-04, optional so a request filed before plugins counted still reads.
+    plugins: z.array(HookPluginSchema).optional(),
+    marketplaces: z.array(HookMarketplaceSchema).optional(),
     dismissed: z.boolean().optional(),
 });
 const RequestsSchema = z.object({ requests: z.record(z.string(), StoredRequestSchema) });
@@ -40,15 +53,44 @@ const requestsOf = (historyRoot: string) =>
 
 const approved = async (historyRoot: string, digest: string): Promise<boolean> => (await ledgerOf(historyRoot).read()).approved[digest] !== undefined;
 
-// Files the set once, so a set found by every turn raises one request; a dismissed one stays dismissed.
-const requestApproval = async (historyRoot: string, set: HookSet, conversationId: string | undefined, now: number): Promise<void> => {
+// The set's plugins as the card lists them, each module with what Claude Code reads it to do. A reader that fails says
+// so on the card and holds nothing up.
+const describePlugins = (set: HookSet, readModule: ModuleReader): Promise<HookPlugin[]> =>
+    Promise.all(
+        set.plugins.map(async ({ plugin, module, readDir }): Promise<HookPlugin> => {
+            if (module === undefined || readDir === undefined) {
+                return plugin;
+            }
+            const summary = await readModule(readDir, module).catch((error: unknown) => ({
+                hooks: [],
+                calls: [],
+                unreadable: `it could not be read (${errorMessage(error)})`,
+            }));
+            return { ...plugin, module: { path: module, ...summary } };
+        }),
+    );
+
+// Files the set once, so a set found by every turn raises one request; a dismissed one stays dismissed. What its
+// modules do is read only then: the request, keyed by the digest, is that reading's cache.
+const requestApproval = async (historyRoot: string, set: HookSet, conversationId: string | undefined, readModule: ModuleReader, now: number): Promise<void> => {
+    if ((await requestsOf(historyRoot).read()).requests[set.digest] !== undefined) {
+        return;
+    }
+    const plugins = await describePlugins(set, readModule);
     let raised = false;
     await requestsOf(historyRoot).update((current) => {
         if (current.requests[set.digest] !== undefined) {
             return current;
         }
         raised = true;
-        const request = { seenAt: now, ...(conversationId === undefined ? {} : { conversationId }), hooks: [...set.hooks], scripts: [...set.scripts] };
+        const request = {
+            seenAt: now,
+            ...(conversationId === undefined ? {} : { conversationId }),
+            hooks: [...set.hooks],
+            scripts: [...set.scripts],
+            ...(plugins.length === 0 ? {} : { plugins }),
+            ...(set.marketplaces.length === 0 ? {} : { marketplaces: [...set.marketplaces] }),
+        };
         const newest = Object.entries({ ...current.requests, [set.digest]: request })
             .toSorted(([, left], [, right]) => right.seenAt - left.seenAt)
             .slice(0, REQUESTS_KEPT);
@@ -65,19 +107,25 @@ export interface HookGate {
     readonly set: HookSet | undefined;
 }
 
-export const gateSettingsHooks = async (historyRoot: string, place: HookPlace, conversationId: string | undefined, now = Date.now()): Promise<HookGate> => {
+export const gateSettingsHooks = async (
+    historyRoot: string,
+    place: HookPlace,
+    conversationId: string | undefined,
+    readModule: ModuleReader,
+    now = Date.now(),
+): Promise<HookGate> => {
     const set = await settingsHookSet(place);
     if (set === undefined || (await approved(historyRoot, set.digest))) {
         return { held: false, set };
     }
-    await requestApproval(historyRoot, set, conversationId, now);
+    await requestApproval(historyRoot, set, conversationId, readModule, now);
     return { held: true, set };
 };
 
 // Said to the model and shown on the message, so neither reads a hook that did not fire as a broken one.
 export const HOOKS_HELD_NOTE: TurnNote = {
     title: "Workspace hooks are off this turn",
-    text: "Claude Code's settings or skills here (.claude/ or ~/.claude/) declare hooks the owner has not approved in their current form, so this turn runs with every hook switched off. The owner approves them under Approvals, and they run from the turn after that.",
+    text: "Claude Code's settings or skills here (.claude/ or ~/.claude/), or a plugin this turn loads, declare hooks or a hooks module the owner has not approved in their current form, so this turn runs with every hook switched off. The owner approves them under Approvals, and they run from the turn after that.",
 };
 
 // The owner's list: unanswered sets newest first, dismissed ones after them, none the ledger already approves.

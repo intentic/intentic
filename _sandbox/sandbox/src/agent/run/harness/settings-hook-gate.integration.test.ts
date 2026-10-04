@@ -6,7 +6,8 @@ import type { HookCallback, HookInput } from "@anthropic-ai/claude-agent-sdk";
 import type { IsolationPlan } from "../../../conversations/worktrees/isolation.js";
 import { approveHookSet, HOOKS_HELD_NOTE, hookRequests } from "../../../guard/hook-approvals.js";
 import type { TurnPolicy, TurnSpec } from "../../providers/agent-request.js";
-import { settingsHookChangeHooks, withSettingsHookGate } from "./settings-hook-gate.js";
+import type { AgentMount } from "./agent-mounts.js";
+import { gatedPlugins, settingsHookChangeHooks, withSettingsHookGate } from "./settings-hook-gate.js";
 
 // The gate as the Claude harness applies it to a turn it planned, and the guard that holds its answer for the rest of
 // the turn, over real settings files. The user's own ~/.claude is pointed at an empty temp dir, so the machine running
@@ -169,6 +170,53 @@ describe("settingsHookChangeHooks", () => {
         const guard = guardOf(await withSettingsHookGate(history, "conv-1", turnAt(work, { plan })));
 
         await writeHooks(worktree);
+        expect(await edited(guard, "project_settings", join(work, ".claude", "settings.json"))).toEqual(REFUSAL);
+    });
+});
+
+// A plugin with a hooks module, as an extension or a plugin connection brings one into a turn.
+const modPlugin = async (dir: string): Promise<string> => {
+    await mkdir(join(dir, ".claude-plugin"), { recursive: true });
+    await mkdir(join(dir, "hooks"), { recursive: true });
+    await writeFile(join(dir, ".claude-plugin", "plugin.json"), JSON.stringify({ name: "modded" }));
+    await writeFile(join(dir, "hooks", "hooks.json"), JSON.stringify({ modules: ["./register.ts"] }));
+    await writeFile(join(dir, "hooks", "register.ts"), "export const register = () => {};\n");
+    return dir;
+};
+
+describe("plugins under the gate", () => {
+    test("only the mounts the image does not ship are gated", () => {
+        const mount = (origin: AgentMount["origin"], id: string, shipped: boolean): AgentMount => ({ origin, id, owner: `${id} owner`, pluginDir: `/p/${id}`, shipped });
+
+        expect(gatedPlugins([mount("builtin", "iq", true), mount("extension", "baked", true), mount("extension", "git", false), mount("plugin", "cap", false), mount("persona", "kit", false)])).toEqual([
+            { name: "git owner", from: "extension", dir: "/p/git" },
+            { name: "cap owner", from: "plugin", dir: "/p/cap" },
+            { name: "kit owner", from: "persona", dir: "/p/kit" },
+        ]);
+    });
+
+    test("a mounted plugin's unapproved module turns every hook off; once approved, the turn carries the plugins it was read with", async () => {
+        const { work, history } = dirs();
+        const plugins = [{ name: "Modded", from: "plugin" as const, dir: await modPlugin(join(work, "..", "plugins", "modded")) }];
+
+        expect((await withSettingsHookGate(history, "conv-1", turnAt(work), plugins)).policy.settingsHooks).toEqual({ held: true });
+        const digest = (await hookRequests(history)).requests[0]?.digest ?? "";
+        await approveHookSet(history, digest);
+
+        expect((await withSettingsHookGate(history, "conv-1", turnAt(work), plugins)).policy.settingsHooks).toEqual({ held: false, digest, plugins });
+    });
+
+    test("mid-turn, an edit leaving the approved plugin set as it was applies, and one enabling a plugin of its own is refused", async () => {
+        const { work, history } = dirs();
+        const plugins = [{ name: "Modded", from: "plugin" as const, dir: await modPlugin(join(work, "..", "plugins", "modded")) }];
+        await withSettingsHookGate(history, "conv-1", turnAt(work), plugins);
+        await approveHookSet(history, (await hookRequests(history)).requests[0]?.digest ?? "");
+        const guard = guardOf(await withSettingsHookGate(history, "conv-1", turnAt(work), plugins));
+
+        await writeSettings(work, { model: "opus" });
+        expect(await edited(guard, "project_settings", join(work, ".claude", "settings.json"))).toEqual({});
+
+        await writeSettings(work, { enabledPlugins: { "helper@tools": true } });
         expect(await edited(guard, "project_settings", join(work, ".claude", "settings.json"))).toEqual(REFUSAL);
     });
 });

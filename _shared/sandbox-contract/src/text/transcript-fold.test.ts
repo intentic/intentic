@@ -408,6 +408,21 @@ describe("foldTurn", () => {
         });
     });
 
+    // What a runtime's extension said is a notice row a reopened chat still shows; its status line is live state only.
+    it("folds an extension's notice into a notice row and keeps its status entries out of the rows", () => {
+        const rows = foldOf("go", [
+            { kind: "agent_status", key: "lint", text: "linting…", source: "lint-ext" },
+            { kind: "agent_notice", level: "warning", text: "Command blocked by user", source: "guard-ext" },
+            { kind: "agent_notice", level: "info", text: "Compacting soon" },
+            { kind: "agent_notice", level: "error", text: "   " },
+        ]);
+        expect(rows.slice(1)).toEqual([
+            { role: "notice", text: "Command blocked by user", agentNotice: { level: "warning", source: "guard-ext" } },
+            { role: "notice", text: "Compacting soon", agentNotice: { level: "info" } },
+        ]);
+        expect(rows.slice(1).map((row) => TranscriptRowSchema.parse(row))).toEqual(rows.slice(1));
+    });
+
     // An agent's own install, let through the command gate, says where it writes before its output arrives.
     it("says where an agent's own install writes, naming its projects", () => {
         expect(foldOf("go", [{ kind: "install", reach: "own-copy", projects: ["video"] }]).at(-1)).toEqual({

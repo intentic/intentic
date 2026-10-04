@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { OPTIONS } from "./features.js";
 import { manifest, PLUGIN_NAME } from "./manifest.js";
@@ -45,6 +45,19 @@ test("the README documents every switch", () => {
     const readme = readFileSync(join(ROOT, "README.md"), "utf8");
     for (const key of Object.keys(OPTIONS)) {
         expect({ key, documented: readme.includes(`| \`${key}\` |`) }).toEqual({ key, documented: true });
+    }
+});
+
+// Claude Code 2.1.287 and later load the mod named under `modules`; older ones read the key and ignore the module. The
+// module is a source file in hooks/, which `files` ships whole.
+test("every module hooks.json names is a file the package ships", () => {
+    const { modules = [] } = read("hooks/hooks.json") as { modules?: string[] };
+    const { files } = read("package.json") as { files: string[] };
+    expect(modules.length).toBeGreaterThan(0);
+    expect(files).toContain("hooks");
+    for (const module of modules) {
+        expect(module.startsWith("./")).toBe(true);
+        expect(existsSync(join(ROOT, "hooks", module))).toBe(true);
     }
 });
 

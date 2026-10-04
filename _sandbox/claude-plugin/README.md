@@ -21,6 +21,8 @@ The hooks and the bundled commands run on Node.js 20.11 or later, which has to b
 | Claude reads a document | `fileq` turns docx, pdf, xlsx, pptx, epub, ipynb, images, audio and archives into markdown. | `fileq` |
 | Claude makes a document | `fileq check` lists what is wrong with a docx, pptx, xlsx or pdf by slide, page or cell, and `fileq render` draws its pages as PNGs for Claude to look at (with LibreOffice and poppler installed). The fileq skill says to run both before handing the file over. | `fileq` |
 
+| A Bash command succeeds, in Claude Code 2.1.287 or later | A line under the prompt says what the cleaners saved so far this session, and `/intentic-pane` shows the full report in a pane. See [In the interface](#in-the-interface). | `output_cleaners` |
+
 A failed command reaches Claude unchanged. Outside an Intentic sandbox there is no secret store to mask values from, so the cleaners mask only text that looks like a credential: an assignment to a name like `API_KEY` or `TOKEN` whose value looks generated, bearer tokens, AWS access keys, and passwords in URLs.
 
 The `intentic:Intentic` output style adds three working habits to Claude Code's own instructions: batch independent lookups, reuse what is already in context, and run long commands in the background instead of sleeping. Pick it in `/output-style`. It is off until you do.
@@ -31,7 +33,7 @@ Open `/config` and find the rows under intentic. The switches read at session st
 
 | Key | Default | Effect |
 | --- | --- | --- |
-| `output_cleaners` | on | Clean successful Bash output and ledger what each cleaner saved |
+| `output_cleaners` | on | Clean successful Bash output, ledger what each cleaner saved, and show the saving under the prompt. Off, none of the three happens |
 | `cleaners` | empty (all) | Which cleaners run: `-cap,-wide` switches some off, `git,pnpm` allows only those |
 | `output_holdout` | 0 | Share of commands left uncleaned, to measure the saving against real output |
 | `project_map` | on | Send the project map at session start |
@@ -62,6 +64,21 @@ The numbers above are an illustration of the format. The report reads two things
 
 The arithmetic is the one behind the savings page of an Intentic sandbox, from the same packages, so a number here means what it means there.
 
+## In the interface
+
+Claude Code 2.1.287 and later can load a small mod from a plugin, code that runs inside Claude Code and draws in its interface. The plugin's mod (`hooks/register.ts`) makes the cleaners' work visible, and does nothing else: it changes no output and sends nothing.
+
+| What | Where it shows | Needs |
+| --- | --- | --- |
+| A status line under the prompt, such as `intentic: Bash output trimmed 84% · 1.6M tokens saved over 12 commands`. It updates after each Bash command and stays empty until a command has been shortened. | The terminal and the Desktop app | `output_cleaners` on |
+| `/intentic-pane`, the `/intentic:stats` report in a pane with a Refresh button. `/intentic-pane all` reports every project. | The terminal and the Desktop app | `node` on `PATH`, as for the rest of the plugin |
+
+Where Claude Code draws nothing, the mod still runs and the status line has no place to go. `/intentic-pane` then answers with the report as text, as it also does in the VS Code extension and in `claude -p`. `/intentic:stats` works the same everywhere, whatever the version, and is the command to use in a script.
+
+The status line counts from the ledger rows the session has already written (when it resumes) and adds each Bash command as it finishes. It is the same ledger `/intentic:stats` reads, so the two agree, except that a command left untrimmed on purpose by `output_holdout` counts as saving nothing in the status line. The mod does a few additions and one status update per Bash command and reads the ledger once, when the session starts. Claude Code gives a mod hook 10 seconds, and 50 ms for the hook on prompt edits, which the mod does not use.
+
+Older Claude Code versions are not harmed by the mod. `modules` in `hooks/hooks.json` is a key those versions either do not know, in which case they read the file as before (checked on 2.1.200), or know and keep it switched off until a rollout reaches the account (seen on 2.1.283), in which case the Bash and session hooks still run and Claude Code may print one line at start saying that a hooks module was not loaded. From 2.1.287 on the module loads by default.
+
 ## Field notes
 
 Run `/intentic:field-notes` every few weeks. It counts this project's sessions (failures by how many sessions hit them, the commands that ran and how often they failed, the files edited most) and asks Claude to rewrite `.claude/intentic/field-notes.toon` from that evidence, checking each fact against the project before writing it. Commit the file to share it with a team, or ignore it to keep it yours.
@@ -89,6 +106,8 @@ The plugin is built from the packages that own each mechanism, so the sandbox an
 - [@intentic/fileq](../fileq): the CLI, bundled as `dist/fileq.mjs`, the text of its skill, and its NOTICE (rules adapted from SurfSense under Apache-2.0), copied to `generated/fileq-NOTICE`.
 - [@intentic/iq](../../_search/iq): the iq skill and the hint a session opens with. The build rewords the hint's two sandbox phrases for a plain install and fails if they change upstream.
 
+The mod is one source file, [hooks/register.ts](hooks/register.ts), shipped as it is: Claude Code loads TypeScript hooks modules itself, in an environment with no Node and no imports beyond the plugin's own files, so there is nothing to bundle. Its helpers are exported and tested with bun (`src/mod.test.ts`); the hooks as Claude Code wires them are tested with its own test runner (`tests/mod.test.ts`).
+
 The build writes `dist/` (one esbuild bundle per hook and command, so an install needs no `node_modules`) and `generated/` (the skills and the output style, from the texts those packages own). Both are ignored by git.
 
 ### Key files
@@ -106,7 +125,8 @@ The build writes `dist/` (one esbuild bundle per hook and command, so an install
 ```sh
 pnpm --filter @intentic/claude-plugin build      # dist/, generated/, and the version in plugin.json
 pnpm --filter @intentic/claude-plugin test
-pnpm --filter @intentic/claude-plugin validate   # build, then `claude plugin validate`
+pnpm --filter @intentic/claude-plugin test:mod   # the mod's tests, through `claude plugin test` (needs `claude` 2.1.287 or later on PATH)
+pnpm --filter @intentic/claude-plugin validate   # build, then `claude plugin validate --strict`
 claude --plugin-dir _sandbox/claude-plugin       # a session with the checkout loaded, after a build
 ```
 

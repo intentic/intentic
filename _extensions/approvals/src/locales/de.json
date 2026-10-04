@@ -87,8 +87,32 @@
         "approvals": "Genehmigungen"
     },
     "hookSetBody": {
+        "actsOn": "Greift ein bei",
+        "enabledIn": "aktiviert in {where}",
         "filesPinned": "Die Genehmigung gilt auch für diese Dateien, Byte für Byte:",
-        "fromProjectSettings": "Workspace .claude/settings.json"
+        "fromExtension": "von einer Erweiterung",
+        "fromPersona": "das Kit einer Persona",
+        "fromPlugin": "eine Plugin-Verbindung",
+        "fromProjectSettings": "Workspace .claude/settings.json",
+        "fromSkills": "ein Plugin-Ordner unter den Skills",
+        "marketplace": "Fügt den Plugin-Marktplatz {name} ({location}) hinzu, aus dem Claude Code aktivierte Plugins installieren kann.",
+        "powers": {
+            "asksModel": "befragt ein Modell",
+            "callsTools": "ruft die Werkzeuge des Agenten auf",
+            "changesFiles": "schreibt oder löscht Dateien",
+            "changesMessages": "kann deine Nachrichten ändern, bevor der Agent sie liest",
+            "decidesToolCalls": "kann Werkzeugaufrufe des Agenten erlauben, blockieren oder ändern",
+            "networkRequests": "stellt Netzwerkanfragen",
+            "readsEnvironment": "liest die Umgebung der Sitzung, in der ihre Zugangsdaten liegen",
+            "readsFiles": "liest Dateien",
+            "rewritesSystemPrompt": "schreibt die Anweisungen des Agenten um",
+            "startsPrograms": "startet Programme",
+            "startsSubagents": "startet Subagenten"
+        },
+        "reachesFor": "Nutzt",
+        "runsCode": "Dieses Plugin führt Code in Claude Code aus, mit allem, was die Sitzung des Agenten erreicht.",
+        "runsCodeDoing": "Dieses Plugin führt Code in Claude Code aus: Es {powers}.",
+        "runsCodeUnreadable": "Dieses Plugin führt Code in Claude Code aus, und was dieser Code tut, ließ sich nicht lesen ({reason}). Eine Freigabe lässt ihn trotzdem laufen."
     },
     "postBody": {
         "showLess": "Weniger anzeigen",

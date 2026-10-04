@@ -36,6 +36,7 @@ import ApprovalMeta from "./ApprovalMeta.vue";
 import ApprovalRail, { type ApprovalScope } from "./ApprovalRail.vue";
 import { approvalsAttention } from "./extension";
 import HookSetBody from "./HookSetBody.vue";
+import { hookSetSize } from "./hookSet.js";
 import { host } from "./host";
 import PostBody from "./PostBody.vue";
 import { countdownWords, limitOf, postsATitle } from "./postText";
@@ -579,7 +580,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
 
                     <!-- Found by a turn, not proposed by one: until the owner says yes to this exact set, turns run with every hook off. -->
                     <RowGroup v-if="hooksVisible.length > 0" :label="t(`approvalsView.hooksWaiting`)" :count="hooksVisible.length">
-                        <Row v-for="request in hooksVisible" :key="request.digest" :title="t(`approvalsView.hookSetTitle`, { count: request.hooks.length }, request.hooks.length)">
+                        <Row v-for="request in hooksVisible" :key="request.digest" :title="t(`approvalsView.hookSetTitle`, { count: hookSetSize(request) }, hookSetSize(request))">
                             <template #lead>
                                 <span :class="ACTION_MARK" class="h-7 w-7 text-sm"><Icon name="shield" /></span>
                             </template>

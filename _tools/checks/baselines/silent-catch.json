@@ -321,7 +321,7 @@
     "_sandbox/sandbox/src/git/remote/repo-git-dirs.ts": 1,
     "_sandbox/sandbox/src/git/remote/root-repo.ts": 3,
     "_sandbox/sandbox/src/guard/command-guard.ts": 1,
-    "_sandbox/sandbox/src/guard/settings-hooks.ts": 2,
+    "_sandbox/sandbox/src/guard/settings-hooks.ts": 1,
     "_sandbox/sandbox/src/history/history.ts": 5,
     "_sandbox/sandbox/src/hosts/desktop-sync.routes.ts": 2,
     "_sandbox/sandbox/src/intentic/apply-events.ts": 1,

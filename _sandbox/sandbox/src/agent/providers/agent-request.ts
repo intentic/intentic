@@ -15,6 +15,7 @@ import type { ClassifiedInstall } from "../../environment/runtime-installs.js";
 import type { ProjectInstallGate } from "./project-installs.js";
 import type { JsExecutionPlan } from "../../execution/js-runtime.js";
 import type { CommandGuardOptions } from "../../guard/command-guard.js";
+import type { MountedPlugin } from "../../guard/settings-hooks.js";
 import type { HostDeviceReach } from "../../hosts/self-host.js";
 import type { PersonaScope } from "../../personas/persona-scope.js";
 import type { HeavyCommands } from "../../system/resources/heavy-commands.js";
@@ -114,8 +115,9 @@ export interface TurnPolicy {
     // Whether the persona may install a missing dependency itself, read by the install-steering and deps hooks.
     readonly dependencyInstallAllowed?: boolean;
     // What the settings-hook gate found (guard/hook-approvals.ts): `held` runs the turn with every hook off; otherwise
-    // `digest` names the approved set, absent when there is none, and a mid-turn edit may not move it.
-    readonly settingsHooks?: { readonly held: boolean; readonly digest?: string };
+    // `digest` names the approved set, absent when there is none, and a mid-turn edit may not move it. `plugins` are the
+    // mounted plugins the set was read with, so the mid-turn check reads the same ones.
+    readonly settingsHooks?: { readonly held: boolean; readonly digest?: string; readonly plugins?: readonly MountedPlugin[] };
     // Harness's delegation ceilings: concurrent, per-turn, nesting; undefined leaves the CLI default in place.
     readonly subagentsAtOnce?: number;
     readonly subagentsPerTurn?: number;

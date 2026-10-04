@@ -13,6 +13,9 @@ export interface AgentMount {
     // Who ships it, as the list names them.
     readonly owner: string;
     readonly pluginDir: string;
+    // Baked into the image (iq, webq, a baked extension's plugin): nothing in /work changes it, so its hooks are outside
+    // the approval the settings-hook gate asks for (guard/settings-hooks.ts says why the rest are not).
+    readonly shipped: boolean;
 }
 
 export type MountHost = ExtensionHost & { readonly config: Pick<Services["config"], "iqPluginDir" | "webqPluginDir"> };
@@ -29,7 +32,7 @@ export interface MountChoice {
     readonly extensions: readonly string[] | undefined;
 }
 
-const baked = (id: string, owner: string, pluginDir: string): AgentMount => ({ origin: "builtin", id, owner, pluginDir });
+const baked = (id: string, owner: string, pluginDir: string): AgentMount => ({ origin: "builtin", id, owner, pluginDir, shipped: true });
 
 // In load order: iq ahead of any user plugin so code search prefers it, webq ungated as its CLI is always on PATH, a kit last.
 export const agentMounts = async (host: MountHost, choice: MountChoice): Promise<AgentMount[]> => {
@@ -41,12 +44,12 @@ export const agentMounts = async (host: MountHost, choice: MountChoice): Promise
     return [
         ...(choice.iqLoaded && host.config.iqPluginDir !== "" ? [baked("iq", "Code search", host.config.iqPluginDir)] : []),
         ...(host.config.webqPluginDir !== "" ? [baked("webq", "Web pages", host.config.webqPluginDir)] : []),
-        ...pluginDirsOf(choice.capabilities, root).map(({ id, dir }): AgentMount => ({ origin: "plugin", id, owner: id, pluginDir: dir })),
-        ...extensions.flatMap(({ id, name, dir }): AgentMount[] =>
-            extensionGranted(choice.extensions, id) ? [{ origin: "extension", id, owner: name, pluginDir: dir }] : [],
+        ...pluginDirsOf(choice.capabilities, root).map(({ id, dir }): AgentMount => ({ origin: "plugin", id, owner: id, pluginDir: dir, shipped: false })),
+        ...extensions.flatMap(({ id, name, dir, source }): AgentMount[] =>
+            extensionGranted(choice.extensions, id) ? [{ origin: "extension", id, owner: name, pluginDir: dir, shipped: source === "builtin" }] : [],
         ),
         ...kits.flatMap(({ persona, dir }): AgentMount[] =>
-            dir === undefined ? [] : [{ origin: "persona", id: persona.id, owner: persona.label ?? persona.id, pluginDir: dir }],
+            dir === undefined ? [] : [{ origin: "persona", id: persona.id, owner: persona.label ?? persona.id, pluginDir: dir, shipped: false }],
         ),
     ];
 };

@@ -1,0 +1,14 @@
+{
+    "name": "intentic-policy",
+    "owner": {
+        "name": "Intentic"
+    },
+    "description": "Claude Code policy the Intentic sandbox image installs as managed settings.",
+    "plugins": [
+        {
+            "name": "intentic-guard",
+            "source": "./plugins/intentic-guard",
+            "description": "Keeps the sandbox's own decisions on tool calls final: a mod someone installs can neither answer nor overturn them."
+        }
+    ]
+}

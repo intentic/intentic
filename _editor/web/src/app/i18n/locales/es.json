@@ -1761,6 +1761,9 @@
             "retryOutageBrief": "Reintenta durante la caída",
             "retryStoppedBrief": "Para tras 3 intentos",
             "waitBrief": "No se envía nada"
+        },
+        "chatAgentStatus": {
+            "label": "Lo que muestran las extensiones del agente"
         }
     },
     "common": {

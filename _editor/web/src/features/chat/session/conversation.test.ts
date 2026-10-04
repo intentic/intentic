@@ -2471,6 +2471,31 @@ describe(`Conversation`, () => {
         expect(conversation.error.value).toBeNull();
     });
 
+    // An extension's status lines are live state: replaced and cleared by key while the turn runs, gone once it settles.
+    it(`holds an extension's status entries by key while the turn runs and drops them when it settles`, async () => {
+        const conversation = new Conversation(`c1`);
+        const seen: string[][] = [];
+        const stop = watch(
+            conversation.turn.agentStatus,
+            (entries) => seen.push([...entries].map(([key, entry]) => `${key}=${entry.source ?? ``}:${entry.text}`)),
+            { flush: `sync` },
+        );
+        daemon.mockImplementation(
+            turnDaemon([
+                { kind: `agent_status`, key: `lint`, text: `linting 3 files`, source: `lint-ext` },
+                { kind: `agent_status`, key: `widget:todo`, text: `- one\n- two` },
+                { kind: `agent_status`, key: `lint`, text: null },
+                { kind: `delta`, text: `done` },
+                { kind: `done` },
+            ]),
+        );
+        await conversation.turn.send(`hello`, settings);
+        stop();
+
+        expect(seen).toEqual([[`lint=lint-ext:linting 3 files`], [`lint=lint-ext:linting 3 files`, `widget:todo=:- one\n- two`], [`widget:todo=:- one\n- two`], []]);
+        expect(conversation.transcript.messages.value.some((message) => message.role === `notice`)).toBe(false);
+    });
+
     it(`stores an account_usage frame against its account, stamped so staleness is comparable`, async () => {
         usageByAccount.value = {};
         const conversation = new Conversation(`c1`);

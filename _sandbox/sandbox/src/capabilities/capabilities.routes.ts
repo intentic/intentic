@@ -79,6 +79,13 @@ const repointCapabilityReferences = async (services: Services, ctx: CapabilityCt
     }
 };
 
+// The entry as stored once its apply succeeded: what the install learned (handler.installed), re-parsed so a handler
+// cannot store what the schema refuses.
+const installedEntry = async (ctx: CapabilityCtx, entry: Capability): Promise<Capability> => {
+    const installed = registry[entry.kind].installed;
+    return installed === undefined ? entry : CapabilitySchema.parse({ ...entry, config: await installed(ctx, entry.id, entry.config) });
+};
+
 // Resolves the markers a form sends where a credential goes, before apply runs: VAULTED back to the stored value (the
 // edit form never sees existing secrets), and a stashed one to the key the sandbox generated for the form (its private
 // half never crossed the wire). A marker with nothing behind it is refused, not passed through, so it can't land in a
@@ -198,7 +205,8 @@ export const createCapabilitiesRoutes = (services: Services) => {
             adding.add(input.id);
             try {
                 yield* handler.apply(ctx, entry.id, entry.config);
-                await versionManifest(services, `connection ${entry.id}`, () => services.capabilities.upsert(entry));
+                const stored = await installedEntry(ctx, entry);
+                await versionManifest(services, `connection ${entry.id}`, () => services.capabilities.upsert(stored));
                 // Stored for good: a generated key's token has done its one job and cannot install the key again.
                 spendStashed(stash, input.config);
                 // Brings the extension's declared autoStart processes up, the same post-apply seam composeEnvironment
@@ -323,7 +331,8 @@ export const createCapabilitiesRoutes = (services: Services) => {
             for await (const line of registry[updated.kind].apply(ctx, updated.id, updated.config)) {
                 void line;
             }
-            await versionManifest(services, `connection ${updated.id} credential`, () => services.capabilities.upsert(updated));
+            const stored = await installedEntry(ctx, updated);
+            await versionManifest(services, `connection ${updated.id} credential`, () => services.capabilities.upsert(stored));
             void reconcileListenerProcesses(services);
             // A rotated key is a new upstream credential; the translator keeps the old one until told to sync.
             if (mintsEndpointProvider(updated.kind)) {

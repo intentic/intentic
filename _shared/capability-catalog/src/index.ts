@@ -688,7 +688,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
             { key: "path", label: "Subdirectory", optional: true },
             { key: "token", label: "Access token", secret: true, optional: true },
         ],
-        hint: "Loaded by the agent next turn. Re-adding the same name updates it.",
+        hint: "Pinned to the commit it installs at and loaded by the agent next turn. Re-adding the same name updates it to the newest commit.",
         guide: {
             scopes: "private repos: read access (e.g. GitHub `repo`)",
             steps: [

@@ -1,5 +1,8 @@
 {
     "description": "intentic: session context (map, field notes, iq teaching), Bash output cleaning. Each script reads its own /config switch and answers nothing when it is off. Without node on PATH the tool hooks stand down silently and each session opens with one line saying why nothing ran.",
+    "modules": [
+        "./register.ts"
+    ],
     "hooks": {
         "SessionStart": [
             {

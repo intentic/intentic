@@ -199,8 +199,19 @@ const watchGaveUp = computed(
 // written: a sandbox older than this app sends no code, and a newer one may send a code this build does not know.
 const { audience } = useAudience();
 const noticeText = computed(() => noticeLine(props.message, audience.value) ?? props.message.text);
+// A notice the runtime's own extension or loop said (sandbox-contract events/agent-ui.ts): its level's glyph and colour.
+// An info line stays the muted notice every other row is; only a warning or an error is drawn louder.
+const AGENT_NOTICE_LOOK = {
+    info: { icon: `info-circle`, tone: `text-subtle` },
+    warning: { icon: `exclamation-triangle`, tone: `text-warning` },
+    error: { icon: `exclamation-circle`, tone: `text-danger` },
+} as const;
+const agentNoticeLook = computed(() => (props.message.agentNotice === undefined ? undefined : AGENT_NOTICE_LOOK[props.message.agentNotice.level]));
 // The board's own watch glyph, another conversation, or a child reporting back.
 const noticeIcon = computed(() => {
+    if (agentNoticeLook.value !== undefined) {
+        return agentNoticeLook.value.icon;
+    }
     if (props.message.watchWake !== undefined) {
         return `eye`;
     }
@@ -513,7 +524,8 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
         <div
             v-else-if="message.role === 'notice' && message.text !== ''"
             class="flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5 self-center py-0.5 text-2xs"
-            :class="watchGaveUp ? `text-danger` : `text-subtle`"
+            :class="watchGaveUp ? `text-danger` : (agentNoticeLook?.tone ?? `text-subtle`)"
+            :data-agent-notice="message.agentNotice?.level"
         >
             <!-- Mark, sentence and clock are one non-wrapping group inside the wrapping row: a sentence wider than the pane must wrap inside its own span. -->
             <span class="flex min-w-0 items-center gap-x-2">
@@ -522,7 +534,10 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 <Icon v-if="pendingWait" name="spinner" spin class="shrink-0 text-xs text-info" />
                 <!-- The board's own watch glyph, so one conversation's watch reads the same in both places. -->
                 <Icon v-else :name="noticeIcon" class="shrink-0 text-xs" />
-                <span class="min-w-0">{{ noticeText }}</span>
+                <!-- Who said it, when the runtime named an extension: its words are not the sandbox's. -->
+                <span class="min-w-0" :class="{ 'whitespace-pre-line': message.agentNotice }"
+                    ><span v-if="message.agentNotice?.source" class="font-medium">{{ message.agentNotice.source }}: </span>{{ noticeText }}</span
+                >
                 <span v-if="waitClock" class="shrink-0 tabular-nums">{{ waitClock }}</span>
             </span>
             <!-- Nobody at the composer typed it, so what the model was told is one press away. -->

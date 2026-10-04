@@ -1,0 +1,7 @@
+{
+    "extraKnownMarketplaces": {
+        "intentic-policy": { "source": { "source": "directory", "path": "/opt/intentic-claude-policy" } }
+    },
+    "enabledPlugins": { "intentic-guard@intentic-policy": true },
+    "prependPlugins": ["intentic-guard@intentic-policy", "sec-default@builtin"]
+}

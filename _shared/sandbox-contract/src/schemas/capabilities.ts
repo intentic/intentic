@@ -57,8 +57,12 @@ export const CliConfigSchema = z
 // internals. `path` is a subdirectory for a plugin inside a larger checkout; `token` is https auth for a private repo.
 export const PluginConfigSchema = z.object({
     url: z.url().describe("The repository to take the plugin from."),
-    // Branch / tag / commit sha to pin; absent = the default branch's HEAD.
-    ref: z.string().min(1).optional().describe("A branch, tag or commit to pin to. Leave it out to follow the default branch."),
+    // Branch / tag / commit sha to install from; absent = the default branch's HEAD. Either way `commit` pins it.
+    ref: z
+        .string()
+        .min(1)
+        .optional()
+        .describe("A branch, tag or commit to install from. Leave it out for the default branch. The install pins the commit it names at that moment."),
     path: z
         .string()
         .min(1)
@@ -66,6 +70,15 @@ export const PluginConfigSchema = z.object({
         .optional()
         .describe("Where inside the repository the plugin lives, for one that sits in a larger checkout."),
     token: z.string().min(1).optional().describe("A credential for a private repository. Stored, never echoed back."),
+    // Set by the sandbox at install, never by the form: re-applying a stored entry (a rotated token, a migration)
+    // checks this out again, and only adding the plugin anew moves it.
+    commit: z
+        .string()
+        .regex(/^[0-9a-f]{40}$/, "commit must be a full 40-character commit sha")
+        .optional()
+        .describe(
+            "The exact commit installed, in full, resolved from the branch, tag or commit when the plugin was added. Its hooks run inside the agent's session, so it stays at this commit until it is added again.",
+        ),
 });
 // An intentic extension from a git repo (UI bundle + agent contributions + processes). Unlike `plugin`, `ref` must be a
 // full commit sha, since extension code runs trusted in the owner's browser and every update is a deliberate re-add at

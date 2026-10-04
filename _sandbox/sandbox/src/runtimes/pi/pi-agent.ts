@@ -16,6 +16,7 @@ import { withStderrTail } from "../decorators/vendor-errors.js";
 import { withTimeout } from "../acp/acp-connection.js";
 import { textPlanTurn, vendorTurn } from "../decorators/vendor-turn.js";
 import { createPiEventMapper } from "./pi-events.js";
+import { answerExtensionUi } from "./pi-extension-ui.js";
 import type { PiEvent, PiProcess, PiSpawn } from "./pi-rpc.js";
 
 // Pi provider adapter (same seam as runAgent/createCodexAgent/createOpenCodeAgent/runAcpAgent): AgentRequest in, AgentEvent
@@ -39,16 +40,6 @@ interface PiTurnState {
     exitCode: number | null;
     readonly wait: IdleWait;
 }
-
-// Answers Pi's extension UI sub-protocol so a project-level extension's dialog can never hang the turn; cancelling is
-// the honest floor (`questions: false`), giving the documented "user dismissed" value. Fire-and-forget methods get no
-// reply.
-const answerExtensionUi = (proc: PiProcess, event: PiEvent): void => {
-    const method = event["method"];
-    if (method === "select" || method === "confirm" || method === "input" || method === "editor") {
-        proc.send({ type: "extension_ui_response", id: event["id"], cancelled: true });
-    }
-};
 
 // How one prompt turn ended: whether anything failed, and, on a `holdText` turn, the text it held back instead of
 // streaming, the plan the user is about to be asked to approve.
@@ -115,8 +106,19 @@ async function* runPiTurn(
                 yield { kind: "error", message: withStderrTail(`Pi exited mid-turn (code ${state.exitCode ?? "?"})`, proc.stderrTail()) };
                 return settled(true);
             }
+            // An extension's UI (pi-extension-ui.ts): what it shows streams as frames, and a dialog parks on a card with
+            // the clock held, since the turn is waiting on a person rather than on Pi.
             if (next.type === "extension_ui_request") {
-                answerExtensionUi(proc, next);
+                const answer = answerExtensionUi(proc, next, { cards: request.hooks.cards, conversationId: request.spec.conversationId, signal: request.signal });
+                yield* answer.frames;
+                if (answer.dialog !== undefined) {
+                    const release = clock.hold();
+                    try {
+                        yield* answer.dialog.ask();
+                    } finally {
+                        release();
+                    }
+                }
                 continue;
             }
             if (next.type !== "agent_settled") {

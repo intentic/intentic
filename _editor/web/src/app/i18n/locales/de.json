@@ -1753,6 +1753,9 @@
             "retryOutageBrief": "Wiederholt beim Ausfall",
             "retryStoppedBrief": "Stoppt nach 3 Versuchen",
             "waitBrief": "Nichts wird gesendet"
+        },
+        "chatAgentStatus": {
+            "label": "Was die Erweiterungen des Agenten anzeigen"
         }
     },
     "common": {

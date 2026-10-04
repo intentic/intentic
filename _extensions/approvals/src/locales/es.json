@@ -87,8 +87,32 @@
         "approvals": "Aprobaciones"
     },
     "hookSetBody": {
+        "actsOn": "Actúa en",
+        "enabledIn": "activado en {where}",
         "filesPinned": "La aprobación también cubre estos archivos, byte a byte:",
-        "fromProjectSettings": ".claude/settings.json del espacio de trabajo"
+        "fromExtension": "traído por una extensión",
+        "fromPersona": "el kit de una persona",
+        "fromPlugin": "una conexión de plugin",
+        "fromProjectSettings": ".claude/settings.json del espacio de trabajo",
+        "fromSkills": "una carpeta de plugin entre las skills",
+        "marketplace": "Añade el marketplace de plugins {name} ({location}), desde el que Claude Code puede instalar los plugins activados.",
+        "powers": {
+            "asksModel": "consulta a un modelo",
+            "callsTools": "llama a las herramientas del agente",
+            "changesFiles": "escribe o borra archivos",
+            "changesMessages": "puede cambiar tus mensajes antes de que el agente los lea",
+            "decidesToolCalls": "puede permitir, bloquear o cambiar las llamadas a herramientas del agente",
+            "networkRequests": "hace peticiones de red",
+            "readsEnvironment": "lee el entorno de la sesión, donde están sus credenciales",
+            "readsFiles": "lee archivos",
+            "rewritesSystemPrompt": "reescribe las instrucciones del agente",
+            "startsPrograms": "inicia programas",
+            "startsSubagents": "inicia subagentes"
+        },
+        "reachesFor": "Usa",
+        "runsCode": "Este plugin ejecuta código dentro de Claude Code, con todo lo que alcanza la sesión del agente.",
+        "runsCodeDoing": "Este plugin ejecuta código dentro de Claude Code: {powers}.",
+        "runsCodeUnreadable": "Este plugin ejecuta código dentro de Claude Code, y no se pudo leer qué hace ese código ({reason}). Aprobarlo lo deja ejecutarse igualmente."
     },
     "postBody": {
         "showLess": "Mostrar menos",

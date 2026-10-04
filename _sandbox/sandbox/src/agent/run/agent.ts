@@ -74,6 +74,7 @@ import { closeSubagents, subagentInParentTree, subagentHooks, type SubagentTurn 
 import { ASK_TOOL_NAMES, answerFiles, formatAnswers } from "../tools/question-answers.js";
 import { imageBlock, loadAttachments } from "../prompt/attachment-images.js";
 import type { ConversationActors } from "../../conversations/actor/conversation-actors.js";
+import { CLAUDE_INSTRUCTION_FILES } from "../../runtimes/claude/claude-builtins.js";
 
 // The request the Claude Code loop runs: it spends a stored account's token, a routed endpoint, the trial, or the
 // container's own credential.
@@ -164,9 +165,11 @@ const CHECKLIST_ENV: Record<string, string> = {
 const REFUSAL_ENV = { CLAUDE_CODE_DISABLE_REFUSAL_FALLBACK: "1" } as const;
 
 // Hides CLI skills with no daemon equivalent: loop/schedule need a live process, keybindings-help/update-config target
-// the CLI's own UI.
+// the CLI's own UI, and plugin-authoring writes mods whose panes and status lines nothing draws under the Agent SDK.
+// Keeps the CLI's built-in AGENTS.md loader out of a turn the daemon composes AGENTS.md for (claude-builtins.ts).
 const HEADLESS_SETTINGS: Exclude<NonNullable<Options["settings"]>, string> = {
-    skillOverrides: { loop: "off", schedule: "off", "keybindings-help": "off", "update-config": "off" },
+    skillOverrides: { loop: "off", schedule: "off", "keybindings-help": "off", "update-config": "off", "plugin-authoring": "off" },
+    ...CLAUDE_INSTRUCTION_FILES,
 };
 
 // The flag layer, above the owner's settings.json. Fast mode is asked per session so it never persists sandbox-wide,

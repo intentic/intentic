@@ -5,11 +5,11 @@
         "composite": false,
         "declaration": false,
         "declarationMap": false,
-        "rootDir": "./src",
+        "rootDir": ".",
         "tsBuildInfoFile": "./.cache/tsbuildinfo",
         "skipLibCheck": true
     },
-    "include": ["./src/**/*"],
+    "include": ["./src/**/*", "./hooks/**/*.ts"],
     "exclude": ["./src/**/*.test.ts"],
     "extends": "@intentic/tsconfig/tsconfig.base.json"
 }

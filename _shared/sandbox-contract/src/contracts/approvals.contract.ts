@@ -42,7 +42,7 @@ export const approvalsContract = {
             path: "/approvals/hooks",
             summary: "Hooks waiting for your yes",
             description:
-                "Hook sets a turn found in Claude Code's settings files, or in a skill's or subagent's definition, that nobody has approved in that exact form. Until one is approved, turns in this workspace run with every hook switched off; the sandbox's own safeguards are not hooks of this kind and keep working.",
+                "Hook sets a turn found in Claude Code's settings files, in a skill's or subagent's definition, or in a plugin the turn loads that the sandbox does not ship (its hooks and its hooks module, code that runs inside Claude Code), that nobody has approved in that exact form. Until one is approved, turns in this workspace run with every hook switched off; the sandbox's own safeguards are not hooks of this kind and keep working.",
         })
         .meta({ floor: "maintainer" })
         .output(HookRequestsSchema),
@@ -52,7 +52,7 @@ export const approvalsContract = {
             path: "/approvals/hooks/{digest}/approve",
             summary: "Let a hook set run",
             description:
-                "Approves exactly this set, commands and the bytes of the files they run, from the next turn on. Any later change to either is a new set and asks again. Owner and maintainers only, and never through a token a program holds.",
+                "Approves exactly this set, commands and the bytes of the files they run, plugin modules included, from the next turn on. Any later change to either is a new set and asks again. Owner and maintainers only, and never through a token a program holds.",
         })
         .meta({ panel: false, control: "never" })
         .input(HookDigestParamSchema)

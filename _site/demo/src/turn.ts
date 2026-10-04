@@ -34,6 +34,13 @@ const todos = (done: number, running: number): AgentEvent => ({
 const FEATURED: Beat[] = [
     { after: 300, event: { kind: `init`, model: `claude-sonnet-5` } },
     { after: 200, event: { kind: `mode`, mode: `plan` } },
+    // What a runtime's own plugin shows (sandbox-contract events/agent-ui.ts): a status line beside the composer for as
+    // long as the turn runs, and a notice that stays in the transcript.
+    { after: 200, event: { kind: `agent_status`, key: `stripe`, text: `Stripe test mode: keys from .env.test`, source: `stripe-kit` } },
+    {
+        after: 200,
+        event: { kind: `agent_notice`, level: `warning`, text: `.env holds a live STRIPE_SECRET_KEY; this turn uses test mode only.`, source: `stripe-kit` },
+    },
     {
         after: 400,
         event: {

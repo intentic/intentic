@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import type { Capability } from "@intentic/sandbox-contract";
-import { gitHead } from "@intentic/scaffold";
+import { gitFullHead, gitHead } from "@intentic/scaffold";
 import { createTerminalRunner } from "../../terminal/terminal-run.js";
 import {
     makeWorkspaceDir,
@@ -22,7 +22,7 @@ import { pluginHandler } from "./plugin.handler.js";
 const exec = promisify(execFile);
 const git = (dir: string, ...args: string[]) => exec("git", ["-C", dir, ...args]);
 
-// A ctx exposing only what pluginHandler touches (files + git.head + the terminal runner + workspace.root),
+// A ctx exposing only what pluginHandler touches (files + git.head/fullHead + the terminal runner + workspace.root),
 // over a fresh temp workspace. The runner is the real one in its no-tmux fallback: the handler's clone/
 // checkout commands run as plain bash against a local fixture repo, offline.
 const tempCtx = (): { ctx: CapabilityCtx; root: string } => {
@@ -30,7 +30,7 @@ const tempCtx = (): { ctx: CapabilityCtx; root: string } => {
     const ctx = {
         workspace: { root },
         files: { read: readWorkspaceFile, mkdir: makeWorkspaceDir, remove: removeWorkspacePath, move: moveWorkspacePath },
-        git: { head: gitHead },
+        git: { head: gitHead, fullHead: gitFullHead },
         terminalRun: createTerminalRunner(),
     } as unknown as CapabilityCtx;
     return { ctx, root };
@@ -81,6 +81,30 @@ test("a pinned ref checks out that commit; re-add without the pin updates to the
     expect(await pluginHandler.status(ctx, "demo", { url: remote.url })).toEqual({ state: "active", detail: second });
 });
 
+test("an install pins the commit its branch resolved to; re-applying the stored entry stays there, adding anew moves it", async () => {
+    const { ctx, root } = tempCtx();
+    const remote = await fixtureRepo();
+    await remote.commit("one");
+    const config = { url: remote.url, ref: "HEAD" };
+
+    await drain(pluginHandler.apply(ctx, "demo", config));
+    const stored = await pluginHandler.installed!(ctx, "demo", config);
+    const pinned = await gitFullHead(pluginDir(root, "demo"));
+    expect(pinned).toMatch(/^[0-9a-f]{40}$/);
+    expect(stored).toEqual({ url: remote.url, ref: "HEAD", commit: pinned });
+
+    // The branch moves on; a rotated token re-applies the stored entry, which checks out the pinned commit again.
+    const newer = await remote.commit("two");
+    await drain(pluginHandler.apply(ctx, "demo", stored));
+    expect(await gitFullHead(pluginDir(root, "demo"))).toBe(pinned);
+    expect(await readWorkspaceFile(join(pluginDir(root, "demo"), "two"))).toBeUndefined();
+
+    // Adding it anew, as the form does with no commit, is the update.
+    await drain(pluginHandler.apply(ctx, "demo", config));
+    expect(await pluginHandler.status(ctx, "demo", config)).toEqual({ state: "active", detail: newer });
+    expect(await pluginHandler.installed!(ctx, "demo", config)).toEqual({ ...config, commit: await gitFullHead(pluginDir(root, "demo")) });
+});
+
 test("a failed clone throws, leaves no debris, and keeps a prior checkout active", async () => {
     const { ctx, root } = tempCtx();
     const missing = join(tmpdir(), "plugin-remote-does-not-exist");
@@ -115,9 +139,9 @@ test("pluginDirsOf maps plugin capabilities to checkout dirs (honoring the subdi
     expect(pluginDirsOf([mcp], "/work")).toEqual([]);
 });
 
-test("echoConfig echoes url/ref/path and hasToken, never the token", () => {
-    const full: Capability = { id: "p", kind: "plugin", config: { url: "https://x/y.git", ref: "v1", path: "plugins/p", token: "secret" } };
-    expect(echoConfig(full, new Map())).toEqual({ url: "https://x/y.git", ref: "v1", path: "plugins/p", hasToken: true });
+test("echoConfig echoes url/ref/path/commit and hasToken, never the token", () => {
+    const full: Capability = { id: "p", kind: "plugin", config: { url: "https://x/y.git", ref: "v1", path: "plugins/p", token: "secret", commit: "a".repeat(40) } };
+    expect(echoConfig(full, new Map())).toEqual({ url: "https://x/y.git", ref: "v1", path: "plugins/p", commit: "a".repeat(40), hasToken: true });
     const bare: Capability = { id: "q", kind: "plugin", config: { url: "https://x/y.git" } };
     expect(echoConfig(bare, new Map())).toEqual({ url: "https://x/y.git", hasToken: false });
 });

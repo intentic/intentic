@@ -1753,6 +1753,9 @@
             "retryOutageBrief": "Réessaie pendant la panne",
             "retryStoppedBrief": "S'arrête après 3 essais",
             "waitBrief": "Rien n'est envoyé"
+        },
+        "chatAgentStatus": {
+            "label": "Ce qu'affichent les extensions de l'agent"
         }
     },
     "common": {
