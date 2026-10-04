@@ -134,15 +134,16 @@ const tip = computed((): TooltipValue => {
             @click="toggle"
         />
         <!-- One node open or shut: beforematch reveals the element it fired on, and a swapped-in copy would lose the
-             match. Cheap text, so it stays in the page while shut for find-in-page to reach. -->
+             match. Cheap text, so it stays in the page while shut for find-in-page to reach. The material is its own
+             scroll box, never a box inside it (`.chat-mark-material` in chat.css). -->
         <div
             v-if="thought !== undefined"
-            class="chat-mark-material chat-spine-material"
+            class="chat-mark-material chat-spine-material chat-inset max-h-64 overflow-auto"
             :class="found && `chat-mark-found`"
             :hidden.attr="shown ? undefined : `until-found`"
             @beforematch="onFound"
         >
-            <pre class="chat-inset max-h-64 overflow-auto px-2.5 py-1.5 text-2xs leading-relaxed whitespace-pre-wrap italic">{{ thought }}</pre>
+            <pre class="px-2.5 py-1.5 text-2xs leading-relaxed whitespace-pre-wrap italic">{{ thought }}</pre>
         </div>
         <!-- The calls are not text worth the page's weight: absent until pressed, and faded in where they land. -->
         <Transition name="chat-mark-reveal">

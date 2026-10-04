@@ -521,6 +521,12 @@
     opacity: 0;
     translate: 0 -4px;
 }
+/* A SHUT MATERIAL MAY HOLD NO SCROLL BOX OF ITS OWN: when it scrolls, the material itself is the scroller. Chromium
+   (2026-10, desktop and WebView2) keeps a box that scrolled inside a `hidden="until-found"` element
+   (`content-visibility: hidden`) as a stale scroller, and from then on paints every sticky box in the transcript at an
+   out-of-date offset: the composer rides up the pane with the turns while layout and hit-testing still place it at the
+   bottom, and the pinned prompt scrolls away. Styling the inner box on `[hidden]` is no way out, since nothing under
+   the lock is restyled until it opens again. */
 /* Material kept in the page while shut (hidden="until-found", ChatAsideLane) arrives the same way, here rather than in
    that Transition, which would unmount it. Shutting takes the shut state's `none`, so it goes at once. */
 .chat-mark-material {

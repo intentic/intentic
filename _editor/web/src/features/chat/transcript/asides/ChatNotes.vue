@@ -44,9 +44,11 @@ const body = (text: string): string => text.replace(/^#{1,6} .*(\n|$)/, ``).trim
                 @toggle="toggleList"
             />
         </div>
-        <!-- Shut until found rather than absent, so find-in-page reaches the list, and a note inside it, and opens both. -->
+        <!-- Shut until found rather than absent, so find-in-page reaches the list, and a note inside it, and opens both.
+             The list is the one scroll box: a note scrolling inside it would be a scroller under a shut list
+             (`.chat-mark-material` in chat.css). -->
         <div
-            class="chat-mark-material chat-spine-material"
+            class="chat-mark-material chat-spine-material chat-inset max-h-80 overflow-auto"
             :class="found && `chat-mark-found`"
             :hidden.attr="open ? undefined : `until-found`"
             @beforematch="
@@ -54,7 +56,7 @@ const body = (text: string): string => text.replace(/^#{1,6} .*(\n|$)/, ``).trim
                 open = true;
             "
         >
-            <div class="chat-inset flex w-full flex-col overflow-hidden text-2xs leading-relaxed">
+            <div class="flex w-full flex-col text-2xs leading-relaxed">
                 <div v-for="note in notes" :key="note.title" class="flex flex-col">
                     <button
                         type="button"
@@ -68,8 +70,8 @@ const body = (text: string): string => text.replace(/^#{1,6} .*(\n|$)/, ``).trim
                     </button>
                     <!-- Shut until found rather than absent, so find-in-page reaches a note and opens it. -->
                     <div :hidden.attr="opened === note.title ? undefined : `until-found`" @beforematch="opened = note.title">
-                        <!-- Capped and scrolled, not clamped: one note here is the whole project map. -->
-                        <p class="max-h-48 overflow-auto px-2.5 pb-1.5 pl-7 whitespace-pre-wrap">{{ body(note.text) }}</p>
+                        <!-- Scrolled, not clamped: one note here is the whole project map, and the list around it caps it. -->
+                        <p class="px-2.5 pb-1.5 pl-7 whitespace-pre-wrap">{{ body(note.text) }}</p>
                     </div>
                 </div>
             </div>

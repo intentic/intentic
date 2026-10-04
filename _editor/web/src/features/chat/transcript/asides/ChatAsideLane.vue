@@ -65,18 +65,17 @@ const said = computed(() => slots[`default`] !== undefined);
                 </div>
             </div>
         </Transition>
-        <!-- One node open or shut: beforematch reveals the element it fired on, and a swapped-in copy would lose the match. -->
+        <!-- One node open or shut: beforematch reveals the element it fired on, and a swapped-in copy would lose the match.
+             It is its own capped scroll box, so what the slot draws must not scroll (`.chat-mark-material` in chat.css). -->
         <div
             v-for="mark in findable"
             :key="mark.key"
-            class="chat-mark-material"
+            class="chat-mark-material max-h-64 overflow-auto rounded-lg"
             :class="found === mark.key && `chat-mark-found`"
             :hidden.attr="opened === mark.key ? undefined : `until-found`"
             @beforematch="onFound(mark.key)"
         >
-            <div class="min-h-0 overflow-hidden">
-                <slot :name="mark.key" />
-            </div>
+            <slot :name="mark.key" />
         </div>
     </div>
 </template>

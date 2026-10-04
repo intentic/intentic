@@ -437,7 +437,8 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 {{ errandSubject.label }}
             </button>
             <template #errand>
-                <pre class="chat-inset max-h-64 overflow-auto px-2.5 py-1.5 text-2xs leading-relaxed whitespace-pre-wrap">{{ message.text }}</pre>
+                <!-- Uncapped: the lane's material around it is the capped scroll box. -->
+                <pre class="chat-inset px-2.5 py-1.5 text-2xs leading-relaxed whitespace-pre-wrap">{{ message.text }}</pre>
             </template>
         </ChatAsideLane>
         <div v-else-if="message.role === 'user'" class="group relative flex max-w-[85%] flex-col items-end gap-1.5">

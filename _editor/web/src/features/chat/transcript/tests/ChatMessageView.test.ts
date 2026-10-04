@@ -20,6 +20,7 @@ import { errandOf, errands, errandPrompt } from "../../run/errands";
 import { changedNothing, type ChatMessage } from "../transcript";
 import { clockOffset, resetSandboxClock } from "../../../agents/fleet/sandboxClock";
 import { IconStub } from "@intentic/ui/testing";
+import { scrollersUnderShut } from "../../../../testing/scrollersUnderShut";
 import { shownText } from "../../../../testing/shownText";
 import { agentStatusMeta, CLOCK_FROM_MS, type EndingByHand, formatElapsed } from "../../../agents/fleet/agentStatus";
 import { setLocale } from "@intentic/ui/i18n";
@@ -893,6 +894,15 @@ describe(`ChatMessageView errand row`, () => {
         expect(shownText(element)).toContain(`src/auth/session.ts`);
     });
 
+    // A scroller under the shut prompt made Chromium paint the transcript's sticky boxes at a stale offset (chat.css).
+    it(`caps and scrolls the prompt on its own shut material, never on a box under it`, () => {
+        const element = mount({ id: 3, role: `user`, text: prompt });
+        const shut = element.querySelector(`[hidden="until-found"]`)!;
+        expect(shut.textContent).toContain(`src/auth/session.ts`);
+        expect(shut.classList.contains(`overflow-auto`)).toBe(true);
+        expect(scrollersUnderShut(element)).toEqual([]);
+    });
+
     // An errand the DAEMON composes rather than this app (verify-nudge.ts). Nothing sends it any more, since nothing
     // checks inside a turn, but transcripts hold it. Built here the way the daemon built it, through the contract both ends
     // share, so a reworded opening on either side fails rather than quietly un-recognising the nudge and filing it as
@@ -987,6 +997,25 @@ describe(`ChatMessageView added-notes mark`, () => {
         await nextTick();
         expect(shownText(element)).toContain(notes[1]!.text);
         expect(shownText(element)).not.toContain(`It opens with a slash but names no command.`);
+    });
+
+    // A note scrolling inside the shut list made Chromium paint the transcript's sticky boxes at a stale offset (chat.css).
+    it(`scrolls the opened list as one box, so nothing under a shut list or note can scroll`, async () => {
+        const element = mount({ id: 9, role: `user`, text: `fix the bug`, notes });
+        const list = element.querySelector(`.chat-notes-row .chat-mark-material`)!;
+        expect(list.classList.contains(`overflow-auto`)).toBe(true);
+        expect(scrollersUnderShut(element)).toEqual([]);
+
+        // Shut again with a note left open: the list is the lock, and the open note under it still holds no scroller.
+        const mark = element.querySelector(`[aria-expanded]`)!;
+        mark.dispatchEvent(new MouseEvent(`click`, { bubbles: true }));
+        await nextTick();
+        [...element.querySelectorAll(`[aria-expanded]`)][1]!.dispatchEvent(new MouseEvent(`click`, { bubbles: true }));
+        await nextTick();
+        mark.dispatchEvent(new MouseEvent(`click`, { bubbles: true }));
+        await nextTick();
+        expect(list.getAttribute(`hidden`)).toBe(`until-found`);
+        expect(scrollersUnderShut(element)).toEqual([]);
     });
 
     it(`stands on the spine as a figure, in a row of its own that shut costs the column nothing`, () => {

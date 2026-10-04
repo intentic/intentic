@@ -6,6 +6,7 @@ import { type App, createApp, h, nextTick } from "vue";
 import type { TranscriptTool } from "@intentic/sandbox-contract";
 import { IconStub } from "@intentic/ui/testing";
 import { useToolCalls } from "../../tools/useToolCalls";
+import { scrollersUnderShut } from "../../../../testing/scrollersUnderShut";
 import { shownText } from "../../../../testing/shownText";
 
 // Same runtime globals as ChatToolCard's suite (window.matchMedia, window.env), absent in jsdom.
@@ -219,6 +220,22 @@ describe(`ChatTurnAsides thought on the node`, () => {
         expect(shut.hasAttribute(`hidden`)).toBe(false);
         expect(shut.classList.contains(`chat-mark-found`)).toBe(true);
         expect(nodes(element)[0]?.getAttribute(`aria-expanded`)).toBe(`true`);
+    });
+
+    // A box that scrolled under a shut thought made Chromium paint the composer mid-pane for the rest of the turn.
+    it(`scrolls a long thought on its own shut material, never on a box under it`, () => {
+        const element = mount({ thinking, tools: [read(`a.ts`)], live: true });
+        const material = element.querySelector(`.chat-mark-material`)!;
+        expect(material.classList.contains(`overflow-auto`)).toBe(true);
+        expect(material.classList.contains(`max-h-64`)).toBe(true);
+
+        app?.unmount();
+        app = undefined;
+        document.body.innerHTML = ``;
+
+        const settled = mount({ thinking, tools: [read(`a.ts`)], live: false });
+        expect(settled.querySelector(`[hidden="until-found"]`)?.classList.contains(`overflow-auto`)).toBe(true);
+        expect(scrollersUnderShut(settled)).toEqual([]);
     });
 
     it(`keeps a reader's own answer over the turn's: a shut thought stays shut as the turn settles`, async () => {
