@@ -2128,6 +2128,56 @@ describe("tabs the daemon retired", () => {
 
         expect(openTabs()).toEqual([`here`, `a`]);
     });
+
+    // A window that was shut or reloading when the board archived a chat never held a roster with it in, so no frame
+    // ever "departs" it: its tab came back from the snapshot and sat in the lane its card had when it opened. The first
+    // roster the window hears answers for the tabs it opened on.
+    const restoredTab = (id: string): Conversation => {
+        const conversation = openAgentTab(id);
+        // Latched by a roster this window heard before the reload, and persisted with the tab.
+        conversation.registered.value = true;
+        return conversation;
+    };
+
+    it("closes a chat archived while this window was shut, on the first roster it hears", () => {
+        restoredTab(`a`);
+        restoredTab(`b`);
+
+        setAgents([agent(`b`)], 5);
+
+        expect(openTabs()).toEqual([`here`, `b`]);
+    });
+
+    it("spares a pinned chat on that first roster, as every unattended close does", () => {
+        restoredTab(`a`).pinned.value = true;
+
+        setAgents([], 5);
+
+        expect(openTabs()).toEqual([`here`, `a`]);
+    });
+
+    // Absence answers only for what this box's roster would list: a chat the roster never filed, and another box's
+    // chat, are not its to retire.
+    it("leaves a chat the roster never filed, and another box's, to their own rules", () => {
+        const unfiled = openAgentTab(`draft`);
+        unfiled.title.value = `a chat with words in it`;
+        restoredTab(`elsewhere`).box.value = `sb-2`;
+
+        setAgents([], 5);
+
+        expect(openTabs()).toEqual([`here`, `draft`, `elsewhere`]);
+    });
+
+    // Later rosters compare against what this window held, as before: a chat absent from every roster it heard is the
+    // first roster's to retire, not each frame's.
+    it("answers for the restored tabs once, not on every frame", () => {
+        setAgents([], 5);
+        const reopened = restoredTab(`a`);
+
+        setAgents([], 6);
+
+        expect(openTabs()).toContain(reopened.conversationId);
+    });
 });
 
 // A held wake leaves the board on its own press. The approvals queue reaches the browser only through a roster read, so

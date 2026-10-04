@@ -3,6 +3,7 @@ import { computed, type ComputedRef } from "vue";
 import { useAgents } from "../../agents/fleet/useAgents";
 import type { FleetAgent } from "../../agents/fleet/useAgents-fleet";
 import { type FleetLane, laneOf, NO_ATTENTION, unregistered } from "../../agents/fleet/agentStatus";
+import { rosterHeard } from "../../agents/fleet/useAgents-registry";
 import type { Conversation } from "../session/conversation";
 import { draftPreview } from "../drafts/draftPreview";
 import { useChat } from "../run/useChat";
@@ -31,21 +32,34 @@ export const originOf = (conversation: Conversation): AgentOrigin | undefined =>
 // Distinguishes it from a live agent's chat.
 export const isArchived = (conversation: Conversation): boolean => useAgents().agentById(conversation.conversationId)?.archivedAt !== undefined;
 
+// Gone from the board: the roster once filed this chat (`registered` latches from it), this window has heard the roster
+// since, and it lists the chat no more, which leaves only the archive or deletion. The roster is every live agent of
+// this box (agents-registry list), so absence is an answer; another box's chat is filed by a roster that never reaches here.
+const leftRoster = (conversation: Conversation): boolean =>
+    conversation.registered.value && conversation.box.value === undefined && rosterHeard.value;
+
 // Same lane as the board's card, from the same rule (laneOf), over the best card available here, in the order of
 // what each can know:
-// - the fleet's own entry, whenever this window's roster holds one
+// - the fleet's own entry, whenever this window's roster holds one, or the archive's: a filed chat owes nothing, since
+//   the archive surfaces none of its asks (boardAnswer, childLook), so it never claims Attention
 // - what this window can see for itself: a turn running or refused right here outranks any older account
+// - a chat that has left the roster settled in Finished, wherever it went: the standing below is older than that news
 // - the standing the card carried in when it opened the chat (Conversation.standing), for a roster that hasn't
 //   answered in this window — the one thing that keeps a popped-out chat from re-deciding the lane alone
-// - failing all three, the client standing the board's own draft card would carry (tabFacts.standingOf)
-// A second rule here is how one conversation sat in Attention on the board and Finished in the switcher.
+// - failing all of these, the client standing the board's own draft card would carry (tabFacts.standingOf)
+// A second rule here is how one conversation sat in Attention on the board and Finished in the switcher, and how an
+// archived chat sat in a popped-out window's Attention long after the board had filed it.
 export const laneOfTab = (conversation: Conversation, agent: FleetAgent | undefined): FleetLane => {
     if (agent !== undefined) {
-        return laneOf(agent);
+        const lane = laneOf(agent);
+        return lane === `attention` && agent.archivedAt !== undefined ? `finished` : lane;
     }
     const here = standingOf(conversation);
     if (here === `starting` || here === `failed`) {
         return laneOf({ status: here, attention: NO_ATTENTION });
+    }
+    if (leftRoster(conversation)) {
+        return `finished`;
     }
     return laneOf(conversation.standing.value ?? { status: here, attention: NO_ATTENTION });
 };

@@ -6,8 +6,9 @@ import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { type App, createApp, h, nextTick } from "vue";
-import { laneOf, NO_ATTENTION, standingFrom } from "../../../agents/fleet/agentStatus";
+import { attentionReason, laneOf, NO_ATTENTION, standingFrom } from "../../../agents/fleet/agentStatus";
 import { agentSeed } from "../../../agents/fleet/useAgents-actions";
+import { archived, setAgents } from "../../../agents/fleet/useAgents-registry";
 import { useChat } from "../../run/useChat";
 import { openAgentConversation } from "../../panel/useChat-reveal";
 import { standingOf } from "../tabFacts";
@@ -134,4 +135,33 @@ it(`lets what this window can see outrank the account the card came in with`, as
     await nextTick();
 
     expect(laneOfRow(limitHit.id)).toBe(`Active`);
+});
+
+// The board filed it away while this window held the chat: the roster answers without it, and the card it was opened
+// from (a spent allowance, in Attention) is older news than that. Regression: archived chats sat in a popped-out
+// window's Attention lane long after the board had archived them.
+it(`settles a chat that has left the roster in Finished, whatever its card said when it opened`, async () => {
+    await mountList();
+    openAgentConversation(agentSeed(limitHit));
+    await nextTick();
+    expect(laneOfRow(limitHit.id)).toBe(`Attention`);
+
+    // The roster this window hears no longer lists it: archived or deleted, by another window or device.
+    setAgents([], 100);
+    await settle();
+
+    expect(laneOfRow(limitHit.id)).toBe(`Finished`);
+});
+
+it(`never puts an archived chat in Attention, nor wears the ask it no longer makes`, async () => {
+    // Read back from the archive, with the standing it was filed in.
+    archived.value = [{ ...limitHit, title: `spent allowance`, updatedAt: 1_000, archivedAt: 2_000, open: false, unread: false, unsent: false }];
+    await mountList();
+    openAgentConversation(agentSeed(limitHit));
+    await settle();
+
+    expect(laneOf(limitHit)).toBe(`attention`);
+    expect(laneOfRow(limitHit.id)).toBe(`Finished`);
+    const row = host!.querySelector(`[data-chat-tab="${limitHit.id}"]`);
+    expect(row?.textContent).not.toContain(attentionReason(limitHit));
 });

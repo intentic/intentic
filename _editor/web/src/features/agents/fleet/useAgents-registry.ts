@@ -269,10 +269,30 @@ export const setAgents = (agents: AgentSummary[], rev: number, live = false): vo
     // Ids that left the roster by another hand than this browser's (daemon sweep, another device); local moves are
     // excluded via `pending`. Triggers an archive-list refresh and closes their chat tabs.
     const incoming = new Set(agents.map((agent) => agent.id));
-    const departed = new Set(registry.value.filter((agent) => !incoming.has(agent.id) && !pending.value.has(agent.id)).map((agent) => agent.id));
+    const gone = (id: string): boolean => !incoming.has(id) && !pending.value.has(id);
+    const departed = new Set(registry.value.filter((agent) => gone(agent.id)).map((agent) => agent.id));
     if (departed.size > 0) {
         void loadArchived();
         useChat().closeRetired(departed);
+    }
+    // The first roster this window hears also answers for the tabs it opened on: a chat archived while the window was
+    // shut or reloading left a roster it never held (the stored one is whichever window was hidden last), so no frame
+    // departs it, and its tab came back with the standing its card had, often Attention. Only this box's, since only
+    // this box's roster lists them. The archive is not re-read for these: nothing about it changed just now, and the
+    // chat list reads it for any registered chat it cannot place.
+    if (!rosterHeard.value) {
+        const away = useChat()
+            .conversations.value.filter(
+                (conversation) =>
+                    conversation.registered.value &&
+                    conversation.box.value === undefined &&
+                    !departed.has(conversation.conversationId) &&
+                    gone(conversation.conversationId),
+            )
+            .map((conversation) => conversation.conversationId);
+        if (away.length > 0) {
+            useChat().closeRetired(new Set(away));
+        }
     }
     appliedRev.value = rev;
     // Every conversation this frame restamped is a reading of the sandbox's clock (sandboxClock.ts).

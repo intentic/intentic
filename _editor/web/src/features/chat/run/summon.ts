@@ -8,7 +8,7 @@ import { traceFocus } from "./focusTrace";
 import { showRun } from "./chatRun";
 import { closeSubagent, showSubagent } from "../panel/subagent/subagentView";
 import { snapshotTab, type StoredTab } from "../tabs/tabSnapshot";
-import { closeConversations, keepChat } from "../tabs/useChat-tabs";
+import { closeConversations, closeTabs, keepChat } from "../tabs/useChat-tabs";
 import { type Reveal, reveal, type RevealEntry } from "../panel/useChat-reveal";
 
 // How a surface outside the panel changes the chat everywhere: the same reveal applies locally and posts to every
@@ -22,6 +22,10 @@ export type Summons =
     // Closes the conversation a card stands for, everywhere, words included — the board's × is the card itself going,
     // unlike the panel's own × which only narrows a pane and sets words aside.
     | { readonly kind: `close`; readonly conversationIds: readonly string[] }
+    // Takes the chats of cards the board filed away (an archive) off every window's panel, the floating one included,
+    // as the panel's own × would: the conversation survives in the archive, so words left unsent are set aside to come
+    // back with it rather than dropped.
+    | { readonly kind: `retire`; readonly conversationIds: readonly string[] }
     // Promotes a peeked tab from the board press, since the panel holding it (and the sweep that would otherwise
     // reclaim it) is very often another window's.
     | { readonly kind: `keep`; readonly conversationIds: readonly string[] }
@@ -41,6 +45,10 @@ const apply = (summons: Summons): void => {
     }
     if (summons.kind === `close`) {
         closeConversations(new Set(summons.conversationIds));
+        return;
+    }
+    if (summons.kind === `retire`) {
+        closeTabs(new Set(summons.conversationIds));
         return;
     }
     if (summons.kind === `keep`) {

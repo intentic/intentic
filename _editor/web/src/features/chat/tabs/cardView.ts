@@ -138,8 +138,9 @@ export const createCardViews = (): CardViews => {
                 status: statusOf(entry),
                 // The corner's word, from the board's own projection: why this chat needs you, else that it worked
                 // since you last looked. A conversation the roster hasn't filed has no standing to report, so its
-                // corner keeps the status glyph. The rim and the cooling chip are absent for the same reason.
-                chip: entry.agent === undefined ? undefined : standingChip(entry.agent),
+                // corner keeps the status glyph. The rim and the cooling chip are absent for the same reason. An
+                // archived one needs nothing (laneOfTab): its row's archive mark is the word, not an ask it no longer makes.
+                chip: entry.agent === undefined || entry.agent.archivedAt !== undefined ? undefined : standingChip(entry.agent),
                 rim: entry.agent === undefined ? undefined : tileRim(entry.agent, { quiet: false }),
                 live: liveOf(entry),
                 snippet,

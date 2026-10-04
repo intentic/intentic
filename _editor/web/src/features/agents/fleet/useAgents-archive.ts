@@ -3,8 +3,7 @@ import { errorMessage } from "@intentic/ui/async";
 import { t } from "@intentic/ui/i18n";
 import { sandboxRef, sandboxScopeGuard } from "@intentic/extension-api";
 import { computed, ref } from "vue";
-import { forgetClosedDraft } from "../../chat/drafts/closedDrafts";
-import { useChat } from "../../chat/run/useChat";
+import { summonChat } from "../../chat/run/summon";
 import { commandShortcut } from "../../../shell/commands/useCommands";
 import { useNotifications } from "../../../shell/notifications/notifications";
 import { type ProcedureOutput, sandboxRpc } from "../../sandbox/client/sandboxRpc";
@@ -14,7 +13,9 @@ import { archived, holdPending, moveAhead } from "./useAgents-registry";
 // The board's exit: archiving takes an agent off the lanes and reclaims its worktree checkout, keeping the branch,
 // transcript and every counter, so it's the routine action (no confirmation, undoable, bulk) while discard stays
 // destructive. Takes the chat tab with it, since a card and a tab are one thing under two skins; undo puts the card
-// back, not the tab, since reopening it is the user's own action.
+// back, not the tab, since reopening it is the user's own action. The tab goes in every window, the popped-out chat
+// included: a chat window that only learnt of the archive from the roster kept the chat it was showing, and kept it in
+// the lane its card had when it was opened.
 
 // Feedback proportional to consequence: one archive says nothing beyond the card leaving its lane, a bulk sweep gets a
 // receipt (since watching one card go is what clearing twelve at once denies you), and a failure gets the persistent
@@ -106,8 +107,8 @@ const fileArchived = (moved: ProcedureOutput<`agents.archive`>[`moved`], rev: nu
     undoable.value = [...moved.map((agent) => agent.id), ...undoable.value.filter((id) => !gone.has(id))];
     archivedFlash.value += 1;
     // The board and strip are two views of one fleet, so cards that leave take their tabs with them, driven off
-    // `moved` alone.
-    useChat().closeTabs(gone);
+    // `moved` alone, and in every window, since the panel drawing them is very often another one's.
+    summonChat({ kind: `retire`, conversationIds: [...gone] });
 };
 
 // What an archive's answer does to the board; a sweep is the one press that reports.
@@ -248,12 +249,11 @@ export const purgeArchived = async (): Promise<void> => {
         const gone = new Set(removed);
         archived.value = archived.value.filter((agent) => !gone.has(agent.id));
         undoable.value = undoable.value.filter((id) => !gone.has(id));
-        // A tab reading a deleted agent has nothing left to read: its branch, worktree and conversation are gone.
-        useChat().closeTabs(gone);
-        // ...and the one thing a close normally keeps goes too: setting a message aside promises the chat can reopen,
-        // but after this press there is no chat left to reopen.
-        for (const id of gone) {
-            forgetClosedDraft(id);
+        // A tab reading a deleted agent has nothing left to read, in any window: its branch, worktree and conversation
+        // are gone. The board's close, so the one thing a close normally keeps goes too: setting a message aside promises
+        // the chat can reopen, but after this press there is no chat left to reopen.
+        if (gone.size > 0) {
+            summonChat({ kind: `close`, conversationIds: [...gone] });
         }
         notice.value =
             removed.length < aimedAt ? t(`agents.useAgentsArchive.deletedSome`, { removed: removed.length, total: aimedAt }) : undefined;

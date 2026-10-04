@@ -495,16 +495,20 @@ export const closeConversations = (ids: ReadonlySet<string>): void => {
 };
 
 // The same close, asked by the daemon rather than the user: tabs whose agent left the roster without this
-// browser closing it (a retention sweep, or an archive/discard elsewhere). Spares two:
+// browser closing it (a retention sweep, or an archive/discard elsewhere, or while this window was shut). Spares three:
 // - the focused chat, so an unattended sweep can't empty the panel mid-read
 // - one holding unsent input, since a close would lose it
+// - a pinned one, held on purpose: no unattended close takes it, and it waits in Finished (laneOfTab)
 // History still has the transcript either way.
 export const closeRetired = (ids: ReadonlySet<string>): void => {
     const retired = new Set(
         conversations.value
             .filter(
                 (conversation) =>
-                    ids.has(conversation.conversationId) && conversation.conversationId !== activeId.value && !conversation.unsent.value,
+                    ids.has(conversation.conversationId) &&
+                    conversation.conversationId !== activeId.value &&
+                    !conversation.unsent.value &&
+                    !conversation.pinned.value,
             )
             .map((conversation) => conversation.conversationId),
     );

@@ -257,6 +257,32 @@ it(`sets no words aside for a chat this window is only shadowing`, async () => {
     expect(closedDrafts.value).toEqual([]);
 });
 
+// An archive files the card away and takes its chat off every window's panel, the floating one included: a chat window
+// that only heard of it from the roster kept the chat it was showing, and kept it in the lane it was opened in.
+it(`takes an archived chat off a window that never saw the press, even the chat it is showing`, () => {
+    const chat = useChat();
+    const filed = new Conversation();
+    deliver(wireSummons({ kind: `reveal`, verb: `show`, entries: [filed], focus: filed.conversationId, caret: false }));
+    expect(chat.activeId.value).toBe(filed.conversationId);
+
+    deliver(wireSummons({ kind: `retire`, conversationIds: [filed.conversationId] }));
+
+    expect(chat.conversations.value.map((conversation) => conversation.conversationId)).not.toContain(filed.conversationId);
+});
+
+// Unlike the board's ×, the conversation survives in the archive, so its unsent words wait to come back with it.
+it(`sets an archived chat's unsent words aside in the window drawing it`, async () => {
+    const chat = useChat();
+    const filed = new Conversation();
+    deliver(wireSummons({ kind: `reveal`, verb: `show`, entries: [filed], focus: filed.conversationId, caret: false }));
+    chat.active.value.draft.value = `half a thought`;
+    await nextTick();
+
+    deliver(wireSummons({ kind: `retire`, conversationIds: [filed.conversationId] }));
+
+    expect(closedDrafts.value.map((entry) => [entry.conversationId, entry.draft])).toEqual([[filed.conversationId, `half a thought`]]);
+});
+
 // Which window ran a turn, by the words of the one call only a send makes; an attach is hydration, not a send.
 const turnsSentHere = (): string[] => run.mock.calls.map(([turn]) => turn.prompt);
 
