@@ -447,7 +447,7 @@ const HOSTED_SETUP = { name: `setup`, query: { machine: `hosted` } } as const;
                                 </span>
                                 <!-- Whose hours this machine spends and what is left of them: its own month on a slot, or
                                      the account's free hours, shared when another machine spends them too. -->
-                                <HostedHoursMeter :hours="hoursOf(machine)" class="max-w-sm py-0.5" />
+                                <HostedHoursMeter :hours="hoursOf(machine)" grow class="max-w-sm py-0.5" />
                                 <!-- The one upgrade prompt on this page, and it is a fact the provider reported rather
                                      than a pitch: this machine was killed for memory, this many times, at this size. -->
                                 <span v-if="machine.oomsThisWeek > 0" class="text-2xs text-warning">

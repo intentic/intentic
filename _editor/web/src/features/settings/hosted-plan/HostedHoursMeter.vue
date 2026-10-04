@@ -6,8 +6,8 @@ import type { MachineHours } from "./hostedHours";
 // hours they are, one line about what is left, and a bar saying the same thing, so colour never carries it alone. Hours
 // counted against no limit get the line and no bar, since there is nothing to fill.
 
-// `grow`: the fill extends from empty to the hours used as the meter is drawn (motion.css `ui-grow-x`), on the usage
-// view where it stands among charts that do; Billing's list of machines leaves it off.
+// `grow`: the fill extends from empty to the hours used as the meter is drawn (motion.css `ui-grow-x`), where the hours
+// are the figure the reader came for (the usage view, Billing's machines).
 const props = defineProps<{ hours: MachineHours; grow?: boolean }>();
 
 const spent = computed(() => props.hours.meter !== undefined && props.hours.meter.remainingMinutes === 0);

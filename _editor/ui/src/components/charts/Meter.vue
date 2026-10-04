@@ -14,6 +14,8 @@ const {
     size = `sm`,
     label,
     valuetext,
+    grow = false,
+    growStep = 0,
 } = defineProps<{
     // The filled share, 0 to 1; undefined (not measured) draws an empty track.
     value: number | undefined;
@@ -23,6 +25,11 @@ const {
     label?: string;
     // What the fill means in words ("12 GB of 40 GB"), spoken instead of a bare percentage.
     valuetext?: string;
+    // The fill extends from empty as the meter is drawn (motion.css `ui-grow-x`), for a meter that is a figure the
+    // reader came to read (a disk's use, a breakdown under it), `growStep` places away from the first of its figure, so
+    // a column of meters fills top to bottom. Off, a meter is simply there; either way a new value glides.
+    grow?: boolean;
+    growStep?: number;
 }>();
 
 const TONES: Record<MeterTone, { readonly track: string; readonly fill: string }> = {
@@ -51,6 +58,11 @@ const percent = computed(() => (value === undefined ? undefined : Math.round(Mat
                   }
         "
     >
-        <div class="h-full rounded-full transition-[width] duration-500" :class="TONES[tone].fill" :style="{ width: `${percent ?? 0}%` }" />
+        <!-- Growing, the recipe moves the width too: a utility's transition list would outrank it and drop the growth. -->
+        <div
+            class="h-full rounded-full"
+            :class="[TONES[tone].fill, grow ? `ui-grow-x` : `transition-[width] duration-500`]"
+            :style="{ width: `${percent ?? 0}%`, '--ui-grow-i': growStep }"
+        />
     </div>
 </template>

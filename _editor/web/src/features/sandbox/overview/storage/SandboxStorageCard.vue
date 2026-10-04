@@ -138,10 +138,14 @@ const cleanedNotice = computed<NoticeModel | undefined>(() => {
         <!-- The previous measurement stays readable while the next one runs, dimmed so nobody acts on it as current. -->
         <div v-if="scan" class="flex flex-col gap-3 transition-opacity" :class="scanning ? `opacity-60` : ``">
             <div v-if="disk" class="flex flex-col gap-1">
+                <!-- THE DISK FILLS, THEN WHAT FILLS IT: the total grows from empty and each category's share after it, top to
+                     bottom, so the ranking of what takes the space is seen forming rather than handed over whole; a rescan
+                     or a clean glides each to its new size (Meter `grow`). -->
                 <Meter
                     :value="disk.percent / 100"
                     :tone="disk.near ? `warning` : `accent`"
                     size="md"
+                    grow
                     :label="t(`sandbox.sandboxStorageCard.heading`)"
                     :valuetext="t(`sandbox.sandboxStorageCard.diskUsed`, { used: formatBytes(disk.usedBytes), total: formatBytes(disk.totalBytes) })"
                 />
@@ -158,7 +162,7 @@ const cleanedNotice = computed<NoticeModel | undefined>(() => {
             <!-- One grid for every row, so names, bars, sizes and actions each line up in a column of their own. -->
             <ul class="grid grid-cols-[minmax(0,1fr)_auto_auto_auto] items-center gap-x-3">
                 <li
-                    v-for="row in shown"
+                    v-for="(row, index) in shown"
                     :key="row.category.id"
                     class="col-span-4 grid min-h-9 grid-cols-subgrid items-center border-t border-line-subtle py-1 first:border-t-0"
                 >
@@ -171,7 +175,7 @@ const cleanedNotice = computed<NoticeModel | undefined>(() => {
                         <Icon :name="open.has(row.category.id) ? `chevron-down` : `chevron-right`" class="shrink-0 text-2xs text-subtle" />
                         <span class="truncate text-xs font-medium text-content">{{ row.text.label }}</span>
                     </button>
-                    <Meter :value="row.share / 100" class="w-12 sm:w-24" />
+                    <Meter :value="row.share / 100" grow :grow-step="index + 1" class="w-12 sm:w-24" />
                     <span class="text-right text-xs tabular-nums text-content">{{ formatBytes(row.category.bytes) }}</span>
                     <div class="flex justify-end">
                         <Button

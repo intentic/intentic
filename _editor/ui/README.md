@@ -39,8 +39,9 @@ flowchart LR
   `lessMotion()`: the tray fold and the column FLIP (`fold.ts`) and the row reveal (`reveal.ts`, `useRowReveal`),
   which plays a list's `[data-reveal]` rows in reading order when it shows. Looping glyphs take their pace from
   `loops.ts`. The CSS recipes are `ui-grow-x`, `ui-grow-y` and `ui-grow-wipe` (a figure growing from its
-  baseline) and `ui-enter` (the workspace arriving). Motion is for the few views where it shows something: the board
-  and the chat's lanes, the usage charts, the workspace.
+  baseline; `Meter`, `BarChart` and the hours meter opt in with `grow`) and `ui-enter` (the workspace arriving).
+  Motion is for the few views where it shows something: the board and the chat's lanes, the usage charts, the
+  sandbox's disk breakdown and the hours on Billing, the workspace.
 - **Icons.** Every glyph is a native SVG drawing in `src/icons/`. The [patches](patches) route PrimeVue, Mermaid and
   Monaco icons to them, and a suite in web keeps third-party icon packages out of the lockfile.
   Attention and warnings use `exclamation-circle`; legacy `exclamation-triangle` and `exclamation` names resolve
