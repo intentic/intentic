@@ -16,7 +16,7 @@ defineProps<{
             <template #actions><slot name="actions" /></template>
         </LaneHeader>
 <!-- The lane's contents, inset and spaced by the LANE rather than by each caller. -->
-        <div class="flex min-w-0 flex-col gap-2.5 px-2 pb-2">
+        <div class="flex min-w-0 flex-col gap-3.5 px-2 pb-2">
             <slot />
         </div>
     </section>

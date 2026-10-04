@@ -60,7 +60,7 @@ onBeforeUnmount(actions.registerDrawn(() => drawnIds.value));
 </script>
 
 <template>
-    <div class="flex min-w-0 flex-col gap-2.5">
+    <div class="flex min-w-0 flex-col gap-3.5">
         <!-- Each card with the tray of agents it started hung from it (ChildRows), read the way the board's cards read, and sliding as one when a tray above opens or shuts (ChatTabList's useFoldFlip). -->
         <div v-for="{ conversation: c, agent, view } in rows" :key="c.conversationId" class="flex min-w-0 flex-col" data-fold-unit>
             <!-- Replaces the card rather than nesting a field in it (a button can't host a usable input). -->

@@ -400,7 +400,7 @@ const starters = computed(() => boardStarters(workspaceRepos.value.length, works
                         </template>
                     </LaneHeader>
                     <!-- Held wakes lead the lane, since a hold is wholly waiting on the user, more than anything running below it; Attention lane only. -->
-                    <div v-if="lane.key === 'attention' && !view.archive && scopedHeld.length > 0" class="flex flex-col gap-2.5 pb-2.5">
+                    <div v-if="lane.key === 'attention' && !view.archive && scopedHeld.length > 0" class="flex flex-col gap-3.5 pb-2.5">
                         <HeldWakeCard
                             v-for="entry in scopedHeld"
                             :key="entry.id"
@@ -440,7 +440,7 @@ const starters = computed(() => boardStarters(workspaceRepos.value.length, works
                         </div>
                     </div>
                     <!-- Runs sit above their lane's agent cards, since a run is a container of several of them and a container belongs above its contents, not among them. -->
-                    <div v-if="runsFor(lane.key).length > 0" class="flex flex-col gap-2.5 pb-2.5">
+                    <div v-if="runsFor(lane.key).length > 0" class="flex flex-col gap-3.5 pb-2.5">
                         <WorkflowRunCard
                             v-for="run in runsFor(lane.key)"
                             :key="run.runId"
@@ -477,7 +477,7 @@ const starters = computed(() => boardStarters(workspaceRepos.value.length, works
                     >
                         {{ filtering ? t(`agents.agentsView.noMatchesInLane`) : lane.empty }}
                     </p>
-                    <div v-else class="relative flex flex-col gap-3.5 pb-2.5">
+                    <div v-else class="relative flex flex-col gap-4.5 pb-2.5">
                         <!-- Skips a card whose inputs haven't changed: the roster ticks about once a second per running turn. -->
                         <Transition
                             v-for="agent in cardsFor(lane.key)"
@@ -587,10 +587,10 @@ const starters = computed(() => boardStarters(workspaceRepos.value.length, works
             </button>
             <!-- Padded by the found card's halo (a 2px outline 2px out), which the scroll box would otherwise clip. -->
             <div v-if="view.beyond" class="-mx-1 mt-2 flex min-h-0 flex-col gap-3 overflow-auto px-1 pb-1">
-                <section v-if="archivedHits.length > 0" class="flex min-w-0 flex-col gap-2.5">
+                <section v-if="archivedHits.length > 0" class="flex min-w-0 flex-col gap-3.5">
                     <LaneHeader :label="t(`agents.agentsView.inArchive`)" icon="box" :count="archivedHits.length" class="px-1" />
                     <!-- Archived agents retain the branch, diff, and transcript actions. -->
-                    <div class="grid gap-2.5" :class="narrow ? '' : 'grid-cols-3 items-start lg:gap-4.5'">
+                    <div class="grid gap-3.5" :class="narrow ? '' : 'grid-cols-3 items-start lg:gap-4.5'">
                         <AgentCard
                             v-for="agent in archivedHits"
                             :key="agent.id"

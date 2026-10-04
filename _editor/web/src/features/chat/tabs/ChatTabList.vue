@@ -276,13 +276,13 @@ defineExpose({ beginRename: actions.beginRename });
     <div ref="root" class="flex min-h-0 flex-col gap-1.5" @pointerenter="pointerOver = true" @pointerleave="pointerOver = false">
         <!-- Whom the lanes are scoped to, only once there is anyone to pick: without personas the lanes are the whole column. -->
         <ChatPersonaGrid v-if="personas.length > 0" ref="grid" :controls="listId" class="px-0.5 pt-1" />
-        <!-- LANE BREAKS OUTRANK CARD BREAKS, and at 12px against 10px they barely did: the eye groups by proximity. -->
+        <!-- LANE BREAKS OUTRANK CARD BREAKS, and at 20px against 14px they barely did: the eye groups by proximity. -->
         <div
             :id="listId"
             ref="scroller"
             :role="personas.length > 0 ? `tabpanel` : undefined"
             :aria-labelledby="personas.length > 0 ? grid?.selectedTabId : undefined"
-            class="flex min-h-0 flex-1 flex-col items-stretch gap-4 overflow-y-auto"
+            class="flex min-h-0 flex-1 flex-col items-stretch gap-5 overflow-y-auto"
         >
             <!-- An empty lane isn't drawn at all (see occupiedLanes). -->
             <RailLane v-for="lane in occupiedLanes" :key="lane.key" :label="lane.label" data-fold-unit>
@@ -306,7 +306,7 @@ defineExpose({ beginRename: actions.beginRename });
                     </Button>
                 </template>
                 <!-- Dashed like the board's run card: a run is the container for the rows below it, not one of them. -->
-                <div v-if="runsIn(lane.key).length > 0" class="flex min-w-0 flex-col gap-2.5">
+                <div v-if="runsIn(lane.key).length > 0" class="flex min-w-0 flex-col gap-3.5">
                     <RailCard
                         v-for="run in runsIn(lane.key)"
                         :key="run.runId"
