@@ -206,6 +206,61 @@ const proseIn = (events: readonly AgentEvent[]): string =>
         .map((event) => (event as Extract<AgentEvent, { kind: "delta" }>).text)
         .join("");
 
+
+// PROBE (temporary, CI-only diagnosis): every process under this one, with what the kernel says it is doing.
+const { readdirSync, readFileSync, readlinkSync } = await import("node:fs");
+const procText = (path: string): string => {
+    try {
+        return readFileSync(path, "utf8");
+    } catch {
+        return "";
+    }
+};
+const describeTree = (): string => {
+    const rows: string[] = [];
+    const parentOf = new Map<number, number>();
+    for (const entry of readdirSync("/proc")) {
+        const pid = Number(entry);
+        if (!Number.isInteger(pid)) continue;
+        const ppid = Number(/^PPid:\s+(\d+)/m.exec(procText(`/proc/${pid}/status`))?.[1] ?? 0);
+        parentOf.set(pid, ppid);
+    }
+    const under = (pid: number): boolean => {
+        for (let at = parentOf.get(pid), hops = 0; at !== undefined && at > 0 && hops < 64; at = parentOf.get(at), hops += 1) {
+            if (at === process.pid) return true;
+        }
+        return false;
+    };
+    for (const pid of parentOf.keys()) {
+        if (!under(pid)) continue;
+        const status = procText(`/proc/${pid}/status`);
+        const pick = (key: string): string => new RegExp(`^${key}:\\s+(.*)$`, "m").exec(status)?.[1] ?? "?";
+        let sockets = 0;
+        try {
+            sockets = readdirSync(`/proc/${pid}/fd`).filter((fd) => {
+                try {
+                    return readlinkSync(`/proc/${pid}/fd/${fd}`).startsWith("socket:");
+                } catch {
+                    return false;
+                }
+            }).length;
+        } catch {}
+        const tasks = (() => {
+            try {
+                return readdirSync(`/proc/${pid}/task`)
+                    .map((tid) => `${tid}:${procText(`/proc/${pid}/task/${tid}/stat`).split(") ")[1]?.split(" ")[0] ?? "?"}/${procText(`/proc/${pid}/task/${tid}/wchan`) || "-"}`)
+                    .join(",");
+            } catch {
+                return "";
+            }
+        })();
+        rows.push(
+            `pid=${pid} ppid=${parentOf.get(pid)} state=${pick("State")} blk=${pick("SigBlk")} ign=${pick("SigIgn")} cgt=${pick("SigCgt")} pnd=${pick("SigPnd")} shd=${pick("ShdPnd")} sockets=${sockets} cmd=${procText(`/proc/${pid}/cmdline`).replaceAll("\0", " ").slice(0, 160)} tasks=${tasks.slice(0, 600)}`,
+        );
+    }
+    return rows.join("\n");
+};
+
 describe.skipIf(!tier.runs)(tier.title, () => {
     beforeAll(async () => {
         if (!(await onPath("opencode"))) {
@@ -237,7 +292,25 @@ describe.skipIf(!tier.runs)(tier.title, () => {
     // Stops the server this tier started; otherwise every run leaks an opencode serve until the box is loaded enough to
     // flake unrelated tests.
     afterAll(async () => {
-        await service?.stop();
+        console.log(`PROBE before stop (self ${process.pid}):\n${describeTree()}`);
+        const started = Date.now();
+        try {
+            await service?.stop();
+            console.log(`PROBE stop took ${Date.now() - started}ms`);
+        } catch (error) {
+            console.log(`PROBE stop failed after ${Date.now() - started}ms:\n${describeTree()}`);
+            for (const line of describeTree().split("\n")) {
+                const pid = Number(/^pid=(\d+)/.exec(line)?.[1]);
+                if (line.includes("opencode") && Number.isInteger(pid)) {
+                    try {
+                        process.kill(pid, "SIGKILL");
+                    } catch {}
+                }
+            }
+            await new Promise((resolve) => setTimeout(resolve, 2_000));
+            console.log(`PROBE 2s after SIGKILL:\n${describeTree()}`);
+            throw error;
+        }
         await model?.close();
         await echo?.close();
     });
