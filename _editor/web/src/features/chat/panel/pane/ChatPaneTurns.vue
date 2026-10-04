@@ -47,6 +47,7 @@ const {
     repeatedChecklists,
     isStreaming,
     showTurnStatus,
+    statusBelow,
     stripOf,
     deliverablesOf,
     checklistViews,
@@ -136,6 +137,7 @@ const column = ref<HTMLElement>();
                         v-memo="[
                             message,
                             isStreaming(message),
+                            isStreaming(message) && statusBelow,
                             turn.folded,
                             doomed.has(message.id),
                             cutsAbove.get(message.id),
@@ -152,6 +154,7 @@ const column = ref<HTMLElement>();
                             v-if="(!repeatedChecklists.has(message.id) || isStreaming(message)) && heldRow !== message.id"
                             :message="message"
                             :streaming="isStreaming(message)"
+                            :status-below="statusBelow"
                             :folded="message.id === turn.id ? turn.folded : undefined"
                             :doomed="doomed.has(message.id)"
                             :checklist-view="checklistViews.get(message.id)"
@@ -180,7 +183,7 @@ const column = ref<HTMLElement>();
         </div>
         <!-- What an empty chat says, which is the composer's to word; not while it loads, whose outline is only held back a moment. -->
         <slot v-else-if="!waiting" name="empty" />
-        <!-- The live turn before it's written anything (showTurnStatus); outside the turn sections since it belongs to no message yet. -->
+        <!-- The live turn before it's written anything, or with rows under its bubble (showTurnStatus); outside the turn sections so it is always the last thing the transcript says. -->
         <ChatTurnStatus v-if="showTurnStatus" />
         <!-- What the queue holds, where the message the reader just sent would have been: after everything that ran, above the error line a press on it may leave. -->
         <ChatHeldMessages />

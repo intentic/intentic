@@ -42,6 +42,9 @@ export const usePaneTranscript = (pane: PaneTranscriptHost) => {
     const { messages, streaming, ending, awaitingDecision } = pane;
     // The bubble this turn writes into, if any (liveBubbleOf); recomputed per frame, scanning only the tail.
     const liveBubble = computed(() => liveBubbleOf(messages.value));
+    // The status line belongs at the transcript's very end: inside the live bubble only while that bubble is the last row.
+    // Rows drawn after it (a notice of a switched account, a rebase, a resumed turn) push it to the column's foot.
+    const statusBelow = computed(() => liveBubble.value !== undefined && liveBubble.value !== messages.value.at(-1));
     // Settled turns come back as the same objects frame to frame (turnsOf's `previous`), so a streamed reply redraws its own
     // turn, not every turn above it.
     const turns = computed<ChatTurn[]>((previous) => turnsOf(messages.value, previous));
@@ -68,10 +71,15 @@ export const usePaneTranscript = (pane: PaneTranscriptHost) => {
         repeatedChecklists,
         // True for the assistant bubble currently being streamed into.
         isStreaming: (message: ChatMessage): boolean => streaming.value && liveBubble.value?.id === message.id,
-        // A sent turn before its first frame, drawn at the column's foot; a parked card is the prompt, not idle work, unless
-        // a person ended the turn, which the line then says.
+        // Rows follow the live bubble, so its status line is drawn at the column's foot instead (statusBelow).
+        statusBelow,
+        // A sent turn before its first frame, or one whose bubble has rows under it, drawn at the column's foot; a parked
+        // card is the prompt, not idle work, unless a person ended the turn, which the line then says.
         showTurnStatus: computed(
-            () => streaming.value && (!awaitingDecision.value || ending.value !== undefined) && liveBubble.value === undefined,
+            () =>
+                streaming.value &&
+                (!awaitingDecision.value || ending.value !== undefined) &&
+                (liveBubble.value === undefined || statusBelow.value),
         ),
         // A turn's strip, once it has stopped writing and only while runs are folded: unfolded cards draw every picture.
         stripOf: (turn: ChatTurn): readonly ChatShot[] | undefined => {

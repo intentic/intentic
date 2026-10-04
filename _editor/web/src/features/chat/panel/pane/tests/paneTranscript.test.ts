@@ -72,6 +72,20 @@ describe(`the live turn`, () => {
         state.ending.value = `stopping`;
         expect(pane.showTurnStatus.value).toBe(true);
     });
+
+    // A turn carried to another account kept writing into its bubble while notices (the switch, the rebase) were drawn
+    // under it, and the working line sat inside the bubble above them, mid-transcript.
+    it(`draws the working line at the foot, not in the live bubble, once rows follow that bubble`, () => {
+        const { state, pane } = paneOf();
+        state.streaming.value = true;
+        expect(pane.statusBelow.value).toBe(false);
+        expect(pane.showTurnStatus.value).toBe(false);
+
+        state.messages.value = [...ROWS, { id: 5, role: `notice`, text: `Switched to Claude.`, local: true }];
+        expect(pane.isStreaming(ROWS[3]!)).toBe(true);
+        expect(pane.statusBelow.value).toBe(true);
+        expect(pane.showTurnStatus.value).toBe(true);
+    });
 });
 
 describe(`a turn's pictures`, () => {

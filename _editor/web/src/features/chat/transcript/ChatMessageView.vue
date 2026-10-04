@@ -60,6 +60,8 @@ const props = defineProps<{
     doomed?: boolean;
     // How this row's checklist snapshot draws (transcript.ts); absent draws the list in full.
     checklistView?: ChecklistView;
+    // Rows follow this live bubble, so the column's foot draws the turn's status line rather than this bubble.
+    statusBelow?: boolean;
 }>();
 
 // A snapshot that moved nothing is not a checklist event, so it draws no line at all — not an empty one.
@@ -147,7 +149,7 @@ const onMarkdownClick = (event: MouseEvent): void => {
 // Status line shows for the whole live turn, not just before the first token, since the model can go quiet
 // mid-tool-call. Reads the conversation's streaming flag, not this message's. A turn a person ended shows it too, parked
 // or not: that line is where the ending is said.
-const showTyping = computed(() => props.streaming && (!awaitingDecision.value || ending.value !== undefined));
+const showTyping = computed(() => props.streaming && !props.statusBelow && (!awaitingDecision.value || ending.value !== undefined));
 
 // Still being written into: live, and nobody has ended the turn. A Stop takes every spinner in the bubble down at the
 // press (a tool still letting go reads unfinished, as it will once settled); whatever the stream's tail still brings is
