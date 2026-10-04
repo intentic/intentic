@@ -746,6 +746,18 @@ test("identical catalogs and reordered models/modalities reuse the existing serv
     reordered.release();
 });
 
+test("a warm Grok acquisition never reads Google's catalog or restarts for it", async () => {
+    const { service, models } = await googleRuntime();
+    const previous = await service.client();
+    models.mockClear();
+    models.mockResolvedValue([OLD_GOOGLE_MODEL, NEW_GOOGLE_MODEL]);
+    const grok = await service.acquire({ providerID: "xai", modelID: "grok-4" });
+    expect(grok.client).toBe(previous);
+    expect(models).not.toHaveBeenCalled();
+    expect(serverSpawns).toHaveLength(1);
+    grok.release();
+});
+
 test.each(["rejected", "empty"])("a %s catalog refresh retains a working registration and retries later", async (failure) => {
     const { service, models } = await googleRuntime();
     const previous = await service.client();

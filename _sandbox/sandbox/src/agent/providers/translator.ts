@@ -3,7 +3,6 @@ import { spawnAs } from "../../workload/workload-class.js";
 import { randomUUID } from "node:crypto";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { createBackoff } from "@intentic/base/async";
 import { errorMessage } from "@intentic/base/errors";
 import {
     type AccountUsage,
@@ -23,12 +22,12 @@ import type { Config } from "../../env.config.js";
 import type { Services } from "../../composition.js";
 import { type CompatEntry, compatYaml, endpointCompatEntries, translatedEndpoints } from "../../endpoints/endpoint-translator.js";
 import { DAEMON_OWNER, workloadStamp } from "../../seams/workload-stamp.js";
-import { engineBinary, engineReady } from "../../engines/engine-resolve.js";
+import { engineBinary, engineReady, resolveEngine } from "../../engines/engine-resolve.js";
 import type { AccountUsageStore } from "../../usage/account-usage.js";
 import { fleetLimit, type TurnLimit } from "../../usage/serviceability/fleet-limit.js";
 import type { HeadroomSource } from "../../usage/headroom.js";
 import { authFileCooling, fetchTranslatorUsage, type TranslatorAuthFile } from "../../usage/translator-usage.js";
-import { createGoogleModelAvailabilityReader, type GoogleModelAvailability } from "./google-model-availability.js";
+import { superviseTranslator } from "./translator-supervisor.js";
 
 // CLIProxyAPI: a bundled Go proxy that lets the Claude Code harness (Anthropic Messages only) drive
 // Codex/Grok/Kimi/Gemini on the user's subscription, behind an Anthropic-compatible endpoint keyed by model id. Config
@@ -151,11 +150,8 @@ const portOf = (url: string): number | undefined => {
     }
 };
 
-// Restart backoff: 10s doubling to 5min; a run past a minute resets the ladder (createBackoff).
-const RESTART_LADDER = { floorMs: 10_000, capMs: 300_000, stableMs: 60_000 } as const;
-
-// The tail of the proxy's output kept per run, enough to carry a Go panic or a bind error into the exit log.
-const OUTPUT_TAIL_BYTES = 2_048;
+// How often the running proxy is compared against the copy the engine store selects; one small file read.
+const SWAP_CHECK_MS = 30_000;
 
 // How long after spawn the quota sweep runs first: enough for the API to listen, short of an early tab open.
 const WARMUP_DELAY_MS = 15_000;
@@ -174,46 +170,40 @@ export const startTranslator = (services: Services): void => {
     }
     const authDir = cliProxyAuthDir(authRoot);
     const configPath = cliProxyConfigPath(config);
-    let child: ChildProcess | undefined;
-    const ladder = createBackoff(RESTART_LADDER);
 
-    const start = async (): Promise<void> => {
-        await mkdir(authDir, { recursive: true });
-        await mkdir(dirname(configPath), { recursive: true });
-        // Waits for the platform tunnel to settle, so the rendered address is deterministic.
-        await services.platformTunnel.ready;
-        // Resolved before spawn so the proxy serves these at once; a down server keeps its persisted entry.
-        const compat = compatYaml(
-            await endpointCompatEntries(services).catch((error: unknown) => {
-                logger.warn({ err: error }, "translator: endpoint list unavailable, starting without the owner's own endpoints");
-                return [];
-            }),
-        );
-        await writeFile(configPath, renderConfig({ port, authDir, token: config.translator.token, compat }), { mode: 0o600 });
-        const startedAt = Date.now();
-        // The proxy logs its exit reason on stdout, not stderr; both streams are captured, in order.
-        let outputTail = "";
-        const keepTail = (chunk: Buffer): void => {
-            outputTail = (outputTail + chunk.toString()).slice(-OUTPUT_TAIL_BYTES);
-        };
-        // Daemon-owned and stamped, so a later daemon can recognize this as its own leftover.
+    const supervisor = superviseTranslator({
         // Falls back from a store copy, to the pack install, to the bare name, reported as missing.
-        const binary = (await engineBinary("translator")) ?? "cli-proxy-api";
-        child = spawnAs({ class: "service" }, binary, ["--config", configPath], {
-            stdio: ["ignore", "pipe", "pipe"],
-            env: { ...process.env, ...workloadStamp(DAEMON_OWNER) },
-        });
-        child.stdout?.on("data", keepTail);
-        child.stderr?.on("data", keepTail);
-        child.on("exit", (code) => {
-            child = undefined;
-            const restartInMs = ladder.next(Date.now() - startedAt);
-            logger.warn({ code, output: outputTail.trim(), restartInMs }, "translator: cli-proxy-api exited, restarting");
-            setTimeout(() => void start().catch((error: unknown) => logger.warn({ err: error }, "translator restart failed")), restartInMs).unref();
-        });
-    };
+        resolve: async () => ({ ...(await resolveEngine("translator")), binary: (await engineBinary("translator")) ?? "cli-proxy-api" }),
+        spawn: async (binary) => {
+            await mkdir(authDir, { recursive: true });
+            await mkdir(dirname(configPath), { recursive: true });
+            // Waits for the platform tunnel to settle, so the rendered address is deterministic.
+            await services.platformTunnel.ready;
+            // Resolved before spawn so the proxy serves these at once; a down server keeps its persisted entry.
+            const compat = compatYaml(
+                await endpointCompatEntries(services).catch((error: unknown) => {
+                    logger.warn({ err: error }, "translator: endpoint list unavailable, starting without the owner's own endpoints");
+                    return [];
+                }),
+            );
+            await writeFile(configPath, renderConfig({ port, authDir, token: config.translator.token, compat }), { mode: 0o600 });
+            // Daemon-owned and stamped, so a later daemon can recognize this as its own leftover.
+            return spawnAs({ class: "service" }, binary, ["--config", configPath], {
+                stdio: ["ignore", "pipe", "pipe"],
+                env: { ...process.env, ...workloadStamp(DAEMON_OWNER) },
+            });
+        },
+        busy: () => services.conversations.activeTurnCount() > 0,
+        logger,
+    });
 
-    void start().catch((error: unknown) => logger.warn({ err: error }, "translator: initial start failed"));
+    void supervisor.start().catch((error: unknown) => logger.warn({ err: error }, "translator: initial start failed"));
+
+    // An Update, revert or channel switch on the Environment card (or the daily check) moves the store's pointer, not
+    // the running proxy; this carries the proxy over to the selected copy once nothing is mid-turn.
+    setInterval(() => {
+        void supervisor.swapIfStale().catch((error: unknown) => logger.warn({ err: error }, "translator: version swap check failed"));
+    }, SWAP_CHECK_MS).unref();
 
     // Warms headroom once the proxy should be up, so the first tab after a restart isn't cold, and takes any credential
     // that can serve nothing out of the rotation before it catches a turn.
@@ -256,7 +246,6 @@ export interface CliProxyClient {
     readonly complete: (input: { provider: KeyedProvider; redirectUrl: string; state: string }) => Promise<void>;
     readonly disconnect: (provider: KeyedProvider, name: string) => Promise<void>;
     readonly models: (provider: KeyedProvider) => Promise<Model[]>;
-    readonly googleModelAvailability: () => Promise<GoogleModelAvailability>;
     // Replaces the running proxy's whole endpoint list, since the daemon owns every entry; rejects when the proxy can't
     // be reached, and answers how it took the list otherwise.
     readonly putCompat: (entries: readonly CompatEntry[]) => Promise<{ readonly ok: boolean; readonly status: number }>;
@@ -291,7 +280,6 @@ export const createCliProxyClient = (params: {
 }): CliProxyClient => {
     const { managementUrl, token, configPath, authDir, usageStore } = params;
     const fetchFn = params.fetchFn ?? fetch;
-    const googleModelAvailability = createGoogleModelAvailabilityReader({ managementUrl, token, fetchFn });
     // Counts as present: a core image bakes none, and an installed binary may be invisible to PATH.
     const binaryPresent = params.binaryPresent ?? (() => engineReady("translator"));
     const spawnFn = params.spawnFn ?? spawn;
@@ -638,7 +626,6 @@ export const createCliProxyClient = (params: {
             return files.length === 1 && files[0] !== undefined ? usageKey(provider, files[0].name) : undefined;
         },
         turnLimit,
-        googleModelAvailability,
         benchUnusable,
         connect: (provider, options) =>
             provider === "grok" || provider === "kimi"

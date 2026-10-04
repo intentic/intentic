@@ -766,17 +766,15 @@ export const createOpenCodeService = (
         // Include this acquisition's asynchronous setup in its lifetime, including privacy-shield checks racing it.
         activeTurns += 1;
         try {
-            const latest = await readGeminiModels(gemini);
+            // Only a Google acquisition reads Google's catalog: a Grok turn never waits on the translator, and a newly
+            // listed Google model is registered by the next Google turn that finds the runtime idle.
+            const latest = model.providerID === OPENCODE_GEMINI_PROVIDER ? await readGeminiModels(gemini) : undefined;
             // A failed first read already has its answer: do not wait on discovery a second time during boot.
-            let clients = await ensure(latest ?? []);
+            let clients = await ensure(model.providerID === OPENCODE_GEMINI_PROVIDER ? (latest ?? []) : undefined);
             if (latest !== undefined && latest.length > 0 && geminiModelSignature(latest) !== geminiModelSignature(bootedGeminiModels)) {
                 if (activeTurns === 1 && sessionJudges.size === 0) {
                     clients = await restart(latest);
-                } else if (
-                    model.providerID === OPENCODE_GEMINI_PROVIDER &&
-                    model.modelID !== undefined &&
-                    !bootedGeminiModels.some((row) => row.id === model.modelID)
-                ) {
+                } else if (model.modelID !== undefined && !bootedGeminiModels.some((row) => row.id === model.modelID)) {
                     throw new Error(
                         `Google's model catalog has refreshed, but its shared runtime is still running other turns. Send again once they finish to use ${model.modelID}.`,
                     );

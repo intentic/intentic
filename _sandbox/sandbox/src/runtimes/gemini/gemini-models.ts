@@ -1,6 +1,8 @@
-// Advertised model metadata for the Google channel (Antigravity), reached through the translator (CLIProxyAPI).
-// Advertisement is not account availability: gemini-catalog joins this list to Google's credential-scoped metadata.
-// Antigravity vends Claude and GPT-OSS beside Gemini, so the channel is decided by `owned_by`, not an id prefix.
+// Model catalog discovery for the Google channel (Antigravity), reached only through the translator (CLIProxyAPI) since
+// Google publishes no Anthropic endpoint; the translator's own model list is the catalog. Antigravity vends more than
+// Gemini (Claude Opus/Sonnet, GPT-OSS too), so membership is decided by `owned_by`, not an id prefix. That list is the
+// translator's built-in catalog, not what each account may call: a row Google refuses is learned from the refusal
+// (gemini-catalog.ts `refused`), never predicted from Google's own metadata, whose ids differ from the translator's.
 import { humanizeModelId } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { getJson } from "../../agent/models/model-discovery.js";
@@ -35,7 +37,7 @@ const ASSUMED_MODALITIES: readonly InputModality[] = ["text", "image"];
 // The translator's own name for the Google channel; this app's wire id for the same channel is `gemini`.
 const CHANNEL = "antigravity";
 
-// Display metadata when discovery and the persisted catalog are empty; these rows never prove account availability.
+// Served only when discovery and the persisted catalog are empty; strongest first, also the picker's display.
 export const SEED_GEMINI_MODELS: readonly GeminiModel[] = [
     { id: "claude-opus-4-6-thinking", label: "Claude Opus 4.6 (Thinking)", inputModalities: ["text", "image"] },
     { id: "gemini-pro-agent", label: "Gemini 3.1 Pro (High)", inputModalities: ["text", "image", "audio", "video"] },
@@ -83,8 +85,7 @@ const publishedModels = async (
     return published;
 };
 
-// Undefined is an unreadable advertisement, not an authoritative empty list. The catalog keeps display metadata in
-// that case, but neither a persisted row nor a seed is permission to invoke a model.
+// Undefined is an unreadable or stalled advertisement, not an authoritative empty list.
 const DISCOVERY_DEADLINE_MS = 8_000;
 
 export const discoverGeminiModels = async (

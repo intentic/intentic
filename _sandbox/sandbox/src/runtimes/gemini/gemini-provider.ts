@@ -23,14 +23,14 @@ import {
 } from "../../agent/providers/provider-module.js";
 import type { Services } from "../../composition.js";
 import type { Config } from "../../env.config.js";
-import { createGeminiCatalog, type GeminiCatalog, selectGeminiModelForRequest } from "./gemini-catalog.js";
+import { createGeminiCatalog, type GeminiCatalog } from "./gemini-catalog.js";
 import { geminiOneShot } from "./gemini-one-shot.js";
 import { sharedServerRefusal } from "../../privacy/harness-route.js";
 
 // Everything Gemini contributes, listed in runtimes/runtime-table.ts: the OpenCode loop Grok runs on, on its own backend.
 
 export interface GeminiSlice {
-    // Account-verified choices; may be empty. OpenCode also reads this to register exact IDs and modalities.
+    // Never empty (discovery → persisted → seed); OpenCode's server config also reads it to register ids at boot.
     readonly geminiModels: GeminiCatalog;
     // Same OpenCode loop grokAgent runs on, just a different backend; built from the same factory, not a separate
     // adapter.
@@ -41,10 +41,9 @@ export interface GeminiSlice {
 export const createGeminiSlice = (input: {
     readonly config: Config;
     readonly authRoot: string;
-    readonly cliProxy: Pick<Services["cliProxy"], "googleModelAvailability">;
     readonly geminiAgent: GeminiSlice["geminiAgent"];
 }): GeminiSlice => ({
-    geminiModels: createGeminiCatalog(input.config, join(input.authRoot, "gemini", "models.json"), input.cliProxy),
+    geminiModels: createGeminiCatalog(input.config, join(input.authRoot, "gemini", "models.json")),
     geminiAgent: input.geminiAgent,
 });
 
@@ -70,12 +69,13 @@ export const planGeminiTurn = async (
         // Reads the wording off the provider's spec row, matching what the connect prompt and picker already say.
         return { ok: false, message: `Connect your ${PROVIDER_ACCESS.gemini.requirement} in Sandbox ▸ Agent to run Gemini here.` };
     }
-    // This guard reads one advertisement/availability snapshot; neither persisted metadata nor a global model
-    // definition can authorize an unavailable pin. Refuse before privacy/runtime probes or turn-tool leases.
-    const selected = await selectGeminiModelForRequest(services.geminiModels, input.model, context.base.signal);
-    context.base.signal.throwIfAborted();
-    if (!selected.ok) {
-        return selected;
+    // A translator with no usable Google sign-in lists no Google model and answers every one "unknown provider".
+    if ((await services.geminiModels.live()) === undefined) {
+        return {
+            ok: false,
+            message:
+                "Google is connected, but the model translator isn't serving any Google model to this sandbox, so nothing can run on it. Send again in a minute; if it keeps happening, reconnect Google in Sandbox ▸ Agent.",
+        };
     }
     const refused = await sharedServerRefusal(services.privacyShield, services.openCode.shielded, "gemini").catch((error: unknown) =>
         error instanceof Error ? error.message : "the privacy shield's policy could not be read",
@@ -83,7 +83,22 @@ export const planGeminiTurn = async (
     if (refused !== undefined) {
         return { ok: false, message: refused };
     }
-    const model = selected.model;
+    const catalog = await services.geminiModels.models();
+    // Absent and empty both mean the catalog default: the wire allows `model: ""`, and nothing was pinned.
+    const pinned = input.model === undefined || input.model === "" ? undefined : input.model;
+    // A pin this channel has stopped offering ends the turn rather than running on the catalog default. Substituting
+    // spends a model the user did not choose, on its own separate allowance, and says so nowhere; the code holds the
+    // message, reloads the picker, and leaves the choice where it belongs. The catalog keeps a de-listed row for its
+    // own grace window (model-catalog.ts), so reaching this means the channel has stopped serving it, not blinked.
+    if (pinned !== undefined && !catalog.models.some((entry) => entry.id === pinned)) {
+        return {
+            ok: false,
+            code: "model-unavailable",
+            message: `Google is no longer offering ${pinned}, and this chat is pinned to it. Pick another model for this chat, or send again if it comes back.`,
+        };
+    }
+    // Never empty, so this always resolves.
+    const model = pinned ?? catalog.default;
     // The turn's remote MCP servers, as Grok's and Codex's; leased last, once nothing can refuse the turn, since only the
     // loop it arms releases it.
     const mounted = await turnToolsOf(services, granted, {

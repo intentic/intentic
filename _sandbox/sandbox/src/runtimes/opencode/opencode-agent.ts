@@ -10,7 +10,7 @@ import { type EmulatedPlan, EXECUTE_PROMPT, PLAN_PREAMBLE, planMode } from "../d
 import { beforeDeadline, DEFAULT_TURN_TIMEOUTS, EXPIRED, type TurnTimeouts, type TurnWatchdog, turnWatchdog } from "../decorators/turn-watchdog.js";
 import { isRateLimited, vendorFailureFrame, type VendorRule } from "../decorators/vendor-errors.js";
 import { isContextOverflowText } from "../../agent/providers/failure-sentences.js";
-import { contextOverflowFrame } from "../../agent/run/error-frames.js";
+import { contextOverflowFrame, modelUnavailableFrame } from "../../agent/run/error-frames.js";
 import { displayNameOf, toolTarget } from "@intentic/agent-context/tool-calls";
 import { editDiffContent, toolLocations } from "../../agent/tools/tool-calls.js";
 import type { CommandGuard } from "../../guard/command-guard.js";
@@ -18,6 +18,7 @@ import { planPhaseOf, toolCallOpened, type TurnCapture, usageTotals } from "../d
 import { vendorTurnGate } from "../decorators/vendor-gate.js";
 import { opt } from "../../opt.js";
 import { isChatModel, parseModelSuggestions } from "./xai-models.js";
+import { OPENCODE_GEMINI_PROVIDER } from "../gemini/gemini-models.js";
 import { openCodeBackendLabel, type OpenCodeService, type SessionJudge, type SessionJudges } from "./opencode.js";
 import { mcpServersOf, mcpToolNameOf, openCodeMounts, type OpenCodeMounts, visibleToolsOf } from "./opencode-mcp.js";
 import { type OpenCodeSubagents, openCodeSubagents } from "./opencode-subagents.js";
@@ -422,6 +423,20 @@ const errorText = (error: unknown): string => {
 // reloads the catalog and drops the bad pinned model.
 const MODEL_INVALID = /model not found|does not exist|no such model|did you mean/i;
 
+// Google's own NOT_FOUND sentence. The translator lists models from its built-in catalog, not per account, so a model it
+// lists can still be one Google does not offer these accounts; Google answers 404 with this sentence. Coded
+// `model-unavailable`, which hides the model from the picker for a day (usage/model-refusals.ts) instead of a bare
+// sentence that names no model and invites the same send again.
+const GOOGLE_NOT_FOUND = /requested entity was not found/i;
+
+const googleRefusalFrame = (provider: string, model: string | undefined, message: string): AgentEvent | undefined =>
+    provider === OPENCODE_GEMINI_PROVIDER && model !== undefined && model !== "" && GOOGLE_NOT_FOUND.test(message)
+        ? modelUnavailableFrame(
+              model,
+              `Google refused ${model} for this sandbox's Google accounts ("${message}"): the translator lists it, but Google does not offer it to them.`,
+          )
+        : undefined;
+
 // How OpenCode's failure sentences are coded, in this order: a model xAI rejected, then a spent allowance, which gets a
 // retry-later notice instead of a Continue that would just re-fail, then a session past the model's window.
 const OPENCODE_FAILURES: readonly VendorRule[] = [
@@ -723,6 +738,8 @@ export const createOpenCodeAgent = (runner: OpenCodeRunner, provider: string = X
             for await (const event of turn) {
                 if (event.kind === "error") {
                     surfacedError = true;
+                    yield (event.code === undefined ? googleRefusalFrame(provider, request.spec.model, event.message) : undefined) ?? event;
+                    continue;
                 }
                 yield event;
             }
@@ -732,7 +749,11 @@ export const createOpenCodeAgent = (runner: OpenCodeRunner, provider: string = X
                     unreachableServer(error, provider) ?? (error instanceof Error ? error.message : `${openCodeBackendLabel(provider)} agent failed`);
                 // A thrown model-not-found (self-heal found no alternatives) gets the same code as the event path, so
                 // the client reloads the catalog and drops the bad pinned model.
-                yield { kind: "error", message, ...(MODEL_INVALID.test(message) ? { code: "grok-model-invalid" as const } : {}) };
+                yield googleRefusalFrame(provider, request.spec.model, message) ?? {
+                    kind: "error",
+                    message,
+                    ...(MODEL_INVALID.test(message) ? { code: "grok-model-invalid" as const } : {}),
+                };
             }
         } finally {
             ended.abort();

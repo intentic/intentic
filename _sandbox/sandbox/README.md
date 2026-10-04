@@ -73,21 +73,16 @@ flowchart LR
   handed the card's settings by the door; `/x/*` refuses a backend's own MCP path, so tools are reached only through
   the door. The contribution inventory is built once and kept until an extension, the enablement file or the
   capability manifest changes (`capabilities/contributions.ts`).
-- OpenCode's Google model registrations are refreshed from the translator's catalog before a turn, including model
-  additions and changed input modalities (`runtimes/opencode/opencode.ts`). A turn holds the shared server through
-  setup and cleanup, including ungated turns and one-shot helpers; Grok device sign-in holds it until approval,
-  cancellation or expiry too. Catalog changes restart only an idle server, after its owned process exits;
-  existing registered models remain usable while busy, and a newly discovered model asks for a retry after active
-  work finishes rather than interrupting it or substituting another model. Failed/empty catalog refreshes retain
-  a working registration, and a stalled catalog read is bounded so it cannot block the shared runtime indefinitely.
-  Google choices additionally require exact-ID support reported by every enabled translator account
-  (`agent/providers/google-model-availability.ts`, `runtimes/gemini/gemini-catalog.ts`): global advertisements alone
-  are not account entitlements. Availability refreshes are bounded and shared, and inventory changes invalidate
-  cached eligibility. Cancelling a turn or helper ends its availability wait without cancelling the shared refresh.
-  Verified exclusions override persisted, seed and disappearance-grace rows before default
-  selection; a verified empty catalog stays empty. Turns and helpers refuse an unavailable pin before mounting tools
-  or acquiring a runtime, without substituting another model. Incomplete verification asks for a retry rather than
-  claiming retirement or requiring a working account to reconnect. Similar model names are not inferred aliases.
+- OpenCode fixes its provider config at spawn, so a Google turn compares the translator's catalog (ids and input
+  modalities) with what the running server registered, and restarts the server onto the new list only when it is idle
+  (`runtimes/opencode/opencode.ts`). A turn holds the server from setup through cleanup, helpers and Grok sign-in
+  included; while it is busy, registered models keep working and a newly listed one asks for a retry. Grok turns
+  never read Google's catalog. A failed, empty or stalled read keeps the working registration.
+- The translator lists Google models from its built-in catalog, not per account, so it can list a model Google does
+  not offer these accounts. Google then answers 404 "Requested entity was not found."; the turn codes that
+  `model-unavailable` naming the model (`runtimes/opencode/opencode-agent.ts`), which hides it from the picker for a
+  day (`usage/model-refusals.ts`). Nothing predicts this from Google's own model metadata: its ids differ from the
+  translator's (`gemini-3.8-flash-tiered` there, `gemini-3.8-flash-high` here, and the latter runs).
 - A process the daemon starts is put in a workload class by whoever starts it (`workload/workload-class.ts`,
   `spawnAs`): its niceness, IO class and rank for the kernel's OOM killer, inherited by everything it forks. Builds
   go first, agent runtimes last, children before their parents. Nothing ranks a process by its command line.

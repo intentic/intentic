@@ -5,7 +5,7 @@ import { stubGlobal, unstubAllGlobals, waitFor } from "@intentic/testing/bun";
 import { subscribeRuntimeChanges } from "../system/runtime-watch.js";
 import { forgetUpstream } from "./engine-channel.js";
 import { engineDescriptor } from "./engine-descriptors.js";
-import { forgetEngineResolution } from "./engine-resolve.js";
+import { forgetEngineResolution, noteEngineServing } from "./engine-resolve.js";
 import { activateVersion, engineVersionDir, readEngineState } from "./engine-store.js";
 import { type EngineHost, type EngineInstaller, enginesView, revertEngine, setChannel, updateEngine } from "./engines.js";
 
@@ -91,6 +91,25 @@ test("the view reports what is running and where it came from", async () => {
     expect(row?.blessed).toBe("9.9.9");
     expect(row?.offered).toBeUndefined();
     expect(view.listSource).toBe("https://example.test/engines.json");
+});
+
+// A long-lived process (the translator) keeps the copy it was spawned on until it restarts; the card names that copy,
+// and keeps offering the selected one, rather than claiming a version nothing is running yet.
+test("the view reports a live process's copy over the store's pointer", async () => {
+    stubGlobal("fetch", jest.fn().mockResolvedValue(jsonResponse({ engines: { opencode: { blessed: "9.9.9" } } })));
+    await updateEngine(host(workspace), "opencode", undefined, installer());
+    forgetEngineResolution();
+    noteEngineServing("opencode", { id: "opencode", version: "9.9.8", source: "store", paths: {} });
+
+    try {
+        const row = (await enginesView(host(workspace))).engines.find((engine) => engine.id === "opencode");
+        expect(row?.running).toEqual({ version: "9.9.8", source: "store" });
+        expect(row?.offered).toEqual({ version: "9.9.9", blessed: true });
+    } finally {
+        noteEngineServing("opencode", undefined);
+    }
+    const row = (await enginesView(host(workspace))).engines.find((engine) => engine.id === "opencode");
+    expect(row?.running).toEqual({ version: "9.9.9", source: "store" });
 });
 
 // Immediate because the image's copy is already on the machine; no check has to run first.

@@ -285,12 +285,7 @@ const createProviderAreas = (config: Config, logger: Logger, authRoot: string, w
                   },
               }),
     });
-    gemini = createGeminiSlice({
-        config,
-        authRoot,
-        cliProxy,
-        geminiAgent: createOpenCodeAgent(createOpenCodeRunner(openCode), OPENCODE_GEMINI_PROVIDER),
-    });
+    gemini = createGeminiSlice({ config, authRoot, geminiAgent: createOpenCodeAgent(createOpenCodeRunner(openCode), OPENCODE_GEMINI_PROVIDER) });
     const claude = createClaudeSlice({
         config,
         logger,

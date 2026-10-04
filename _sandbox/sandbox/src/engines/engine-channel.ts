@@ -7,8 +7,7 @@ import { type EngineState, isQuarantined } from "./engine-store.js";
 // a JSON file in the intentic repo, fetched raw and overridable by env. Neither read may throw: failure keeps the last
 // good value or answers "nothing on offer", never breaking a running sandbox.
 
-const LIST_URL = (): string =>
-    process.env["INTENTIC_ENGINES_LIST_URL"] ?? "https://raw.githubusercontent.com/intentic/intentic/main/engines.json";
+const LIST_URL = (): string => process.env["INTENTIC_ENGINES_LIST_URL"] ?? "https://raw.githubusercontent.com/intentic/intentic/main/engines.json";
 
 // Refreshed hourly; the card's Update button reads the list directly, bypassing the wait.
 const LIST_TTL_MS = 60 * 60_000;

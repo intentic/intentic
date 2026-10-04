@@ -84,8 +84,7 @@ export const quarantineVersion = async (id: EngineId, version: string, reason: s
         quarantined: [{ version, reason, at }, ...rest.quarantined.filter((entry) => entry.version !== version)].slice(0, QUARANTINE_KEPT),
     }));
 
-export const isQuarantined = (state: EngineState, version: string): boolean =>
-    state.quarantined.some((entry) => entry.version === version);
+export const isQuarantined = (state: EngineState, version: string): boolean => state.quarantined.some((entry) => entry.version === version);
 
 // Deletes every version except active and previous; called after an install so the store holds at most those two, never
 // a stale extra download.
@@ -121,4 +120,3 @@ const directoryBytes = async (dir: string): Promise<number> => {
     );
     return sizes.reduce((total, size) => total + size, 0);
 };
-

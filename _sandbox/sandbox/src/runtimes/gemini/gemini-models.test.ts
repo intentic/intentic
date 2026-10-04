@@ -167,10 +167,10 @@ test("bounds and cancels a stalled advertisement read", async () => {
     }
 });
 
-test("the display seed is non-empty and declares chat models' input modalities", () => {
+test("the seed floor is non-empty and passes its own filter, so a turn always resolves a usable model", () => {
     expect(SEED_GEMINI_MODELS.length).toBeGreaterThan(0);
     expect(SEED_GEMINI_MODELS.every((model) => isChatModel(model.id))).toBe(true);
-    // Even fallback display metadata keeps modalities; eligibility is verified separately before a turn can run.
+    // The floor serves a turn before discovery lands, so it must declare modalities, or the first turn is blind.
     expect(SEED_GEMINI_MODELS.every((model) => model.inputModalities.includes("text"))).toBe(true);
     expect(SEED_GEMINI_MODELS.some((model) => model.inputModalities.includes("image"))).toBe(true);
 });

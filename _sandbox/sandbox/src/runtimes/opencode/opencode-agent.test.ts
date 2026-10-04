@@ -13,6 +13,7 @@ import { type CommandGuard, consultWith, type GuardOutcome, vendorSubject } from
 import { unstubbed } from "@intentic/testing";
 import { opt } from "../../opt.js";
 import type { OpenCodeService, SessionJudge } from "./opencode.js";
+import { OPENCODE_GEMINI_PROVIDER } from "../gemini/gemini-models.js";
 import { mcpServersOf, type OpenCodeMcpServer, openCodeMounts } from "./opencode-mcp.js";
 import type { AgentRequest, ContainerCredential } from "../../agent/providers/agent-request.js";
 import { DEFAULT_TURN_TIMEOUTS } from "../decorators/turn-watchdog.js";
@@ -573,6 +574,43 @@ test("a session past the model's window is coded context-overflow, by OpenCode's
     const xai = "This model's maximum prompt length is 131072 but the request contains 145312 tokens.";
     expect(await collect(createOpenCodeAgent(fakeRunner(failed({ name: "APIError", data: { message: xai } })).runner), request)).toEqual([
         { kind: "error", code: "context-overflow", message: xai },
+        { kind: "done" },
+    ]);
+});
+
+// The translator lists models from its built-in catalog, so it can list one Google does not offer these accounts; Google
+// then answers 404 NOT_FOUND. Coded model-unavailable so the picker hides that model, and the sentence names it.
+test("Google's NOT_FOUND on a Google turn is coded model-unavailable and names the refused model", async () => {
+    const notFound = (): OpenCodeRunner =>
+        fakeRunner([
+            { type: "session.created", properties: { info: { id: "s1" } } },
+            {
+                type: "session.error",
+                properties: { sessionID: "s1", error: { name: "APIError", data: { message: "Requested entity was not found." } } },
+            },
+        ]).runner;
+    const turn = (model: string) => ({ ...request, spec: { ...request.spec, model } });
+
+    const events = await collect(createOpenCodeAgent(notFound(), OPENCODE_GEMINI_PROVIDER), turn("claude-opus-5-5-high"));
+    const failure = events.find((event) => event.kind === "error") as { code?: string; message: string } | undefined;
+    expect(failure?.code).toBe("model-unavailable");
+    expect(failure?.message).toContain("claude-opus-5-5-high");
+    expect(failure?.message).toContain("Requested entity was not found.");
+
+    // The same sentence from a thrown prompt (outside the event stream) is read the same way.
+    const throwing: OpenCodeRunner = async function* () {
+        yield { type: "session.created", properties: { info: { id: "s2" } } } as Event;
+        throw new Error("Requested entity was not found.");
+    };
+    const thrown = (await collect(createOpenCodeAgent(throwing, OPENCODE_GEMINI_PROVIDER), turn("claude-opus-5-5-high"))).find(
+        (event) => event.kind === "error",
+    ) as { code?: string } | undefined;
+    expect(thrown?.code).toBe("model-unavailable");
+
+    // Grok never says this sentence for a model, so its turns keep the error as it came.
+    expect(await collect(createOpenCodeAgent(notFound()), turn("grok-4"))).toEqual([
+        { kind: "session", sessionId: "s1" },
+        { kind: "error", message: "Requested entity was not found." },
         { kind: "done" },
     ]);
 });

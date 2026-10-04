@@ -9,7 +9,7 @@ import { blessedEntry, blessedList, blessedListReadAt, blessedListSource, lowest
 import { ENGINE_DESCRIPTORS, engineDescriptor } from "./engine-descriptors.js";
 import { type EngineInstallOutcome, installEngine, isEngineInstalling } from "./engine-install.js";
 import { engineChannel, readEngineChannels, setEngineChannel, DEFAULT_CHANNEL } from "./engine-policy.js";
-import { forgetEngineResolution, resolveEngine } from "./engine-resolve.js";
+import { engineServing, forgetEngineResolution, resolveEngine } from "./engine-resolve.js";
 import {
     activateVersion,
     deactivate,
@@ -52,12 +52,14 @@ const rowOf = async (root: string, id: EngineId): Promise<EngineRow> => {
         blessedEntry(id).then((entry) => entry?.blessed),
         engineDiskBytes(id),
     ]);
-    const running = resolved.source === "store" ? resolved.version : baked;
+    // A live process's copy wins over the pointer: until it restarts, that is what a turn started now reaches.
+    const live = engineServing(id) ?? resolved;
+    const running = live.source === "store" ? live.version : baked;
     const target = await targetVersion(id, channel, state);
     return {
         id,
         label: descriptor.label,
-        running: { ...opt("version", running), source: resolved.source },
+        running: { ...opt("version", running), source: live.source },
         ...opt("baked", baked),
         channel,
         // An offer exists only when it differs from what's running; a matching channel is steady state, not pending.

@@ -40,7 +40,12 @@ const resolveNow = async (id: EngineId): Promise<ResolvedEngine> => {
     }
     const prefix = engineVersionDir(id, version);
     // Directory can vanish without the pointer knowing (GC elsewhere, restored snapshot); checked, not trusted.
-    if (!(await access(prefix, constants.F_OK).then(() => true, () => false))) {
+    if (
+        !(await access(prefix, constants.F_OK).then(
+            () => true,
+            () => false,
+        ))
+    ) {
         return imageAnswer(id);
     }
     const paths = await engineDescriptor(id).paths(prefix);
@@ -67,6 +72,21 @@ export const engineBinary = async (id: EngineId): Promise<string | undefined> =>
 
 // Whether a spawned engine has a copy here to run: an Environment-card install counts as much as the image's own.
 export const engineReady = async (id: EngineId): Promise<boolean> => (await engineBinary(id)) !== undefined;
+
+// What a long-lived engine process is serving right now, where that can lag the pointer: the translator resolves its
+// binary once per spawn and keeps it until it restarts. Read by the Environment card, so it names the copy a turn
+// started now would really reach rather than the one the store has selected. Undefined while no such process is up.
+const serving = new Map<EngineId, ResolvedEngine>();
+
+export const noteEngineServing = (id: EngineId, resolved: ResolvedEngine | undefined): void => {
+    if (resolved === undefined) {
+        serving.delete(id);
+        return;
+    }
+    serving.set(id, resolved);
+};
+
+export const engineServing = (id: EngineId): ResolvedEngine | undefined => serving.get(id);
 
 // Drops the cache immediately: this process just moved the pointer itself, or a test suite is switching fixture trees.
 export const forgetEngineResolution = (id?: EngineId): void => {
