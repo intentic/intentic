@@ -42,6 +42,7 @@ import { latestVersion } from "./updates/version-check.js";
 import { breakingNotes, MAX_UPDATE_NOTES, updateNotes, withdrawnRelease } from "./updates/release-notes.js";
 import { preparingUpdate, stagedUpdate, updateOutcome } from "./updates/staged-update.js";
 import { fileUpdateSkip, updateOffered } from "./updates/update-skip.js";
+import { autoUpdater } from "./updates/auto-update.js";
 import { opt } from "../opt.js";
 import { runtimeHealth } from "../agent/providers/adapter-health.js";
 import { buildId } from "../version.js";
@@ -269,11 +270,12 @@ export const createSystemRoutes = (services: Services) => {
             const runtimes = runtimeHealth();
             // The host machine's own build status and its last word on the version, unknowable to the daemon; read
             // fresh from /history, never cached, like the owner's skip beside them.
-            const [staged, preparing, lastUpdate, skippedVersion] = await Promise.all([
+            const [staged, preparing, lastUpdate, skippedVersion, autoUpdate] = await Promise.all([
                 stagedUpdate(services.config.historyRoot),
                 preparingUpdate(services.config.historyRoot, Date.now()),
                 updateOutcome(services.config.historyRoot),
                 fileUpdateSkip(services.config.historyRoot).skipped(),
+                autoUpdater()?.state(),
             ]);
             const withdrawn = withdrawnRelease(info.version);
             // Capped so a long-neglected sandbox gets a card, not a scroll; the remainder travels as a count.
@@ -293,13 +295,31 @@ export const createSystemRoutes = (services: Services) => {
                 ...opt("lastUpdate", lastUpdate),
                 ...opt("withdrawn", withdrawn),
                 ...opt("skippedVersion", skippedVersion),
+                ...opt("autoUpdate", autoUpdate),
             };
         }),
         // The owner's "not this one" for the update card, kept until they ask for the newest release again; a release
         // newer than the skipped one is offered as usual.
         skipUpdate: i.skipUpdate.handler(async ({ input }) => {
             await fileUpdateSkip(services.config.historyRoot).skip(input.version);
+            // A skipped release is no longer one to take by itself; the card hears that without waiting for a poll.
+            autoUpdater()?.poke();
             return { ok: true } as const;
+        }),
+        // The owner's say over taking a downloaded update by itself. Refused, in words, where this sandbox never does.
+        autoUpdate: i.autoUpdate.handler(async ({ input }) => {
+            const updater = autoUpdater();
+            if (updater === undefined) {
+                throw new ORPCError("CONFLICT", {
+                    message:
+                        "This sandbox does not update itself: it is hosted, built from a checkout, or not run by a machine's ic. Its update card says how it updates instead.",
+                });
+            }
+            try {
+                return await updater.configure(input);
+            } catch (error) {
+                throw new ORPCError("CONFLICT", { message: error instanceof Error ? error.message : String(error) });
+            }
         }),
         // What the daemon couldn't read in `.intentic/` manifests. The three hand-edited ones are re-read here before
         // answering, since a registry entry is only as fresh as its last read; daemon-written manifests skip this step.

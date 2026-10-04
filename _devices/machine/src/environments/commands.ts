@@ -160,7 +160,7 @@ export const updates = buildCommand<UpdatesFlags>({
         out(
             config.sandboxUpdates === false
                 ? "Sandboxes: each update downloads when you take it, a wait of minutes. Turn background downloads back on with --sandboxes on."
-                : "Sandboxes: each one's next update is downloaded in the background, so applying it is a restart of about half a minute. Turn it off with --sandboxes off.",
+                : "Sandboxes: each one's next update is downloaded in the background, so applying it is a restart of about half a minute, which a sandbox takes by itself at a quiet moment unless its update card says otherwise. Turn the downloads off with --sandboxes off.",
         );
         out(
             config.sandboxBackups === false

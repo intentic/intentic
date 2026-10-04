@@ -5,12 +5,14 @@ import { useRoute } from "vue-router";
 import { useChat } from "../features/chat/run/useChat";
 import { floatingWindowPanel } from "./window/floating";
 import { onScreen } from "./window/onScreen";
+import { awayFromWindow } from "./window/inputAway";
 import { startBackgroundLoader, stopBackgroundLoader } from "../router/prefetch/useBackgroundLoader";
 import { startDraftingReceipts } from "../features/workspace/changes/draftingReceipts";
-import { reportIdle, reportSessionId, reportView } from "./presence/usePresence";
+import { reportAway, reportIdle, reportSessionId, reportView } from "./presence/usePresence";
 import { useSandboxLiveness } from "../features/sandbox/overview/useSandboxLiveness";
 import { offerTimezone } from "../features/sandbox/overview/offerTimezone";
 import { startRestartWatch } from "../features/sandbox/live/restartWatch";
+import { startAutoUpdateWatch } from "../features/sandbox/overview/version/autoUpdateWatch";
 import { startBrowserTab } from "./browser-tab/browserTab";
 
 // The signed-in session's live daemon connection and the panels it feeds, mounted above every route
@@ -44,6 +46,9 @@ watch(
 );
 // Per window, not per tab (onScreen.ts): a floating chat needs its own idle signal.
 watch(onScreen, (looking) => reportIdle(!looking), { immediate: true });
+// A window left on screen that nobody has touched for minutes: what lets the sandbox tell the editor left open overnight
+// from a person at it, before restarting itself for an update.
+watch(awayFromWindow, (away) => reportAway(away), { immediate: true });
 
 // The one fact about the owner that only the browser holds: which clock they are on. Offered as soon as a sandbox is
 // attached rather than from the settings screen, because the schedule that gets this wrong is usually created before
@@ -64,6 +69,10 @@ startDraftingReceipts();
 // Follows the runs that end in this sandbox being replaced, for the same reason: the restart reaches the reader
 // wherever they are, so what explains it cannot live on the card that started it.
 startRestartWatch();
+
+// A sandbox updating itself at a quiet moment counts down where the reader is, so they can stop it, and the silence of
+// its restart is named as one, like a restart they asked for.
+startAutoUpdateWatch();
 
 // The browser tab tells what needs the reader, what finished while they were away and whether work is under way, in
 // its title, its icon and (when they asked for it) a sound. Same lifetime: it is about the session, not a screen.

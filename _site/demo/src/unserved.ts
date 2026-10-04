@@ -160,6 +160,8 @@ export const UNSERVED = {
     "POST /engines/revert": REAL_MACHINE,
     // Offered only beside an update, and the demo's /info never has one to offer.
     "system.skipUpdate": REAL_MACHINE,
+    // The switch for updates that take themselves, drawn only where /info carries `autoUpdate`, which the demo's never does.
+    "system.autoUpdate": REAL_MACHINE,
     "POST /bundles": REAL_MACHINE,
     "DELETE /bundles": REAL_MACHINE,
     "POST /bundles/ticket": REAL_MACHINE,

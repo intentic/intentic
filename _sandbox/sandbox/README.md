@@ -155,6 +155,15 @@ flowchart LR
   host's rollback (`system/boot/fault.ts`): `crash-at-boot` fails the boot before convergence, `crash-after-ready` exits 1
   twenty seconds after the gate opens, `fail-conversion` makes convergence throw with an episode open. Production images
   never set it; any other value is ignored.
+- A sandbox takes a downloaded update by itself (`system/updates/auto-update.ts`, started by
+  `bootstrap/update-when-quiet.ts`), but only where a machine's `ic` swaps its container and only an update that machine
+  already staged, so what it decides is the half-minute restart, never a download. It holds that restart while an agent
+  is mid-turn or landing, a subagent or workflow runs, somebody has the editor on screen and in use (presence's `away`),
+  a terminal printed in the last ten minutes (for the first day of waiting), something scheduled is due within ten
+  minutes, the owner paused it, or the release has breaking notes (those always wait for a person). Then it counts down
+  where any connected page can stop it, and hands the machine the same `update` the button sends, asking the next boot
+  to resume what the restart cuts. The owner's switch and pause live in `/history/update-policy.json`; `/info`'s
+  `autoUpdate` says where it stands, and the `update` runtime domain tells every page when that moves.
 - `conversations.db` never keeps the daemon down (`store/conversations-db-recovery.ts`): after a run that died
   unannounced it is quick-checked before anything reads it, and a file that fails to open or to pass is moved aside with
   its sidecars as `conversations.db.corrupt-<ms>` (never deleted), what still reads of it is copied into a new file with

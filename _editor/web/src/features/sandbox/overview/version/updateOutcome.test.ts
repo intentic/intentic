@@ -31,6 +31,15 @@ describe(`what the machine last did, in plain words`, () => {
         });
     });
 
+    it(`says an update this sandbox took by itself was its own, and a pressed one was not`, () => {
+        const took = outcome({ result: `updated`, at: NOW - HOUR });
+        const applied = { at: NOW - HOUR - 120_000, to: `1.316.0` };
+        expect(outcomeNews(took, `1.316.0`, NOW, applied)?.text).toBe(`Updated by itself from 1.315.0 to 1.316.0, while nothing was going on.`);
+        // A later swap by somebody's press, onto another version, is not the one it started.
+        expect(outcomeNews(outcome({ result: `updated`, to: `1.317.0` }), `1.317.0`, NOW, applied)?.text).toBe(`Updated from 1.315.0 to 1.317.0.`);
+        expect(outcomeNews({ ...took, at: applied.at - 1 }, `1.316.0`, NOW, applied)?.text).toBe(`Updated from 1.315.0 to 1.316.0.`);
+    });
+
     it(`drops the ready line once the previous version is gone, and the whole line a day after the update`, () => {
         const ended = outcome({ result: `updated`, keepUntil: NOW - 1 });
         expect(outcomeNews(ended, `1.316.0`, NOW)).toMatchObject({ text: `Updated from 1.315.0 to 1.316.0.`, probation: false, ready: undefined });

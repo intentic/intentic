@@ -11,7 +11,7 @@ import { connectedCount } from "./presence.js";
 
 // Freshest tmux session_activity across all panes, in ms; 0 when tmux has no server. A listing that failed throws, so
 // the check skips its pass instead of reading a terminal it could not see as idle and stopping the machine under it.
-const lastTerminalActivity = async (): Promise<number> => {
+export const lastTerminalActivity = async (): Promise<number> => {
     const listed = await forkedExec("tmux", ["list-panes", "-a", "-F", "#{session_activity}"]).catch((error: unknown) => {
         if (isNoTmuxServer(error)) {
             return undefined;

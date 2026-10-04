@@ -71,6 +71,7 @@ import { newestRunDocument } from "../store/newest-run.js";
 import { bootFailureDocument } from "../system/boot/boot-failure.js";
 import { heavyCommandsDocument } from "../system/resources/heavy-commands.js";
 import { stagedUpdateDocument, updateOutcomeDocument, updatePreparingDocument } from "../system/updates/staged-update.js";
+import { updatePolicyDocument } from "../system/updates/update-policy.js";
 import { skippedUpdateDocument } from "../system/updates/update-skip.js";
 import { workspaceIdentityDocument } from "../system/workspace-identity.js";
 import { accountUsageDocument } from "../usage/account-usage.js";
@@ -162,6 +163,7 @@ export const stateDocuments = (): readonly DocumentSpec[] => [
     stagedUpdateDocument,
     updateOutcomeDocument,
     updatePreparingDocument,
+    updatePolicyDocument,
     skippedUpdateDocument,
     workspaceIdentityDocument,
     accountUsageDocument,

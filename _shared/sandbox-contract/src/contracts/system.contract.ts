@@ -14,7 +14,7 @@ import { PresenceReportSchema } from "../schemas/logs.js";
 import { SandboxMetricsSchema, StorageCleanInputSchema, StorageCleanResultSchema, StorageReportSchema } from "../schemas/metrics.js";
 import { OkSchema } from "../schemas/shared.js";
 import { DaemonSessionSchema, InfoSchema, ManifestProblemsSchema, ManifestRepairSchema } from "../schemas/system.js";
-import { SkipUpdateInputSchema } from "../schemas/updates.js";
+import { AutoUpdateInputSchema, AutoUpdateSchema, SkipUpdateInputSchema } from "../schemas/updates.js";
 import {
     BrowserNameParamSchema,
     BrowsersListSchema,
@@ -56,6 +56,19 @@ export const systemContract = {
         .meta({ floor: "maintainer" })
         .input(SkipUpdateInputSchema)
         .output(OkSchema),
+    // The owner's say over taking a downloaded update by itself; /info's `autoUpdate` reads the state back.
+    autoUpdate: systemRoute
+        .route({
+            method: "POST",
+            path: "/system/update/auto",
+            summary: "Decide how updates are taken",
+            description:
+                "Turns taking a downloaded update by itself on or off, pauses it until a moment, or takes the downloaded update right now. A sandbox taking updates by itself waits for a quiet moment: no agent mid-turn, nobody at the editor, terminals quiet. Answers with where it stands afterwards.",
+        })
+        // Which version the sandbox runs, and when it restarts onto it, is the operator's decision, like the update itself.
+        .meta({ floor: "maintainer" })
+        .input(AutoUpdateInputSchema)
+        .output(AutoUpdateSchema),
     // Own route, not a field on /info: it goes stale on a manifest changing on disk, not on identity changing.
     manifestProblems: systemRoute
         .route({

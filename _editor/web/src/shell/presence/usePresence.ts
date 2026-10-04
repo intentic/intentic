@@ -114,7 +114,7 @@ const DEBOUNCE_MS = 300;
 
 // This tab's current /events connection id, set by the liveness loop per attempt, plus its activity state.
 let clientId: string | undefined;
-const report: { idle: boolean; view?: string; sessionId?: string; path?: string } = { idle: false };
+const report: { idle: boolean; away?: true; view?: string; sessionId?: string; path?: string } = { idle: false };
 let lastSent: string | undefined;
 let timer: ReturnType<typeof setTimeout> | undefined;
 
@@ -153,6 +153,17 @@ export const reportOpenPath = (path: string | undefined): void => {
 
 export const reportIdle = (idle: boolean): void => {
     report.idle = idle;
+    send();
+};
+
+// On screen but untouched for minutes (inputAway.ts). Sent only while true: absent reads as here, which is also what a
+// daemon older than the field makes of it.
+export const reportAway = (away: boolean): void => {
+    if (away) {
+        report.away = true;
+    } else {
+        delete report.away;
+    }
     send();
 };
 

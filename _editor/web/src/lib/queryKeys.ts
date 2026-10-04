@@ -54,6 +54,8 @@ const PUSHED_READS: Readonly<Record<string, readonly ProcedureName[]>> = {
     skills: [`skills.list`, `skills.read`],
     subagents: [`system.subagents`],
     terminals: [`system.terminals`],
+    // An automatic update's state rides /info, beside everything else the update card reads.
+    update: [`system.info`],
     "workflow-runs": [`workflows.runs`],
     workflows: [`workflows.list`],
 };

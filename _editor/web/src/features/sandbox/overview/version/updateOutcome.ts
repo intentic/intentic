@@ -42,9 +42,20 @@ export interface OutcomeNews {
     readonly ready: string | undefined;
 }
 
+// The update this sandbox started by itself (autoUpdate.lastApplied), as the swap the host recorded: begun no later than
+// the swap ended, within the few minutes a swap takes, onto the same version. Anything else was somebody's press.
+const AUTO_SWAP_MS = 3 * 60 * 60_000;
+type Applied = NonNullable<Info[`autoUpdate`]>[`lastApplied`];
+const tookItself = (outcome: UpdateOutcome, applied: Applied): boolean =>
+    applied !== undefined &&
+    outcome.verb === `update` &&
+    outcome.at >= applied.at &&
+    outcome.at - applied.at <= AUTO_SWAP_MS &&
+    (applied.to === undefined || (outcome.to !== undefined && versionName(outcome.to).replace(/^v/, ``) === applied.to.replace(/^v/, ``)));
+
 // "Updated from 1.315.0 to 1.316.0.", in the verb's own words. Undefined for a swap that moved no version (a reshape,
 // a rebuild onto the same release): the machine did something, but nothing a version card has to explain.
-const movedSentence = (outcome: UpdateOutcome): string | undefined => {
+const movedSentence = (outcome: UpdateOutcome, applied?: Applied): string | undefined => {
     const from = outcome.from === undefined ? undefined : versionName(outcome.from);
     const to = outcome.to === undefined ? undefined : versionName(outcome.to);
     if (outcome.verb === `rollback`) {
@@ -53,13 +64,13 @@ const movedSentence = (outcome: UpdateOutcome): string | undefined => {
             : t(`sandbox.updateOutcome.wentBack`);
     }
     if (from !== undefined && to !== undefined && from !== to) {
-        return t(`sandbox.updateOutcome.updatedFromTo`, { from, to });
+        return tookItself(outcome, applied) ? t(`sandbox.updateOutcome.updatedByItselfFromTo`, { from, to }) : t(`sandbox.updateOutcome.updatedFromTo`, { from, to });
     }
     return outcome.verb === `update` ? t(`sandbox.updateOutcome.updated`) : undefined;
 };
 
-const updatedNews = (outcome: UpdateOutcome, now: number): OutcomeNews | undefined => {
-    const moved = movedSentence(outcome);
+const updatedNews = (outcome: UpdateOutcome, now: number, applied: Applied): OutcomeNews | undefined => {
+    const moved = movedSentence(outcome, applied);
     const probation = outcome.keepUntil !== undefined && outcome.keepUntil > now;
     if (moved === undefined || (!probation && now - outcome.at > UPDATE_NEWS_MS)) {
         return undefined;
@@ -101,12 +112,12 @@ const rolledBackSentence = (outcome: UpdateOutcome): string => {
  * What the machine last did about this sandbox's version, as the card says it, or undefined when it is not news: no
  * record, a probation that ended quietly (`kept`), or an update that worked more than a day ago.
  */
-export const outcomeNews = (outcome: UpdateOutcome | undefined, latest: string | undefined, now: number): OutcomeNews | undefined => {
+export const outcomeNews = (outcome: UpdateOutcome | undefined, latest: string | undefined, now: number, applied?: Applied): OutcomeNews | undefined => {
     if (outcome === undefined || outcome.result === `kept`) {
         return undefined;
     }
     if (outcome.result === `updated`) {
-        return updatedNews(outcome, now);
+        return updatedNews(outcome, now, applied);
     }
     const stillOffered = outcome.to !== undefined && outcome.to === latest;
     if (!stillOffered && now - outcome.at > FAILURE_NEWS_MS) {
@@ -173,11 +184,13 @@ const rollbackWhyOf = (canRollBack: boolean, withdrawn: boolean): UpdateCardPlan
 export const updateCardPlan = ({ info, hosted, canRollBack, skipServed, now }: UpdateCardFacts): UpdateCardPlan => {
     const latest = info?.latest;
     const offered = info?.updateAvailable === true;
-    const news = hosted ? undefined : outcomeNews(info?.lastUpdate, latest, now);
+    const news = hosted ? undefined : outcomeNews(info?.lastUpdate, latest, now, info?.autoUpdate?.lastApplied);
     const withdrawn = info?.withdrawn === undefined ? undefined : withdrawnSentence(info.withdrawn);
     const skipped = skipServed ? skippedOf(info) : undefined;
     const retry = offered && news?.failed !== undefined && news.failed === latest;
     const said = [news, withdrawn, skipped].some((part) => part !== undefined);
+    // A sandbox that can update itself always has a card, if only for the switch that says whether it does.
+    const switchable = !hosted && info?.autoUpdate !== undefined;
     return {
         news,
         withdrawn,
@@ -185,6 +198,6 @@ export const updateCardPlan = ({ info, hosted, canRollBack, skipServed, now }: U
         skippable: skipServed && retry ? latest : undefined,
         retry,
         rollbackWhy: rollbackWhyOf(canRollBack, withdrawn !== undefined),
-        visible: offered || canRollBack || said,
+        visible: offered || canRollBack || said || switchable,
     };
 };

@@ -53,6 +53,9 @@ const running = new Map<string, { readonly abort: AbortController }>();
 
 export const workflowRunning = (runId: string): boolean => running.has(runId);
 
+// Every run in flight, for whoever has to know nothing is (an automatic update waiting for a quiet moment).
+export const runningWorkflowIds = (): string[] => [...running.keys()];
+
 // Stops nothing not yet started and cuts off in-flight steps immediately, unlike a loop's Stop, which finishes the
 // current iteration: a workflow round is a whole agent turn. Returns false when nothing was running.
 export const stopWorkflowRun = (runId: string): boolean => {

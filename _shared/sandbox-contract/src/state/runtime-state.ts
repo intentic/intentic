@@ -58,6 +58,10 @@ const RUNTIME_DOMAINS = [
 
     // The audit log grew or a gateway's status moved or aged out; the log lives outside /work, so no file push carries it.
     { domain: "activity", invalidates: [["activity"], ["activity-status"]] },
+
+    // An automatic update started waiting, changed what it waits on, began counting down or handed itself to the
+    // machine: what every page needs to hear before the sandbox goes quiet under it, wherever the reader is.
+    { domain: "update", invalidates: [["update"]] },
 ] as const satisfies readonly RuntimeDomainBinding[];
 
 export const RUNTIME_DOMAIN_BINDINGS: readonly RuntimeDomainBinding[] = RUNTIME_DOMAINS;

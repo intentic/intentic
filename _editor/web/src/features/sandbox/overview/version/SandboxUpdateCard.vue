@@ -11,8 +11,11 @@ import { useRole } from "../../secrets/useRole";
 import { expectRestart, type RestartQuiet } from "../../live/sandboxRestart";
 import HostedRollbackDialog from "./HostedRollbackDialog.vue";
 import UpdateDownloadProgress from "./UpdateDownloadProgress.vue";
+import UpdateAutoStatus from "./UpdateAutoStatus.vue";
+import UpdateAutoSwitch from "./UpdateAutoSwitch.vue";
 import UpdateRollbackPanel from "./UpdateRollbackPanel.vue";
 import UpdateWhatsNew from "./UpdateWhatsNew.vue";
+import { useAutoUpdate } from "./useAutoUpdate";
 import { useBackgroundDownload } from "./useBackgroundDownload";
 import { type DownloadState, downloadPercent, downloadPollMs, downloadStep, downloading } from "./updateDownload";
 import { updateCardPlan } from "./updateOutcome";
@@ -208,7 +211,15 @@ const planRefused = computed(() => updateAvailable.value && stagedPlan.value?.ok
 const offering = computed(() => updateAvailable.value && localImage.value === undefined && !planRefused.value);
 // The previous version stays parked for a day only where `ic` does the swap: not on a hosted machine, not under a deploy.
 const throughIc = computed(() => hosted.value === undefined && !serverManaged.value);
-const retryLabel = computed(() => (plan.value.retry ? t(`sandbox.sandboxUpdateCard.tryAgain`) : undefined));
+// UPDATES THAT TAKE THEMSELVES. Where the daemon can (self-hosted, through the machine's ic), a downloaded update waits
+// for a quiet moment and installs by itself (UpdateAutoStatus says when, and what it waits for); the gold button stays,
+// as "Update now", for whoever would rather not wait. The switch says whether it does any of that.
+const { auto } = useAutoUpdate();
+const autoOn = computed(() => auto.value?.enabled === true);
+const autoPaused = computed(() => autoOn.value && auto.value?.pausedUntil !== undefined && auto.value.pausedUntil > Date.now());
+const retryLabel = computed(() =>
+    plan.value.retry ? t(`sandbox.sandboxUpdateCard.tryAgain`) : autoOn.value && updateStaged.value ? t(`sandbox.autoUpdate.updateNow`) : undefined,
+);
 
 // How much is in it: every note in the gap, including the ones the daemon held back for the changelog.
 const improvements = computed(() => updateNotes.value.length + moreUpdateNotes.value);
@@ -272,6 +283,19 @@ const troubleBesideRebuild = computed(
 const troubleAtFoot = computed(() => canRollBack.value && !plan.value.rollbackWhy && !troubleBesideRebuild.value);
 // The way back, open: only while there is one, however it was opened.
 const rollbackShown = computed(() => canRollBack.value && rollbackOpen.value);
+// Whether the quiet group has anything to say under its heading. A sandbox that only shows its switch draws no empty block.
+const quietBody = computed(
+    () =>
+        autoPaused.value ||
+        withdrawnNotice.value !== undefined ||
+        newsNotice.value !== undefined ||
+        plan.value.skipped !== undefined ||
+        skipNotice.value !== undefined ||
+        (slug.value !== undefined && !serverManaged.value && (localImage.value !== undefined || planRefused.value)) ||
+        planRefused.value ||
+        troubleAtFoot.value ||
+        rollbackShown.value,
+);
 // The developer notes, the stored-file conversions and the way back: the offer's fine print, below what is new.
 const finePrint = computed(
     () => breakingNotes.value.length > 0 || convertedFiles.value.length > 0 || stagedPlan.value?.downgrade === true || troubleAtFoot.value || rollbackShown.value,
@@ -353,9 +377,16 @@ const finePrint = computed(
                     </template>
                     <!-- Downloading in the background: nothing to press until it is in, so its progress stands in the
                          buttons' place, and the card turns to the restart by itself once it is. -->
-                    <UpdateDownloadProgress v-else-if="isDownloading" :step="downloadStep(preparing)" :percent="downloadPercent(preparing)" :version="latest" />
-                    <!-- Downloaded already, the gold button is the restart; otherwise it downloads, builds and restarts. -->
-                    <HostRecreate v-else-if="slug" :slug="slug" action="Update" :ready="updateStaged" gilded bare keeps-said :label="retryLabel" />
+                    <template v-else-if="isDownloading">
+                        <UpdateDownloadProgress :step="downloadStep(preparing)" :percent="downloadPercent(preparing)" :version="latest" />
+                        <UpdateAutoStatus downloading />
+                    </template>
+                    <!-- Downloaded already, the gold button is the restart; otherwise it downloads, builds and restarts. Above it,
+                         when updates take themselves, when this one will and what it is politely waiting for. -->
+                    <template v-else-if="slug">
+                        <UpdateAutoStatus />
+                        <HostRecreate :slug="slug" action="Update" :ready="updateStaged" gilded bare keeps-said :label="retryLabel" />
+                    </template>
 
                     <ul class="flex flex-wrap gap-x-5 gap-y-1.5">
                         <li v-for="fact in facts" :key="fact.icon" v-tooltip.top="fact.tip" class="flex items-center gap-1.5 text-2xs text-muted">
@@ -364,10 +395,13 @@ const finePrint = computed(
                             <span class="sr-only">{{ fact.tip }}</span>
                         </li>
                     </ul>
+                    <UpdateAutoSwitch />
 
                     <!-- Only the restart costs a turn, and only a press starts one: said beside the button, never under a
                          download that interrupts nothing. -->
-                    <p v-if="midTurn > 0 && !isDownloading" class="flex gap-1.5 text-2xs text-warning">
+                    <!-- Said only when the update waits for a press: one that takes itself already lists, above, the agents it is
+                         waiting for, and never cuts them. -->
+                    <p v-if="midTurn > 0 && !isDownloading && !autoOn" class="flex gap-1.5 text-2xs text-warning">
                         <Icon name="exclamation-triangle" class="mt-px shrink-0" aria-hidden="true" />
                         <span>
                             {{ t(`sandbox.sandboxUpdateCard.midTurnRestart`, { count: midTurn }, midTurn) }}
@@ -462,8 +496,10 @@ const finePrint = computed(
                 </div>
             </template>
 
-            <RowNote variant="block">
+            <RowNote v-if="quietBody" variant="block">
                 <div class="flex flex-col gap-4">
+                    <!-- A pause the owner can lift, the one thing an update that takes itself says with nothing on offer. -->
+                    <UpdateAutoStatus v-if="autoPaused" />
                     <!-- What there is to know about the version that runs, before what there is to do. -->
                     <Notice v-if="withdrawnNotice" :of="withdrawnNotice" />
                     <div v-if="newsNotice" class="flex flex-col gap-1.5">
@@ -558,6 +594,7 @@ const finePrint = computed(
                     </div>
                 </div>
             </RowNote>
+            <UpdateAutoSwitch row />
         </RowGroup>
 
         <HostedRollbackDialog :sandbox="hostedRollingBack ? active : undefined" @close="hostedRollingBack = false" />

@@ -42,6 +42,7 @@ export const updatePresence = (identity: VerifiedIdentity, report: PresenceRepor
         email: entry.email,
         role: entry.role,
         idle: report.idle,
+        ...(report.away === true ? { away: true } : {}),
         ...(entry.name !== undefined ? { name: entry.name } : {}),
         ...(entry.picture !== undefined ? { picture: entry.picture } : {}),
         ...(report.view !== undefined ? { view: report.view } : {}),
@@ -61,6 +62,15 @@ export const presentMembers = (): ReadonlySet<string> =>
 
 // Live /events connections, not idleEverywhere: an idle tab is still a person who expects the workspace to stay alive.
 export const connectedCount = (): number => entries.size;
+
+// The people actually at the editor right now, by the name they go by, once each: a tab on screen that somebody has
+// touched in the last few minutes (`away` is a tab left on screen untouched). What an automatic update will not restart
+// the sandbox under (system/updates/auto-update.ts).
+export const peopleAtEditor = (): string[] => [
+    ...new Map(
+        [...entries.values()].filter((user) => !user.idle && user.away !== true).map((user) => [user.email.toLowerCase(), user.name ?? user.email] as const),
+    ).values(),
+];
 
 // Immediate snapshot on subscribe, so a fresh /events connection paints the roster without waiting for the next change.
 export const subscribePresence = (listener: (users: PresenceUser[]) => void): (() => void) => {

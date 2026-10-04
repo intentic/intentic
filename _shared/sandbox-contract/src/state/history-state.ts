@@ -88,6 +88,9 @@ export const HISTORY_STATE_FILES: readonly StateFile[] = [
     // last boot could not start (the daemon writes it, the host's probation reads it): all rebuilt by whoever next says.
     { path: "update-outcome.json", portability: "derived" },
     { path: "update-skipped.json", portability: "derived" },
+    // Whether this sandbox takes downloaded updates by itself, a pause, and the update it last started unasked
+    // (system/updates/update-policy.ts): about this machine's restarts, so a moved sandbox starts on the default.
+    { path: "update-policy.json", portability: "derived" },
     { path: "boot-failure.json", portability: "derived" },
     // A rebuild's ask that the next boot resume the turns it cuts (restart-resume.ts): about this machine's next boot only,
     // read once by it, so a moved sandbox starts without one.

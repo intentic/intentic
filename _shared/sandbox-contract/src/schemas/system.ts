@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { StatePlanSchema } from "./state-plan.js";
-import { UpdateOutcomeSchema, WithdrawnReleaseSchema } from "./updates.js";
+import { AutoUpdateSchema, UpdateOutcomeSchema, WithdrawnReleaseSchema } from "./updates.js";
 // version is this build's baked-in version; latest/updateAvailable come from comparing it to the published stable
 // release.
 // Whether a runtime can serve a turn, probed off the turn path. "unknown" reads as available-but-unverified, never as
@@ -122,6 +122,11 @@ export const InfoSchema = z.object({
         .string()
         .optional()
         .describe("A release the owner chose to skip. While it is the newest, no update is offered; a newer one is. Absent when nothing is skipped."),
+    // Taking a downloaded update by itself at a quiet moment (system/updates/auto-update.ts); absent where the daemon
+    // cannot (a hosted machine, a checkout-built base, a daemon outside a container) and from a daemon older than it.
+    autoUpdate: AutoUpdateSchema.optional().describe(
+        "Whether and when this sandbox takes a downloaded update by itself, and what it is waiting on. Absent where it cannot: a hosted sandbox, one built from a checkout, or one older than automatic updates.",
+    ),
 });
 export type Info = z.infer<typeof InfoSchema>;
 // What the daemon could not read in its own `.intentic/` state files, and in the files on its volume that

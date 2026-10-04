@@ -100,6 +100,8 @@ export const PresenceUserSchema = z.object({
     // The caller's trust tier, resolved at connection time; on the roster so a tab can also read its own role.
     role: MemberRoleSchema,
     idle: z.boolean(),
+    // On screen, but untouched for several minutes (PresenceReport's `away`); absent reads as not away.
+    away: z.boolean().optional(),
     // Route/view name the tab is on ("workspace", "automations", "ext:<id>/<key>", …).
     view: z.string().optional(),
     // The chat conversation the tab has active.

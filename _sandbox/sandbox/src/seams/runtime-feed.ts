@@ -28,6 +28,8 @@ const THROTTLE_MS: Record<RuntimeDomain, number> = {
     engines: 250,
     // A turn's start and end log in bursts; each read re-scans the whole log.
     activity: 1000,
+    // What an automatic update waits on moves with every turn's start and end; a page needs the gist, not each beat.
+    update: 1000,
 };
 
 const subscribers = new Set<(domains: RuntimeDomain[]) => void>();

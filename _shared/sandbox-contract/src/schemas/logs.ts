@@ -65,6 +65,12 @@ export const ClientDiagnosticsAcceptedSchema = z.object({
 export const PresenceReportSchema = z.object({
     clientId: z.string().describe("This connection's own id, the same one it gave the event stream."),
     idle: z.boolean().describe("Whether the person has stopped doing anything."),
+    // Narrower than `idle`, which is the window being off screen: a window left on screen with nobody touching it for
+    // minutes. What an automatic update reads to tell a person at the editor from an editor left open overnight.
+    away: z
+        .boolean()
+        .optional()
+        .describe("Whether the window is on screen but nobody has touched it for several minutes. Absent from a page older than it, which reads as not away."),
     view: z.string().optional().describe("Which view they are on."),
     sessionId: z.string().optional().describe("Which conversation they have open."),
     path: z
