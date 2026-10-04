@@ -149,10 +149,13 @@ const chipHint = computed((): Tip | undefined =>
                 class="flex w-full min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-muted"
             >
                 <slot name="meta" />
-                <!-- Tight card's live readout, held at the end of the facts line; same corner a settled card's age uses. -->
-                <span v-if="tight && live !== undefined" class="ml-auto flex min-w-0 items-center gap-1 font-medium text-link">
-                    <Icon :name="live.icon" class="shrink-0 text-2xs" />
-                    <span class="min-w-0 truncate">{{ live.text }}</span>
+                <!-- Tight card's live readout, held at the end of the facts line; same corner a settled card's age uses. Takes the line's leftover width with its words in a size container, so a long command truncates (whole in the hover) instead of wrapping the readout onto a row of its own. -->
+                <span v-if="tight && live !== undefined" class="flex min-w-max flex-[1_1_0] items-center justify-end gap-1 font-medium text-link">
+                    <span v-tooltip.top="live.text" class="@container min-w-4 flex-1 truncate text-right"
+                        ><Icon :name="live.icon" class="mr-1 inline-block align-[-0.1em] text-2xs" /><span class="hidden @[4.5rem]:inline">{{
+                            live.text
+                        }}</span></span
+                    >
                     <span v-if="live.since !== undefined" class="shrink-0 tabular-nums">{{ formatElapsed(live.since, now) }}</span>
                 </span>
             </span>

@@ -134,9 +134,13 @@ const coolingTip = computed((): Tip | undefined =>
     <!-- A watch whose command sits at a prompt: what is waiting and for how long, in the watch's slot, with the press that
     ends it. One row of siblings, so the words are the only part that gives way: nested, the glyph and clock were squeezed
     under the press on a narrow card. -->
-    <span v-if="prompt !== undefined" class="inline-flex min-w-0 items-center gap-1.5 font-medium text-warning" v-tooltip.top="prompt.hint">
-        <Icon name="terminal" class="shrink-0 text-2xs" />
-        <span class="min-w-0 truncate">{{ t(`agents.agentStatus.waitingForInput`) }}</span>
+    <!-- Fills what the line leaves it, words in a size container like the running readout's below, so they never wrap the corner. -->
+    <span v-if="prompt !== undefined" class="flex min-w-0 flex-1 items-center gap-1.5 font-medium text-warning" v-tooltip.top="prompt.hint">
+        <span class="@container min-w-4 flex-1 truncate text-right"
+            ><Icon name="terminal" class="mr-1.5 inline-block align-[-0.1em] text-2xs" /><span class="hidden @[4.5rem]:inline">{{
+                t(`agents.agentStatus.waitingForInput`)
+            }}</span></span
+        >
         <span class="shrink-0 tabular-nums">{{ prompt.elapsed }}</span>
         <Button
             size="small"
@@ -152,11 +156,15 @@ const coolingTip = computed((): Tip | undefined =>
         </Button>
     </span>
     <!-- Same slot and grammar as the running tool and the settled date: a card is only ever one of those three things at a time. -->
-    <span v-else-if="watch !== undefined" class="inline-flex min-w-0 items-center gap-1.5">
+    <!-- Fills what the line leaves it, words in a size container like the running readout's below: a watch's label names a whole CI run, and sized to that it pushed the corner onto a row of its own. -->
+    <span v-else-if="watch !== undefined" class="flex min-w-0 flex-1 items-center gap-1.5">
         <!-- Readout and its hint wrap together, separately from the press beside them. -->
-        <span class="inline-flex min-w-0 items-center gap-1.5 font-medium text-link" v-tooltip.top="watch.hint">
-            <Icon name="eye" class="shrink-0 text-2xs" />
-            <span class="min-w-0 truncate">{{ watch.text }}</span>
+        <span class="flex min-w-0 flex-1 items-center gap-1.5 font-medium text-link" v-tooltip.top="watch.hint">
+            <span class="@container min-w-4 flex-1 truncate text-right"
+                ><Icon name="eye" class="mr-1.5 inline-block align-[-0.1em] text-2xs" /><span class="hidden @[4.5rem]:inline">{{
+                    watch.text
+                }}</span></span
+            >
             <span class="shrink-0 tabular-nums">{{ watch.countdown }}</span>
         </span>
         <!-- The one visible way to disarm a watch; previously only a right-click menu or a drag, neither discoverable from the readout that announces it. -->
@@ -176,10 +184,16 @@ const coolingTip = computed((): Tip | undefined =>
     </span>
 
     <!-- Same corner as the settled card's date, so the eye finds one readout per card instead of two at different heights. -->
-    <span v-if="working" class="inline-flex min-w-0 items-center gap-1.5 font-medium text-link">
-        <!-- Glyph follows whichever fact leads: running children if any, else the tool the agent itself is using. -->
-        <Icon :name="(agent.subagents?.running ?? 0) > 0 ? 'users' : activityIcon(agent.activity?.tool)" class="shrink-0 text-2xs" />
-        <span class="min-w-0 truncate">{{ activityText ?? t(`ui.status.working`) }}</span>
+    <!-- Fills what the line leaves it. The words are size-contained, so they never decide whether the corner wraps: they give way, down to the glyph alone, and the hover keeps them whole. -->
+    <span v-if="working" class="flex min-w-0 flex-1 items-center gap-1.5 font-medium text-link">
+        <!-- A size container, which is what contains the words; below a few characters' room they drop out and the glyph speaks alone, rather than a stub like "B…". -->
+        <span v-tooltip.top="activityText" class="@container min-w-4 flex-1 truncate text-right">
+            <!-- Inline, inside the clipped words, so it rides next to them when they fit and survives first when they don't. Glyph follows whichever fact leads: running children if any, else the tool the agent itself is using. -->
+            <Icon
+                :name="(agent.subagents?.running ?? 0) > 0 ? 'users' : activityIcon(agent.activity?.tool)"
+                class="mr-1.5 inline-block align-[-0.1em] text-2xs"
+            /><span class="hidden @[4.5rem]:inline">{{ activityText ?? t(`ui.status.working`) }}</span></span
+        >
         <span v-if="agent.startedAt !== undefined" class="shrink-0 tabular-nums">{{ formatElapsed(agent.startedAt, now) }}</span>
     </span>
 </template>

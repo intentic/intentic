@@ -896,8 +896,8 @@ const grab = (event: PointerEvent): void => {
                     :dense="true"
                 />
 
-                <!-- Press and clock pinned right by margin, not a spacer, so wrapping doesn't strand them on an empty line. -->
-                <span class="ml-auto inline-flex min-w-0 items-center gap-2 text-subtle">
+                <!-- Press and clock take the line's leftover width, right-aligned. Sized from zero, floored at their fixed parts: the running command's words are contained (AgentCardClock), so a long command truncates here instead of pushing the corner onto a row of its own. -->
+                <span class="inline-flex min-w-max flex-[1_1_0] items-center justify-end gap-2 text-subtle">
                     <!-- A stranded turn's own press, in the drill-in's seat (see `resendable`). It acts in place, so it is a text action leading with what it does, not a link trailing the arrow that marks the drill-in as a way somewhere else. -->
                     <button
                         v-if="resendable"
