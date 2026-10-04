@@ -3,7 +3,7 @@ import { createServer, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { query } from "@anthropic-ai/claude-agent-sdk";
+import { sdk } from "../../../engines/claude-sdk.js";
 
 // One Claude Code turn against a scripted model that asks for one Bash call, with an SDK PreToolUse callback refusing
 // it the way the daemon's guards do and the mod at argv[2] loaded as a user's plugin. Prints whether the refusing hook
@@ -79,7 +79,7 @@ delete env["ANTHROPIC_AUTH_TOKEN"];
 
 let hookRan = false;
 try {
-    for await (const message of query({
+    for await (const message of sdk().query({
         prompt: "run it",
         options: {
             cwd: scratch,

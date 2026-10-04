@@ -1,6 +1,6 @@
 ---
 name: whatsapp
-description: Read and send messages in the connected WhatsApp number's chats and groups via the whatsapp CLI, find contacts by name, read a chat's history, and help the user pair the linked device. Use when the user asks to send a WhatsApp message (to a person by name or number), reply or react in a chat or group, read what was said in a chat, fetch a file someone sent, or connect/pair WhatsApp.
+description: Read and send messages in the connected WhatsApp number's chats and groups via the whatsapp CLI, and pair its linked device. Use when the user asks to send a WhatsApp message (to a person by name or number), reply or react in a chat or group, read a chat's history, fetch a file someone sent, or connect/pair WhatsApp.
 ---
 
 # WhatsApp (connected)

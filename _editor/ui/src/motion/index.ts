@@ -1,6 +1,6 @@
 // THE MOTION MODULE: everything about whether and how the interface moves, in one place.
 //
-// - preference.ts — the Appearance setting (System, On, Off), the `data-motion="reduced"` switch it writes on <html>,
+// - choice.ts — the Appearance setting (System, On, Off), the `data-motion="reduced"` switch it writes on <html>,
 //   and `lessMotion()`, which every move played from script asks before it starts.
 // - loops.ts — the pace of a glyph that loops to say work is happening (a spinner, the thinking rosette): slowed rather
 //   than stopped when motion is off, and where it may run on the compositor.
@@ -19,7 +19,7 @@ export {
     REDUCE_MOTION_QUERY,
     resolveReducedMotion,
     useMotion,
-} from "./preference.js";
+} from "./choice.js";
 export { setDeveloperBuild, useCompositedLoops, useReducedMotion, useTouchMotion } from "./loops.js";
 export { canAnimate, FOLD_EASE, FOLD_MS, slideFrom, stopSlide, trayFold, useFoldFlip } from "./fold.js";
 export { REVEAL_MS, REVEAL_RISE_PX, REVEAL_ROWS, REVEAL_STEP_MS, revealRows, type RowReveal, type RowRevealOptions, rowsUnder, useRowReveal } from "./reveal.js";

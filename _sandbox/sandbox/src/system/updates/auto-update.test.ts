@@ -1,4 +1,5 @@
 import type { DeviceFlowLine, DeviceSandboxFlow, StagedUpdate } from "@intentic/sandbox-contract";
+import { waitFor } from "@intentic/testing/bun";
 import type { RestartResume } from "../../agent/run/turn/restart-resume.js";
 import {
     type AutoUpdateActivity,
@@ -147,7 +148,9 @@ describe("createAutoUpdater", () => {
             },
             logger: { info: () => undefined, warn: () => undefined },
             pollMs: 5,
-            countdownMs: { seen: 60, unseen: 20 },
+            // Long enough that a loaded runner still looks inside a countdown (20 ms ran out between two 15 ms ticks on
+            // CI); a test waiting for one to end polls for it rather than sleeping a guess.
+            countdownMs: { seen: 600, unseen: 300 },
             cutoverGraceMs: 10_000,
         });
         return updater;
@@ -194,16 +197,20 @@ describe("createAutoUpdater", () => {
         expect((await auto.state()).phase).toBe("waiting");
 
         activity = QUIET;
-        await tick();
-        const counting = await auto.state();
-        expect(counting.phase).toBe("countdown");
-        expect(counting.startsAt).toBeGreaterThan(Date.now() - 20);
+        const counting = await waitFor(
+            async () => {
+                const state = await auto.state();
+                expect(state.phase).toBe("countdown");
+                return state;
+            },
+            { interval: 5 },
+        );
+        expect(counting.startsAt).toBeGreaterThan(Date.now());
         expect(relayed).toEqual([]);
 
-        await tick(40);
-        expect(relayed).toEqual([{ host: "rog", flow: { op: "update", slug: "work" } }]);
+        await waitFor(() => expect(relayed).toEqual([{ host: "rog", flow: { op: "update", slug: "work" } }]), { timeout: 3_000, interval: 10 });
         // The stream dying at the cutover never lets this process withdraw the ask: the next boot resumes what it cut.
-        expect(asks).toEqual(["ask"]);
+        await waitFor(() => expect(asks).toEqual(["ask"]), { interval: 5 });
         expect((await auto.state()).phase).toBe("updating");
         expect(policy.applied?.to).toBe("1.5.0");
     });
@@ -240,12 +247,20 @@ describe("createAutoUpdater", () => {
     test("a machine that answers in words did not restart anything: said, and tried again later", async () => {
         answer = [{ kind: "error", message: "Not enough free disk space for the update." }];
         const auto = make();
-        await tick(60);
+        // Settled once the next look has read the failure back as a hold: until then the state is the failure alone.
+        const state = await waitFor(
+            async () => {
+                const said = await auto.state();
+                expect({ failure: said.failure, holds: said.holds.map((hold) => hold.kind) }).toEqual({
+                    failure: "Not enough free disk space for the update.",
+                    holds: ["retry"],
+                });
+                return said;
+            },
+            { timeout: 3_000, interval: 10 },
+        );
         expect(relayed).toHaveLength(1);
-        const state = await auto.state();
         expect(state.phase).toBe("waiting");
-        expect(state.failure).toBe("Not enough free disk space for the update.");
-        expect(state.holds.map((hold) => hold.kind)).toEqual(["retry"]);
         // No update of ours is coming, so the next boot must not claim one, nor resume turns for it.
         expect(policy.applied).toBeUndefined();
         expect(asks).toEqual(["ask", "withdraw"]);

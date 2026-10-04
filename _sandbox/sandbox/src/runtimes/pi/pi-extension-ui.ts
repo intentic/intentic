@@ -107,7 +107,7 @@ const responseOf = (request: PiDialogRequest, question: AskQuestion, reply: Extr
 };
 
 const parkDialog = (proc: PiProcess, request: PiDialogRequest, question: AskQuestion, context: PiDialogContext): PiDialog => ({
-    ask: async function* () {
+    async *ask() {
         const { id, wait } = context.cards.create("question", { kind: "question", requestId: "", cancelled: true }, context.conversationId);
         yield { kind: "question", requestId: id, questions: [question] };
         // Pi's own timeout resolves the dialog on its side; the card goes with it.

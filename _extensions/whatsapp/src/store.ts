@@ -314,7 +314,7 @@ export const openWaStore = (path: string): WaStore => {
                 ? stmt("SELECT * FROM messages WHERE chat = ? ORDER BY ts DESC, rowid DESC LIMIT ?").all(bareJid(chat), limit)
                 : stmt("SELECT * FROM messages WHERE chat = ? AND ts < ? ORDER BY ts DESC, rowid DESC LIMIT ?").all(bareJid(chat), beforeTs, limit)
         ) as unknown as RawMessageRow[];
-        return rows.reverse().map(toMessage);
+        return rows.toReversed().map(toMessage);
     };
 
     const directory = (): DirectoryEntry[] => {

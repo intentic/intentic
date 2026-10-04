@@ -113,12 +113,15 @@ describe(`the control channel`, () => {
     it(`lets go of what a replaced grant held, and keeps the replacement past the old one's end`, async () => {
         const other = join(dir, `other`);
         mkdirSync(other);
-        write(JSON.stringify({ op: `grant`, token: TOKEN, id: `w1`, path: dir, kind: `folder`, expiresInMs: 20 }));
+        // Long enough that the replacement lands first on a loaded runner: with 20 ms the first grant's own timer ended
+        // it before the second line was served, and the app heard a revocation it never asked for.
+        write(JSON.stringify({ op: `grant`, token: TOKEN, id: `w1`, path: dir, kind: `folder`, expiresInMs: 300 }));
         await saidWhen(1);
+        const firstEnds = grants.byToken(TOKEN)?.expiresAt ?? Date.now();
         write(JSON.stringify({ op: `grant`, token: TOKEN, id: `w1`, path: other, kind: `folder` }));
         await saidWhen(2);
         // Past the first grant's end, and its timer's.
-        await new Promise((resolve) => setTimeout(resolve, 60));
+        await new Promise((resolve) => setTimeout(resolve, Math.max(0, firstEnds - Date.now()) + 40));
         expect([grants.byToken(TOKEN)?.root, forgotten.map((grant) => grant.root)]).toEqual([other, [dir]]);
         expect(said.map((event) => event.event)).toEqual([`granted`, `granted`]);
     });

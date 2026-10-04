@@ -196,3 +196,32 @@ test.skipIf(!linuxPid.runs)(linuxPid.title("a timed-out shutdown stays retryable
         await fake.cleanup();
     }
 });
+
+// On CI the real server ran the signal handlers it had installed on SIGTERM and stayed up, so every stop timed out and
+// nothing could boot again. A stand-in that ignores SIGTERM outright is the same server to the service.
+test.skipIf(!linuxPid.runs)(linuxPid.title("a server that outlives SIGTERM is killed after the grace, and the next call boots afresh"), async () => {
+    const children: ReturnType<typeof spawnChild>[] = [];
+    const service = createOpenCodeService(XDG, {
+        spawnServer: async () => {
+            // An ignored signal stays ignored across exec, so `sleep` keeps the shell's pid and its deafness to SIGTERM.
+            const child = spawnChild("sh", ["-c", "trap '' TERM; exec sleep 60"], { stdio: "ignore" });
+            children.push(child);
+            runningSleep(child.pid ?? 0);
+            return { url: "http://127.0.0.1:0", close: () => child.kill("SIGTERM") };
+        },
+    });
+    try {
+        await service.client();
+        const first = children[0]!;
+        const exited = new Promise<NodeJS.Signals | null>((resolve) => first.once("exit", (_code, signal) => resolve(signal)));
+
+        await service.stop();
+
+        expect(await exited).toBe("SIGKILL");
+        await service.client();
+        expect(children).toHaveLength(2);
+    } finally {
+        await Promise.all(children.map(killOwned));
+        await service.stop();
+    }
+}, 30_000);

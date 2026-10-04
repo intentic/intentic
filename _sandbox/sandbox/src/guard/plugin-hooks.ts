@@ -34,6 +34,7 @@ export const jsonIn = async (path: string): Promise<unknown> => {
     try {
         return JSON.parse(text) as unknown;
     } catch {
+        // allow(silent-catch): text that is not strict JSON is a file the CLI reads nothing from, which is what undefined says
         return undefined;
     }
 };
@@ -66,7 +67,7 @@ const codeFiles = async (dir: string, readable: (path: string) => string, rel = 
             if (entry.isDirectory()) {
                 return codeFiles(dir, readable, path);
             }
-            const isFile = entry.isFile() || (entry.isSymbolicLink() && (await stat(readable(join(dir, path))).catch(() => undefined))?.isFile() === true);
+            const isFile = entry.isFile() || (entry.isSymbolicLink() && (await stat(readable(join(dir, path))).catch(undefinedIfCliSeesNothing))?.isFile() === true);
             return isFile && MODULE_FILE.test(entry.name) ? [join(dir, path)] : [];
         }),
     );
@@ -134,7 +135,7 @@ export const skillFolderPlugins = async (root: string, readable: (path: string) 
     const found = await Promise.all(
         names.map(async (name) => {
             const dir = join(root, "skills", name);
-            return (await stat(readable(join(dir, MANIFEST))).catch(() => undefined))?.isFile() === true ? [{ name, dir }] : [];
+            return (await stat(readable(join(dir, MANIFEST))).catch(undefinedIfCliSeesNothing))?.isFile() === true ? [{ name, dir }] : [];
         }),
     );
     return found.flat();

@@ -16,7 +16,7 @@ import { withStderrTail } from "../decorators/vendor-errors.js";
 import { withTimeout } from "../acp/acp-connection.js";
 import { textPlanTurn, vendorTurn } from "../decorators/vendor-turn.js";
 import { createPiEventMapper } from "./pi-events.js";
-import { answerExtensionUi } from "./pi-extension-ui.js";
+import { answerExtensionUi, type PiDialog } from "./pi-extension-ui.js";
 import type { PiEvent, PiProcess, PiSpawn } from "./pi-rpc.js";
 
 // Pi provider adapter (same seam as runAgent/createCodexAgent/createOpenCodeAgent/runAcpAgent): AgentRequest in, AgentEvent
@@ -46,6 +46,19 @@ interface PiTurnState {
 interface PiTurnOutcome {
     readonly errored: boolean;
     readonly planText?: string;
+}
+
+// A dialog parks on its card with the turn's clock held: the turn is waiting on a person, not on Pi.
+async function* askHeld(dialog: PiDialog | undefined, hold: () => () => void): AsyncGenerator<AgentEvent> {
+    if (dialog === undefined) {
+        return;
+    }
+    const release = hold();
+    try {
+        yield* dialog.ask();
+    } finally {
+        release();
+    }
 }
 
 // One prompt turn on the warm process: send the prompt, stream mapped events until agent_settled (or a watchdog fires,
@@ -111,14 +124,7 @@ async function* runPiTurn(
             if (next.type === "extension_ui_request") {
                 const answer = answerExtensionUi(proc, next, { cards: request.hooks.cards, conversationId: request.spec.conversationId, signal: request.signal });
                 yield* answer.frames;
-                if (answer.dialog !== undefined) {
-                    const release = clock.hold();
-                    try {
-                        yield* answer.dialog.ask();
-                    } finally {
-                        release();
-                    }
-                }
+                yield* askHeld(answer.dialog, clock.hold);
                 continue;
             }
             if (next.type !== "agent_settled") {

@@ -117,7 +117,7 @@ export const seedFromLedger = (text: string, session: string): Tally => {
                 tally = add(tally, row.rawBytes, row.emittedBytes);
             }
         } catch {
-            // A torn or foreign line is not a row; the ledger's own reader skips these the same way.
+            // allow(silent-catch): a torn or foreign line is not a row; the ledger's own reader skips these the same way.
         }
     }
     return tally;
@@ -216,7 +216,7 @@ const dataDir = async ($: Api): Promise<string | undefined> => {
             }
         }
     } catch {
-        // No plugins/data yet: nothing has run, and the derived directory is as good as any.
+        // allow(silent-catch): no plugins/data yet means nothing has run, and the derived directory is as good as any.
     }
     return best;
 };
