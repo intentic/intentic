@@ -1,4 +1,5 @@
 import { humanizeModelId } from "@intentic/sandbox-contract";
+import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { discoverGeminiModels, isChatModel, SEED_GEMINI_MODELS } from "./gemini-models.js";
 
 const jsonResponse = (body: unknown, status = 200): Response => new Response(JSON.stringify(body), { status });
@@ -9,16 +10,19 @@ const translator = (
     models: { id: string; owned_by: string }[],
     published: { name: string; displayName?: string; supportedInputModalities?: string[] }[] = [],
 ) =>
-    (async (url: string | URL, init?: RequestInit) => {
-        const target = String(url);
-        expect((init?.headers as Record<string, string> | undefined)?.["authorization"]).toBe("Bearer local-bearer");
-        if (target.endsWith("/v1beta/models")) {
-            return jsonResponse({ models: published });
-        }
-        // Trailing slash on the configured URL is normalized away.
-        expect(target).toBe("http://127.0.0.1:8788/v1/models");
-        return jsonResponse({ data: models });
-    }) as unknown as typeof fetch;
+    Object.assign(
+        async (url: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+            const target = String(url);
+            expect(new Headers(init?.headers).get("authorization")).toBe("Bearer local-bearer");
+            if (target.endsWith("/v1beta/models")) {
+                return jsonResponse({ models: published });
+            }
+            // Trailing slash on the configured URL is normalized away.
+            expect(target).toBe("http://127.0.0.1:8788/v1/models");
+            return jsonResponse({ data: models });
+        },
+        { preconnect: () => undefined },
+    );
 
 test("humanizeModelId title-cases the tokens and leaves version segments alone", () => {
     expect(humanizeModelId("gemini-3.1-pro-low")).toBe("Gemini 3.1 Pro Low");
@@ -43,7 +47,7 @@ test("keeps every model the Google channel vends, Claude and GPT-OSS included", 
         { id: "claude-sonnet-4-6", owned_by: "anthropic" },
     ]);
 
-    expect((await discoverGeminiModels("http://127.0.0.1:8788/", "local-bearer", fake)).map((model) => model.id)).toEqual([
+    expect((await discoverGeminiModels("http://127.0.0.1:8788/", "local-bearer", fake))?.map((model) => model.id)).toEqual([
         "gemini-pro-agent",
         "claude-opus-4-6-thinking",
         "claude-opus-5-5-high",
@@ -61,7 +65,7 @@ test("labels a model as its vendor publishes it, since no rule recovers that nam
         [{ name: "models/gemini-pro-agent", displayName: "Gemini 3.1 Pro (High)" }],
     );
 
-    expect((await discoverGeminiModels("http://127.0.0.1:8788", "local-bearer", fake)).map((model) => model.label)).toEqual([
+    expect((await discoverGeminiModels("http://127.0.0.1:8788", "local-bearer", fake))?.map((model) => model.label)).toEqual([
         "Gemini 3.1 Pro (High)",
         // Unpublished id falls back to the humanized form rather than dropping out.
         "Gemini 3 Flash",
@@ -100,15 +104,73 @@ test("a model the channel publishes nothing about is assumed to take images, bec
     ]);
 });
 
-test("discoverGeminiModels returns [] on a non-ok response so the caller falls through to seed", async () => {
-    const fake = (async () => jsonResponse({ error: "unauthorized" }, 401)) as unknown as typeof fetch;
-    expect(await discoverGeminiModels("http://127.0.0.1:8788", "local-bearer", fake)).toEqual([]);
+test("parses optional display JSON without trusting malformed labels or modality entries", async () => {
+    const fake = Object.assign(
+        async (url: Parameters<typeof fetch>[0]) =>
+            jsonResponse(
+                String(url).endsWith("/v1beta/models")
+                    ? {
+                          models: [
+                              null,
+                              { name: 123 },
+                              { name: "models/gemini-pro-agent", displayName: 123, supportedInputModalities: ["text", "image", "3d", 123] },
+                          ],
+                      }
+                    : { data: [{ id: "gemini-pro-agent", owned_by: "antigravity" }] },
+            ),
+        { preconnect: () => undefined },
+    );
+    expect(await discoverGeminiModels("http://127.0.0.1:8788", "local-bearer", fake)).toEqual([
+        { id: "gemini-pro-agent", label: "Gemini Pro Agent", inputModalities: ["text", "image"] },
+    ]);
 });
 
-test("the seed floor is non-empty and passes its own filter, so a turn always resolves a usable model", () => {
+test("an unreadable advertisement is unknown, not an authoritative empty catalog", async () => {
+    const fake = Object.assign(async () => jsonResponse({ error: "unauthorized" }, 401), { preconnect: () => undefined });
+    expect(await discoverGeminiModels("http://127.0.0.1:8788", "local-bearer", fake)).toBe(undefined);
+});
+
+test("a successful empty advertisement is distinct from a failed read", async () => {
+    expect(await discoverGeminiModels("http://127.0.0.1:8788", "local-bearer", translator([]))).toEqual([]);
+});
+
+test.each([{ data: {} }, {}, { data: [null] }, { data: [{ owned_by: "antigravity" }] }])(
+    "a malformed advertisement remains unknown: %j",
+    async (body) => {
+        const fake = Object.assign(async () => jsonResponse(body), { preconnect: () => undefined });
+        expect(await discoverGeminiModels("http://127.0.0.1:8788", "local-bearer", fake)).toBe(undefined);
+    },
+);
+
+test("bounds and cancels a stalled advertisement read", async () => {
+    jest.useFakeTimers();
+    const signals: AbortSignal[] = [];
+    const fake = Object.assign(
+        async (_url: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) =>
+            new Promise<Response>((_resolve, reject) => {
+                const signal = init?.signal;
+                if (signal === undefined || signal === null) {
+                    throw new Error("discovery omitted its cancellation signal");
+                }
+                signals.push(signal);
+                signal.addEventListener("abort", () => reject(new Error("request aborted")), { once: true });
+            }),
+        { preconnect: () => undefined },
+    );
+    try {
+        const result = discoverGeminiModels("http://127.0.0.1:8788", "local-bearer", fake);
+        await advanceTimersByTimeAsync(8_000);
+        expect(await result).toBe(undefined);
+        expect(signals.map((signal) => signal.aborted)).toEqual([true, true]);
+    } finally {
+        jest.useRealTimers();
+    }
+});
+
+test("the display seed is non-empty and declares chat models' input modalities", () => {
     expect(SEED_GEMINI_MODELS.length).toBeGreaterThan(0);
     expect(SEED_GEMINI_MODELS.every((model) => isChatModel(model.id))).toBe(true);
-    // The floor serves a turn before discovery lands, so it must declare modalities, or the first turn is blind.
+    // Even fallback display metadata keeps modalities; eligibility is verified separately before a turn can run.
     expect(SEED_GEMINI_MODELS.every((model) => model.inputModalities.includes("text"))).toBe(true);
     expect(SEED_GEMINI_MODELS.some((model) => model.inputModalities.includes("image"))).toBe(true);
 });

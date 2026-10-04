@@ -80,6 +80,14 @@ flowchart LR
   existing registered models remain usable while busy, and a newly discovered model asks for a retry after active
   work finishes rather than interrupting it or substituting another model. Failed/empty catalog refreshes retain
   a working registration, and a stalled catalog read is bounded so it cannot block the shared runtime indefinitely.
+  Google choices additionally require exact-ID support reported by every enabled translator account
+  (`agent/providers/google-model-availability.ts`, `runtimes/gemini/gemini-catalog.ts`): global advertisements alone
+  are not account entitlements. Availability refreshes are bounded and shared, and inventory changes invalidate
+  cached eligibility. Cancelling a turn or helper ends its availability wait without cancelling the shared refresh.
+  Verified exclusions override persisted, seed and disappearance-grace rows before default
+  selection; a verified empty catalog stays empty. Turns and helpers refuse an unavailable pin before mounting tools
+  or acquiring a runtime, without substituting another model. Incomplete verification asks for a retry rather than
+  claiming retirement or requiring a working account to reconnect. Similar model names are not inferred aliases.
 - A process the daemon starts is put in a workload class by whoever starts it (`workload/workload-class.ts`,
   `spawnAs`): its niceness, IO class and rank for the kernel's OOM killer, inherited by everything it forks. Builds
   go first, agent runtimes last, children before their parents. Nothing ranks a process by its command line.

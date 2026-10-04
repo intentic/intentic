@@ -11,6 +11,7 @@ import { sandboxIdFromToken, sha256Hex } from "@intentic/sandbox-contract/tunnel
 import { unstubbed } from "@intentic/testing";
 import { SETTLES, waitFor } from "@intentic/testing/bun";
 import type { OpenCodeService } from "./runtimes/opencode/opencode.js";
+import { geminiCatalogFake } from "./runtimes/gemini/gemini-provider.testing.js";
 
 import { createApp } from "./app.js";
 import { workspacePaths } from "./workspace/workspace.js";
@@ -790,20 +791,21 @@ test("agent.run keeps a pinned Gemini model the catalog still offers, and refuse
     // Read off the native runner, the only one a Gemini turn reaches; the catalog-membership rule under test is
     // unchanged.
     // geminiModels overrides the direct member the runtime reads, not the derived record.
-    const run = async (model?: string): Promise<{ sent: string | undefined; errors: Extract<AgentEvent, { kind: "error" }>[] }> => {
+    const run = async (
+        model?: string,
+        advertised: readonly string[] = models,
+        available: readonly string[] = advertised,
+    ): Promise<{ sent: string | undefined; errors: Extract<AgentEvent, { kind: "error" }>[] }> => {
         let seen: AgentRequest | undefined;
         const client = clientFor(
             createApp(
                 services({
                     config: withTranslator,
                     cliProxy: geminiConnected,
-                    geminiModels: {
-                        models: async () => ({
-                            models: models.map((id) => ({ id, label: id, inputModalities: ["text" as const] })),
-                            default: models[0]!,
-                        }),
-                        live: async () => models.map((id) => ({ id, label: id, inputModalities: ["text" as const] })),
-                    },
+                    geminiModels: geminiCatalogFake(
+                        advertised.map((id) => ({ id, label: id, inputModalities: ["text" as const] })),
+                        { availability: { state: "verified", accounts: 1, models: available } },
+                    ),
                     async *geminiAgent(request) {
                         seen = request;
                         yield { kind: "done" };
@@ -825,6 +827,16 @@ test("agent.run keeps a pinned Gemini model the catalog still offers, and refuse
     expect(retired.sent).toBeUndefined();
     expect(retired.errors.map((fact) => fact.code)).toEqual(["model-unavailable"]);
     expect(retired.errors[0]?.message).toContain("gemini-2.5-pro");
+
+    const advertised = [...models, "claude-opus-5-5-high"];
+    const unavailable = await run("claude-opus-5-5-high", advertised, models);
+    expect(unavailable.sent).toBe(undefined);
+    expect(unavailable.errors.map((fact) => fact.code)).toEqual(["model-unavailable"]);
+    expect(unavailable.errors[0]?.message).toBe(
+        "Google does not currently offer claude-opus-5-5-high through this sandbox's enabled account pool. Pick an available model explicitly, or send again if it becomes available.",
+    );
+    expect((await run(undefined, advertised, models)).sent).toBe("gemini-pro-agent");
+    expect((await run("claude-opus-5-5-high", advertised, advertised)).sent).toBe("claude-opus-5-5-high");
 });
 
 // No Google account is still a named-fix refusal; the native runtime owns that gate now, not the routed one.

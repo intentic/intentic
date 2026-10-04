@@ -1,6 +1,7 @@
 import { type OneShotAsk, oneShotDeadline } from "../../agent/providers/adapter.js";
 import type { Services } from "../../composition.js";
 import { OPENCODE_GEMINI_PROVIDER } from "./gemini-models.js";
+import { selectGeminiModelForRequest } from "./gemini-catalog.js";
 import { sharedServerRefusal } from "../../privacy/harness-route.js";
 
 // Runs on OpenCode instead of the Claude Code harness: Google's Antigravity channel refuses any request whose system
@@ -27,12 +28,17 @@ const textOf = (parts: readonly { readonly type: string; readonly text?: string 
 // Given up front so OpenCode's auto-title pass (a second model call) never fires; the string is never read.
 const HELPER_SESSION_TITLE = `intentic helper (one-shot)`;
 
-export const geminiOneShot = async (services: Pick<Services, "openCode" | "privacyShield">, ask: OneShotAsk): Promise<string> => {
+export const geminiOneShot = async (services: Pick<Services, "openCode" | "privacyShield" | "geminiModels">, ask: OneShotAsk): Promise<string> => {
+    const selected = await selectGeminiModelForRequest(services.geminiModels, ask.model, ask.signal);
+    ask.signal.throwIfAborted();
+    if (!selected.ok) {
+        throw new Error(selected.message);
+    }
     const refused = await sharedServerRefusal(services.privacyShield, services.openCode.shielded, "gemini");
     if (refused !== undefined) {
         throw new Error(refused);
     }
-    const lease = await services.openCode.acquire({ providerID: OPENCODE_GEMINI_PROVIDER, modelID: ask.model });
+    const lease = await services.openCode.acquire({ providerID: OPENCODE_GEMINI_PROVIDER, modelID: selected.model });
     try {
         const { client } = lease;
         const created = await client.session.create({ query: { directory: ask.cwd }, body: { title: HELPER_SESSION_TITLE } });
@@ -48,7 +54,7 @@ export const geminiOneShot = async (services: Pick<Services, "openCode" | "priva
                 query: { directory: ask.cwd },
                 // No effort knob: OpenCode names only (provider, model), and Google's catalog rows publish no effort scale.
                 body: {
-                    model: { providerID: OPENCODE_GEMINI_PROVIDER, modelID: ask.model },
+                    model: { providerID: OPENCODE_GEMINI_PROVIDER, modelID: selected.model },
                     system: SYSTEM,
                     tools: { ...NO_TOOLS },
                     parts: [{ type: `text`, text: ask.prompt }],

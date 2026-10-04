@@ -1,7 +1,8 @@
-// Model catalog discovery for the Google channel (Antigravity), reached only through the translator (CLIProxyAPI) since
-// Google publishes no Anthropic endpoint; the translator's own model list is the catalog. Antigravity vends more than
-// Gemini (Claude Opus/Sonnet, GPT-OSS too), so membership is decided by `owned_by`, not an id prefix.
+// Advertised model metadata for the Google channel (Antigravity), reached through the translator (CLIProxyAPI).
+// Advertisement is not account availability: gemini-catalog joins this list to Google's credential-scoped metadata.
+// Antigravity vends Claude and GPT-OSS beside Gemini, so the channel is decided by `owned_by`, not an id prefix.
 import { humanizeModelId } from "@intentic/sandbox-contract";
+import { z } from "zod";
 import { getJson } from "../../agent/models/model-discovery.js";
 
 // A model the user can chat with, not one of the image/audio/embedding endpoints Google ships alongside it.
@@ -34,7 +35,7 @@ const ASSUMED_MODALITIES: readonly InputModality[] = ["text", "image"];
 // The translator's own name for the Google channel; this app's wire id for the same channel is `gemini`.
 const CHANNEL = "antigravity";
 
-// Served only when discovery and the persisted catalog are empty; strongest first, also the picker's display.
+// Display metadata when discovery and the persisted catalog are empty; these rows never prove account availability.
 export const SEED_GEMINI_MODELS: readonly GeminiModel[] = [
     { id: "claude-opus-4-6-thinking", label: "Claude Opus 4.6 (Thinking)", inputModalities: ["text", "image"] },
     { id: "gemini-pro-agent", label: "Gemini 3.1 Pro (High)", inputModalities: ["text", "image", "audio", "video"] },
@@ -45,6 +46,15 @@ export const SEED_GEMINI_MODELS: readonly GeminiModel[] = [
 
 const base = (translatorUrl: string): string => translatorUrl.replace(/\/$/, "");
 
+// Parse HTTP JSON before catalog membership is trusted. Optional display metadata can be discarded independently.
+const AdvertisedCatalog = z.object({ data: z.array(z.object({ id: z.string().min(1), owned_by: z.string().optional() })) });
+const PublishedCatalog = z.object({ models: z.array(z.unknown()) });
+const PublishedModel = z.object({
+    name: z.string(),
+    displayName: z.string().optional().catch(undefined),
+    supportedInputModalities: z.array(z.string().catch("")).optional().catch(undefined),
+});
+
 // Display names and input modalities keyed by id, from /v1beta/models (which lacks the channel but has both); the
 // catalog joins this with /v1/models's channel tag. Humanizing an id alone gets the name wrong (`gemini-pro-agent`
 // isn't "Gemini Pro Agent").
@@ -53,17 +63,16 @@ const publishedModels = async (
     token: string,
     fetchImpl: typeof fetch,
 ): Promise<Map<string, { label?: string; inputModalities?: readonly InputModality[] }>> => {
-    const json = await getJson<{ models?: { name?: string; displayName?: string; supportedInputModalities?: string[] }[] }>(
-        `${base(translatorUrl)}/v1beta/models`,
-        token,
-        fetchImpl,
-    );
+    const json = await getJson<unknown>(`${base(translatorUrl)}/v1beta/models`, token, fetchImpl);
+    const catalog = PublishedCatalog.safeParse(json);
     const published = new Map<string, { label?: string; inputModalities?: readonly InputModality[] }>();
-    for (const model of json?.models ?? []) {
-        const id = model.name?.replace(/^models\//, "");
-        if (id === undefined) {
+    for (const entry of catalog.success ? catalog.data.models : []) {
+        const parsed = PublishedModel.safeParse(entry);
+        if (!parsed.success) {
             continue;
         }
+        const model = parsed.data;
+        const id = model.name.replace(/^models\//, "");
         const modalities = (model.supportedInputModalities ?? []).filter(isKnownModality);
         published.set(id, {
             ...(model.displayName !== undefined && model.displayName !== "" ? { label: model.displayName } : {}),
@@ -74,22 +83,38 @@ const publishedModels = async (
     return published;
 };
 
-// Google channel's chat models, labelled as the translator publishes them; returns [] on a non-ok or parse error so the
-// caller falls through to the persisted/seed catalog.
+// Undefined is an unreadable advertisement, not an authoritative empty list. The catalog keeps display metadata in
+// that case, but neither a persisted row nor a seed is permission to invoke a model.
+const DISCOVERY_DEADLINE_MS = 8_000;
+
 export const discoverGeminiModels = async (
     translatorUrl: string,
     translatorToken: string,
     fetchImpl: typeof fetch = fetch,
-): Promise<GeminiModel[]> => {
-    const [catalog, published] = await Promise.all([
-        getJson<{ data?: { id: string; owned_by?: string }[] }>(`${base(translatorUrl)}/v1/models`, translatorToken, fetchImpl),
-        publishedModels(translatorUrl, translatorToken, fetchImpl),
-    ]);
-    return (catalog?.data ?? [])
-        .filter((model) => model.owned_by === CHANNEL && isChatModel(model.id))
-        .map((model) => ({
-            id: model.id,
-            label: published.get(model.id)?.label ?? humanizeModelId(model.id),
-            inputModalities: published.get(model.id)?.inputModalities ?? ASSUMED_MODALITIES,
-        }));
+): Promise<GeminiModel[] | undefined> => {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), DISCOVERY_DEADLINE_MS);
+    const boundedFetch = Object.assign(
+        (url: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => fetchImpl(url, { ...init, signal: controller.signal }),
+        fetchImpl,
+    );
+    try {
+        const [catalog, published] = await Promise.all([
+            getJson<unknown>(`${base(translatorUrl)}/v1/models`, translatorToken, boundedFetch),
+            publishedModels(translatorUrl, translatorToken, boundedFetch),
+        ]);
+        const parsed = AdvertisedCatalog.safeParse(catalog);
+        if (!parsed.success) {
+            return undefined;
+        }
+        return parsed.data.data
+            .filter((model) => model.owned_by === CHANNEL && isChatModel(model.id))
+            .map((model) => ({
+                id: model.id,
+                label: published.get(model.id)?.label ?? humanizeModelId(model.id),
+                inputModalities: published.get(model.id)?.inputModalities ?? ASSUMED_MODALITIES,
+            }));
+    } finally {
+        clearTimeout(timeout);
+    }
 };

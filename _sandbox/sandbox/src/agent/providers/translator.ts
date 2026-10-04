@@ -28,6 +28,7 @@ import type { AccountUsageStore } from "../../usage/account-usage.js";
 import { fleetLimit, type TurnLimit } from "../../usage/serviceability/fleet-limit.js";
 import type { HeadroomSource } from "../../usage/headroom.js";
 import { authFileCooling, fetchTranslatorUsage, type TranslatorAuthFile } from "../../usage/translator-usage.js";
+import { createGoogleModelAvailabilityReader, type GoogleModelAvailability } from "./google-model-availability.js";
 
 // CLIProxyAPI: a bundled Go proxy that lets the Claude Code harness (Anthropic Messages only) drive
 // Codex/Grok/Kimi/Gemini on the user's subscription, behind an Anthropic-compatible endpoint keyed by model id. Config
@@ -255,6 +256,7 @@ export interface CliProxyClient {
     readonly complete: (input: { provider: KeyedProvider; redirectUrl: string; state: string }) => Promise<void>;
     readonly disconnect: (provider: KeyedProvider, name: string) => Promise<void>;
     readonly models: (provider: KeyedProvider) => Promise<Model[]>;
+    readonly googleModelAvailability: () => Promise<GoogleModelAvailability>;
     // Replaces the running proxy's whole endpoint list, since the daemon owns every entry; rejects when the proxy can't
     // be reached, and answers how it took the list otherwise.
     readonly putCompat: (entries: readonly CompatEntry[]) => Promise<{ readonly ok: boolean; readonly status: number }>;
@@ -289,6 +291,7 @@ export const createCliProxyClient = (params: {
 }): CliProxyClient => {
     const { managementUrl, token, configPath, authDir, usageStore } = params;
     const fetchFn = params.fetchFn ?? fetch;
+    const googleModelAvailability = createGoogleModelAvailabilityReader({ managementUrl, token, fetchFn });
     // Counts as present: a core image bakes none, and an installed binary may be invisible to PATH.
     const binaryPresent = params.binaryPresent ?? (() => engineReady("translator"));
     const spawnFn = params.spawnFn ?? spawn;
@@ -563,7 +566,13 @@ export const createCliProxyClient = (params: {
                 key: entry.key,
                 provider: entry.provider,
                 read: async () => {
-                    const read = await fetchTranslatorUsage({ fetchFn, managementUrl, managementToken: token, provider: entry.provider, file: entry.file });
+                    const read = await fetchTranslatorUsage({
+                        fetchFn,
+                        managementUrl,
+                        managementToken: token,
+                        provider: entry.provider,
+                        file: entry.file,
+                    });
                     if (!("usage" in read)) {
                         return { windows: [], failure: read.failure };
                     }
@@ -629,6 +638,7 @@ export const createCliProxyClient = (params: {
             return files.length === 1 && files[0] !== undefined ? usageKey(provider, files[0].name) : undefined;
         },
         turnLimit,
+        googleModelAvailability,
         benchUnusable,
         connect: (provider, options) =>
             provider === "grok" || provider === "kimi"

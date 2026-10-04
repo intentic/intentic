@@ -129,7 +129,8 @@ import { createGitSlice, type GitSlice } from "./git/git-slice.js";
 // One interface; each provider extends it with its own area declared beside its code, so adding a provider needs only
 // an extends clause and a spread.
 export interface Services
-    extends ClaudeSlice,
+    extends
+        ClaudeSlice,
         CodexSlice,
         CursorSlice,
         GrokSlice,
@@ -284,8 +285,19 @@ const createProviderAreas = (config: Config, logger: Logger, authRoot: string, w
                   },
               }),
     });
-    gemini = createGeminiSlice({ config, authRoot, geminiAgent: createOpenCodeAgent(createOpenCodeRunner(openCode), OPENCODE_GEMINI_PROVIDER) });
-    const claude = createClaudeSlice({ config, logger, authRoot, workspaceRoot: config.workspaceRoot, providerRefusals: () => whole().providerRefusals });
+    gemini = createGeminiSlice({
+        config,
+        authRoot,
+        cliProxy,
+        geminiAgent: createOpenCodeAgent(createOpenCodeRunner(openCode), OPENCODE_GEMINI_PROVIDER),
+    });
+    const claude = createClaudeSlice({
+        config,
+        logger,
+        authRoot,
+        workspaceRoot: config.workspaceRoot,
+        providerRefusals: () => whole().providerRefusals,
+    });
     const cursor = createCursorSlice({ authRoot, logger });
     // What this sandbox has been refused, for the plans that publish no allowance to read; Cursor's only reading.
     const observedLimits = fileObservedLimitStore(join(config.historyRoot, observedLimitsDocument.path));
@@ -350,27 +362,23 @@ const createHostsSlice = ({ historyRoot, logger, peerTools, whole }: PeerDoorDep
 });
 
 // Pane listing rides with the scan rather than behind it: both are cheap, and an unowned port is unactionable.
-const scanPortsWith =
-    (logger: Logger) =>
-    async (): Promise<ListeningPort[]> => {
-        const [listeners, panes] = await Promise.all([
-            scanListeningPorts(),
-            // The ports list never fails for want of owners: unknown panes leave each port unowned, said in the log.
-            panePids().catch((error: unknown) => {
-                logger.warn({ err: error }, "ports: terminal panes could not be listed, ports show no owning session");
-                return new Map<number, string>();
-            }),
-        ]);
-        return withOwningSessions(listeners, panes);
-    };
+const scanPortsWith = (logger: Logger) => async (): Promise<ListeningPort[]> => {
+    const [listeners, panes] = await Promise.all([
+        scanListeningPorts(),
+        // The ports list never fails for want of owners: unknown panes leave each port unowned, said in the log.
+        panePids().catch((error: unknown) => {
+            logger.warn({ err: error }, "ports: terminal panes could not be listed, ports show no owning session");
+            return new Map<number, string>();
+        }),
+    ]);
+    return withOwningSessions(listeners, panes);
+};
 
 // Slice members a slice builder leaves out, each because the builder importing it would close a cycle between
 // subsystems (daemon-boundaries): the builder's Omit<…> type names them, and this Pick of the same names is checked
 // against it, so leaving one out fails to compile.
 type BridgedMembers = DerivedMembers | PortsMembers | QueueMembers | IntakeMembers | WorkflowsMembers | AgentToolsMember;
-const createBridgedMembers = (
-    deps: Pick<Services, "config" | "logger" | "workspace" | "heavyCommands">,
-): Pick<Services, BridgedMembers> => {
+const createBridgedMembers = (deps: Pick<Services, "config" | "logger" | "workspace" | "heavyCommands">): Pick<Services, BridgedMembers> => {
     const { config, logger, workspace } = deps;
     const webchatOutbox = fileWebchatOutbox(join(workspace.root, webchatOutboxDocument.path));
     return {
@@ -402,7 +410,16 @@ const createBridgedMembers = (
 const createDaemonMembers = (
     deps: Pick<
         Services,
-        "config" | "logger" | "workspace" | "capabilities" | "conversations" | "chores" | "runtimeInstalls" | "processes" | "serviceProcesses" | "scanPorts"
+        | "config"
+        | "logger"
+        | "workspace"
+        | "capabilities"
+        | "conversations"
+        | "chores"
+        | "runtimeInstalls"
+        | "processes"
+        | "serviceProcesses"
+        | "scanPorts"
     > & { readonly manifestHost: ExtensionHost },
 ) => {
     const { config, logger, workspace, capabilities, conversations, chores, runtimeInstalls, processes, serviceProcesses } = deps;
@@ -544,7 +561,9 @@ export const createServices = (config: Config, logger: Logger): Services => {
         forget: (conversationId) => {
             secretsSlice.credentialGrants.forget(conversationId);
             // A purged conversation's grants go with it, so a reused id inherits nothing it was not given.
-            void conversationGrants.forget(conversationId).catch((error: unknown) => logger.warn({ err: error, conversationId }, "conversation grants: forgetting failed"));
+            void conversationGrants
+                .forget(conversationId)
+                .catch((error: unknown) => logger.warn({ err: error, conversationId }, "conversation grants: forgetting failed"));
         },
     });
     // A review's code-only counts outlive the process: a restart reopening every review tab reads them back.
@@ -579,7 +598,10 @@ export const createServices = (config: Config, logger: Logger): Services => {
         }),
         ...createNeedsSlice({ workspaceRoot: workspace.root, logger, whole }),
         ...extensionsSlice,
-        ...createAutomationsSlice({ workspaceRoot: workspace.root, archived: (conversationId) => agents.entry(conversationId)?.archivedAt !== undefined }),
+        ...createAutomationsSlice({
+            workspaceRoot: workspace.root,
+            archived: (conversationId) => agents.entry(conversationId)?.archivedAt !== undefined,
+        }),
         ...createLoopsSlice(workspace.root),
         ...createCiSlice({ workspace, capabilities, config, logger }),
         ...createGitSlice(),
@@ -610,7 +632,18 @@ export const createServices = (config: Config, logger: Logger): Services => {
         }),
         ...providers.areas,
         ...bridged,
-        ...createDaemonMembers({ ...processesSlice, config, logger, workspace, capabilities, conversations, chores, runtimeInstalls, scanPorts: bridged.scanPorts, manifestHost: capabilitiesParts.manifestHost }),
+        ...createDaemonMembers({
+            ...processesSlice,
+            config,
+            logger,
+            workspace,
+            capabilities,
+            conversations,
+            chores,
+            runtimeInstalls,
+            scanPorts: bridged.scanPorts,
+            manifestHost: capabilitiesParts.manifestHost,
+        }),
         trial,
         platformTunnel,
         personas,

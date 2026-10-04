@@ -4,6 +4,14 @@ import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import type { Services } from "../../composition.js";
 import { geminiOneShot } from "./gemini-one-shot.js";
 import { privacySliceFake } from "../../privacy/privacy-slice.testing.js";
+import type { GoogleModelAvailability } from "../../agent/providers/google-model-availability.js";
+import { geminiCatalogFake } from "./gemini-provider.testing.js";
+
+const HELPER_MODELS = [
+    { id: "gemini-3-flash", label: "Gemini 3 Flash", inputModalities: ["text" as const] },
+    { id: "claude-opus-5-5-high", label: "Opus 5.5", inputModalities: ["text" as const, "image" as const] },
+];
+let availability: GoogleModelAvailability;
 
 // Pins the shape of the OpenCode helper session and its runtime lifetime; none of these is visible from the answer.
 const created = jest.fn<(input: unknown) => Promise<{ data?: { id: string } }>>();
@@ -16,6 +24,7 @@ const released = jest.fn<() => void>();
 const services = (): Services =>
     unstubbed<Services>(`services`, {
         privacyShield: privacySliceFake().privacyShield,
+        geminiModels: geminiCatalogFake(HELPER_MODELS, { availability }),
         openCode: unstubbed<Services[`openCode`]>(`openCode`, {
             shielded: async () => true,
             acquire: async (model) => {
@@ -48,7 +57,10 @@ const answering = (parts: { type: string; text?: string }[]): void => {
     aborted.mockResolvedValue(undefined);
 };
 
-beforeEach(() => jest.clearAllMocks());
+beforeEach(() => {
+    jest.clearAllMocks();
+    availability = { state: "verified", accounts: 1, models: HELPER_MODELS.map((model) => model.id) };
+});
 afterEach(() => jest.useRealTimers());
 
 test("names the session it opens, so OpenCode never spends a call titling it", async () => {
@@ -65,6 +77,83 @@ test("acquires the requested Google model, including a newly discovered Opus, wi
     expect(acquired).toHaveBeenCalledWith(model);
     expect(prompt).toHaveBeenCalledWith(expect.objectContaining({ body: expect.objectContaining({ model }) }));
     expect(released).toHaveBeenCalledTimes(1);
+});
+
+test("an unavailable helper pin is refused before runtime acquisition or session creation", async () => {
+    availability = { state: "verified", accounts: 31, models: ["gemini-3-flash"] };
+    await expect(ask(undefined, "claude-opus-5-5-high")).rejects.toThrow(
+        "Google does not currently offer claude-opus-5-5-high through this sandbox's enabled account pool. Pick an available model explicitly, or send again if it becomes available.",
+    );
+    expect(acquired).not.toHaveBeenCalled();
+    expect(created).not.toHaveBeenCalled();
+    expect(prompt).not.toHaveBeenCalled();
+    expect(released).not.toHaveBeenCalled();
+});
+
+test("an unverified helper pin gives retry guidance without acquiring a runtime", async () => {
+    availability = { state: "incomplete", accounts: 2, verified: 1, models: ["gemini-3-flash"] };
+    await expect(ask()).rejects.toThrow(
+        "Google model availability could not be verified for every enabled account. Send again in a minute; your selected model has not been changed.",
+    );
+    expect(acquired).not.toHaveBeenCalled();
+    expect(created).not.toHaveBeenCalled();
+    expect(prompt).not.toHaveBeenCalled();
+});
+
+test("a cancelled helper does not begin availability checking or acquire a runtime", async () => {
+    const controller = new AbortController();
+    const helper = services();
+    const select = jest.spyOn(helper.geminiModels, "select");
+    controller.abort(new Error("helper cancelled"));
+    await expect(
+        geminiOneShot(helper, {
+            provider: "gemini",
+            prompt: "Name this session",
+            cwd: WORKSPACE_ROOT,
+            model: "gemini-3-flash",
+            signal: controller.signal,
+        }),
+    ).rejects.toThrow("helper cancelled");
+    expect(select).not.toHaveBeenCalled();
+    expect(acquired).not.toHaveBeenCalled();
+    expect(created).not.toHaveBeenCalled();
+    expect(prompt).not.toHaveBeenCalled();
+});
+
+test("cancellation ends a pending availability check without waiting for selection or acquiring a runtime", async () => {
+    const controller = new AbortController();
+    const started = Promise.withResolvers<void>();
+    const selection = Promise.withResolvers<Awaited<ReturnType<Services["geminiModels"]["select"]>>>();
+    const helper = services();
+    const result = geminiOneShot(
+        {
+            ...helper,
+            geminiModels: {
+                ...helper.geminiModels,
+                select: async () => {
+                    started.resolve();
+                    return selection.promise;
+                },
+            },
+        },
+        {
+            provider: "gemini",
+            prompt: "Name this session",
+            cwd: WORKSPACE_ROOT,
+            model: "gemini-3-flash",
+            signal: controller.signal,
+        },
+    );
+    const failed = result.catch((error: unknown) => (error instanceof Error ? error.message : String(error)));
+    await started.promise;
+    controller.abort(new Error("helper cancelled during verification"));
+    expect(await failed).toBe("helper cancelled during verification");
+    // Late completion must not re-enter runtime acquisition after the caller has already stopped waiting.
+    selection.resolve({ ok: true, model: "gemini-3-flash" });
+    await selection.promise;
+    expect(acquired).not.toHaveBeenCalled();
+    expect(created).not.toHaveBeenCalled();
+    expect(prompt).not.toHaveBeenCalled();
 });
 
 // Wildcard {"*": false} avoids tracking OpenCode's individual tool names here.
