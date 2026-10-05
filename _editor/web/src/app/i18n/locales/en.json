@@ -2704,7 +2704,7 @@
             "details": "Details",
             "retry": "Try again",
             "hide": "Hide",
-            "show": "Show the build",
+            "show": "Show build",
             "buildingButton": "Building sandbox… {percent}%",
             "houseLabel": "The agent's house: {stage}"
         }

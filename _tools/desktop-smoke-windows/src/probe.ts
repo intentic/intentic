@@ -158,9 +158,13 @@ export const appWindowTitled = async (app: string, fragment: string): Promise<bo
 
 // Presses Return only after confirming focus, then verifies success by watching the dialog vanish rather than trusting
 // the focus call, since focus can shift (a start-from-cold link's main window stealing it) between the two.
-const ANSWER_ATTEMPTS = 3;
+const ANSWER_PRESSES = 3;
 const ANSWER_SETTLE_MS = 3_000;
 const ANSWER_POLL_MS = 250;
+// How long a desktop that answers nothing (every listing, focus or key past run()'s 15s) is waited out. That counts
+// toward this time limit, not toward the presses: in run 37292817794 nothing on the runner answered for about two
+// minutes after the cold launch, and three timed-out attempts gave up before a single Return went out.
+const ANSWER_DEADLINE_MS = 150_000;
 
 // Window layer the retry loop drives, injectable so tests can fake it; the loop is this file's one real decision (when
 // to press again, what silence means).
@@ -201,22 +205,27 @@ export const answerConfirm = async (
         }
     };
 
-    let refusal = `"${titleFragment}" was still up after ${ANSWER_ATTEMPTS} presses of Return, each one sent to a window this machine confirmed had the keyboard`;
-    let pressed = false;
-    for (let attempt = 1; attempt <= ANSWER_ATTEMPTS; attempt += 1) {
+    // Only a press that went out counts toward ANSWER_PRESSES. A step that threw sent nothing, so it is retried until
+    // the deadline, and what the last one said is the refusal.
+    const deadline = ops.now() + ANSWER_DEADLINE_MS;
+    let presses = 0;
+    while (presses < ANSWER_PRESSES) {
         try {
-            // Inside the try: a window listing that throws is a failed attempt to retry, not a crash of the whole
-            // smoke (run 36875866500 died here on a listing that ran past its 15s).
+            // Inside the try: a window listing that throws is a failed step to retry, not a crash of the whole smoke
+            // (run 36875866500 died here on a listing that ran past its 15s).
             const dialog = await ops.showing();
             if (dialog === undefined) {
                 // Gone before any press means it was never there; gone after one means the press worked.
-                return pressed ? undefined : `no window of ${app}'s is showing "${titleFragment}" any more`;
+                return presses > 0 ? undefined : `no window of ${app}'s is showing "${titleFragment}" any more`;
             }
             await ops.focus(dialog);
             await ops.press();
-            pressed = true;
+            presses += 1;
         } catch (error) {
-            refusal = errorMessage(error);
+            if (ops.now() >= deadline) {
+                const said = errorMessage(error);
+                return presses > 0 ? said : `${said} No Return went out in ${ANSWER_DEADLINE_MS / 1_000}s of trying.`;
+            }
             await ops.sleep(ANSWER_POLL_MS);
             continue;
         }
@@ -224,7 +233,7 @@ export const answerConfirm = async (
             return undefined;
         }
     }
-    return refusal;
+    return `"${titleFragment}" was still up after ${ANSWER_PRESSES} presses of Return, each one sent to a window this machine confirmed had the keyboard`;
 };
 
 /** Who holds the keyboard, and whether Windows' sign-in screen is over this desktop. */

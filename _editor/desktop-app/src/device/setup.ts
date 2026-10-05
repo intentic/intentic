@@ -163,9 +163,9 @@ const HIGHEST_FLOOR = 90;
 // the bar, and a new link starts from nothing.
 let barFor: string | undefined;
 const floorFor = (args: SetupArgs): number => {
-    const carried = barFor === args.code && progress.value !== undefined ? Math.min(progress.value.percent, HIGHEST_FLOOR) : 0;
+    const floor = barFor === args.code && progress.value !== undefined ? Math.min(progress.value.percent, HIGHEST_FLOOR) : 0;
     barFor = args.code;
-    return carried;
+    return floor;
 };
 
 // A fresh attempt: the previous list stays on screen through a re-run rather than being cleared, so items the reader

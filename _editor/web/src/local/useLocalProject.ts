@@ -11,11 +11,15 @@ import { projectNames } from "./projectWords";
 // allow(module-state): one folder per window, so one question and one build.
 const dialogOpen = ref(false);
 // What the dialog draws; undefined while the app is still weighing the folder.
+// allow(module-state): the one dialog this window's folder has.
 const preview = ref<LocalProjectPreview | undefined>(undefined);
+// allow(module-state): the one sandbox being made for this window's folder.
 const creating = ref(false);
 // Why the last press made nothing, in the app's own words.
+// allow(module-state): the one dialog this window's folder has.
 const failure = ref<string | undefined>(undefined);
 // The build's card folded to one line by the reader, who can unfold it from there or from the folder's button.
+// allow(module-state): the one build card this window shows.
 const minimized = ref(false);
 
 const host = () => localHost().project;
@@ -87,6 +91,7 @@ const fold = (folded: boolean): void => {
 
 // Why the last "Try again" started nothing (the platform out of reach, a setup already running): said on the card, in
 // place of the failure it was meant to get past.
+// allow(module-state): the one build card this window shows.
 const retryFailure = ref<string | undefined>(undefined);
 
 /** The stopped build again, on the same sandbox. */

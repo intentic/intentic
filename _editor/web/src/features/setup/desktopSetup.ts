@@ -20,23 +20,23 @@ let lastTold = ``;
 
 // The app's reports on this page's own record, so the replay's timeline holds what the app's window was saying: the
 // app's own events go out under its install id, beside this session rather than in it (desktop-app analytics.ts).
-const tell = (report: DesktopSetupReport): void => {
-    const told = `${report.state}|${report.waitingFor ?? ``}|${report.requirements?.join(`,`) ?? ``}`;
+const tell = (heard: DesktopSetupReport): void => {
+    const told = `${heard.state}|${heard.waitingFor ?? ``}|${heard.requirements?.join(`,`) ?? ``}`;
     if (told === lastTold) {
         return;
     }
     lastTold = told;
     track(`desktop_setup_report`, {
-        state: report.state,
-        percent: report.percent,
-        ...(report.step === undefined ? {} : { step: report.step }),
-        ...(report.waitingFor === undefined ? {} : { waitingFor: report.waitingFor }),
-        ...(report.requirements === undefined ? {} : { requirements: report.requirements }),
+        state: heard.state,
+        percent: heard.percent,
+        ...(heard.step === undefined ? {} : { step: heard.step }),
+        ...(heard.waitingFor === undefined ? {} : { waitingFor: heard.waitingFor }),
+        ...(heard.requirements === undefined ? {} : { requirements: heard.requirements }),
     });
 };
 
-const parkedBy = (report: DesktopSetupReport): DesktopSetupParked | undefined =>
-    report.state === `waiting` && (report.waitingFor === `restart` || report.waitingFor === `signOut`) ? report.waitingFor : undefined;
+const parkedBy = (heard: DesktopSetupReport): DesktopSetupParked | undefined =>
+    heard.state === `waiting` && (heard.waitingFor === `restart` || heard.waitingFor === `signOut`) ? heard.waitingFor : undefined;
 
 export const useDesktopSetup = (): {
     readonly report: Readonly<Ref<DesktopSetupReport | undefined>>;

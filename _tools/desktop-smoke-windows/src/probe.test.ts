@@ -97,3 +97,36 @@ test("a window listing that fails mid-answer is retried, not thrown: a slow list
     expect(await answerConfirm(`intentic-desktop`, `Set up a sandbox`, ops)).toBeUndefined();
     expect(fake.presses).toHaveLength(1);
 });
+
+test("a desktop that answers nothing for longer than three tries still gets its Return: silence spends time, not presses", async () => {
+    const fake = dialog(1);
+    let listings = 0;
+    const showing = fake.ops.showing;
+    const ops: ConfirmOps = {
+        ...fake.ops,
+        // Run 37292817794: every listing for about two minutes after the cold launch was killed at 15s.
+        showing: async () => {
+            listings += 1;
+            if (listings <= 8) {
+                throw new Error(`"powershell.exe" did not answer within 15s and was stopped.`);
+            }
+            return await showing();
+        },
+    };
+    expect(await answerConfirm(`intentic-desktop`, `Set up a sandbox`, ops)).toBeUndefined();
+    expect(fake.presses).toHaveLength(1);
+});
+
+test("a desktop that never answers is reported in its own words, saying no Return went out", async () => {
+    const fake = dialog(1);
+    const ops: ConfirmOps = {
+        ...fake.ops,
+        showing: async () => {
+            throw new Error(`"powershell.exe" did not answer within 15s and was stopped.`);
+        },
+    };
+    expect(await answerConfirm(`intentic-desktop`, `Set up a sandbox`, ops)).toBe(
+        `"powershell.exe" did not answer within 15s and was stopped. No Return went out in 150s of trying.`,
+    );
+    expect(fake.presses).toHaveLength(0);
+});
