@@ -1,23 +1,18 @@
 <script setup lang="ts">
 import {
-    endpointProvider,
     PERSONAL_DATA_CLASSES,
     PRIVACY_ALLOW_MAX,
     type PersonalDataClass,
     type PrivacyImages,
-    type PrivacyLedgerAction,
     type PrivacyNames,
     type PrivacyProvider,
     type PrivacyShieldMode,
     type PrivacyShieldPolicy,
-    TRIAL_ENDPOINT_ID,
 } from "@intentic/sandbox-contract";
 import {
     Button,
     formatDate,
     formatDateTime,
-    Icon,
-    type IconName,
     Notice,
     type NoticeModel,
     Row,
@@ -26,9 +21,6 @@ import {
     SegmentedControl,
     SkeletonRows,
     SkeletonSnapshot,
-    StatusBadge,
-    type StatusVariant,
-    timeAgo,
     ui,
     vSkeletonSource,
 } from "@intentic/ui";
@@ -36,23 +28,13 @@ import { noticeFrom } from "@intentic/ui/async";
 import { formatFixed } from "@intentic/ui/format";
 import { useT } from "@intentic/ui/i18n";
 import Checkbox from "primevue/checkbox";
-import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref } from "vue";
 import { useDraft } from "../../../../lib/useDraft";
 import { SandboxHttpError } from "../../client/sandboxHttpError";
-import {
-    ALLOW_VALUE_MAX,
-    allowListFrom,
-    allowListProblem,
-    allowListText,
-    foundIn,
-    ledgerTime,
-    providerTrusted,
-    sameList,
-    withClass,
-    withTrusted,
-} from "./privacyShield";
+import { ALLOW_VALUE_MAX, allowListFrom, allowListProblem, allowListText, ledgerTime, sameList, withClass } from "./privacyShield";
 import PrivacyNameDictionary from "./PrivacyNameDictionary.vue";
+import PrivacyShieldActivity from "./PrivacyShieldActivity.vue";
+import PrivacyTrustedProviders from "./PrivacyTrustedProviders.vue";
 import { usePrivacyLog, usePrivacyShield, usePrivacySources } from "./usePrivacyShield";
 
 // The privacy shield: whether personal data is kept from model providers the owner does not trust, and what the
@@ -116,28 +98,26 @@ const namesNote = computed(() =>
 );
 const nameModelMissing = computed(() => names.value === `model` && status.value?.readers.model === false);
 
-// One record per kind: the checkbox's full name, and the short word a log row's breakdown uses.
+// Each kind's full name, for its checkbox.
 const KINDS = computed(
     () =>
         ({
-            "person-name": { label: t(`sandbox.agentPrivacyShield.classes.personName`), short: t(`sandbox.agentPrivacyShield.short.personName`) },
-            "national-id": { label: t(`sandbox.agentPrivacyShield.classes.nationalId`), short: t(`sandbox.agentPrivacyShield.short.nationalId`) },
-            "tax-id": { label: t(`sandbox.agentPrivacyShield.classes.taxId`), short: t(`sandbox.agentPrivacyShield.short.taxId`) },
-            "identity-document": {
-                label: t(`sandbox.agentPrivacyShield.classes.identityDocument`),
-                short: t(`sandbox.agentPrivacyShield.short.identityDocument`),
-            },
-            "bank-account": { label: t(`sandbox.agentPrivacyShield.classes.bankAccount`), short: t(`sandbox.agentPrivacyShield.short.bankAccount`) },
-            "payment-card": { label: t(`sandbox.agentPrivacyShield.classes.paymentCard`), short: t(`sandbox.agentPrivacyShield.short.paymentCard`) },
-            email: { label: t(`sandbox.agentPrivacyShield.classes.email`), short: t(`sandbox.agentPrivacyShield.short.email`) },
-            phone: { label: t(`sandbox.agentPrivacyShield.classes.phone`), short: t(`sandbox.agentPrivacyShield.short.phone`) },
-            address: { label: t(`sandbox.agentPrivacyShield.classes.address`), short: t(`sandbox.agentPrivacyShield.short.address`) },
-        }) satisfies Record<PersonalDataClass, { label: string; short: string }>,
+            "person-name": t(`sandbox.agentPrivacyShield.classes.personName`),
+            "national-id": t(`sandbox.agentPrivacyShield.classes.nationalId`),
+            "tax-id": t(`sandbox.agentPrivacyShield.classes.taxId`),
+            "identity-document": t(`sandbox.agentPrivacyShield.classes.identityDocument`),
+            "bank-account": t(`sandbox.agentPrivacyShield.classes.bankAccount`),
+            "payment-card": t(`sandbox.agentPrivacyShield.classes.paymentCard`),
+            email: t(`sandbox.agentPrivacyShield.classes.email`),
+            phone: t(`sandbox.agentPrivacyShield.classes.phone`),
+            address: t(`sandbox.agentPrivacyShield.classes.address`),
+        }) satisfies Record<PersonalDataClass, string>,
 );
 
 // Which group sent the last write, so a refusal is said in that group and not one a scroll away from the press.
-const writtenFrom = ref<`shield` | `trusted`>(`shield`);
-const write = (from: `shield` | `trusted`, change: (current: PrivacyShieldPolicy) => PrivacyShieldPolicy): void => {
+type WriteSource = `shield` | `trusted` | `activity`;
+const writtenFrom = ref<WriteSource>(`shield`);
+const write = (from: WriteSource, change: (current: PrivacyShieldPolicy) => PrivacyShieldPolicy): void => {
     writtenFrom.value = from;
     setPolicy(change);
 };
@@ -155,22 +135,6 @@ const forgetNotice = computed(() =>
 );
 
 const providers = computed<readonly PrivacyProvider[]>(() => status.value?.providers ?? []);
-// The free trial is reached through a tunnel on this machine, but every request goes on to Intentic's platform and the
-// vendor behind it: never trusted by itself, so its row says where the data would go before anyone switches it on.
-const TRIAL_PROVIDER = endpointProvider(TRIAL_ENDPOINT_ID);
-const providerNote = (provider: PrivacyProvider): string | undefined => {
-    if (provider.local) {
-        return t(`sandbox.agentPrivacyShield.localNote`);
-    }
-    if (provider.id === TRIAL_PROVIDER) {
-        return t(`sandbox.agentPrivacyShield.trialNote`);
-    }
-    return provider.shieldable ? undefined : t(`sandbox.agentPrivacyShield.unshieldableNote`);
-};
-
-// Grants made one conversation at a time, from each conversation's own strip above its composer: counted here so how far
-// the shield has been opened is in view on the page that sets it, and taken back together in one press.
-const conversationGrants = computed(() => policy.value?.conversations.length ?? 0);
 
 // The allow list is edited as text and saved on an explicit press, since a write per keystroke would replace the
 // whole policy dozens of times for one word.
@@ -192,36 +156,16 @@ const saveAllow = (): void => {
     allowDraft.value = allowListText(allow);
     write(`shield`, (current) => ({ ...current, allow }));
 };
+// A value the activity showed being masked, pressed as one to leave alone: added to what is saved, which the box above
+// follows unless it holds an edit of its own.
+const neverMask = (value: string): void => {
+    write(`activity`, (current) => ({ ...current, allow: allowListFrom(allowListText([...current.allow, value])) }));
+};
 
 // Shown while the shield runs, or while it still has something to show: a dataset taught while it was off is the
 // owner's to forget whatever the switch says, and a record outlives the switch that made it.
 const showSources = computed(() => running.value || sources.value.length > 0);
 const showActivity = computed(() => running.value || entries.value.length > 0);
-
-// What the activity group draws per action: the word, its badge tone, and the glyph that leads the row.
-const ACTIONS = computed(
-    () =>
-        ({
-            masked: { label: t(`sandbox.agentPrivacyShield.masked`), variant: `success`, icon: `shield`, tone: `text-success` },
-            watched: { label: t(`sandbox.agentPrivacyShield.watched`), variant: `info`, icon: `eye`, tone: `text-info` },
-            passed: { label: t(`sandbox.agentPrivacyShield.passed`), variant: `neutral`, icon: `check`, tone: `text-subtle` },
-            refused: { label: t(`sandbox.agentPrivacyShield.refused`), variant: `danger`, icon: `times`, tone: `text-danger` },
-        }) satisfies Record<PrivacyLedgerAction, { label: string; variant: StatusVariant; icon: IconName; tone: string }>,
-);
-
-// The newest twenty: enough to see what the shield is doing, without the group outgrowing the controls above it.
-const RECENT = 20;
-const providerLabel = (id: string): string => providers.value.find((provider) => provider.id === id)?.label ?? id;
-const activity = computed(() =>
-    entries.value.slice(0, RECENT).map((entry, index) => ({
-        entry,
-        // Two requests can land in one millisecond; the position keeps their keys apart.
-        key: `${entry.at}-${index}`,
-        time: ledgerTime(entry.at),
-        found: foundIn(entry),
-        provider: providerLabel(entry.provider),
-    })),
-);
 
 // Each taught dataset with its date read once; a date the daemon wrote unreadably is left off rather than drawn wrong.
 const datasets = computed(() => sources.value.map((source) => ({ source, time: ledgerTime(source.at) })));
@@ -291,7 +235,7 @@ const LEARN_COMMAND = `privacy learn <file> --column …`;
                                         size="small"
                                         @update:model-value="(on: unknown) => write(`shield`, (current) => withClass(current, kind, on === true))"
                                     />
-                                    <span>{{ KINDS[kind].label }}</span>
+                                    <span>{{ KINDS[kind] }}</span>
                                 </label>
                             </div>
                         </template>
@@ -371,47 +315,14 @@ const LEARN_COMMAND = `privacy learn <file> --column …`;
             </template>
         </RowGroup>
 
-        <RowGroup v-if="running && status !== undefined" :label="t(`sandbox.agentPrivacyShield.trustedProviders`)">
-            <RowNote>{{ t(`sandbox.agentPrivacyShield.trustedIntro`) }}</RowNote>
-
-            <RowNote v-if="providers.length === 0" variant="empty">{{ t(`sandbox.agentPrivacyShield.noProviders`) }}</RowNote>
-
-            <Row
-                v-for="provider in providers"
-                :key="provider.id"
-                :icon="provider.local ? `desktop` : `cloud`"
-                :title="provider.label"
-                :description="providerNote(provider)"
-            >
-                <template #control>
-                    <!-- A local model is trusted whatever the list says, so its switch is shown on and cannot be moved. -->
-                    <ToggleSwitch
-                        :model-value="policy !== undefined && providerTrusted(provider, policy)"
-                        :disabled="provider.local || !ready"
-                        :aria-label="t(`sandbox.agentPrivacyShield.trustProvider`, { label: provider.label })"
-                        @update:model-value="(on: boolean) => write(`trusted`, (current) => withTrusted(current, provider.id, on))"
-                    />
-                </template>
-            </Row>
-
-            <RowNote v-if="conversationGrants > 0">
-                <span class="flex flex-wrap items-center gap-x-2 gap-y-1">
-                    <span class="min-w-0 flex-1">{{
-                        t(`sandbox.agentPrivacyShield.conversationGrants`, { count: conversationGrants }, conversationGrants)
-                    }}</span>
-                    <Button
-                        size="small"
-                        severity="secondary"
-                        :text="true"
-                        :disabled="!ready"
-                        @click="write(`trusted`, (current) => ({ ...current, conversations: [] }))"
-                        >{{ t(`sandbox.agentPrivacyShield.takeBackAll`) }}</Button
-                    >
-                </span>
-            </RowNote>
-
-            <RowNote v-if="saveNotice !== undefined && writtenFrom === `trusted`" variant="block"><Notice :of="saveNotice" /></RowNote>
-        </RowGroup>
+        <PrivacyTrustedProviders
+            v-if="running && status !== undefined"
+            :providers="providers"
+            :policy="policy"
+            :ready="ready"
+            :notice="writtenFrom === `trusted` ? saveNotice : undefined"
+            @write="(change) => write(`trusted`, change)"
+        />
 
         <!-- The note on how a dataset arrives is drawn under the outline too, as it is under the list. -->
         <SkeletonSnapshot v-if="showSources && sourcesLoading" of="sandbox.agent.privacy-datasets">
@@ -467,71 +378,16 @@ const LEARN_COMMAND = `privacy learn <file> --column …`;
         <SkeletonSnapshot v-if="showActivity && logLoading" of="sandbox.agent.privacy-activity">
             <RowGroup :label="t(`sandbox.agentPrivacyShield.activity`)"><SkeletonRows :rows="3" description /></RowGroup>
         </SkeletonSnapshot>
-        <RowGroup v-else-if="showActivity" v-skeleton-source="`sandbox.agent.privacy-activity`" :label="t(`sandbox.agentPrivacyShield.activity`)">
-            <RowNote v-if="logError !== undefined" variant="block"
-                ><Notice tone="danger">{{ logError }}</Notice></RowNote
-            >
-
-            <RowNote v-else-if="activity.length === 0" variant="empty">{{ t(`sandbox.agentPrivacyShield.noActivity`) }}</RowNote>
-
-            <template v-else>
-                <Row v-for="row in activity" :key="row.key">
-                    <template #lead="{ iconClass }">
-                        <Icon :name="ACTIONS[row.entry.action].icon" :class="[iconClass, ACTIONS[row.entry.action].tone]" />
-                    </template>
-
-                    <template #title>
-                        <span class="flex min-w-0 items-baseline gap-2">
-                            <span class="truncate">{{ row.provider }}</span>
-                            <span class="shrink-0 text-2xs" :class="row.entry.trusted ? `text-subtle` : `text-warning`">
-                                {{ row.entry.trusted ? t(`sandbox.agentPrivacyShield.trusted`) : t(`sandbox.agentPrivacyShield.untrusted`) }}
-                            </span>
-                        </span>
-                    </template>
-
-                    <template #description>
-                        <span v-if="row.entry.action === `refused` && row.entry.detail !== undefined" class="text-danger">{{
-                            row.entry.detail
-                        }}</span>
-                        <span v-else class="flex flex-wrap items-center gap-1.5">
-                            <span>
-                                {{
-                                    row.found.total > 0
-                                        ? t(`sandbox.agentPrivacyShield.found`, { count: row.found.total })
-                                        : t(`sandbox.agentPrivacyShield.nothingFound`)
-                                }}
-                            </span>
-                            <!-- Each kind with its count; the full name on hover, since the short word is what fits a row. -->
-                            <span
-                                v-for="part in row.found.parts"
-                                :key="part.kind"
-                                v-tooltip.top="KINDS[part.kind].label"
-                                class="rounded bg-content/5 px-1.5 py-0.5 text-3xs text-subtle"
-                            >
-                                {{ KINDS[part.kind].short }} <span class="tabular-nums text-content">{{ part.count }}</span>
-                            </span>
-                            <span v-if="row.entry.images > 0" class="inline-flex items-center gap-1">
-                                <Icon name="image" class="text-3xs" />
-                                {{ t(`sandbox.agentPrivacyShield.imagesCount`, { count: row.entry.images }, row.entry.images) }}
-                            </span>
-                            <span v-if="row.entry.documents > 0" class="inline-flex items-center gap-1">
-                                <Icon name="file" class="text-3xs" />
-                                {{ t(`sandbox.agentPrivacyShield.documentsCount`, { count: row.entry.documents }, row.entry.documents) }}
-                            </span>
-                        </span>
-                    </template>
-
-                    <template #meta>
-                        <StatusBadge :variant="ACTIONS[row.entry.action].variant" :label="ACTIONS[row.entry.action].label" size="xs" dot />
-                        <span v-if="row.time !== undefined" class="shrink-0 text-2xs text-subtle" v-tooltip.top="formatDateTime(row.time)">
-                            {{ timeAgo(row.time) }}
-                        </span>
-                    </template>
-                </Row>
-
-                <!-- The log keeps counts and kinds only, which is worth saying where a reader might look for the values. -->
-                <RowNote>{{ t(`sandbox.agentPrivacyShield.activityNote`) }}</RowNote>
-            </template>
-        </RowGroup>
+        <PrivacyShieldActivity
+            v-else-if="showActivity"
+            v-skeleton-source="`sandbox.agent.privacy-activity`"
+            :entries="entries"
+            :providers="providers"
+            :policy="policy"
+            :ready="ready"
+            :error="logError"
+            :notice="writtenFrom === `activity` ? saveNotice : undefined"
+            @never-mask="neverMask"
+        />
     </div>
 </template>

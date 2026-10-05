@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { PersonalDataClass, PrivacyShieldPolicy } from "@intentic/sandbox-contract";
+import { PRIVACY_EXCERPT_REACH, type PersonalDataClass, type PrivacyReplacement, type PrivacyShieldPolicy } from "@intentic/sandbox-contract";
 import { detectPersonalData, normalizeAllowed, type PersonalDataSpan } from "./detect/detect.js";
 import type { PrivacyVault, VaultHit } from "./privacy-vault.js";
 import { tokenPattern } from "./tokens.js";
@@ -11,11 +11,16 @@ import { tokenPattern } from "./tokens.js";
 
 export type ClassCounts = Partial<Record<PersonalDataClass, number>>;
 
+// One value replaced, as the log keeps it: its token, its kind, and the masked text around it.
+export type Replacement = Omit<PrivacyReplacement, "image">;
+
 export interface MaskResult {
     readonly text: string;
     // What was found in a string not seen before; empty for one the memo answered, so a request counts only what it
     // added.
     readonly counts: ClassCounts;
+    // Each value counted, in the order it sits in the string; empty exactly when `counts` is.
+    readonly found: readonly Replacement[];
 }
 
 // A second source of spans: the local named-entity model.
@@ -35,7 +40,9 @@ export interface Masker {
     readonly mask: (text: string) => Promise<MaskResult>;
     // Where the personal data in a string sits and the token each value was given, the string left as it is: for text
     // that exists only as pixels (an image's words), where what changes is the picture. Counts as `mask` counts.
-    readonly find: (text: string) => Promise<{ readonly spans: readonly FoundSpan[]; readonly counts: ClassCounts }>;
+    readonly find: (
+        text: string,
+    ) => Promise<{ readonly spans: readonly FoundSpan[]; readonly counts: ClassCounts; readonly found: readonly Replacement[] }>;
     readonly restore: (text: string) => string;
 }
 
@@ -132,6 +139,56 @@ const segmentsAroundTokens = (text: string): { readonly text: string; readonly t
 
 const HAS_WORD = /[\p{L}\p{N}]/u;
 
+// Where a token landed in a masked string.
+interface Placed {
+    readonly token: string;
+    readonly class: PersonalDataClass;
+    readonly at: number;
+}
+
+const WHITESPACE = /\s/u;
+
+// The masked text around one token, on one line: cut at whitespace where there is some within reach, so neither a word
+// nor another token is cut in half, and marked with an ellipsis where the string goes on.
+export const excerptAround = (text: string, start: number, end: number, reach = PRIVACY_EXCERPT_REACH): string => {
+    let from = Math.max(0, start - reach);
+    let to = Math.min(text.length, end + reach);
+    // Mid-word on the left: start after the next whitespace instead.
+    if (from > 0 && !WHITESPACE.test(text[from - 1] ?? "")) {
+        const space = text.slice(from, start).search(WHITESPACE);
+        from = space === -1 ? from : from + space + 1;
+    }
+    // Mid-word on the right: end at the last whitespace instead.
+    if (to < text.length && !WHITESPACE.test(text[to] ?? "")) {
+        const tail = text.slice(end, to);
+        const space = Math.max(...[" ", "\n", "\t", "\r"].map((each) => tail.lastIndexOf(each)));
+        to = space === -1 ? to : end + space;
+    }
+    const body = text.slice(from, to).replace(/\s+/gu, " ").trim();
+    return `${from > 0 ? "…" : ""}${body}${to < text.length ? "…" : ""}`;
+};
+
+const replacementsIn = (masked: string, placed: readonly Placed[]): Replacement[] =>
+    placed.map((each) => ({ token: each.token, class: each.class, excerpt: excerptAround(masked, each.at, each.at + each.token.length) }));
+
+// The text with each span replaced by its token, and where each token landed, offset by `base`.
+const placeTokens = (
+    text: string,
+    spans: readonly { readonly start: number; readonly end: number; readonly class: PersonalDataClass; readonly token: string }[],
+    placed: Placed[],
+    base: number,
+): string => {
+    let out = "";
+    let last = 0;
+    for (const span of spans) {
+        out += text.slice(last, span.start);
+        placed.push({ token: span.token, class: span.class, at: base + out.length });
+        out += span.token;
+        last = span.end;
+    }
+    return out + text.slice(last);
+};
+
 // Spans as `find` remembers them, written by itself; anything else reads as nothing found.
 const parseSpans = (text: string): FoundSpan[] => {
     const parsed: unknown = JSON.parse(text);
@@ -160,16 +217,18 @@ export const createMasker = ({ vault, policy, memo, recognizer }: MaskerDeps): M
                 return admitted(payload.class, value) ? [{ start, end, class: payload.class, value, token: payload.token, rank: 0 }] : [];
             });
 
-    // Replaces the chosen spans; tallies what it replaced.
-    const apply = (text: string, spans: readonly Candidate[], counts: Record<string, number>): string => {
-        let out = "";
-        let last = 0;
+    // Replaces the chosen spans; tallies what it replaced, and where each token landed in the whole string (`base` is
+    // where this stretch starts in it).
+    const apply = (text: string, spans: readonly Candidate[], counts: Record<string, number>, placed: Placed[], base: number): string => {
         for (const span of spans) {
-            out += text.slice(last, span.start) + (span.token ?? vault.tokenFor(span.value, span.class));
-            last = span.end;
             counts[span.class] = (counts[span.class] ?? 0) + 1;
         }
-        return out + text.slice(last);
+        return placeTokens(
+            text,
+            spans.map((span) => ({ ...span, token: span.token ?? vault.tokenFor(span.value, span.class) })),
+            placed,
+            base,
+        );
     };
 
     // What every source finds in a stretch of text holding no token, overlaps settled.
@@ -185,45 +244,45 @@ export const createMasker = ({ vault, policy, memo, recognizer }: MaskerDeps): M
         return chooseSpans([...knownCandidates(text), ...detected, ...recognized]);
     };
 
-    const maskSegment = async (text: string, counts: Record<string, number>): Promise<string> => apply(text, await spansOf(text), counts);
-
     // Only the vault's values can have changed since a remembered masking; looking for those alone is a fraction of the
     // full pass.
-    const remaskKnown = (text: string, counts: Record<string, number>): string =>
-        segmentsAroundTokens(text)
-            .map((part) => (part.token ? part.text : apply(part.text, chooseSpans(knownCandidates(part.text)), counts)))
-            .join("");
+    const remaskKnown = (text: string, counts: Record<string, number>, placed: Placed[]): string => {
+        let out = "";
+        for (const part of segmentsAroundTokens(text)) {
+            out += part.token ? part.text : apply(part.text, chooseSpans(knownCandidates(part.text)), counts, placed, out.length);
+        }
+        return out;
+    };
 
     return {
         mask: async (text) => {
             if (text.length < 2 || !HAS_WORD.test(text)) {
-                return { text, counts: {} };
+                return { text, counts: {}, found: [] };
             }
             await vault.load();
             const key = createHash("sha1").update(policyKey).update("\0").update(text).digest("base64url");
             const remembered = memo.get(key);
             if (remembered !== undefined && remembered.generation === vault.generation()) {
-                return { text: remembered.text, counts: {} };
+                return { text: remembered.text, counts: {}, found: [] };
             }
             const counts: Record<string, number> = {};
-            let masked: string;
+            const placed: Placed[] = [];
+            let masked = "";
             if (remembered === undefined) {
-                const parts: string[] = [];
                 for (const part of segmentsAroundTokens(text)) {
-                    parts.push(part.token ? part.text : await maskSegment(part.text, counts));
+                    masked += part.token ? part.text : apply(part.text, await spansOf(part.text), counts, placed, masked.length);
                 }
-                masked = parts.join("");
             } else {
-                masked = remaskKnown(remembered.text, counts);
+                masked = remaskKnown(remembered.text, counts, placed);
             }
             // The generation after this masking's own additions: they are in `masked` already.
             memo.set(key, { text: masked, generation: vault.generation() });
-            return { text: masked, counts };
+            return { text: masked, counts, found: replacementsIn(masked, placed) };
         },
         find: async (text) => {
             const counts: Record<string, number> = {};
             if (text.length < 2 || !HAS_WORD.test(text)) {
-                return { spans: [], counts };
+                return { spans: [], counts, found: [] };
             }
             await vault.load();
             // Remembered as the masked strings are, under a key of its own: an image's words are re-sent with every
@@ -231,7 +290,7 @@ export const createMasker = ({ vault, policy, memo, recognizer }: MaskerDeps): M
             const key = createHash("sha1").update("find\0").update(policyKey).update("\0").update(text).digest("base64url");
             const remembered = memo.get(key);
             if (remembered !== undefined && remembered.generation === vault.generation()) {
-                return { spans: parseSpans(remembered.text), counts: {} };
+                return { spans: parseSpans(remembered.text), counts: {}, found: [] };
             }
             const spans: FoundSpan[] = [];
             let offset = 0;
@@ -253,7 +312,13 @@ export const createMasker = ({ vault, policy, memo, recognizer }: MaskerDeps): M
                 offset += part.text.length;
             }
             memo.set(key, { text: JSON.stringify(spans), generation: vault.generation() });
-            return { spans, counts };
+            if (remembered !== undefined) {
+                return { spans, counts, found: [] };
+            }
+            // The words as the picture reads once painted over: the same spans, each written as its token.
+            const placed: Placed[] = [];
+            const masked = placeTokens(text, spans, placed, 0);
+            return { spans, counts, found: replacementsIn(masked, placed) };
         },
         restore: (text) =>
             text.includes("⟦") || text.includes("[[")

@@ -4,6 +4,7 @@ import type { AppEnv } from "../../app-env.js";
 import { createGatewayRoute } from "../gateway/gateway-route.js";
 import { CLEARED_PLACEHOLDER } from "../gateway/tool-result-clearing.js";
 import { privacySliceFake } from "../privacy-slice.testing.js";
+import { tokenOf } from "../tokens.js";
 
 // The gateway end to end, over the real shield (detectors, vault, masker, wire walkers) and a stand-in provider: what the
 // provider is sent, what the runtime gets back, and what the log keeps. The provider must never read a value the shield
@@ -116,7 +117,7 @@ const assembled = async (response: Response): Promise<{ text: string; input: str
 };
 
 describe("masking for an untrusted provider", () => {
-    test("the provider reads tokens, the runtime gets the values back, and the log keeps kinds and counts only", async () => {
+    test("the provider reads tokens, the runtime gets the values back, and the log keeps kinds, counts and tokens only", async () => {
         const { fake, provider, send } = await harness({ mode: "on" }, "claude");
         const response = await send("/v1/messages?beta=true", request(`id|name|pesel\n1|${PERSON}|${PESEL}\n`));
         expect(response.status).toBe(200);
@@ -136,6 +137,9 @@ describe("masking for an untrusted provider", () => {
         const [entry] = fake.privacyLedger.entries;
         expect(entry).toMatchObject({ provider: "claude", trusted: false, action: "masked", protocol: "anthropic", conversationId: "c-1" });
         expect(entry?.counts["national-id"]).toBe(1);
+        // What the number became, and the row it sat in as the provider read it.
+        const token = tokenOf("NATIONAL_ID", 1);
+        expect(entry?.replacements).toContainEqual({ token, class: "national-id", excerpt: expect.stringContaining(`|${token}`) as string });
         expect(JSON.stringify(fake.privacyLedger.entries)).not.toContain(PESEL);
     });
 

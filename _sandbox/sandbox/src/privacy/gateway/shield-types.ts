@@ -1,4 +1,4 @@
-import type { PersonalDataClass } from "@intentic/sandbox-contract";
+import type { PersonalDataClass, PrivacyReplacement } from "@intentic/sandbox-contract";
 
 // What a wire format's walker is handed for one request: the text pass, the binary passes, and a tally. The walkers know
 // where each protocol keeps its text; this knows what to do with it. Kept apart from both so each protocol is a pure
@@ -11,6 +11,8 @@ export interface ShieldTally {
     images: number;
     // Documents replaced by their masked text.
     documents: number;
+    // The first values replaced, one per token, for the log (PRIVACY_REPLACEMENTS_MAX of them at most).
+    readonly replacements: PrivacyReplacement[];
 }
 
 // An image or document a walker found, as base64 with its media type.

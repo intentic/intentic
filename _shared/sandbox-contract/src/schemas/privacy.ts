@@ -120,9 +120,27 @@ export const PrivacyShieldStatusSchema = z.object({
 });
 export type PrivacyShieldStatus = z.infer<typeof PrivacyShieldStatusSchema>;
 
-// One request the gateway handled, as the log keeps it: counts and kinds, never a value.
+// One request the gateway handled, as the log keeps it: counts and kinds, the tokens it gave and the masked text around
+// them, never a value.
 export const PrivacyLedgerActionSchema = z.enum(["masked", "watched", "passed", "refused"]);
 export type PrivacyLedgerAction = z.infer<typeof PrivacyLedgerActionSchema>;
+
+// The most replacements one entry keeps, and how much masked text it keeps on each side of a token: enough to see what a
+// value became and how the provider read it, not a second transcript.
+export const PRIVACY_REPLACEMENTS_MAX = 12;
+export const PRIVACY_EXCERPT_REACH = 48;
+
+// One value the shield replaced in what a request added, as its token: the value itself stays in the vault, off the
+// workspace, and only the owner can have it read back (privacy.reveal).
+export const PrivacyReplacementSchema = z.object({
+    token: z.string().describe("The token the value became, as the provider read it: Alice."),
+    class: PersonalDataClassSchema,
+    excerpt: z
+        .string()
+        .describe("The masked text around the token as it left this machine (watching: as it would have). Tokens only, never a value."),
+    image: z.boolean().optional().describe("Found in an image's text, so the token was painted over the picture rather than written."),
+});
+export type PrivacyReplacement = z.infer<typeof PrivacyReplacementSchema>;
 
 export const PrivacyLedgerEntrySchema = z.object({
     at: z.string().describe("When, as an ISO timestamp."),
@@ -135,8 +153,18 @@ export const PrivacyLedgerEntrySchema = z.object({
     documents: z.number().int().describe("Documents replaced by their masked text."),
     protocol: z.string().describe("Which wire format the request spoke."),
     detail: z.string().optional().describe("Why it was refused, when it was."),
+    replacements: z
+        .array(PrivacyReplacementSchema)
+        .max(PRIVACY_REPLACEMENTS_MAX)
+        .optional()
+        .describe("The first values replaced in what this request added, one per token. Absent on entries written before it was kept."),
 });
 export type PrivacyLedgerEntry = z.infer<typeof PrivacyLedgerEntrySchema>;
+
+// Tokens read back to their values, for the owner checking what the shield masked; a token this vault never gave out is
+// left out of the answer.
+export const PRIVACY_REVEAL_MAX = 100;
+export const PrivacyRevealSchema = z.object({ tokens: z.array(z.string().min(1).max(64)).max(PRIVACY_REVEAL_MAX) });
 
 // A dataset taught to the shield: each value is matched exactly from then on, in every form it is written.
 export const PRIVACY_KNOWN_BATCH_MAX = 50_000;

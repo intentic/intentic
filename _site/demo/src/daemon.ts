@@ -861,6 +861,8 @@ export const procedures = {
         }),
         setPolicy: () => refuse(`This is the demo workspace: the privacy shield guards a sandbox's own model traffic, and this one sends none.`),
         log: () => [],
+        // Nothing is logged, so there is no token to read back.
+        reveal: () => ({}),
         dictionary: ({ query }) => demoNameDictionary(query),
         sources: () => [],
         forget: () => refuse(`This is the demo workspace: nothing has been taught to its privacy shield.`),

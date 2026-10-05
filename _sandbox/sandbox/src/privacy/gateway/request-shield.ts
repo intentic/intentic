@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
-import type { PrivacyImages } from "@intentic/sandbox-contract";
+import { PRIVACY_REPLACEMENTS_MAX, type PrivacyImages } from "@intentic/sandbox-contract";
 import { type PaintedImage, paintRegions, readingText, regionsFor } from "../image-mask.js";
-import type { ClassCounts, Masker } from "../masker.js";
+import type { ClassCounts, Masker, Replacement } from "../masker.js";
 import type { ImageReading, LocalReaders } from "../readers.js";
 import type { RequestShield, ShieldBinary, ShieldTally } from "./shield-types.js";
 
@@ -26,7 +26,19 @@ const addCounts = (into: Record<string, number>, counts: ClassCounts): void => {
     }
 };
 
-export const emptyTally = (): ShieldTally => ({ counts: {}, images: 0, documents: 0 });
+// The first of each token, until the log's share is full: the same value found twice in one request says nothing new.
+const addFound = (tally: ShieldTally, found: readonly Replacement[], image = false): void => {
+    for (const each of found) {
+        if (tally.replacements.length >= PRIVACY_REPLACEMENTS_MAX) {
+            return;
+        }
+        if (!tally.replacements.some((kept) => kept.token === each.token)) {
+            tally.replacements.push(image ? { ...each, image: true } : each);
+        }
+    }
+};
+
+export const emptyTally = (): ShieldTally => ({ counts: {}, images: 0, documents: 0, replacements: [] });
 
 // Values by content hash, oldest dropped first: a screenshot re-sent with every request of a turn is read once.
 export interface Memo<T> {
@@ -107,6 +119,7 @@ export const maskingShield = ({ masker, readers, readings, images, tally, fetchI
     const mask = async (text: string): Promise<string> => {
         const result = await masker.mask(text);
         addCounts(tally.counts, result.counts);
+        addFound(tally, result.found);
         return result.text;
     };
     // The memo's answer, or the reader's, remembered; `fresh` when the reader ran, so a re-sent image counts once.
@@ -129,6 +142,7 @@ export const maskingShield = ({ masker, readers, readings, images, tally, fetchI
         }
         const found = await masker.find(readingText(reading.value.lines));
         addCounts(tally.counts, found.counts);
+        addFound(tally, found.found, true);
         if (found.spans.length === 0) {
             return "keep";
         }
@@ -178,6 +192,7 @@ export const watchingShield = ({ masker, tally, images }: Pick<RequestShieldDeps
     mask: async (text) => {
         const result = await masker.mask(text);
         addCounts(tally.counts, result.counts);
+        addFound(tally, result.found);
         return text;
     },
     note: undefined,

@@ -104,6 +104,7 @@ export const createGatewayRoute = ({ shield, warn, fetch: send = fetch, now = ()
                 documents: tally.documents,
                 protocol: fields.protocol,
                 ...(fields.detail !== undefined ? { detail: fields.detail } : {}),
+                ...(tally.replacements.length > 0 ? { replacements: tally.replacements } : {}),
             })
             .catch((error: unknown) => warn("privacy shield: the log could not be written", error));
     };

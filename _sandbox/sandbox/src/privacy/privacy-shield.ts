@@ -15,7 +15,7 @@ import type { PrivacyVault } from "./privacy-vault.js";
 import type { LocalReaders } from "./readers.js";
 import type { GatewaySession, SessionTokens } from "./gateway/session-token.js";
 import { createReadingMemo, type ReadingMemo } from "./gateway/request-shield.js";
-import { TOKEN_LABEL } from "./tokens.js";
+import { TOKEN_LABEL, TOKEN_SOURCE } from "./tokens.js";
 
 // The privacy shield as the rest of the daemon sees it: the owner's policy, the decision whether a turn may run, the
 // base URL a runtime is pointed at, and the masker every other exit (push, shares) borrows. The gateway route that does
@@ -49,6 +49,8 @@ export interface PrivacyShield {
     readonly learn: (source: string, values: readonly PrivacyKnownValue[]) => Promise<{ added: number; known: number }>;
     readonly forget: (source: string) => Promise<number>;
     readonly sources: () => Promise<PrivacyKnownSource[]>;
+    // The value behind each token the vault gave out, for the owner checking what was masked; others are left out.
+    readonly reveal: (tokens: readonly string[]) => Promise<Record<string, string>>;
     readonly vault: PrivacyVault;
     readonly ledger: PrivacyLedger;
     readonly readers: LocalReaders;
@@ -84,6 +86,9 @@ export const unshieldedRefusal = (label: string, inConversation: boolean): strin
             ? `Let ${label} read this conversation as it is from the strip above the composer, trust it everywhere in Sandbox ▸ Agent ▸ Safety, or pick a provider the shield covers.`
             : `Trust it in Sandbox ▸ Agent ▸ Safety, or pick a provider the shield covers.`,
     ].join(" ");
+
+// One whole token, in either spelling.
+const WHOLE_TOKEN = new RegExp(`^(?:${TOKEN_SOURCE})$`, "u");
 
 export const createPrivacyShield = (deps: PrivacyShieldDeps): PrivacyShield => {
     const memo = createMaskMemo();
@@ -154,6 +159,23 @@ export const createPrivacyShield = (deps: PrivacyShieldDeps): PrivacyShield => {
         learn: deps.vault.learn,
         forget: deps.vault.forget,
         sources: deps.vault.sources,
+        reveal: async (tokens) => {
+            await deps.vault.load();
+            const values: Record<string, string> = {};
+            for (const token of tokens) {
+                const [, label, index, looseLabel, looseIndex] = WHOLE_TOKEN.exec(token) ?? [];
+                const value =
+                    label !== undefined && index !== undefined
+                        ? deps.vault.resolve(label, index)
+                        : looseLabel !== undefined && looseIndex !== undefined
+                          ? deps.vault.resolve(looseLabel, looseIndex)
+                          : undefined;
+                if (value !== undefined) {
+                    values[token] = value;
+                }
+            }
+            return values;
+        },
         vault: deps.vault,
         ledger: deps.ledger,
         readers: deps.readers,

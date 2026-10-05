@@ -78,6 +78,22 @@ export function usePrivacyLog() {
     return { entries: computed<PrivacyLedgerEntry[]>(() => query.data.value ?? []), isLoading: query.isLoading, error };
 }
 
+// The values behind the tokens the activity shows, read from the vault for the owner alone: anybody else is refused
+// (403) and the page shows the tokens by themselves. Memory only, so no value reaches the persisted mirror, and never
+// retried, since a refusal does not change by asking again. The previous answer stays while a new token is asked about.
+export function usePrivacyReveal(tokens: Ref<readonly string[]>) {
+    const { query } = useSandboxQuery({
+        ...rpcQuery(`privacy.reveal`, () => ({ tokens: [...tokens.value] }), { unpersisted: true }),
+        enabled: computed(() => tokens.value.length > 0),
+        retry: false,
+        placeholderData: keepPreviousData,
+    });
+    return {
+        values: computed<Readonly<Record<string, string>>>(() => query.data.value ?? {}),
+        refused: computed<boolean>(() => query.error.value !== null),
+    };
+}
+
 // The datasets taught to the shield, and the owner's way to forget one. The agent teaches through its CLI, which this
 // panel never does.
 export function usePrivacySources() {

@@ -1,4 +1,5 @@
-import { createMaskMemo, createMasker } from "../masker.js";
+import { createMaskMemo, createMasker, excerptAround } from "../masker.js";
+import { tokenOf } from "../tokens.js";
 import { privacySliceFake } from "../privacy-slice.testing.js";
 
 // The parts of the shield every exit shares: the masker the gateway walks a request with, the decision whether a turn
@@ -33,7 +34,7 @@ describe("the masker", () => {
         const first = await masker.mask(`⟦PERSON_7⟧ ma PESEL ${PESEL}`);
         expect(first.text).toBe("⟦PERSON_7⟧ ma PESEL ⟦NATIONAL_ID_1⟧");
         const second = await masker.mask(`⟦PERSON_7⟧ ma PESEL ${PESEL}`);
-        expect(second).toEqual({ text: first.text, counts: {} });
+        expect(second).toEqual({ text: first.text, counts: {}, found: [] });
     });
 
     test("an allowed value and a switched-off kind are left as they are", async () => {
@@ -47,11 +48,47 @@ describe("the masker", () => {
         expect(masked.text).toBe("Jan Kowalski, jan@firma.pl, ⟦NATIONAL_ID_1⟧");
     });
 
+    test("each value found says what it became and how the provider reads the text around it", async () => {
+        const { privacyShield } = privacySliceFake();
+        const masker = createMasker({ vault: privacyShield.vault, policy: { ...POLICY, classes: ["email"] }, memo: createMaskMemo() });
+        const before = "The quarterly report lists every open contract and the person to ask about each one; for the";
+        const masked = await masker.mask(
+            `${before} renewal write to anna.k@kancelaria-lis.pl before Friday,\n   since   the legal team closes the books then and nothing is signed after.`,
+        );
+        const token = tokenOf("EMAIL", 1);
+        expect(masked.found).toEqual([
+            {
+                token,
+                class: "email",
+                excerpt: `…to ask about each one; for the renewal write to ${token} before Friday, since the legal team closes…`,
+            },
+        ]);
+    });
+
+    test("an excerpt is cut at whitespace within reach, and raw where there is none", () => {
+        expect(excerptAround("short one", 0, 5)).toBe("short one");
+        const text = `${"a".repeat(60)}TOKEN${"b".repeat(60)}`;
+        expect(excerptAround(text, 60, 65, 10)).toBe(`…${"a".repeat(10)}TOKEN${"b".repeat(10)}…`);
+        expect(excerptAround("one two three TOKEN four five six", 14, 19, 6)).toBe("…three TOKEN four…");
+    });
+
     test("an unknown token is restored to itself, never to a guess", async () => {
         const { privacyShield } = privacySliceFake();
         const masker = createMasker({ vault: privacyShield.vault, policy: { ...POLICY, classes: [...POLICY.classes] }, memo: createMaskMemo() });
         await privacyShield.vault.load();
         expect(masker.restore("⟦PERSON_42⟧ and [[EMAIL_9]]")).toBe("⟦PERSON_42⟧ and [[EMAIL_9]]");
+    });
+});
+
+test("the owner reads a token back to its value, in either spelling; a token never given out is left out", async () => {
+    const { privacyShield } = privacySliceFake();
+    await privacyShield.learn("crm.sqlite:clients (member_no)", [{ value: "ACME-0042-XK", class: "identity-document" }]);
+    const token = tokenOf("ID_DOCUMENT", 1);
+    // The spelling a model rewrites the brackets into, built rather than written so it reads as what it is.
+    const loose = `[[${"ID_DOCUMENT"}_1]]`;
+    expect(await privacyShield.reveal([token, loose, tokenOf("PERSON", 9), "not a token"])).toEqual({
+        [token]: "ACME-0042-XK",
+        [loose]: "ACME-0042-XK",
     });
 });
 

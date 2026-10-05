@@ -1,12 +1,17 @@
+import { PROVIDER_BRAND_PATHS, type ProviderBrand } from "@intentic/constants";
 import {
+    isEndpointProvider,
+    isTrialProvider,
     PERSONAL_DATA_CLASSES,
     PRIVACY_ALLOW_MAX,
     type PersonalDataClass,
+    type PrivacyLedgerAction,
     type PrivacyLedgerEntry,
     type PrivacyNameList,
     type PrivacyNameLookup,
     type PrivacyNameWord,
     type PrivacyProvider,
+    type PrivacyReplacement,
     type PrivacyShieldPolicy,
 } from "@intentic/sandbox-contract";
 
@@ -91,6 +96,196 @@ export const foundIn = (entry: Pick<PrivacyLedgerEntry, `counts`>): Found => {
 export const ledgerTime = (at: string): number | undefined => {
     const parsed = Date.parse(at);
     return Number.isNaN(parsed) ? undefined : parsed;
+};
+
+// One provider's share of the log: how many requests went its way and what was found in them, as the newest of them
+// stood (trusted or not, masked or watched).
+export interface ProviderActivity {
+    readonly provider: string;
+    readonly requests: number;
+    readonly values: number;
+    readonly trusted: boolean;
+    readonly action: PrivacyLedgerAction;
+}
+
+// What the requests the log still holds came to, all told: the one line that stands for the hundreds of rows that each
+// said "nothing found".
+export interface ActivitySummary {
+    readonly requests: number;
+    readonly values: number;
+    readonly images: number;
+    readonly documents: number;
+    readonly refused: number;
+    // The oldest request the log holds, which is where "all told" starts.
+    readonly since: number | undefined;
+    // The most recently used first.
+    readonly providers: readonly ProviderActivity[];
+}
+
+// The log arrives newest first, so the first entry seen of a provider is its newest.
+export const activitySummary = (entries: readonly PrivacyLedgerEntry[]): ActivitySummary => {
+    const providers = new Map<string, { provider: string; requests: number; values: number; trusted: boolean; action: PrivacyLedgerAction }>();
+    let values = 0;
+    let images = 0;
+    let documents = 0;
+    let refused = 0;
+    for (const entry of entries) {
+        const found = foundIn(entry).total;
+        values += found;
+        images += entry.images;
+        documents += entry.documents;
+        refused += entry.action === `refused` ? 1 : 0;
+        const known = providers.get(entry.provider);
+        if (known === undefined) {
+            providers.set(entry.provider, { provider: entry.provider, requests: 1, values: found, trusted: entry.trusted, action: entry.action });
+        } else {
+            known.requests += 1;
+            known.values += found;
+        }
+    }
+    const oldest = entries.at(-1);
+    return {
+        requests: entries.length,
+        values,
+        images,
+        documents,
+        refused,
+        since: oldest === undefined ? undefined : ledgerTime(oldest.at),
+        providers: [...providers.values()],
+    };
+};
+
+interface FindingBase {
+    readonly key: string;
+    readonly at: number | undefined;
+    readonly provider: string;
+    readonly trusted: boolean;
+    readonly action: PrivacyLedgerAction;
+}
+
+// Something the shield did worth a row of its own: a value it replaced (once per token, however many requests carried
+// it), or a request that says more than its values: refused, or carrying images or documents, or written before tokens
+// were kept and so known by its counts alone.
+export type ActivityFinding =
+    | (FindingBase & { readonly kind: `value`; readonly replacement: PrivacyReplacement; readonly requests: number })
+    | (FindingBase & {
+          readonly kind: `request`;
+          readonly found: Found;
+          readonly images: number;
+          readonly documents: number;
+          readonly detail?: string;
+      });
+
+// Newest first, as the log is: a value seen again in an older request adds to the newest row's count rather than a row.
+export const activityFindings = (entries: readonly PrivacyLedgerEntry[]): ActivityFinding[] => {
+    const findings: ActivityFinding[] = [];
+    const seen = new Map<string, number>();
+    entries.forEach((entry, index) => {
+        const base = { at: ledgerTime(entry.at), provider: entry.provider, trusted: entry.trusted, action: entry.action };
+        const replacements = entry.replacements ?? [];
+        if (entry.action !== `refused`) {
+            for (const replacement of replacements) {
+                const at = seen.get(replacement.token);
+                if (at !== undefined) {
+                    const earlier = findings[at];
+                    if (earlier?.kind === `value`) {
+                        findings[at] = { ...earlier, requests: earlier.requests + 1 };
+                    }
+                    continue;
+                }
+                seen.set(replacement.token, findings.length);
+                findings.push({ ...base, kind: `value`, key: `value-${replacement.token}`, replacement, requests: 1 });
+            }
+        }
+        // Counts with no tokens beside them are the only account an older entry has of what it found; images and
+        // documents get a row where no value row already speaks for them (an image held back, read as nothing).
+        const found = replacements.length === 0 ? foundIn(entry) : { total: 0, parts: [] };
+        const images = entry.images > 0 && !replacements.some((replacement) => replacement.image === true);
+        const documents = entry.documents > 0 && replacements.length === 0;
+        if (entry.action === `refused` || images || documents || found.total > 0) {
+            findings.push({
+                ...base,
+                kind: `request`,
+                // Two requests can land in one millisecond; the position keeps their keys apart.
+                key: `request-${entry.at}-${index}`,
+                found,
+                images: entry.images,
+                documents: entry.documents,
+                ...(entry.detail !== undefined ? { detail: entry.detail } : {}),
+            });
+        }
+    });
+    return findings;
+};
+
+// Every token the page is about to show, once, for the one read that puts their values beside them.
+export const findingTokens = (findings: readonly ActivityFinding[]): string[] => [
+    ...new Set(findings.flatMap((finding) => (finding.kind === `value` ? [finding.replacement.token] : []))),
+];
+
+export interface ExcerptPart {
+    readonly text: string;
+    // A token, which the page draws as one; `own` when it is the one the row is about.
+    readonly token: boolean;
+    readonly own: boolean;
+}
+
+// Either spelling, as the daemon reads them (src/privacy/tokens.ts).
+const TOKEN = /⟦[A-Z][A-Z_]*?_\d{1,7}⟧|\[\[[A-Z][A-Z_]*?_\d{1,7}\]\]/gu;
+
+// An excerpt cut at its tokens, so each can be drawn as what the provider read in place of a value.
+export const excerptParts = (excerpt: string, own: string): ExcerptPart[] => {
+    const parts: ExcerptPart[] = [];
+    let last = 0;
+    for (const match of excerpt.matchAll(TOKEN)) {
+        if (match.index > last) {
+            parts.push({ text: excerpt.slice(last, match.index), token: false, own: false });
+        }
+        parts.push({ text: match[0], token: true, own: match[0] === own });
+        last = match.index + match[0].length;
+    }
+    if (last < excerpt.length) {
+        parts.push({ text: excerpt.slice(last), token: false, own: false });
+    }
+    return parts;
+};
+
+// What stands for a provider: its vendor's mark where it has one, else what it is (a model running here, the free
+// trial, a server the owner pointed at, an agent nothing here knows the vendor of).
+export type ProviderMark = { readonly brand: ProviderBrand } | { readonly glyph: `cpu` | `gift` | `server` | `sparkles` };
+
+const isBrand = (id: string): id is ProviderBrand => Object.hasOwn(PROVIDER_BRAND_PATHS, id);
+
+export const providerMark = (id: string, local: boolean): ProviderMark => {
+    if (isBrand(id)) {
+        return { brand: id };
+    }
+    if (local) {
+        return { glyph: `cpu` };
+    }
+    if (isTrialProvider(id)) {
+        return { glyph: `gift` };
+    }
+    return { glyph: isEndpointProvider(id) ? `server` : `sparkles` };
+};
+
+// What a provider is sent under the policy in force, the one fact its row has to make plain: tokens; the values while
+// the shield only watches; the values as they are (trusted, or a runtime the gateway can't cover while it only
+// watches); nothing, since a runtime the gateway can't cover does not run untrusted while it masks; or nothing that
+// leaves, for a model on this machine.
+export type ProviderReceives = `tokens` | `watched` | `values` | `refused` | `local`;
+
+export const providerReceives = (provider: PrivacyProvider, policy: PrivacyShieldPolicy): ProviderReceives => {
+    if (provider.local) {
+        return `local`;
+    }
+    if (providerTrusted(provider, policy) || policy.mode === `off`) {
+        return `values`;
+    }
+    if (!provider.shieldable) {
+        return policy.mode === `on` ? `refused` : `values`;
+    }
+    return policy.mode === `on` ? `tokens` : `watched`;
 };
 
 // What a looked-up word or name comes to: masked on its own, never part of a name, a name only beside other evidence

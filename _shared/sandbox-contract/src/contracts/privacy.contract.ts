@@ -6,6 +6,7 @@ import {
     PrivacyKnownSourceSchema,
     PrivacyKnownValueSchema,
     PrivacyLedgerEntrySchema,
+    PrivacyRevealSchema,
     PrivacyShieldPolicySchema,
     PrivacyShieldStatusSchema,
 } from "../schemas/privacy.js";
@@ -42,9 +43,20 @@ export const privacyContract = {
             path: "/privacy/log",
             summary: "What the privacy shield did lately",
             description:
-                "Each model request the gateway handled: which provider, whether it was trusted, and how many of each kind of personal data it found. Never the values.",
+                "Each model request the gateway handled: which provider, whether it was trusted, how many of each kind of personal data it found, and the tokens it gave with the masked text around them. Never the values.",
         })
         .output(z.array(PrivacyLedgerEntrySchema)),
+    reveal: procedure
+        .route({
+            method: "POST",
+            path: "/privacy/reveal",
+            summary: "Read tokens back to their values",
+            description:
+                "The value each token stands for, from the vault, so the owner can check what the shield masked and spot a value it should have left alone. Only the owner may ask; a token the vault never gave out is left out.",
+        })
+        .meta({ floor: "owner", control: "never", panel: false })
+        .input(PrivacyRevealSchema)
+        .output(z.record(z.string(), z.string())),
     dictionary: procedure
         .route({
             method: "GET",

@@ -271,6 +271,7 @@ const samplesOf = ({ fleet, automations, ci, workflows, loops, devices, approval
             status: undefined,
             setPolicy: { mode: `on`, trusted: [], classes: [`person-name`], images: `mask`, names: `dictionary`, allow: [] },
             log: undefined,
+            reveal: { tokens: [] },
             dictionary: { query: `kow` },
             sources: undefined,
             forget: { source: `clients.csv (name)` },

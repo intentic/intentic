@@ -2,17 +2,25 @@ import {
     DEFAULT_PRIVACY_SHIELD,
     PERSONAL_DATA_CLASSES,
     PRIVACY_ALLOW_MAX,
+    type PrivacyLedgerEntry,
     type PrivacyNameWord,
+    type PrivacyProvider,
     type PrivacyShieldPolicy,
 } from "@intentic/sandbox-contract";
 import {
     ALLOW_VALUE_MAX,
+    activityFindings,
+    activitySummary,
     allowListFrom,
     allowListProblem,
     allowListText,
+    excerptParts,
+    findingTokens,
     foundIn,
     ledgerTime,
     nameVerdict,
+    providerMark,
+    providerReceives,
     providerTrusted,
     sameList,
     shownWord,
@@ -185,5 +193,149 @@ describe(`sourceHost`, () => {
         expect(sourceHost(`https://www.ssa.gov/oact/babynames/limits.html`)).toBe(`ssa.gov`);
         expect(sourceHost(undefined)).toBeUndefined();
         expect(sourceHost(`not a url`)).toBeUndefined();
+    });
+});
+
+// A token as the daemon writes one, built rather than spelled so it reads as the shape it is.
+const token = (label: string, index: number): string => `\u27e6${label}_${index}\u27e7`;
+
+// One logged request, nothing found unless the test says otherwise.
+const entry = (fields: Partial<PrivacyLedgerEntry> & Pick<PrivacyLedgerEntry, `at`>): PrivacyLedgerEntry => ({
+    provider: `claude`,
+    trusted: false,
+    action: `masked`,
+    counts: {},
+    images: 0,
+    documents: 0,
+    protocol: `anthropic`,
+    ...fields,
+});
+
+const PERSON = token(`PERSON`, 3);
+const EMAIL = token(`EMAIL`, 1);
+
+describe(`activitySummary`, () => {
+    it(`counts every request once, and names each provider by its newest request, most recent first`, () => {
+        const summary = activitySummary([
+            entry({ at: `2026-10-05T12:03:00Z`, counts: { "person-name": 2 } }),
+            entry({ at: `2026-10-05T12:02:00Z`, provider: `codex`, trusted: true, action: `passed` }),
+            entry({ at: `2026-10-05T12:01:00Z`, action: `refused`, images: 1 }),
+            entry({ at: `2026-10-05T12:00:00Z`, documents: 2, counts: { email: 1 } }),
+        ]);
+        expect(summary).toEqual({
+            requests: 4,
+            values: 3,
+            images: 1,
+            documents: 2,
+            refused: 1,
+            since: Date.parse(`2026-10-05T12:00:00Z`),
+            providers: [
+                { provider: `claude`, requests: 3, values: 3, trusted: false, action: `masked` },
+                { provider: `codex`, requests: 1, values: 0, trusted: true, action: `passed` },
+            ],
+        });
+    });
+
+    it(`an empty log has nothing to date it from`, () => {
+        expect(activitySummary([]).since).toBeUndefined();
+    });
+});
+
+describe(`activityFindings`, () => {
+    it(`gives each value one row, at its newest request, counting the older requests that carried it too`, () => {
+        const findings = activityFindings([
+            entry({ at: `2026-10-05T12:02:00Z`, replacements: [{ token: PERSON, class: `person-name`, excerpt: `to ${PERSON} today` }] }),
+            entry({ at: `2026-10-05T12:01:00Z` }),
+            entry({
+                at: `2026-10-05T12:00:00Z`,
+                action: `watched`,
+                replacements: [
+                    { token: EMAIL, class: `email`, excerpt: `write ${EMAIL}` },
+                    { token: PERSON, class: `person-name`, excerpt: `from ${PERSON}` },
+                ],
+            }),
+        ]);
+        expect(
+            findings.map((finding) => (finding.kind === `value` ? [finding.replacement.token, finding.requests, finding.action] : finding.kind)),
+        ).toEqual([
+            [PERSON, 2, `masked`],
+            [EMAIL, 1, `watched`],
+        ]);
+        expect(findings[0]).toMatchObject({ replacement: { excerpt: `to ${PERSON} today` } });
+    });
+
+    it(`gives a refused request, images or documents no value speaks for, and counts alone a row of their own`, () => {
+        const findings = activityFindings([
+            entry({ at: `2026-10-05T12:04:00Z`, action: `refused`, detail: `unrecognised request /v1/files` }),
+            // The value read off the image is the image's row.
+            entry({ at: `2026-10-05T12:03:00Z`, images: 1, replacements: [{ token: PERSON, class: `person-name`, excerpt: PERSON, image: true }] }),
+            // Held back unread: nothing but the count says it happened.
+            entry({ at: `2026-10-05T12:02:00Z`, images: 1 }),
+            // Written before tokens were kept: the counts are all it has.
+            entry({ at: `2026-10-05T12:01:00Z`, counts: { "national-id": 1 } }),
+            entry({ at: `2026-10-05T12:00:00Z` }),
+        ]);
+        expect(findings.map((finding) => [finding.kind, finding.kind === `request` ? finding.found.total : finding.replacement.token])).toEqual([
+            [`request`, 0],
+            [`value`, PERSON],
+            [`request`, 0],
+            [`request`, 1],
+        ]);
+        expect(findings[0]).toMatchObject({ action: `refused`, detail: `unrecognised request /v1/files` });
+        expect(findings[2]).toMatchObject({ images: 1 });
+    });
+
+    it(`asks for each token on show once`, () => {
+        const findings = activityFindings([
+            entry({ at: `2026-10-05T12:01:00Z`, replacements: [{ token: PERSON, class: `person-name`, excerpt: PERSON }] }),
+            entry({ at: `2026-10-05T12:00:00Z`, images: 1, replacements: [{ token: EMAIL, class: `email`, excerpt: EMAIL }] }),
+        ]);
+        expect(findingTokens(findings)).toEqual([PERSON, EMAIL]);
+    });
+});
+
+describe(`excerptParts`, () => {
+    it(`cuts an excerpt at every token, in either spelling, and marks the row's own`, () => {
+        // The spelling a model rewrites the brackets into, built so it stays the shape it is.
+        const loose = `[[${`EMAIL`}_1]]`;
+        expect(excerptParts(`…ask ${PERSON} or ${loose} today`, PERSON)).toEqual([
+            { text: `…ask `, token: false, own: false },
+            { text: PERSON, token: true, own: true },
+            { text: ` or `, token: false, own: false },
+            { text: loose, token: true, own: false },
+            { text: ` today`, token: false, own: false },
+        ]);
+        expect(excerptParts(`no tokens here`, PERSON)).toEqual([{ text: `no tokens here`, token: false, own: false }]);
+    });
+});
+
+const provider = (fields: Partial<PrivacyProvider> & Pick<PrivacyProvider, `id`>): PrivacyProvider => ({
+    label: fields.id,
+    shieldable: true,
+    local: false,
+    ...fields,
+});
+
+describe(`providerMark`, () => {
+    it(`draws a vendor's own mark, and otherwise what the provider is`, () => {
+        expect(providerMark(`claude`, false)).toEqual({ brand: `claude` });
+        expect(providerMark(`endpoint/qwen`, true)).toEqual({ glyph: `cpu` });
+        expect(providerMark(`endpoint/free-trial`, false)).toEqual({ glyph: `gift` });
+        expect(providerMark(`endpoint/office-vllm`, false)).toEqual({ glyph: `server` });
+        expect(providerMark(`my-acp-agent`, false)).toEqual({ glyph: `sparkles` });
+    });
+});
+
+describe(`providerReceives`, () => {
+    it(`says what each provider is sent under the policy in force`, () => {
+        const on = policy({ mode: `on`, trusted: [`codex`] });
+        const watching = policy({ mode: `watch` });
+        expect(providerReceives(provider({ id: `claude` }), on)).toBe(`tokens`);
+        expect(providerReceives(provider({ id: `codex` }), on)).toBe(`values`);
+        expect(providerReceives(provider({ id: `cursor`, shieldable: false }), on)).toBe(`refused`);
+        expect(providerReceives(provider({ id: `endpoint/qwen`, local: true }), on)).toBe(`local`);
+        expect(providerReceives(provider({ id: `claude` }), watching)).toBe(`watched`);
+        // A runtime the gateway can't sit in front of is neither masked nor watched: it runs as it is.
+        expect(providerReceives(provider({ id: `cursor`, shieldable: false }), watching)).toBe(`values`);
     });
 });
