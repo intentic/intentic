@@ -91,11 +91,38 @@
     }
 }
 
-/* Loading placeholder. */
+/* LOADING PLACEHOLDER: a bar of the ink's own hue, with a soft band of light passing over it and a breath of rest
+   before the next, so a skeleton reads as work under way rather than as a layout that forgot its words.
+
+   The band is SMIL inside the SVG a mask is drawn from, not a CSS Animation: Chrome DevTools rebuilds an open Styles
+   editor whenever a CSS animation starts or stops, and a skeleton starts on every request (app/reducedMotion.test.ts).
+   An SVG drawn as an image keeps its own timeline, one per image, so every bar on the screen sweeps in step, and it
+   costs a repaint of the bars alone: nothing is re-styled or laid out.
+
+   The mask only weights the bar's own colour, so the hue is the theme's (`--ui-skeleton-ink`, which a skin may
+   answer): light takes ink AWAY under the band, letting the paper through, and dark adds it, so the band is a
+   highlight in both. Under reduced motion nothing travels; the bar breathes in place instead, slowly, since a still
+   placeholder beside a slow request reads as a broken one. */
 @layer components {
     .skeleton {
-        border-radius: 0.25rem;
-        background-color: color-mix(in srgb, var(--color-content) 10%, transparent);
+        border-radius: 0.3125rem;
+        background-color: var(--ui-skeleton-ink, color-mix(in oklab, var(--color-content) 11%, transparent));
+        mask-image: var(--ui-skeleton-sheen);
+        mask-size: 100% 100%;
+        mask-repeat: no-repeat;
+    }
+    :root {
+        /* Full ink at rest, a band dipping to 45% of it sweeping left to right in 1.3s, then 0.5s still. */
+        --ui-skeleton-sheen: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1 1' preserveAspectRatio='none'%3E%3ClinearGradient id='s' x1='-.7' x2='0'%3E%3Cstop offset='0' stop-opacity='1'/%3E%3Cstop offset='.5' stop-opacity='.45'/%3E%3Cstop offset='1' stop-opacity='1'/%3E%3Canimate attributeName='x1' values='-.7;1;1' keyTimes='0;.72;1' calcMode='spline' keySplines='.45 0 .25 1;0 0 1 1' dur='1.8s' repeatCount='indefinite'/%3E%3Canimate attributeName='x2' values='0;1.7;1.7' keyTimes='0;.72;1' calcMode='spline' keySplines='.45 0 .25 1;0 0 1 1' dur='1.8s' repeatCount='indefinite'/%3E%3C/linearGradient%3E%3Crect width='1' height='1' fill='url(%23s)'/%3E%3C/svg%3E");
+    }
+    :root[data-mode="dark"] {
+        --ui-skeleton-ink: color-mix(in oklab, var(--color-content) 15%, transparent);
+        /* 62% of the ink at rest, the band rising to all of it. */
+        --ui-skeleton-sheen: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1 1' preserveAspectRatio='none'%3E%3ClinearGradient id='s' x1='-.7' x2='0'%3E%3Cstop offset='0' stop-opacity='.62'/%3E%3Cstop offset='.5' stop-opacity='1'/%3E%3Cstop offset='1' stop-opacity='.62'/%3E%3Canimate attributeName='x1' values='-.7;1;1' keyTimes='0;.72;1' calcMode='spline' keySplines='.45 0 .25 1;0 0 1 1' dur='1.8s' repeatCount='indefinite'/%3E%3Canimate attributeName='x2' values='0;1.7;1.7' keyTimes='0;.72;1' calcMode='spline' keySplines='.45 0 .25 1;0 0 1 1' dur='1.8s' repeatCount='indefinite'/%3E%3C/linearGradient%3E%3Crect width='1' height='1' fill='url(%23s)'/%3E%3C/svg%3E");
+    }
+    /* Reduced motion, in either scheme: the whole bar eases between full ink and 60% of it, every 2.8s. */
+    :root[data-motion="reduced"] {
+        --ui-skeleton-sheen: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1 1' preserveAspectRatio='none'%3E%3Crect width='1' height='1'%3E%3Canimate attributeName='fill-opacity' values='1;.6;1' calcMode='spline' keySplines='.45 0 .55 1;.45 0 .55 1' dur='2.8s' repeatCount='indefinite'/%3E%3C/rect%3E%3C/svg%3E");
     }
     /* A placeholder drawn from its content's imprint (<SkeletonSnapshot>): it keeps the content's surfaces, as a
        hand-drawn skeleton keeps its card, and nothing in it answers the pointer or a selection. */

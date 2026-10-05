@@ -93,6 +93,14 @@ describe(`reduced motion`, () => {
         const skeleton = readFileSync(utilities, `utf8`).match(/\.skeleton\s*\{[^}]*\}/)?.[0];
         expect(skeleton).toEqual(expect.stringContaining(`background-color`));
         expect(skeleton).not.toMatch(/\banimation\s*:/);
+        // Its motion is SMIL in the SVG its mask is drawn from, in every scheme and under reduced motion alike: a
+        // placeholder standing still beside a slow request reads as a broken one.
+        expect(skeleton).toEqual(expect.stringContaining(`mask-image: var(--ui-skeleton-sheen)`));
+        const sheens = [...readFileSync(utilities, `utf8`).matchAll(/--ui-skeleton-sheen:\s*url\("([^"]*)"\)/g)].map((match) => decodeURIComponent(match[1] ?? ``));
+        expect(sheens).toHaveLength(3);
+        for (const sheen of sheens) {
+            expect(sheen).toMatch(/<animate [^>]*repeatCount='indefinite'/);
+        }
         for (const file of requestDrivenStyles) {
             expect(readFileSync(file, `utf8`), `${file} starts motion from request or navigation state`).not.toMatch(/\banimation\s*:/);
         }

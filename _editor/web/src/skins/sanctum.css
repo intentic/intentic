@@ -645,9 +645,10 @@
         color: oklch(97% 0.01 80);
     }
 
-    [data-skin="sanctum"] .skeleton {
-        background-color: rgba(201, 160, 92, 0.06);
-        background-image: linear-gradient(90deg, transparent 20%, rgba(201, 160, 92, 0.11) 50%, transparent 80%);
+    /* The placeholder's ink leans to the gilt, as the stone around it does; its sweep is the kit's (utilities.css).
+       Named on both attributes so it outranks the dark scheme's own answer, which it is drawn over. */
+    :root[data-skin="sanctum"][data-mode="dark"] {
+        --ui-skeleton-ink: color-mix(in oklab, color-mix(in oklab, var(--color-content) 55%, var(--sanctum-gold)) 18%, transparent);
     }
 }
 
