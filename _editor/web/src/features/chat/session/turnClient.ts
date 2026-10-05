@@ -652,6 +652,11 @@ export class TurnClient {
         const phase = this.phase.value;
         host.transcript.settle();
         this.move({ kind: `settled` });
+        // A Stop pressed before the daemon's ack armed nothing (endedByReader): the turn wasn't taken yet as far as this
+        // window knew. If the ack came after all, the daemon holds a stopped turn, so the way back is armed now.
+        if (phase.kind === `running` && phase.ending !== undefined && host.pickUp.value === undefined) {
+            host.pickUp.value = { reason: `stopped` };
+        }
         const waiters = this.settleWaiters;
         this.settleWaiters = [];
         for (const settled of waiters) {

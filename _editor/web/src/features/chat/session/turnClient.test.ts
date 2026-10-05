@@ -411,6 +411,25 @@ describe(`a run's lifecycle`, () => {
         ]);
     });
 
+    // A first turn's ack can take a while (its worktree is made first): a Stop pressed before it still leaves a way back
+    // once the ack says the daemon took the turn.
+    it(`arms the way back for a send stopped before its ack, once the ack says the daemon took it`, async () => {
+        const { client, host } = clientOf();
+        let ack: ((receipt: MessageReceipt) => void) | undefined;
+        run.mockImplementation(() => new Promise((resolve) => (ack = resolve)));
+        stop.mockImplementation(async () => ({ stopped: true }));
+        attach.mockImplementation(async () => attached(`r6`, 6_000, `explore android`));
+        const sending = client.send(`explore android`, SETTINGS);
+        await Promise.resolve();
+
+        client.stop();
+        expect(host.pickUp.value).toBeUndefined();
+        ack?.({ delivered: `started`, run: `r6` });
+        await sending;
+
+        expect(host.pickUp.value).toEqual({ reason: `stopped` });
+    });
+
     it(`stops nothing when nothing runs, and arms no way back for a turn the daemon never took`, () => {
         const { client, host } = clientOf();
 
