@@ -1,14 +1,15 @@
 import { upgradeWebSocket } from "@hono/node-server";
 import { errorMessage } from "@intentic/base/errors";
 import type { WSContext } from "hono/ws";
-import type { BrowserContext, Page } from "playwright";
+import type { Page } from "playwright";
 import { chromiumWindowArgs, ensureDisplay, releaseDisplay } from "../cast/display.js";
 import { placeWindow } from "../cast/region.js";
 import { startLiveView, type LiveView } from "../cast/live-view.js";
 import { armPasskeys } from "../tools/passkeys.js";
 import type { ScreencastClientMessage } from "../cast/screencast.js";
 import { resolveProfileExit } from "./browser-exit.js";
-import { acceptLanguage, browserFingerprint } from "./fingerprint.js";
+import { browserFingerprint } from "./fingerprint.js";
+import { launchOwnerBrowser, type OwnerBrowser } from "./owner-browser.js";
 import { acquireProfileLock, launchSessionDir, markConnected, passkeyPath, profileOwner, releaseProfileLock } from "./session-store.js";
 import { stealthInit } from "./stealth.js";
 import type { Services } from "../../composition.js";
@@ -28,7 +29,7 @@ export const createBrowserProfileRoute = (services: Services) =>
         let account: string | undefined;
         // profileOwner of the entry; the session dir, passkeys and lock are keyed to it.
         let owner: string | undefined;
-        let context: BrowserContext | undefined;
+        let owned: OwnerBrowser | undefined;
         let view: LiveView | undefined;
         let closed = false;
         let unregisterAccess: (() => void) | undefined;
@@ -45,9 +46,9 @@ export const createBrowserProfileRoute = (services: Services) =>
             await view?.stop();
             view = undefined;
             try {
-                await context?.close();
+                await owned?.close();
             } catch (err) {
-                services.logger.warn({ err }, "browser-profile: context close failed");
+                services.logger.warn({ err }, "browser-profile: browser close failed");
             }
             if (owner !== undefined) {
                 releaseProfileLock(owner);
@@ -165,34 +166,27 @@ export const createBrowserProfileRoute = (services: Services) =>
                     // Same seed as the agent's browser fingerprint: a device change mid-session triggers a logout or
                     // captcha.
                     const fingerprint = await browserFingerprint(services.workspace.root, profile, boundExit?.place);
-                    context = await playwright.chromium.launchPersistentContext(await launchSessionDir(services.workspace.root, profile), {
-                        headless: false,
-                        env: { ...process.env, DISPLAY: display.name },
-                        // null: page fills the window exactly, so picture coordinates map directly to XTEST clicks on
-                        // the display.
-                        viewport: null,
+                    // Started plainly and attached afterwards (owner-browser.ts): a Playwright-launched window is
+                    // refused by sign-in risk checks that the same browser, started this way, passes.
+                    owned = await launchOwnerBrowser(playwright, {
+                        executablePath: playwright.chromium.executablePath(),
+                        userDataDir: await launchSessionDir(services.workspace.root, profile),
+                        display: display.name,
                         // From the fingerprint's place: a bound profile claims its exit's country, unbound claims the
-                        // sandbox's.
-                        locale: fingerprint.locale,
-                        timezoneId: fingerprint.timezoneId,
-                        // Explicit: deriving from locale alone would contradict the multi-tag navigator.languages set
-                        // below.
-                        extraHTTPHeaders: { "Accept-Language": acceptLanguage(fingerprint.languages) },
-                        // Must match locale/timezoneId above: an IP in Berlin under a New York clock is worse than no
-                        // exit at all.
-                        ...(boundExit === undefined ? {} : { proxy: { server: boundExit.proxy } }),
-                        // --no-sandbox: container is the isolation boundary, running as root.
-                        // --disable-dev-shm-usage: avoids crashing on a container's tiny /dev/shm.
-                        // --disable-blink-features=AutomationControlled: drops navigator.webdriver.
-                        // Window flags: the corner region.ts keeps every window in (no window manager on Xvfb).
-                        args: ["--no-sandbox", "--disable-blink-features=AutomationControlled", "--disable-dev-shm-usage", ...chromiumWindowArgs(display)],
+                        // sandbox's. Must match the proxy: an IP in Berlin under a New York clock is worse than no exit.
+                        fingerprint,
+                        proxy: boundExit?.proxy,
+                        // The corner region.ts keeps every window in (no window manager on Xvfb); the page fills the
+                        // window, so picture coordinates map directly to XTEST clicks on the display.
+                        windowArgs: chromiumWindowArgs(display),
                     });
+                    const ctx = owned.context;
                     // Patches residual server tells (SwiftShader GPU, host core count) before first navigation.
-                    await context.addInitScript(stealthInit(fingerprint));
-                    const ctx = context;
+                    await ctx.addInitScript(stealthInit(fingerprint));
                     // Ensures a page exists before the screencast starts; it then follows later pages and popups on its
                     // own.
-                    const page = ctx.pages()[0] ?? (await ctx.newPage());
+                    // The tab Chromium opened on about:blank; a profile may also restore older tabs behind it.
+                    const page = ctx.pages().find((candidate) => candidate.url() === "about:blank") ?? (await ctx.newPage());
                     // Security key armed before first navigation; an identity's accounts share one key, as they share
                     // cookies.
                     const storePath = passkeyPath(services.workspace.root, profile);
