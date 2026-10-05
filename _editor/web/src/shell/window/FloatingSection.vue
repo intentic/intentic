@@ -121,7 +121,7 @@ onUnmounted(() => {
 <template>
 <!-- The chat panel styles itself with `grid-area: chat`, so its slot's parent must be a grid with that area; the side
          panel takes `side` beside it. The other two fill a plain flex column. -->
-    <div v-if="panel === `chat`" class="chat-floating-root grid h-screen w-screen overflow-hidden" :style="layoutStyle">
+    <div v-if="panel === `chat`" class="grid h-screen w-screen overflow-hidden" :style="layoutStyle">
         <div ref="slot" class="contents"></div>
         <SidePanel v-if="sideShown" floating />
     </div>

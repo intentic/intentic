@@ -131,15 +131,16 @@
 }
 /* Chat type scale The chat column runs on the APP's type scale — it does not keep one of its own. */
 
-/* Snapshots the docked tiers before the popped-out transcript rescales them on .chat-turns. */
-.chat-floating-root {
+/* Snapshots the docked tiers before a wide panel (its own window, or the full-window /chat section: one form, one size)
+   rescales them on .chat-turns. ChatPanel sets the class. */
+.chat-panel-wide {
     --chat-pop-3xs: var(--text-3xs);
     --chat-pop-2xs: var(--text-2xs);
     --chat-pop-xs: var(--text-xs);
     --chat-pop-sm: var(--text-sm);
     --chat-pop-base: var(--text-base);
 }
-.chat-floating-root .chat-turns {
+.chat-panel-wide .chat-turns {
     /* 7/6 is the body tier's own step, 0.75rem → 0.875rem: the size the reader asked for, spent on every tier. */
     --chat-pop: 7 / 6;
     --text-3xs: calc(var(--chat-pop-3xs) * (var(--chat-pop)));
@@ -149,11 +150,11 @@
     --text-base: calc(var(--chat-pop-base) * (var(--chat-pop)));
 }
 /* A DECISION CARD'S ANSWER BUTTONS, which the rescale above cannot reach. */
-.chat-floating-root .chat-turns .p-button.p-button-sm {
+.chat-panel-wide .chat-turns .p-button.p-button-sm {
     font-size: var(--text-2xs);
 }
 /* THE PROMPT READS A TIER UNDER THE ANSWER IT STANDS OVER. */
-.chat-floating-root .chat-turns .chat-prompt-text {
+.chat-panel-wide .chat-turns .chat-prompt-text {
     font-size: var(--text-2xs);
 }
 

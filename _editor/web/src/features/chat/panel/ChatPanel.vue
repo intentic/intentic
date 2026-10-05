@@ -251,6 +251,8 @@ watch(
 
 <template>
     <!-- Docked, the panel is a column (bar on top, pane below); on a wide surface the bar becomes a rail on the left. -->
+    <!-- Wide is one form wherever it stands (a popped-out window or the full-window /chat section): `chat-panel-wide` is what
+         chat.css keys the transcript's larger reading size on, so the two never drift apart. -->
     <!-- `--capacity-rail` reserves the out-of-flow rail width without widening the transcript. -->
     <!-- The strip paints no surface of its own: it is one composer floating over a page, and the box draws its own edge.
          Nor does it clip, so the `@` and `/` lists can stand above a composer that has no room over it. -->
@@ -260,7 +262,7 @@ watch(
     <div
         ref="root"
         class="chat-panel relative flex min-h-0"
-        :class="[chatWide ? 'flex-row' : 'flex-col', ground]"
+        :class="[chatWide && !bar ? 'chat-panel-wide flex-row' : 'flex-col', ground]"
         :style="{ '--capacity-rail': showsRail ? uiLength(CAPACITY_RAIL_PX) : `0px` }"
         data-window-band
     >

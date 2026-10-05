@@ -168,8 +168,8 @@ watch(activeId, () => {
     }
 });
 
-// Anchored to whichever button opened it (docked header glyph or rail's "Past chats"); the anchor also picks
-// the window it opens in, since AnchoredOverlay derives document and viewport from it.
+// Opened from the docked header's history glyph; the anchor also picks the window it opens in, since AnchoredOverlay
+// derives document and viewport from it.
 const historyOpen = ref(false);
 const historyAnchor = ref<HTMLElement>();
 const searchInput = ref<InstanceType<typeof SearchBar> | null>(null);
@@ -572,9 +572,10 @@ const openHistory = (event: Event): void => {
             </button>
         </div>
 
-        <!-- Foot of the rail: New agent (the fleet board's own wording). Past chats stays on the docked header and the full /chat section; a popped-out window has no room for a second action beside it. -->
+        <!-- Foot of the rail: New agent (the fleet board's own wording), and nothing else. The rail is one form whether it stands
+             in /chat or in a popped-out window, so neither grows an action the other lacks; history is the docked header's. -->
         <div v-else class="flex shrink-0 flex-wrap items-center justify-center gap-2 pb-2.5 pt-3">
-            <!-- Both actions take the kit's compact secondary tier; the face names who a scoped chat speaks as. -->
+            <!-- The kit's compact secondary tier; the face names who a scoped chat speaks as. -->
             <Button
                 size="small"
                 severity="secondary"
@@ -598,10 +599,6 @@ const openHistory = (event: Event): void => {
                     >
                 </span>
             </Button>
-            <Button v-if="!floats" size="small" severity="secondary" @click="openHistory">
-                <Icon name="history" class="text-xs" />
-                <span>{{ t(`chat.chatTabs.pastChats`) }}</span>
-            </Button>
         </div>
 
         <!-- Pinned to the column's width, capped so the transcript is never fully covered. -->
@@ -612,7 +609,7 @@ const openHistory = (event: Event): void => {
             <ChatTabList class="min-h-0 flex-1" @select="pick" @close="emit('close', $event)" @open="pickNotOpen" />
         </div>
 
-        <!-- Anchored to whichever button was pressed; AnchoredOverlay caps it to that button's own window. -->
+        <!-- Anchored to the button pressed; AnchoredOverlay caps it to that button's own window. -->
         <AnchoredOverlay v-model="historyOpen" :anchor="historyAnchor" side="bottom">
             <div class="flex min-h-0 w-72 flex-col">
                 <SearchBar
